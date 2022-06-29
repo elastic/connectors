@@ -49,7 +49,7 @@ class ElasticServer:
         await self.prepare_index(CONNECTORS_INDEX, [doc])
 
     async def get_existing_ids(self, index):
-        logger.debug("get_existing_ids")
+        logger.debug(f"Scanning existing index {index}")
         try:
             await self.client.indices.get(index=index)
         except ElasticNotFoundError:
@@ -60,10 +60,29 @@ class ElasticServer:
         ):
             yield doc["_id"]
 
-    async def async_bulk(self, generator):
+    async def async_bulk(self, index, generator):
+        existing_ids = [doc_id async for doc_id in self.get_existing_ids(index)]
+
+        logger.debug(f"Found {len(existing_ids)} docs in {index}")
+
+        async def get_docs():
+            async for doc in generator:
+                if doc["_id"] in existing_ids:
+                    continue
+                doc_id = doc["_id"]
+                doc["id"] = doc_id
+                del doc["_id"]
+                yield {
+                    "_op_type": "update",
+                    "_index": es_index,
+                    "_id": doc_id,
+                    "doc": doc,
+                    "doc_as_upsert": True,
+                }
+
         res = defaultdict(int)
 
-        async for ok, result in async_streaming_bulk(self.client, generator):
+        async for ok, result in async_streaming_bulk(self.client, get_docs()):
             action, result = result.popitem()
             if not ok:
                 logger.exception("failed to %s document %s" % ())

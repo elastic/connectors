@@ -1,18 +1,23 @@
 import os
 import asyncio
+import importlib
 
 import yaml
 
-from connectors.backends.mongo import MongoConnector
 from connectors.elastic import ElasticServer
 from connectors.logger import logger
-
 
 IDLING = 10
 
 
 def get_connector_instance(definition):
-    return MongoConnector(definition)
+    logger.debug(f"Getting connector instance for {definition}")
+    service_type = definition["service_type"]
+    module = importlib.import_module(f"connectors.backends.{service_type}")
+    klass_name = f"{service_type.capitalize()}Connector"
+    klass = getattr(module, klass_name)
+    logger.debug(f"Found a matching plugin {klass}")
+    return klass(definition)
 
 
 async def poll(config):
@@ -28,23 +33,7 @@ async def poll(config):
             es_index = definition["es_index"]
             await es.prepare_index(es_index)
             existing_ids = [doc_id async for doc_id in es.get_existing_ids(es_index)]
-
-            async def get_docs():
-                async for doc in connector.get_docs():
-                    if doc["_id"] in existing_ids:
-                        continue
-                    doc_id = doc["_id"]
-                    doc["id"] = doc_id
-                    del doc["_id"]
-                    yield {
-                        "_op_type": "update",
-                        "_index": es_index,
-                        "_id": doc_id,
-                        "doc": doc,
-                        "doc_as_upsert": True,
-                    }
-
-            result = await es.async_bulk(get_docs())
+            result = await es.async_bulk(es_index, connector.get_docs())
             logger.info(result)
 
         await asyncio.sleep(IDLING)
