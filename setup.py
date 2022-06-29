@@ -36,6 +36,6 @@ setup(
     install_requires=install_requires,
     entry_points="""
       [console_scripts]
-      ingest = connectors.app:main
-      """,
+      elastic-ingest = connectors.cli:main
+      """
 )

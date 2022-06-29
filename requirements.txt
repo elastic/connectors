@@ -1,3 +1,4 @@
 elasticsearch[async]
 motor
 black
+pyyaml

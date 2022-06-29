@@ -2,15 +2,18 @@ from collections import defaultdict
 from elasticsearch import AsyncElasticsearch, NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan, async_streaming_bulk
 
+from connectors.logger import logger
+
 
 CONNECTORS_INDEX = ".elastic-connectors"
 
 
 class ElasticServer:
-    def __init__(self):
-        self.client = AsyncElasticsearch(
-            hosts=["http://localhost:9200"], basic_auth=("elastic", "changeme")
-        )
+    def __init__(self, config):
+        logger.info(f"Connecting to {config['host']}")
+        self.host = config["host"]
+        self.auth = config["user"], config["password"]
+        self.client = AsyncElasticsearch(hosts=[self.host], basic_auth=self.auth)
 
     async def get_connectors_definitions(self):
         resp = await self.client.search(
@@ -46,7 +49,7 @@ class ElasticServer:
         await self.prepare_index(CONNECTORS_INDEX, [doc])
 
     async def get_existing_ids(self, index):
-        print("get_existing_ids")
+        logger.debug("get_existing_ids")
         try:
             await self.client.indices.get(index=index)
         except ElasticNotFoundError:
@@ -63,7 +66,7 @@ class ElasticServer:
         async for ok, result in async_streaming_bulk(self.client, generator):
             action, result = result.popitem()
             if not ok:
-                print("failed to %s document %s" % ())
+                logger.exception("failed to %s document %s" % ())
             res[action] += 1
 
         return dict(res)
