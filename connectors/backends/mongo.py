@@ -1,4 +1,6 @@
 from datetime import datetime
+from collections.abc import Iterable
+
 from bson import Decimal128
 from motor.motor_asyncio import AsyncIOMotorClient
 from connectors.elastic import ElasticServer
@@ -21,15 +23,23 @@ class MongoConnector:
     async def ping(self):
         await self.client.admin.command("ping")
 
+    # XXX That's a lot of work...
     def serialize(self, doc):
-        # make this generic
-        for review in doc["reviews"]:
-            review["date"] = review["date"].isoformat()
+        def _serialize(value):
+            if isinstance(value, (list, tuple)):
+                value = [_serialize(item) for item in value]
+            elif isinstance(value, dict):
+                for key, svalue in value.items():
+                    value[key] = _serialize(svalue)
+            elif isinstance(value, datetime):
+                value = value.isoformat()
+            elif isinstance(value, Decimal128):
+                value = value.to_decimal()
+            return value
+
         for key, value in doc.items():
-            if isinstance(value, datetime):
-                doc[key] = value.isoformat()
-            if isinstance(value, Decimal128):
-                doc[key] = value.to_decimal()
+            doc[key] = _serialize(value)
+
         return doc
 
     async def get_docs(self):
