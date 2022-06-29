@@ -16,34 +16,46 @@ class ElasticServer:
         self.client = AsyncElasticsearch(hosts=[self.host], basic_auth=self.auth)
 
     async def get_connectors_definitions(self):
+        await self._prepare()
         resp = await self.client.search(
             index=CONNECTORS_INDEX,
             body={"query": {"match_all": {}}},
             size=20,
+            expand_wildcards="hidden",
         )
         for hit in resp["hits"]["hits"]:
             yield hit["_source"]
 
     async def prepare_index(self, index, docs=None, mapping=None):
-        try:
-            await self.client.indices.get(index=index, expand_wildcards="hidden")
-        except ElasticNotFoundError:
-            await self.client.indices.create(index=CONNECTORS_INDEX)
-            if docs is None:
-                return
-            # XXX bulk
-            doc_id = 1
-            for doc in docs:
-                await self.client.index(index=CONNECTORS_INDEX, id=doc_id, document=doc)
-                doc_id += 1
+        logger.debug(f"Checking index {index}")
+        exists = await self.client.indices.exists(
+            index=index, expand_wildcards="hidden"
+        )
+        if exists:
+            logger.debug(f"{index} exists")
+            return
 
-    async def prepare(self):
+        logger.debug(f"Creating index {index}")
+        await self.client.indices.create(index=index)
+        if docs is None:
+            return
+        # XXX bulk
+        doc_id = 1
+        for doc in docs:
+            await self.client.index(index=index, id=doc_id, document=doc)
+            doc_id += 1
+
+    # XXX should be set by kibana
+    async def _prepare(self):
         doc = {
             "service_type": "mongo",
             "sync_now": True,
             "es_index": "search-airbnb",
             "last_synced": "",
             "scheduling": {"interval": "*"},
+            "host": "mongodb://127.0.0.1:27021",
+            "database": "sample_airbnb",
+            "collection": "listingsAndReviews",
         }
 
         await self.prepare_index(CONNECTORS_INDEX, [doc])
@@ -74,7 +86,7 @@ class ElasticServer:
                 del doc["_id"]
                 yield {
                     "_op_type": "update",
-                    "_index": es_index,
+                    "_index": index,
                     "_id": doc_id,
                     "doc": doc,
                     "doc_as_upsert": True,

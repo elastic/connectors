@@ -7,26 +7,31 @@ from connectors.elastic import ElasticServer
 class MongoConnector:
     def __init__(self, definition):
         self.definition = definition
+        self.host = definition.get("host", "mongodb://127.0.0.1:27021")
+        self.database = definition["database"]
+        self.collection = definition["collection"]
         self.client = AsyncIOMotorClient(
-            "mongodb://127.0.0.1:27021",
+            self.host,
             directConnection=True,
-            connectTimeoutMS=30,
-            socketTimeoutMS=30,
+            connectTimeoutMS=60,
+            socketTimeoutMS=60,
         )
-        self.db = self.client.sample_airbnb
+        self.db = self.client[self.database]
 
     async def ping(self):
         await self.client.admin.command("ping")
 
-    async def get_docs(self):
-        async for doc in self.db.listingsAndReviews.find():
-            # make this generic
-            for review in doc["reviews"]:
-                review["date"] = review["date"].isoformat()
-            for key, value in doc.items():
-                if isinstance(value, datetime):
-                    doc[key] = value.isoformat()
-                if isinstance(value, Decimal128):
-                    doc[key] = value.to_decimal()
+    def serialize(self, doc):
+        # make this generic
+        for review in doc["reviews"]:
+            review["date"] = review["date"].isoformat()
+        for key, value in doc.items():
+            if isinstance(value, datetime):
+                doc[key] = value.isoformat()
+            if isinstance(value, Decimal128):
+                doc[key] = value.to_decimal()
+        return doc
 
-            yield doc
+    async def get_docs(self):
+        async for doc in self.db[self.collection].find():
+            yield self.serialize(doc)

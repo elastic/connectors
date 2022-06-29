@@ -22,7 +22,6 @@ def get_connector_instance(definition):
 
 async def poll(config):
     es = ElasticServer(config["elasticsearch"])
-    await es.prepare()
 
     while True:
         logger.debug("poll")
