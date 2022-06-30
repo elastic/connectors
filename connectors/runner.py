@@ -1,3 +1,15 @@
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
+"""
+Event loop
+
+- polls for work by calling Elasticsearch on a regular basis
+- instanciates connector plugins
+- mirrors an Elasticsearch index with a collection of documents
+"""
 import os
 import asyncio
 
@@ -11,12 +23,15 @@ IDLING = 10
 
 
 async def poll(config):
+    """Main event loop.
+    """
     es = ElasticServer(config["elasticsearch"])
 
     while True:
         logger.debug("poll")
         async for definition in es.get_connectors_definitions():
-            connector = get_connector_instance(definition, config)
+            service_type = definition["service_type"]
+            connector = get_connector_instance(service_type, config)
             await connector.ping()
 
             es_index = definition["es_index"]
@@ -29,6 +44,8 @@ async def poll(config):
 
 
 def run(args):
+    """Runner
+    """
     if not os.path.exists(args.config_file):
         raise IOError(f"{args.config_file} does not exist")
 
