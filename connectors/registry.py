@@ -18,10 +18,11 @@ def get_klass(fqn):
     return getattr(module, klass_name)
 
 
-def get_connector_instance(service_type, config):
+def get_connector_instance(definition, config):
     """Returns a connector class instance, given a service type
     """
-    logger.debug(f"Getting connector instance for {definition}")
+    service_type = definition["service_type"]
+    logger.debug(f"Getting connector instance for {service_type}")
     klass = get_klass(config["connectors"][service_type])
     logger.debug(f"Found a matching plugin {klass}")
     return klass(definition)

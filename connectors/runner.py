@@ -31,7 +31,7 @@ async def poll(config):
         logger.debug("poll")
         async for definition in es.get_connectors_definitions():
             service_type = definition["service_type"]
-            connector = get_connector_instance(service_type, config)
+            connector = get_connector_instance(definition, config)
             await connector.ping()
 
             es_index = definition["es_index"]
