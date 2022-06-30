@@ -1,4 +1,4 @@
-Stravava
-========
+Connectors
+==========
 
-Index your Strava data into Elasticsearch
+Ingest documents into Elasticsearch, following BYOC & BYOEI standards.
