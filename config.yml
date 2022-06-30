@@ -2,3 +2,6 @@ elasticsearch:
   host: http://localhost:9200
   user: elastic
   password: changeme
+
+connectors:
+  mongo: connectors.backends.mongo:MongoConnector
