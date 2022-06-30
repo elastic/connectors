@@ -2,3 +2,4 @@ elasticsearch[async]
 motor
 black
 pyyaml
+aioboto3

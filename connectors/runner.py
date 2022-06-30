@@ -13,7 +13,7 @@ IDLING = 10
 def get_connector_instance(definition, config):
     logger.debug(f"Getting connector instance for {definition}")
     service_type = definition["service_type"]
-    module_name, klass_name = config['connectors'][service_type].split(':')
+    module_name, klass_name = config["connectors"][service_type].split(":")
     module = importlib.import_module(module_name)
     klass = getattr(module, klass_name)
     logger.debug(f"Found a matching plugin {klass}")
