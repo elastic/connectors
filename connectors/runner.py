@@ -1,23 +1,13 @@
 import os
 import asyncio
-import importlib
 
 import yaml
 
 from connectors.elastic import ElasticServer
 from connectors.logger import logger
+from connectors.registry import get_connector_instance, get_connectors
 
 IDLING = 10
-
-
-def get_connector_instance(definition, config):
-    logger.debug(f"Getting connector instance for {definition}")
-    service_type = definition["service_type"]
-    module_name, klass_name = config["connectors"][service_type].split(":")
-    module = importlib.import_module(module_name)
-    klass = getattr(module, klass_name)
-    logger.debug(f"Found a matching plugin {klass}")
-    return klass(definition)
 
 
 async def poll(config):
@@ -45,9 +35,16 @@ def run(args):
     with open(args.config_file) as f:
         config = yaml.safe_load(f)
 
+    if args.action == "list":
+        logger.info("Registered connectors:")
+        for connector in get_connectors(config):
+            logger.info(f"- {connector.__doc__.strip()}")
+        return 0
+
     logger.info(f"Connecting to {config['elasticsearch']['host']}")
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(poll(config))
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("Bye")
+    return 0

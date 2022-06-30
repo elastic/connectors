@@ -7,6 +7,8 @@ from connectors.elastic import ElasticServer
 
 
 class MongoConnector:
+    """MongoDB
+    """
     def __init__(self, definition):
         self.definition = definition
         self.host = definition.get("host", "mongodb://127.0.0.1:27021")

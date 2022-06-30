@@ -5,4 +5,4 @@ elasticsearch:
 
 connectors:
   mongo: connectors.backends.mongo:MongoConnector
-  s3: connectors.backend.aws:S3Connector
+  s3: connectors.backends.aws:S3Connector

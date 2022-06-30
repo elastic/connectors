@@ -7,7 +7,16 @@ from connectors.logger import set_logger
 
 
 def _parser():
-    parser = ArgumentParser(prog="run_connector")
+    parser = ArgumentParser(prog="elastic-ingest")
+
+    parser.add_argument(
+        "--action",
+        type=str,
+        default="poll",
+        choices=["poll", "list"],
+        help="What elastic-ingest should do",
+    )
+
     parser.add_argument(
         "-c",
         "--config-file",
@@ -15,6 +24,7 @@ def _parser():
         help="Configuration file",
         default=os.path.join(os.path.dirname(__file__), "..", "config.yml"),
     )
+
     parser.add_argument(
         "--debug",
         action="store_true",
