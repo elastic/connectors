@@ -21,6 +21,9 @@ class Connector:
         self.scheduling = definition["scheduling"]
         self.elastic_server = elastic_server
 
+    def utc_now(self):
+        return datetime.utcnow().isoformat()
+
     def json(self):
         return self.definition
 
@@ -40,7 +43,12 @@ class Connector:
 
     async def sync_starts(self):
         self.definition["sync_now"] = False
+        self.definition["sync_status"] = "2"
+        self.definition["last_seen"] = self.utc_now()
         await self._write()
 
     async def sync_done(self):
+        self.definition["sync_status"] = "1"
+        self.definition["last_seen"] = self.utc_now()
+        self.definition["last_sync"] = self.utc_now()
         await self._write()
