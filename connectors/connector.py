@@ -9,6 +9,7 @@ Connector definition
 from crontab import CronTab
 from datetime import datetime
 
+
 class Connector:
     def __init__(self, elastic_server, definition):
         self.definition = definition
@@ -16,7 +17,7 @@ class Connector:
         self.index_name = definition["index_name"]
         self.configuration = {}
         for key, value in definition["configuration"].items():
-            self.configuration[key] = value['value']
+            self.configuration[key] = value["value"]
         self.scheduling = definition["scheduling"]
         self.elastic_server = elastic_server
 
@@ -24,7 +25,7 @@ class Connector:
         return self.definition
 
     async def _write(self):
-        self.elastic_server.save_connector(self.definition)
+        await self.elastic_server.save_connector(self.definition)
 
     def next_sync(self):
         """Returns in seconds when the next sync should happen.

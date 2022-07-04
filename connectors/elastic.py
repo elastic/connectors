@@ -20,7 +20,9 @@ class ElasticServer:
         await self.client.close()
 
     async def save_connector(self, connector_definition):
-        pass
+        body = dict(connector_definition)
+        doc_id = body.pop("id")
+        return await self.client.index(index=CONNECTORS_INDEX, id=doc_id, body=body)
 
     async def get_connectors_definitions(self):
         resp = await self.client.search(
@@ -30,7 +32,9 @@ class ElasticServer:
             expand_wildcards="hidden",
         )
         for hit in resp["hits"]["hits"]:
-            yield Connector(self, hit["_source"])
+            source = hit["_source"]
+            source["id"] = hit["_id"]
+            yield Connector(self, source)
 
     async def prepare_index(self, index, docs=None, mapping=None, delete_first=False):
         logger.debug(f"Checking index {index}")
