@@ -19,6 +19,9 @@ class ElasticServer:
     async def close(self):
         await self.client.close()
 
+    async def save_connector(self, connector_definition):
+        pass
+
     async def get_connectors_definitions(self):
         resp = await self.client.search(
             index=CONNECTORS_INDEX,
@@ -27,7 +30,7 @@ class ElasticServer:
             expand_wildcards="hidden",
         )
         for hit in resp["hits"]["hits"]:
-            yield Connector(hit["_source"])
+            yield Connector(self, hit["_source"])
 
     async def prepare_index(self, index, docs=None, mapping=None, delete_first=False):
         logger.debug(f"Checking index {index}")

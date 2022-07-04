@@ -31,8 +31,17 @@ async def poll(config):
             logger.debug("poll")
             async for definition in es.get_connectors_definitions():
                 service_type = definition.service_type
+                logger.debug(f"Syncing '{service_type}'")
+                next_sync = definition.next_sync()
+                if next_sync == -1 or next_sync - IDLING > 0:
+                    logger.debug(f"Next sync due in {next_sync} seconds")
+                    continue
+
+                await definition.sync_starts()
+
                 connector = get_connector_instance(definition, config)
                 index_name = definition.index_name
+
                 await connector.ping()
                 await es.prepare_index(index_name)
 
@@ -41,6 +50,7 @@ async def poll(config):
                 ]
                 result = await es.async_bulk(index_name, connector.get_docs())
                 logger.info(result)
+                await definition.sync_done()
 
             await asyncio.sleep(IDLING)
     finally:
