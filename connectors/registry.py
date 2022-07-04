@@ -17,7 +17,7 @@ def get_klass(fqn):
     return getattr(module, klass_name)
 
 
-def get_connector_instance(definition, config):
+def get_data_provider(definition, config):
     """Returns a connector class instance, given a service type"""
     service_type = definition.service_type
     logger.debug(f"Getting connector instance for {service_type}")
@@ -26,7 +26,7 @@ def get_connector_instance(definition, config):
     return klass(definition)
 
 
-def get_connectors(config):
+def get_data_providers(config):
     """Returns an iterator of all registered connectors."""
     for name, fqn in config["connectors"].items():
         yield get_klass(fqn)

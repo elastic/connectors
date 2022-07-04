@@ -1,12 +1,7 @@
 from collections import defaultdict
 from elasticsearch import AsyncElasticsearch, NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan, async_streaming_bulk
-
 from connectors.logger import logger
-from connectors.connector import Connector
-
-
-CONNECTORS_INDEX = ".elastic-connectors"
 
 
 class ElasticServer:
@@ -19,23 +14,6 @@ class ElasticServer:
     async def close(self):
         await self.client.close()
 
-    async def save_connector(self, connector_definition):
-        body = dict(connector_definition)
-        doc_id = body.pop("id")
-        return await self.client.index(index=CONNECTORS_INDEX, id=doc_id, body=body)
-
-    async def get_connectors_definitions(self):
-        resp = await self.client.search(
-            index=CONNECTORS_INDEX,
-            body={"query": {"match_all": {}}},
-            size=20,
-            expand_wildcards="hidden",
-        )
-        for hit in resp["hits"]["hits"]:
-            source = hit["_source"]
-            source["id"] = hit["_id"]
-            yield Connector(self, source)
-
     async def prepare_index(self, index, docs=None, mapping=None, delete_first=False):
         logger.debug(f"Checking index {index}")
         exists = await self.client.indices.exists(
@@ -43,11 +21,10 @@ class ElasticServer:
         )
         if exists:
             logger.debug(f"{index} exists")
-            if delete_first:
-                logger.debug(f"Deleting it first")
-                await self.client.indices.delete(index=index, expand_wildcards="hidden")
-            else:
+            if not delete_first:
                 return
+            logger.debug(f"Deleting it first")
+            await self.client.indices.delete(index=index, expand_wildcards="hidden")
 
         logger.debug(f"Creating index {index}")
         await self.client.indices.create(index=index)

@@ -7,8 +7,8 @@ import aioboto3
 
 
 class S3Connector:
-    """Amazon S3
-    """
+    """Amazon S3"""
+
     def __init__(self, definition):
         self.session = aioboto3.Session()
         self.bucket = definition.configuration["bucket"]

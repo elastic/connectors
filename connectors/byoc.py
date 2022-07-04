@@ -6,29 +6,59 @@
 """
 Connector definition
 """
-from crontab import CronTab
 from datetime import datetime
 
+from elasticsearch import AsyncElasticsearch
+from crontab import CronTab
 
-class Connector:
-    def __init__(self, elastic_server, definition):
+from connectors.logger import logger
+
+CONNECTORS_INDEX = ".elastic-connectors"
+
+
+class BYOConnectors:
+    def __init__(self, config):
+        logger.info(f"Connecting to {config['host']}")
+        self.host = config["host"]
+        self.auth = config["user"], config["password"]
+        self.client = AsyncElasticsearch(hosts=[self.host], basic_auth=self.auth)
+
+    async def close(self):
+        await self.client.close()
+
+    async def save(self, connector):
+        return await self.client.index(
+            index=CONNECTORS_INDEX, id=connector.doc_id, body=dict(connector.definition)
+        )
+
+    async def get_list(self):
+        resp = await self.client.search(
+            index=CONNECTORS_INDEX,
+            body={"query": {"match_all": {}}},
+            size=20,
+            expand_wildcards="hidden",
+        )
+        for hit in resp["hits"]["hits"]:
+            yield BYOConnector(self, hit["_id"], hit["_source"])
+
+
+class BYOConnector:
+    def __init__(self, connectors, doc_id, definition):
         self.definition = definition
+        self.doc_id = doc_id
         self.service_type = definition["service_type"]
         self.index_name = definition["index_name"]
         self.configuration = {}
         for key, value in definition["configuration"].items():
             self.configuration[key] = value["value"]
         self.scheduling = definition["scheduling"]
-        self.elastic_server = elastic_server
+        self.connectors = connectors
 
     def utc_now(self):
         return datetime.utcnow().isoformat()
 
-    def json(self):
-        return self.definition
-
     async def _write(self):
-        await self.elastic_server.save_connector(self.definition)
+        await self.connectors.save(self)
 
     def next_sync(self):
         """Returns in seconds when the next sync should happen.

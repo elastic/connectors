@@ -12,8 +12,8 @@ from connectors.elastic import ElasticServer
 
 
 class MongoConnector:
-    """MongoDB
-    """
+    """MongoDB"""
+
     def __init__(self, definition):
         self.definition = definition
         self.config = definition.configuration

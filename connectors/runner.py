@@ -16,8 +16,9 @@ import asyncio
 import yaml
 
 from connectors.elastic import ElasticServer
+from connectors.byoc import BYOConnectors
 from connectors.logger import logger
-from connectors.registry import get_connector_instance, get_connectors
+from connectors.registry import get_data_provider, get_data_providers
 
 IDLING = 10
 
@@ -25,32 +26,33 @@ IDLING = 10
 async def poll(config):
     """Main event loop."""
     es = ElasticServer(config["elasticsearch"])
-
+    connectors = BYOConnectors(config["elasticsearch"])
     try:
         while True:
             logger.debug("poll")
-            async for definition in es.get_connectors_definitions():
-                service_type = definition.service_type
+            async for connector in connectors.get_list():
+
+                service_type = connector.service_type
                 logger.debug(f"Syncing '{service_type}'")
-                next_sync = definition.next_sync()
+                next_sync = connector.next_sync()
                 if next_sync == -1 or next_sync - IDLING > 0:
                     logger.debug(f"Next sync due in {next_sync} seconds")
                     continue
 
-                await definition.sync_starts()
+                await connector.sync_starts()
 
-                connector = get_connector_instance(definition, config)
-                index_name = definition.index_name
+                data_provider = get_data_provider(connector, config)
+                index_name = connector.index_name
 
-                await connector.ping()
+                await data_provider.ping()
                 await es.prepare_index(index_name)
 
                 existing_ids = [
                     doc_id async for doc_id in es.get_existing_ids(index_name)
                 ]
-                result = await es.async_bulk(index_name, connector.get_docs())
+                result = await es.async_bulk(index_name, data_provider.get_docs())
                 logger.info(result)
-                await definition.sync_done()
+                await connector.sync_done()
 
             await asyncio.sleep(IDLING)
     finally:
