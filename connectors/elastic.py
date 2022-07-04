@@ -3,6 +3,7 @@ from elasticsearch import AsyncElasticsearch, NotFoundError as ElasticNotFoundEr
 from elasticsearch.helpers import async_scan, async_streaming_bulk
 
 from connectors.logger import logger
+from connectors.connector import Connector
 
 
 CONNECTORS_INDEX = ".elastic-connectors"
@@ -15,8 +16,10 @@ class ElasticServer:
         self.auth = config["user"], config["password"]
         self.client = AsyncElasticsearch(hosts=[self.host], basic_auth=self.auth)
 
+    async def close(self):
+        await self.client.close()
+
     async def get_connectors_definitions(self):
-        await self._prepare()
         resp = await self.client.search(
             index=CONNECTORS_INDEX,
             body={"query": {"match_all": {}}},
@@ -24,16 +27,20 @@ class ElasticServer:
             expand_wildcards="hidden",
         )
         for hit in resp["hits"]["hits"]:
-            yield hit["_source"]
+            yield Connector(hit["_source"])
 
-    async def prepare_index(self, index, docs=None, mapping=None):
+    async def prepare_index(self, index, docs=None, mapping=None, delete_first=False):
         logger.debug(f"Checking index {index}")
         exists = await self.client.indices.exists(
             index=index, expand_wildcards="hidden"
         )
         if exists:
             logger.debug(f"{index} exists")
-            return
+            if delete_first:
+                logger.debug(f"Deleting it first")
+                await self.client.indices.delete(index=index, expand_wildcards="hidden")
+            else:
+                return
 
         logger.debug(f"Creating index {index}")
         await self.client.indices.create(index=index)
@@ -44,21 +51,6 @@ class ElasticServer:
         for doc in docs:
             await self.client.index(index=index, id=doc_id, document=doc)
             doc_id += 1
-
-    # XXX should be set by kibana
-    async def _prepare(self):
-        doc = {
-            "service_type": "mongo",
-            "sync_now": True,
-            "es_index": "search-airbnb",
-            "last_synced": "",
-            "scheduling": {"interval": "*"},
-            "host": "mongodb://127.0.0.1:27021",
-            "database": "sample_airbnb",
-            "collection": "listingsAndReviews",
-        }
-
-        await self.prepare_index(CONNECTORS_INDEX, [doc])
 
     async def get_existing_ids(self, index):
         logger.debug(f"Scanning existing index {index}")

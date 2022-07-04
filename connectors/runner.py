@@ -23,29 +23,32 @@ IDLING = 10
 
 
 async def poll(config):
-    """Main event loop.
-    """
+    """Main event loop."""
     es = ElasticServer(config["elasticsearch"])
 
-    while True:
-        logger.debug("poll")
-        async for definition in es.get_connectors_definitions():
-            service_type = definition["service_type"]
-            connector = get_connector_instance(definition, config)
-            await connector.ping()
+    try:
+        while True:
+            logger.debug("poll")
+            async for definition in es.get_connectors_definitions():
+                service_type = definition.service_type
+                connector = get_connector_instance(definition, config)
+                index_name = definition.index_name
+                await connector.ping()
+                await es.prepare_index(index_name)
 
-            es_index = definition["es_index"]
-            await es.prepare_index(es_index)
-            existing_ids = [doc_id async for doc_id in es.get_existing_ids(es_index)]
-            result = await es.async_bulk(es_index, connector.get_docs())
-            logger.info(result)
+                existing_ids = [
+                    doc_id async for doc_id in es.get_existing_ids(index_name)
+                ]
+                result = await es.async_bulk(index_name, connector.get_docs())
+                logger.info(result)
 
-        await asyncio.sleep(IDLING)
+            await asyncio.sleep(IDLING)
+    finally:
+        await es.close()
 
 
 def run(args):
-    """Runner
-    """
+    """Runner"""
     if not os.path.exists(args.config_file):
         raise IOError(f"{args.config_file} does not exist")
 

@@ -16,9 +16,10 @@ class MongoConnector:
     """
     def __init__(self, definition):
         self.definition = definition
-        self.host = definition.get("host", "mongodb://127.0.0.1:27021")
-        self.database = definition["database"]
-        self.collection = definition["collection"]
+        self.config = definition.configuration
+        self.host = self.config.get("host", "mongodb://127.0.0.1:27021")
+        self.database = self.config["database"]
+        self.collection = self.config["collection"]
         self.client = AsyncIOMotorClient(
             self.host,
             directConnection=True,
