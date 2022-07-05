@@ -19,7 +19,8 @@ import yaml
 from connectors.elastic import ElasticServer
 from connectors.byoc import BYOConnectors
 from connectors.logger import logger
-from connectors.registry import get_data_provider, get_data_providers
+from connectors.registry import get_data_provider
+
 
 IDLING = 10
 
@@ -32,28 +33,8 @@ async def poll(config):
         while True:
             logger.debug("Polling...")
             async for connector in connectors.get_list():
-
-                service_type = connector.service_type
-                logger.debug(f"Syncing '{service_type}'")
-                next_sync = connector.next_sync()
-                if next_sync == -1 or next_sync - IDLING > 0:
-                    logger.debug(f"Next sync due in {next_sync} seconds")
-                    continue
-
-                await connector.sync_starts()
-                try:
-                    data_provider = get_data_provider(connector, config)
-                    index_name = connector.index_name
-
-                    await data_provider.ping()
-                    await es.prepare_index(index_name)
-
-                    result = await es.async_bulk(index_name, data_provider.get_docs())
-                    logger.info(result)
-                    await connector.sync_done()
-                except Exception as e:
-                    await connector.sync_failed(e)
-                    raise
+                data_provider = get_data_provider(connector, config)
+                await connector.sync(data_provider, es, IDLING)
 
             await asyncio.sleep(IDLING)
     finally:

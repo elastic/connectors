@@ -87,3 +87,24 @@ class BYOConnector:
         self.definition["sync_status"] = "3"
         self.definition["last_seen"] = self.definition["last_sync"] = self.utc_now()
         await self._write()
+
+    async def sync(self, data_provider, elastic_server, idling):
+        service_type = self.service_type
+        logger.debug(f"Syncing '{service_type}'")
+        next_sync = self.next_sync()
+        if next_sync == -1 or next_sync - idling > 0:
+            logger.debug(f"Next sync due in {next_sync} seconds")
+            return
+
+        await self.sync_starts()
+        try:
+            await data_provider.ping()
+            await elastic_server.prepare_index(self.index_name)
+            result = await elastic_server.async_bulk(
+                index_name, data_provider.get_docs()
+            )
+            logger.info(result)
+            await self.sync_done()
+        except Exception as e:
+            await self.sync_failed(e)
+            raise
