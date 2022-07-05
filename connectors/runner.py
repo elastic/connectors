@@ -12,6 +12,7 @@ Event loop
 """
 import os
 import asyncio
+import signal
 
 import yaml
 
@@ -29,7 +30,7 @@ async def poll(config):
     connectors = BYOConnectors(config["elasticsearch"])
     try:
         while True:
-            logger.debug("poll")
+            logger.debug("Polling...")
             async for connector in connectors.get_list():
 
                 service_type = connector.service_type
@@ -47,9 +48,6 @@ async def poll(config):
                 await data_provider.ping()
                 await es.prepare_index(index_name)
 
-                existing_ids = [
-                    doc_id async for doc_id in es.get_existing_ids(index_name)
-                ]
                 result = await es.async_bulk(index_name, data_provider.get_docs())
                 logger.info(result)
                 await connector.sync_done()
@@ -73,10 +71,14 @@ def run(args):
             logger.info(f"- {connector.__doc__.strip()}")
         return 0
 
-    logger.info(f"Connecting to {config['elasticsearch']['host']}")
     loop = asyncio.get_event_loop()
+    coro = asyncio.ensure_future(poll(config))
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, coro.cancel)
+
     try:
-        loop.run_until_complete(poll(config))
-    except (asyncio.CancelledError, KeyboardInterrupt):
+        loop.run_until_complete(coro)
+    except asyncio.CancelledError:
         logger.info("Bye")
     return 0

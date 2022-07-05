@@ -16,6 +16,10 @@ def set_logger(log_level=logging.INFO):
     if logger is None:
         logger = logging.getLogger("connectors")
         handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            fmt="[%(asctime)s][%(levelname)s] %(message)s", datefmt="%H:%M:%S"
+        )
+        handler.setFormatter(formatter)
         logger.addHandler(handler)
     logger.propagate = False
     logger.setLevel(log_level)

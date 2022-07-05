@@ -18,7 +18,7 @@ CONNECTORS_INDEX = ".elastic-connectors"
 
 class BYOConnectors:
     def __init__(self, config):
-        logger.info(f"Connecting to {config['host']}")
+        logger.debug(f"BYOConnectors connecting to {config['host']}")
         self.host = config["host"]
         self.auth = config["user"], config["password"]
         self.client = AsyncElasticsearch(hosts=[self.host], basic_auth=self.auth)

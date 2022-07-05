@@ -6,7 +6,7 @@ from connectors.logger import logger
 
 class ElasticServer:
     def __init__(self, config):
-        logger.info(f"Connecting to {config['host']}")
+        logger.debug(f"ElasticServer connecting to {config['host']}")
         self.host = config["host"]
         self.auth = config["user"], config["password"]
         self.client = AsyncElasticsearch(hosts=[self.host], basic_auth=self.auth)
