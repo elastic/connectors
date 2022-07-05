@@ -79,6 +79,11 @@ class BYOConnector:
 
     async def sync_done(self):
         self.definition["sync_status"] = "1"
-        self.definition["last_seen"] = self.utc_now()
-        self.definition["last_sync"] = self.utc_now()
+        self.definition["last_seen"] = self.definition["last_sync"] = self.utc_now()
+        await self._write()
+
+    async def sync_failed(self, exception):
+        self.definition["sync_error"] = str(exception)
+        self.definition["sync_status"] = "3"
+        self.definition["last_seen"] = self.definition["last_sync"] = self.utc_now()
         await self._write()

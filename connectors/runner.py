@@ -41,16 +41,19 @@ async def poll(config):
                     continue
 
                 await connector.sync_starts()
+                try:
+                    data_provider = get_data_provider(connector, config)
+                    index_name = connector.index_name
 
-                data_provider = get_data_provider(connector, config)
-                index_name = connector.index_name
+                    await data_provider.ping()
+                    await es.prepare_index(index_name)
 
-                await data_provider.ping()
-                await es.prepare_index(index_name)
-
-                result = await es.async_bulk(index_name, data_provider.get_docs())
-                logger.info(result)
-                await connector.sync_done()
+                    result = await es.async_bulk(index_name, data_provider.get_docs())
+                    logger.info(result)
+                    await connector.sync_done()
+                except Exception as e:
+                    await connector.sync_failed(e)
+                    raise
 
             await asyncio.sleep(IDLING)
     finally:
