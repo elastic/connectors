@@ -4,3 +4,4 @@ black
 pyyaml
 aioboto3
 crontab
+pytest
