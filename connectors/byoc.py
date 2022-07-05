@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """
-Connector definition
+Implementation of BYOC protocol.
 """
 from datetime import datetime
 
@@ -101,7 +101,7 @@ class BYOConnector:
             await data_provider.ping()
             await elastic_server.prepare_index(self.index_name)
             result = await elastic_server.async_bulk(
-                index_name, data_provider.get_docs()
+                self.index_name, data_provider.get_docs()
             )
             logger.info(result)
             await self.sync_done()
