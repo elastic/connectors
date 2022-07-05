@@ -19,7 +19,7 @@ import yaml
 from connectors.elastic import ElasticServer
 from connectors.byoc import BYOConnectors
 from connectors.logger import logger
-from connectors.registry import get_data_provider
+from connectors.registry import get_data_providers, get_data_provider
 
 
 IDLING = 10
@@ -41,6 +41,12 @@ async def poll(config):
         await es.close()
 
 
+async def get_list(config):
+    logger.info("Registered connectors:")
+    for provider in get_data_providers(config):
+        logger.info(f"- {provider.__doc__.strip()}")
+
+
 def run(args):
     """Runner"""
     if not os.path.exists(args.config_file):
@@ -49,14 +55,11 @@ def run(args):
     with open(args.config_file) as f:
         config = yaml.safe_load(f)
 
-    if args.action == "list":
-        logger.info("Registered connectors:")
-        for connector in get_connectors(config):
-            logger.info(f"- {connector.__doc__.strip()}")
-        return 0
-
     loop = asyncio.get_event_loop()
-    coro = asyncio.ensure_future(poll(config))
+    if args.action == "list":
+        coro = asyncio.ensure_future(get_list(config))
+    else:
+        coro = asyncio.ensure_future(poll(config))
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, coro.cancel)
