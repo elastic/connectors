@@ -14,6 +14,11 @@ from crontab import CronTab
 from connectors.logger import logger
 
 CONNECTORS_INDEX = ".elastic-connectors"
+JOBS_INDEX = ".elastic-connectors-sync-jobs"
+
+
+def utc_now():
+    return datetime.utcnow().isoformat()
 
 
 class BYOConnectors:
@@ -42,6 +47,47 @@ class BYOConnectors:
             yield BYOConnector(self, hit["_id"], hit["_source"])
 
 
+class SyncJob:
+    def __init__(connector_id, elastic_client):
+        self.connector_id = connector_id
+        self.client = elastic_client
+        self.created_at = utc_now()
+        self.job_id = None
+
+    async def start(self):
+        job_def = {
+            "connector_id": self.connector_id,
+            "status": "2",
+            "error": "",
+            "deleted_document_count": 0,
+            "indexed_document_count": 0,
+            "created_at": self.created_at,
+            "updated_at": self.created_at,
+        }
+        resp = await self.client.index(index=JOBS_INDEX, body=job_def)
+        self.job_id = resp["_id"]
+        return self.job_id
+
+    async def done(self, indexed_count, deleted_count):
+        job_def = {
+            "status": "1",
+            "deleted_document_count": indexed_count,
+            "indexed_document_count": deleted_count,
+            "updated_at": utc_now(),
+        }
+        await self.client.index(index=JOBS_INDEX, id=self.job_id, body=job_def)
+
+    async def failed(self, exception):
+        job_def = {
+            "status": "3",
+            "error": str(exception),
+            "deleted_document_count": 0,
+            "indexed_document_count": 0,
+            "updated_at": utc_now(),
+        }
+        await self.client.index(index=JOBS_INDEX, id=self.job_id, body=job_def)
+
+
 class BYOConnector:
     def __init__(self, connectors, doc_id, definition):
         self.definition = definition
@@ -53,9 +99,7 @@ class BYOConnector:
             self.configuration[key] = value["value"]
         self.scheduling = definition["scheduling"]
         self.connectors = connectors
-
-    def utc_now(self):
-        return datetime.utcnow().isoformat()
+        self.client = connectors.client
 
     async def _write(self):
         await self.connectors.save(self)
@@ -72,20 +116,36 @@ class BYOConnector:
         return CronTab(self.scheduling["interval"]).next(default_utc=True)
 
     async def sync_starts(self):
+        # create a sync job
+        job = SyncJob(self.doc_id, self.client)
+        job_id = await job.start()
+
+        # save connector state
         self.definition["sync_now"] = False
         self.definition["sync_status"] = "2"
-        self.definition["last_seen"] = self.utc_now()
+        self.definition["last_seen"] = now
         await self._write()
 
-    async def sync_done(self):
+        logger.info(f"Sync starts, Job id: {job_id}")
+        return job
+
+    async def sync_done(self, job, indexed_count, deleted_count):
+        # update the sync job
+        await job.done(indexed_count, deleted_count)
+
+        now = utc_now()
         self.definition["sync_status"] = "1"
-        self.definition["last_seen"] = self.definition["last_sync"] = self.utc_now()
+        self.definition["last_seen"] = self.definition["last_sync"] = now
         await self._write()
+        logger.info(f"Sync done: {indexed_count} indexed, {deleted_count} deleted.")
 
-    async def sync_failed(self, exception):
+    async def sync_failed(self, job, exception):
+        # update the sync job
+        await job.failed(exception)
+
         self.definition["sync_error"] = str(exception)
         self.definition["sync_status"] = "3"
-        self.definition["last_seen"] = self.definition["last_sync"] = self.utc_now()
+        self.definition["last_seen"] = self.definition["last_sync"] = now
         await self._write()
 
     async def sync(self, data_provider, elastic_server, idling):
@@ -93,18 +153,17 @@ class BYOConnector:
         logger.debug(f"Syncing '{service_type}'")
         next_sync = self.next_sync()
         if next_sync == -1 or next_sync - idling > 0:
-            logger.debug(f"Next sync due in {next_sync} seconds")
+            logger.debug(f"Next sync due in {int(next_sync)} seconds")
             return
 
-        await self.sync_starts()
+        job = await self.sync_starts()
         try:
             await data_provider.ping()
             await elastic_server.prepare_index(self.index_name)
             result = await elastic_server.async_bulk(
                 self.index_name, data_provider.get_docs()
             )
-            logger.info(result)
-            await self.sync_done()
+            await self.sync_done(job, result.get("update", 0), result.get("delete", 0))
         except Exception as e:
-            await self.sync_failed(e)
+            await self.sync_failed(job, e)
             raise

@@ -8,6 +8,7 @@ import yaml
 
 
 CONNECTORS_INDEX = ".elastic-connectors"
+JOBS_INDEX = ".elastic-connectors-sync-jobs"
 
 # XXX simulating Kibana click-arounds
 async def prepare(config):
@@ -78,8 +79,13 @@ async def prepare(config):
 
     print(f"Prepare {CONNECTORS_INDEX}")
     await es.prepare_index(CONNECTORS_INDEX, [doc], delete_first=True)
+
+    print(f"Prepare {JOBS_INDEX}")
+    await es.prepare_index(JOBS_INDEX, [], delete_first=True)
+
     print(f"Delete search-airbnb")
-    await es.client.indices.delete(index='search-airbnb')
+    if await es.client.indices.exists(index='search-airbnb'):
+        await es.client.indices.delete(index='search-airbnb')
     print("Done")
     await es.close()
 
