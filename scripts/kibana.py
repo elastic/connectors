@@ -46,19 +46,14 @@ async def prepare(config):
         # Current status of the connector, and the value can be
         "status": "configured",
 
-        # Current sync status
-        "sync_status": "null",
-
-        # sync error
-        "sync_error": "",
+        # Last sync
+        "last_sync_status": "null",
+        "last_sync_error": "",
+        "last_synced": "",
 
         # Written by connector on each operation,
         # used by Kibana to hint to user about status of connector
         "last_seen": "",
-
-        # Date the last sync was completed
-        "last_synced": "",
-
         # Date the connector was created
         "created_at": "",
 

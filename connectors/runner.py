@@ -27,6 +27,7 @@ IDLING = 10
 
 async def poll(config):
     """Main event loop."""
+    loop = asyncio.get_event_loop()
     es = ElasticServer(config["elasticsearch"])
     connectors = BYOConnectors(config["elasticsearch"])
     try:
@@ -34,6 +35,7 @@ async def poll(config):
             logger.debug("Polling...")
             async for connector in connectors.get_list():
                 data_provider = get_data_provider(connector, config)
+                loop.create_task(connector.heartbeat())
                 await connector.sync(data_provider, es, IDLING)
 
             await asyncio.sleep(IDLING)
