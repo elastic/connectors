@@ -44,12 +44,10 @@ async def prepare(config):
         "service_type": "mongo",
 
         # Current status of the connector, and the value can be
-        # 1. Needs configuration, 2. Configured, 3. Error
-        "status": "1",
+        "status": "configured",
 
-        # Current sync status, and the value can be
-        # 1. Completed, 2. In progress, 3. Failed
-        "sync_status": "1",
+        # Current sync status
+        "sync_status": "null",
 
         # sync error
         "sync_error": "",
