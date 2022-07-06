@@ -73,7 +73,7 @@ class BYOConnectors:
             if doc_id not in _CONNECTORS_CACHE:
                 _CONNECTORS_CACHE[doc_id] = BYOConnector(self, doc_id, hit["_source"])
             else:
-                # Need to check and update
+                # XXX Need to check and update
                 pass
 
             yield _CONNECTORS_CACHE[doc_id]

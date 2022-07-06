@@ -13,6 +13,7 @@ Event loop
 import os
 import asyncio
 import signal
+import time
 
 import yaml
 
@@ -23,6 +24,24 @@ from connectors.registry import get_data_providers, get_data_provider
 
 
 IDLING = 10
+ERRORS = [0, time.time()]
+
+
+def raise_if_spurious(exception):
+    errors, first = ERRORS
+    errors += 1
+
+    # if we piled up too many errors we raise and quit
+    if errors > 20:
+        raise exception
+
+    # we re-init every ten minutes
+    if time.time() - last > 600:
+        first = time.time()
+        errors = 0
+
+    ERRORS[0] = errors
+    ERRORS[1] = first
 
 
 async def poll(config):
@@ -34,9 +53,13 @@ async def poll(config):
         while True:
             logger.debug("Polling...")
             async for connector in connectors.get_list():
-                data_provider = get_data_provider(connector, config)
-                loop.create_task(connector.heartbeat())
-                await connector.sync(data_provider, es, IDLING)
+                try:
+                    data_provider = get_data_provider(connector, config)
+                    loop.create_task(connector.heartbeat())
+                    await connector.sync(data_provider, es, IDLING)
+                except Exception as e:
+                    logging.critical(e, exc_info=True)
+                    raise_if_spurious(e)
 
             await asyncio.sleep(IDLING)
     finally:
