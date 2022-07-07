@@ -10,7 +10,14 @@ from aioresponses import aioresponses
 from elasticsearch import AsyncElasticsearch
 import pytest
 
-from connectors.byoc import e2str, Status, iso_utc, SyncJob, JobStatus
+from connectors.byoc import (
+    e2str,
+    Status,
+    iso_utc,
+    SyncJob,
+    JobStatus,
+    BYOConnectors,
+)
 
 
 @pytest.fixture
@@ -56,3 +63,49 @@ async def test_sync_job(mock_responses):
     await job.done(12, 34)
     assert job.status == JobStatus.COMPLETED
     await client.close()
+
+
+mongo = {
+    "api_key_id": "",
+    "configuration": {
+        "host": {"value": "mongodb://127.0.0.1:27021", "label": "MongoDB Host"},
+        "database": {"value": "sample_airbnb", "label": "MongoDB Database"},
+        "collection": {
+            "value": "listingsAndReviews",
+            "label": "MongoDB Collection",
+        },
+    },
+    "index_name": "search-airbnb",
+    "service_type": "mongo",
+    "status": "configured",
+    "last_sync_status": "null",
+    "last_sync_error": "",
+    "last_synced": "",
+    "last_seen": "",
+    "created_at": "",
+    "updated_at": "",
+    "scheduling": {"enabled": True, "interval": "0 * * * *"},
+    "sync_now": True,
+}
+
+
+@pytest.mark.asyncio
+async def test_connectors_get_list(mock_responses):
+    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+
+    headers = {"X-Elastic-Product": "Elasticsearch"}
+
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
+        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
+        headers=headers,
+    )
+
+    connectors = BYOConnectors(config)
+    conns = []
+
+    async for connector in connectors.get_list():
+        conns.append(connector)
+
+    assert len(conns) == 1
+    await connectors.close()

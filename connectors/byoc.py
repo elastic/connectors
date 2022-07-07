@@ -66,7 +66,7 @@ class BYOConnectors:
     async def get_list(self):
         resp = await self.client.search(
             index=CONNECTORS_INDEX,
-            body={"query": {"match_all": {}}},
+            query={"match_all": {}},
             size=20,
             expand_wildcards="hidden",
         )
