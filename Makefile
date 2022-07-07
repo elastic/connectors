@@ -6,9 +6,10 @@ bin/python:
 install: bin/python
 	bin/pip install -r requirements.txt
 
-black:
+lint:
 	bin/black connectors
 	bin/black setup.py
+	bin/flake8 connectors
 
 test:
 	bin/pytest --cov=connectors -sv connectors/tests

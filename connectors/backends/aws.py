@@ -15,7 +15,7 @@ class S3Connector:
         self.region = definition.configuration.get("region", "eu-central-1")
 
     async def get_docs(self):
-        async with session.resource("s3", region_name=self.region) as s3:
+        async with self.session.resource("s3", region_name=self.region) as s3:
             bucket = await s3.Bucket(self.bucket)
             async for s3_object in bucket.objects.all():
                 yield s3_object

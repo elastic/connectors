@@ -4,11 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from datetime import datetime
-from collections.abc import Iterable
-
 from bson import Decimal128
 from motor.motor_asyncio import AsyncIOMotorClient
-from connectors.elastic import ElasticServer
 
 
 class MongoConnector:

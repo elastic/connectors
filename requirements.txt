@@ -1,8 +1,12 @@
 elasticsearch[async]
 motor
-black
 pyyaml
 aioboto3
 crontab
+
+black
+flake8
+aioresponses
 pytest
 pytest-cov
+pytest-asyncio

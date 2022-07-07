@@ -36,7 +36,7 @@ def raise_if_spurious(exception):
         raise exception
 
     # we re-init every ten minutes
-    if time.time() - last > 600:
+    if time.time() - first > 600:
         first = time.time()
         errors = 0
 
@@ -58,7 +58,7 @@ async def poll(config):
                     loop.create_task(connector.heartbeat())
                     await connector.sync(data_provider, es, IDLING)
                 except Exception as e:
-                    logging.critical(e, exc_info=True)
+                    logger.critical(e, exc_info=True)
                     raise_if_spurious(e)
 
             await asyncio.sleep(IDLING)

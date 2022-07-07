@@ -100,7 +100,7 @@ class SyncJob:
             "created_at": self.created_at,
             "updated_at": self.created_at,
         }
-        resp = await self.client.index(index=JOBS_INDEX, body=job_def)
+        resp = await self.client.index(index=JOBS_INDEX, document=job_def)
         self.job_id = resp["_id"]
         return self.job_id
 
@@ -112,7 +112,9 @@ class SyncJob:
             "indexed_document_count": deleted_count,
             "updated_at": iso_utc(),
         }
-        await self.client.index(index=JOBS_INDEX, id=self.job_id, body=job_def)
+        return await self.client.index(
+            index=JOBS_INDEX, id=self.job_id, document=job_def
+        )
 
     async def failed(self, exception):
         self.status = JobStatus.ERROR
@@ -123,7 +125,7 @@ class SyncJob:
             "indexed_document_count": 0,
             "updated_at": iso_utc(),
         }
-        await self.client.index(index=JOBS_INDEX, id=self.job_id, body=job_def)
+        return await self.client.index(index=JOBS_INDEX, id=self.job_id, body=job_def)
 
 
 class BYOConnector:

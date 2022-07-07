@@ -23,7 +23,7 @@ class ElasticServer:
             logger.debug(f"{index} exists")
             if not delete_first:
                 return
-            logger.debug(f"Deleting it first")
+            logger.debug("Deleting it first")
             await self.client.indices.delete(index=index, expand_wildcards="hidden")
 
         logger.debug(f"Creating index {index}")
@@ -73,7 +73,7 @@ class ElasticServer:
         async for ok, result in async_streaming_bulk(self.client, get_docs()):
             action, result = result.popitem()
             if not ok:
-                logger.exception("failed to %s document %s" % ())
+                logger.exception(f"Failed to {action} see {result}")
             res[action] += 1
 
         return dict(res)
