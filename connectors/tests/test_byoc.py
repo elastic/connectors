@@ -55,3 +55,4 @@ async def test_sync_job(mock_responses):
 
     await job.done(12, 34)
     assert job.status == JobStatus.COMPLETED
+    await client.close()
