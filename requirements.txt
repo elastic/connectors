@@ -5,3 +5,4 @@ pyyaml
 aioboto3
 crontab
 pytest
+pytest-cov

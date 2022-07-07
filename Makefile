@@ -1,4 +1,4 @@
-.phony: black test
+.PHONY: black test
 
 bin/python:
 	python3 -m venv .
@@ -11,4 +11,4 @@ black:
 	bin/black setup.py
 
 test:
-	bin/pytest -sv connectors/tests
+	bin/pytest --cov=connectors -sv connectors/tests
