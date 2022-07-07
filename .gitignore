@@ -1,0 +1,9 @@
+bin
+lib
+include
+.coverage
+*.un~
+*.swp
+pyvenv.cfg
+*.egg-info
+__pycache__

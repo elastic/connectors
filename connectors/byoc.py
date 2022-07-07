@@ -39,8 +39,10 @@ class JobStatus(Enum):
     ERROR = 4
 
 
-def utc_now():
-    return datetime.utcnow().isoformat()
+def iso_utc(when=None):
+    if when is None:
+        when = datetime.utcnow()
+    return when.isoformat()
 
 
 _CONNECTORS_CACHE = {}
@@ -83,7 +85,7 @@ class SyncJob:
     def __init__(self, connector_id, elastic_client):
         self.connector_id = connector_id
         self.client = elastic_client
-        self.created_at = utc_now()
+        self.created_at = iso_utc()
         self.job_id = None
         self.status = None
 
@@ -108,7 +110,7 @@ class SyncJob:
             "status": e2str(self.status),
             "deleted_document_count": indexed_count,
             "indexed_document_count": deleted_count,
-            "updated_at": utc_now(),
+            "updated_at": iso_utc(),
         }
         await self.client.index(index=JOBS_INDEX, id=self.job_id, body=job_def)
 
@@ -119,7 +121,7 @@ class SyncJob:
             "error": str(exception),
             "deleted_document_count": 0,
             "indexed_document_count": 0,
-            "updated_at": utc_now(),
+            "updated_at": iso_utc(),
         }
         await self.client.index(index=JOBS_INDEX, id=self.job_id, body=job_def)
 
@@ -137,11 +139,11 @@ class BYOConnector:
         self.connectors = connectors
         self.client = connectors.client
         self.definition["status"] = e2str(Status.CONNECTED)
-        self.definition["last_seen"] = utc_now()
+        self.definition["last_seen"] = iso_utc()
         self._heartbeat_started = self._syncing = False
 
     async def _write(self):
-        self.definition["last_seen"] = utc_now()
+        self.definition["last_seen"] = iso_utc()
         await self.connectors.save(self)
 
     async def heartbeat(self):
@@ -151,7 +153,7 @@ class BYOConnector:
         while True:
             logger.debug("*** BEAT")
             if not self._syncing:
-                self.definition["last_seen"] = utc_now()
+                self.definition["last_seen"] = iso_utc()
                 await self._write()
             await asyncio.sleep(HEARTBEAT_DELAY)
 
@@ -181,7 +183,7 @@ class BYOConnector:
         await job.done(indexed_count, deleted_count)
 
         self.definition["sync_status"] = e2str(job.status)
-        self.definition["last_sync"] = utc_now()
+        self.definition["last_sync"] = iso_utc()
         await self._write()
 
         logger.info(f"Sync done: {indexed_count} indexed, {deleted_count} deleted.")
@@ -191,7 +193,7 @@ class BYOConnector:
 
         self.definition["last_sync_error"] = str(exception)
         self.definition["last_sync_status"] = e2str(job.status)
-        self.definition["last_sync"] = utc_now()
+        self.definition["last_sync"] = iso_utc()
         await self._write()
 
     async def sync(self, data_provider, elastic_server, idling):
