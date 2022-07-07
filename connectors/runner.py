@@ -17,7 +17,7 @@ import time
 
 import yaml
 
-from connectors.elastic import ElasticServer
+from connectors.byoei import ElasticServer
 from connectors.byoc import BYOConnectors
 from connectors.logger import logger
 from connectors.registry import get_data_providers, get_data_provider

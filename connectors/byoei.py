@@ -1,3 +1,11 @@
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
+"""
+Implementation of BYOEI protocol (+some ids collecting)
+"""
 from collections import defaultdict
 from elasticsearch import AsyncElasticsearch, NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan, async_streaming_bulk
