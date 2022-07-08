@@ -3,6 +3,6 @@ elasticsearch:
   user: elastic
   password: changeme
 
-connectors:
+sources:
   mongo: connectors.sources.mongo:MongoDataSoruce
   s3: connectors.sources.aws:S3DataSource
