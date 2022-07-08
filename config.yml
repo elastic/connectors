@@ -3,6 +3,12 @@ elasticsearch:
   user: elastic
   password: changeme
 
+service:
+  idling: 30
+  heartbeat: 300
+  max_errors: 20
+  max_errors_span: 600
+
 sources:
   mongo: connectors.sources.mongo:MongoDataSource
   s3: connectors.sources.aws:S3DataSource

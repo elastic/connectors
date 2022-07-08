@@ -6,7 +6,6 @@
 """ Helpers to build sources + FQN-based Registry
 """
 import importlib
-from connectors.logger import logger
 
 
 class Field:
@@ -73,10 +72,7 @@ def _get_klass(fqn):
 def get_data_source(connector, config):
     """Returns a source class instance, given a service type"""
     service_type = connector.service_type
-    logger.debug(f"Getting source instance for {service_type}")
-    klass = _get_klass(config["sources"][service_type])
-    logger.debug(f"Found a matching class : {klass}")
-    return klass(connector)
+    return _get_klass(config["sources"][service_type])(connector)
 
 
 def get_data_sources(config):

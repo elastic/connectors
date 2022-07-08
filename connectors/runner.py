@@ -23,9 +23,6 @@ from connectors.logger import logger
 from connectors.source import get_data_sources, get_data_source
 
 
-IDLING = 10
-
-
 class ConnectorService:
     def __init__(self, config_file):
         self.config_file = config_file
@@ -34,17 +31,20 @@ class ConnectorService:
             raise IOError(f"{config_file} does not exist")
         with open(config_file) as f:
             self.config = yaml.safe_load(f)
+        self.service_config = self.config["service"]
+        self.idling = self.service_config["idling"]
+        self.hb = self.service_config["heartbeat"]
 
     def raise_if_spurious(self, exception):
         errors, first = self.errors
         errors += 1
 
         # if we piled up too many errors we raise and quit
-        if errors > 20:
+        if errors > self.service_config["max_errors"]:
             raise exception
 
         # we re-init every ten minutes
-        if time.time() - first > 600:
+        if time.time() - first > self.service_config["max_errors_span"]:
             first = time.time()
             errors = 0
 
@@ -58,17 +58,17 @@ class ConnectorService:
         connectors = BYOIndex(self.config["elasticsearch"])
         try:
             while True:
-                logger.debug("Polling...")
+                logger.debug(f"Polling every {self.idling} seconds")
                 async for connector in connectors.get_list():
                     try:
                         data_source = get_data_source(connector, self.config)
-                        loop.create_task(connector.heartbeat())
-                        await connector.sync(data_source, es, IDLING)
+                        loop.create_task(connector.heartbeat(self.hb))
+                        await connector.sync(data_source, es, self.idling)
                     except Exception as e:
                         logger.critical(e, exc_info=True)
                         self.raise_if_spurious(e)
 
-                await asyncio.sleep(IDLING)
+                await asyncio.sleep(self.idling)
         finally:
             await es.close()
 

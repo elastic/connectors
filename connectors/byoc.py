@@ -19,7 +19,6 @@ from connectors.source import DataSourceConfiguration
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
-HEARTBEAT_DELAY = 300
 
 
 def e2str(entry):
@@ -149,16 +148,16 @@ class BYOConnector:
         self.doc_source["last_seen"] = iso_utc()
         await self.index.save(self)
 
-    async def heartbeat(self):
+    async def heartbeat(self, delay):
         if self._heartbeat_started:
             return
         self._heartbeat_started = True
         while True:
-            logger.debug("*** BEAT")
+            logger.debug(f"*** BEAT every {delay} seconds")
             if not self._syncing:
                 self.doc_source["last_seen"] = iso_utc()
                 await self._write()
-            await asyncio.sleep(HEARTBEAT_DELAY)
+            await asyncio.sleep(delay)
 
     def next_sync(self):
         """Returns in seconds when the next sync should happen.
@@ -201,12 +200,14 @@ class BYOConnector:
 
     async def sync(self, data_provider, elastic_server, idling):
         service_type = self.service_type
-        logger.debug(f"Syncing '{service_type}'")
         next_sync = self.next_sync()
         if next_sync == -1 or next_sync - idling > 0:
-            logger.debug(f"Next sync due in {int(next_sync)} seconds")
+            logger.debug(
+                f"Next sync for {service_type} due in {int(next_sync)} seconds"
+            )
             return
 
+        logger.debug(f"Syncing '{service_type}'")
         self._syncing = True
         job = await self._sync_starts()
         try:
