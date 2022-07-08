@@ -1,10 +1,16 @@
-from connectors.elastic import ElasticServer
-from connectors.logger import logger
-
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
 import os
 import asyncio
 
 import yaml
+
+from connectors.byoei import ElasticServer
+from connectors.logger import logger
+from connectors.sources.mongo import MongoDataSource
 
 
 CONNECTORS_INDEX = ".elastic-connectors"
@@ -21,20 +27,7 @@ async def prepare(config):
         "api_key_id": "",
 
         # Configurations, e.g. API key
-        "configuration": {
-            "host": {
-                "value": "mongodb://127.0.0.1:27021",
-                "label": "MongoDB Host"
-            },
-            "database": {
-                "value": "sample_airbnb",
-                "label": "MongoDB Database"
-            },
-            "collection": {
-                "value": "listingsAndReviews",
-                "label": "MongoDB Collection",
-            },
-        },
+        "configuration": MongoDataSource.get_default_configuration(),
 
         # Name of the index the documents will be written to.
         # Set by Kibana, *not* the connector.

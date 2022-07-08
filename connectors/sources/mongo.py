@@ -7,23 +7,41 @@ from datetime import datetime
 from bson import Decimal128
 from motor.motor_asyncio import AsyncIOMotorClient
 
+from connectors.source import BaseDataSource
 
-class MongoConnector:
+
+class MongoDataSource(BaseDataSource):
     """MongoDB"""
 
     def __init__(self, definition):
-        self.definition = definition
-        self.config = definition.configuration
-        self.host = self.config.get("host", "mongodb://127.0.0.1:27021")
-        self.database = self.config["database"]
-        self.collection = self.config["collection"]
+        super().__init__(definition)
         self.client = AsyncIOMotorClient(
-            self.host,
+            self.config["host"],
             directConnection=True,
             connectTimeoutMS=60,
             socketTimeoutMS=60,
         )
-        self.db = self.client[self.database]
+        self.db = self.client[self.config["database"]]
+
+    @classmethod
+    def get_default_configuration(cls):
+        return {
+            "host": {
+                "value": "mongodb://127.0.0.1:27021",
+                "label": "MongoDB Host",
+                "type": "str",
+            },
+            "database": {
+                "value": "sample_airbnb",
+                "label": "MongoDB Database",
+                "type": "str",
+            },
+            "collection": {
+                "value": "listingsAndReviews",
+                "label": "MongoDB Collection",
+                "type": "str",
+            },
+        }
 
     async def ping(self):
         await self.client.admin.command("ping")
@@ -48,5 +66,5 @@ class MongoConnector:
         return doc
 
     async def get_docs(self):
-        async for doc in self.db[self.collection].find():
+        async for doc in self.db[self.config["collection"]].find():
             yield self.serialize(doc)

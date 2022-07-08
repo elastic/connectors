@@ -4,18 +4,37 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import aioboto3
+from connectors.source import BaseDataSource
 
 
-class S3Connector:
+class S3Connector(BaseDataSource):
     """Amazon S3"""
 
     def __init__(self, definition):
-        self.session = aioboto3.Session()
-        self.bucket = definition.configuration["bucket"]
-        self.region = definition.configuration.get("region", "eu-central-1")
+        super().__init__(definition)
+        self.session = None
+
+    async def ping(self):
+        pass
 
     async def get_docs(self):
-        async with self.session.resource("s3", region_name=self.region) as s3:
-            bucket = await s3.Bucket(self.bucket)
+        self.session = aioboto3.Session()
+        async with self.session.resource("s3", region_name=self.config["region"]) as s3:
+            bucket = await s3.Bucket(self.config["bucket"])
             async for s3_object in bucket.objects.all():
                 yield s3_object
+
+    @classmethod
+    def get_default_configuration(cls):
+        return {
+            "bucket": {
+                "value": "bucker",
+                "label": "AWS Bucket",
+                "type": "str",
+            },
+            "region": {
+                "value": "eu-central-1",
+                "label": "AWS Region",
+                "type": "str",
+            },
+        }
