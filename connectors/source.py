@@ -16,7 +16,7 @@ class Field:
         self.type = type
 
 
-class Configuration:
+class DataSourceConfiguration:
     def __init__(self, config):
         self._config = {}
         for key, value in config.items():

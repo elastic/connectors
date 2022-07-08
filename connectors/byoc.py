@@ -14,7 +14,7 @@ from elasticsearch import AsyncElasticsearch
 from crontab import CronTab
 
 from connectors.logger import logger
-from connectors.source import Configuration
+from connectors.source import DataSourceConfiguration
 
 
 CONNECTORS_INDEX = ".elastic-connectors"
@@ -138,7 +138,7 @@ class BYOConnector:
 
         self.service_type = doc_source["service_type"]
         self.index_name = doc_source["index_name"]
-        self.configuration = Configuration(doc_source["configuration"])
+        self.configuration = DataSourceConfiguration(doc_source["configuration"])
         self.scheduling = doc_source["scheduling"]
         self.client = index.client
         self.doc_source["status"] = e2str(Status.CONNECTED)
