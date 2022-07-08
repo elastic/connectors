@@ -17,6 +17,8 @@ class Field:
 
 
 class DataSourceConfiguration:
+    """Holds the configuration needed by the source class"""
+
     def __init__(self, config):
         self._config = {}
         for key, value in config.items():
@@ -41,6 +43,8 @@ class DataSourceConfiguration:
 
 
 class BaseDataSource:
+    """Base class, defines a lose contract."""
+
     def __init__(self, connector):
         self.connector = connector
         self.configuration = connector.configuration

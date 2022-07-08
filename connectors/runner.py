@@ -24,67 +24,69 @@ from connectors.registry import get_data_providers, get_data_provider
 
 
 IDLING = 10
-ERRORS = [0, time.time()]
 
 
-def raise_if_spurious(exception):
-    errors, first = ERRORS
-    errors += 1
+class ConnectorService:
+    def __init__(self, config_file):
+        self.config_file = config_file
+        self.errors = [0, time.time()]
+        if not os.path.exists(config_file):
+            raise IOError(f"{config_file} does not exist")
+        with open(config_file) as f:
+            self.config = yaml.safe_load(f)
 
-    # if we piled up too many errors we raise and quit
-    if errors > 20:
-        raise exception
+    def raise_if_spurious(self, exception):
+        errors, first = self.errors
+        errors += 1
 
-    # we re-init every ten minutes
-    if time.time() - first > 600:
-        first = time.time()
-        errors = 0
+        # if we piled up too many errors we raise and quit
+        if errors > 20:
+            raise exception
 
-    ERRORS[0] = errors
-    ERRORS[1] = first
+        # we re-init every ten minutes
+        if time.time() - first > 600:
+            first = time.time()
+            errors = 0
 
+        self.errors[0] = errors
+        self.errors[1] = first
 
-async def poll(config):
-    """Main event loop."""
-    loop = asyncio.get_event_loop()
-    es = ElasticServer(config["elasticsearch"])
-    connectors = BYOIndex(config["elasticsearch"])
-    try:
-        while True:
-            logger.debug("Polling...")
-            async for connector in connectors.get_list():
-                try:
-                    data_provider = get_data_provider(connector, config)
-                    loop.create_task(connector.heartbeat())
-                    await connector.sync(data_provider, es, IDLING)
-                except Exception as e:
-                    logger.critical(e, exc_info=True)
-                    raise_if_spurious(e)
+    async def poll(self):
+        """Main event loop."""
+        loop = asyncio.get_event_loop()
+        es = ElasticServer(self.config["elasticsearch"])
+        connectors = BYOIndex(self.config["elasticsearch"])
+        try:
+            while True:
+                logger.debug("Polling...")
+                async for connector in connectors.get_list():
+                    try:
+                        data_provider = get_data_provider(connector, self.config)
+                        loop.create_task(connector.heartbeat())
+                        await connector.sync(data_provider, es, IDLING)
+                    except Exception as e:
+                        logger.critical(e, exc_info=True)
+                        self.raise_if_spurious(e)
 
-            await asyncio.sleep(IDLING)
-    finally:
-        await es.close()
+                await asyncio.sleep(IDLING)
+        finally:
+            await es.close()
 
-
-async def get_list(config):
-    logger.info("Registered connectors:")
-    for provider in get_data_providers(config):
-        logger.info(f"- {provider.__doc__.strip()}")
+    async def get_list(self):
+        logger.info("Registered connectors:")
+        for provider in get_data_providers(self.config):
+            logger.info(f"- {provider.__doc__.strip()}")
 
 
 def run(args):
     """Runner"""
-    if not os.path.exists(args.config_file):
-        raise IOError(f"{args.config_file} does not exist")
-
-    with open(args.config_file) as f:
-        config = yaml.safe_load(f)
+    service = ConnectorService(args.config_file)
 
     loop = asyncio.get_event_loop()
     if args.action == "list":
-        coro = asyncio.ensure_future(get_list(config))
+        coro = asyncio.ensure_future(service.get_list())
     else:
-        coro = asyncio.ensure_future(poll(config))
+        coro = asyncio.ensure_future(service.poll())
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, coro.cancel)
@@ -93,4 +95,5 @@ def run(args):
         loop.run_until_complete(coro)
     except asyncio.CancelledError:
         logger.info("Bye")
+
     return 0
