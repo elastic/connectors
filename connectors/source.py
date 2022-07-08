@@ -3,8 +3,10 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-""" Helpers to build sources
+""" Helpers to build sources + FQN-based Registry
 """
+import importlib
+from connectors.logger import logger
 
 
 class Field:
@@ -59,3 +61,25 @@ class BaseDataSource:
 
     async def get_docs(self):
         raise NotImplementedError
+
+
+def _get_klass(fqn):
+    """Converts a Fully Qualified Name into a class instance."""
+    module_name, klass_name = fqn.split(":")
+    module = importlib.import_module(module_name)
+    return getattr(module, klass_name)
+
+
+def get_data_source(connector, config):
+    """Returns a source class instance, given a service type"""
+    service_type = connector.service_type
+    logger.debug(f"Getting source instance for {service_type}")
+    klass = _get_klass(config["sources"][service_type])
+    logger.debug(f"Found a matching class : {klass}")
+    return klass(connector)
+
+
+def get_data_sources(config):
+    """Returns an iterator of all registered sources."""
+    for name, fqn in config["sources"].items():
+        yield _get_klass(fqn)

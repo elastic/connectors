@@ -10,4 +10,3 @@ What the project contains:
 - `byoei.py` -- implements the BYOEI protocol
 - `runner.py` -- the async loop that polls Elasticsearch for work
 - `sources` -- data sources (Mongo, AWS S3, etc.)
-- `registry.py` -- data sources plugins registry

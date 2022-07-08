@@ -20,7 +20,7 @@ import yaml
 from connectors.byoei import ElasticServer
 from connectors.byoc import BYOIndex
 from connectors.logger import logger
-from connectors.registry import get_data_providers, get_data_provider
+from connectors.source import get_data_sources, get_data_source
 
 
 IDLING = 10
@@ -61,9 +61,9 @@ class ConnectorService:
                 logger.debug("Polling...")
                 async for connector in connectors.get_list():
                     try:
-                        data_provider = get_data_provider(connector, self.config)
+                        data_source = get_data_source(connector, self.config)
                         loop.create_task(connector.heartbeat())
-                        await connector.sync(data_provider, es, IDLING)
+                        await connector.sync(data_source, es, IDLING)
                     except Exception as e:
                         logger.critical(e, exc_info=True)
                         self.raise_if_spurious(e)
@@ -74,8 +74,8 @@ class ConnectorService:
 
     async def get_list(self):
         logger.info("Registered connectors:")
-        for provider in get_data_providers(self.config):
-            logger.info(f"- {provider.__doc__.strip()}")
+        for source in get_data_sources(self.config):
+            logger.info(f"- {source.__doc__.strip()}")
 
 
 def run(args):
