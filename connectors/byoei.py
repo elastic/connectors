@@ -13,10 +13,10 @@ from connectors.logger import logger
 
 
 class ElasticServer:
-    def __init__(self, config):
-        logger.debug(f"ElasticServer connecting to {config['host']}")
-        self.host = config["host"]
-        self.auth = config["user"], config["password"]
+    def __init__(self, elastic_config):
+        logger.debug(f"ElasticServer connecting to {elastic_config['host']}")
+        self.host = elastic_config["host"]
+        self.auth = elastic_config["user"], elastic_config["password"]
         self.client = AsyncElasticsearch(hosts=[self.host], basic_auth=self.auth)
 
     async def close(self):

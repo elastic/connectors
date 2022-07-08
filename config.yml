@@ -4,5 +4,5 @@ elasticsearch:
   password: changeme
 
 sources:
-  mongo: connectors.sources.mongo:MongoDataSoruce
+  mongo: connectors.sources.mongo:MongoDataSource
   s3: connectors.sources.aws:S3DataSource

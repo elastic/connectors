@@ -18,7 +18,7 @@ import time
 import yaml
 
 from connectors.byoei import ElasticServer
-from connectors.byoc import BYOConnectors
+from connectors.byoc import BYOIndex
 from connectors.logger import logger
 from connectors.registry import get_data_providers, get_data_provider
 
@@ -48,7 +48,7 @@ async def poll(config):
     """Main event loop."""
     loop = asyncio.get_event_loop()
     es = ElasticServer(config["elasticsearch"])
-    connectors = BYOConnectors(config["elasticsearch"])
+    connectors = BYOIndex(config["elasticsearch"])
     try:
         while True:
             logger.debug("Polling...")

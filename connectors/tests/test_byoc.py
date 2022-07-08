@@ -16,7 +16,7 @@ from connectors.byoc import (
     iso_utc,
     SyncJob,
     JobStatus,
-    BYOConnectors,
+    BYOIndex,
 )
 
 
@@ -101,7 +101,7 @@ async def test_connectors_get_list(mock_responses):
         headers=headers,
     )
 
-    connectors = BYOConnectors(config)
+    connectors = BYOIndex(config)
     conns = []
 
     async for connector in connectors.get_list():

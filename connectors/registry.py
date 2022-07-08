@@ -17,13 +17,13 @@ def get_klass(fqn):
     return getattr(module, klass_name)
 
 
-def get_data_provider(definition, config):
+def get_data_provider(connector, config):
     """Returns a source class instance, given a service type"""
-    service_type = definition.service_type
+    service_type = connector.service_type
     logger.debug(f"Getting source instance for {service_type}")
     klass = get_klass(config["sources"][service_type])
-    logger.debug(f"Found a matching plugin {klass}")
-    return klass(definition)
+    logger.debug(f"Found a matching class : {klass}")
+    return klass(connector)
 
 
 def get_data_providers(config):

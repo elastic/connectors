@@ -41,9 +41,9 @@ class Configuration:
 
 
 class BaseDataSource:
-    def __init__(self, definition):
-        self.definition = definition
-        self.config = Configuration(definition.configuration)
+    def __init__(self, connector):
+        self.connector = connector
+        self.configuration = connector.configuration
 
     @classmethod
     def get_default_configuration(cls):

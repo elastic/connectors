@@ -10,8 +10,8 @@ from connectors.source import BaseDataSource
 class S3Connector(BaseDataSource):
     """Amazon S3"""
 
-    def __init__(self, definition):
-        super().__init__(definition)
+    def __init__(self, connector):
+        super().__init__(connector)
         self.session = None
 
     async def ping(self):
@@ -19,8 +19,10 @@ class S3Connector(BaseDataSource):
 
     async def get_docs(self):
         self.session = aioboto3.Session()
-        async with self.session.resource("s3", region_name=self.config["region"]) as s3:
-            bucket = await s3.Bucket(self.config["bucket"])
+        async with self.session.resource(
+            "s3", region_name=self.configuration["region"]
+        ) as s3:
+            bucket = await s3.Bucket(self.configuration["bucket"])
             async for s3_object in bucket.objects.all():
                 yield s3_object
 

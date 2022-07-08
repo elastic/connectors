@@ -14,6 +14,8 @@ from elasticsearch import AsyncElasticsearch
 from crontab import CronTab
 
 from connectors.logger import logger
+from connectors.source import Configuration
+
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
@@ -48,11 +50,11 @@ def iso_utc(when=None):
 _CONNECTORS_CACHE = {}
 
 
-class BYOConnectors:
-    def __init__(self, config):
-        logger.debug(f"BYOConnectors connecting to {config['host']}")
-        self.host = config["host"]
-        self.auth = config["user"], config["password"]
+class BYOIndex:
+    def __init__(self, elastic_config):
+        logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
+        self.host = elastic_config["host"]
+        self.auth = elastic_config["user"], elastic_config["password"]
         self.client = AsyncElasticsearch(hosts=[self.host], basic_auth=self.auth)
 
     async def close(self):
@@ -60,7 +62,7 @@ class BYOConnectors:
 
     async def save(self, connector):
         return await self.client.index(
-            index=CONNECTORS_INDEX, id=connector.doc_id, body=dict(connector.definition)
+            index=CONNECTORS_INDEX, id=connector.doc_id, body=dict(connector.doc_source)
         )
 
     async def get_list(self):
@@ -129,24 +131,23 @@ class SyncJob:
 
 
 class BYOConnector:
-    def __init__(self, connectors, doc_id, definition):
-        self.definition = definition
+    def __init__(self, index, doc_id, doc_source):
+        self.doc_source = doc_source
         self.doc_id = doc_id
-        self.service_type = definition["service_type"]
-        self.index_name = definition["index_name"]
-        self.configuration = {}
-        for key, value in definition["configuration"].items():
-            self.configuration[key] = value["value"]
-        self.scheduling = definition["scheduling"]
-        self.connectors = connectors
-        self.client = connectors.client
-        self.definition["status"] = e2str(Status.CONNECTED)
-        self.definition["last_seen"] = iso_utc()
+        self.index = index
+
+        self.service_type = doc_source["service_type"]
+        self.index_name = doc_source["index_name"]
+        self.configuration = Configuration(doc_source["configuration"])
+        self.scheduling = doc_source["scheduling"]
+        self.client = index.client
+        self.doc_source["status"] = e2str(Status.CONNECTED)
+        self.doc_source["last_seen"] = iso_utc()
         self._heartbeat_started = self._syncing = False
 
     async def _write(self):
-        self.definition["last_seen"] = iso_utc()
-        await self.connectors.save(self)
+        self.doc_source["last_seen"] = iso_utc()
+        await self.index.save(self)
 
     async def heartbeat(self):
         if self._heartbeat_started:
@@ -155,7 +156,7 @@ class BYOConnector:
         while True:
             logger.debug("*** BEAT")
             if not self._syncing:
-                self.definition["last_seen"] = iso_utc()
+                self.doc_source["last_seen"] = iso_utc()
                 await self._write()
             await asyncio.sleep(HEARTBEAT_DELAY)
 
@@ -164,7 +165,7 @@ class BYOConnector:
 
         If the function returns -1, no sync is scheduled.
         """
-        if self.definition["sync_now"]:
+        if self.doc_source["sync_now"]:
             return 0
         if not self.scheduling["enabled"]:
             return -1
@@ -174,8 +175,8 @@ class BYOConnector:
         job = SyncJob(self.doc_id, self.client)
         job_id = await job.start()
 
-        self.definition["sync_now"] = False
-        self.definition["last_sync_status"] = e2str(job.status)
+        self.doc_source["sync_now"] = False
+        self.doc_source["last_sync_status"] = e2str(job.status)
         await self._write()
 
         logger.info(f"Sync starts, Job id: {job_id}")
@@ -184,8 +185,8 @@ class BYOConnector:
     async def _sync_done(self, job, indexed_count, deleted_count):
         await job.done(indexed_count, deleted_count)
 
-        self.definition["sync_status"] = e2str(job.status)
-        self.definition["last_sync"] = iso_utc()
+        self.doc_source["sync_status"] = e2str(job.status)
+        self.doc_source["last_sync"] = iso_utc()
         await self._write()
 
         logger.info(f"Sync done: {indexed_count} indexed, {deleted_count} deleted.")
@@ -193,9 +194,9 @@ class BYOConnector:
     async def _sync_failed(self, job, exception):
         await job.failed(exception)
 
-        self.definition["last_sync_error"] = str(exception)
-        self.definition["last_sync_status"] = e2str(job.status)
-        self.definition["last_sync"] = iso_utc()
+        self.doc_source["last_sync_error"] = str(exception)
+        self.doc_source["last_sync_status"] = e2str(job.status)
+        self.doc_source["last_sync"] = iso_utc()
         await self._write()
 
     async def sync(self, data_provider, elastic_server, idling):

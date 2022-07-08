@@ -13,15 +13,15 @@ from connectors.source import BaseDataSource
 class MongoDataSource(BaseDataSource):
     """MongoDB"""
 
-    def __init__(self, definition):
-        super().__init__(definition)
+    def __init__(self, connector):
+        super().__init__(connector)
         self.client = AsyncIOMotorClient(
-            self.config["host"],
+            self.configuration["host"],
             directConnection=True,
             connectTimeoutMS=60,
             socketTimeoutMS=60,
         )
-        self.db = self.client[self.config["database"]]
+        self.db = self.client[self.configuration["database"]]
 
     @classmethod
     def get_default_configuration(cls):
@@ -66,5 +66,5 @@ class MongoDataSource(BaseDataSource):
         return doc
 
     async def get_docs(self):
-        async for doc in self.db[self.config["collection"]].find():
+        async for doc in self.db[self.configuration["collection"]].find():
             yield self.serialize(doc)
