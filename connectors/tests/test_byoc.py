@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import asyncio
 import json
 from datetime import datetime
 
@@ -84,6 +85,39 @@ mongo = {
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
 }
+
+
+@pytest.mark.asyncio
+async def test_heartbeat(mock_responses):
+    _CONNECTORS_CACHE.clear()
+
+    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    headers = {"X-Elastic-Product": "Elasticsearch"}
+
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
+        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
+        headers=headers,
+    )
+
+    for i in range(10):
+        mock_responses.put(
+            "http://nowhere.com:9200/.elastic-connectors/_doc/1",
+            payload={"_id": "1"},
+            headers=headers,
+        )
+
+    connectors = BYOIndex(config)
+    conns = []
+    loop = asyncio.get_event_loop()
+
+    async for connector in connectors.get_list():
+        loop.create_task(connector.heartbeat(0.2))
+        loop.create_task(connector.heartbeat(1.0))  # NO-OP
+        conns.append(connector)
+
+    await asyncio.sleep(0.4)
+    await conns[0].close()
 
 
 @pytest.mark.asyncio

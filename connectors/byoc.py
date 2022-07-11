@@ -147,6 +147,10 @@ class BYOConnector:
         self.doc_source["status"] = e2str(Status.CONNECTED)
         self.doc_source["last_seen"] = iso_utc()
         self._heartbeat_started = self._syncing = False
+        self._closed = False
+
+    async def close(self):
+        self._closed = True
 
     async def _write(self):
         self.doc_source["last_seen"] = iso_utc()
@@ -156,7 +160,7 @@ class BYOConnector:
         if self._heartbeat_started:
             return
         self._heartbeat_started = True
-        while True:
+        while not self._closed:
             logger.debug(f"*** BEAT every {delay} seconds")
             if not self._syncing:
                 self.doc_source["last_seen"] = iso_utc()
