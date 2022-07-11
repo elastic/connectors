@@ -5,11 +5,13 @@
 #
 import json
 from datetime import datetime
+import asyncio
 
 from aioresponses import aioresponses
 from elasticsearch import AsyncElasticsearch
 import pytest
 
+from connectors.byoei import ElasticServer
 from connectors.byoc import (
     e2str,
     Status,
@@ -17,7 +19,15 @@ from connectors.byoc import (
     SyncJob,
     JobStatus,
     BYOIndex,
+    _CONNECTORS_CACHE,
 )
+
+
+@pytest.fixture(scope="module")
+def event_loop():
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
 
 
 @pytest.fixture
@@ -40,6 +50,8 @@ def test_utc():
 
 @pytest.mark.asyncio
 async def test_sync_job(mock_responses):
+    _CONNECTORS_CACHE.clear()
+
     client = AsyncElasticsearch(hosts=["http://nowhere.com:9200"])
 
     job = SyncJob("connector-id", client)
@@ -91,8 +103,9 @@ mongo = {
 
 @pytest.mark.asyncio
 async def test_connectors_get_list(mock_responses):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    _CONNECTORS_CACHE.clear()
 
+    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
 
     mock_responses.post(
@@ -109,3 +122,83 @@ async def test_connectors_get_list(mock_responses):
 
     assert len(conns) == 1
     await connectors.close()
+
+
+@pytest.mark.asyncio
+async def test_sync_mongo(mock_responses):
+    _CONNECTORS_CACHE.clear()
+
+    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    headers = {"X-Elastic-Product": "Elasticsearch"}
+
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
+        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
+        headers=headers,
+    )
+    mock_responses.put(
+        "http://nowhere.com:9200/.elastic-connectors/_doc/1",
+        payload={"_id": "1"},
+        headers=headers,
+    )
+    mock_responses.put(
+        "http://nowhere.com:9200/.elastic-connectors/_doc/1",
+        payload={"_id": "1"},
+        headers=headers,
+    )
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc",
+        payload={"_id": "1"},
+        headers=headers,
+    )
+    mock_responses.put(
+        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc/1",
+        payload={"_id": "1"},
+        headers=headers,
+    )
+    mock_responses.head(
+        "http://nowhere.com:9200/search-airbnb?expand_wildcards=hidden", headers=headers
+    )
+    mock_responses.get(
+        "http://nowhere.com:9200/search-airbnb",
+        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
+        headers=headers,
+    )
+    mock_responses.get(
+        "http://nowhere.com:9200/search-airbnb/_search?scroll=5m",
+        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
+        headers=headers,
+    )
+    mock_responses.post(
+        "http://nowhere.com:9200/search-airbnb/_search?scroll=5m",
+        payload={"_id": "1"},
+        headers=headers,
+    )
+    mock_responses.put(
+        "http://nowhere.com:9200/search-airbnb/_search?scroll=5m",
+        payload={"_id": "1"},
+        headers=headers,
+    )
+    mock_responses.put(
+        "http://nowhere.com:9200/_bulk",
+        payload={"items": []},
+        headers=headers,
+    )
+
+    doc = {"_id": 1}
+
+    class Data:
+        async def ping(self):
+            pass
+
+        async def get_docs(self, *args, **kw):
+            for d in [doc, doc]:
+                yield {"_id": 1}
+
+    es = ElasticServer(config)
+    connectors = BYOIndex(config)
+    try:
+        async for connector in connectors.get_list():
+            await connector.sync(Data(), es, 0)
+    finally:
+        await connectors.close()

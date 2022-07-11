@@ -61,7 +61,9 @@ class BYOIndex:
 
     async def save(self, connector):
         return await self.client.index(
-            index=CONNECTORS_INDEX, id=connector.doc_id, body=dict(connector.doc_source)
+            index=CONNECTORS_INDEX,
+            id=connector.doc_id,
+            document=dict(connector.doc_source),
         )
 
     async def get_list(self):
@@ -126,7 +128,9 @@ class SyncJob:
             "indexed_document_count": 0,
             "updated_at": iso_utc(),
         }
-        return await self.client.index(index=JOBS_INDEX, id=self.job_id, body=job_def)
+        return await self.client.index(
+            index=JOBS_INDEX, id=self.job_id, document=job_def
+        )
 
 
 class BYOConnector:
