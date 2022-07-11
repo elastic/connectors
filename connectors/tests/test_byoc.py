@@ -5,9 +5,7 @@
 #
 import json
 from datetime import datetime
-import asyncio
 
-from aioresponses import aioresponses
 from elasticsearch import AsyncElasticsearch
 import pytest
 
@@ -21,19 +19,6 @@ from connectors.byoc import (
     BYOIndex,
     _CONNECTORS_CACHE,
 )
-
-
-@pytest.fixture(scope="module")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
-@pytest.fixture
-def mock_responses():
-    with aioresponses() as m:
-        yield m
 
 
 def test_e2str():
