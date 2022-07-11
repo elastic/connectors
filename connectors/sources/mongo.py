@@ -4,10 +4,12 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from datetime import datetime
+import asyncio
 from bson import Decimal128
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from connectors.source import BaseDataSource
+from connectors.logger import logger
 
 
 class MongoDataSource(BaseDataSource):
@@ -18,10 +20,18 @@ class MongoDataSource(BaseDataSource):
         self.client = AsyncIOMotorClient(
             self.configuration["host"],
             directConnection=True,
-            connectTimeoutMS=60,
-            socketTimeoutMS=60,
+            connectTimeoutMS=120,
+            socketTimeoutMS=120,
         )
         self.db = self.client[self.configuration["database"]]
+        self._first_sync = self._dirty = True
+
+    async def watch(self, collection):
+        logger.debug("Watching changes...")
+        async with collection.watch([]) as stream:
+            async for change in stream:
+                logger.debug("Mongo has been changed")
+                self._dirty = True
 
     @classmethod
     def get_default_configuration(cls):
@@ -65,6 +75,18 @@ class MongoDataSource(BaseDataSource):
 
         return doc
 
+    async def changed(self):
+        return self._dirty
+
     async def get_docs(self):
-        async for doc in self.db[self.configuration["collection"]].find():
+        collection = self.db[self.configuration["collection"]]
+
+        if self._first_sync:
+            logger.debug("First Sync!")
+            asyncio.get_event_loop().create_task(self.watch(collection))
+            self._first_sync = False
+
+        async for doc in collection.find():
             yield self.serialize(doc)
+
+        self._dirty = False

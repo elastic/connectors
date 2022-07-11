@@ -8,6 +8,7 @@ Implementation of BYOC protocol.
 """
 import asyncio
 from enum import Enum
+import time
 
 from elasticsearch import AsyncElasticsearch
 from crontab import CronTab
@@ -142,6 +143,7 @@ class BYOConnector:
         self.doc_source["last_seen"] = iso_utc()
         self._heartbeat_started = self._syncing = False
         self._closed = False
+        self._start_time = None
 
     async def close(self):
         self._closed = True
@@ -180,6 +182,7 @@ class BYOConnector:
         self.doc_source["last_sync_status"] = e2str(job.status)
         await self._write()
 
+        self._start_time = time.time()
         logger.info(f"Sync starts, Job id: {job_id}")
         return job
 
@@ -189,8 +192,10 @@ class BYOConnector:
         self.doc_source["sync_status"] = e2str(job.status)
         self.doc_source["last_sync"] = iso_utc()
         await self._write()
-
-        logger.info(f"Sync done: {indexed_count} indexed, {deleted_count} deleted.")
+        logger.info(
+            f"Sync done: {indexed_count} indexed, {deleted_count} "
+            f" deleted. ({int(time.time() - self._start_time)} seconds)"
+        )
 
     async def _sync_failed(self, job, exception):
         await job.failed(exception)
@@ -209,6 +214,10 @@ class BYOConnector:
             )
             return
 
+        if not await data_provider.changed():
+            logger.debug(f"No change in {service_type} data provider, skipping...")
+            return
+
         logger.debug(f"Syncing '{service_type}'")
         self._syncing = True
         job = await self._sync_starts()
@@ -224,3 +233,4 @@ class BYOConnector:
             raise
         finally:
             self._syncing = False
+            self._start_time = None

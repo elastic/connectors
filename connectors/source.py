@@ -55,6 +55,9 @@ class BaseDataSource:
         """Returns a dict with a default configuration"""
         raise NotImplementedError
 
+    async def changed(self):
+        return True
+
     async def ping(self):
         raise NotImplementedError
 
@@ -69,10 +72,17 @@ def _get_klass(fqn):
     return getattr(module, klass_name)
 
 
+_CACHED_SOURCES = {}
+
+
 def get_data_source(connector, config):
     """Returns a source class instance, given a service type"""
     service_type = connector.service_type
-    return _get_klass(config["sources"][service_type])(connector)
+    if service_type not in _CACHED_SOURCES:
+        _CACHED_SOURCES[service_type] = _get_klass(config["sources"][service_type])(
+            connector
+        )
+    return _CACHED_SOURCES[service_type]
 
 
 def get_data_sources(config):

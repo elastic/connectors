@@ -6,7 +6,9 @@
 """
 Implementation of BYOEI protocol (+some ids collecting)
 """
+import time
 from collections import defaultdict
+
 from elasticsearch import AsyncElasticsearch, NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan, async_streaming_bulk
 from connectors.logger import logger
@@ -58,10 +60,15 @@ class ElasticServer:
             yield doc["_id"]
 
     async def async_bulk(self, index, generator):
+        start = time.time()
         existing_ids = frozenset(
             [doc_id async for doc_id in self.get_existing_ids(index)]
         )
-        logger.debug(f"Found {len(existing_ids)} docs in {index}")
+
+        logger.debug(
+            f"Found {len(existing_ids)} docs in {index} (duration "
+            f"{int(time.time() - start)} seconds)"
+        )
         seen_ids = set()
 
         async def get_docs():

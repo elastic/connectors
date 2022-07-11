@@ -56,7 +56,7 @@ async def prepare(config):
         # Scheduling intervals
         "scheduling": {
             "enabled": True,
-            "interval": "0 * * * *"
+            "interval": "* * * * *"
         },  # crontab syntax
 
         # A flag to run sync immediately
