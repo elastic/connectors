@@ -202,3 +202,4 @@ async def test_sync_mongo(mock_responses):
             await connector.sync(Data(), es, 0)
     finally:
         await connectors.close()
+        await es.close()

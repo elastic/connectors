@@ -12,4 +12,4 @@ lint:
 	bin/flake8 connectors
 
 test:
-	bin/pytest --cov=connectors -sv connectors/tests
+	bin/pytest --cov-report term-missing --cov-report html --cov=connectors -sv connectors/tests
