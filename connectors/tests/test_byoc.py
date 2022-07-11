@@ -210,6 +210,9 @@ async def test_sync_mongo(mock_responses):
         async def ping(self):
             pass
 
+        async def changed(self):
+            return True
+
         async def get_docs(self, *args, **kw):
             for d in [doc, doc]:
                 yield {"_id": 1}
