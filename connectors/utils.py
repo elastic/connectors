@@ -3,10 +3,10 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from connectors.source import Field
+from datetime import datetime
 
 
-def test_field():
-    # stupid holder
-    f = Field("name")
-    assert f.label == "name"
+def iso_utc(when=None):
+    if when is None:
+        when = datetime.utcnow()
+    return when.isoformat()

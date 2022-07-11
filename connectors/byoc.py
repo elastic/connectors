@@ -7,12 +7,12 @@
 Implementation of BYOC protocol.
 """
 import asyncio
-from datetime import datetime
 from enum import Enum
 
 from elasticsearch import AsyncElasticsearch
 from crontab import CronTab
 
+from connectors.utils import iso_utc
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration
 
@@ -38,12 +38,6 @@ class JobStatus(Enum):
     IN_PROGRESS = 2
     COMPLETED = 3
     ERROR = 4
-
-
-def iso_utc(when=None):
-    if when is None:
-        when = datetime.utcnow()
-    return when.isoformat()
 
 
 _CONNECTORS_CACHE = {}
