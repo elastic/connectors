@@ -8,13 +8,13 @@ To install the CLI, run:
 
 .. code-block:: bash
 
-   pip install elasticsearch-connectors
+   $ pip install elasticsearch-connectors
 
 The `elastic-ingest` CLI will be installed on your system:
 
 .. code-block:: bash
 
-    elastic-ingest --help
+    $ elastic-ingest --help
     usage: elastic-ingest [-h] [--action {poll,list}] [-c CONFIG_FILE] [--debug]
 
     optional arguments:
@@ -62,7 +62,7 @@ source `GoogleDriveDataSource` in the package `gdrive`, we should be able to run
 
 .. code-block:: bash
 
-   pip install mycompany-foo
+   $ pip install mycompany-foo
 
 And then add in the Yaml file:
 
@@ -77,4 +77,57 @@ And that source will be available in Kibana.
 Implementing a new source
 =========================
 
-XXX
+Implementing a new source is done by creating a new class which responsibility
+is to send back the data from the targeted source.
+
+Source classes are not required to use any base class as long
+as it follows the API signature defined in `BaseDataSource <connectors/source.py>`_:
+
+.. code-block:: python
+
+    class BaseDataSource:
+        @classmethod
+        def get_default_configuration(cls):
+            """Returns a dict with a default configuration
+            """
+            raise NotImplementedError
+
+        async def changed(self):
+            """When called, returns True if something has changed in the backend.
+
+            Otherwise returns False and the next sync is skipped.
+
+            Some backends don't provide that information.
+            In that case, this always return True.
+            """
+            return True
+
+        async def ping(self):
+            """When called, pings the backend
+
+            If the backend has an issue, raises an exception
+            """
+            raise NotImplementedError
+
+        async def get_docs(self):
+            """Returns an iterator on all documents present in the backend"""
+            raise NotImplementedError
+
+
+
+Async vs Sync
+=============
+
+The CLI uses `asyncio` and makes the assumption that all the code that has been
+called should not block the event loop. In order to achieve this asynchronicity
+source classes should use async libs for their backend.
+
+When not possible, the class should use `run_in_executor <https://docs.python.org/3/library/asyncio-eventloop.html#executing-code-in-thread-or-process-pools>`_
+and run the blocking code in another thread or process.
+
+Assuming the work is I/O bound, the class should use threads. If there's some
+heavy CPU-bound computation (encryption work, etc), processes should be used to
+avoid `GIL contention <https://realpython.com/python-gil/>`_
+
+
+
