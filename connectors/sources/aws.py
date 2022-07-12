@@ -30,7 +30,7 @@ class S3Connector(BaseDataSource):
     def get_default_configuration(cls):
         return {
             "bucket": {
-                "value": "bucker",
+                "value": "bucket",
                 "label": "AWS Bucket",
                 "type": "str",
             },

@@ -118,6 +118,7 @@ async def test_heartbeat(mock_responses):
 
     await asyncio.sleep(0.4)
     await conns[0].close()
+    await connectors.close()
 
 
 @pytest.mark.asyncio
@@ -222,6 +223,7 @@ async def test_sync_mongo(mock_responses):
     try:
         async for connector in connectors.get_list():
             await connector.sync(Data(), es, 0)
+            await connector.close()
     finally:
         await connectors.close()
         await es.close()
