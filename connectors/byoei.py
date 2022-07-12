@@ -55,15 +55,20 @@ class ElasticServer:
             return
 
         async for doc in async_scan(
-            client=self.client, index=index, _source=["id"], size=2000
+            client=self.client,
+            index=index,
+            _source=["id", "timestamp"],
         ):
-            yield doc["_id"]
+            yield doc["_source"]
 
     async def async_bulk(self, index, generator):
         start = time.time()
-        existing_ids = frozenset(
-            [doc_id async for doc_id in self.get_existing_ids(index)]
-        )
+        existing_ids = set()
+        existing_timestamps = {}
+
+        async for doc in self.get_existing_ids(index):
+            existing_ids.add(doc["id"])
+            existing_timestamps[doc["id"]] = doc["timestamp"]
 
         logger.debug(
             f"Found {len(existing_ids)} docs in {index} (duration "
@@ -75,8 +80,14 @@ class ElasticServer:
             async for doc in generator:
                 doc_id = doc["_id"]
                 seen_ids.add(doc_id)
+
+                if "timestamp" in doc:
+                    if existing_timestamps.get(doc_id, "") == doc["timestamp"]:
+                        continue
+                else:
+                    doc["timestamp"] = iso_utc()
+
                 doc["id"] = doc_id
-                doc["timestamp"] = iso_utc()
 
                 del doc["_id"]
                 yield {
