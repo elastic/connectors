@@ -85,9 +85,11 @@ To sync both sides, the CLI uses these steps:
 - asks the source if something has changed, if not, bail out.
 - collects the list of documents IDs and timestamps in Elasticsearch
 - iterate on documents provided by the data source class
-- for each document:
+- for each document
+
   - if there is a timestamp and it matches the one in Elasticsearch, ignores it
   - if not, adds it as an `upsert` operation into a `bulk` call to Elasticsearch
+
 - for each id from Elasticsearch that is not present it the documents sent by the data source class,
   adds it as a `delete` operation into the `bulk` call
 - `bulk` calls are emited every 500 operations.
