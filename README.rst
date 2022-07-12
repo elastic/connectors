@@ -73,12 +73,32 @@ And then add in the Yaml file:
 
 And that source will be available in Kibana.
 
+How a sync works
+================
+
+Syncing a backend consists of reconciliating an Elasticsearch index with an
+external data source. It's a read-only mirror of the data located in the 3rd
+party storage.
+
+To sync both sides, the CLI uses these steps:
+
+- asks the source if something has changed, if not, bail out.
+- collects the list of documents IDs and timestamps in Elasticsearch
+- iterate on documents provided by the data source class
+- for each document:
+  - if there is a timestamp and it matches the one in Elasticsearch, ignores it
+  - if not, adds it as an `upsert` operation into a `bulk` call to Elasticsearch
+- for each id from Elasticsearch that is not present it the documents sent by the data source class,
+  adds it as a `delete` operation into the `bulk` call
+- `bulk` calls are emited every 500 operations.
+
+
 
 Implementing a new source
 =========================
 
 Implementing a new source is done by creating a new class which responsibility
-is to send back the data from the targeted source.
+is to send back documents from the targeted source.
 
 Source classes are not required to use any base class as long
 as it follows the API signature defined in `BaseDataSource <connectors/source.py>`_:
@@ -110,7 +130,11 @@ as it follows the API signature defined in `BaseDataSource <connectors/source.py
             raise NotImplementedError
 
         async def get_docs(self):
-            """Returns an iterator on all documents present in the backend"""
+            """Returns an iterator on all documents present in the backend
+
+            Each document is a mapping with at least an `id` field
+            and optionally a `timestamp` field in ISO 8601 UTC
+            """
             raise NotImplementedError
 
 
