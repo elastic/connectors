@@ -28,7 +28,7 @@ The `elastic-ingest` CLI will be installed on your system:
 Architecture
 ============
 
-The CLI runs the `ConnectorService <connectors/runner.py>` which is an
+The CLI runs the `ConnectorService <connectors/runner.py>`_ which is an
 asynchronous event loop. It calls Elasticsearch on a regular basis to see if
 some syncs need to happen.
 
@@ -41,7 +41,7 @@ When a user asks for a sync of a specific source, the service instanciates
 a class that it uses to reach out the source and collect data.
 
 A source class can be any Python class, and is declared into the
-`configuration <config.yml>` file. For example:
+`configuration <config.yml>`_ file. For example:
 
 .. code-block:: yaml
 
