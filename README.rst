@@ -73,6 +73,29 @@ And then add in the Yaml file:
 
 And that source will be available in Kibana.
 
+
+Sync strategy
+=============
+
+In Workplace Search we have the four following syncs:
+
+- **Full sync** (runs every 72 hours by default): This synchronization job synchronizes all of the data from the content source ensuring full data parity.
+- **Incremental sync** (runs every 2 hours by default): This synchronization job synchronizes updates to the data at the content source ensuring high data freshness.
+- **Deletion sync** (runs every 6 hours by default): This synchronization job synchronizes document deletions from the content source ensuring regular removal of stale data.
+- **Permissions sync** (runs every 5 minutes by default, when Document Level Permissions are enabled): This synchronization job synchronizes document permissions from the content sources ensuring secure access to documents on Workplace Search.
+
+In `connectors-py` we are implementing for now just **Full sync**, which ensures
+full data parity (including deletion).
+
+This sync strategy is good enough for some sources like Mongo where 100,000 documents
+can be fully synced in less than 30 seconds.
+
+We will introduce more sophisticated syncs as we add new sources, in order to achieve
+the same level of freshness we have in Workplace Search.
+
+The **Permissions sync** will be included later as well once we have designed
+how Document-Level Permission works in the new architecture.
+
 How a sync works
 ================
 
