@@ -1,15 +1,15 @@
 # general metadata
-version: "CHANGEME"
-repository: "git@github.com:elastic/connectors.git"
-revision: "main"
+version: CHANGEME
+repository: git@github.com:elastic/connectors-ruby.git
+revision: main
 
 elasticsearch:
-#  cloud_id: "CHANGEME"
+#  cloud_id: CHANGEME
   hosts: http://localhost:9200
-  api_key: "CHANGEME"
+  api_key: CHANGEME
 
-connector_package_id: "CHANGEME"
-service_type: "CHANGEME"
+connector_package_id: CHANGEME
+service_type: stub_connector
 log_level: info
 
 idle_timeout: 60
