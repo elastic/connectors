@@ -10,3 +10,4 @@ aioresponses
 pytest
 pytest-cov
 pytest-asyncio
+mysql-connector-python

@@ -11,4 +11,5 @@ service:
 
 sources:
   mongo: connectors.sources.mongo:MongoDataSource
-  s3: connectors.sources.aws:S3DataSource
+  # s3: connectors.sources.aws:S3Connector
+  mysql: connectors.sources.mysql:MySqlDataSource

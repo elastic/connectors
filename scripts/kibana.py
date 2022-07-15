@@ -11,6 +11,7 @@ import yaml
 from connectors.byoei import ElasticServer
 from connectors.logger import logger
 from connectors.sources.mongo import MongoDataSource
+from connectors.sources.mysql import MySqlDataSource
 
 
 CONNECTORS_INDEX = ".elastic-connectors"
@@ -27,14 +28,14 @@ async def prepare(config):
         "api_key_id": "",
 
         # Configurations, e.g. API key
-        "configuration": MongoDataSource.get_default_configuration(),
+        "configuration": MySqlDataSource.get_default_configuration(),
 
         # Name of the index the documents will be written to.
         # Set by Kibana, *not* the connector.
-        "index_name": "search-airbnb",
+        "index_name": "search-mysql",
 
         # used to surface copy and icons in the front end
-        "service_type": "mongo",
+        "service_type": "mysql",
 
         # Current status of the connector, and the value can be
         "status": "configured",
