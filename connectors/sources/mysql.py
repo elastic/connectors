@@ -35,7 +35,7 @@ class MySqlDataSource(BaseDataSource):
     def get_default_configuration(cls):
         return {
             "host": {
-                "value": "10.50.2.115",
+                "value": "127.0.0.1",
                 "label": "MySQL Host",
                 "type": "str",
             },
@@ -45,17 +45,17 @@ class MySqlDataSource(BaseDataSource):
                 "type": "int",
             },
             "user": {
-                "value": "root",
+                "value": "user",
                 "label": "MySQL Username",
                 "type": "str",
             },
             "password": {
-                "value": "Crest@123",
+                "value": "password",
                 "label": "MySQL Password",
                 "type": "str",
             },
             "database": {
-                "value": "sql_hr",
+                "value": "sql_db",
                 "label": "MySQL Database",
                 "type": "str",
             },
