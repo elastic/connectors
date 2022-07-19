@@ -19,7 +19,6 @@ class MySqlDataSource(BaseDataSource):
     def __init__(self, connector):
         super().__init__(connector)
         try:
-            # cnx = connection.MySQLConnection(user='root', password='Crest@123', host='10.50.2.115',port="3306", database='sql_hr')
             self.connection = connection.MySQLConnection(
                 user=self.configuration["user"],
                 password=self.configuration["password"],
