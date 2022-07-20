@@ -17,6 +17,12 @@ If you want to add a new connector source, you need to:
 7. The backend needs to return 10,001 documents.
 
 
+.. note::
+
+   Any patch with changes outside `connectors/sources <connectors/sources>`_ or `config.yml <config.yml>`_
+   will be rejected.
+
+
 Testing the connector
 :::::::::::::::::::::
 
