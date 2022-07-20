@@ -65,7 +65,7 @@ class BaseDataSource:
         raise NotImplementedError
 
 
-def _get_klass(fqn):
+def get_source_klass(fqn):
     """Converts a Fully Qualified Name into a class instance."""
     module_name, klass_name = fqn.split(":")
     module = importlib.import_module(module_name)
@@ -79,7 +79,7 @@ def get_data_source(connector, config):
     """Returns a source class instance, given a service type"""
     service_type = connector.service_type
     if service_type not in _CACHED_SOURCES:
-        _CACHED_SOURCES[service_type] = _get_klass(config["sources"][service_type])(
+        _CACHED_SOURCES[service_type] = get_source_klass(config["sources"][service_type])(
             connector
         )
     return _CACHED_SOURCES[service_type]
@@ -88,4 +88,4 @@ def get_data_source(connector, config):
 def get_data_sources(config):
     """Returns an iterator of all registered sources."""
     for name, fqn in config["sources"].items():
-        yield _get_klass(fqn)
+        yield get_source_klass(fqn)
