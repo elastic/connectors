@@ -2,8 +2,67 @@ How to contribute connectors
 ============================
 
 
-Checklist
-:::::::::
+Implementing a new source
+:::::::::::::::::::::::::
+
+Implementing a new source is done by creating a new class which responsibility
+is to send back documents from the targeted source.
+
+Source classes are not required to use any base class as long
+as it follows the API signature defined in `BaseDataSource <connectors/source.py>`_:
+
+.. code-block:: python
+
+    class BaseDataSource:
+        @classmethod
+        def get_default_configuration(cls):
+            """Returns a dict with a default configuration
+            """
+            raise NotImplementedError
+
+        async def changed(self):
+            """When called, returns True if something has changed in the backend.
+
+            Otherwise returns False and the next sync is skipped.
+
+            Some backends don't provide that information.
+            In that case, this always return True.
+            """
+            return True
+
+        async def ping(self):
+            """When called, pings the backend
+
+            If the backend has an issue, raises an exception
+            """
+            raise NotImplementedError
+
+        async def get_docs(self):
+            """Returns an iterator on all documents present in the backend
+
+            Each document is a mapping with at least an `id` field
+            and optionally a `timestamp` field in ISO 8601 UTC
+            """
+            raise NotImplementedError
+
+
+Async vs Sync
+:::::::::::::
+
+The CLI uses `asyncio` and makes the assumption that all the code that has been
+called should not block the event loop. In order to achieve this asynchronicity
+source classes should use async libs for their backend.
+
+When not possible, the class should use `run_in_executor <https://docs.python.org/3/library/asyncio-eventloop.html#executing-code-in-thread-or-process-pools>`_
+and run the blocking code in another thread or process.
+
+Assuming the work is I/O-bound, the class should use threads. If there's some
+heavy CPU-bound computation (encryption work, etc), processes should be used to
+avoid `GIL contention <https://realpython.com/python-gil/>`_
+
+
+Contribution Checklist
+::::::::::::::::::::::
 
 
 If you want to add a new connector source, you need to:
@@ -12,15 +71,19 @@ If you want to add a new connector source, you need to:
 2. implement a class that implements all methods described in `connectors.source.BaseDataSource`
 3. add a unit test in `connectors/sources/tests <connectors/sources/tests>`_ with +90% coverage
 4. declare your connector in `config.yml <config.yml>`_ in the `sources` section
-5. when possible, provide a docker image that runs the backend service, so we can test the connector
-6. if you can't provide a docker image, provide the credentials needed to run against a service
-7. The backend needs to return 10,001 documents.
+5. declare your dependencies in `requirements.txt <requirements.txt>`_
+6. make sure you use an async lib for your source. If not possible, make sure you don't block the loop
+7. when possible, provide a docker image that runs the backend service, so we can test the connector
+8. if you can't provide a docker image, provide the credentials needed to run against a service
+9. The backend needs to return 10,001 documents.
 
 
-.. note::
+.. warning::
 
    Any patch with changes outside `connectors/sources <connectors/sources>`_ or `config.yml <config.yml>`_
-   will be rejected. If you need changes in the framework, reach out the Ingestion team.
+   and `requirements.txt <requirements.txt>`_ will be rejected.
+
+   If you need changes in the framework, reach out the Ingestion team.
 
 
 Testing the connector
