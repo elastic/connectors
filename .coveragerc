@@ -1,2 +1,2 @@
 [report]
-omit = connectors/tests/*
+omit = connectors/tests/*,connectors/sources/tests/*

@@ -79,9 +79,9 @@ def get_data_source(connector, config):
     """Returns a source class instance, given a service type"""
     service_type = connector.service_type
     if service_type not in _CACHED_SOURCES:
-        _CACHED_SOURCES[service_type] = get_source_klass(config["sources"][service_type])(
-            connector
-        )
+        _CACHED_SOURCES[service_type] = get_source_klass(
+            config["sources"][service_type]
+        )(connector)
     return _CACHED_SOURCES[service_type]
 
 
