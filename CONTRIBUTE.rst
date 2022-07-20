@@ -20,7 +20,7 @@ If you want to add a new connector source, you need to:
 .. note::
 
    Any patch with changes outside `connectors/sources <connectors/sources>`_ or `config.yml <config.yml>`_
-   will be rejected.
+   will be rejected. If you need changes in the framework, reach out the Ingestion team.
 
 
 Testing the connector
