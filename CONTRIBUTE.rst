@@ -75,7 +75,7 @@ If you want to add a new connector source, you need to:
 6. make sure you use an async lib for your source. If not possible, make sure you don't block the loop
 7. when possible, provide a docker image that runs the backend service, so we can test the connector
 8. if you can't provide a docker image, provide the credentials needed to run against a service
-9. the test backend needs to return 10,001 documents due to internal implementation details of the connector - it batches the data into chunks 0f 10,000 items
+9. the test backend needs to return 10,001 documents due to 10,000 being a default size limit for Elasticsearch pagination. Having 10,001 documents returned from the test backend will help testing connector more deeply
 
 
 .. warning::
