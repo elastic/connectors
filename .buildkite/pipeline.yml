@@ -1,2 +1,5 @@
+agents:
+  useVault: false
+
 steps:
   - command: "make test"
