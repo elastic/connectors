@@ -12,6 +12,7 @@ class Field:
     def __init__(self, name, label=None, value="", type="str"):
         if label is None:
             label = name
+        self.name = name
         self.label = label
         self.value = value
         self.type = type
