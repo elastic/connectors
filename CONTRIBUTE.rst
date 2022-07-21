@@ -71,11 +71,11 @@ If you want to add a new connector source, you need to:
 2. implement a class that implements all methods described in `connectors.source.BaseDataSource`
 3. add a unit test in `connectors/sources/tests <connectors/sources/tests>`_ with +90% coverage
 4. declare your connector in `config.yml <config.yml>`_ in the `sources` section
-5. declare your dependencies in `requirements.txt <requirements.txt>`_
+5. declare your dependencies in `requirements.txt <requirements.txt>`_. Make sure you pin these dependencies
 6. make sure you use an async lib for your source. If not possible, make sure you don't block the loop
 7. when possible, provide a docker image that runs the backend service, so we can test the connector
 8. if you can't provide a docker image, provide the credentials needed to run against a service
-9. The backend needs to return 10,001 documents.
+9. the test backend needs to return 10,001 documents due to internal implementation details of the connector - it batches the data into chunks 0f 10,000 items
 
 
 .. warning::
@@ -83,7 +83,7 @@ If you want to add a new connector source, you need to:
    Any patch with changes outside `connectors/sources <connectors/sources>`_ or `config.yml <config.yml>`_
    and `requirements.txt <requirements.txt>`_ will be rejected.
 
-   If you need changes in the framework, reach out the Ingestion team.
+   If you need changes in the framework, reach out to the `Ingestion team <https://github.com/orgs/elastic/teams/ingestion-team/members>`_.
 
 
 Testing the connector
