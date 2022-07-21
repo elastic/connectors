@@ -1,0 +1,13 @@
+elasticsearch:
+  host: http://nowhere.com:9200
+  user: elastic
+  password: changeme
+
+service:
+  idling: 0.5
+  heartbeat: 300
+  max_errors: 20
+  max_errors_span: 600
+
+sources:
+  fake: test_runner:FakeSource

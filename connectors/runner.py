@@ -34,6 +34,7 @@ class ConnectorService:
         self.service_config = self.config["service"]
         self.idling = self.service_config["idling"]
         self.hb = self.service_config["heartbeat"]
+        self.running = False
 
     def raise_if_spurious(self, exception):
         errors, first = self.errors
@@ -51,13 +52,17 @@ class ConnectorService:
         self.errors[0] = errors
         self.errors[1] = first
 
+    def stop(self):
+        self.running = False
+
     async def poll(self):
         """Main event loop."""
         loop = asyncio.get_event_loop()
         es = ElasticServer(self.config["elasticsearch"])
         connectors = BYOIndex(self.config["elasticsearch"])
+        self.running = True
         try:
-            while True:
+            while self.running:
                 logger.debug(f"Polling every {self.idling} seconds")
                 async for connector in connectors.get_list():
                     try:

@@ -7,7 +7,7 @@ import aioboto3
 from connectors.source import BaseDataSource
 
 
-class S3Connector(BaseDataSource):
+class S3DataSource(BaseDataSource):
     """Amazon S3"""
 
     def __init__(self, connector):
