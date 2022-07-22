@@ -12,6 +12,7 @@ require 'active_support/core_ext/object/deep_dup'
 require 'date'
 
 require 'utility'
+require 'stubs/app_config'
 require 'stubs/connectors/stats' unless defined?(Rails)
 
 module Connectors
@@ -218,7 +219,7 @@ module Connectors
 
         raise Utility::TransientServerError.new(
           "Transient error #{e.class}: #{e.message}",
-          :suspend_until => Connectors.config.fetch('transient_server_error_retry_delay_minutes').minutes.from_now,
+          :suspend_until => AppConfig.connectors.fetch('transient_server_error_retry_delay_minutes').minutes.from_now,
           :cursors => config.cursors
         )
       end
