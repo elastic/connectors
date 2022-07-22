@@ -3,6 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import io
+import sys
 import pytest
 import asyncio
 from aioresponses import aioresponses
@@ -19,6 +21,16 @@ class Logger:
         self.logs.append(msg)
 
     critical = info = debug
+
+
+@pytest.fixture
+def catch_stdout():
+    old = sys.stdout
+    new = sys.stdout = io.StringIO()
+    try:
+        yield new
+    finally:
+        sys.stdout = old
 
 
 @pytest.fixture

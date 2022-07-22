@@ -12,6 +12,7 @@ from argparse import ArgumentParser
 import os
 import logging
 
+from connectors import __version__
 from connectors.runner import run
 from connectors.logger import set_logger
 
@@ -42,11 +43,21 @@ def _parser():
         help="Run the event loop in debug mode.",
     )
 
+    parser.add_argument(
+        "--version",
+        action="store_true",
+        default=False,
+        help="Display the version and exit.",
+    )
+
     return parser
 
 
 def main(args=None):
     parser = _parser()
     args = parser.parse_args(args=args)
+    if args.version:
+        print(__version__)
+        return 0
     set_logger(args.debug and logging.DEBUG or logging.INFO)
     return run(args)
