@@ -7,7 +7,6 @@ import os
 import pytest
 import asyncio
 from unittest import mock
-from contextlib import contextmanager
 
 from connectors.runner import ConnectorService, run
 from connectors.byoc import _CONNECTORS_CACHE
@@ -145,6 +144,6 @@ async def test_connector_service_poll(mock_responses, patch_logger):
 def test_connector_service_run(mock_responses, patch_logger):
     args = mock.MagicMock()
     args.config_file = CONFIG
-    args.action = 'list'
+    args.action = "list"
     assert run(args) == 0
-    assert patch_logger.logs == ['Registered connectors:', '- Fakey']
+    assert patch_logger.logs == ["Registered connectors:", "- Fakey"]
