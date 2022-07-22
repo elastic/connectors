@@ -7,6 +7,7 @@ import pytest
 import asyncio
 from aioresponses import aioresponses
 
+
 class Logger:
     def __init__(self, silent=True):
         self.logs = []
@@ -18,7 +19,6 @@ class Logger:
         self.logs.append(msg)
 
     critical = info = debug
-
 
 
 @pytest.fixture
