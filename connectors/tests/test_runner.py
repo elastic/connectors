@@ -6,9 +6,10 @@
 import os
 import pytest
 import asyncio
+from unittest import mock
+from contextlib import contextmanager
 
-from connectors.runner import ConnectorService
-from connectors import runner
+from connectors.runner import ConnectorService, run
 from connectors.byoc import _CONNECTORS_CACHE
 
 
@@ -39,34 +40,16 @@ FAKE_CONFIG = {
 }
 
 
-class Logger:
-    logs = []
-
-    def debug(self, msg, exc_info=True):
-        print(msg)
-        self.logs.append(msg)
-
-    critical = info = debug
-
-
 def test_bad_config():
     with pytest.raises(OSError):
         ConnectorService("BEEUUUAH")
 
 
 @pytest.mark.asyncio
-async def test_connector_service_list():
-    logger = Logger()
-    old_logger = runner.logger
-    runner.logger = logger
-    try:
-        service = ConnectorService(CONFIG)
-        await service.get_list()
-
-    finally:
-        runner.logger = old_logger
-
-    assert logger.logs == ["Registered connectors:", "- Fakey"]
+async def test_connector_service_list(patch_logger):
+    service = ConnectorService(CONFIG)
+    await service.get_list()
+    assert patch_logger.logs == ["Registered connectors:", "- Fakey"]
 
 
 class FakeSource:
@@ -87,8 +70,8 @@ class FakeSource:
         yield {"_id": 1}
 
 
-@pytest.mark.asyncio
-async def test_connector_service_poll(mock_responses):
+def set_server_responses(mock_responses):
+
     _CONNECTORS_CACHE.clear()
     headers = {"X-Elastic-Product": "Elasticsearch"}
 
@@ -150,12 +133,18 @@ async def test_connector_service_poll(mock_responses):
         headers=headers,
     )
 
-    logger = Logger()
-    old_logger = runner.logger
-    runner.logger = logger
-    try:
-        service = ConnectorService(CONFIG)
-        asyncio.get_event_loop().call_soon(service.stop)
-        await service.poll()
-    finally:
-        runner.logger = old_logger
+
+@pytest.mark.asyncio
+async def test_connector_service_poll(mock_responses, patch_logger):
+    set_server_responses(mock_responses)
+    service = ConnectorService(CONFIG)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll()
+
+
+def test_connector_service_run(mock_responses, patch_logger):
+    args = mock.MagicMock()
+    args.config_file = CONFIG
+    args.action = 'list'
+    assert run(args) == 0
+    assert patch_logger.logs == ['Registered connectors:', '- Fakey']
