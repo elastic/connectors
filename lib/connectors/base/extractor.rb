@@ -13,7 +13,6 @@ require 'date'
 
 require 'utility'
 require 'stubs/connectors/stats' unless defined?(Rails)
-require 'stubs/connectors' unless defined?(Rails)
 
 module Connectors
   module Base
