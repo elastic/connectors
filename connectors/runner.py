@@ -86,8 +86,8 @@ class ConnectorService:
 def run(args):
     """Runner"""
     service = ConnectorService(args.config_file)
-
     loop = asyncio.get_event_loop()
+
     if args.action == "list":
         coro = asyncio.ensure_future(service.get_list())
     else:

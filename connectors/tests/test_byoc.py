@@ -145,7 +145,7 @@ async def test_connectors_get_list(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_sync_mongo(mock_responses):
+async def test_sync_mongo(mock_responses, patch_logger):
     _CONNECTORS_CACHE.clear()
 
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
