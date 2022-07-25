@@ -39,7 +39,6 @@ class S3DataSource(BaseDataSource):
         async with self.session.client(
             "s3", region_name=self.configuration["region"]
         ) as s3:
-
             # XXX limit the size
             logger.debug(f"Downloading {key}")
             resp = await s3.get_object(Bucket=self.configuration["bucket"], Key=key)
