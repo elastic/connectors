@@ -135,11 +135,10 @@ class ElasticServer:
                 data = await download
                 if data is None:
                     continue
-                doc_id = data.pop("_id")
                 yield {
                     "_op_type": "update",
                     "_index": index,
-                    "_id": doc_id,
+                    "_id": data.pop("_id"),
                     "doc": data,
                     "doc_as_upsert": True,
                 }
