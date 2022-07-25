@@ -17,6 +17,7 @@ SUPPORTED_CONTENT_TYPE = [
     "text/plain",
 ]
 SUPPORTED_FILETYPE = [".py", ".rst"]
+ONE_MEGA = 1048576
 
 
 class S3DataSource(BaseDataSource):
@@ -33,7 +34,7 @@ class S3DataSource(BaseDataSource):
     async def ping(self):
         pass
 
-    async def _get_content(self, key):
+    async def _get_content(self, key, timestamp):
         # reuse the same for all files
         async with self.session.client(
             "s3", region_name=self.configuration["region"]
@@ -44,11 +45,11 @@ class S3DataSource(BaseDataSource):
             resp = await s3.get_object(Bucket=self.configuration["bucket"], Key=key)
             data = ""
             while True:
-                chunk = await resp["Body"].read(1048576)
+                chunk = await resp["Body"].read(ONE_MEGA)
                 if not chunk:
                     break
                 data += chunk.decode("utf8")
-            return "text", data
+            return {"timestamp": timestamp, "text": data}
 
     async def get_docs(self):
         async with self.session.resource(
@@ -79,7 +80,11 @@ class S3DataSource(BaseDataSource):
                     ):
                         return
 
-                    return doc_id, timestamp, await self._get_content(obj_summary.key)
+                    content = await self._get_content(
+                        obj_summary.key, last_modified.isoformat()
+                    )
+                    content["_id"] = doc_id
+                    return content
 
                 yield doc, partial(_download, doc_id)
 
