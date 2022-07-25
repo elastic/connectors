@@ -5,6 +5,7 @@ bin/python:
 
 install: bin/python
 	bin/pip install -r requirements.txt
+	bin/python setup.py develop
 
 lint:
 	bin/black connectors
