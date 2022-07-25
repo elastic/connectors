@@ -87,6 +87,6 @@ class MongoDataSource(BaseDataSource):
             self._first_sync = False
 
         async for doc in collection.find():
-            yield self.serialize(doc)
+            yield self.serialize(doc), None
 
         self._dirty = False

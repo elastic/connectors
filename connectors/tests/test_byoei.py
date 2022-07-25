@@ -176,8 +176,8 @@ async def test_async_bulk(mock_responses):
     es = ElasticServer(config)
 
     async def get_docs():
-        yield {"_id": "1"}
-        yield {"_id": "3"}
+        yield {"_id": "1"}, None
+        yield {"_id": "3"}, None
 
     res = await es.async_bulk("search-some-index", get_docs())
 
