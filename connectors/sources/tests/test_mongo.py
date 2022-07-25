@@ -63,7 +63,7 @@ async def test_get_docs(patch_logger):
     ):
         source = create_source(MongoDataSource)
         num = 0
-        async for doc in source.get_docs():
+        async for (doc, dl) in source.get_docs():
             assert doc["id"] in ("one", "two")
             num += 1
 

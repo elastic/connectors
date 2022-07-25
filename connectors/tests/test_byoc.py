@@ -216,7 +216,7 @@ async def test_sync_mongo(mock_responses, patch_logger):
 
         async def get_docs(self, *args, **kw):
             for d in [doc, doc]:
-                yield {"_id": 1}
+                yield {"_id": 1}, None
 
     es = ElasticServer(config)
     connectors = BYOIndex(config)

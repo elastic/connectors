@@ -8,6 +8,7 @@ Implementation of BYOEI protocol (+some ids collecting)
 """
 import time
 from collections import defaultdict
+import asyncio
 
 from elasticsearch import AsyncElasticsearch, NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan, async_streaming_bulk
@@ -21,12 +22,14 @@ class ElasticServer:
         self.host = elastic_config["host"]
         self.auth = elastic_config["user"], elastic_config["password"]
         self.client = AsyncElasticsearch(hosts=[self.host], basic_auth=self.auth)
+        self._downloads = []
+        self.loop = asyncio.get_event_loop()
 
     async def close(self):
         await self.client.close()
 
     async def prepare_index(self, index, docs=None, mapping=None, delete_first=False):
-        """Creates the index, given a mappingm if it does not exists."""
+        """Creates the index, given a mapping if it does not exists."""
         # XXX todo update the existing index with the new mapping
         logger.debug(f"Checking index {index}")
         exists = await self.client.indices.exists(
@@ -65,14 +68,17 @@ class ElasticServer:
         ):
             yield doc["_source"]
 
+    def _add_download(self, coro):
+        self._downloads.append(coro)
+
     async def async_bulk(self, index, generator):
         start = time.time()
         existing_ids = set()
         existing_timestamps = {}
 
-        async for doc in self.get_existing_ids(index):
-            existing_ids.add(doc["id"])
-            existing_timestamps[doc["id"]] = doc["timestamp"]
+        async for es_doc in self.get_existing_ids(index):
+            existing_ids.add(es_doc["id"])
+            existing_timestamps[es_doc["id"]] = es_doc["timestamp"]
 
         logger.debug(
             f"Found {len(existing_ids)} docs in {index} (duration "
@@ -80,8 +86,11 @@ class ElasticServer:
         )
         seen_ids = set()
 
+        res = defaultdict(int)
+
         async def get_docs():
             async for doc in generator:
+                doc, lazy_download = doc
                 doc_id = doc["id"] = doc.pop("_id")
                 seen_ids.add(doc_id)
 
@@ -92,9 +101,18 @@ class ElasticServer:
                 # For them we update the docs in any case.
                 if "timestamp" in doc:
                     if existing_timestamps.get(doc_id, "") == doc["timestamp"]:
+                        logger.debug(f"Skipping {doc_id}")
+                        await lazy_download(doit=False)
                         continue
                 else:
                     doc["timestamp"] = iso_utc()
+
+                if lazy_download is not None:
+                    self._add_download(
+                        self.loop.create_task(
+                            lazy_download(doit=True, timestamp=doc["timestamp"])
+                        )
+                    )
 
                 yield {
                     "_op_type": "update",
@@ -111,10 +129,33 @@ class ElasticServer:
                     continue
                 yield {"_op_type": "delete", "_index": index, "_id": doc_id}
 
-        res = defaultdict(int)
+        # XXX this can be defferred
+        async def get_attachments():
+            for download in self._downloads:
+                data = await download
+                if data is None:
+                    continue
+                doc_id, ts, (field, data) = data
+                doc = {field: data, "timestamp": ts}
+                yield {
+                    "_op_type": "update",
+                    "_index": index,
+                    "_id": doc_id,
+                    "doc": doc,
+                    "doc_as_upsert": True,
+                }
 
-        # The async_streaming_bulk helper batches bulk requests for us.
-        async for ok, result in async_streaming_bulk(self.client, get_docs()):
+        async def _full_sync():
+            logger.debug("Getting the docs + starting the downloads if needed")
+            async for doc in get_docs():
+                yield doc
+
+            logger.debug("Uploading the attachments")
+            async for attachment in get_attachments():
+                yield attachment
+
+        logger.debug("Starting the bulk stream")
+        async for ok, result in async_streaming_bulk(self.client, _full_sync()):
             action, result = result.popitem()
             if not ok:
                 logger.exception(f"Failed to {action} see {result}")
