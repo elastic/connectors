@@ -40,8 +40,27 @@ as it follows the API signature defined in `BaseDataSource <connectors/source.py
         async def get_docs(self):
             """Returns an iterator on all documents present in the backend
 
-            Each document is a mapping with at least an `id` field
+            Each document is a tuple with:
+            - a mapping with the data to index
+            - a coroutine to download extra data (attachments)
+
+            The mapping should have least an `id` field
             and optionally a `timestamp` field in ISO 8601 UTC
+
+            The coroutine is called if the document needs to be synced
+            and has attachements. It need to return a mapping to index.
+
+            It has two arguments: doit and timestamp
+            If doit is False, it should return None immediatly.
+            If timestamp is provided, it should be used in the mapping.
+
+            Example:
+
+               async def get_file(doit=True, timestamp=None):
+                   if not doit:
+                       return
+                   return {'TEXT': 'DATA', 'timestamp': timestamp,
+                           'id': 'doc-id'}
             """
             raise NotImplementedError
 
