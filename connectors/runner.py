@@ -58,8 +58,13 @@ class ConnectorService:
     async def poll(self):
         """Main event loop."""
         loop = asyncio.get_event_loop()
-        es = ElasticServer(self.config["elasticsearch"])
         connectors = BYOIndex(self.config["elasticsearch"])
+        if not (await connectors.ping()):
+            logger.exception(f"{self.config['elasticsearch']['host']} seem down. Bye!")
+            await connectors.close()
+            return
+
+        es = ElasticServer(self.config["elasticsearch"])
         self.running = True
         try:
             while self.running:

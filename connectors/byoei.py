@@ -208,6 +208,9 @@ class ElasticServer:
         es_logger = logging.getLogger("elastic_transport.node")
         set_extra_logger(es_logger, log_level=logging.getLevelName(level))
 
+    async def ping(self):
+        await self.client.ping()
+
     async def close(self):
         await self.client.close()
 
