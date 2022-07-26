@@ -60,13 +60,12 @@ class Bulker:
                 continue
 
             operation = doc["_op_type"]
-
             self.ops[operation] += 1
-            batch.append({operation: {"_index": doc["_index"], "_id": doc["_id"]}})
-            if operation == "update":
+            if operation in ("update", "create"):
+                batch.append({"update": {"_index": doc["_index"], "_id": doc["_id"]}})
                 batch.append({"doc": doc["doc"], "doc_as_upsert": True})
-            elif operation == "create":
-                batch.append({"doc": doc["doc"]})
+            else:
+                batch.append({operation: {"_index": doc["_index"], "_id": doc["_id"]}})
 
             if len(batch) >= self.chunk_size * 2:
                 ops.append(asyncio.create_task(self._batch_bulk(list(batch))))
