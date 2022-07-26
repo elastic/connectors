@@ -63,6 +63,9 @@ class BYOIndex:
             document=dict(connector.doc_source),
         )
 
+    async def ping(self):
+        return await self.client.ping()
+
     async def get_list(self):
         resp = await self.client.search(
             index=CONNECTORS_INDEX,
