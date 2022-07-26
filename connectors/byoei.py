@@ -6,13 +6,15 @@
 """
 Implementation of BYOEI protocol (+some ids collecting)
 """
+import logging
 import time
 from collections import defaultdict
 import asyncio
 
 from elasticsearch import AsyncElasticsearch, NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan, async_streaming_bulk
-from connectors.logger import logger
+
+from connectors.logger import logger, set_es_logger
 from connectors.utils import iso_utc
 
 
@@ -24,6 +26,8 @@ class ElasticServer:
         self.client = AsyncElasticsearch(hosts=[self.host], basic_auth=self.auth)
         self._downloads = []
         self.loop = asyncio.get_event_loop()
+        level = elastic_config.get("log_level", "INFO")
+        set_es_logger(log_level=logging.getLevelName(level))
 
     async def close(self):
         await self.client.close()
@@ -92,6 +96,7 @@ class ElasticServer:
             async for doc in generator:
                 doc, lazy_download = doc
                 doc_id = doc["id"] = doc.pop("_id")
+                logger.debug(f"Looking at {doc_id}")
                 seen_ids.add(doc_id)
 
                 # If the doc has a timestamp, we can use it to see if it has
