@@ -127,7 +127,7 @@ class Fetcher:
             await asyncio.sleep(0)
 
         await self.queue.put("END_DOWNLOADS")
-        logger.info("Downloads done.")
+        logger.info(f"Downloads done {downloads} files.")
 
     async def run(self, generator):
         t1 = self.loop.create_task(self.get_docs(generator))
@@ -135,7 +135,7 @@ class Fetcher:
         await asyncio.gather(t1, t2)
 
     async def get_docs(self, generator):
-        logger.info("Starting doc syncs")
+        logger.info("Starting doc lookups")
         self.sync_runs = True
 
         seen_ids = set()
