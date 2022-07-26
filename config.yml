@@ -2,6 +2,7 @@ elasticsearch:
   host: http://localhost:9200
   user: elastic
   password: changeme
+  log_level: DEBUG
 
 service:
   idling: 30
