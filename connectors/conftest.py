@@ -24,6 +24,21 @@ class Logger:
 
 
 @pytest.fixture
+def patch_ping():
+    from connectors.byoc import BYOIndex
+
+    async def _ping(*args):
+        return True
+
+    old = BYOIndex.ping
+    BYOIndex.ping = _ping
+    try:
+        yield
+    finally:
+        BYOIndex.ping = old
+
+
+@pytest.fixture
 def catch_stdout():
     old = sys.stdout
     new = sys.stdout = io.StringIO()

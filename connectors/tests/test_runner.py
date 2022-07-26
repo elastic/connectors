@@ -134,14 +134,7 @@ def set_server_responses(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_connector_service_poll(mock_responses, patch_logger):
-    from connectors.byoc import BYOIndex
-
-    async def _ping(*args):
-        return True
-
-    BYOIndex.ping = _ping
-
+async def test_connector_service_poll(mock_responses, patch_logger, patch_ping):
     set_server_responses(mock_responses)
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
@@ -154,3 +147,77 @@ def test_connector_service_run(mock_responses, patch_logger):
     args.action = "list"
     assert run(args) == 0
     assert patch_logger.logs == ["Registered connectors:", "- Fakey"]
+
+
+@pytest.mark.asyncio
+async def test_ping_fails(mock_responses, patch_logger):
+    from connectors.byoc import BYOIndex
+
+    async def _ping(*args):
+        return False
+
+    BYOIndex.ping = _ping
+
+    service = ConnectorService(CONFIG)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll()
+
+    assert patch_logger.logs[-1] == "http://nowhere.com:9200 seem down. Bye!"
+
+
+@pytest.mark.asyncio
+async def test_spurious(mock_responses, patch_logger, patch_ping):
+    set_server_responses(mock_responses)
+
+    from connectors.byoc import BYOConnector
+
+    async def _sync(*args):
+        raise Exception("me")
+
+    old_sync = BYOConnector.sync
+    BYOConnector.sync = _sync
+
+    try:
+        service = ConnectorService(CONFIG)
+        service.idling = 0
+        service.service_config["max_errors"] = 0
+        await service.poll()
+    except Exception:
+        pass
+    finally:
+        BYOConnector.sync = old_sync
+
+    assert patch_logger.logs[-1].args[0] == "me"
+
+
+@pytest.mark.asyncio
+async def test_spurious_continue(mock_responses, patch_logger, patch_ping):
+    set_server_responses(mock_responses)
+
+    from connectors.byoc import BYOConnector
+
+    async def _sync(*args):
+        raise Exception("me")
+
+    old_sync = BYOConnector.sync
+    BYOConnector.sync = _sync
+
+    set_server_responses(mock_responses)
+    headers = {"X-Elastic-Product": "Elasticsearch"}
+
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
+        payload={"hits": {"hits": [{"_id": "1", "_source": FAKE_CONFIG}]}},
+        headers=headers,
+    )
+
+    try:
+        service = ConnectorService(CONFIG)
+        asyncio.get_event_loop().call_soon(service.stop)
+        await service.poll()
+    except Exception:
+        pass
+    finally:
+        BYOConnector.sync = old_sync
+
+    assert patch_logger.logs[3].args[0] == "me"

@@ -176,11 +176,19 @@ async def test_async_bulk(mock_responses, patch_logger):
     es = ElasticServer(config)
 
     async def get_docs():
-        yield {"_id": "1"}, None
-        yield {"_id": "3"}, None
+        async def _dl_none(doit=True, timestamp=None):
+            return None
+
+        async def _dl(doit=True, timestamp=None):
+            if not doit:
+                return
+            return {"TEXT": "DATA", "timestamp": timestamp, "_id": "1"}
+
+        yield {"_id": "1", "timestamp": datetime.datetime.now().isoformat()}, _dl
+        yield {"_id": "3"}, _dl_none
 
     res = await es.async_bulk("search-some-index", get_docs())
 
-    # we should delete `2`, update `1` and create `3`
-    assert res == {"create": 1, "delete": 1, "update": 1}
+    # we should delete `2`, update `2` and create `3`
+    assert res == {"create": 1, "delete": 1, "update": 2}
     await es.close()
