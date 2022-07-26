@@ -62,9 +62,9 @@ async def prepare(service_type, index_name, config):
         print(f"Prepare {JOBS_INDEX}")
         await es.prepare_index(JOBS_INDEX, [], delete_first=True)
 
-        print(f"Delete search-airbnb")
-        if await es.client.indices.exists(index="search-airbnb"):
-            await es.client.indices.delete(index="search-airbnb")
+        print(f"Delete {index_name}")
+        if await es.client.indices.exists(index=index_name):
+            await es.client.indices.delete(index=index_name)
         print("Done")
     finally:
         await es.close()

@@ -7,10 +7,13 @@ import os
 from hashlib import md5
 import asyncio
 from functools import partial
+import logging
 
 import aioboto3
+from aiobotocore.utils import logger as aws_logger
+
 from connectors.source import BaseDataSource
-from connectors.logger import logger
+from connectors.logger import logger, set_extra_logger
 
 
 SUPPORTED_CONTENT_TYPE = [
@@ -27,6 +30,8 @@ class S3DataSource(BaseDataSource):
         super().__init__(connector)
         self.session = aioboto3.Session()
         self.loop = asyncio.get_event_loop()
+        set_extra_logger(aws_logger, log_level=logging.INFO, prefix="S3")
+        set_extra_logger("aioboto3.resources", log_level=logging.INFO, prefix="S3")
 
     async def close(self):
         await self.dl_client.close()
@@ -45,6 +50,7 @@ class S3DataSource(BaseDataSource):
             data = ""
             while True:
                 chunk = await resp["Body"].read(ONE_MEGA)
+                await asyncio.sleep(0)
                 if not chunk:
                     break
                 data += chunk.decode("utf8")
@@ -55,25 +61,31 @@ class S3DataSource(BaseDataSource):
             "s3", region_name=self.configuration["region"]
         ) as s3:
             bucket = await s3.Bucket(self.configuration["bucket"])
+            await asyncio.sleep(0)
+
             async for obj_summary in bucket.objects.all():
+
                 doc_id = md5(obj_summary.key.encode("utf8")).hexdigest()
-                obj = await obj_summary.Object()
-                last_modified = await obj.last_modified
+                last_modified = await obj_summary.last_modified
+                await asyncio.sleep(0)
 
                 doc = {
                     "_id": doc_id,
                     "filename": obj_summary.key,
                     "size": await obj_summary.size,
-                    "content-type": await obj.content_type,
                     "timestamp": last_modified.isoformat(),
                 }
 
                 async def _download(doc_id, timestamp=None, doit=None):
                     if not doit:
                         return
+
                     # XXX check the checksum_crc32 of the file
+                    obj = await obj_summary.Object()  # XXXX expensive
+
+                    content_type = await obj.content_type
                     if (
-                        doc["content-type"] not in SUPPORTED_CONTENT_TYPE
+                        content_type not in SUPPORTED_CONTENT_TYPE
                         and os.path.splitext(obj_summary.key)[-1]
                         not in SUPPORTED_FILETYPE
                     ):
@@ -96,7 +108,7 @@ class S3DataSource(BaseDataSource):
                 "type": "str",
             },
             "region": {
-                "value": "eu-central-1",
+                "value": "us-west-2",
                 "label": "AWS Region",
                 "type": "str",
             },
