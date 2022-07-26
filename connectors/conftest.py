@@ -35,18 +35,27 @@ def catch_stdout():
 
 @pytest.fixture
 def patch_logger(silent=True):
-    logger = Logger(silent)
+    new_logger = Logger(silent)
 
-    from connectors import runner
-    from connectors import byoc
-    from connectors import byoei
+    from connectors.logger import logger
 
-    old_logger = runner.logger
-    byoei.logger = runner.logger = byoc.logger = logger
+    logger._old_exception = logger.exception
+    logger._old_critical = logger.critical
+    logger._old_info = logger.info
+    logger._old_debug = logger.debug
+
+    logger.exception = new_logger.debug
+    logger.critical = new_logger.debug
+    logger.info = new_logger.debug
+    logger.debug = new_logger.debug
+
     try:
-        yield logger
+        yield new_logger
     finally:
-        byoei.logger = runner.logger = byoc.logger = old_logger
+        logger.exception = logger._old_exception
+        logger.critical = logger._old_critical
+        logger.info = logger._old_info
+        logger.debug = logger._old_debug
 
 
 @pytest.fixture(scope="module")

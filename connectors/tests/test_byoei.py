@@ -108,7 +108,7 @@ async def test_get_existing_ids(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_async_bulk(mock_responses):
+async def test_async_bulk(mock_responses, patch_logger):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.get(
