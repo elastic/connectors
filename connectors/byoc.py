@@ -232,7 +232,11 @@ class BYOConnector:
             result = await elastic_server.async_bulk(
                 self.index_name, data_provider.get_docs()
             )
-            await self._sync_done(job, result.get("update", 0), result.get("delete", 0))
+            await self._sync_done(
+                job,
+                result.get("update", 0) + result.get("create", 0),
+                result.get("delete", 0),
+            )
         except Exception as e:
             await self._sync_failed(job, e)
             raise
