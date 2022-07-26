@@ -1,2 +1,2 @@
 [report]
-omit = connectors/tests/*,connectors/sources/tests/*
+omit = connectors/conftest.py,connectors/tests/*,connectors/sources/tests/*
