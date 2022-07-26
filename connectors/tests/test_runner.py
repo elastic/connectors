@@ -135,6 +135,13 @@ def set_server_responses(mock_responses):
 
 @pytest.mark.asyncio
 async def test_connector_service_poll(mock_responses, patch_logger):
+    from connectors.byoc import BYOIndex
+
+    async def _ping(*args):
+        return True
+
+    BYOIndex.ping = _ping
+
     set_server_responses(mock_responses)
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)

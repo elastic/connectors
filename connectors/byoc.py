@@ -54,6 +54,9 @@ class BYOIndex:
         )
 
     async def close(self):
+        for connector in _CONNECTORS_CACHE.values():
+            await connector.close()
+            await asyncio.sleep(0)
         await self.client.close()
 
     async def save(self, connector):
@@ -149,9 +152,13 @@ class BYOConnector:
         self._heartbeat_started = self._syncing = False
         self._closed = False
         self._start_time = None
+        self._hb = None
 
     async def close(self):
         self._closed = True
+        if self._heartbeat_started:
+            self._hb.cancel()
+            self._heartbeat_started = False
 
     async def _write(self):
         self.doc_source["last_seen"] = iso_utc()
@@ -161,12 +168,16 @@ class BYOConnector:
         if self._heartbeat_started:
             return
         self._heartbeat_started = True
-        while not self._closed:
-            logger.debug(f"*** BEAT every {delay} seconds")
-            if not self._syncing:
-                self.doc_source["last_seen"] = iso_utc()
-                await self._write()
-            await asyncio.sleep(delay)
+
+        async def _heartbeat():
+            while not self._closed:
+                logger.debug(f"*** BEAT every {delay} seconds")
+                if not self._syncing:
+                    self.doc_source["last_seen"] = iso_utc()
+                    await self._write()
+                await asyncio.sleep(delay)
+
+        self._hb = asyncio.create_task(_heartbeat())
 
     def next_sync(self):
         """Returns in seconds when the next sync should happen.
