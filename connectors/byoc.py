@@ -141,7 +141,6 @@ class BYOConnector:
         self.doc_source = doc_source
         self.doc_id = doc_id
         self.index = index
-
         self.service_type = doc_source["service_type"]
         self.index_name = doc_source["index_name"]
         self.configuration = DataSourceConfiguration(doc_source["configuration"])
@@ -240,6 +239,8 @@ class BYOConnector:
         try:
             await data_provider.ping()
             await elastic_server.prepare_index(self.index_name)
+            await asyncio.sleep(0)
+
             result = await elastic_server.async_bulk(
                 self.index_name, data_provider.get_docs()
             )

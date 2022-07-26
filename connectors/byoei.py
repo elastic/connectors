@@ -71,6 +71,8 @@ class Bulker:
                 ops.append(asyncio.create_task(self._batch_bulk(list(batch))))
                 batch.clear()
 
+            await asyncio.sleep(0)
+
         if len(batch) > 0:
             ops.append(asyncio.create_task(self._batch_bulk(list(batch))))
             batch.clear()

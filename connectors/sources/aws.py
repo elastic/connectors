@@ -19,7 +19,7 @@ from connectors.logger import logger, set_extra_logger
 SUPPORTED_CONTENT_TYPE = [
     "text/plain",
 ]
-SUPPORTED_FILETYPE = [".py", ".rst", ".rb", ".sh", ".md"]
+SUPPORTED_FILETYPE = [".py", ".rst", ".rb", ".sh", ".md", ".txt"]
 ONE_MEGA = 1048576
 
 
@@ -37,7 +37,7 @@ class S3DataSource(BaseDataSource):
         await self.dl_client.close()
 
     async def ping(self):
-        pass
+        return True
 
     async def _get_content(self, key, timestamp):
         # reuse the same for all files

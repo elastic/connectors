@@ -5,6 +5,7 @@
 #
 import io
 import sys
+import os
 import pytest
 import asyncio
 from aioresponses import aioresponses
@@ -84,3 +85,26 @@ def event_loop():
 def mock_responses():
     with aioresponses() as m:
         yield m
+
+
+@pytest.fixture
+def mock_aws():
+    if "AWS_ACCESS_KEY_ID" in os.environ:
+        old_key = os.environ["AWS_ACCESS_KEY_ID"]
+        os.environ["AWS_ACCESS_KEY_ID"] = "xxx"
+    else:
+        old_key = None
+
+    if "AWS_SECRET_ACCESS_KEY" in os.environ:
+        old_secret = os.environ["AWS_SECRET_ACCESS_KEY"]
+        os.environ["AWS_SECRET_ACCESS_KEY"] = "xxx"
+    else:
+        old_secret = None
+
+    try:
+        yield
+    finally:
+        if old_secret is not None:
+            os.environ["AWS_SECRET_ACCESS_KEY"] = old_secret
+        if old_key is not None:
+            os.environ["AWS_ACCESS_KEY_ID"] = old_key
