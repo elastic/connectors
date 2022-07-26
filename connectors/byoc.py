@@ -49,7 +49,9 @@ class BYOIndex:
         logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
         self.host = elastic_config["host"]
         self.auth = elastic_config["user"], elastic_config["password"]
-        self.client = AsyncElasticsearch(hosts=[self.host], basic_auth=self.auth)
+        self.client = AsyncElasticsearch(
+            hosts=[self.host], basic_auth=self.auth, request_timeout=120
+        )
 
     async def close(self):
         await self.client.close()

@@ -26,17 +26,18 @@ class Bulker:
         self.queue = queue
         self.bulk_time = 0
         self.bulking = False
-        self.indexed_pages_count = 0
+        self.ops = defaultdict(int)
+        self.chunk_size = 500
 
-    async def batch_bulk(self, operations):
+    async def _batch_bulk(self, operations):
         # todo treat result to retry errors like in async_streaming_bulk
         start = time.time()
         try:
             res = await self.client.bulk(operations=operations)
         finally:
             self.bulk_time += time.time() - start
-        self.indexed_pages_count += int(len(operations) / 2)
-        logger.info(f"Indexed {self.indexed_pages_count}.")
+
+        logger.info(dict(self.ops))
         return res
 
     async def run(self):
@@ -58,6 +59,7 @@ class Bulker:
             if doc in ("END_DOCS", "END_DOWNLOADS"):
                 continue
 
+            self.ops[doc["_op_type"]] += 1
             batch.append(
                 {doc["_op_type"]: {"_index": doc["_index"], "_id": doc["_id"]}}
             )
@@ -80,25 +82,35 @@ class Bulker:
 class Fetcher:
     """Grab data and add them in the queue for the bulker"""
 
-    def __init__(self, client, queue, index):
+    def __init__(self, client, queue, index, existing_ids, existing_timestamps):
         self.client = client
         self.queue = queue
         self.bulk_time = 0
         self.bulking = False
         self.index = index
-        self._downloads = []
+        self._downloads = asyncio.Queue()
         self.loop = asyncio.get_event_loop()
-
-    def _add_download(self, coro):
-        # XXX use a queue to throttle downloads
-        self._downloads.append(coro)
+        self.existing_ids = existing_ids
+        self.existing_timestamps = existing_timestamps
+        self.sync_runs = False
 
     # XXX this can be defferred
     async def get_attachments(self):
-        for download in self._downloads:
-            data = await download
+        downloads = 0
+        logger.info("Starting downloads")
+
+        while self.sync_runs:
+            coro = await self._downloads.get()
+            if coro == "END":
+                break
+
+            data = await coro
+            await asyncio.sleep(0)
+
             if data is None:
                 continue
+
+            downloads += 1
             await self.queue.put(
                 {
                     "_op_type": "update",
@@ -108,18 +120,23 @@ class Fetcher:
                     "doc_as_upsert": True,
                 }
             )
+
+            if divmod(downloads, 10)[-1] == 0:
+                logger.info(f"Downloaded {downloads} files.")
+
             await asyncio.sleep(0)
 
         await self.queue.put("END_DOWNLOADS")
+        logger.info("Downloads done.")
 
-    async def run(self, generator, existing_ids, existing_timestamps):
-        t1 = self.loop.create_task(
-            self.get_docs(generator, existing_ids, existing_timestamps)
-        )
+    async def run(self, generator):
+        t1 = self.loop.create_task(self.get_docs(generator))
         t2 = self.loop.create_task(self.get_attachments())
         await asyncio.gather(t1, t2)
 
-    async def get_docs(self, generator, existing_ids, existing_timestamps):
+    async def get_docs(self, generator):
+        logger.info("Starting doc syncs")
+        self.sync_runs = True
 
         seen_ids = set()
         async for doc in generator:
@@ -134,7 +151,7 @@ class Fetcher:
             # Some backends do not know how to do this so it's optional.
             # For them we update the docs in any case.
             if "timestamp" in doc:
-                if existing_timestamps.get(doc_id, "") == doc["timestamp"]:
+                if self.existing_timestamps.get(doc_id, "") == doc["timestamp"]:
                     logger.debug(f"Skipping {doc_id}")
                     await lazy_download(doit=False)
                     continue
@@ -142,7 +159,7 @@ class Fetcher:
                 doc["timestamp"] = iso_utc()
 
             if lazy_download is not None:
-                self._add_download(
+                await self._downloads.put(
                     self.loop.create_task(
                         lazy_download(doit=True, timestamp=doc["timestamp"])
                     )
@@ -161,13 +178,14 @@ class Fetcher:
 
         # We delete any document that existed in Elasticsearch that was not
         # returned by the backend.
-        for doc_id in existing_ids:
+        for doc_id in self.existing_ids:
             if doc_id in seen_ids:
                 continue
             await self.queue.put(
                 {"_op_type": "delete", "_index": self.index, "_id": doc_id}
             )
 
+        await self._downloads.put("END")
         await self.queue.put("END_DOCS")
 
 
@@ -176,14 +194,14 @@ class ElasticServer:
         logger.debug(f"ElasticServer connecting to {elastic_config['host']}")
         self.host = elastic_config["host"]
         self.auth = elastic_config["user"], elastic_config["password"]
-        self.client = AsyncElasticsearch(hosts=[self.host], basic_auth=self.auth)
+        self.client = AsyncElasticsearch(
+            hosts=[self.host], basic_auth=self.auth, request_timeout=120
+        )
         self._downloads = []
         self.loop = asyncio.get_event_loop()
         level = elastic_config.get("log_level", "INFO")
         es_logger = logging.getLogger("elastic_transport.node")
         set_extra_logger(es_logger, log_level=logging.getLevelName(level))
-        self.chunk_size = 500
-        self.indexed_pages_count = 0
 
     async def close(self):
         await self.client.close()
@@ -243,13 +261,9 @@ class ElasticServer:
             f"{int(time.time() - start)} seconds)"
         )
 
-        res = defaultdict(int)
-
         # start the fetcher
-        fetcher = Fetcher(self.client, stream, index)
-        fetcher_task = asyncio.create_task(
-            fetcher.run(generator, existing_ids, existing_timestamps)
-        )
+        fetcher = Fetcher(self.client, stream, index, existing_ids, existing_timestamps)
+        fetcher_task = asyncio.create_task(fetcher.run(generator))
 
         # start the bulker
         bulker = Bulker(self.client, stream)
@@ -258,5 +272,4 @@ class ElasticServer:
         await asyncio.gather(fetcher_task, bulker_task)
 
         # we return a number for each operation type.
-        res = {}
-        return dict(res)
+        return dict(bulker.ops)
