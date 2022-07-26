@@ -29,7 +29,7 @@ class ElasticServer:
         level = elastic_config.get("log_level", "INFO")
         es_logger = logging.getLogger("elastic_transport.node")
         set_extra_logger(es_logger, log_level=logging.getLevelName(level))
-        self.chunk_size = 50
+        self.chunk_size = 500
         self.indexed_pages_count = 0
 
     async def close(self):
@@ -92,7 +92,7 @@ class ElasticServer:
             finally:
                 self.bulk_time += time.time() - start
             self.indexed_pages_count += int(len(operations) / 2)
-            logger.info(f"Sent {self.indexed_pages_count} to ES so far")
+            logger.info(f"Indexed {self.indexed_pages_count}.")
             return res
 
         docs_ended = downloads_ended = False
@@ -117,7 +117,7 @@ class ElasticServer:
             else:
                 batch.append({"doc": doc["doc"]})
 
-            if len(batch) >= self.chunk_size:
+            if len(batch) >= self.chunk_size * 2:
                 ops.append(asyncio.create_task(batch_bulk(list(batch))))
                 batch.clear()
 
@@ -209,6 +209,7 @@ class ElasticServer:
                     }
                 )
                 await asyncio.sleep(0)
+
             await stream.put("END_DOWNLOADS")
 
         # start all fetchers

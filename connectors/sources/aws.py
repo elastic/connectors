@@ -19,7 +19,7 @@ from connectors.logger import logger, set_extra_logger
 SUPPORTED_CONTENT_TYPE = [
     "text/plain",
 ]
-SUPPORTED_FILETYPE = [".py", ".rst"]
+SUPPORTED_FILETYPE = [".py", ".rst", ".rb", ".sh", ".md"]
 ONE_MEGA = 1048576
 
 
@@ -41,12 +41,14 @@ class S3DataSource(BaseDataSource):
 
     async def _get_content(self, key, timestamp):
         # reuse the same for all files
+
+        logger.debug(f"Downloading {key}")
         async with self.session.client(
             "s3", region_name=self.configuration["region"]
         ) as s3:
             # XXX limit the size
-            logger.debug(f"Downloading {key}")
             resp = await s3.get_object(Bucket=self.configuration["bucket"], Key=key)
+            await asyncio.sleep(0)
             data = ""
             while True:
                 chunk = await resp["Body"].read(ONE_MEGA)
@@ -54,6 +56,7 @@ class S3DataSource(BaseDataSource):
                 if not chunk:
                     break
                 data += chunk.decode("utf8")
+            logger.debug(f"Downloaded {len(data)} for {key}")
             return {"timestamp": timestamp, "text": data}
 
     async def get_docs(self):
@@ -69,35 +72,35 @@ class S3DataSource(BaseDataSource):
                 last_modified = await obj_summary.last_modified
                 await asyncio.sleep(0)
 
+                key = obj_summary.key
                 doc = {
                     "_id": doc_id,
-                    "filename": obj_summary.key,
+                    "filename": key,
                     "size": await obj_summary.size,
                     "timestamp": last_modified.isoformat(),
                 }
 
-                async def _download(doc_id, timestamp=None, doit=None):
+                async def _download(doc_id, key, timestamp=None, doit=None):
                     if not doit:
                         return
 
                     # XXX check the checksum_crc32 of the file
-                    obj = await obj_summary.Object()  # XXXX expensive
+                    # obj = await obj_summary.Object()  # XXXX expensive
+                    # content_type = await obj.content_type
 
-                    content_type = await obj.content_type
                     if (
-                        content_type not in SUPPORTED_CONTENT_TYPE
-                        and os.path.splitext(obj_summary.key)[-1]
+                        # content_type not in SUPPORTED_CONTENT_TYPE
+                        os.path.splitext(key)[-1]
                         not in SUPPORTED_FILETYPE
                     ):
+                        logger.debug(f"{key} can't be extracted")
                         return
 
-                    content = await self._get_content(
-                        obj_summary.key, last_modified.isoformat()
-                    )
+                    content = await self._get_content(key, timestamp)
                     content["_id"] = doc_id
                     return content
 
-                yield doc, partial(_download, doc_id)
+                yield doc, partial(_download, doc_id, key)
 
     @classmethod
     def get_default_configuration(cls):
