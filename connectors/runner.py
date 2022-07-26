@@ -80,6 +80,7 @@ class ConnectorService:
 
                 await asyncio.sleep(self.idling)
         finally:
+            await connectors.close()
             await es.close()
 
     async def get_list(self):
