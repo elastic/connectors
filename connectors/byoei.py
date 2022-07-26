@@ -12,9 +12,9 @@ from collections import defaultdict
 import asyncio
 
 from elasticsearch import AsyncElasticsearch, NotFoundError as ElasticNotFoundError
-from elasticsearch.helpers import async_scan, async_streaming_bulk
+from elasticsearch.helpers import async_scan
 
-from connectors.logger import logger, set_es_logger
+from connectors.logger import logger, set_extra_logger
 from connectors.utils import iso_utc
 
 
@@ -27,7 +27,10 @@ class ElasticServer:
         self._downloads = []
         self.loop = asyncio.get_event_loop()
         level = elastic_config.get("log_level", "INFO")
-        set_es_logger(log_level=logging.getLevelName(level))
+        es_logger = logging.getLogger("elastic_transport.node")
+        set_extra_logger(es_logger, log_level=logging.getLevelName(level))
+        self.chunk_size = 50
+        self.indexed_pages_count = 0
 
     async def close(self):
         await self.client.close()
@@ -75,10 +78,61 @@ class ElasticServer:
     def _add_download(self, coro):
         self._downloads.append(coro)
 
+    async def _bulk(self, queue):
+        batch = []
+        ops = []
+        self.bulk_time = 0
+        self.bulking = True
+
+        async def batch_bulk(operations):
+            # todo treat result to retry errors like in async_streaming_bulk
+            start = time.time()
+            try:
+                res = await self.client.bulk(operations=operations)
+            finally:
+                self.bulk_time += time.time() - start
+            self.indexed_pages_count += int(len(operations) / 2)
+            logger.info(f"Sent {self.indexed_pages_count} to ES so far")
+            return res
+
+        docs_ended = downloads_ended = False
+        while True:
+            doc = await queue.get()
+            if doc == "END_DOCS":
+                docs_ended = True
+            if doc == "END_DOWNLOADS":
+                downloads_ended = True
+
+            if docs_ended and downloads_ended:
+                break
+
+            if doc in ("END_DOCS", "END_DOWNLOADS"):
+                continue
+
+            batch.append(
+                {doc["_op_type"]: {"_index": doc["_index"], "_id": doc["_id"]}}
+            )
+            if doc["_op_type"] == "update":
+                batch.append({"doc": doc["doc"], "doc_as_upsert": True})
+            else:
+                batch.append({"doc": doc["doc"]})
+
+            if len(batch) >= self.chunk_size:
+                ops.append(asyncio.create_task(batch_bulk(list(batch))))
+                batch.clear()
+
+        if len(batch) > 0:
+            ops.append(asyncio.create_task(batch_bulk(list(batch))))
+            batch.clear()
+
+        await asyncio.gather(*ops)
+
     async def async_bulk(self, index, generator):
         start = time.time()
         existing_ids = set()
         existing_timestamps = {}
+        stream = asyncio.Queue()
+        ops = []
 
         async for es_doc in self.get_existing_ids(index):
             existing_ids.add(es_doc["id"])
@@ -119,20 +173,25 @@ class ElasticServer:
                         )
                     )
 
-                yield {
-                    "_op_type": "update",
-                    "_index": index,
-                    "_id": doc_id,
-                    "doc": doc,
-                    "doc_as_upsert": True,
-                }
+                await stream.put(
+                    {
+                        "_op_type": "update",
+                        "_index": index,
+                        "_id": doc_id,
+                        "doc": doc,
+                        "doc_as_upsert": True,
+                    }
+                )
+                await asyncio.sleep(0)
 
             # We delete any document that existed in Elasticsearch that was not
             # returned by the backend.
             for doc_id in existing_ids:
                 if doc_id in seen_ids:
                     continue
-                yield {"_op_type": "delete", "_index": index, "_id": doc_id}
+                await stream.put({"_op_type": "delete", "_index": index, "_id": doc_id})
+
+            await stream.put("END_DOCS")
 
         # XXX this can be defferred
         async def get_attachments():
@@ -140,29 +199,27 @@ class ElasticServer:
                 data = await download
                 if data is None:
                     continue
-                yield {
-                    "_op_type": "update",
-                    "_index": index,
-                    "_id": data.pop("_id"),
-                    "doc": data,
-                    "doc_as_upsert": True,
-                }
+                await stream.put(
+                    {
+                        "_op_type": "update",
+                        "_index": index,
+                        "_id": data.pop("_id"),
+                        "doc": data,
+                        "doc_as_upsert": True,
+                    }
+                )
+                await asyncio.sleep(0)
+            await stream.put("END_DOWNLOADS")
 
-        async def _full_sync():
-            logger.debug("Getting the docs + starting the downloads if needed")
-            async for doc in get_docs():
-                yield doc
+        # start all fetchers
+        ops.append(asyncio.create_task(get_docs()))
+        ops.append(asyncio.create_task(get_attachments()))
 
-            logger.debug("Uploading the attachments")
-            async for attachment in get_attachments():
-                yield attachment
+        # start the bulker
+        ops.append(asyncio.create_task(self._bulk(stream)))
 
-        logger.debug("Starting the bulk stream")
-        async for ok, result in async_streaming_bulk(self.client, _full_sync()):
-            action, result = result.popitem()
-            if not ok:
-                logger.exception(f"Failed to {action} see {result}")
-            res[action] += 1
+        await asyncio.gather(*ops)
 
         # we return a number for each operation type.
+        res = {}
         return dict(res)

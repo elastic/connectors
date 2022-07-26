@@ -32,14 +32,15 @@ def set_logger(log_level=logging.INFO):
     return logger
 
 
-def set_es_logger(log_level=logging.INFO, prefix="BYOC"):
-    es_logger = logging.getLogger("elastic_transport.node")
+def set_extra_logger(logger, log_level=logging.INFO, prefix="BYOC"):
+    if isinstance(logger, str):
+        logger = logging.getLogger(logger)
     handler = logging.StreamHandler()
     formatter = _formatter(prefix)
     handler.setFormatter(formatter)
     handler.setLevel(log_level)
-    es_logger.addHandler(handler)
-    es_logger.setLevel(log_level)
+    logger.addHandler(handler)
+    logger.setLevel(log_level)
 
 
 set_logger()
