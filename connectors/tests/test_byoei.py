@@ -182,5 +182,5 @@ async def test_async_bulk(mock_responses):
     res = await es.async_bulk("search-some-index", get_docs())
 
     # we should delete `2`, update `1` and create `3`
-    assert res == {"create": 1, "delete": 1, "index": 1}
+    assert res == {"create": 1, "delete": 1, "update": 1}
     await es.close()

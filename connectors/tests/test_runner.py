@@ -66,7 +66,7 @@ class FakeSource:
         pass
 
     async def get_docs(self):
-        yield {"_id": 1}
+        yield {"_id": 1}, None
 
 
 def set_server_responses(mock_responses):

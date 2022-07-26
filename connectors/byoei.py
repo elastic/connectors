@@ -59,13 +59,13 @@ class Bulker:
             if doc in ("END_DOCS", "END_DOWNLOADS"):
                 continue
 
-            self.ops[doc["_op_type"]] += 1
-            batch.append(
-                {doc["_op_type"]: {"_index": doc["_index"], "_id": doc["_id"]}}
-            )
-            if doc["_op_type"] == "update":
+            operation = doc["_op_type"]
+
+            self.ops[operation] += 1
+            batch.append({operation: {"_index": doc["_index"], "_id": doc["_id"]}})
+            if operation == "update":
                 batch.append({"doc": doc["doc"], "doc_as_upsert": True})
-            else:
+            elif operation == "create":
                 batch.append({"doc": doc["doc"]})
 
             if len(batch) >= self.chunk_size * 2:
@@ -165,9 +165,14 @@ class Fetcher:
                     )
                 )
 
+            if doc_id in self.existing_ids:
+                operation = "update"
+            else:
+                operation = "create"
+
             await self.queue.put(
                 {
-                    "_op_type": "update",
+                    "_op_type": operation,
                     "_index": self.index,
                     "_id": doc_id,
                     "doc": doc,
