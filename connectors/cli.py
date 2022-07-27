@@ -50,6 +50,13 @@ def _parser():
         help="Display the version and exit.",
     )
 
+    parser.add_argument(
+        "--one-sync",
+        action="store_true",
+        default=False,
+        help="Runs a single sync and exits.",
+    )
+
     return parser
 
 
