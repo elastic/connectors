@@ -50,7 +50,7 @@ A source class can be any Python class, and is declared into the
     s3: connectors.sources.aws:S3DataSource
 
 
-The source class is declared with its `Fully Qualified Name (FQN)<https://en.wikipedia.org/wiki/Fully_qualified_name>`_
+The source class is declared with its `Fully Qualified Name (FQN) <https://en.wikipedia.org/wiki/Fully_qualified_name>`_
 so the framework knows where the class is located so it can import it and
 instanciate it.
 
@@ -115,7 +115,7 @@ To sync both sides, the CLI uses these steps:
 
 - for each id from Elasticsearch that is not present it the documents sent by the data source class,
   adds it as a `delete` operation into the `bulk` call
-- `bulk` calls are emited every 500 operations.
+- `bulk` calls are emited every 500 operations (this is configurable for slow networks).
 
 
 To implement a new source, check `CONTRIBUTE.rst <CONTRIBUTE.rst>`_
