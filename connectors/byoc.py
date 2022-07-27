@@ -50,8 +50,11 @@ class BYOIndex:
         self.host = elastic_config["host"]
         self.auth = elastic_config["user"], elastic_config["password"]
         self.client = AsyncElasticsearch(
-            hosts=[self.host], basic_auth=self.auth, request_timeout=120
+            hosts=[self.host],
+            basic_auth=self.auth,
+            request_timeout=elastic_config.get("request_timeout", 120),
         )
+        self.bulk_queue_max_size = elastic_config.get("bulk_queue_max_size", 1024)
 
     async def close(self):
         for connector in _CONNECTORS_CACHE.values():
@@ -79,7 +82,12 @@ class BYOIndex:
         for hit in resp["hits"]["hits"]:
             doc_id = hit["_id"]
             if doc_id not in _CONNECTORS_CACHE:
-                _CONNECTORS_CACHE[doc_id] = BYOConnector(self, doc_id, hit["_source"])
+                _CONNECTORS_CACHE[doc_id] = BYOConnector(
+                    self,
+                    doc_id,
+                    hit["_source"],
+                    bulk_queue_max_size=self.bulk_queue_max_size,
+                )
             else:
                 # XXX Need to check and update
                 pass
@@ -137,7 +145,7 @@ class SyncJob:
 
 
 class BYOConnector:
-    def __init__(self, index, doc_id, doc_source):
+    def __init__(self, index, doc_id, doc_source, bulk_queue_max_size=1024):
         self.doc_source = doc_source
         self.doc_id = doc_id
         self.index = index
@@ -152,6 +160,7 @@ class BYOConnector:
         self._closed = False
         self._start_time = None
         self._hb = None
+        self.bulk_queue_max_size = bulk_queue_max_size
 
     async def close(self):
         self._closed = True
@@ -242,7 +251,9 @@ class BYOConnector:
             await asyncio.sleep(0)
 
             result = await elastic_server.async_bulk(
-                self.index_name, data_provider.get_docs()
+                self.index_name,
+                data_provider.get_docs(),
+                queue_size=self.bulk_queue_max_size,
             )
             await self._sync_done(
                 job,
