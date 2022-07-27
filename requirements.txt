@@ -2,7 +2,7 @@ elasticsearch[async]>=8.3.1
 motor>=3.0.0
 pyyaml>=6.0
 aioboto3>=9.6.0
-crontab>=0.23.0
+cron-schedule-triggers>=0.0.11
 
 black>=22.6.0
 flake8>=4.0.1

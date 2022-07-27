@@ -11,9 +11,8 @@ from enum import Enum
 import time
 
 from elasticsearch import AsyncElasticsearch
-from crontab import CronTab
 
-from connectors.utils import iso_utc
+from connectors.utils import iso_utc, next_run
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration
 
@@ -196,7 +195,7 @@ class BYOConnector:
             return 0
         if not self.scheduling["enabled"]:
             return -1
-        return CronTab(self.scheduling["interval"]).next(default_utc=True)
+        return next_run(self.scheduling["interval"])
 
     async def _sync_starts(self):
         job = SyncJob(self.doc_id, self.client)
