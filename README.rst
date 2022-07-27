@@ -34,7 +34,7 @@ some syncs need to happen.
 
 That information is provided by Kibana and follows the `BYOC <https://github.com/elastic/connectors-ruby/blob/main/docs/CONNECTOR_PROTOCOL.md>`_ protocol.
 That protocol defines a few structures in a couple of dedicated Elasticsearch
-indices, that are used by Kibana to drive sync job, and by the connectors
+indices, that are used by Kibana to drive sync jobs, and by the connectors
 to report on that work.
 
 When a user asks for a sync of a specific source, the service instanciates
