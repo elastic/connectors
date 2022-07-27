@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from datetime import datetime
-from cstriggers.core.trigger import QuartzCron
+from connectors.quartz import QuartzCron
 
 
 def iso_utc(when=None):
