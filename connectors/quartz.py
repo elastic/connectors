@@ -1,5 +1,6 @@
 # vendored version of https://pypi.org/project/cron-schedule-triggers/
 # the repo is gone
+# TODO: simplify this code then port it to ruby
 import calendar
 from collections import OrderedDict
 from datetime import datetime, timedelta
