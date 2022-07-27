@@ -65,7 +65,7 @@ as it follows the API signature defined in `BaseDataSource <connectors/source.py
             raise NotImplementedError
 
 
-Take a look at the `Mongo connector.<connectors/sources/mongo.py>`_ for inspiration.
+Take a look at the `Mongo connector <connectors/sources/mongo.py>`_ for inspiration.
 It's pretty straightforward and has that nice little extra feature some other connectors
 can't implement easily: the `Changes <https://www.mongodb.com/docs/manual/changeStreams/>`_
 stream API allows it to detect when something has changed in the Mongo collection.
@@ -116,14 +116,21 @@ If you want to add a new connector source, you need to:
 8. if you can't provide a docker image, provide the credentials needed to run against an online service
 9. the test backend needs to return more than 10k documents due to 10k being a default size limit for Elasticsearch pagination.
    Having more than 10k documents returned from the test backend will help testing connector more deeply
+10. the backend meets the performance requirements if we provide some (memory usage, how fast it syncs 10k docs, etc.)
 
 
-.. warning::
+To make sure we're building great connectors, we will be pretty strict on this checklist and we will
+not allow connectors to change the framework code itself.
 
-   Any patch with changes outside `connectors/sources <connectors/sources>`_ or `config.yml <config.yml>`_
-   and `requirements.txt <requirements.txt>`_ will be rejected.
+Any patch with changes outside `connectors/sources <connectors/sources>`_ or `config.yml <config.yml>`_
+and `requirements.txt <requirements.txt>`_ will be rejected.
 
-   If you need changes in the framework, reach out to the `Ingestion team <https://github.com/orgs/elastic/teams/ingestion-team/members>`_.
+If you need changes in the framework, or you are not sure about how to do something,
+reach out to the `Ingestion team <https://github.com/orgs/elastic/teams/ingestion-team/members>`_.
+
+For 6, you can look at `Developing with asyncio <https://docs.python.org/3/library/asyncio-dev.html>`_.
+Asynchronous programming in Python is very concise and produce nice looking code once you understand how it works,
+but it requires a bit of practice.
 
 
 Testing the connector
