@@ -51,7 +51,7 @@ async def prepare(service_type, index_name, config):
             # Date the connector was updated
             "updated_at": "",
             # Scheduling intervals
-            "scheduling": {"enabled": True, "interval": "* * * * *"},  # crontab syntax
+            "scheduling": {"enabled": True, "interval": "1 * * * * *"},  # quartz syntax
             # A flag to run sync immediately
             "sync_now": True,
         }
