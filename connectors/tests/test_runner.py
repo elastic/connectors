@@ -146,7 +146,7 @@ def test_connector_service_run(mock_responses, patch_logger):
     args.config_file = CONFIG
     args.action = "list"
     assert run(args) == 0
-    assert patch_logger.logs == ["Registered connectors:", "- Fakey"]
+    assert patch_logger.logs == ["Registered connectors:", "- Fakey", "Bye"]
 
 
 @pytest.mark.asyncio

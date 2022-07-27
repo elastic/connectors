@@ -3,6 +3,8 @@ elasticsearch:
   user: elastic
   password: changeme
   log_level: INFO
+  bulk_queue_max_size: 1024
+  request_timeout: 120
 
 service:
   idling: 30

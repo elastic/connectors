@@ -2,6 +2,7 @@ elasticsearch:
   host: http://nowhere.com:9200
   user: elastic
   password: changeme
+  bulk_queue_max_size: 1024
 
 service:
   idling: 0.5

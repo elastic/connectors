@@ -83,13 +83,15 @@ class Bulker:
 class Fetcher:
     """Grab data and add them in the queue for the bulker"""
 
-    def __init__(self, client, queue, index, existing_ids, existing_timestamps):
+    def __init__(
+        self, client, queue, index, existing_ids, existing_timestamps, queue_size=1024
+    ):
         self.client = client
         self.queue = queue
         self.bulk_time = 0
         self.bulking = False
         self.index = index
-        self._downloads = asyncio.Queue()
+        self._downloads = asyncio.Queue(maxsize=queue_size)
         self.loop = asyncio.get_event_loop()
         self.existing_ids = existing_ids
         self.existing_timestamps = existing_timestamps
@@ -201,7 +203,9 @@ class ElasticServer:
         self.host = elastic_config["host"]
         self.auth = elastic_config["user"], elastic_config["password"]
         self.client = AsyncElasticsearch(
-            hosts=[self.host], basic_auth=self.auth, request_timeout=120
+            hosts=[self.host],
+            basic_auth=self.auth,
+            request_timeout=elastic_config.get("request_timeout", 120),
         )
         self._downloads = []
         self.loop = asyncio.get_event_loop()
@@ -255,11 +259,11 @@ class ElasticServer:
         ):
             yield doc["_source"]
 
-    async def async_bulk(self, index, generator):
+    async def async_bulk(self, index, generator, queue_size=1024):
         start = time.time()
         existing_ids = set()
         existing_timestamps = {}
-        stream = asyncio.Queue()
+        stream = asyncio.Queue(maxsize=queue_size)
 
         async for es_doc in self.get_existing_ids(index):
             existing_ids.add(es_doc["id"])
@@ -271,7 +275,14 @@ class ElasticServer:
         )
 
         # start the fetcher
-        fetcher = Fetcher(self.client, stream, index, existing_ids, existing_timestamps)
+        fetcher = Fetcher(
+            self.client,
+            stream,
+            index,
+            existing_ids,
+            existing_timestamps,
+            queue_size=queue_size,
+        )
         fetcher_task = asyncio.create_task(fetcher.run(generator))
 
         # start the bulker
