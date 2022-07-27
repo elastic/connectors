@@ -5,7 +5,6 @@
 #
 from datetime import datetime
 from unittest import mock
-import io
 
 import pytest
 

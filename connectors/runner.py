@@ -55,7 +55,7 @@ class ConnectorService:
     def stop(self):
         self.running = False
 
-    async def poll(self):
+    async def poll(self, one_sync=False):
         """Main event loop."""
         loop = asyncio.get_event_loop()
         connectors = BYOIndex(self.config["elasticsearch"])
@@ -74,11 +74,15 @@ class ConnectorService:
                         data_source = get_data_source(connector, self.config)
                         loop.create_task(connector.heartbeat(self.hb))
                         await connector.sync(data_source, es, self.idling)
+                        if one_sync:
+                            self.stop()
+                            break
                     except Exception as e:
                         logger.critical(e, exc_info=True)
                         self.raise_if_spurious(e)
 
-                await asyncio.sleep(self.idling)
+                if not one_sync:
+                    await asyncio.sleep(self.idling)
         finally:
             await connectors.close()
             await es.close()
@@ -97,13 +101,14 @@ def run(args):
     if args.action == "list":
         coro = asyncio.ensure_future(service.get_list())
     else:
-        coro = asyncio.ensure_future(service.poll())
+        coro = asyncio.ensure_future(service.poll(args.one_sync))
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, coro.cancel)
 
     try:
         loop.run_until_complete(coro)
+        logger.info("Bye")
     except asyncio.CancelledError:
         logger.info("Bye")
 

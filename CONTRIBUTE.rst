@@ -94,7 +94,8 @@ If you want to add a new connector source, you need to:
 6. make sure you use an async lib for your source. If not possible, make sure you don't block the loop
 7. when possible, provide a docker image that runs the backend service, so we can test the connector
 8. if you can't provide a docker image, provide the credentials needed to run against a service
-9. the test backend needs to return 10,001 documents due to 10,000 being a default size limit for Elasticsearch pagination. Having 10,001 documents returned from the test backend will help testing connector more deeply
+9. the test backend needs to return more than 10k documents due to 10k being a default size limit for Elasticsearch pagination.
+   Having more than 10k documents returned from the test backend will help testing connector more deeply
 
 
 .. warning::
@@ -114,10 +115,10 @@ To test the connector, we'll run::
 
 We require the connector to have a unit test and to have a 90% coverage reported by this command
 
-If this first step pass, we'll start your Docker instance or configure your bakcend, then run::
+If this first step pass, we'll start your Docker instance or configure your backend, then run::
 
-   make ftest service_type
+   make ftest NAME=mongo
 
 This will configure the connector in Elasticsearch to run a full sync.
-The script will verify that the Elasticsearch index receives 10,001 documents
+The script will verify that the Elasticsearch index receives documents
 
