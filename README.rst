@@ -32,7 +32,7 @@ The CLI runs the `ConnectorService <connectors/runner.py>`_ which is an
 asynchronous event loop. It calls Elasticsearch on a regular basis to see if
 some syncs need to happen.
 
-That information is provided by Kibana and follows the `BYOC` protocol.
+That information is provided by Kibana and follows the `BYOC <https://github.com/elastic/connectors-ruby/blob/main/docs/CONNECTOR_PROTOCOL.md>`_ protocol.
 That protocol defines a few structures in a couple of dedicated Elasticsearch
 indices, that are used by Kibana to drive sync job, and by the connectors
 to report on that work.
@@ -50,8 +50,8 @@ A source class can be any Python class, and is declared into the
     s3: connectors.sources.aws:S3DataSource
 
 
-This notation is called the Fully Qualified Name (FQN) and tells the
-framework where the class is located so it can import it and
+The source class is declared with its `Fully Qualified Name (FQN)<https://en.wikipedia.org/wiki/Fully_qualified_name>`_
+so the framework knows where the class is located so it can import it and
 instanciate it.
 
 Source classes can be located in this project or any other Python
