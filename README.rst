@@ -8,13 +8,13 @@ To install the CLI, run:
 
 .. code-block:: bash
 
-   $ pip install elasticsearch-connectors
+   $ make install
 
 The `elastic-ingest` CLI will be installed on your system:
 
 .. code-block:: bash
 
-    $ elastic-ingest --help
+    $ bin/elastic-ingest --help
     usage: elastic-ingest [-h] [--action {poll,list}] [-c CONFIG_FILE] [--debug]
 
     optional arguments:
