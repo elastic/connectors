@@ -65,19 +65,39 @@ as it follows the API signature defined in `BaseDataSource <connectors/source.py
             raise NotImplementedError
 
 
+Take a look at the `Mongo connector.<connectors/sources/mongo.py>`_ for inspiration.
+It's pretty straightforward and has that nice little extra feature some other connectors
+can't implement easily: the `Changes <https://www.mongodb.com/docs/manual/changeStreams/>`_
+stream API allows it to detect when something has changed in the Mongo collection.
+After a first sync, and as long as the connector runs, it will skip any sync if nothing
+changed.
+
+Each connector will have their own specific behaviors and implementations. When
+a connector is loaded, it stays in memory so you can come up with any strategy you want
+to make it more efficient. You just need to be careful not to blow memory.
+
+
 Async vs Sync
 :::::::::::::
 
 The CLI uses `asyncio` and makes the assumption that all the code that has been
-called should not block the event loop. In order to achieve this asynchronicity
+called should not block the event loop. This makes syncs extremely fast with
+no memory overhead. In order to achieve this asynchronicity,
 source classes should use async libs for their backend.
 
 When not possible, the class should use `run_in_executor <https://docs.python.org/3/library/asyncio-eventloop.html#executing-code-in-thread-or-process-pools>`_
 and run the blocking code in another thread or process.
 
-Assuming the work is I/O-bound, the class should use threads. If there's some
-heavy CPU-bound computation (encryption work, etc), processes should be used to
+When you send work in the background, you will have two options:
+
+- if the work is I/O-bound, the class should use threads
+- if there's some heavy CPU-bound computation (encryption work, etc), processes should be used to
 avoid `GIL contention <https://realpython.com/python-gil/>`_
+
+When building async I/O-bound connectors, make sure that you provide a way to
+recycle connections and that you can throttle calls to the backends. This is
+very important to avoid file descriptors exhaustion and hammering the backend
+service.
 
 
 Contribution Checklist
@@ -93,7 +113,7 @@ If you want to add a new connector source, you need to:
 5. declare your dependencies in `requirements.txt <requirements.txt>`_. Make sure you pin these dependencies
 6. make sure you use an async lib for your source. If not possible, make sure you don't block the loop
 7. when possible, provide a docker image that runs the backend service, so we can test the connector
-8. if you can't provide a docker image, provide the credentials needed to run against a service
+8. if you can't provide a docker image, provide the credentials needed to run against an online service
 9. the test backend needs to return more than 10k documents due to 10k being a default size limit for Elasticsearch pagination.
    Having more than 10k documents returned from the test backend will help testing connector more deeply
 
@@ -120,5 +140,5 @@ If this first step pass, we'll start your Docker instance or configure your back
    make ftest NAME=mongo
 
 This will configure the connector in Elasticsearch to run a full sync.
-The script will verify that the Elasticsearch index receives documents
+The script will verify that the Elasticsearch index receives documents.
 
