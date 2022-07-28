@@ -63,7 +63,7 @@ run-docker:
 exec_app:
 	cd lib/app; bundle _$(shell cat .bundler-version)_ exec ruby app.rb
 
-exec_cli:
-	cd lib/app; bundle _$(shell cat .bundler-version)_ exec ruby console_app.rb
+cli:
+	cd lib/app; bundle _$(shell cat .bundler-version)_ exec ruby app.rb --console
 
 run: | update_config_dev exec_app
