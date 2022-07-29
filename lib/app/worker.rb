@@ -34,11 +34,7 @@ module App
         Core::ElasticConnectorActions.ensure_connectors_index_exists
         Core::ElasticConnectorActions.ensure_job_index_exists
         connector_settings = Core::ConnectorSettings.fetch(App::Config[:connector_id])
-        Core::ElasticConnectorActions.ensure_content_index_exists(
-          connector_settings.index_name,
-          App::Config[:use_analysis_icu],
-          App::Config[:content_language_code]
-        )
+        Core::ElasticConnectorActions.ensure_content_index_exists(connector_settings.index_name)
       end
 
       def start_heartbeat_task

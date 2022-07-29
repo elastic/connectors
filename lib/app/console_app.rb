@@ -54,11 +54,7 @@ module App
 
       Core::ElasticConnectorActions.ensure_connectors_index_exists
       config_settings = Core::ConnectorSettings.fetch(connector_id)
-      Core::ElasticConnectorActions.ensure_content_index_exists(
-        config_settings[:index_name],
-        App::Config[:use_analysis_icu],
-        App::Config[:content_language_code]
-      )
+      Core::ElasticConnectorActions.ensure_content_index_exists(config_settings[:index_name])
       Core::SyncJobRunner.new(config_settings, App::Config[:service_type]).execute
     end
 
@@ -74,7 +70,7 @@ module App
     def register_connector
       if connector_id.present?
         puts "You already have registered a connector with ID: #{connector_id}. Registering a new connector will overwrite the existing one."
-        puts 'Are you sure you want to continue? (y/n)'
+        puts 'Are you sure you want to continue? (y/N)'
         return false unless gets.chomp.strip.casecmp('y').zero?
       end
       puts 'Please enter index name for data ingestion. Use only letters, underscored and dashes.'
@@ -83,10 +79,13 @@ module App
         puts "Index name #{index_name} contains symbols that aren't allowed!"
         return false
       end
+      puts 'Do you want to use ICU Analysis Plugin? (y/N)'
+      use_analysis_icu = gets.chomp.strip.casecmp('y').zero?
+      language_code = select_analyzer
       # these might not have been created without kibana
       Core::ElasticConnectorActions.ensure_connectors_index_exists
       # create the connector
-      created_id = create_connector(index_name, force: true)
+      created_id = create_connector(index_name, use_analysis_icu, language_code)
       update_connector_id(created_id)
       true
     end
@@ -129,13 +128,10 @@ module App
       result
     end
 
-    def create_connector(index_name, force: false)
-      id = connector_id
-      if force || Core::ElasticConnectorActions.get_connector(connector_id)[:found] == false
-        id = Core::ElasticConnectorActions.create_connector(index_name, App::Config[:service_type])
-
-        puts "Successfully registered connector #{index_name} with ID #{created_id}"
-      end
+    def create_connector(index_name, use_analysis_icu = false, language_code = :en)
+      id = Core::ElasticConnectorActions.create_connector(index_name, App::Config[:service_type])
+      Core::ElasticConnectorActions.ensure_content_index_exists(index_name, use_analysis_icu, language_code)
+      puts "Successfully registered connector #{index_name} with ID #{id}"
 
       connector_settings = Core::ConnectorSettings.fetch(id)
 
@@ -147,6 +143,24 @@ module App
       menu.select_command
     rescue Interrupt
       exit_normally
+    end
+
+    def select_analyzer
+      analyzers = App::Menu.new('Please select a language analyzer', supported_analyzers)
+      analyzers.select_command
+    rescue Interrupt
+      exit_normally
+    end
+
+    def supported_analyzers
+      @supported_analyzers ||= YAML.safe_load(
+        File.read(Utility::Elasticsearch::Index::TextAnalysisSettings::LANGUAGE_DATA_FILE_PATH),
+        symbolize_names: true
+      ).map do |language_code, data|
+        { :command => language_code, :hint => data[:name] }
+      end
+      puts @supported_analyzers
+      @supported_analyzers
     end
 
     def wait_for_keypress(message = nil)

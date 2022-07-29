@@ -13,10 +13,3 @@ service_type: "CHANGEME"
 log_level: info
 
 idle_timeout: 60
-
-# ICU Analysis Plugin is used (false by default)
-# turn this on if the ICU plugin - International Components for Unicode - is installed in your Elasticsearch instance
-# see https://www.elastic.co/guide/en/elasticsearch/plugins/current/analysis-icu.html
-use_analysis_icu: false
-# language code to use for the content indices
-content_language_code: en
