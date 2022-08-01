@@ -1,7 +1,9 @@
 .PHONY: black test
 
+PYTHON=python3
+
 bin/python:
-	python3 -m venv .
+	$(PYTHON) -m venv .
 
 install: bin/python
 	bin/pip install -r requirements.txt
