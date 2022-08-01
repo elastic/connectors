@@ -2,8 +2,4 @@ agents:
   useVault: false
 
 steps:
-  - command: yarn install && yarn run test
-    plugins:
-      - docker#v3.2.0:
-          image: "node:8"
-          workdir: /app
+  - command: docker -v
