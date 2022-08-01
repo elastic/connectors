@@ -74,13 +74,14 @@ class ConnectorService:
                         data_source = get_data_source(connector, self.config)
                         loop.create_task(connector.heartbeat(self.hb))
                         await connector.sync(data_source, es, self.idling)
+                        await asyncio.sleep(0)
+
                         if one_sync:
                             self.stop()
                             break
                     except Exception as e:
                         logger.critical(e, exc_info=True)
                         self.raise_if_spurious(e)
-
                 if not one_sync:
                     await asyncio.sleep(self.idling)
         finally:

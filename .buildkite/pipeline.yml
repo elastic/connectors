@@ -2,4 +2,8 @@ agents:
   useVault: false
 
 steps:
-  - command: "make test"
+- command: make test
+  plugins:
+  - docker#v3.2.0:
+      image: "python"
+      workdir: /app
