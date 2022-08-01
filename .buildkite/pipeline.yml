@@ -4,6 +4,6 @@ agents:
 steps:
 - command: make test
   plugins:
-  - docker#v3.2.0:
-      image: "python"
-      workdir: /app
+    - docker#v3.2.0:
+        image: "ubuntu"
+        workdir: /app
