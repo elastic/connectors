@@ -4,8 +4,6 @@ agents:
 steps:
 - command: 
     - ls
-    - python -v
-    - make test
   plugins:
     - docker#v3.2.0:
         image: "ubuntu"
