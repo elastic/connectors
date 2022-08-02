@@ -19,8 +19,9 @@ module App
 
     class << self
       def start!
-        if App::Config[:disable_warnings] || true
-          Kernel.silence_warnings do   # intercepts `warn` calls emited by the Elasticsearch client
+        disable_warnings = App::Config[:disable_warnings] || true
+        if disable_warnings
+          Kernel.silence_warnings do # intercepts `warn` calls emited by the Elasticsearch client
             _start
           end
         else
@@ -46,7 +47,7 @@ module App
           connector_settings = Core::ConnectorSettings.fetch(App::Config[:connector_id])
           Core::ElasticConnectorActions.ensure_content_index_exists(connector_settings.index_name)
         rescue Elastic::Transport::Transport::Errors::Unauthorized => e
-          raise 'Elasticsearch is not authorizing access'
+          raise "Elasticsearch is not authorizing access #{e}"
         end
       end
 
