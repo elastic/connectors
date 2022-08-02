@@ -19,12 +19,19 @@ module App
 
     class << self
       def start!
-        disable_warnings = App::Config[:disable_warnings] || true
+        disable_warnings = if App::Config.has_key?(:disable_warnings)
+                             App::Config[:disable_warnings]
+                           else
+                             true
+                           end
+
         if disable_warnings
+          Utility::Logger.info('Disabling warnings')
           Kernel.silence_warnings do # intercepts `warn` calls emited by the Elasticsearch client
             _start
           end
         else
+          Utility::Logger.info('Enabling warnings')
           _start
         end
       end
