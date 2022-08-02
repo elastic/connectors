@@ -6,6 +6,7 @@
 
 # frozen_string_literal: true
 
+require 'logger'
 require 'elasticsearch'
 require 'app/config'
 
@@ -34,6 +35,9 @@ module Utility
       else
         raise 'Either elasticsearch.cloud_id or elasticsearch.hosts should be configured.'
       end
+      configs[:log] = es_config[:log] || false
+      configs[:trace] = es_config[:trace] || false
+      configs[:logger] = es_config[:logger] || ::Logger.new(IO::NULL)
       configs
     end
 
