@@ -24,7 +24,7 @@ describe App::Worker do
   end
 
   shared_examples 'handle_warnings' do |disable_warnings, stderr|
-    it 'should display warnings from the Elasticsearch lib' do
+    it "with disable_warnings=#{disable_warnings}" do
       # This call will raise a 401 when the lib checks the server, and that will create a warning
       allow_any_instance_of(Elasticsearch::Client).to receive(:elasticsearch_validation_request).and_raise(Elastic::Transport::Transport::Errors::Unauthorized)
 
