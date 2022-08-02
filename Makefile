@@ -6,7 +6,7 @@ config/connectors.yml:
 	cp config/connectors.yml.example config/connectors.yml
 
 test: config/connectors.yml
-	bundle _$(shell cat .bundler-version)_ exec rspec spec --order rand
+	bundle _$(shell cat .bundler-version)_ exec rspec spec --order rand --warnings
 
 ftest:
 	-cp config/connectors.yml config/connectors.yml.$$(date +%Y%m%d%H%M%S).saved 2>/dev/null

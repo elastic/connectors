@@ -9,6 +9,12 @@
 require 'yaml'
 require 'app/worker'
 
+class FakeSettings
+  def index_name
+    'index'
+  end
+end
+
 describe App::Worker do
   it 'should raise error for invalid service type' do
     allow(App::Config).to receive(:[]).with(:disable_warnings).and_return(true)
@@ -17,7 +23,9 @@ describe App::Worker do
     expect { described_class.start! }.to raise_error('foobar is not a supported connector')
   end
 
-  it 'should discard warnings from the Elasticsearch lib' do
+  it 'should display warnings from the Elasticsearch lib' do
+    expect_any_instance_of(Elasticsearch::Client).to receive(:elasticsearch_validation_request).and_raise(Elastic::Transport::Transport::Errors::Unauthorized)
+
     config = {
       :disable_warnings => false,
       :service_type => 'stub_connector',
@@ -28,39 +36,51 @@ describe App::Worker do
       }
     }
 
-    App::Config = config
-
-    body = {
-      'version' => {
-        'number' => '8.4.0'
-      }
-    }
-
-    # missing x-elastic-product on purpose
-    stub_request(:get, 'http://notreallyaserver:9200/')
-      .to_return(
-        status: 401,
-        body: YAML.dump(body),
-        headers: {
-          'content-type' => 'application/yaml'
-        }
-      )
-
-    settings = Core::ConnectorSettings.new(
-      {
-        '_source'.to_sym => {
-          'index_name' => 'index'
-        }
-      }
-    )
-    expect(Core::ElasticConnectorActions).to receive(:ensure_index_exists).at_least(3).times
-    expect(Core::ConnectorSettings).to receive(:fetch).and_return(settings)
-
+    App::Config = config # rubocop:disable Naming/ConstantName
     allow(App::Worker).to receive(:start_heartbeat_task)
     allow(App::Worker).to receive(:start_polling_jobs)
 
-    described_class.start!
+    allow(Core::ElasticConnectorActions).to receive(:ensure_connectors_index_exists)
+    allow(Core::ElasticConnectorActions).to receive(:ensure_content_index_exists)
+    expect(Core::ConnectorSettings).to receive(:fetch).and_return(FakeSettings.new)
 
-    # expect { described_class.start!}.to output("my message").to_stdout
+    stub_request(:head, 'http://notreallyaserver:9200/.elastic-connectors-sync-jobs-v1')
+      .to_return(status: 404, body: YAML.dump({}), headers: {})
+
+    stub_request(:put, 'http://notreallyaserver:9200/.elastic-connectors-sync-jobs-v1')
+      .to_return(status: 200, body: YAML.dump({}), headers: {})
+
+    # with warnings
+    expect { described_class.start! }.to output(/#{Elasticsearch::SECURITY_PRIVILEGES_VALIDATION_WARNING}/).to_stderr
+  end
+
+  it 'should discard warnings from the Elasticsearch lib by default' do
+    allow_any_instance_of(Elasticsearch::Client).to receive(:elasticsearch_validation_request).and_raise(Elastic::Transport::Transport::Errors::Unauthorized)
+
+    config = {
+      :service_type => 'stub_connector',
+      :connector_id => '1',
+      :elasticsearch => {
+      :api_key => 'key',
+      :hosts => 'http://notreallyaserver'
+      }
+    }
+
+    App::Config = config # rubocop:disable Naming/ConstantName
+    allow(App::Worker).to receive(:start_heartbeat_task)
+    allow(App::Worker).to receive(:start_polling_jobs)
+
+    allow(Core::ElasticConnectorActions).to receive(:ensure_connectors_index_exists)
+    allow(Core::ElasticConnectorActions).to receive(:ensure_content_index_exists)
+    expect(Core::ConnectorSettings).to receive(:fetch).and_return(FakeSettings.new)
+
+    stub_request(:head, 'http://notreallyaserver:9200/.elastic-connectors-sync-jobs-v1')
+      .to_return(status: 404, body: YAML.dump({}), headers: {})
+
+    stub_request(:put, 'http://notreallyaserver:9200/.elastic-connectors-sync-jobs-v1')
+      .to_return(status: 200, body: YAML.dump({}), headers: {})
+
+    # with warnings
+    expect { described_class.start! }.to output('').to_stderr
   end
 end
