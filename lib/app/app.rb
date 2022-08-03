@@ -13,10 +13,7 @@ require 'app/config'
 require 'utility/logger'
 
 module App
-  # Set UTC as the timezone
-  ENV['TZ'] = 'UTC'
-
-  Utility::Logger.level = App::Config[:log_level]
-
-  App::Worker.start!
+  with_logging(App::Config) do
+    App::Worker.start!
+  end
 end

@@ -17,8 +17,16 @@ end
 
 describe App::Worker do
   it 'should raise error for invalid service type' do
-    allow(App::Config).to receive(:[]).with(:disable_warnings).and_return(true)
-    allow(App::Config).to receive(:[]).with(:service_type).and_return('foobar')
+    config = {
+      :service_type => 'foobar',
+      :connector_id => '1',
+      :elasticsearch => {
+        :api_key => 'key',
+        :hosts => 'http://notreallyaserver'
+      }
+    }
+
+    App::Config = config # rubocop:disable Naming/ConstantName
     allow(Connectors::REGISTRY).to receive(:connector_class).and_return(nil)
     expect { described_class.start! }.to raise_error('foobar is not a supported connector')
   end
@@ -41,12 +49,12 @@ describe App::Worker do
                  }
                else
                  {
-                   :disable_warnings => false,
                    :service_type => 'stub_connector',
                    :connector_id => '1',
                    :elasticsearch => {
                      :api_key => 'key',
-                     :hosts => 'http://notreallyaserver'
+                     :hosts => 'http://notreallyaserver',
+                     :disable_warnings => false
                    }
                  }
                end
