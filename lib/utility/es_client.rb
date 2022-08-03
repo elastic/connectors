@@ -37,7 +37,14 @@ module Utility
       end
       configs[:log] = es_config[:log] || false
       configs[:trace] = es_config[:trace] || false
-      configs[:logger] = es_config[:logger] || ::Logger.new(IO::NULL)
+
+      # if log or trace is activated, we use the application logger
+      configs[:logger] = if configs[:log] || configs[:trace]
+                           Utility::Logger.logger
+                         else
+                           # silence!
+                           ::Logger.new(IO::NULL)
+                         end
       configs
     end
 
