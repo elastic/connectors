@@ -26,8 +26,9 @@ describe App::Worker do
       }
     }
 
-    App::Config = config # rubocop:disable Naming/ConstantName
     allow(Connectors::REGISTRY).to receive(:connector_class).and_return(nil)
+    stub_const("App::Config", config)
+
     expect { described_class.start! }.to raise_error('foobar is not a supported connector')
   end
 
@@ -59,7 +60,7 @@ describe App::Worker do
                  }
                end
 
-      App::Config = config # rubocop:disable Naming/ConstantName
+      stub_const("App::Config", config)
 
       # mocking the worker so start! returns immediatly after the initial checks
       allow(App::Worker).to receive(:start_heartbeat_task)
