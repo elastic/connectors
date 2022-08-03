@@ -7,6 +7,9 @@ elasticsearch:
 #  cloud_id: "CHANGEME"
   hosts: http://localhost:9200
   api_key: "CHANGEME"
+  disable_warnings: true
+  trace: false
+  log: false
 
 connector_id: "CHANGEME"
 service_type: "CHANGEME"

@@ -21,7 +21,6 @@ module App
       def start!
         Utility::Logger.info('Running pre-flight check.')
         pre_flight_check
-
         Utility::Logger.info('Starting connector service workers.')
         start_heartbeat_task
         start_polling_jobs
@@ -31,10 +30,14 @@ module App
 
       def pre_flight_check
         raise "#{App::Config[:service_type]} is not a supported connector" unless Connectors::REGISTRY.registered?(App::Config[:service_type])
-        Core::ElasticConnectorActions.ensure_connectors_index_exists
-        Core::ElasticConnectorActions.ensure_job_index_exists
-        connector_settings = Core::ConnectorSettings.fetch(App::Config[:connector_id])
-        Core::ElasticConnectorActions.ensure_content_index_exists(connector_settings.index_name)
+        begin
+          Core::ElasticConnectorActions.ensure_connectors_index_exists
+          Core::ElasticConnectorActions.ensure_job_index_exists
+          connector_settings = Core::ConnectorSettings.fetch(App::Config[:connector_id])
+          Core::ElasticConnectorActions.ensure_content_index_exists(connector_settings.index_name)
+        rescue Elastic::Transport::Transport::Errors::Unauthorized => e
+          raise "Elasticsearch is not authorizing access #{e}"
+        end
       end
 
       def start_heartbeat_task
