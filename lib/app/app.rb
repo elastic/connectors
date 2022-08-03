@@ -13,7 +13,7 @@ require 'app/config'
 require 'utility/logger'
 
 module App
-  with_logging(App::Config) do
+  Utility::with_logging(App::Config) do
     App::Worker.start!
   end
 end

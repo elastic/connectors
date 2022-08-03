@@ -41,10 +41,9 @@ module Utility
     end
   end
 
-  def with_logging(config, &block)
+  def self.with_logging(config, &block)
     # Set UTC as the timezone
     ENV['TZ'] = 'UTC'
-
     Logger.level = config[:log_level]
     es_config = config[:elasticsearch]
     disable_warnings = if es_config.has_key?(:disable_warnings)
@@ -58,7 +57,7 @@ module Utility
       Kernel.silence_warnings(&block)
     else
       Logger.info('Enabling warnings')
-      yield
+      Kernel.enable_warnings(&block)
     end
   end
 end

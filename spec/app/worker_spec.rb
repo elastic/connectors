@@ -8,6 +8,7 @@
 
 require 'yaml'
 require 'app/worker'
+require 'utility/logger'
 
 class FakeSettings
   def index_name
@@ -20,16 +21,20 @@ describe App::Worker do
     config = {
       :service_type => 'foobar',
       :connector_id => '1',
+      :log_level => 'INFO',
       :elasticsearch => {
         :api_key => 'key',
         :hosts => 'http://notreallyaserver'
       }
     }
-
     allow(Connectors::REGISTRY).to receive(:connector_class).and_return(nil)
-    stub_const("App::Config", config)
+    stub_const('App::Config', config)
 
-    expect { described_class.start! }.to raise_error('foobar is not a supported connector')
+    expect {
+      Utility.with_logging(config) do
+        described_class.start!
+      end
+    }.to raise_error('foobar is not a supported connector')
   end
 
   shared_examples 'handle_warnings' do |disable_warnings, stderr|
@@ -43,6 +48,7 @@ describe App::Worker do
                  {
                    :service_type => 'stub_connector',
                    :connector_id => '1',
+                   :log_level => 'INFO',
                    :elasticsearch => {
                      :api_key => 'key',
                      :hosts => 'http://notreallyaserver'
@@ -51,6 +57,7 @@ describe App::Worker do
                else
                  {
                    :service_type => 'stub_connector',
+                   :log_level => 'INFO',
                    :connector_id => '1',
                    :elasticsearch => {
                      :api_key => 'key',
@@ -60,8 +67,6 @@ describe App::Worker do
                  }
                end
 
-      stub_const("App::Config", config)
-
       # mocking the worker so start! returns immediatly after the initial checks
       allow(App::Worker).to receive(:start_heartbeat_task)
       allow(App::Worker).to receive(:start_polling_jobs)
@@ -70,13 +75,20 @@ describe App::Worker do
       allow(Core::ElasticConnectorActions).to receive(:ensure_connectors_index_exists)
       allow(Core::ElasticConnectorActions).to receive(:ensure_content_index_exists)
       expect(Core::ConnectorSettings).to receive(:fetch).and_return(FakeSettings.new)
+
       stub_request(:head, 'http://notreallyaserver:9200/.elastic-connectors-sync-jobs-v1')
         .to_return(status: 404, body: YAML.dump({}), headers: {})
       stub_request(:put, 'http://notreallyaserver:9200/.elastic-connectors-sync-jobs-v1')
         .to_return(status: 200, body: YAML.dump({}), headers: {})
 
+      stub_const('App::Config', config)
+
       # now let's see what is displated in stderr
-      expect { described_class.start! }.to output(stderr).to_stderr
+      expect {
+        Utility.with_logging(config) do
+          described_class.start!
+        end
+      }.to output(stderr).to_stderr
     end
   end
 
