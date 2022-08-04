@@ -15,7 +15,7 @@ import asyncio
 import signal
 import time
 
-import yaml
+from envyaml import EnvYAML
 
 from connectors.byoei import ElasticServer
 from connectors.byoc import BYOIndex
@@ -29,8 +29,7 @@ class ConnectorService:
         self.errors = [0, time.time()]
         if not os.path.exists(config_file):
             raise IOError(f"{config_file} does not exist")
-        with open(config_file) as f:
-            self.config = yaml.safe_load(f)
+        self.config = EnvYAML(config_file)
         self.service_config = self.config["service"]
         self.idling = self.service_config["idling"]
         self.hb = self.service_config["heartbeat"]

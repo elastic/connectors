@@ -25,6 +25,17 @@ class Logger:
 
 
 @pytest.fixture
+def set_env():
+    old = os.environ.get("elasticsearch.password")
+    os.environ["elasticsearch.password"] = "password"
+    try:
+        yield
+    finally:
+        if old:
+            os.environ["elasticsearch.password"] = old
+
+
+@pytest.fixture
 def patch_ping():
     from connectors.byoc import BYOIndex
 
