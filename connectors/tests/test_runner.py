@@ -45,7 +45,7 @@ def test_bad_config():
 
 
 @pytest.mark.asyncio
-async def test_connector_service_list(patch_logger):
+async def test_connector_service_list(patch_logger, set_env):
     service = ConnectorService(CONFIG)
     await service.get_list()
     assert patch_logger.logs == ["Registered connectors:", "- Fakey"]
@@ -134,14 +134,16 @@ def set_server_responses(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_connector_service_poll(mock_responses, patch_logger, patch_ping):
+async def test_connector_service_poll(
+    mock_responses, patch_logger, patch_ping, set_env
+):
     set_server_responses(mock_responses)
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
 
 
-def test_connector_service_run(mock_responses, patch_logger):
+def test_connector_service_run(mock_responses, patch_logger, set_env):
     args = mock.MagicMock()
     args.config_file = CONFIG
     args.action = "list"
@@ -150,7 +152,7 @@ def test_connector_service_run(mock_responses, patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_ping_fails(mock_responses, patch_logger):
+async def test_ping_fails(mock_responses, patch_logger, set_env):
     from connectors.byoc import BYOIndex
 
     async def _ping(*args):
@@ -166,7 +168,7 @@ async def test_ping_fails(mock_responses, patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_spurious(mock_responses, patch_logger, patch_ping):
+async def test_spurious(mock_responses, patch_logger, patch_ping, set_env):
     set_server_responses(mock_responses)
 
     from connectors.byoc import BYOConnector
@@ -191,7 +193,7 @@ async def test_spurious(mock_responses, patch_logger, patch_ping):
 
 
 @pytest.mark.asyncio
-async def test_spurious_continue(mock_responses, patch_logger, patch_ping):
+async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_env):
     set_server_responses(mock_responses)
 
     from connectors.byoc import BYOConnector
