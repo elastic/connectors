@@ -21,7 +21,7 @@ class Logger:
             print(msg)
         self.logs.append(msg)
 
-    exception = critical = info = debug
+    error = exception = critical = info = debug
 
 
 @pytest.fixture

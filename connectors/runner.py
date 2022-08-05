@@ -58,12 +58,15 @@ class ConnectorService:
         """Main event loop."""
         loop = asyncio.get_event_loop()
         connectors = BYOIndex(self.config["elasticsearch"])
+        es_host = self.config["elasticsearch"]["host"]
+
         if not (await connectors.ping()):
-            logger.exception(f"{self.config['elasticsearch']['host']} seem down. Bye!")
+            logger.critical(f"{es_host} seem down. Bye!")
             await connectors.close()
-            return
+            return -1
 
         es = ElasticServer(self.config["elasticsearch"])
+        logger.info(f"Service started, listening to events from {es_host}")
         self.running = True
         try:
             while self.running:
@@ -86,11 +89,13 @@ class ConnectorService:
         finally:
             await connectors.close()
             await es.close()
+        return 0
 
     async def get_list(self):
         logger.info("Registered connectors:")
         for source in get_data_sources(self.config):
             logger.info(f"- {source.__doc__.strip()}")
+        return 0
 
 
 def run(args):
@@ -109,7 +114,9 @@ def run(args):
     try:
         loop.run_until_complete(coro)
         logger.info("Bye")
+        return coro.result()
     except asyncio.CancelledError:
         logger.info("Bye")
+        return 0
 
-    return 0
+    return -1
