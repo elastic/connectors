@@ -163,7 +163,6 @@ async def test_ping_fails(mock_responses, patch_logger, set_env):
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
-
     assert patch_logger.logs[-1] == "http://nowhere.com:9200 seem down. Bye!"
 
 
