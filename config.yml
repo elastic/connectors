@@ -15,4 +15,5 @@ service:
 sources:
   mongo: connectors.sources.mongo:MongoDataSource
   s3: connectors.sources.aws:S3DataSource
+  network_drive: connectors.sources.network_drive:NASDataSource
   dir: connectors.sources.dummy:DirectoryDataSource
