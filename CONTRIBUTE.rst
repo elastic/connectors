@@ -103,24 +103,33 @@ service.
 Contribution Checklist
 ::::::::::::::::::::::
 
+Initial contribution
+*****************
 
 If you want to add a new connector source, following requirements are mandatory for the initial patch:
 
 1. add a module or a directory in `connectors/sources <connectors/sources>`_
-2. implement a class that implements **all** methods described in `connectors.source.BaseDataSource`
+2. implement a class that implements **all methods** described in `connectors.source.BaseDataSource`
 3. add a unit test in `connectors/sources/tests <connectors/sources/tests>`_ with **+90% coverage**
-4. declare your connector in `config.yml <config.yml>`_ in the `sources` section
-5. declare your dependencies in `requirements.txt <requirements.txt>`_. Make sure you pin these dependencies
-6. make sure you use an async lib for your source. If not possible, make sure you don't block the loop
-7. when possible, provide a docker image that runs the backend service, so we can test the connector. If you can't provide a docker image, provide the credentials needed to run against an online service.
+4. **declare your connector** in `config.yml <config.yml>`_ in the `sources` section
+5. **declare your dependencies** in `requirements.txt <requirements.txt>`_. Make sure you pin these dependencies
+6. make sure you use an **async lib** for your source. If not possible, make sure you don't block the loop
+7. when possible, provide a **docker image** that runs the backend service, so we can test the connector. If you can't provide a docker image, provide the credentials needed to run against an online service.
 8. the **test backend** needs to return more than **10k documents** due to 10k being a default size limit for Elasticsearch pagination.
    Having more than 10k documents returned from the test backend will help testing connector more deeply   
-   
+  
+Enhancements
+************
+
 Enhancements that can be done after initial contribution:   
 
-- the backend meets the performance requirements if we provide some (memory usage, how fast it syncs 10k docs, etc.)
-- update README for the connector client
+1. the backend meets the performance requirements if we provide some (memory usage, how fast it syncs 10k docs, etc.)
+2. update README for the connector client
+3. small functional improvements for connector clients
 
+
+Other
+*****
 
 To make sure we're building great connectors, we will be pretty strict on this checklist and we will
 not allow connectors to change the framework code itself.
