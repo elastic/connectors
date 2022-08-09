@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import sys
 import os
 import asyncio
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
@@ -104,6 +105,8 @@ def main(args=None):
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("Bye")
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
