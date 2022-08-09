@@ -15,4 +15,4 @@ service:
 sources:
   mongo: connectors.sources.mongo:MongoDataSource
   s3: connectors.sources.aws:S3DataSource
-  dir: connectors.sources.dummy:DirectoryDataSource
+  dir: connectors.sources.directory:DirectoryDataSource
