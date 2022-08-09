@@ -9,21 +9,12 @@ from unittest import mock
 import pytest
 
 from connectors.sources.aws import S3DataSource
-from connectors.source import DataSourceConfiguration
-from connectors.sources.tests.support import create_source
-
-
-def test_get_configuration():
-    klass = S3DataSource
-    # make sure the config can be read
-    config = DataSourceConfiguration(klass.get_default_configuration())
-    assert config["bucket"] == "ent-search-ingest-dev"
+from connectors.sources.tests.support import create_source, assert_basics
 
 
 @pytest.mark.asyncio
-async def test_ping(mock_aws):
-    source = create_source(S3DataSource)
-    await source.ping()
+async def test_basics():
+    await assert_basics(S3DataSource, "bucket", "ent-search-ingest-dev")
 
 
 class Summary:

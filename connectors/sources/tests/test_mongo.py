@@ -10,19 +10,11 @@ import pytest
 from bson.decimal128 import Decimal128
 
 from connectors.sources.mongo import MongoDataSource
-from connectors.source import DataSourceConfiguration
-from connectors.sources.tests.support import create_source
-
-
-def test_get_configuration():
-    klass = MongoDataSource
-    # make sure the config can be read
-    config = DataSourceConfiguration(klass.get_default_configuration())
-    assert config["host"] == "mongodb://127.0.0.1:27021"
+from connectors.sources.tests.support import create_source, assert_basics
 
 
 @pytest.mark.asyncio
-async def test_ping():
+async def test_basics():
     with (
         mock.patch(
             "pymongo.topology.Topology._select_servers_loop",
@@ -30,8 +22,7 @@ async def test_ping():
         ),
         mock.patch("pymongo.mongo_client.MongoClient._get_socket"),
     ):
-        source = create_source(MongoDataSource)
-        await source.ping()
+        await assert_basics(MongoDataSource, "host", "mongodb://127.0.0.1:27021")
 
 
 @pytest.mark.asyncio
