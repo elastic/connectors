@@ -68,6 +68,10 @@ class FakeSource:
     async def get_docs(self):
         yield {"_id": 1}, None
 
+    @classmethod
+    def get_default_configuration(cls):
+        return []
+
 
 def set_server_responses(mock_responses):
 
