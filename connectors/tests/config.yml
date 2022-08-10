@@ -9,6 +9,9 @@ service:
   heartbeat: 300
   max_errors: 20
   max_errors_span: 600
+  max_es_wait_duration: 1
+  es_initial_backoff_duration: 0
+  es_backoff_multiplier: 0
 
 sources:
   fake: test_runner:FakeSource

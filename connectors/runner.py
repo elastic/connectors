@@ -33,6 +33,11 @@ class ConnectorService:
         self.service_config = self.config["service"]
         self.idling = self.service_config["idling"]
         self.hb = self.service_config["heartbeat"]
+        self.max_es_wait_duration = self.service_config["max_es_wait_duration"]
+        self.es_initial_backoff_duration = self.service_config[
+            "es_initial_backoff_duration"
+        ]
+        self.es_backoff_multiplier = self.service_config["es_backoff_multiplier"]
         self.running = False
 
     def raise_if_spurious(self, exception):
@@ -54,15 +59,29 @@ class ConnectorService:
     def stop(self):
         self.running = False
 
+    async def wait_for_es(self, connectors):
+        backoff = self.es_initial_backoff_duration
+        start = time.time()
+        while time.time() - start < self.max_es_wait_duration:
+            logger.info(
+                f"Waiting for {connectors.host} (so far: {int(time.time() - start)} secs)"
+            )
+            if await connectors.ping():
+                return True
+            await asyncio.sleep(backoff)
+            backoff *= self.es_backoff_multiplier
+
+        await connectors.close()
+        return False
+
     async def poll(self, one_sync=False):
         """Main event loop."""
         loop = asyncio.get_event_loop()
         connectors = BYOIndex(self.config["elasticsearch"])
         es_host = self.config["elasticsearch"]["host"]
 
-        if not (await connectors.ping()):
+        if not (await self.wait_for_es(connectors)):
             logger.critical(f"{es_host} seem down. Bye!")
-            await connectors.close()
             return -1
 
         es = ElasticServer(self.config["elasticsearch"])

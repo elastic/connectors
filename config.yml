@@ -11,6 +11,9 @@ service:
   heartbeat: 300
   max_errors: 20
   max_errors_span: 600
+  max_es_wait_duration: 60
+  es_initial_backoff_duration: 1
+  es_backoff_multiplier: 2
 
 sources:
   mongo: connectors.sources.mongo:MongoDataSource
