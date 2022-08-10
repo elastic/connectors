@@ -103,7 +103,6 @@ class Fetcher:
 
     # XXX this can be defferred
     async def get_attachments(self):
-        downloads = 0
         logger.info("Starting downloads")
 
         while self.sync_runs:
@@ -117,7 +116,7 @@ class Fetcher:
             if data is None:
                 continue
 
-            downloads += 1
+            self.total_downloads += 1
             await self.queue.put(
                 {
                     "_op_type": "update",
@@ -128,14 +127,13 @@ class Fetcher:
                 }
             )
 
-            if divmod(downloads, 10)[-1] == 0:
-                logger.info(f"Downloaded {downloads} files.")
+            if divmod(self.total_downloads, 10)[-1] == 0:
+                logger.info(f"Downloaded {self.total_downloads} files.")
 
             await asyncio.sleep(0)
 
         await self.queue.put("END_DOWNLOADS")
-        logger.info(f"Downloads done {downloads} files.")
-        self.total_downloads = downloads
+        logger.info(f"Downloads done {self.total_downloads} files.")
 
     async def run(self, generator):
         t1 = self.loop.create_task(self.get_docs(generator))
