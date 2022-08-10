@@ -9,63 +9,12 @@ Implementing a new source is done by creating a new class which responsibility
 is to send back documents from the targeted source.
 
 Source classes are not required to use any base class as long
-as it follows the API signature defined in `BaseDataSource <connectors/source.py>`_:
+as it follows the API signature defined in `BaseDataSource <connectors/source.py>`_.
 
-.. code-block:: python
+Check out an example in `directory.py <connectors/sources/directory.py>`_ for a basic
+example.
 
-    class BaseDataSource:
-        @classmethod
-        def get_default_configuration(cls):
-            """Returns a dict with a default configuration
-            """
-            raise NotImplementedError
-
-        async def changed(self):
-            """When called, returns True if something has changed in the backend.
-
-            Otherwise returns False and the next sync is skipped.
-
-            Some backends don't provide that information.
-            In that case, this always return True.
-            """
-            return True
-
-        async def ping(self):
-            """When called, pings the backend
-
-            If the backend has an issue, raises an exception
-            """
-            raise NotImplementedError
-
-        async def get_docs(self):
-            """Returns an iterator on all documents present in the backend
-
-            Each document is a tuple with:
-            - a mapping with the data to index
-            - a coroutine to download extra data (attachments)
-
-            The mapping should have least an `id` field
-            and optionally a `timestamp` field in ISO 8601 UTC
-
-            The coroutine is called if the document needs to be synced
-            and has attachements. It need to return a mapping to index.
-
-            It has two arguments: doit and timestamp
-            If doit is False, it should return None immediatly.
-            If timestamp is provided, it should be used in the mapping.
-
-            Example:
-
-               async def get_file(doit=True, timestamp=None):
-                   if not doit:
-                       return
-                   return {'TEXT': 'DATA', 'timestamp': timestamp,
-                           'id': 'doc-id'}
-            """
-            raise NotImplementedError
-
-
-Take a look at the `Mongo connector <connectors/sources/mongo.py>`_ for inspiration.
+Take a look at the `Mongo connector <connectors/sources/mongo.py>`_ for more inspiration.
 It's pretty straightforward and has that nice little extra feature some other connectors
 can't implement easily: the `Changes <https://www.mongodb.com/docs/manual/changeStreams/>`_
 stream API allows it to detect when something has changed in the Mongo collection.
@@ -116,12 +65,12 @@ If you want to add a new connector source, following requirements are mandatory 
 6. make sure you use an **async lib** for your source. If not possible, make sure you don't block the loop
 7. when possible, provide a **docker image** that runs the backend service, so we can test the connector. If you can't provide a docker image, provide the credentials needed to run against an online service.
 8. the **test backend** needs to return more than **10k documents** due to 10k being a default size limit for Elasticsearch pagination.
-   Having more than 10k documents returned from the test backend will help testing connector more deeply   
-  
+   Having more than 10k documents returned from the test backend will help testing connector more deeply
+
 Enhancements
 ************
 
-Enhancements that can be done after initial contribution:   
+Enhancements that can be done after initial contribution:
 
 1. the backend meets the performance requirements if we provide some (memory usage, how fast it syncs 10k docs, etc.)
 2. update README for the connector client

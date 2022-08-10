@@ -19,6 +19,7 @@ HERE = os.path.dirname(__file__)
 class DirectoryDataSource:
     def __init__(self, connector):
         self.directory = connector.configuration["directory"]
+        self.pattern = connector.configuration["pattern"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -26,6 +27,11 @@ class DirectoryDataSource:
             "directory": {
                 "value": HERE,
                 "label": "Directory",
+                "type": "str",
+            },
+            "pattern": {
+                "value": "**/*.py",
+                "label": "File glob-like pattern",
                 "type": "str",
             },
         }
@@ -49,7 +55,7 @@ class DirectoryDataSource:
 
     async def get_docs(self):
         root_directory = Path(self.directory)
-        for path_object in root_directory.glob("**/*.py"):
+        for path_object in root_directory.glob(self.pattern):
             if not path_object.is_file():
                 continue
 
