@@ -61,6 +61,7 @@ class Bulker:
 
             operation = doc["_op_type"]
             self.ops[operation] += 1
+
             if operation in ("update", "create"):
                 batch.append({"update": {"_index": doc["_index"], "_id": doc["_id"]}})
                 batch.append({"doc": doc["doc"], "doc_as_upsert": True})
@@ -96,6 +97,9 @@ class Fetcher:
         self.existing_ids = existing_ids
         self.existing_timestamps = existing_timestamps
         self.sync_runs = False
+        self.total_downloads = 0
+        self.total_docs_updated = 0
+        self.total_docs_created = 0
 
     # XXX this can be defferred
     async def get_attachments(self):
@@ -131,6 +135,7 @@ class Fetcher:
 
         await self.queue.put("END_DOWNLOADS")
         logger.info(f"Downloads done {downloads} files.")
+        self.total_downloads = downloads
 
     async def run(self, generator):
         t1 = self.loop.create_task(self.get_docs(generator))
@@ -170,8 +175,10 @@ class Fetcher:
 
             if doc_id in self.existing_ids:
                 operation = "update"
+                self.total_docs_updated += 1
             else:
                 operation = "create"
+                self.total_docs_created += 1
 
             await self.queue.put(
                 {
@@ -291,5 +298,10 @@ class ElasticServer:
 
         await asyncio.gather(fetcher_task, bulker_task)
 
-        # we return a number for each operation type.
-        return dict(bulker.ops)
+        # we return a number for each operation type
+        return {
+            "bulk_operations": dict(bulker.ops),
+            "doc_created": fetcher.total_docs_created,
+            "attachment_extracted": fetcher.total_downloads,
+            "doc_updated": fetcher.total_docs_updated,
+        }
