@@ -51,7 +51,7 @@ class ConnectorService:
         for field in ("host", "username", "password"):
             if field not in es_config:
                 continue
-            logger.debug("Overriding {field}")
+            logger.debug(f"Overriding {field}")
             self.config["service"][field] = es_config[field]
 
     def raise_if_spurious(self, exception):
