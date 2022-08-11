@@ -14,6 +14,7 @@ import os
 import asyncio
 import signal
 import time
+import functools
 
 from envyaml import EnvYAML
 
@@ -21,6 +22,7 @@ from connectors.byoei import ElasticServer
 from connectors.byoc import BYOIndex
 from connectors.logger import logger
 from connectors.source import get_data_sources, get_data_source
+from connectors.utils import CancellableSleeps
 
 
 class ConnectorService:
@@ -34,6 +36,8 @@ class ConnectorService:
         self.idling = self.service_config["idling"]
         self.hb = self.service_config["heartbeat"]
         self.running = False
+        self._sleeper = None
+        self._sleeps = CancellableSleeps()
 
     def raise_if_spurious(self, exception):
         errors, first = self.errors
@@ -53,6 +57,7 @@ class ConnectorService:
 
     def stop(self):
         self.running = False
+        self._sleeps.cancel()
 
     async def poll(self, one_sync=False):
         """Main event loop."""
@@ -84,7 +89,7 @@ class ConnectorService:
                         logger.critical(e, exc_info=True)
                         self.raise_if_spurious(e)
                 if not one_sync:
-                    await asyncio.sleep(self.idling)
+                    await self._sleeps.sleep(self.idling)
         finally:
             await connectors.close()
             await es.close()
@@ -95,6 +100,10 @@ class ConnectorService:
         for source in get_data_sources(self.config):
             logger.info(f"- {source.__doc__.strip()}")
         return 0
+
+    def shutdown(self, sig, coro):
+        logger.info(f"Caught {sig.name}. Gracefull shutdown.")
+        self.stop()
 
 
 def run(args):
@@ -108,7 +117,7 @@ def run(args):
         coro = asyncio.ensure_future(service.poll(args.one_sync))
 
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, coro.cancel)
+        loop.add_signal_handler(sig, functools.partial(service.shutdown, sig, coro))
 
     try:
         loop.run_until_complete(coro)

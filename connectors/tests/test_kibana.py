@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import os
+from unittest import mock
 from connectors.kibana import main
 
 
@@ -29,6 +30,7 @@ def mock_index_creation(index, mock_responses, hidden=True):
     )
 
 
+@mock.patch.dict(os.environ, {"elasticsearch.password": "changeme"})
 def test_main(catch_stdout, mock_responses):
     headers = {"X-Elastic-Product": "Elasticsearch"}
 

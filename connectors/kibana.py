@@ -8,7 +8,7 @@ import os
 import asyncio
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
-import yaml
+from envyaml import EnvYAML
 
 from connectors.byoei import ElasticServer
 from connectors.logger import logger
@@ -96,9 +96,7 @@ def main(args=None):
     if not os.path.exists(config_file):
         raise IOError(f"{config_file} does not exist")
 
-    with open(config_file) as f:
-        config = yaml.safe_load(f)
-
+    config = EnvYAML(config_file)
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(prepare(args.service_type, args.index_name, config))
