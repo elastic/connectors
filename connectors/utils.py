@@ -30,7 +30,6 @@ class ESClient:
         elif "api_key" in config:
             options["api_key"] = config["api_key"]
 
-        # XXX add API key support
         if config.get("ssl", False):
             options["verify_certs"] = True
             if "ca_certs" in config:
