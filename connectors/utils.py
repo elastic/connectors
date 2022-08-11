@@ -84,3 +84,27 @@ def next_run(quartz_definition):
     if secs < 1.0:
         secs = 0
     return secs
+
+
+class CancellableSleeps:
+    def __init__(self):
+        self._sleeps = set()
+
+    async def sleep(self, delay, result=None, *, loop=None):
+        async def _sleep(delay, result=None, *, loop=None):
+            coro = asyncio.sleep(delay, result=result, loop=loop)
+            task = asyncio.ensure_future(coro)
+            self._sleeps.add(task)
+            try:
+                return await task
+            except asyncio.CancelledError:
+                logger.debug("Sleep canceled")
+                return result
+            finally:
+                self._sleeps.remove(task)
+
+        await _sleep(delay, result=result, loop=loop)
+
+    def cancel(self):
+        for task in self._sleeps:
+            task.cancel()

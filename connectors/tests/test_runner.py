@@ -225,4 +225,4 @@ async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_e
     finally:
         BYOConnector.sync = old_sync
 
-    assert isinstance(patch_logger.logs[-2], Exception)
+    assert isinstance(patch_logger.logs[-3], Exception)
