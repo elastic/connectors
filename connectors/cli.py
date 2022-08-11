@@ -44,6 +44,13 @@ def _parser():
     )
 
     parser.add_argument(
+        "--filebeat",
+        action="store_true",
+        default=False,
+        help="Output in filebeeat format.",
+    )
+
+    parser.add_argument(
         "--version",
         action="store_true",
         default=False,
@@ -66,5 +73,5 @@ def main(args=None):
     if args.version:
         print(__version__)
         return 0
-    set_logger(args.debug and logging.DEBUG or logging.INFO)
+    set_logger(args.debug and logging.DEBUG or logging.INFO, filebeat=args.filebeat)
     return run(args)

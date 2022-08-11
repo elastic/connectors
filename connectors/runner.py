@@ -51,11 +51,11 @@ class ConnectorService:
             "elasticsearch.username",
             "elasticsearch.password",
         ):
-            sub = field.split('.')[-1]
+            sub = field.split(".")[-1]
             if field not in ent_search_config:
                 continue
             logger.debug(f"Overriding {field}")
-            self.config['elasticsearch'][sub] = ent_search_config[field]
+            self.config["elasticsearch"][sub] = ent_search_config[field]
 
     def raise_if_spurious(self, exception):
         errors, first = self.errors
