@@ -39,20 +39,22 @@ class ConnectorService:
         self.running = False
         self._sleeper = None
         self._sleeps = CancellableSleeps()
+        self.connectors = None
 
     def ent_search_config(self):
         if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
             return
         logger.info("Found ENT_SEARCH_CONFIG_PATH, loading ent-search config")
         ent_search_config = EnvYAML(os.environ["ENT_SEARCH_CONFIG_PATH"])
-        if "elasticsearch" not in ent_search_config:
-            return
-        es_config = ent_search_config["elasticsearch"]
-        for field in ("host", "username", "password"):
-            if field not in es_config:
+        for field in (
+            "elasticsearch.host",
+            "elasticsearch.username",
+            "elasticsearch.password",
+        ):
+            if field not in ent_search_config:
                 continue
             logger.debug(f"Overriding {field}")
-            self.config["service"][field] = es_config[field]
+            self.config["service"][field] = ent_search_config[field]
 
     def raise_if_spurious(self, exception):
         errors, first = self.errors
@@ -73,24 +75,26 @@ class ConnectorService:
     def stop(self):
         self.running = False
         self._sleeps.cancel()
+        if self.connectors is not None:
+            self.connectors.stop_waiting()
 
     async def poll(self, one_sync=False):
         """Main event loop."""
         loop = asyncio.get_event_loop()
-        connectors = BYOIndex(self.config["elasticsearch"])
+        self.connectors = BYOIndex(self.config["elasticsearch"])
         es_host = self.config["elasticsearch"]["host"]
+        self.running = True
 
-        if not (await connectors.wait()):
+        if not (await self.connectors.wait()):
             logger.critical(f"{es_host} seem down. Bye!")
             return -1
 
         es = ElasticServer(self.config["elasticsearch"])
         logger.info(f"Service started, listening to events from {es_host}")
-        self.running = True
         try:
             while self.running:
                 logger.debug(f"Polling every {self.idling} seconds")
-                async for connector in connectors.get_list():
+                async for connector in self.connectors.get_list():
                     try:
                         data_source = get_data_source(connector, self.config)
                         loop.create_task(connector.heartbeat(self.hb))
@@ -106,7 +110,7 @@ class ConnectorService:
                 if not one_sync:
                     await self._sleeps.sleep(self.idling)
         finally:
-            await connectors.close()
+            await self.connectors.close()
             await es.close()
         return 0
 

@@ -17,7 +17,7 @@ from connectors.quartz import QuartzCron
 class ESClient:
     def __init__(self, config):
         self.host = config["host"]
-
+        self._sleeps = CancellableSleeps()
         options = {
             "hosts": [config["host"]],
             "request_timeout": config.get("request_timeout", 120),
@@ -44,6 +44,11 @@ class ESClient:
         self.initial_backoff_duration = config.get("initial_backoff_duration", 5)
         self.backoff_multiplier = config.get("backoff_multiplier", 2)
         self.client = AsyncElasticsearch(**options)
+        self._keep_waiting = True
+
+    def stop_waiting(self):
+        self._keep_waiting = False
+        self._sleeps.cancel()
 
     async def close(self):
         await self.client.close()
@@ -56,12 +61,14 @@ class ESClient:
         start = time.time()
         logger.debug(f"Wait for Elasticsearch (max: {self.max_wait_duration})")
         while time.time() - start < self.max_wait_duration:
+            if not self._keep_waiting:
+                return False
             logger.info(
                 f"Waiting for {self.host} (so far: {int(time.time() - start)} secs)"
             )
             if await self.ping():
                 return True
-            await asyncio.sleep(backoff)
+            await self._sleeps.sleep(backoff)
             backoff *= self.backoff_multiplier
 
         await self.close()
