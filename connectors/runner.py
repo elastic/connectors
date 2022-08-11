@@ -32,12 +32,27 @@ class ConnectorService:
         if not os.path.exists(config_file):
             raise IOError(f"{config_file} does not exist")
         self.config = EnvYAML(config_file)
+        self.ent_search_config()
         self.service_config = self.config["service"]
         self.idling = self.service_config["idling"]
         self.hb = self.service_config["heartbeat"]
         self.running = False
         self._sleeper = None
         self._sleeps = CancellableSleeps()
+
+    def ent_search_config(self):
+        if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
+            return
+        logger.info("Found ENT_SEARCH_CONFIG_PATH, loading ent-search config")
+        ent_search_config = EnvYAML(os.environ["ENT_SEARCH_CONFIG_PATH"])
+        if "elasticsearch" not in ent_search_config:
+            return
+        es_config = ent_search_config["elasticsearch"]
+        for field in ("host", "username", "password"):
+            if field not in es_config:
+                continue
+            logger.debug("Overriding {field}")
+            self.config["service"][field] = es_config[field]
 
     def raise_if_spurious(self, exception):
         errors, first = self.errors
