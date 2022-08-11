@@ -5,6 +5,7 @@ aioboto3>=9.6.0
 pytz>=2022.1
 aiohttp>=3.8.1
 envyaml>=1.10.211231
+ecs-logging>=2.0.0
 
 black>=22.6.0
 flake8>=4.0.1

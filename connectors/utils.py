@@ -39,7 +39,9 @@ class ESClient:
 
         level = config.get("log_level", "INFO").upper()
         es_logger = logging.getLogger("elastic_transport.node")
-        set_extra_logger(es_logger, log_level=logging.getLevelName(level))
+        set_extra_logger(
+            es_logger, log_level=logging.getLevelName(level), filebeat=logger.filebeat
+        )
         self.max_wait_duration = config.get("max_wait_duration", 60)
         self.initial_backoff_duration = config.get("initial_backoff_duration", 5)
         self.backoff_multiplier = config.get("backoff_multiplier", 2)
