@@ -6,16 +6,15 @@
 """
 Implementation of BYOEI protocol (+some ids collecting)
 """
-import logging
 import time
 from collections import defaultdict
 import asyncio
 
-from elasticsearch import AsyncElasticsearch, NotFoundError as ElasticNotFoundError
+from elasticsearch import NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan
 
-from connectors.logger import logger, set_extra_logger
-from connectors.utils import iso_utc
+from connectors.logger import logger
+from connectors.utils import iso_utc, ESClient
 
 
 class Bulker:
@@ -202,27 +201,12 @@ class Fetcher:
         await self.queue.put("END_DOCS")
 
 
-class ElasticServer:
+class ElasticServer(ESClient):
     def __init__(self, elastic_config):
         logger.debug(f"ElasticServer connecting to {elastic_config['host']}")
-        self.host = elastic_config["host"]
-        self.auth = elastic_config["user"], elastic_config["password"]
-        self.client = AsyncElasticsearch(
-            hosts=[self.host],
-            basic_auth=self.auth,
-            request_timeout=elastic_config.get("request_timeout", 120),
-        )
+        super().__init__(elastic_config)
         self._downloads = []
         self.loop = asyncio.get_event_loop()
-        level = elastic_config.get("log_level", "INFO")
-        es_logger = logging.getLogger("elastic_transport.node")
-        set_extra_logger(es_logger, log_level=logging.getLevelName(level))
-
-    async def ping(self):
-        await self.client.ping()
-
-    async def close(self):
-        await self.client.close()
 
     async def prepare_index(self, index, docs=None, mapping=None, delete_first=False):
         """Creates the index, given a mapping if it does not exists."""
