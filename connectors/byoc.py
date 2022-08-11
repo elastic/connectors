@@ -10,9 +10,7 @@ import asyncio
 from enum import Enum
 import time
 
-from elasticsearch import AsyncElasticsearch
-
-from connectors.utils import iso_utc, next_run
+from connectors.utils import iso_utc, next_run, ESClient
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration
 
@@ -43,23 +41,17 @@ class JobStatus(Enum):
 _CONNECTORS_CACHE = {}
 
 
-class BYOIndex:
+class BYOIndex(ESClient):
     def __init__(self, elastic_config):
+        super().__init__(elastic_config)
         logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
-        self.host = elastic_config["host"]
-        self.auth = elastic_config["user"], elastic_config["password"]
-        self.client = AsyncElasticsearch(
-            hosts=[self.host],
-            basic_auth=self.auth,
-            request_timeout=elastic_config.get("request_timeout", 120),
-        )
         self.bulk_queue_max_size = elastic_config.get("bulk_queue_max_size", 1024)
 
     async def close(self):
         for connector in _CONNECTORS_CACHE.values():
             await connector.close()
             await asyncio.sleep(0)
-        await self.client.close()
+        await super().close()
 
     async def save(self, connector):
         return await self.client.index(
@@ -67,9 +59,6 @@ class BYOIndex:
             id=connector.doc_id,
             document=dict(connector.doc_source),
         )
-
-    async def ping(self):
-        return await self.client.ping()
 
     async def get_list(self):
         resp = await self.client.search(

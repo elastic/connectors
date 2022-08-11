@@ -4,7 +4,69 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from datetime import datetime
+import logging
+import time
+import asyncio
+
+from elasticsearch import AsyncElasticsearch
+
+from connectors.logger import set_extra_logger, logger
 from connectors.quartz import QuartzCron
+
+
+class ESClient:
+    def __init__(self, config):
+        self.host = config["host"]
+
+        options = {
+            "hosts": [config["host"]],
+            "request_timeout": config.get("request_timeout", 120),
+        }
+        if "user" in config:
+            if "api_key" in config:
+                raise KeyError("You can't use basic auth and Api Key at the same time")
+            auth = config["user"], config["password"]
+            options["basic_auth"] = auth
+        elif "api_key" in config:
+            options["api_key"] = config["api_key"]
+
+        # XXX add API key support
+        if config.get("ssl", False):
+            options["verify_certs"] = True
+            if "ca_certs" in config:
+                ca_certs = config["ca_certs"]
+                logger.debug(f"Verifying cert with {ca_certs}")
+                options["ca_certs"] = ca_certs
+
+        level = config.get("log_level", "INFO").upper()
+        es_logger = logging.getLogger("elastic_transport.node")
+        set_extra_logger(es_logger, log_level=logging.getLevelName(level))
+        self.max_wait_duration = config.get("max_wait_duration", 60)
+        self.initial_backoff_duration = config.get("initial_backoff_duration", 5)
+        self.backoff_multiplier = config.get("backoff_multiplier", 2)
+        self.client = AsyncElasticsearch(**options)
+
+    async def close(self):
+        await self.client.close()
+
+    async def ping(self):
+        return await self.client.ping()
+
+    async def wait(self):
+        backoff = self.initial_backoff_duration
+        start = time.time()
+        logger.debug(f"Wait for Elasticsearch (max: {self.max_wait_duration})")
+        while time.time() - start < self.max_wait_duration:
+            logger.info(
+                f"Waiting for {self.host} (so far: {int(time.time() - start)} secs)"
+            )
+            if await self.ping():
+                return True
+            await asyncio.sleep(backoff)
+            backoff *= self.backoff_multiplier
+
+        await self.close()
+        return False
 
 
 def iso_utc(when=None):
