@@ -13,6 +13,7 @@ import time
 from connectors.utils import iso_utc, next_run, ESClient
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration
+from elasticsearch.exceptions import ApiError
 
 
 CONNECTORS_INDEX = ".elastic-connectors"
@@ -61,12 +62,18 @@ class BYOIndex(ESClient):
         )
 
     async def get_list(self):
-        resp = await self.client.search(
-            index=CONNECTORS_INDEX,
-            query={"match_all": {}},
-            size=20,
-            expand_wildcards="hidden",
-        )
+        try:
+            resp = await self.client.search(
+                index=CONNECTORS_INDEX,
+                query={"match_all": {}},
+                size=20,
+                expand_wildcards="hidden",
+            )
+        except ApiError as e:
+            logger.critical(f"The server returned {e.status_code}")
+            logger.critical(e.body, exc_info=True)
+            return
+
         for hit in resp["hits"]["hits"]:
             doc_id = hit["_id"]
             if doc_id not in _CONNECTORS_CACHE:
