@@ -1,7 +1,7 @@
 elasticsearch:
-  host: https://ent-search-connectors-10.es.us-west2.gcp.elastic-cloud.com:443
-  user: elastic
-  password: 31reAMNlcIvlKQJ6FLoczibo
+  host: http://localhost:9200
+  username: elastic
+  password: changeme
   ssl: true
   bulk_queue_max_size: 1024
   request_timeout: 120
