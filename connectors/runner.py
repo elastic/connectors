@@ -105,8 +105,10 @@ class ConnectorService:
                         if one_sync:
                             self.stop()
                             break
-                    except KeyError as ke:
-                        logger.debug(f"Can't handle source of type {connector.service_type}")
+                    except KeyError:
+                        logger.debug(
+                            f"Can't handle source of type {connector.service_type}"
+                        )
                     except Exception as e:
                         logger.critical(e, exc_info=True)
                         self.raise_if_spurious(e)
