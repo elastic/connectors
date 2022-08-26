@@ -17,6 +17,8 @@ HERE = os.path.dirname(__file__)
 
 
 class DirectoryDataSource:
+    """Directory"""
+
     def __init__(self, connector):
         self.directory = connector.configuration["directory"]
         self.pattern = connector.configuration["pattern"]
