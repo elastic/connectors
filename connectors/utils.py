@@ -104,7 +104,7 @@ class CancellableSleeps:
 
     async def sleep(self, delay, result=None, *, loop=None):
         async def _sleep(delay, result=None, *, loop=None):
-            coro = asyncio.sleep(delay, result=result, loop=loop)
+            coro = asyncio.sleep(delay, result=result)
             task = asyncio.ensure_future(coro)
             self._sleeps.add(task)
             try:
