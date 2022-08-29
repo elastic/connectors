@@ -71,7 +71,7 @@ class IndexSettings:
         return (
             self.ICU_ANALYSIS_SETTINGS
             if analysis_settings
-            else self.ICU_ANALYSIS_SETTINGS
+            else self.NON_ICU_ANALYSIS_SETTINGS
         )
 
     @property

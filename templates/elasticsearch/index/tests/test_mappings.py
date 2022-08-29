@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from utils.elasticsearch.index.mappings import IndexMappings
+from templates.elasticsearch.index.mappings import IndexMappings
 
 EXPECTED_CONNECTORS_PROPS = ["id", "_subextracted_as_of", "_subextracted_version"]
 
