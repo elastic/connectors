@@ -208,7 +208,7 @@ class ElasticServer(ESClient):
         self._downloads = []
         self.loop = asyncio.get_event_loop()
 
-    async def prepare_index(self, index, docs=None, mapping=None, delete_first=False):
+    async def prepare_index(self, index, *, docs=None, settings=None, mappings=None, delete_first=False):
         """Creates the index, given a mapping if it does not exists."""
         # XXX todo update the existing index with the new mapping
         logger.debug(f"Checking index {index}")
@@ -223,7 +223,7 @@ class ElasticServer(ESClient):
             await self.client.indices.delete(index=index, expand_wildcards="hidden")
 
         logger.debug(f"Creating index {index}")
-        await self.client.indices.create(index=index)
+        await self.client.indices.create(index=index, settings=settings, mappings=mappings)
         if docs is None:
             return
         # XXX bulk

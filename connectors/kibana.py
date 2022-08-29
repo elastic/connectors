@@ -58,10 +58,10 @@ async def prepare(service_type, index_name, config):
         }
 
         print(f"Prepare {CONNECTORS_INDEX}")
-        await es.prepare_index(CONNECTORS_INDEX, [doc], delete_first=True)
+        await es.prepare_index(CONNECTORS_INDEX, docs=[doc], delete_first=True)
 
         print(f"Prepare {JOBS_INDEX}")
-        await es.prepare_index(JOBS_INDEX, [], delete_first=True)
+        await es.prepare_index(JOBS_INDEX, docs=[], delete_first=True)
 
         print(f"Delete {index_name}")
         if await es.client.indices.exists(index=index_name):
