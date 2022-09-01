@@ -145,49 +145,55 @@ class Fetcher:
         self.sync_runs = True
 
         seen_ids = set()
-        async for doc in generator:
-            doc, lazy_download = doc
-            doc_id = doc["id"] = doc.pop("_id")
-            logger.debug(f"Looking at {doc_id}")
-            seen_ids.add(doc_id)
+        try:
+            async for doc in generator:
+                doc, lazy_download = doc
+                doc_id = doc["id"] = doc.pop("_id")
+                logger.debug(f"Looking at {doc_id}")
+                seen_ids.add(doc_id)
 
-            # If the doc has a timestamp, we can use it to see if it has
-            # been modified. This reduces the bulk size a *lot*
-            #
-            # Some backends do not know how to do this so it's optional.
-            # For them we update the docs in any case.
-            if "timestamp" in doc:
-                if self.existing_timestamps.get(doc_id, "") == doc["timestamp"]:
-                    logger.debug(f"Skipping {doc_id}")
-                    await lazy_download(doit=False)
-                    continue
-            else:
-                doc["timestamp"] = iso_utc()
+                # If the doc has a timestamp, we can use it to see if it has
+                # been modified. This reduces the bulk size a *lot*
+                #
+                # Some backends do not know how to do this so it's optional.
+                # For them we update the docs in any case.
+                if "timestamp" in doc:
+                    if self.existing_timestamps.get(doc_id, "") == doc["timestamp"]:
+                        logger.debug(f"Skipping {doc_id}")
+                        await lazy_download(doit=False)
+                        continue
+                else:
+                    doc["timestamp"] = iso_utc()
 
-            if lazy_download is not None:
-                await self._downloads.put(
-                    self.loop.create_task(
-                        lazy_download(doit=True, timestamp=doc["timestamp"])
+                if lazy_download is not None:
+                    await self._downloads.put(
+                        self.loop.create_task(
+                            lazy_download(doit=True, timestamp=doc["timestamp"])
+                        )
                     )
+
+                if doc_id in self.existing_ids:
+                    operation = "update"
+                    self.total_docs_updated += 1
+                else:
+                    operation = "create"
+                    self.total_docs_created += 1
+
+                await self.queue.put(
+                    {
+                        "_op_type": operation,
+                        "_index": self.index,
+                        "_id": doc_id,
+                        "doc": doc,
+                        "doc_as_upsert": True,
+                    }
                 )
-
-            if doc_id in self.existing_ids:
-                operation = "update"
-                self.total_docs_updated += 1
-            else:
-                operation = "create"
-                self.total_docs_created += 1
-
-            await self.queue.put(
-                {
-                    "_op_type": operation,
-                    "_index": self.index,
-                    "_id": doc_id,
-                    "doc": doc,
-                    "doc_as_upsert": True,
-                }
-            )
-            await asyncio.sleep(0)
+                await asyncio.sleep(0)
+        except Exception:
+            logger.critical("The document fetcher failed", exc_info=True)
+            await self._downloads.put("END")
+            await self.queue.put("END_DOCS")
+            return
 
         # We delete any document that existed in Elasticsearch that was not
         # returned by the backend.

@@ -40,6 +40,23 @@ FAKE_CONFIG = {
 }
 
 
+FAKE_CONFIG_FAIL_SERVICE = {
+    "api_key_id": "",
+    "configuration": {"fail": {"value": True, "label": ""}},
+    "index_name": "search-airbnb",
+    "service_type": "fake",
+    "status": "configured",
+    "last_sync_status": "null",
+    "last_sync_error": "",
+    "last_synced": "",
+    "last_seen": "",
+    "created_at": "",
+    "updated_at": "",
+    "scheduling": {"enabled": True, "interval": "0 * * * *"},
+    "sync_now": True,
+}
+
+
 FAKE_CONFIG_BUGGY_SERVICE = {
     "api_key_id": "",
     "configuration": {"raise": {"value": True, "label": ""}},
@@ -93,7 +110,8 @@ class FakeSource:
 
     def __init__(self, connector):
         if connector.configuration.has_field("raise"):
-            raise Exception("I break")
+            raise Exception("I break on init")
+        self.fail = connector.configuration.has_field("fail")
 
     async def changed(self):
         return True
@@ -102,6 +120,8 @@ class FakeSource:
         pass
 
     async def get_docs(self):
+        if self.fail:
+            raise Exception("I fail while syncing")
         yield {"_id": 1}, None
 
     @classmethod
@@ -183,6 +203,18 @@ async def test_connector_service_poll(
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_sync_fails(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+
+    set_server_responses(mock_responses, FAKE_CONFIG_FAIL_SERVICE)
+    service = ConnectorService(CONFIG)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll()
+    assert "The document fetcher failed" in patch_logger.logs
 
 
 @pytest.mark.asyncio
