@@ -10,6 +10,7 @@ from unittest import mock
 
 from connectors.runner import ConnectorService, run
 from connectors.byoc import _CONNECTORS_CACHE
+from connectors.source import DataSourceError, _CACHED_SOURCES
 
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
@@ -39,6 +40,40 @@ FAKE_CONFIG = {
 }
 
 
+FAKE_CONFIG_BUGGY_SERVICE = {
+    "api_key_id": "",
+    "configuration": {"raise": {"value": True, "label": ""}},
+    "index_name": "search-airbnb",
+    "service_type": "fake",
+    "status": "configured",
+    "last_sync_status": "null",
+    "last_sync_error": "",
+    "last_synced": "",
+    "last_seen": "",
+    "created_at": "",
+    "updated_at": "",
+    "scheduling": {"enabled": True, "interval": "0 * * * *"},
+    "sync_now": True,
+}
+
+
+FAKE_CONFIG_UNKNOWN_SERVICE = {
+    "api_key_id": "",
+    "configuration": {},
+    "index_name": "search-airbnb",
+    "service_type": "UNKNOWN",
+    "status": "configured",
+    "last_sync_status": "null",
+    "last_sync_error": "",
+    "last_synced": "",
+    "last_seen": "",
+    "created_at": "",
+    "updated_at": "",
+    "scheduling": {"enabled": True, "interval": "0 * * * *"},
+    "sync_now": True,
+}
+
+
 def test_bad_config():
     with pytest.raises(OSError):
         ConnectorService("BEEUUUAH")
@@ -56,8 +91,9 @@ class FakeSource:
 
     service_type = "fake"
 
-    def __init__(self, *args):
-        pass
+    def __init__(self, connector):
+        if connector.configuration.has_field("raise"):
+            raise Exception("I break")
 
     async def changed(self):
         return True
@@ -73,14 +109,16 @@ class FakeSource:
         return []
 
 
-def set_server_responses(mock_responses):
+def set_server_responses(mock_responses, config=FAKE_CONFIG):
 
     _CONNECTORS_CACHE.clear()
+    _CACHED_SOURCES.clear()
+
     headers = {"X-Elastic-Product": "Elasticsearch"}
 
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={"hits": {"hits": [{"_id": "1", "_source": FAKE_CONFIG}]}},
+        payload={"hits": {"hits": [{"_id": "1", "_source": config}]}},
         headers=headers,
     )
     mock_responses.post(
@@ -112,12 +150,12 @@ def set_server_responses(mock_responses):
 
     mock_responses.get(
         "http://nowhere.com:9200/search-airbnb",
-        payload={"hits": {"hits": [{"_id": "1", "_source": FAKE_CONFIG}]}},
+        payload={"hits": {"hits": [{"_id": "1", "_source": config}]}},
         headers=headers,
     )
     mock_responses.get(
         "http://nowhere.com:9200/search-airbnb/_search?scroll=5m",
-        payload={"hits": {"hits": [{"_id": "1", "_source": FAKE_CONFIG}]}},
+        payload={"hits": {"hits": [{"_id": "1", "_source": config}]}},
         headers=headers,
     )
     mock_responses.post(
@@ -145,6 +183,33 @@ async def test_connector_service_poll(
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_unknown_service(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+
+    set_server_responses(mock_responses, FAKE_CONFIG_UNKNOWN_SERVICE)
+    service = ConnectorService(CONFIG)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll()
+    assert "Can't handle source of type UNKNOWN" in patch_logger.logs
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_buggy_service(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+
+    set_server_responses(mock_responses, FAKE_CONFIG_BUGGY_SERVICE)
+    service = ConnectorService(CONFIG)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll()
+    for log in patch_logger.logs:
+        if isinstance(log, DataSourceError):
+            return
+    raise AssertionError
 
 
 def test_connector_service_run(mock_responses, patch_logger, set_env):
