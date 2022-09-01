@@ -44,10 +44,17 @@ def _parser():
     )
 
     parser.add_argument(
+        "--sync-now",
+        action="store_true",
+        default=False,
+        help="Force a sync on first run for each connector.",
+    )
+
+    parser.add_argument(
         "--filebeat",
         action="store_true",
         default=False,
-        help="Output in filebeeat format.",
+        help="Output in filebeat format.",
     )
 
     parser.add_argument(
