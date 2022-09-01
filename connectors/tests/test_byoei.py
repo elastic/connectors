@@ -192,8 +192,10 @@ async def test_async_bulk(mock_responses, patch_logger):
     assert res == {
         "bulk_operations": {"create": 1, "delete": 1, "update": 2},
         "doc_created": 1,
+        "doc_deleted": 1,
         "attachment_extracted": 1,
         "doc_updated": 1,
+        "fetch_error": None,
     }
 
     await es.close()

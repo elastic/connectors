@@ -113,27 +113,21 @@ class SyncJob:
         self.job_id = resp["_id"]
         return self.job_id
 
-    async def done(self, indexed_count, deleted_count):
-        self.status = JobStatus.COMPLETED
+    async def done(self, indexed_count=0, deleted_count=0, exception=None):
         job_def = {
-            "status": e2str(self.status),
             "deleted_document_count": indexed_count,
             "indexed_document_count": deleted_count,
             "updated_at": iso_utc(),
         }
-        return await self.client.index(
-            index=JOBS_INDEX, id=self.job_id, document=job_def
-        )
 
-    async def failed(self, exception):
-        self.status = JobStatus.ERROR
-        job_def = {
-            "status": e2str(self.status),
-            "error": str(exception),
-            "deleted_document_count": 0,
-            "indexed_document_count": 0,
-            "updated_at": iso_utc(),
-        }
+        if exception is None:
+            self.status = JobStatus.COMPLETED
+        else:
+            self.status = JobStatus.ERROR
+            job_def["error"] = str(exception)
+
+        job_def["status"] = e2str(self.status)
+
         return await self.client.index(
             index=JOBS_INDEX, id=self.job_id, document=job_def
         )
@@ -205,24 +199,27 @@ class BYOConnector:
         logger.info(f"Sync starts, Job id: {job_id}")
         return job
 
-    async def _sync_done(self, job, indexed_count, deleted_count):
-        await job.done(indexed_count, deleted_count)
+    async def _sync_done(self, job, result, exception=None):
+        doc_updated = result.get("doc_updated", 0)
+        doc_created = result.get("doc_created", 0)
+        doc_deleted = result.get("doc_deleted", 0)
+        exception = result.get("fetch_error", exception)
 
-        self.doc_source["sync_status"] = e2str(job.status)
-        self.doc_source["last_sync"] = iso_utc()
+        indexed_count = doc_updated + doc_created
+
+        await job.done(indexed_count, doc_deleted, exception)
+
+        self.doc_source["last_sync_status"] = e2str(job.status)
+        if exception is None:
+            self.doc_source["last_sync_error"] = ""
+        else:
+            self.doc_source["last_sync_error"] = str(exception)
+        self.doc_source["last_synced"] = iso_utc()
         await self._write()
         logger.info(
-            f"Sync done: {indexed_count} indexed, {deleted_count} "
+            f"Sync done: {indexed_count} indexed, {doc_deleted} "
             f" deleted. ({int(time.time() - self._start_time)} seconds)"
         )
-
-    async def _sync_failed(self, job, exception):
-        await job.failed(exception)
-
-        self.doc_source["last_sync_error"] = str(exception)
-        self.doc_source["last_sync_status"] = e2str(job.status)
-        self.doc_source["last_sync"] = iso_utc()
-        await self._write()
 
     async def sync(self, data_provider, elastic_server, idling):
         service_type = self.service_type
@@ -250,13 +247,10 @@ class BYOConnector:
                 data_provider.get_docs(),
                 queue_size=self.bulk_queue_max_size,
             )
-            await self._sync_done(
-                job,
-                result.get("update", 0) + result.get("create", 0),
-                result.get("delete", 0),
-            )
+            await self._sync_done(job, result)
+
         except Exception as e:
-            await self._sync_failed(job, e)
+            await self._sync_done(job, {}, exception=e)
             raise
         finally:
             self._syncing = False
