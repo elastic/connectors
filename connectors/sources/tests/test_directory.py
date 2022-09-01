@@ -19,4 +19,9 @@ async def test_get_docs(patch_logger):
     num = 0
     async for (doc, dl) in source.get_docs():
         num += 1
+        if "__init__.py" in doc["path"]:
+            continue
+        data = await dl(doit=True, timestamp="xx")
+        assert len(data["text"]) > 0
+
     assert num > 3

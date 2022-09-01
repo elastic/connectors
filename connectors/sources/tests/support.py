@@ -22,3 +22,4 @@ async def assert_basics(klass, field, value):
     assert config[field] == value
     source = create_source(klass)
     await source.ping()
+    await source.changed()
