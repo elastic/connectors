@@ -47,7 +47,7 @@ class Bulker:
         docs_ended = downloads_ended = False
         while True:
             doc = await self.queue.get()
-            if doc == "END_DOCS":
+            if doc in ("END_DOCS", "FETCH_ERROR"):
                 docs_ended = True
             if doc == "END_DOWNLOADS":
                 downloads_ended = True
@@ -55,7 +55,7 @@ class Bulker:
             if docs_ended and downloads_ended:
                 break
 
-            if doc in ("END_DOCS", "END_DOWNLOADS"):
+            if doc in ("END_DOCS", "END_DOWNLOADS", "FETCH_ERROR"):
                 continue
 
             operation = doc["_op_type"]
@@ -100,6 +100,7 @@ class Fetcher:
         self.total_docs_updated = 0
         self.total_docs_created = 0
         self.total_docs_deleted = 0
+        self.fetch_error = None
 
     # XXX this can be defferred
     async def get_attachments(self):
@@ -189,10 +190,11 @@ class Fetcher:
                     }
                 )
                 await asyncio.sleep(0)
-        except Exception:
+        except Exception as e:
             logger.critical("The document fetcher failed", exc_info=True)
             await self._downloads.put("END")
-            await self.queue.put("END_DOCS")
+            await self.queue.put("FETCH_ERROR")
+            self.fetch_error = e
             return
 
         # We delete any document that existed in Elasticsearch that was not
@@ -299,4 +301,5 @@ class ElasticServer(ESClient):
             "attachment_extracted": fetcher.total_downloads,
             "doc_updated": fetcher.total_docs_updated,
             "doc_deleted": fetcher.total_docs_deleted,
+            "fetch_error": fetcher.fetch_error,
         }

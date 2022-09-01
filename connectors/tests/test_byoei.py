@@ -195,6 +195,7 @@ async def test_async_bulk(mock_responses, patch_logger):
         "doc_deleted": 1,
         "attachment_extracted": 1,
         "doc_updated": 1,
+        "fetch_error": None,
     }
 
     await es.close()
