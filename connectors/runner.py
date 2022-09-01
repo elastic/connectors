@@ -84,7 +84,7 @@ class ConnectorService:
         if self.connectors is not None:
             self.connectors.stop_waiting()
 
-    async def poll(self, one_sync=False):
+    async def poll(self, one_sync=False, sync_now=True):
         """Main event loop."""
         loop = asyncio.get_event_loop()
         self.connectors = BYOIndex(self.config["elasticsearch"])
@@ -115,7 +115,7 @@ class ConnectorService:
 
                     try:
                         loop.create_task(connector.heartbeat(self.hb))
-                        await connector.sync(data_source, es, self.idling)
+                        await connector.sync(data_source, es, self.idling, sync_now)
                         await asyncio.sleep(0)
 
                         if one_sync:
@@ -150,7 +150,7 @@ def run(args):
     if args.action == "list":
         coro = asyncio.ensure_future(service.get_list())
     else:
-        coro = asyncio.ensure_future(service.poll(args.one_sync))
+        coro = asyncio.ensure_future(service.poll(args.one_sync, args.sync_now))
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(service.shutdown, sig, coro))

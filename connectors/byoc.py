@@ -221,14 +221,17 @@ class BYOConnector:
             f" deleted. ({int(time.time() - self._start_time)} seconds)"
         )
 
-    async def sync(self, data_provider, elastic_server, idling):
+    async def sync(self, data_provider, elastic_server, idling, sync_now=False):
         service_type = self.service_type
-        next_sync = self.next_sync()
-        if next_sync == -1 or next_sync - idling > 0:
-            logger.debug(
-                f"Next sync for {service_type} due in {int(next_sync)} seconds"
-            )
-            return
+        if not sync_now:
+            next_sync = self.next_sync()
+            if next_sync == -1 or next_sync - idling > 0:
+                logger.debug(
+                    f"Next sync for {service_type} due in {int(next_sync)} seconds"
+                )
+                return
+        else:
+            logger.info("Sync forced")
 
         if not await data_provider.changed():
             logger.debug(f"No change in {service_type} data provider, skipping...")
