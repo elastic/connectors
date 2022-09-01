@@ -15,7 +15,6 @@ from connectors.source import DataSourceError, _CACHED_SOURCES
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
-
 FAKE_CONFIG = {
     "api_key_id": "",
     "configuration": {
@@ -37,6 +36,30 @@ FAKE_CONFIG = {
     "updated_at": "",
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
+}
+
+
+FAKE_CONFIG_NO_SYNC = {
+    "api_key_id": "",
+    "configuration": {
+        "host": {"value": "mongodb://127.0.0.1:27021", "label": "MongoDB Host"},
+        "database": {"value": "sample_airbnb", "label": "MongoDB Database"},
+        "collection": {
+            "value": "listingsAndReviews",
+            "label": "MongoDB Collection",
+        },
+    },
+    "index_name": "search-airbnb",
+    "service_type": "fake",
+    "status": "configured",
+    "last_sync_status": "null",
+    "last_sync_error": "",
+    "last_synced": "",
+    "last_seen": "",
+    "created_at": "",
+    "updated_at": "",
+    "scheduling": {"enabled": False, "interval": "0 * * * *"},
+    "sync_now": False,
 }
 
 
@@ -203,6 +226,18 @@ async def test_connector_service_poll(
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
+    assert "Sync done: 1 indexed, 0  deleted. (0 seconds)" in patch_logger.logs
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_sync_now(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+    set_server_responses(mock_responses, FAKE_CONFIG_NO_SYNC)
+    service = ConnectorService(CONFIG)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll(sync_now=True)
+    assert "Sync done: 1 indexed, 0  deleted. (0 seconds)" in patch_logger.logs
 
 
 @pytest.mark.asyncio
