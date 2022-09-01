@@ -235,8 +235,8 @@ async def test_connector_service_poll_sync_now(
 ):
     set_server_responses(mock_responses, FAKE_CONFIG_NO_SYNC)
     service = ConnectorService(CONFIG)
-    asyncio.get_event_loop().call_soon(service.stop)
-    await service.poll(sync_now=True)
+    # one_sync means it won't loop forever
+    await service.poll(sync_now=True, one_sync=True)
     assert "Sync done: 1 indexed, 0  deleted. (0 seconds)" in patch_logger.logs
 
 
