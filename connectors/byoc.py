@@ -252,8 +252,8 @@ class BYOConnector:
             )
             await self._sync_done(
                 job,
-                result.get("update", 0) + result.get("create", 0),
-                result.get("delete", 0),
+                result.get("doc_updated", 0) + result.get("doc_created", 0),
+                result.get("doc_deleted", 0),
             )
         except Exception as e:
             await self._sync_failed(job, e)

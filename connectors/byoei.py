@@ -99,6 +99,7 @@ class Fetcher:
         self.total_downloads = 0
         self.total_docs_updated = 0
         self.total_docs_created = 0
+        self.total_docs_deleted = 0
 
     # XXX this can be defferred
     async def get_attachments(self):
@@ -196,6 +197,7 @@ class Fetcher:
             await self.queue.put(
                 {"_op_type": "delete", "_index": self.index, "_id": doc_id}
             )
+            self.total_docs_deleted += 1
 
         await self._downloads.put("END")
         await self.queue.put("END_DOCS")
@@ -208,7 +210,9 @@ class ElasticServer(ESClient):
         self._downloads = []
         self.loop = asyncio.get_event_loop()
 
-    async def prepare_index(self, index, *, docs=None, settings=None, mappings=None, delete_first=False):
+    async def prepare_index(
+        self, index, *, docs=None, settings=None, mappings=None, delete_first=False
+    ):
         """Creates the index, given a mapping if it does not exists."""
         # XXX todo update the existing index with the new mapping
         logger.debug(f"Checking index {index}")
@@ -223,7 +227,9 @@ class ElasticServer(ESClient):
             await self.client.indices.delete(index=index, expand_wildcards="hidden")
 
         logger.debug(f"Creating index {index}")
-        await self.client.indices.create(index=index, settings=settings, mappings=mappings)
+        await self.client.indices.create(
+            index=index, settings=settings, mappings=mappings
+        )
         if docs is None:
             return
         # XXX bulk
@@ -286,4 +292,5 @@ class ElasticServer(ESClient):
             "doc_created": fetcher.total_docs_created,
             "attachment_extracted": fetcher.total_downloads,
             "doc_updated": fetcher.total_docs_updated,
+            "doc_deleted": fetcher.total_docs_deleted,
         }
