@@ -208,8 +208,9 @@ class BYOConnector:
     async def _sync_done(self, job, indexed_count, deleted_count):
         await job.done(indexed_count, deleted_count)
 
-        self.doc_source["sync_status"] = e2str(job.status)
-        self.doc_source["last_sync"] = iso_utc()
+        self.doc_source["last_sync_status"] = e2str(job.status)
+        self.doc_source["last_sync_error"] = ""
+        self.doc_source["last_synced"] = iso_utc()
         await self._write()
         logger.info(
             f"Sync done: {indexed_count} indexed, {deleted_count} "
@@ -221,7 +222,7 @@ class BYOConnector:
 
         self.doc_source["last_sync_error"] = str(exception)
         self.doc_source["last_sync_status"] = e2str(job.status)
-        self.doc_source["last_sync"] = iso_utc()
+        self.doc_source["last_synced"] = iso_utc()
         await self._write()
 
     async def sync(self, data_provider, elastic_server, idling):
