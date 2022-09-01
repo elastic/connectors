@@ -25,6 +25,7 @@ from connectors.source import (
     get_data_sources,
     get_data_source,
     ServiceTypeNotSupportedError,
+    DataSourceError,
 )
 from connectors.utils import CancellableSleeps
 
@@ -107,7 +108,7 @@ class ConnectorService:
                             f"Can't handle source of type {connector.service_type}"
                         )
                         continue
-                    except Exception as e:
+                    except DataSourceError as e:
                         logger.critical(e, exc_info=True)
                         self.raise_if_spurious(e)
                         continue
