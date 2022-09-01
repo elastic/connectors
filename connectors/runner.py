@@ -21,7 +21,11 @@ from envyaml import EnvYAML
 from connectors.byoei import ElasticServer
 from connectors.byoc import BYOIndex
 from connectors.logger import logger
-from connectors.source import get_data_sources, get_data_source
+from connectors.source import (
+    get_data_sources,
+    get_data_source,
+    ServiceTypeNotSupportedError,
+)
 from connectors.utils import CancellableSleeps
 
 
@@ -98,6 +102,17 @@ class ConnectorService:
                 async for connector in self.connectors.get_list():
                     try:
                         data_source = get_data_source(connector, self.config)
+                    except ServiceTypeNotSupportedError:
+                        logger.debug(
+                            f"Can't handle source of type {connector.service_type}"
+                        )
+                        continue
+                    except Exception as e:
+                        logger.critical(e, exc_info=True)
+                        self.raise_if_spurious(e)
+                        continue
+
+                    try:
                         loop.create_task(connector.heartbeat(self.hb))
                         await connector.sync(data_source, es, self.idling)
                         await asyncio.sleep(0)
@@ -105,10 +120,6 @@ class ConnectorService:
                         if one_sync:
                             self.stop()
                             break
-                    except KeyError:
-                        logger.debug(
-                            f"Can't handle source of type {connector.service_type}"
-                        )
                     except Exception as e:
                         logger.critical(e, exc_info=True)
                         self.raise_if_spurious(e)

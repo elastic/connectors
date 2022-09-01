@@ -6,6 +6,15 @@
 """ Helpers to build sources + FQN-based Registry
 """
 import importlib
+from connectors.logger import logger
+
+
+class ServiceTypeNotSupportedError(Exception):
+    pass
+
+
+class DataSourceError(Exception):
+    pass
 
 
 class Field:
@@ -33,6 +42,9 @@ class DataSourceConfiguration:
 
     def __getitem__(self, key):
         return self._config[key].value
+
+    def has_field(self, name):
+        return name in self._config
 
     def set_field(self, name, label=None, value="", type="str"):
         self._config[name] = Field(name, label, value, type)
@@ -115,9 +127,16 @@ def get_data_source(connector, config):
     """Returns a source class instance, given a service type"""
     service_type = connector.service_type
     if service_type not in _CACHED_SOURCES:
-        _CACHED_SOURCES[service_type] = get_source_klass(
-            config["sources"][service_type]
-        )(connector)
+        if service_type not in config["sources"]:
+            raise ServiceTypeNotSupportedError(service_type)
+
+        fqn = config["sources"][service_type]
+        try:
+            _CACHED_SOURCES[service_type] = get_source_klass(fqn)(connector)
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+            raise DataSourceError(f"Could not instanciate {fqn} for {service_type}")
+
     return _CACHED_SOURCES[service_type]
 
 
