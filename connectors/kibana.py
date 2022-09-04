@@ -13,6 +13,7 @@ from envyaml import EnvYAML
 from connectors.byoei import ElasticServer
 from connectors.logger import logger
 from connectors.source import get_source_klass
+from connectors.utils import validate_index_name
 
 
 CONNECTORS_INDEX = ".elastic-connectors"
@@ -83,7 +84,10 @@ def _parser():
         "--service-type", type=str, help="Service type", default="mongo"
     )
     parser.add_argument(
-        "--index-name", type=str, help="Elasticsearch index", default="search-mongo"
+        "--index-name",
+        type=validate_index_name,
+        help="Elasticsearch index",
+        default="search-mongo",
     )
     return parser
 

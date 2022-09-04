@@ -98,6 +98,32 @@ def next_run(quartz_definition):
     return secs
 
 
+INVALID_CHARS = "\\", "/", "*", "?", '"', "<", ">", "|", " ", ",", "#"
+INVALID_PREFIX = "_", "-", "+"
+INVALID_NAME = "..", "."
+
+
+class InvalidIndexNameError(ValueError):
+    pass
+
+
+def validate_index_name(name):
+    for char in INVALID_CHARS:
+        if char in name:
+            raise InvalidIndexNameError(f"Invalid character {char}")
+
+    if name.startswith(INVALID_PREFIX):
+        raise InvalidIndexNameError(f"Invalid prefix {name[0]}")
+
+    if not name.islower():
+        raise InvalidIndexNameError("Must be lowercase")
+
+    if name in INVALID_NAME:
+        raise InvalidIndexNameError("Can't use that name")
+
+    return name
+
+
 class CancellableSleeps:
     def __init__(self):
         self._sleeps = set()
