@@ -15,7 +15,7 @@ DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
 async def verify(service_type, index_name, config):
     config = config["elasticsearch"]
     host = config["host"]
-    auth = config["user"], config["password"]
+    auth = config["username"], config["password"]
     client = AsyncElasticsearch(hosts=[host], basic_auth=auth, request_timeout=120)
 
     try:
