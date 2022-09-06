@@ -100,20 +100,20 @@ class ConnectorService:
         try:
             while self.running:
                 logger.debug(f"Polling every {self.idling} seconds")
-                async for connector in self.connectors.get_list():
-                    try:
-                        data_source = get_data_source(connector, self.config)
-                    except ServiceTypeNotSupportedError:
-                        logger.debug(
-                            f"Can't handle source of type {connector.service_type}"
-                        )
-                        continue
-                    except DataSourceError as e:
-                        logger.critical(e, exc_info=True)
-                        self.raise_if_spurious(e)
-                        continue
+                try:
+                    async for connector in self.connectors.get_list():
+                        try:
+                            data_source = get_data_source(connector, self.config)
+                        except ServiceTypeNotSupportedError:
+                            logger.debug(
+                                f"Can't handle source of type {connector.service_type}"
+                            )
+                            continue
+                        except DataSourceError as e:
+                            logger.critical(e, exc_info=True)
+                            self.raise_if_spurious(e)
+                            continue
 
-                    try:
                         loop.create_task(connector.heartbeat(self.hb))
                         await connector.sync(data_source, es, self.idling, sync_now)
                         await asyncio.sleep(0)
@@ -121,9 +121,10 @@ class ConnectorService:
                         if one_sync:
                             self.stop()
                             break
-                    except Exception as e:
-                        logger.critical(e, exc_info=True)
-                        self.raise_if_spurious(e)
+                except Exception as e:
+                    logger.critical(e, exc_info=True)
+                    self.raise_if_spurious(e)
+
                 if not one_sync:
                     await self._sleeps.sleep(self.idling)
         finally:
