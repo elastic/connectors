@@ -16,3 +16,4 @@ sources:
   mongo: connectors.sources.mongo:MongoDataSource
   s3: connectors.sources.aws:S3DataSource
   dir: connectors.sources.dummy:DirectoryDataSource
+  mysql: connectors.sources.mysql:MySqlDataSource

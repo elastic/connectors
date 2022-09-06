@@ -4,44 +4,16 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """MySQL source module responsible to fetch documents from MySQL"""
+from datetime import date, datetime
+from decimal import Decimal
+
 import aiomysql
+from bson import Decimal128
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import iso_utc
 
-
-class MysqlDatabaseConnectionManager(object):
-    """This is the context manager which handles MySQL server connection"""
-
-    def __init__(self, connection_string):
-        """Initialise connection string to connect to the MySQL server.
-
-        Args:
-            connection_string (Dict): Dictionary of connection string parameters
-        """
-        self.connection_string = connection_string
-        self.connection = None
-
-    async def __aenter__(self):
-        """Initialize a MySQL database connection"""
-        try:
-            self.connection = await aiomysql.connect(**self.connection_string)
-            self.cursor = await self.connection.cursor()
-            return self
-        except aiomysql.OperationalError as error:
-            raise
-
-    async def __aexit__(self, exception_type, exception_value, traceback):
-        """Close the MySQL database connection
-
-        Args:
-            exception_type (str): Type of exception
-            exception_value (str): Value of exception
-            traceback (str): Type of Traceback
-        """
-        await self.cursor.close()
-        self.connection.close()
+MAX_POOL_SIZE = 10
 
 
 class MySqlDataSource(BaseDataSource):
@@ -60,8 +32,10 @@ class MySqlDataSource(BaseDataSource):
             "user": self.configuration["user"],
             "password": self.configuration["password"],
             "db": None,
+            "maxsize": MAX_POOL_SIZE,
         }
         self._first_sync = self._dirty = True
+        self.connection_pool = None
 
     @classmethod
     def get_default_configuration(cls):
@@ -72,7 +46,7 @@ class MySqlDataSource(BaseDataSource):
         """
         return {
             "host": {
-                "value": "localhost",
+                "value": "127.0.0.1",
                 "label": "MySQL Host",
                 "type": "str",
             },
@@ -82,33 +56,176 @@ class MySqlDataSource(BaseDataSource):
                 "type": "int",
             },
             "user": {
-                "value": "mysql_user",
+                "value": "root",
                 "label": "MySQL Username",
                 "type": "str",
             },
             "password": {
-                "value": "mysql_password",
+                "value": "changeme",
                 "label": "MySQL Password",
                 "type": "str",
             },
             "database": {
-                "value": [],
+                "value": ["customerinfo"],
                 "label": "List of MySQL Databases",
                 "type": "list",
+            },
+            "connector_name": {
+                "value": "MySQL Connector",
+                "label": "Friendly name for the connector",
+                "type": "str",
             },
         }
 
     async def ping(self):
         """Verify the connection with MySQL server"""
-        async with MysqlDatabaseConnectionManager(
-            connection_string=self.connection_string
-        ) as context_manager:
-            try:
-                await context_manager.connection.ping()
+        try:
+            self.connection_pool = await aiomysql.create_pool(**self.connection_string)
+
+            async with self.connection_pool.acquire() as connection:
+                await connection.ping()
                 logger.info("Successfully connected to the MySQL Server.")
-            except Exception:
-                logger.exception("Error while connecting to the MySQL Server.")
-                raise
+        except Exception:
+            logger.exception("Error while connecting to the MySQL Server.")
+            raise
+
+    async def _execute_query(self, query):
+        """Executes the passed query on the MySQL server.
+
+        Args:
+            query (str): MySql query to be executed.
+
+        Returns:
+            list, tuple: Column names and query response
+        """
+
+        async with self.connection_pool.acquire() as connection:
+            async with connection.cursor() as cursor:
+                await cursor.execute(query)
+                response = cursor.fetchall().result()
+                column_names = [column[0] for column in cursor.description]
+                return column_names, response
+
+    async def fetch_rows(self, database):
+        """Fetches all the rows from all the tables of the database.
+
+        Args:
+            database (str): Name of database
+            query (str): Query to fetch database tables
+
+        Yields:
+            Dict: Row document to index
+        """
+
+        query = f"SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}'"
+        _, query_response = await self._execute_query(query=query)
+        if query_response:
+            for table in query_response:
+                table_name = table[0]
+                query = f"SELECT * FROM {database}.{table_name}"
+                async for row in self.create_document(
+                    database=database, table=table_name, query=query
+                ):
+                    yield row
+        else:
+            logger.warn(
+                f"Fetched 0 tables for the database: {database}. Either the database has no tables or the user does not have access to this database."
+            )
+
+    def serialize(self, doc):
+        """Reads each element from the document and serialize it as per it’s datatype.
+
+        Args:
+            doc (Dict): Dictionary to be serialize
+
+        Returns:
+            doc (Dict): Serialized version of dictionary
+        """
+
+        def _serialize(value):
+            """Serialize input value as per it’s datatype.
+            Args:
+                value (Any Datatype): Value to be serialize
+
+            Returns:
+                value (Any Datatype): Serialized version of input value.
+            """
+
+            if isinstance(value, (list, tuple)):
+                value = [_serialize(item) for item in value]
+            elif isinstance(value, dict):
+                for key, svalue in value.items():
+                    value[key] = _serialize(svalue)
+            elif isinstance(value, (datetime, date)):
+                value = value.isoformat()
+            elif isinstance(value, Decimal128):
+                value = value.to_decimal()
+            elif isinstance(value, (bytes, bytearray)):
+                value = value.decode(errors="ignore")
+            elif isinstance(value, Decimal):
+                value = float(value)
+            return value
+
+        for key, value in doc.items():
+            doc[key] = _serialize(value)
+
+        return doc
+
+    async def create_document(self, database, table, query):
+        """Fetches all the table entires and format them in an Elasticsearch document
+
+        Args:
+            database (str): Name of database
+            table (str): Name of table
+            query (str): Query to execute
+
+        Yields:
+            Dict: Document to be index
+        """
+
+        column_names, query_response = await self._execute_query(query=query)
+
+        # Query to get the table's primary key
+        query = f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'"
+        _, columns = await self._execute_query(query=query)
+
+        keys = []
+        if columns:
+            # Query to get the table's last update time
+            last_update_time_query = f"SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}'"
+            _, last_update_time = await self._execute_query(
+                query=last_update_time_query
+            )
+
+            for column_name in columns:
+                keys.append(column_name[0])
+
+            for row in query_response:
+                row = dict(zip(column_names, row))
+                row.update({"Database": database})
+                row.update({"Table": table})
+                row.update({"timestamp": last_update_time[0][0]})
+                keys_value = ""
+                for key in keys:
+                    keys_value += f"{row.get(key)}_" if row.get(key) else ""
+                row.update({"_id": f"{database}_{table}_{keys_value}"})
+                row = self.serialize(doc=row)
+                yield row
+        else:
+            logger.warn(
+                f"Skipping {table} table from database {database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
+            )
+
+    async def fetch_all_databases(self):
+        """Fetches all user databases
+
+        Returns:
+            List: List of databases
+        """
+        query = "SHOW DATABASES"
+        _, query_response = await self._execute_query(query=query)
+        databases = [database[0] for database in query_response]
+        return databases
 
     async def get_docs(self):
         """Executes the logic to fetch databases, tables and rows in async manner.
@@ -116,7 +233,13 @@ class MySqlDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        # TODO: Fetch the documents from MySQL server
-        # yield dummy document to run ping implementation
-        yield {"_id": "123", "timestamp": iso_utc()}, None
+        databases = (
+            self.configuration["database"]
+            if self.configuration["database"]
+            else await self.fetch_all_databases()
+        )
+        for database in databases:
+            async for row in self.fetch_rows(database=database):
+                yield row, None
+
         self._dirty = False
