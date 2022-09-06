@@ -1,10 +1,14 @@
 elasticsearch:
   host: http://localhost:9200
-  user: elastic
+  username: elastic
   password: changeme
-  log_level: INFO
+  ssl: true
   bulk_queue_max_size: 1024
   request_timeout: 120
+  max_wait_duration: 120
+  initial_backoff_duration: 1
+  backoff_multiplier: 2
+  log_level: debug
 
 service:
   idling: 30

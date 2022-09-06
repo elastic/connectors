@@ -3,15 +3,17 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import sys
 import os
 import asyncio
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
-import yaml
+from envyaml import EnvYAML
 
 from connectors.byoei import ElasticServer
 from connectors.logger import logger
 from connectors.source import get_source_klass
+from connectors.utils import validate_index_name
 
 
 CONNECTORS_INDEX = ".elastic-connectors"
@@ -57,10 +59,10 @@ async def prepare(service_type, index_name, config):
         }
 
         print(f"Prepare {CONNECTORS_INDEX}")
-        await es.prepare_index(CONNECTORS_INDEX, [doc], delete_first=True)
+        await es.prepare_index(CONNECTORS_INDEX, docs=[doc], delete_first=True)
 
         print(f"Prepare {JOBS_INDEX}")
-        await es.prepare_index(JOBS_INDEX, [], delete_first=True)
+        await es.prepare_index(JOBS_INDEX, docs=[], delete_first=True)
 
         print(f"Delete {index_name}")
         if await es.client.indices.exists(index=index_name):
@@ -82,7 +84,10 @@ def _parser():
         "--service-type", type=str, help="Service type", default="mongo"
     )
     parser.add_argument(
-        "--index-name", type=str, help="Elasticsearch index", default="search-mongo"
+        "--index-name",
+        type=validate_index_name,
+        help="Elasticsearch index",
+        default="search-mongo",
     )
     return parser
 
@@ -95,15 +100,15 @@ def main(args=None):
     if not os.path.exists(config_file):
         raise IOError(f"{config_file} does not exist")
 
-    with open(config_file) as f:
-        config = yaml.safe_load(f)
-
+    config = EnvYAML(config_file)
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(prepare(args.service_type, args.index_name, config))
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("Bye")
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

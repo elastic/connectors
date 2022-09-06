@@ -1,0 +1,111 @@
+---
+da:
+  name: Danish
+  stemmer: danish
+  stop_words: _danish_
+de:
+  name: German
+  stemmer: light_german
+  stop_words: _german_
+en:
+  name: English
+  stemmer: light_english
+  stop_words: _english_
+es:
+  name: Spanish
+  stemmer: light_spanish
+  stop_words: _spanish_
+fr:
+  name: French
+  stemmer: light_french
+  stop_words: _french_
+  custom_filter_definitions:
+    fr-elision:
+      type: elision
+      articles:
+      - l
+      - m
+      - t
+      - qu
+      - n
+      - s
+      - j
+      - d
+      - c
+      - jusqu
+      - quoiqu
+      - lorsqu
+      - puisqu
+      articles_case: true
+  prepended_filters:
+  - fr-elision
+it:
+  name: Italian
+  stemmer: light_italian
+  stop_words: _italian_
+  custom_filter_definitions:
+    it-elision:
+      type: elision
+      articles:
+      - c
+      - l
+      - all
+      - dall
+      - dell
+      - nell
+      - sull
+      - coll
+      - pell
+      - gl
+      - agl
+      - dagl
+      - degl
+      - negl
+      - sugl
+      - un
+      - m
+      - t
+      - s
+      - v
+      - d
+      articles_case: true
+  prepended_filters:
+  - it-elision
+ja:
+  name: Japanese
+  stemmer: light_english
+  stop_words: _english_
+  postpended_filters:
+  - cjk_bigram
+ko:
+  name: Korean
+  stemmer: light_english
+  stop_words: _english_
+  postpended_filters:
+  - cjk_bigram
+nl:
+  name: Dutch
+  stemmer: dutch
+  stop_words: _dutch_
+pt:
+  name: Portuguese
+  stemmer: light_portuguese
+  stop_words: _portuguese_
+pt-br:
+  name: Portuguese (Brazil)
+  stemmer: brazilian
+  stop_words: _brazilian_
+ru:
+  name: Russian
+  stemmer: russian
+  stop_words: _russian_
+th:
+  name: Thai
+  stemmer: light_english
+  stop_words: _thai_
+zh:
+  name: Chinese
+  stemmer: light_english
+  stop_words: _english_
+  postpended_filters:
+  - cjk_bigram

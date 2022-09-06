@@ -22,6 +22,6 @@ test:
 
 
 ftest:
-	bin/python scripts/kibana.py --index-name search-$(NAME) --service-type $(NAME)
+	bin/fake-kibana --index-name search-$(NAME) --service-type $(NAME)
 	bin/elastic-ingest --one-sync
 	bin/python scripts/verify.py --index-name search-$(NAME) --service-type $(NAME)
