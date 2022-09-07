@@ -68,7 +68,9 @@ class ESClient:
         logger.debug(f"Wait for Elasticsearch (max: {self.max_wait_duration})")
         while time.time() - start < self.max_wait_duration:
             if not self._keep_waiting:
+                await self.close()
                 return False
+
             logger.info(
                 f"Waiting for {self.host} (so far: {int(time.time() - start)} secs)"
             )
