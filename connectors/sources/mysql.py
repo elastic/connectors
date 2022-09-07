@@ -14,6 +14,13 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource
 
 MAX_POOL_SIZE = 10
+QUERIES = {
+    "ALL_DATABASE": "SHOW DATABASES",
+    "ALL_TABLE": "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}'",
+    "TABLE_DATA": "SELECT * FROM {database}.{table}",
+    "TABLE_PRIMARY_KEY": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'",
+    "TABLE_LAST_UPDATE_TIME": "SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}'",
+}
 
 
 class MySqlDataSource(BaseDataSource):
@@ -117,12 +124,17 @@ class MySqlDataSource(BaseDataSource):
             Dict: Row document to index
         """
 
-        query = f"SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}'"
+        # Query to get all table names from a database
+        query = QUERIES["ALL_TABLE"].format(database=database)
         _, query_response = await self._execute_query(query=query)
         if query_response:
             for table in query_response:
                 table_name = table[0]
-                query = f"SELECT * FROM {database}.{table_name}"
+
+                # Query to get table's data
+                query = QUERIES["TABLE_DATA"].format(
+                    database=database, table=table_name
+                )
                 async for row in self.create_document(
                     database=database, table=table_name, query=query
                 ):
@@ -186,13 +198,16 @@ class MySqlDataSource(BaseDataSource):
         column_names, query_response = await self._execute_query(query=query)
 
         # Query to get the table's primary key
-        query = f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'"
+        query = QUERIES["TABLE_PRIMARY_KEY"].format(database=database, table=table)
         _, columns = await self._execute_query(query=query)
 
         keys = []
         if columns:
+
             # Query to get the table's last update time
-            last_update_time_query = f"SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}'"
+            last_update_time_query = QUERIES["TABLE_LAST_UPDATE_TIME"].format(
+                database=database, table=table
+            )
             _, last_update_time = await self._execute_query(
                 query=last_update_time_query
             )
@@ -202,27 +217,32 @@ class MySqlDataSource(BaseDataSource):
 
             for row in query_response:
                 row = dict(zip(column_names, row))
-                row.update({"Database": database})
-                row.update({"Table": table})
-                row.update({"timestamp": last_update_time[0][0]})
                 keys_value = ""
                 for key in keys:
                     keys_value += f"{row.get(key)}_" if row.get(key) else ""
-                row.update({"_id": f"{database}_{table}_{keys_value}"})
-                row = self.serialize(doc=row)
-                yield row
+                row.update(
+                    {
+                        "_id": f"{database}_{table}_{keys_value}",
+                        "timestamp": last_update_time[0][0],
+                        "Database": database,
+                        "Table": table,
+                    }
+                )
+                yield self.serialize(doc=row)
         else:
             logger.warn(
                 f"Skipping {table} table from database {database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
             )
 
-    async def fetch_all_databases(self):
+    async def _fetch_all_databases(self):
         """Fetches all user databases
 
         Returns:
             List: List of databases
         """
-        query = "SHOW DATABASES"
+
+        # Query to get all databases
+        query = QUERIES["ALL_DATABASE"]
         _, query_response = await self._execute_query(query=query)
         databases = [database[0] for database in query_response]
         return databases
@@ -236,7 +256,7 @@ class MySqlDataSource(BaseDataSource):
         databases = (
             self.configuration["database"]
             if self.configuration["database"]
-            else await self.fetch_all_databases()
+            else await self._fetch_all_databases()
         )
         for database in databases:
             async for row in self.fetch_rows(database=database):

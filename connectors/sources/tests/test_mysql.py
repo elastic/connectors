@@ -264,7 +264,7 @@ async def test_fetch_all_databases():
         mock.patch("source._execute_query", return_value=response)
 
     # Execute
-    response = await source.fetch_all_databases()
+    response = await source._fetch_all_databases()
 
     # Assert
     assert response == ["table1", "table2"]
