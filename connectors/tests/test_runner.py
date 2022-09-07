@@ -14,6 +14,8 @@ from connectors.source import DataSourceError, _CACHED_SOURCES
 
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
+ES_CONFIG = os.path.join(os.path.dirname(__file__), "entsearch.yml")
+
 
 FAKE_CONFIG = {
     "api_key_id": "",
@@ -227,6 +229,18 @@ async def test_connector_service_poll(
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
     assert "Sync done: 1 indexed, 0  deleted. (0 seconds)" in patch_logger.logs
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_with_entsearch(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+    with mock.patch.dict(os.environ, {"ENT_SEARCH_CONFIG_PATH": ES_CONFIG}):
+        set_server_responses(mock_responses)
+        service = ConnectorService(CONFIG)
+        asyncio.get_event_loop().call_soon(service.stop)
+        await service.poll()
+        assert "Sync done: 1 indexed, 0  deleted. (0 seconds)" in patch_logger.logs
 
 
 @pytest.mark.asyncio
