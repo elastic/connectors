@@ -161,7 +161,9 @@ class Fetcher:
                 if "timestamp" in doc:
                     if self.existing_timestamps.get(doc_id, "") == doc["timestamp"]:
                         logger.debug(f"Skipping {doc_id}")
-                        await lazy_download(doit=False)
+                        # cancel the download
+                        if lazy_download is not None:
+                            await lazy_download(doit=False)
                         continue
                 else:
                     doc["timestamp"] = iso_utc()
