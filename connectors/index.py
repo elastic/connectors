@@ -7,69 +7,116 @@ from os import path
 import yaml
 import copy
 
+ENUM_IGNORE_ABOVE = 2048
+
+DATE_FIELD_MAPPING = {"type": "date"}
+
+KEYWORD_FIELD_MAPPING = {"type": "keyword"}
+
+TEXT_FIELD_MAPPING = {
+    "type": "text",
+    "analyzer": "iq_text_base",
+    "index_options": "freqs",
+    "fields": {
+        "stem": {"type": "text", "analyzer": "iq_text_stem"},
+        "prefix": {
+            "type": "text",
+            "analyzer": "i_prefix",
+            "search_analyzer": "q_prefix",
+            "index_options": "docs",
+        },
+        "delimiter": {
+            "type": "text",
+            "analyzer": "iq_text_delimiter",
+            "index_options": "freqs",
+        },
+        "joined": {
+            "type": "text",
+            "analyzer": "i_text_bigram",
+            "search_analyzer": "q_text_bigram",
+            "index_options": "freqs",
+        },
+        "enum": {"type": "keyword", "ignore_above": ENUM_IGNORE_ABOVE},
+    },
+}
+
+WORKPLACE_SEARCH_SUBEXTRACTION_STAMP_FIELD_MAPPINGS = {
+    "_subextracted_as_of": DATE_FIELD_MAPPING,
+    "_subextracted_version": KEYWORD_FIELD_MAPPING,
+}
+
+CRAWLER_FIELD_MAPPINGS = {
+    "additional_urls": KEYWORD_FIELD_MAPPING,
+    "body_content": TEXT_FIELD_MAPPING,
+    "domains": KEYWORD_FIELD_MAPPING,
+    "headings": TEXT_FIELD_MAPPING,
+    "last_crawled_at": DATE_FIELD_MAPPING,
+    "links": KEYWORD_FIELD_MAPPING,
+    "meta_description": TEXT_FIELD_MAPPING,
+    "meta_keywords": KEYWORD_FIELD_MAPPING,
+    "title": TEXT_FIELD_MAPPING,
+    "url": KEYWORD_FIELD_MAPPING,
+    "url_host": KEYWORD_FIELD_MAPPING,
+    "url_path": KEYWORD_FIELD_MAPPING,
+    "url_path_dir1": KEYWORD_FIELD_MAPPING,
+    "url_path_dir2": KEYWORD_FIELD_MAPPING,
+    "url_path_dir3": KEYWORD_FIELD_MAPPING,
+    "url_port": KEYWORD_FIELD_MAPPING,
+    "url_scheme": KEYWORD_FIELD_MAPPING,
+}
+
+DEFAULT_LANGUAGE = "en"
+FRONT_NGRAM_MAX_GRAM = 12
+LANGUAGE_DATA_FILE_PATH = path.join(path.dirname(__file__), "language_data.yml")
+
+GENERIC_FILTERS = {
+    "front_ngram": {
+        "type": "edge_ngram",
+        "min_gram": 1,
+        "max_gram": FRONT_NGRAM_MAX_GRAM,
+    },
+    "delimiter": {
+        "type": "word_delimiter_graph",
+        "generate_word_parts": "true",
+        "generate_number_parts": "true",
+        "catenate_words": "true",
+        "catenate_numbers": "true",
+        "catenate_all": "true",
+        "preserve_original": "false",
+        "split_on_case_change": "true",
+        "split_on_numerics": "true",
+        "stem_english_possessive": "true",
+    },
+    "bigram_joiner": {
+        "type": "shingle",
+        "token_separator": "",
+        "max_shingle_size": 2,
+        "output_unigrams": "false",
+    },
+    "bigram_joiner_unigrams": {
+        "type": "shingle",
+        "token_separator": "",
+        "max_shingle_size": 2,
+        "output_unigrams": "true",
+    },
+    "bigram_max_size": {"type": "length", "min": 0, "max": 16},
+}
+
+NON_ICU_ANALYSIS_SETTINGS = {
+    "tokenizer_name": "standard",
+    "folding_filters": ["cjk_width", "lowercase", "asciifolding"],
+}
+
+ICU_ANALYSIS_SETTINGS = {
+    "tokenizer_name": "icu_tokenizer",
+    "folding_filters": ["icu_folding"],
+}
+
 
 class Mappings:
     """
     Create default mappings to enable relevance tuning
     """
-
-    ENUM_IGNORE_ABOVE = 2048
-
-    DATE_FIELD_MAPPING = {"type": "date"}
-
-    KEYWORD_FIELD_MAPPING = {"type": "keyword"}
-
-    TEXT_FIELD_MAPPING = {
-        "type": "text",
-        "analyzer": "iq_text_base",
-        "index_options": "freqs",
-        "fields": {
-            "stem": {"type": "text", "analyzer": "iq_text_stem"},
-            "prefix": {
-                "type": "text",
-                "analyzer": "i_prefix",
-                "search_analyzer": "q_prefix",
-                "index_options": "docs",
-            },
-            "delimiter": {
-                "type": "text",
-                "analyzer": "iq_text_delimiter",
-                "index_options": "freqs",
-            },
-            "joined": {
-                "type": "text",
-                "analyzer": "i_text_bigram",
-                "search_analyzer": "q_text_bigram",
-                "index_options": "freqs",
-            },
-            "enum": {"type": "keyword", "ignore_above": ENUM_IGNORE_ABOVE},
-        },
-    }
-
-    WORKPLACE_SEARCH_SUBEXTRACTION_STAMP_FIELD_MAPPINGS = {
-        "_subextracted_as_of": DATE_FIELD_MAPPING,
-        "_subextracted_version": KEYWORD_FIELD_MAPPING,
-    }
-
-    CRAWLER_FIELD_MAPPINGS = {
-        "additional_urls": KEYWORD_FIELD_MAPPING,
-        "body_content": TEXT_FIELD_MAPPING,
-        "domains": KEYWORD_FIELD_MAPPING,
-        "headings": TEXT_FIELD_MAPPING,
-        "last_crawled_at": DATE_FIELD_MAPPING,
-        "links": KEYWORD_FIELD_MAPPING,
-        "meta_description": TEXT_FIELD_MAPPING,
-        "meta_keywords": KEYWORD_FIELD_MAPPING,
-        "title": TEXT_FIELD_MAPPING,
-        "url": KEYWORD_FIELD_MAPPING,
-        "url_host": KEYWORD_FIELD_MAPPING,
-        "url_path": KEYWORD_FIELD_MAPPING,
-        "url_path_dir1": KEYWORD_FIELD_MAPPING,
-        "url_path_dir2": KEYWORD_FIELD_MAPPING,
-        "url_path_dir3": KEYWORD_FIELD_MAPPING,
-        "url_port": KEYWORD_FIELD_MAPPING,
-        "url_scheme": KEYWORD_FIELD_MAPPING,
-    }
 
     @classmethod
     def default_text_fields_mappings(
@@ -81,20 +128,20 @@ class Mappings:
                 {
                     "data": {
                         "match_mapping_type": "string",
-                        "mapping": cls.TEXT_FIELD_MAPPING,
+                        "mapping": TEXT_FIELD_MAPPING,
                     }
                 }
             ],
             "properties": {},
         }
-        id_prop = {"id": cls.KEYWORD_FIELD_MAPPING}
+        id_prop = {"id": KEYWORD_FIELD_MAPPING}
         if is_crawler_index:
             result["properties"].update(id_prop)
-            result["properties"].update(cls.CRAWLER_FIELD_MAPPINGS)
+            result["properties"].update(CRAWLER_FIELD_MAPPINGS)
         if is_connectors_index:
             result["properties"].update(id_prop)
             result["properties"].update(
-                cls.WORKPLACE_SEARCH_SUBEXTRACTION_STAMP_FIELD_MAPPINGS
+                WORKPLACE_SEARCH_SUBEXTRACTION_STAMP_FIELD_MAPPINGS
             )
         return result
 
@@ -104,66 +151,17 @@ class UnsupportedLanguageCode(Exception):
 
 
 class Settings:
-    DEFAULT_LANGUAGE = "en"
-    FRONT_NGRAM_MAX_GRAM = 12
-    LANGUAGE_DATA_FILE_PATH = path.join(path.dirname(__file__), "language_data.yml")
-
-    GENERIC_FILTERS = {
-        "front_ngram": {
-            "type": "edge_ngram",
-            "min_gram": 1,
-            "max_gram": FRONT_NGRAM_MAX_GRAM,
-        },
-        "delimiter": {
-            "type": "word_delimiter_graph",
-            "generate_word_parts": "true",
-            "generate_number_parts": "true",
-            "catenate_words": "true",
-            "catenate_numbers": "true",
-            "catenate_all": "true",
-            "preserve_original": "false",
-            "split_on_case_change": "true",
-            "split_on_numerics": "true",
-            "stem_english_possessive": "true",
-        },
-        "bigram_joiner": {
-            "type": "shingle",
-            "token_separator": "",
-            "max_shingle_size": 2,
-            "output_unigrams": "false",
-        },
-        "bigram_joiner_unigrams": {
-            "type": "shingle",
-            "token_separator": "",
-            "max_shingle_size": 2,
-            "output_unigrams": "true",
-        },
-        "bigram_max_size": {"type": "length", "min": 0, "max": 16},
-    }
-
-    NON_ICU_ANALYSIS_SETTINGS = {
-        "tokenizer_name": "standard",
-        "folding_filters": ["cjk_width", "lowercase", "asciifolding"],
-    }
-
-    ICU_ANALYSIS_SETTINGS = {
-        "tokenizer_name": "icu_tokenizer",
-        "folding_filters": ["icu_folding"],
-    }
+    """Default settings for the Elasticsearch index"""
 
     @property
     def language_data(self):
         if not self._language_data:
-            with open(self.LANGUAGE_DATA_FILE_PATH, "r") as f:
+            with open(LANGUAGE_DATA_FILE_PATH, "r") as f:
                 self._language_data = yaml.safe_load(f)
         return self._language_data
 
     def icu_settings(self, analysis_settings):
-        return (
-            self.ICU_ANALYSIS_SETTINGS
-            if analysis_settings
-            else self.NON_ICU_ANALYSIS_SETTINGS
-        )
+        return ICU_ANALYSIS_SETTINGS if analysis_settings else NON_ICU_ANALYSIS_SETTINGS
 
     @property
     def stemmer_name(self):
@@ -197,7 +195,7 @@ class Settings:
 
     @property
     def filter_definitions(self):
-        definitions = copy.deepcopy(self.GENERIC_FILTERS)
+        definitions = copy.deepcopy(GENERIC_FILTERS)
 
         definitions[self.stem_filter_name] = {
             "type": "stemmer",
@@ -278,7 +276,7 @@ class Settings:
 
     def __init__(self, *, language_code=None, analysis_icu=False):
         self._language_data = None
-        self.language_code = language_code or self.DEFAULT_LANGUAGE
+        self.language_code = language_code or DEFAULT_LANGUAGE
 
         if self.language_code not in self.language_data:
             raise UnsupportedLanguageCode(

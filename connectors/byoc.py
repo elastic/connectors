@@ -245,7 +245,9 @@ class BYOConnector:
             # TODO: where do we get language_code and analysis_icu?
             mappings, settings = defaults_for(is_connectors_index=True)
             await data_provider.ping()
-            await elastic_server.prepare_index(self.index_name, mappings=mappings, settings=settings)
+            await elastic_server.prepare_index(
+                self.index_name, mappings=mappings, settings=settings
+            )
             await asyncio.sleep(0)
 
             result = await elastic_server.async_bulk(
