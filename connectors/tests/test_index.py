@@ -4,30 +4,37 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import pytest
-from connectors.index import Mappings, Settings, UnsupportedLanguageCode
+from connectors.index import (
+    Mappings,
+    Settings,
+    UnsupportedLanguageCode,
+    DEFAULT_LANGUAGE,
+    NON_ICU_ANALYSIS_SETTINGS,
+    ICU_ANALYSIS_SETTINGS,
+)
 
 EXPECTED_CONNECTORS_PROPS = ["id", "_subextracted_as_of", "_subextracted_version"]
 
 EXPECTED_CRAWLER_PROPS = [
-        "id",
-        "additional_urls",
-        "body_content",
-        "domains",
-        "headings",
-        "last_crawled_at",
-        "links",
-        "meta_description",
-        "meta_keywords",
-        "title",
-        "url",
-        "url_host",
-        "url_path",
-        "url_path_dir1",
-        "url_path_dir2",
-        "url_path_dir3",
-        "url_port",
-        "url_scheme",
-    ]
+    "id",
+    "additional_urls",
+    "body_content",
+    "domains",
+    "headings",
+    "last_crawled_at",
+    "links",
+    "meta_description",
+    "meta_keywords",
+    "title",
+    "url",
+    "url_host",
+    "url_path",
+    "url_path_dir1",
+    "url_path_dir2",
+    "url_path_dir3",
+    "url_port",
+    "url_scheme",
+]
 
 EXPECTED_ANALYZER_KEYS = {
     "i_prefix",
@@ -90,9 +97,7 @@ def test_mappings_crawler_index():
 
 def test_settings_analysis_icu_false():
     """When analysis_icu is false"""
-    actual = Settings(
-        language_code=Settings.DEFAULT_LANGUAGE, analysis_icu=False
-    ).to_hash()
+    actual = Settings(language_code=DEFAULT_LANGUAGE, analysis_icu=False).to_hash()
     assert isinstance(actual, dict)
     assert "analysis" in actual
     assert "analyzer" in actual["analysis"]
@@ -100,8 +105,8 @@ def test_settings_analysis_icu_false():
     analyzer = actual["analysis"]["analyzer"]
     assert EXPECTED_ANALYZER_KEYS.issubset(analyzer.keys())
 
-    non_icu_filters = Settings.NON_ICU_ANALYSIS_SETTINGS["folding_filters"]
-    icu_filters = Settings.ICU_ANALYSIS_SETTINGS["folding_filters"]
+    non_icu_filters = NON_ICU_ANALYSIS_SETTINGS["folding_filters"]
+    icu_filters = ICU_ANALYSIS_SETTINGS["folding_filters"]
 
     filters = {f for item in analyzer.values() for f in item["filter"]}
     # should contain non-icu filters
@@ -112,9 +117,7 @@ def test_settings_analysis_icu_false():
 
 def test_settings_analysis_icu_true():
     """When analysis_icu is true"""
-    actual = Settings(
-        language_code=Settings.DEFAULT_LANGUAGE, analysis_icu=True
-    ).to_hash()
+    actual = Settings(language_code=DEFAULT_LANGUAGE, analysis_icu=True).to_hash()
     assert isinstance(actual, dict)
     assert "analysis" in actual
     assert "analyzer" in actual["analysis"]
@@ -122,8 +125,8 @@ def test_settings_analysis_icu_true():
     analyzer = actual["analysis"]["analyzer"]
     assert EXPECTED_ANALYZER_KEYS.issubset(analyzer.keys())
 
-    non_icu_filters = Settings.NON_ICU_ANALYSIS_SETTINGS["folding_filters"]
-    icu_filters = Settings.ICU_ANALYSIS_SETTINGS["folding_filters"]
+    non_icu_filters = NON_ICU_ANALYSIS_SETTINGS["folding_filters"]
+    icu_filters = ICU_ANALYSIS_SETTINGS["folding_filters"]
 
     filters = {f for item in analyzer.values() for f in item["filter"]}
     # should contain icu filters
