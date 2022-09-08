@@ -58,7 +58,7 @@ class BYOIndex(ESClient):
     async def save(self, connector):
         return await self.client.index(
             index=CONNECTORS_INDEX,
-            id=connector.doc_id,
+            id=connector.id,
             document=dict(connector.doc_source),
         )
 
@@ -76,11 +76,11 @@ class BYOIndex(ESClient):
             return
 
         for hit in resp["hits"]["hits"]:
-            doc_id = hit["_id"]
-            if doc_id not in _CONNECTORS_CACHE:
-                _CONNECTORS_CACHE[doc_id] = BYOConnector(
+            connector_id = hit["_id"]
+            if connector_id not in _CONNECTORS_CACHE:
+                _CONNECTORS_CACHE[connector_id] = BYOConnector(
                     self,
-                    doc_id,
+                    connector_id,
                     hit["_source"],
                     bulk_queue_max_size=self.bulk_queue_max_size,
                 )
@@ -88,7 +88,7 @@ class BYOIndex(ESClient):
                 # XXX Need to check and update
                 pass
 
-            yield _CONNECTORS_CACHE[doc_id]
+            yield _CONNECTORS_CACHE[connector_id]
 
 
 class SyncJob:
@@ -135,10 +135,11 @@ class SyncJob:
 
 
 class BYOConnector:
-    def __init__(self, index, doc_id, doc_source, bulk_queue_max_size=1024):
+    def __init__(self, index, connector_id, doc_source, bulk_queue_max_size=1024):
         self.doc_source = doc_source
-        self.doc_id = doc_id
+        self.id = connector_id
         self.index = index
+        self.native = doc_source.get("is_native", False)
         self.service_type = doc_source["service_type"]
         self.index_name = doc_source["index_name"]
         self.configuration = DataSourceConfiguration(doc_source["configuration"])
@@ -189,7 +190,7 @@ class BYOConnector:
         return next_run(self.scheduling["interval"])
 
     async def _sync_starts(self):
-        job = SyncJob(self.doc_id, self.client)
+        job = SyncJob(self.id, self.client)
         job_id = await job.start()
 
         self.doc_source["sync_now"] = False
