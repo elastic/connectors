@@ -1,0 +1,21 @@
+elasticsearch:
+  host: http://nowhere.com:9200
+  user: elastic
+  password: ${elasticsearch.password}
+  bulk_queue_max_size: 1024
+  max_wait_duration: 1
+  initial_backoff_duration: 0
+  backoff_multiplier: 0
+
+service:
+  idling: 0.5
+  heartbeat: 300
+  max_errors: 20
+  max_errors_span: 600
+
+connectors_ids:
+  - 'blah'
+
+sources:
+  fake: test_runner:FakeSource
+
