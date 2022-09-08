@@ -8,7 +8,7 @@ elasticsearch:
   max_wait_duration: 120
   initial_backoff_duration: 1
   backoff_multiplier: 2
-  #log_level: debug
+  log_level: debug
 
 service:
   idling: 30

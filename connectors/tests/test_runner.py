@@ -17,7 +17,7 @@ from connectors.conftest import assert_re
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 ES_CONFIG = os.path.join(os.path.dirname(__file__), "entsearch.yml")
-
+CONFIG_2 = os.path.join(os.path.dirname(__file__), "config_2.yml")
 
 FAKE_CONFIG = {
     "api_key_id": "",
@@ -40,9 +40,32 @@ FAKE_CONFIG = {
     "updated_at": "",
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
-    "is_native": True
+    "is_native": True,
 }
 
+FAKE_CONFIG_NOT_NATIVE = {
+    "api_key_id": "",
+    "configuration": {
+        "host": {"value": "mongodb://127.0.0.1:27021", "label": "MongoDB Host"},
+        "database": {"value": "sample_airbnb", "label": "MongoDB Database"},
+        "collection": {
+            "value": "listingsAndReviews",
+            "label": "MongoDB Collection",
+        },
+    },
+    "index_name": "search-airbnb",
+    "service_type": "fake",
+    "status": "configured",
+    "last_sync_status": "null",
+    "last_sync_error": "",
+    "last_synced": "",
+    "last_seen": "",
+    "created_at": "",
+    "updated_at": "",
+    "scheduling": {"enabled": True, "interval": "0 * * * *"},
+    "sync_now": True,
+    "is_native": False,
+}
 
 LARGE_FAKE_CONFIG = dict(FAKE_CONFIG)
 LARGE_FAKE_CONFIG["service_type"] = "large_fake"
@@ -264,6 +287,17 @@ async def test_connector_service_poll_large(
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
     assert_re(r"Sync done: 10001 indexed, 0  deleted", patch_logger.logs)
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_not_native(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+    set_server_responses(mock_responses, FAKE_CONFIG_NOT_NATIVE)
+    service = ConnectorService(CONFIG_2)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll()
+    assert "Connector 1 of type fake not supported, ignoring" in patch_logger.logs
 
 
 @pytest.mark.asyncio
