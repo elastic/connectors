@@ -13,6 +13,9 @@ service:
   max_errors: 20
   max_errors_span: 600
 
+connectors_ids:
+  - '1'
+
 sources:
   fake: test_runner:FakeSource
   large_fake: test_runner:LargeFakeSource

@@ -40,6 +40,7 @@ FAKE_CONFIG = {
     "updated_at": "",
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
+    "is_native": True
 }
 
 

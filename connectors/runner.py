@@ -90,6 +90,8 @@ class ConnectorService:
         self.connectors = BYOIndex(self.config["elasticsearch"])
         es_host = self.config["elasticsearch"]["host"]
         self.running = True
+        native_service_types = self.config.get("native_service_types", [])
+        connector_ids = self.config.get("connectors_ids", [])
 
         if not (await self.connectors.wait()):
             logger.critical(f"{es_host} seem down. Bye!")
@@ -102,6 +104,19 @@ class ConnectorService:
                 logger.debug(f"Polling every {self.idling} seconds")
                 try:
                     async for connector in self.connectors.get_list():
+                        # we only look at connectors we natively support or the
+                        # ones where we have the connector_id explicitely
+                        if (
+                            connector.service_type not in native_service_types
+                            and connector.id not in connector_ids
+                        ):
+                            logger.debug(
+                                f"Connector {connector.id} of type {connector.service_type} not supported, ignoring"
+                            )
+                            continue
+
+                        if connector.native:
+                            logger.debug(f"Connector {connector.id} natively supported")
                         try:
                             data_source = get_data_source(connector, self.config)
                         except ServiceTypeNotSupportedError:
