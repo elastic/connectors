@@ -7,10 +7,12 @@ import os
 import pytest
 import asyncio
 from unittest import mock
+from functools import partial
 
 from connectors.runner import ConnectorService, run
 from connectors.byoc import _CONNECTORS_CACHE
 from connectors.source import DataSourceError, _CACHED_SOURCES
+from connectors.conftest import assert_re
 
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
@@ -39,6 +41,10 @@ FAKE_CONFIG = {
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
 }
+
+
+LARGE_FAKE_CONFIG = dict(FAKE_CONFIG)
+LARGE_FAKE_CONFIG["service_type"] = "large_fake"
 
 
 FAKE_CONFIG_NO_SYNC = {
@@ -125,7 +131,7 @@ def test_bad_config():
 async def test_connector_service_list(patch_logger, set_env):
     service = ConnectorService(CONFIG)
     await service.get_list()
-    assert patch_logger.logs == ["Registered connectors:", "- Fakey"]
+    assert patch_logger.logs == ["Registered connectors:", "- Fakey", "- Phatey"]
 
 
 class FakeSource:
@@ -144,14 +150,30 @@ class FakeSource:
     async def ping(self):
         pass
 
+    async def _dl(self, doc_id, timestamp=None, doit=None):
+        if not doit:
+            return
+        return {"_id": doc_id, "timestamp": timestamp, "text": "xx"}
+
     async def get_docs(self):
         if self.fail:
             raise Exception("I fail while syncing")
-        yield {"_id": 1}, None
+        yield {"_id": 1}, partial(self._dl, 1)
 
     @classmethod
     def get_default_configuration(cls):
         return []
+
+
+class LargeFakeSource(FakeSource):
+    """Phatey"""
+
+    service_type = "large_fake"
+
+    async def get_docs(self):
+        for i in range(10001):
+            doc_id = str(i + 1)
+            yield {"_id": doc_id}, partial(self._dl, doc_id)
 
 
 def set_server_responses(mock_responses, config=FAKE_CONFIG):
@@ -217,6 +239,7 @@ def set_server_responses(mock_responses, config=FAKE_CONFIG):
         "http://nowhere.com:9200/_bulk",
         payload={"items": []},
         headers=headers,
+        repeat=True,
     )
 
 
@@ -229,6 +252,17 @@ async def test_connector_service_poll(
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
     assert "Sync done: 1 indexed, 0  deleted. (0 seconds)" in patch_logger.logs
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_large(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+    set_server_responses(mock_responses, LARGE_FAKE_CONFIG)
+    service = ConnectorService(CONFIG)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll()
+    assert_re(r"Sync done: 10001 indexed, 0  deleted", patch_logger.logs)
 
 
 @pytest.mark.asyncio
@@ -298,7 +332,7 @@ def test_connector_service_run(mock_responses, patch_logger, set_env):
     args.config_file = CONFIG
     args.action = "list"
     assert run(args) == 0
-    assert patch_logger.logs == ["Registered connectors:", "- Fakey", "Bye"]
+    assert patch_logger.logs == ["Registered connectors:", "- Fakey", "- Phatey", "Bye"]
 
 
 @pytest.mark.asyncio
