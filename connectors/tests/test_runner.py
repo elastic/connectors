@@ -214,7 +214,11 @@ def set_server_responses(mock_responses, config=FAKE_CONFIG):
     mock_responses.head(
         "http://nowhere.com:9200/search-airbnb?expand_wildcards=hidden", headers=headers
     )
-
+    mock_responses.get(
+        "http://nowhere.com:9200/search-airbnb/_mapping?expand_wildcards=hidden",
+        payload={"search-airbnb": {"mappings": {}}},
+        headers=headers,
+    )
     mock_responses.get(
         "http://nowhere.com:9200/search-airbnb",
         payload={"hits": {"hits": [{"_id": "1", "_source": config}]}},

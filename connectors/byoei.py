@@ -238,8 +238,11 @@ class ElasticServer(ESClient):
             response = await self.client.indices.get_mapping(
                 index=index, expand_wildcards="hidden"
             )
-            if not response[index]["mappings"] and mappings:
-                logger.debug("Index %s has no mappings. Adding mappings...", index)
+            mappings = response[index].get("mappings", {})
+            if len(mappings) == 0 and mappings:
+                logger.debug(
+                    "Index %s has no mappings or it's empty. Adding mappings...", index
+                )
                 await self.client.indices.put_mapping(
                     index=index,
                     properties=mappings.get("properties", {}),
