@@ -14,6 +14,7 @@ from connectors.utils import iso_utc, next_run, ESClient
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration
 from elasticsearch.exceptions import ApiError
+from connectors.index import defaults_for
 
 
 CONNECTORS_INDEX = ".elastic-connectors"
@@ -241,8 +242,12 @@ class BYOConnector:
         self._syncing = True
         job = await self._sync_starts()
         try:
+            # TODO: where do we get language_code and analysis_icu?
+            mappings, settings = defaults_for(is_connectors_index=True)
             await data_provider.ping()
-            await elastic_server.prepare_index(self.index_name)
+            await elastic_server.prepare_index(
+                self.index_name, mappings=mappings, settings=settings
+            )
             await asyncio.sleep(0)
 
             result = await elastic_server.async_bulk(
