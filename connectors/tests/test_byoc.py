@@ -186,6 +186,10 @@ async def test_sync_mongo(mock_responses, patch_logger):
         payload={"search-airbnb": {"mappings": {}}},
         headers=headers,
     )
+    mock_responses.put(
+        "http://nowhere.com:9200/search-airbnb/_mapping?expand_wildcards=hidden",
+        headers=headers,
+    )
     mock_responses.get(
         "http://nowhere.com:9200/search-airbnb",
         payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
