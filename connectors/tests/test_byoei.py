@@ -56,11 +56,7 @@ async def test_prepare_index(mock_responses):
     )
 
     # prepare-index, with mappings
-    mappings = {
-        "properties": {
-            "name": {"type": "keyword"}
-        }
-    }
+    mappings = {"properties": {"name": {"type": "keyword"}}}
     mock_responses.head(
         "http://nowhere.com:9200/search-new-index?expand_wildcards=hidden",
         headers=headers,
@@ -68,7 +64,7 @@ async def test_prepare_index(mock_responses):
     mock_responses.get(
         "http://nowhere.com:9200/search-new-index/_mapping?expand_wildcards=hidden",
         headers=headers,
-        payload={"search-new-index": {"mappings": {}}}
+        payload={"search-new-index": {"mappings": {}}},
     )
     mock_responses.put(
         "http://nowhere.com:9200/search-new-index/_mapping?expand_wildcards=hidden",
