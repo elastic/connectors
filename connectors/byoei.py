@@ -235,13 +235,15 @@ class ElasticServer(ESClient):
                 logger.debug("Deleting it first")
                 await self.client.indices.delete(index=index, expand_wildcards="hidden")
                 return
-            response = await self.client.indices.get_mapping(index=index, expand_wildcards="hidden")
+            response = await self.client.indices.get_mapping(
+                index=index, expand_wildcards="hidden"
+            )
             if not response[index]["mappings"] and mappings:
                 logger.debug("Index %s has no mappings. Adding mappings...", index)
                 await self.client.indices.put_mapping(
                     index=index,
                     properties=mappings.get("properties", {}),
-                    expand_wildcards="hidden"
+                    expand_wildcards="hidden",
                 )
                 logger.debug("Index %s mappings added", index)
             else:
