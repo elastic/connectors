@@ -19,8 +19,8 @@ service:
 native_service_types:
   - s3
 
-connectors_ids:
-  - '1'
+# some id
+#connector_id: '1'
 
 sources:
   mongo: connectors.sources.mongo:MongoDataSource

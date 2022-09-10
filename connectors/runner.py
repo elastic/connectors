@@ -91,7 +91,14 @@ class ConnectorService:
         es_host = self.config["elasticsearch"]["host"]
         self.running = True
         native_service_types = self.config.get("native_service_types", [])
-        connector_ids = self.config.get("connectors_ids", [])
+
+        # XXX we can support multiple connectors but Ruby can't so let's use a
+        # single id
+        # connectors_ids = self.config.get("connectors_ids", [])
+        if "connector_id" in self.config:
+            connectors_ids = [self.config.get("connector_id")]
+        else:
+            connectors_ids = []
 
         if not (await self.connectors.wait()):
             logger.critical(f"{es_host} seem down. Bye!")
@@ -108,7 +115,7 @@ class ConnectorService:
                         # ones where we have the connector_id explicitely
                         if (
                             connector.service_type not in native_service_types
-                            and connector.id not in connector_ids
+                            and connector.id not in connectors_ids
                         ):
                             logger.debug(
                                 f"Connector {connector.id} of type {connector.service_type} not supported, ignoring"
