@@ -16,6 +16,12 @@ service:
   max_errors: 20
   max_errors_span: 600
 
+native_service_types:
+  - s3
+
+# some id
+#connector_id: '1'
+
 sources:
   mongo: connectors.sources.mongo:MongoDataSource
   s3: connectors.sources.aws:S3DataSource
