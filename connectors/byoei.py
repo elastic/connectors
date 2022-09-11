@@ -229,7 +229,6 @@ class ElasticServer(ESClient):
         else:
             expand_wildcards = "open"
 
-        logger.debug(f"Checking index {index}")
         exists = await self.client.indices.exists(
             index=index, expand_wildcards=expand_wildcards
         )
