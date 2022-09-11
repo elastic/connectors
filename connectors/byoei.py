@@ -231,10 +231,27 @@ class ElasticServer(ESClient):
         )
         if exists:
             logger.debug(f"{index} exists")
-            if not delete_first:
+            if delete_first:
+                logger.debug("Deleting it first")
+                await self.client.indices.delete(index=index, expand_wildcards="hidden")
                 return
-            logger.debug("Deleting it first")
-            await self.client.indices.delete(index=index, expand_wildcards="hidden")
+            response = await self.client.indices.get_mapping(
+                index=index, expand_wildcards="hidden"
+            )
+            existing_mappings = response[index].get("mappings", {})
+            if len(existing_mappings) == 0 and mappings:
+                logger.debug(
+                    "Index %s has no mappings or it's empty. Adding mappings...", index
+                )
+                await self.client.indices.put_mapping(
+                    index=index,
+                    properties=mappings.get("properties", {}),
+                    expand_wildcards="hidden",
+                )
+                logger.debug("Index %s mappings added", index)
+            else:
+                logger.debug("Index %s already has mappings. Skipping...", index)
+            return
 
         logger.debug(f"Creating index {index}")
         await self.client.indices.create(

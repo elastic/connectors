@@ -177,7 +177,18 @@ async def test_sync_mongo(mock_responses, patch_logger):
         headers=headers,
     )
     mock_responses.head(
-        "http://nowhere.com:9200/search-airbnb?expand_wildcards=hidden", headers=headers
+        "http://nowhere.com:9200/search-airbnb?expand_wildcards=hidden",
+        headers=headers,
+        repeat=True,
+    )
+    mock_responses.get(
+        "http://nowhere.com:9200/search-airbnb/_mapping?expand_wildcards=hidden",
+        payload={"search-airbnb": {"mappings": {}}},
+        headers=headers,
+    )
+    mock_responses.put(
+        "http://nowhere.com:9200/search-airbnb/_mapping?expand_wildcards=hidden",
+        headers=headers,
     )
     mock_responses.get(
         "http://nowhere.com:9200/search-airbnb",
