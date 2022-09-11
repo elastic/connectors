@@ -26,6 +26,7 @@ from connectors.source import (
     get_data_source,
     ServiceTypeNotSupportedError,
     DataSourceError,
+    purge_cache as purge_sources,
 )
 from connectors.utils import CancellableSleeps
 
@@ -45,6 +46,7 @@ class ConnectorService:
         self._sleeper = None
         self._sleeps = CancellableSleeps()
         self.connectors = None
+        self.keep_alive = self.service_config.get("keep_alive", False)
 
     def ent_search_config(self):
         if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
@@ -149,6 +151,9 @@ class ConnectorService:
 
                 if not one_sync:
                     await self._sleeps.sleep(self.idling)
+
+                if not self.keep_alive:
+                    await purge_sources()
         finally:
             await self.connectors.close()
             await es.close()
