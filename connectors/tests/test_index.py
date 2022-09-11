@@ -12,7 +12,7 @@ from connectors.index import (
     DEFAULT_LANGUAGE,
     NON_ICU_ANALYSIS_SETTINGS,
     ICU_ANALYSIS_SETTINGS,
-    defaults_for
+    defaults_for,
 )
 
 EXPECTED_CONNECTORS_PROPS = ["id", "_subextracted_as_of", "_subextracted_version"]
