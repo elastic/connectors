@@ -13,7 +13,7 @@ async def test_prepare_index(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.head(
-        "http://nowhere.com:9200/search-new-index?expand_wildcards=hidden",
+        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
         headers=headers,
         status=404,
     )
@@ -28,11 +28,11 @@ async def test_prepare_index(mock_responses):
     await es.prepare_index("search-new-index", delete_first=True)
 
     mock_responses.head(
-        "http://nowhere.com:9200/search-new-index?expand_wildcards=hidden",
+        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
         headers=headers,
     )
     mock_responses.delete(
-        "http://nowhere.com:9200/search-new-index?expand_wildcards=hidden",
+        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
         headers=headers,
     )
     mock_responses.put(
@@ -58,16 +58,16 @@ async def test_prepare_index(mock_responses):
     # prepare-index, with mappings
     mappings = {"properties": {"name": {"type": "keyword"}}}
     mock_responses.head(
-        "http://nowhere.com:9200/search-new-index?expand_wildcards=hidden",
+        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
         headers=headers,
     )
     mock_responses.get(
-        "http://nowhere.com:9200/search-new-index/_mapping?expand_wildcards=hidden",
+        "http://nowhere.com:9200/search-new-index/_mapping?expand_wildcards=open",
         headers=headers,
         payload={"search-new-index": {"mappings": {}}},
     )
     mock_responses.put(
-        "http://nowhere.com:9200/search-new-index/_mapping?expand_wildcards=hidden",
+        "http://nowhere.com:9200/search-new-index/_mapping?expand_wildcards=open",
         headers=headers,
     )
     await es.prepare_index("search-new-index", mappings=mappings)

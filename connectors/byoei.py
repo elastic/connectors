@@ -224,19 +224,25 @@ class ElasticServer(ESClient):
         self, index, *, docs=None, settings=None, mappings=None, delete_first=False
     ):
         """Creates the index, given a mapping if it does not exists."""
-        # XXX todo update the existing index with the new mapping
+        if index.startswith("."):
+            expand_wildcards = "hidden"
+        else:
+            expand_wildcards = "open"
+
         logger.debug(f"Checking index {index}")
         exists = await self.client.indices.exists(
-            index=index, expand_wildcards="hidden"
+            index=index, expand_wildcards=expand_wildcards
         )
         if exists:
             logger.debug(f"{index} exists")
             if delete_first:
                 logger.debug("Deleting it first")
-                await self.client.indices.delete(index=index, expand_wildcards="hidden")
+                await self.client.indices.delete(
+                    index=index, expand_wildcards=expand_wildcards
+                )
                 return
             response = await self.client.indices.get_mapping(
-                index=index, expand_wildcards="hidden"
+                index=index, expand_wildcards=expand_wildcards
             )
             existing_mappings = response[index].get("mappings", {})
             if len(existing_mappings) == 0 and mappings:
@@ -246,7 +252,7 @@ class ElasticServer(ESClient):
                 await self.client.indices.put_mapping(
                     index=index,
                     properties=mappings.get("properties", {}),
-                    expand_wildcards="hidden",
+                    expand_wildcards=expand_wildcards,
                 )
                 logger.debug("Index %s mappings added", index)
             else:
