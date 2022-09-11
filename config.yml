@@ -8,7 +8,7 @@ elasticsearch:
   max_wait_duration: 120
   initial_backoff_duration: 1
   backoff_multiplier: 2
-  log_level: debug
+  log_level: info
 
 service:
   idling: 30
@@ -19,6 +19,7 @@ service:
 native_service_types:
   - s3
   - mongo
+  - mysql
 
 # some id
 #connector_id: '1'
@@ -27,3 +28,4 @@ sources:
   mongo: connectors.sources.mongo:MongoDataSource
   s3: connectors.sources.aws:S3DataSource
   dir: connectors.sources.directory:DirectoryDataSource
+  mysql: connectors.sources.mysql:MySqlDataSource
