@@ -10,14 +10,16 @@ from unittest import mock
 from functools import partial
 
 from connectors.runner import ConnectorService, run
-from connectors.byoc import _CONNECTORS_CACHE
-from connectors.source import DataSourceError, _CACHED_SOURCES
+from connectors.byoc import purge_cache as purge_connectors
+from connectors.source import DataSourceError, purge_cache as purge_sources
 from connectors.conftest import assert_re
 
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 ES_CONFIG = os.path.join(os.path.dirname(__file__), "entsearch.yml")
 CONFIG_2 = os.path.join(os.path.dirname(__file__), "config_2.yml")
+CONFIG_KEEP_ALIVE = os.path.join(os.path.dirname(__file__), "config_keep_alive.yml")
+
 
 FAKE_CONFIG = {
     "api_key_id": "",
@@ -200,10 +202,9 @@ class LargeFakeSource(FakeSource):
             yield {"_id": doc_id}, partial(self._dl, doc_id)
 
 
-def set_server_responses(mock_responses, config=FAKE_CONFIG):
-
-    _CONNECTORS_CACHE.clear()
-    _CACHED_SOURCES.clear()
+async def set_server_responses(mock_responses, config=FAKE_CONFIG):
+    await purge_connectors()
+    await purge_sources()
 
     headers = {"X-Elastic-Product": "Elasticsearch"}
 
@@ -279,7 +280,7 @@ def set_server_responses(mock_responses, config=FAKE_CONFIG):
 async def test_connector_service_poll(
     mock_responses, patch_logger, patch_ping, set_env
 ):
-    set_server_responses(mock_responses)
+    await set_server_responses(mock_responses)
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
@@ -290,7 +291,7 @@ async def test_connector_service_poll(
 async def test_connector_service_poll_large(
     mock_responses, patch_logger, patch_ping, set_env
 ):
-    set_server_responses(mock_responses, LARGE_FAKE_CONFIG)
+    await set_server_responses(mock_responses, LARGE_FAKE_CONFIG)
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
@@ -301,7 +302,7 @@ async def test_connector_service_poll_large(
 async def test_connector_service_poll_not_native(
     mock_responses, patch_logger, patch_ping, set_env
 ):
-    set_server_responses(mock_responses, FAKE_CONFIG_NOT_NATIVE)
+    await set_server_responses(mock_responses, FAKE_CONFIG_NOT_NATIVE)
     service = ConnectorService(CONFIG_2)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
@@ -313,7 +314,7 @@ async def test_connector_service_poll_with_entsearch(
     mock_responses, patch_logger, patch_ping, set_env
 ):
     with mock.patch.dict(os.environ, {"ENT_SEARCH_CONFIG_PATH": ES_CONFIG}):
-        set_server_responses(mock_responses)
+        await set_server_responses(mock_responses)
         service = ConnectorService(CONFIG)
         asyncio.get_event_loop().call_soon(service.stop)
         await service.poll()
@@ -324,7 +325,7 @@ async def test_connector_service_poll_with_entsearch(
 async def test_connector_service_poll_sync_now(
     mock_responses, patch_logger, patch_ping, set_env
 ):
-    set_server_responses(mock_responses, FAKE_CONFIG_NO_SYNC)
+    await set_server_responses(mock_responses, FAKE_CONFIG_NO_SYNC)
     service = ConnectorService(CONFIG)
     # one_sync means it won't loop forever
     await service.poll(sync_now=True, one_sync=True)
@@ -336,7 +337,7 @@ async def test_connector_service_poll_sync_fails(
     mock_responses, patch_logger, patch_ping, set_env
 ):
 
-    set_server_responses(mock_responses, FAKE_CONFIG_FAIL_SERVICE)
+    await set_server_responses(mock_responses, FAKE_CONFIG_FAIL_SERVICE)
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
@@ -348,7 +349,7 @@ async def test_connector_service_poll_unknown_service(
     mock_responses, patch_logger, patch_ping, set_env
 ):
 
-    set_server_responses(mock_responses, FAKE_CONFIG_UNKNOWN_SERVICE)
+    await set_server_responses(mock_responses, FAKE_CONFIG_UNKNOWN_SERVICE)
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
@@ -360,7 +361,7 @@ async def test_connector_service_poll_buggy_service(
     mock_responses, patch_logger, patch_ping, set_env
 ):
 
-    set_server_responses(mock_responses, FAKE_CONFIG_BUGGY_SERVICE)
+    await set_server_responses(mock_responses, FAKE_CONFIG_BUGGY_SERVICE)
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
@@ -395,7 +396,7 @@ async def test_ping_fails(mock_responses, patch_logger, set_env):
 
 @pytest.mark.asyncio
 async def test_spurious(mock_responses, patch_logger, patch_ping, set_env):
-    set_server_responses(mock_responses)
+    await set_server_responses(mock_responses)
 
     from connectors.byoc import BYOConnector
 
@@ -420,7 +421,7 @@ async def test_spurious(mock_responses, patch_logger, patch_ping, set_env):
 
 @pytest.mark.asyncio
 async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_env):
-    set_server_responses(mock_responses)
+    await set_server_responses(mock_responses)
 
     from connectors.byoc import BYOConnector
 
@@ -430,7 +431,7 @@ async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_e
     old_sync = BYOConnector.sync
     BYOConnector.sync = _sync
 
-    set_server_responses(mock_responses)
+    await set_server_responses(mock_responses)
     headers = {"X-Elastic-Product": "Elasticsearch"}
 
     mock_responses.post(
@@ -440,7 +441,7 @@ async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_e
     )
 
     try:
-        service = ConnectorService(CONFIG)
+        service = ConnectorService(CONFIG_KEEP_ALIVE)
         asyncio.get_event_loop().call_soon(service.stop)
         await service.poll()
     except Exception:

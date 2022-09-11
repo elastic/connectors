@@ -43,6 +43,16 @@ class JobStatus(Enum):
 _CONNECTORS_CACHE = {}
 
 
+async def purge_cache():
+    for connector in _CONNECTORS_CACHE.values():
+        try:
+            await connector.close()
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+        await asyncio.sleep(0)
+    _CONNECTORS_CACHE.clear()
+
+
 class BYOIndex(ESClient):
     def __init__(self, elastic_config):
         super().__init__(elastic_config)
@@ -50,9 +60,7 @@ class BYOIndex(ESClient):
         self.bulk_queue_max_size = elastic_config.get("bulk_queue_max_size", 1024)
 
     async def close(self):
-        for connector in _CONNECTORS_CACHE.values():
-            await connector.close()
-            await asyncio.sleep(0)
+        await purge_cache()
         await super().close()
 
     async def save(self, connector):
@@ -85,8 +93,7 @@ class BYOIndex(ESClient):
                     bulk_queue_max_size=self.bulk_queue_max_size,
                 )
             else:
-                # XXX Need to check and update
-                pass
+                _CONNECTORS_CACHE[connector_id].update_config(hit["_source"])
 
             yield _CONNECTORS_CACHE[connector_id]
 
@@ -139,11 +146,7 @@ class BYOConnector:
         self.doc_source = doc_source
         self.id = connector_id
         self.index = index
-        self.native = doc_source.get("is_native", False)
-        self.service_type = doc_source["service_type"]
-        self.index_name = doc_source["index_name"]
-        self.configuration = DataSourceConfiguration(doc_source["configuration"])
-        self.scheduling = doc_source["scheduling"]
+        self.update_config(doc_source)
         self.client = index.client
         self.doc_source["status"] = e2str(Status.CONNECTED)
         self.doc_source["last_seen"] = iso_utc()
@@ -152,6 +155,13 @@ class BYOConnector:
         self._start_time = None
         self._hb = None
         self.bulk_queue_max_size = bulk_queue_max_size
+
+    def update_config(self, doc_source):
+        self.native = doc_source.get("is_native", False)
+        self.service_type = doc_source["service_type"]
+        self.index_name = doc_source["index_name"]
+        self.configuration = DataSourceConfiguration(doc_source["configuration"])
+        self.scheduling = doc_source["scheduling"]
 
     async def close(self):
         self._closed = True
