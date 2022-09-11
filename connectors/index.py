@@ -308,4 +308,4 @@ def defaults_for(
         is_connectors_index=is_connectors_index, is_crawler_index=is_crawler_index
     )
     settings = Settings(language_code=language_code, analysis_icu=analysis_icu)
-    return mappings, settings
+    return mappings, settings.to_hash()
