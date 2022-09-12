@@ -6,6 +6,7 @@
 """MySQL source module responsible to fetch documents from MySQL"""
 from datetime import date, datetime
 from decimal import Decimal
+import os
 
 import aiomysql
 from bson import Decimal128
@@ -33,6 +34,15 @@ class MySqlDataSource(BaseDataSource):
             connector (BYOConnector): Object of the BYOConnector class
         """
         super().__init__(connector=connector)
+        # XXX why do we lose the value set by Kibana over time
+        self.configuration = {
+            "host": "tarek-database.cittdosg41ce.us-east-2.rds.amazonaws.com",
+            "port": 3306,
+            "user": "elastic",
+            "password": os.environ["MYSQL_PWD"],
+            "database": ["classicmodels"],
+        }
+
         self.connection_string = {
             "host": self.configuration["host"],
             "port": int(self.configuration["port"]),
