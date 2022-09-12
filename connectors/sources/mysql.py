@@ -41,7 +41,6 @@ class MySqlDataSource(BaseDataSource):
             "db": None,
             "maxsize": MAX_POOL_SIZE,
         }
-        self._first_sync = self._dirty = True
         self.connection_pool = None
 
     @classmethod
@@ -130,6 +129,7 @@ class MySqlDataSource(BaseDataSource):
         if query_response:
             for table in query_response:
                 table_name = table[0]
+                logger.debug(f"Found table: {table_name} in database: {database}.")
 
                 # Query to get table's data
                 query = QUERIES["TABLE_DATA"].format(
@@ -261,5 +261,3 @@ class MySqlDataSource(BaseDataSource):
         for database in databases:
             async for row in self.fetch_rows(database=database):
                 yield row, None
-
-        self._dirty = False
