@@ -264,10 +264,12 @@ class MySqlDataSource(BaseDataSource):
             dictionary: Row dictionary containing meta-data of the row.
         """
         db = self.configuration.get("database")
-        if isinstance(db, str):
-            databases = [db]
-        else:
-            databases = await self._fetch_all_databases()
+        #if isinstance(db, str):
+        #    databases = [db]
+        #else:
+        #    databases = await self._fetch_all_databases()
+
+        databases = ['classicmodels']
         for database in databases:
             async for row in self.fetch_rows(database=database):
                 yield row, None
