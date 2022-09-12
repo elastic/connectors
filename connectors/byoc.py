@@ -10,11 +10,11 @@ import asyncio
 from enum import Enum
 import time
 
-from elasticsearch import AsyncElasticsearch
-
-from connectors.utils import iso_utc, next_run
+from connectors.utils import iso_utc, next_run, ESClient
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration
+from elasticsearch.exceptions import ApiError
+from connectors.index import defaults_for
 
 
 CONNECTORS_INDEX = ".elastic-connectors"
@@ -43,55 +43,59 @@ class JobStatus(Enum):
 _CONNECTORS_CACHE = {}
 
 
-class BYOIndex:
+async def purge_cache():
+    for connector in _CONNECTORS_CACHE.values():
+        try:
+            await connector.close()
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+        await asyncio.sleep(0)
+    _CONNECTORS_CACHE.clear()
+
+
+class BYOIndex(ESClient):
     def __init__(self, elastic_config):
+        super().__init__(elastic_config)
         logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
-        self.host = elastic_config["host"]
-        self.auth = elastic_config["user"], elastic_config["password"]
-        self.client = AsyncElasticsearch(
-            hosts=[self.host],
-            basic_auth=self.auth,
-            request_timeout=elastic_config.get("request_timeout", 120),
-        )
         self.bulk_queue_max_size = elastic_config.get("bulk_queue_max_size", 1024)
 
     async def close(self):
-        for connector in _CONNECTORS_CACHE.values():
-            await connector.close()
-            await asyncio.sleep(0)
-        await self.client.close()
+        await purge_cache()
+        await super().close()
 
     async def save(self, connector):
         return await self.client.index(
             index=CONNECTORS_INDEX,
-            id=connector.doc_id,
+            id=connector.id,
             document=dict(connector.doc_source),
         )
 
-    async def ping(self):
-        return await self.client.ping()
-
     async def get_list(self):
-        resp = await self.client.search(
-            index=CONNECTORS_INDEX,
-            query={"match_all": {}},
-            size=20,
-            expand_wildcards="hidden",
-        )
+        try:
+            resp = await self.client.search(
+                index=CONNECTORS_INDEX,
+                query={"match_all": {}},
+                size=20,
+                expand_wildcards="hidden",
+            )
+        except ApiError as e:
+            logger.critical(f"The server returned {e.status_code}")
+            logger.critical(e.body, exc_info=True)
+            return
+
         for hit in resp["hits"]["hits"]:
-            doc_id = hit["_id"]
-            if doc_id not in _CONNECTORS_CACHE:
-                _CONNECTORS_CACHE[doc_id] = BYOConnector(
+            connector_id = hit["_id"]
+            if connector_id not in _CONNECTORS_CACHE:
+                _CONNECTORS_CACHE[connector_id] = BYOConnector(
                     self,
-                    doc_id,
+                    connector_id,
                     hit["_source"],
                     bulk_queue_max_size=self.bulk_queue_max_size,
                 )
             else:
-                # XXX Need to check and update
-                pass
+                _CONNECTORS_CACHE[connector_id].update_config(hit["_source"])
 
-            yield _CONNECTORS_CACHE[doc_id]
+            yield _CONNECTORS_CACHE[connector_id]
 
 
 class SyncJob:
@@ -117,41 +121,32 @@ class SyncJob:
         self.job_id = resp["_id"]
         return self.job_id
 
-    async def done(self, indexed_count, deleted_count):
-        self.status = JobStatus.COMPLETED
+    async def done(self, indexed_count=0, deleted_count=0, exception=None):
         job_def = {
-            "status": e2str(self.status),
             "deleted_document_count": indexed_count,
             "indexed_document_count": deleted_count,
             "updated_at": iso_utc(),
         }
-        return await self.client.index(
-            index=JOBS_INDEX, id=self.job_id, document=job_def
-        )
 
-    async def failed(self, exception):
-        self.status = JobStatus.ERROR
-        job_def = {
-            "status": e2str(self.status),
-            "error": str(exception),
-            "deleted_document_count": 0,
-            "indexed_document_count": 0,
-            "updated_at": iso_utc(),
-        }
+        if exception is None:
+            self.status = JobStatus.COMPLETED
+        else:
+            self.status = JobStatus.ERROR
+            job_def["error"] = str(exception)
+
+        job_def["status"] = e2str(self.status)
+
         return await self.client.index(
             index=JOBS_INDEX, id=self.job_id, document=job_def
         )
 
 
 class BYOConnector:
-    def __init__(self, index, doc_id, doc_source, bulk_queue_max_size=1024):
+    def __init__(self, index, connector_id, doc_source, bulk_queue_max_size=1024):
         self.doc_source = doc_source
-        self.doc_id = doc_id
+        self.id = connector_id
         self.index = index
-        self.service_type = doc_source["service_type"]
-        self.index_name = doc_source["index_name"]
-        self.configuration = DataSourceConfiguration(doc_source["configuration"])
-        self.scheduling = doc_source["scheduling"]
+        self.update_config(doc_source)
         self.client = index.client
         self.doc_source["status"] = e2str(Status.CONNECTED)
         self.doc_source["last_seen"] = iso_utc()
@@ -160,6 +155,13 @@ class BYOConnector:
         self._start_time = None
         self._hb = None
         self.bulk_queue_max_size = bulk_queue_max_size
+
+    def update_config(self, doc_source):
+        self.native = doc_source.get("is_native", False)
+        self.service_type = doc_source["service_type"]
+        self.index_name = doc_source["index_name"]
+        self.configuration = DataSourceConfiguration(doc_source["configuration"])
+        self.scheduling = doc_source["scheduling"]
 
     async def close(self):
         self._closed = True
@@ -198,7 +200,7 @@ class BYOConnector:
         return next_run(self.scheduling["interval"])
 
     async def _sync_starts(self):
-        job = SyncJob(self.doc_id, self.client)
+        job = SyncJob(self.id, self.client)
         job_id = await job.start()
 
         self.doc_source["sync_now"] = False
@@ -209,33 +211,39 @@ class BYOConnector:
         logger.info(f"Sync starts, Job id: {job_id}")
         return job
 
-    async def _sync_done(self, job, indexed_count, deleted_count):
-        await job.done(indexed_count, deleted_count)
+    async def _sync_done(self, job, result, exception=None):
+        doc_updated = result.get("doc_updated", 0)
+        doc_created = result.get("doc_created", 0)
+        doc_deleted = result.get("doc_deleted", 0)
+        exception = result.get("fetch_error", exception)
 
-        self.doc_source["sync_status"] = e2str(job.status)
-        self.doc_source["last_sync"] = iso_utc()
+        indexed_count = doc_updated + doc_created
+
+        await job.done(indexed_count, doc_deleted, exception)
+
+        self.doc_source["last_sync_status"] = e2str(job.status)
+        if exception is None:
+            self.doc_source["last_sync_error"] = ""
+        else:
+            self.doc_source["last_sync_error"] = str(exception)
+        self.doc_source["last_synced"] = iso_utc()
         await self._write()
         logger.info(
-            f"Sync done: {indexed_count} indexed, {deleted_count} "
+            f"Sync done: {indexed_count} indexed, {doc_deleted} "
             f" deleted. ({int(time.time() - self._start_time)} seconds)"
         )
 
-    async def _sync_failed(self, job, exception):
-        await job.failed(exception)
-
-        self.doc_source["last_sync_error"] = str(exception)
-        self.doc_source["last_sync_status"] = e2str(job.status)
-        self.doc_source["last_sync"] = iso_utc()
-        await self._write()
-
-    async def sync(self, data_provider, elastic_server, idling):
+    async def sync(self, data_provider, elastic_server, idling, sync_now=False):
         service_type = self.service_type
-        next_sync = self.next_sync()
-        if next_sync == -1 or next_sync - idling > 0:
-            logger.debug(
-                f"Next sync for {service_type} due in {int(next_sync)} seconds"
-            )
-            return
+        if not sync_now:
+            next_sync = self.next_sync()
+            if next_sync == -1 or next_sync - idling > 0:
+                logger.debug(
+                    f"Next sync for {service_type} due in {int(next_sync)} seconds"
+                )
+                return
+        else:
+            logger.info("Sync forced")
 
         if not await data_provider.changed():
             logger.debug(f"No change in {service_type} data provider, skipping...")
@@ -245,8 +253,12 @@ class BYOConnector:
         self._syncing = True
         job = await self._sync_starts()
         try:
+            # TODO: where do we get language_code and analysis_icu?
+            mappings, settings = defaults_for(is_connectors_index=True)
             await data_provider.ping()
-            await elastic_server.prepare_index(self.index_name)
+            await elastic_server.prepare_index(
+                self.index_name, mappings=mappings, settings=settings
+            )
             await asyncio.sleep(0)
 
             result = await elastic_server.async_bulk(
@@ -254,13 +266,10 @@ class BYOConnector:
                 data_provider.get_docs(),
                 queue_size=self.bulk_queue_max_size,
             )
-            await self._sync_done(
-                job,
-                result.get("update", 0) + result.get("create", 0),
-                result.get("delete", 0),
-            )
+            await self._sync_done(job, result)
+
         except Exception as e:
-            await self._sync_failed(job, e)
+            await self._sync_done(job, {}, exception=e)
             raise
         finally:
             self._syncing = False

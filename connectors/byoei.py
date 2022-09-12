@@ -6,16 +6,15 @@
 """
 Implementation of BYOEI protocol (+some ids collecting)
 """
-import logging
 import time
 from collections import defaultdict
 import asyncio
 
-from elasticsearch import AsyncElasticsearch, NotFoundError as ElasticNotFoundError
+from elasticsearch import NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan
 
-from connectors.logger import logger, set_extra_logger
-from connectors.utils import iso_utc
+from connectors.logger import logger
+from connectors.utils import iso_utc, ESClient
 
 
 class Bulker:
@@ -48,7 +47,7 @@ class Bulker:
         docs_ended = downloads_ended = False
         while True:
             doc = await self.queue.get()
-            if doc == "END_DOCS":
+            if doc in ("END_DOCS", "FETCH_ERROR"):
                 docs_ended = True
             if doc == "END_DOWNLOADS":
                 downloads_ended = True
@@ -56,11 +55,12 @@ class Bulker:
             if docs_ended and downloads_ended:
                 break
 
-            if doc in ("END_DOCS", "END_DOWNLOADS"):
+            if doc in ("END_DOCS", "END_DOWNLOADS", "FETCH_ERROR"):
                 continue
 
             operation = doc["_op_type"]
             self.ops[operation] += 1
+
             if operation in ("update", "create"):
                 batch.append({"update": {"_index": doc["_index"], "_id": doc["_id"]}})
                 batch.append({"doc": doc["doc"], "doc_as_upsert": True})
@@ -96,10 +96,14 @@ class Fetcher:
         self.existing_ids = existing_ids
         self.existing_timestamps = existing_timestamps
         self.sync_runs = False
+        self.total_downloads = 0
+        self.total_docs_updated = 0
+        self.total_docs_created = 0
+        self.total_docs_deleted = 0
+        self.fetch_error = None
 
     # XXX this can be defferred
     async def get_attachments(self):
-        downloads = 0
         logger.info("Starting downloads")
 
         while self.sync_runs:
@@ -113,7 +117,7 @@ class Fetcher:
             if data is None:
                 continue
 
-            downloads += 1
+            self.total_downloads += 1
             await self.queue.put(
                 {
                     "_op_type": "update",
@@ -124,13 +128,13 @@ class Fetcher:
                 }
             )
 
-            if divmod(downloads, 10)[-1] == 0:
-                logger.info(f"Downloaded {downloads} files.")
+            if divmod(self.total_downloads, 10)[-1] == 0:
+                logger.info(f"Downloaded {self.total_downloads} files.")
 
             await asyncio.sleep(0)
 
         await self.queue.put("END_DOWNLOADS")
-        logger.info(f"Downloads done {downloads} files.")
+        logger.info(f"Downloads done {self.total_downloads} files.")
 
     async def run(self, generator):
         t1 = self.loop.create_task(self.get_docs(generator))
@@ -142,47 +146,58 @@ class Fetcher:
         self.sync_runs = True
 
         seen_ids = set()
-        async for doc in generator:
-            doc, lazy_download = doc
-            doc_id = doc["id"] = doc.pop("_id")
-            logger.debug(f"Looking at {doc_id}")
-            seen_ids.add(doc_id)
+        try:
+            async for doc in generator:
+                doc, lazy_download = doc
+                doc_id = doc["id"] = doc.pop("_id")
+                logger.debug(f"Looking at {doc_id}")
+                seen_ids.add(doc_id)
 
-            # If the doc has a timestamp, we can use it to see if it has
-            # been modified. This reduces the bulk size a *lot*
-            #
-            # Some backends do not know how to do this so it's optional.
-            # For them we update the docs in any case.
-            if "timestamp" in doc:
-                if self.existing_timestamps.get(doc_id, "") == doc["timestamp"]:
-                    logger.debug(f"Skipping {doc_id}")
-                    await lazy_download(doit=False)
-                    continue
-            else:
-                doc["timestamp"] = iso_utc()
+                # If the doc has a timestamp, we can use it to see if it has
+                # been modified. This reduces the bulk size a *lot*
+                #
+                # Some backends do not know how to do this so it's optional.
+                # For them we update the docs in any case.
+                if "timestamp" in doc:
+                    if self.existing_timestamps.get(doc_id, "") == doc["timestamp"]:
+                        logger.debug(f"Skipping {doc_id}")
+                        # cancel the download
+                        if lazy_download is not None:
+                            await lazy_download(doit=False)
+                        continue
+                else:
+                    doc["timestamp"] = iso_utc()
 
-            if lazy_download is not None:
-                await self._downloads.put(
-                    self.loop.create_task(
-                        lazy_download(doit=True, timestamp=doc["timestamp"])
+                if lazy_download is not None:
+                    await self._downloads.put(
+                        self.loop.create_task(
+                            lazy_download(doit=True, timestamp=doc["timestamp"])
+                        )
                     )
+
+                if doc_id in self.existing_ids:
+                    operation = "update"
+                    self.total_docs_updated += 1
+                else:
+                    operation = "create"
+                    self.total_docs_created += 1
+
+                await self.queue.put(
+                    {
+                        "_op_type": operation,
+                        "_index": self.index,
+                        "_id": doc_id,
+                        "doc": doc,
+                        "doc_as_upsert": True,
+                    }
                 )
-
-            if doc_id in self.existing_ids:
-                operation = "update"
-            else:
-                operation = "create"
-
-            await self.queue.put(
-                {
-                    "_op_type": operation,
-                    "_index": self.index,
-                    "_id": doc_id,
-                    "doc": doc,
-                    "doc_as_upsert": True,
-                }
-            )
-            await asyncio.sleep(0)
+                await asyncio.sleep(0)
+        except Exception as e:
+            logger.critical("The document fetcher failed", exc_info=True)
+            await self._downloads.put("END")
+            await self.queue.put("FETCH_ERROR")
+            self.fetch_error = e
+            return
 
         # We delete any document that existed in Elasticsearch that was not
         # returned by the backend.
@@ -192,49 +207,62 @@ class Fetcher:
             await self.queue.put(
                 {"_op_type": "delete", "_index": self.index, "_id": doc_id}
             )
+            self.total_docs_deleted += 1
 
         await self._downloads.put("END")
         await self.queue.put("END_DOCS")
 
 
-class ElasticServer:
+class ElasticServer(ESClient):
     def __init__(self, elastic_config):
         logger.debug(f"ElasticServer connecting to {elastic_config['host']}")
-        self.host = elastic_config["host"]
-        self.auth = elastic_config["user"], elastic_config["password"]
-        self.client = AsyncElasticsearch(
-            hosts=[self.host],
-            basic_auth=self.auth,
-            request_timeout=elastic_config.get("request_timeout", 120),
-        )
+        super().__init__(elastic_config)
         self._downloads = []
         self.loop = asyncio.get_event_loop()
-        level = elastic_config.get("log_level", "INFO")
-        es_logger = logging.getLogger("elastic_transport.node")
-        set_extra_logger(es_logger, log_level=logging.getLevelName(level))
 
-    async def ping(self):
-        await self.client.ping()
-
-    async def close(self):
-        await self.client.close()
-
-    async def prepare_index(self, index, docs=None, mapping=None, delete_first=False):
+    async def prepare_index(
+        self, index, *, docs=None, settings=None, mappings=None, delete_first=False
+    ):
         """Creates the index, given a mapping if it does not exists."""
-        # XXX todo update the existing index with the new mapping
+        if index.startswith("."):
+            expand_wildcards = "hidden"
+        else:
+            expand_wildcards = "open"
+
         logger.debug(f"Checking index {index}")
         exists = await self.client.indices.exists(
-            index=index, expand_wildcards="hidden"
+            index=index, expand_wildcards=expand_wildcards
         )
         if exists:
             logger.debug(f"{index} exists")
-            if not delete_first:
+            if delete_first:
+                logger.debug("Deleting it first")
+                await self.client.indices.delete(
+                    index=index, expand_wildcards=expand_wildcards
+                )
                 return
-            logger.debug("Deleting it first")
-            await self.client.indices.delete(index=index, expand_wildcards="hidden")
+            response = await self.client.indices.get_mapping(
+                index=index, expand_wildcards=expand_wildcards
+            )
+            existing_mappings = response[index].get("mappings", {})
+            if len(existing_mappings) == 0 and mappings:
+                logger.debug(
+                    "Index %s has no mappings or it's empty. Adding mappings...", index
+                )
+                await self.client.indices.put_mapping(
+                    index=index,
+                    properties=mappings.get("properties", {}),
+                    expand_wildcards=expand_wildcards,
+                )
+                logger.debug("Index %s mappings added", index)
+            else:
+                logger.debug("Index %s already has mappings. Skipping...", index)
+            return
 
         logger.debug(f"Creating index {index}")
-        await self.client.indices.create(index=index)
+        await self.client.indices.create(
+            index=index, settings=settings, mappings=mappings
+        )
         if docs is None:
             return
         # XXX bulk
@@ -291,5 +319,12 @@ class ElasticServer:
 
         await asyncio.gather(fetcher_task, bulker_task)
 
-        # we return a number for each operation type.
-        return dict(bulker.ops)
+        # we return a number for each operation type
+        return {
+            "bulk_operations": dict(bulker.ops),
+            "doc_created": fetcher.total_docs_created,
+            "attachment_extracted": fetcher.total_downloads,
+            "doc_updated": fetcher.total_docs_updated,
+            "doc_deleted": fetcher.total_docs_deleted,
+            "fetch_error": fetcher.fetch_error,
+        }

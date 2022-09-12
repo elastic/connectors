@@ -1,0 +1,5 @@
+elasticsearch:
+  host: http://nowhere.com:9200
+  user: elastic
+  password: ${elasticsearch.password}
+
