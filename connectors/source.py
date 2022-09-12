@@ -85,6 +85,13 @@ class BaseDataSource:
         """
         raise NotImplementedError
 
+    async def close(self):
+        """Called when the source is closed.
+
+        Can be used to close connections
+        """
+        pass
+
     async def get_docs(self):
         """Returns an iterator on all documents present in the backend
 
@@ -138,6 +145,15 @@ def get_data_source(connector, config):
             raise DataSourceError(f"Could not instanciate {fqn} for {service_type}")
 
     return _CACHED_SOURCES[service_type]
+
+
+async def purge_cache():
+    for connector in _CACHED_SOURCES.values():
+        try:
+            await connector.close()
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+    _CACHED_SOURCES.clear()
 
 
 def get_data_sources(config):

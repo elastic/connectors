@@ -161,7 +161,9 @@ class Fetcher:
                 if "timestamp" in doc:
                     if self.existing_timestamps.get(doc_id, "") == doc["timestamp"]:
                         logger.debug(f"Skipping {doc_id}")
-                        await lazy_download(doit=False)
+                        # cancel the download
+                        if lazy_download is not None:
+                            await lazy_download(doit=False)
                         continue
                 else:
                     doc["timestamp"] = iso_utc()
@@ -222,17 +224,40 @@ class ElasticServer(ESClient):
         self, index, *, docs=None, settings=None, mappings=None, delete_first=False
     ):
         """Creates the index, given a mapping if it does not exists."""
-        # XXX todo update the existing index with the new mapping
+        if index.startswith("."):
+            expand_wildcards = "hidden"
+        else:
+            expand_wildcards = "open"
+
         logger.debug(f"Checking index {index}")
         exists = await self.client.indices.exists(
-            index=index, expand_wildcards="hidden"
+            index=index, expand_wildcards=expand_wildcards
         )
         if exists:
             logger.debug(f"{index} exists")
-            if not delete_first:
+            if delete_first:
+                logger.debug("Deleting it first")
+                await self.client.indices.delete(
+                    index=index, expand_wildcards=expand_wildcards
+                )
                 return
-            logger.debug("Deleting it first")
-            await self.client.indices.delete(index=index, expand_wildcards="hidden")
+            response = await self.client.indices.get_mapping(
+                index=index, expand_wildcards=expand_wildcards
+            )
+            existing_mappings = response[index].get("mappings", {})
+            if len(existing_mappings) == 0 and mappings:
+                logger.debug(
+                    "Index %s has no mappings or it's empty. Adding mappings...", index
+                )
+                await self.client.indices.put_mapping(
+                    index=index,
+                    properties=mappings.get("properties", {}),
+                    expand_wildcards=expand_wildcards,
+                )
+                logger.debug("Index %s mappings added", index)
+            else:
+                logger.debug("Index %s already has mappings. Skipping...", index)
+            return
 
         logger.debug(f"Creating index {index}")
         await self.client.indices.create(

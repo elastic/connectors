@@ -14,6 +14,7 @@ from connectors.utils import iso_utc, next_run, ESClient
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration
 from elasticsearch.exceptions import ApiError
+from connectors.index import defaults_for
 
 
 CONNECTORS_INDEX = ".elastic-connectors"
@@ -42,6 +43,16 @@ class JobStatus(Enum):
 _CONNECTORS_CACHE = {}
 
 
+async def purge_cache():
+    for connector in _CONNECTORS_CACHE.values():
+        try:
+            await connector.close()
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+        await asyncio.sleep(0)
+    _CONNECTORS_CACHE.clear()
+
+
 class BYOIndex(ESClient):
     def __init__(self, elastic_config):
         super().__init__(elastic_config)
@@ -49,15 +60,13 @@ class BYOIndex(ESClient):
         self.bulk_queue_max_size = elastic_config.get("bulk_queue_max_size", 1024)
 
     async def close(self):
-        for connector in _CONNECTORS_CACHE.values():
-            await connector.close()
-            await asyncio.sleep(0)
+        await purge_cache()
         await super().close()
 
     async def save(self, connector):
         return await self.client.index(
             index=CONNECTORS_INDEX,
-            id=connector.doc_id,
+            id=connector.id,
             document=dict(connector.doc_source),
         )
 
@@ -75,19 +84,18 @@ class BYOIndex(ESClient):
             return
 
         for hit in resp["hits"]["hits"]:
-            doc_id = hit["_id"]
-            if doc_id not in _CONNECTORS_CACHE:
-                _CONNECTORS_CACHE[doc_id] = BYOConnector(
+            connector_id = hit["_id"]
+            if connector_id not in _CONNECTORS_CACHE:
+                _CONNECTORS_CACHE[connector_id] = BYOConnector(
                     self,
-                    doc_id,
+                    connector_id,
                     hit["_source"],
                     bulk_queue_max_size=self.bulk_queue_max_size,
                 )
             else:
-                # XXX Need to check and update
-                pass
+                _CONNECTORS_CACHE[connector_id].update_config(hit["_source"])
 
-            yield _CONNECTORS_CACHE[doc_id]
+            yield _CONNECTORS_CACHE[connector_id]
 
 
 class SyncJob:
@@ -134,14 +142,11 @@ class SyncJob:
 
 
 class BYOConnector:
-    def __init__(self, index, doc_id, doc_source, bulk_queue_max_size=1024):
+    def __init__(self, index, connector_id, doc_source, bulk_queue_max_size=1024):
         self.doc_source = doc_source
-        self.doc_id = doc_id
+        self.id = connector_id
         self.index = index
-        self.service_type = doc_source["service_type"]
-        self.index_name = doc_source["index_name"]
-        self.configuration = DataSourceConfiguration(doc_source["configuration"])
-        self.scheduling = doc_source["scheduling"]
+        self.update_config(doc_source)
         self.client = index.client
         self.doc_source["status"] = e2str(Status.CONNECTED)
         self.doc_source["last_seen"] = iso_utc()
@@ -150,6 +155,13 @@ class BYOConnector:
         self._start_time = None
         self._hb = None
         self.bulk_queue_max_size = bulk_queue_max_size
+
+    def update_config(self, doc_source):
+        self.native = doc_source.get("is_native", False)
+        self.service_type = doc_source["service_type"]
+        self.index_name = doc_source["index_name"]
+        self.configuration = DataSourceConfiguration(doc_source["configuration"])
+        self.scheduling = doc_source["scheduling"]
 
     async def close(self):
         self._closed = True
@@ -188,7 +200,7 @@ class BYOConnector:
         return next_run(self.scheduling["interval"])
 
     async def _sync_starts(self):
-        job = SyncJob(self.doc_id, self.client)
+        job = SyncJob(self.id, self.client)
         job_id = await job.start()
 
         self.doc_source["sync_now"] = False
@@ -241,8 +253,12 @@ class BYOConnector:
         self._syncing = True
         job = await self._sync_starts()
         try:
+            # TODO: where do we get language_code and analysis_icu?
+            mappings, settings = defaults_for(is_connectors_index=True)
             await data_provider.ping()
-            await elastic_server.prepare_index(self.index_name)
+            await elastic_server.prepare_index(
+                self.index_name, mappings=mappings, settings=settings
+            )
             await asyncio.sleep(0)
 
             result = await elastic_server.async_bulk(

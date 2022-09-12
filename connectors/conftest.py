@@ -6,8 +6,10 @@
 import io
 import sys
 import os
-import pytest
 import asyncio
+import re
+
+import pytest
 from aioresponses import aioresponses
 
 
@@ -119,3 +121,13 @@ def mock_aws():
             os.environ["AWS_SECRET_ACCESS_KEY"] = old_secret
         if old_key is not None:
             os.environ["AWS_ACCESS_KEY_ID"] = old_key
+
+
+def assert_re(expr, items):
+    expr = re.compile(expr)
+
+    for item in reversed(items):
+        if isinstance(item, str) and expr.match(item):
+            return
+
+    raise AssertionError(f"{expr} not found in {items}")
