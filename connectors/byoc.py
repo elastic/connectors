@@ -71,6 +71,8 @@ class BYOIndex(ESClient):
         )
 
     async def get_list(self):
+        await self.client.indices.refresh(index=CONNECTORS_INDEX)
+
         try:
             resp = await self.client.search(
                 index=CONNECTORS_INDEX,
@@ -83,9 +85,13 @@ class BYOIndex(ESClient):
             logger.critical(e.body, exc_info=True)
             return
 
+        logger.debug(f"Found {len(resp['hits']['hits'])} connectors")
         for hit in resp["hits"]["hits"]:
             connector_id = hit["_id"]
             if connector_id not in _CONNECTORS_CACHE:
+                logger.debug(
+                    f"=> id: {connector_id}, service_type: {hit['_source']['service_type']}"
+                )
                 _CONNECTORS_CACHE[connector_id] = BYOConnector(
                     self,
                     connector_id,
@@ -253,9 +259,13 @@ class BYOConnector:
         self._syncing = True
         job = await self._sync_starts()
         try:
+            logger.debug(f"Pinging the {data_provider} backend")
+            await data_provider.ping()
+            await asyncio.sleep(0)
+
             # TODO: where do we get language_code and analysis_icu?
             mappings, settings = defaults_for(is_connectors_index=True)
-            await data_provider.ping()
+            logger.debug("Preparing the index")
             await elastic_server.prepare_index(
                 self.index_name, mappings=mappings, settings=settings
             )

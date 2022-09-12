@@ -233,6 +233,13 @@ class ElasticServer(ESClient):
         exists = await self.client.indices.exists(
             index=index, expand_wildcards=expand_wildcards
         )
+        if exists and delete_first:
+            logger.debug(f"{index} exists, deleting...")
+            logger.debug("Deleting it first")
+            await self.client.indices.delete(
+                index=index, expand_wildcards=expand_wildcards
+            )
+            exists = False
         if exists:
             logger.debug(f"{index} exists")
             if delete_first:

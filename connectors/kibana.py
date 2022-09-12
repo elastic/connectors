@@ -6,12 +6,13 @@
 import sys
 import os
 import asyncio
+import logging
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 from envyaml import EnvYAML
 
 from connectors.byoei import ElasticServer
-from connectors.logger import logger
+from connectors.logger import logger, set_logger
 from connectors.source import get_source_klass
 from connectors.utils import validate_index_name
 
@@ -56,25 +57,26 @@ async def prepare(service_type, index_name, config):
             "scheduling": {"enabled": True, "interval": "1 * * * * *"},  # quartz syntax
             # A flag to run sync immediately
             "sync_now": True,
+            "is_native": True,
         }
 
-        print(f"Prepare {CONNECTORS_INDEX}")
+        logger.info(f"Prepare {CONNECTORS_INDEX}")
         await es.prepare_index(CONNECTORS_INDEX, docs=[doc], delete_first=True)
 
-        print(f"Prepare {JOBS_INDEX}")
+        logger.info(f"Prepare {JOBS_INDEX}")
         await es.prepare_index(JOBS_INDEX, docs=[], delete_first=True)
 
-        print(f"Delete {index_name}")
+        logger.info(f"Delete {index_name}")
         if await es.client.indices.exists(index=index_name):
             await es.client.indices.delete(index=index_name)
-        print("Done")
+        logger.info("Done")
     finally:
         await es.close()
 
 
 def _parser():
     parser = ArgumentParser(
-        prog="connector-config", formatter_class=ArgumentDefaultsHelpFormatter
+        prog="fake-kibana", formatter_class=ArgumentDefaultsHelpFormatter
     )
 
     parser.add_argument(
@@ -89,6 +91,13 @@ def _parser():
         help="Elasticsearch index",
         default="search-mongo",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        default=False,
+        help="Run the event loop in debug mode.",
+    )
+
     return parser
 
 
@@ -100,6 +109,7 @@ def main(args=None):
     if not os.path.exists(config_file):
         raise IOError(f"{config_file} does not exist")
 
+    set_logger(args.debug and logging.DEBUG or logging.INFO)
     config = EnvYAML(config_file)
     loop = asyncio.get_event_loop()
     try:
