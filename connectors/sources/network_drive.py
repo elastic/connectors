@@ -32,7 +32,6 @@ class NASDataSource(BaseDataSource):
         self.server_ip = self.configuration["server_ip"]
         self.port = self.configuration["server_port"]
         self.drive_path = self.configuration["drive_path"]
-        self._first_sync = self._dirty = True
 
     @classmethod
     def get_default_configuration(cls):
@@ -176,5 +175,3 @@ class NASDataSource(BaseDataSource):
         for path, _, _ in directory_details:
             async for file in self.get_files(path=path):
                 yield file, partial(self.get_content, file)
-
-        self._dirty = False
