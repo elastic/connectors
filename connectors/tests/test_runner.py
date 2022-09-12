@@ -209,6 +209,9 @@ async def set_server_responses(mock_responses, config=FAKE_CONFIG):
     headers = {"X-Elastic-Product": "Elasticsearch"}
 
     mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
+    )
+    mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
         payload={"hits": {"hits": [{"_id": "1", "_source": config}]}},
         headers=headers,
