@@ -34,10 +34,10 @@ class MySqlDataSource(BaseDataSource):
         """
         super().__init__(connector=connector)
         self.connection_string = {
-            "host": self.configuration["host"],
-            "port": self.configuration["port"],
-            "user": self.configuration["user"],
-            "password": self.configuration["password"],
+            "host": "tarek-database.cittdosg41ce.us-east-2.rds.amazonaws.com",  #self.configuration["host"],
+            "port": 3306,  #self.configuration["port"],
+            "user": "elastic", #self.configuration["user"],
+            "password": os.environ['MYSQL_PWD'], #self.configuration["password"],
             "db": None,
             "maxsize": MAX_POOL_SIZE,
         }
@@ -253,11 +253,12 @@ class MySqlDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        databases = (
-            self.configuration["database"]
-            if self.configuration["database"]
-            else await self._fetch_all_databases()
-        )
+        databases = ['classicmodels']
+        #(
+        #    self.configuration["database"]
+        #    if self.configuration["database"]
+        #    else await self._fetch_all_databases()
+        #)
         for database in databases:
             async for row in self.fetch_rows(database=database):
                 yield row, None
