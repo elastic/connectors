@@ -6,11 +6,15 @@
 """Network Drive source module responsible to fetch documents from Network Drive.
 """
 import asyncio
-import smbclient
+import os
+from functools import partial
 
+import smbclient
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import iso_utc
+from smbprotocol.exceptions import SMBException, SMBOSError
+
+SUPPORTED_FILETYPE = [".py", ".rst", ".rb", ".sh", ".md", ".txt"]
 
 
 class NASDataSource(BaseDataSource):
@@ -27,7 +31,7 @@ class NASDataSource(BaseDataSource):
         self.password = self.configuration["password"]
         self.server_ip = self.configuration["server_ip"]
         self.port = self.configuration["server_port"]
-
+        self.drive_path = self.configuration["drive_path"]
         self._first_sync = self._dirty = True
 
     @classmethod
@@ -49,7 +53,7 @@ class NASDataSource(BaseDataSource):
                 "type": "str",
             },
             "server_ip": {
-                "value": "1.2.3.4",
+                "value": "127.0.0.1",
                 "label": "SMB IP",
                 "type": "str",
             },
@@ -63,15 +67,16 @@ class NASDataSource(BaseDataSource):
                 "label": "SMB shared folder/directory",
                 "type": "str",
             },
+            "connector_name": {
+                "value": "Network Drive Connector",
+                "label": "Friendly name for the connector",
+                "type": "str",
+            },
         }
 
     def create_connection(self):
-        """Creates an SMB session to the shared drive.
-
-        Returns:
-            Session object for the network drive
-        """
-        return smbclient.register_session(
+        """Creates an SMB session to the shared drive."""
+        smbclient.register_session(
             server=self.server_ip,
             username=self.username,
             password=self.password,
@@ -84,12 +89,92 @@ class NASDataSource(BaseDataSource):
         await loop.run_in_executor(executor=None, func=self.create_connection)
         logger.info("Successfully connected to the Network Drive")
 
+    async def get_files(self, path):
+        """Fetches the metadata of the files present on given path
+
+        Args:
+            path (str): The path of a folder in the Network Drive
+        """
+        files = []
+        loop = asyncio.get_running_loop()
+        try:
+            files = await loop.run_in_executor(None, smbclient.scandir, path)
+        except (SMBOSError, SMBException) as exception:
+            logger.exception(f"Error while scanning the path {path}. Error {exception}")
+
+        for file in files:
+            if not file.is_dir():
+                document = {"path": file.path}
+                file_details = file._dir_info.fields
+
+                document["size"] = file_details["allocation_size"].get_value()
+                document["_id"] = file_details["file_id"].get_value()
+                document["created_at"] = (
+                    file_details["creation_time"].get_value().isoformat()
+                )
+                document["timestamp"] = (
+                    file_details["change_time"].get_value().isoformat()
+                )
+                document["title"] = file.name
+                yield document
+
+    def fetch_file_content(self, path):
+        """Fetches the file content from the given drive path
+
+        Args:
+            path (str): The file path of the file on the Network Drive
+        """
+        try:
+            with smbclient.open_file(
+                path=path, encoding="utf-8", errors="ignore"
+            ) as file:
+                return file.read()
+        except SMBOSError as error:
+            logger.error(
+                f"Cannot read the contents of file on path:{path}. Error {error}"
+            )
+
+    async def get_content(self, file, timestamp=None, doit=None):
+        """Get the content for a given file
+
+        Args:
+            file (dictionary): Formatted file document
+            timestamp (timestamp, optional): Timestamp of file last modified. Defaults to None.
+            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to None.
+
+        Returns:
+            dictionary: Content document with id, timestamp & text
+        """
+        if (
+            not doit
+            or os.path.splitext(file["title"])[-1] not in SUPPORTED_FILETYPE
+            or not file["size"]
+        ):
+            return
+
+        loop = asyncio.get_running_loop()
+        content = await loop.run_in_executor(
+            executor=None, func=partial(self.fetch_file_content, path=file["path"])
+        )
+
+        return {
+            "_id": file["id"],
+            "timestamp": file["timestamp"],
+            "text": content,
+        }
+
     async def get_docs(self):
         """Executes the logic to fetch files in async manner.
         Yields:
-            dictionary: dictionary containing meta-data of the files.
+            dictionary: Dictionary containing the Network Drive files as documents
         """
-        # TODO: Fetch documents from Network Drive in async manner.
-        # yield dummy document since this is a chunk PR.
-        yield {"_id": "123", "timestamp": iso_utc()}, None
+        loop = asyncio.get_running_loop()
+        directory_details = await loop.run_in_executor(
+            executor=None,
+            func=partial(smbclient.walk, top=rf"\\{self.server_ip}/{self.drive_path}"),
+        )
+        for path, _, _ in directory_details:
+            async for file in self.get_files(path=path):
+                yield file, partial(self.get_content, file)
+
         self._dirty = False
