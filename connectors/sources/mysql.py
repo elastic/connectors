@@ -6,6 +6,7 @@
 """MySQL source module responsible to fetch documents from MySQL"""
 from datetime import date, datetime
 from decimal import Decimal
+import os
 
 import aiomysql
 from bson import Decimal128
