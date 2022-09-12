@@ -63,6 +63,9 @@ class BaseDataSource:
         self.connector = connector
         self.configuration = connector.configuration
 
+    def __str__(self):
+        return f"Datasource `{self.__class__.__doc__}`"
+
     @classmethod
     def get_default_configuration(cls):
         """Returns a dict with a default configuration"""

@@ -12,7 +12,7 @@ from elasticsearch import AsyncElasticsearch
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
 
 
-async def verify(service_type, index_name, config):
+async def verify(service_type, index_name, size, config):
     config = config["elasticsearch"]
     host = config["host"]
     auth = config["username"], config["password"]
@@ -24,8 +24,8 @@ async def verify(service_type, index_name, config):
         count = resp["count"]
 
         print(f"Found {count} documents")
-        if count < 10000:
-            raise Exception("We want 10k+ docs")
+        if count < size:
+            raise Exception(f"We want {size} docs")
         print("🤗")
     finally:
         await client.close()
@@ -44,6 +44,7 @@ def _parser():
     parser.add_argument(
         "--index-name", type=str, help="Elasticsearch index", default="search-mongo"
     )
+    parser.add_argument("--size", type=int, help="How many docs", default=10001)
     return parser
 
 
@@ -60,7 +61,9 @@ def main(args=None):
 
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(verify(args.service_type, args.index_name, config))
+        loop.run_until_complete(
+            verify(args.service_type, args.index_name, args.size, config)
+        )
         print("Bye")
     except (asyncio.CancelledError, KeyboardInterrupt):
         print("Bye")
