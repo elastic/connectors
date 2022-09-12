@@ -6,7 +6,6 @@
 """MySQL source module responsible to fetch documents from MySQL"""
 from datetime import date, datetime
 from decimal import Decimal
-import os
 
 import aiomysql
 from bson import Decimal128
@@ -35,10 +34,10 @@ class MySqlDataSource(BaseDataSource):
         """
         super().__init__(connector=connector)
         self.connection_string = {
-            "host": "tarek-database.cittdosg41ce.us-east-2.rds.amazonaws.com",  #self.configuration["host"],
-            "port": 3306,  #self.configuration["port"],
-            "user": "elastic", #self.configuration["user"],
-            "password": os.environ['MYSQL_PWD'], #self.configuration["password"],
+            "host": self.configuration["host"],
+            "port": int(self.configuration["port"]),
+            "user": self.configuration["user"],
+            "password": self.configuration["password"],
             "db": None,
             "maxsize": MAX_POOL_SIZE,
         }
@@ -254,15 +253,13 @@ class MySqlDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        databases = ['classicmodels']
-        #(
-        #    self.configuration["database"]
-        #    if self.configuration["database"]
-        #    else await self._fetch_all_databases()
-        #)
+        db = self.configuration.get("database")
+        if isinstance(db, str):
+            databases = [db]
+        else:
+            databases = await self._fetch_all_databases()
         for database in databases:
             async for row in self.fetch_rows(database=database):
                 yield row, None
 
         self._dirty = False
-
