@@ -152,6 +152,14 @@ class SyncJob:
         return await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
 
 
+class PipelineSettings:
+    def __init__(self, pipeline):
+        self.name = pipeline.get("name", "ent-search-generic-ingestion")
+        self.extract_binary_content = pipeline.get("extract_binary_content", True)
+        self.reduce_whitespace = pipeline.get("reduce_whitespace", True)
+        self.run_ml_inference = pipeline.get("run_ml_inference", False)
+
+
 class BYOConnector:
     def __init__(self, index, connector_id, doc_source, bulk_queue_max_size=1024):
         self.doc_source = doc_source
@@ -166,6 +174,7 @@ class BYOConnector:
         self._start_time = None
         self._hb = None
         self.bulk_queue_max_size = bulk_queue_max_size
+        self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
 
     def update_config(self, doc_source):
         self.native = doc_source.get("is_native", False)
@@ -250,6 +259,14 @@ class BYOConnector:
             f" deleted. ({int(time.time() - self._start_time)} seconds)"
         )
 
+    async def prepare_docs(self, data_provider):
+        async for doc, lazy_download in data_provider.get_docs():
+            # adapt doc for pipeline settings
+            doc["_extract_binary_content"] = self.pipeline.extract_binary_content
+            doc["_reduce_whitespace"] = self.pipeline.reduce_whitespace
+            doc["_run_ml_inference"] = self.pipeline.run_ml_inference
+            yield doc, lazy_download
+
     async def sync(self, data_provider, elastic_server, idling, sync_now=False):
         service_type = self.service_type
         if not sync_now:
@@ -284,7 +301,8 @@ class BYOConnector:
 
             result = await elastic_server.async_bulk(
                 self.index_name,
-                data_provider.get_docs(),
+                self.prepare_docs(data_provider),
+                data_provider.connector.pipeline,
                 queue_size=self.bulk_queue_max_size,
             )
             await self._sync_done(job, result)
