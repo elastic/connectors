@@ -34,15 +34,6 @@ class MySqlDataSource(BaseDataSource):
             connector (BYOConnector): Object of the BYOConnector class
         """
         super().__init__(connector=connector)
-        # XXX why do we lose the value set by Kibana over time
-        self.configuration = {
-            "host": "tarek-database.cittdosg41ce.us-east-2.rds.amazonaws.com",
-            "port": 3306,
-            "user": "elastic",
-            "password": os.environ["MYSQL_PWD"],
-            "database": ["classicmodels"],
-        }
-
         self.connection_string = {
             "host": self.configuration["host"],
             "port": int(self.configuration["port"]),
@@ -264,12 +255,11 @@ class MySqlDataSource(BaseDataSource):
             dictionary: Row dictionary containing meta-data of the row.
         """
         db = self.configuration.get("database")
-        #if isinstance(db, str):
-        #    databases = [db]
-        #else:
-        #    databases = await self._fetch_all_databases()
+        if isinstance(db, str):
+            databases = [db]
+        else:
+            databases = await self._fetch_all_databases()
 
-        databases = ['classicmodels']
         for database in databases:
             async for row in self.fetch_rows(database=database):
                 yield row, None
