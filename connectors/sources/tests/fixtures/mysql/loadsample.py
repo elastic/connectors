@@ -11,9 +11,7 @@ def main():
     cursor.execute(f"CREATE DATABASE {DATABASE_NAME}")
     cursor.execute(f"USE {DATABASE_NAME}")
     for table in range(15):
-        sql_query = (
-            f"CREATE TABLE IF NOT EXISTS customers_{table} (name VARCHAR(255), age int, PRIMARY KEY (name))"
-        )
+        sql_query = f"CREATE TABLE IF NOT EXISTS customers_{table} (name VARCHAR(255), age int, PRIMARY KEY (name))"
         cursor.execute(sql_query)
         raws = []
         for raw_id in range(1000):

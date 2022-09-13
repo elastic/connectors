@@ -1,4 +1,3 @@
-#
 # Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
@@ -64,10 +63,18 @@ class BYOIndex(ESClient):
         await super().close()
 
     async def save(self, connector):
-        return await self.client.index(
+        # we never update the configuration
+        document = dict(connector.doc_source)
+
+        # read only we never update
+        for key in "api_key_id", "pipeline", "scheduling", "configuration":
+            if key in document:
+                del document[key]
+
+        return await self.client.update(
             index=CONNECTORS_INDEX,
             id=connector.id,
-            document=dict(connector.doc_source),
+            doc=document,
         )
 
     async def get_list(self):
@@ -174,6 +181,12 @@ class BYOConnector:
         if self._heartbeat_started:
             self._hb.cancel()
             self._heartbeat_started = False
+
+    async def is_configured(self):
+        if self.doc_source["status"] == e2str(Status.CONFIGURED):
+            return
+        self.doc_source["status"] = e2str(Status.CONFIGURED)
+        await self._write()
 
     async def _write(self):
         self.doc_source["last_seen"] = iso_utc()

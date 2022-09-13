@@ -139,6 +139,7 @@ class ConnectorService:
                             self.raise_if_spurious(e)
                             continue
 
+                        await connector.is_configured()
                         loop.create_task(connector.heartbeat(self.hb))
                         await connector.sync(data_source, es, self.idling, sync_now)
                         await asyncio.sleep(0)
