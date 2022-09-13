@@ -149,9 +149,7 @@ class SyncJob:
 
         job_def["status"] = e2str(self.status)
 
-        return await self.client.index(
-            index=JOBS_INDEX, id=self.job_id, document=job_def
-        )
+        return await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
 
 
 class BYOConnector:
@@ -182,10 +180,10 @@ class BYOConnector:
             self._hb.cancel()
             self._heartbeat_started = False
 
-    async def is_configured(self):
-        if self.doc_source["status"] == e2str(Status.CONFIGURED):
+    async def is_ready(self):
+        if self.doc_source["status"] == e2str(Status.CONNECTED):
             return
-        self.doc_source["status"] = e2str(Status.CONFIGURED)
+        self.doc_source["status"] = e2str(Status.CONNECTED)
         await self._write()
 
     async def _write(self):

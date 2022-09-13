@@ -57,6 +57,12 @@ async def test_sync_job(mock_responses):
         payload={"_id": "1"},
         headers=headers,
     )
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_update/1",
+        headers=headers,
+        repeat=True,
+    )
+
     await job.start()
     assert job.status == JobStatus.IN_PROGRESS
     assert job.job_id is not None
@@ -187,6 +193,11 @@ async def test_sync_mongo(mock_responses, patch_logger):
         "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc",
         payload={"_id": "1"},
         headers=headers,
+    )
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_update/1",
+        headers=headers,
+        repeat=True,
     )
     mock_responses.put(
         "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc/1",

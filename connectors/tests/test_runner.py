@@ -176,6 +176,9 @@ class FakeSource:
     async def ping(self):
         pass
 
+    async def close(self):
+        pass
+
     async def _dl(self, doc_id, timestamp=None, doit=None):
         if not doit:
             return
@@ -221,7 +224,11 @@ async def set_server_responses(mock_responses, config=FAKE_CONFIG):
         payload={"_id": "1"},
         headers=headers,
     )
-
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_update/1",
+        headers=headers,
+        repeat=True,
+    )
     mock_responses.put(
         "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc/1",
         payload={"_id": "1"},
