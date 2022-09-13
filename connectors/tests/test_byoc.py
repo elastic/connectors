@@ -173,6 +173,11 @@ async def test_sync_mongo(mock_responses, patch_logger):
         payload={"_id": "1"},
         headers=headers,
     )
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_update/1",
+        headers=headers,
+        repeat=True,
+    )
     mock_responses.put(
         "http://nowhere.com:9200/.elastic-connectors/_doc/1",
         payload={"_id": "1"},

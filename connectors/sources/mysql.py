@@ -1,4 +1,3 @@
-#
 # Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
@@ -35,7 +34,7 @@ class MySqlDataSource(BaseDataSource):
         super().__init__(connector=connector)
         self.connection_string = {
             "host": self.configuration["host"],
-            "port": self.configuration["port"],
+            "port": int(self.configuration["port"]),
             "user": self.configuration["user"],
             "password": self.configuration["password"],
             "db": None,
@@ -253,11 +252,16 @@ class MySqlDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        databases = (
-            self.configuration["database"]
-            if self.configuration["database"]
-            else await self._fetch_all_databases()
-        )
+        if isinstance(self.configuration["database"], str):
+            databases = [self.configuration["database"]]
+        elif self.configuration["database"] is None:
+            databases = []
+        else:
+            databases = self.configuration["database"]
+
+        if len(databases) == 0:
+            databases = await self._fetch_all_databases()
+
         for database in databases:
             async for row in self.fetch_rows(database=database):
                 yield row, None

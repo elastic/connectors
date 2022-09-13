@@ -239,6 +239,11 @@ async def set_server_responses(mock_responses, config=FAKE_CONFIG):
         payload={"_id": "1"},
         headers=headers,
     )
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_update/1",
+        headers=headers,
+        repeat=True,
+    )
     mock_responses.head(
         "http://nowhere.com:9200/search-airbnb?expand_wildcards=open", headers=headers
     )
