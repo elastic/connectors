@@ -32,7 +32,7 @@ services:
     networks:
       - mongo-network
     ports:
-      - 27017:27017
+      - 27021:27017
     restart: always
   kibana:
     image: docker.elastic.co/kibana/kibana:${VERSION}

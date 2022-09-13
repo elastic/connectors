@@ -1,4 +1,4 @@
-elasticsearch[async]>=8.3.1
+elasticsearch[async]>=8.4.1
 aiomysql==0.1.1
 motor>=3.0.0
 pyyaml>=6.0

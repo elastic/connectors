@@ -31,7 +31,7 @@ def mock_index_creation(index, mock_responses, hidden=True):
 
 
 @mock.patch.dict(os.environ, {"elasticsearch.password": "changeme"})
-def test_main(catch_stdout, mock_responses):
+def test_main(patch_logger, mock_responses):
     headers = {"X-Elastic-Product": "Elasticsearch"}
 
     mock_index_creation(".elastic-connectors", mock_responses)
@@ -55,5 +55,4 @@ def test_main(catch_stdout, mock_responses):
         )
         == 0
     )
-    catch_stdout.seek(0)
-    assert catch_stdout.read().strip().endswith("Done")
+    assert patch_logger.logs[-1].endswith("Done")

@@ -22,6 +22,7 @@ test:
 
 
 ftest:
-	bin/fake-kibana --index-name search-$(NAME) --service-type $(NAME)
-	bin/elastic-ingest --one-sync
-	bin/python scripts/verify.py --index-name search-$(NAME) --service-type $(NAME)
+	bin/fake-kibana --index-name search-$(NAME) --service-type $(NAME) --debug
+	bin/elastic-ingest --one-sync --sync-now
+	bin/elastic-ingest --one-sync --sync-now
+	bin/python scripts/verify.py --index-name search-$(NAME) --service-type $(NAME) --size 3000

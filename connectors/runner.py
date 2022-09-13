@@ -93,6 +93,7 @@ class ConnectorService:
         es_host = self.config["elasticsearch"]["host"]
         self.running = True
         native_service_types = self.config.get("native_service_types", [])
+        logger.debug(f"Native support for {', '.join(native_service_types)}")
 
         # XXX we can support multiple connectors but Ruby can't so let's use a
         # single id
@@ -151,6 +152,8 @@ class ConnectorService:
 
                 if not one_sync:
                     await self._sleeps.sleep(self.idling)
+                else:
+                    self.stop()
 
                 if not self.keep_alive:
                     await purge_sources()

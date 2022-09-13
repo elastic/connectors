@@ -12,6 +12,9 @@ from connectors.byoei import ElasticServer
 async def test_prepare_index(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
+    )
     mock_responses.head(
         "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
         headers=headers,

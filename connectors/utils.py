@@ -22,6 +22,8 @@ class ESClient:
             "hosts": [config["host"]],
             "request_timeout": config.get("request_timeout", 120),
         }
+        logger.debug(f"Host is {config['host']}")
+
         if "username" in config:
             if "api_key" in config:
                 raise KeyError("You can't use basic auth and Api Key at the same time")
