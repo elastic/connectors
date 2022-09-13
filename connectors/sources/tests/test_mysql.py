@@ -137,7 +137,9 @@ async def test__execute_query():
     source.connection_pool.acquire.cursor = Cursor
 
     # Execute
-    with mock.patch.object(aiomysql, "create_pool", return_value=mock_mysql_response()):
+    with mock.patch.object(
+        aiomysql, "create_pool", return_value=(await mock_mysql_response())
+    ):
         response = await source._execute_query(query="select * from table")
 
         # Assert
@@ -155,7 +157,9 @@ async def test__execute_query_negative():
     source.connection_pool.acquire.cursor = Cursor
 
     # Execute
-    with mock.patch.object(aiomysql, "create_pool", return_value=mock_mysql_response()):
+    with mock.patch.object(
+        aiomysql, "create_pool", return_value=(await mock_mysql_response())
+    ):
         with pytest.raises(Exception):
             await source._execute_query()
 
@@ -204,7 +208,9 @@ async def test_create_document():
     query = "select * from table"
 
     # Execute
-    with mock.patch.object(aiomysql, "create_pool", return_value=mock_mysql_response()):
+    with mock.patch.object(
+        aiomysql, "create_pool", return_value=(await mock_mysql_response())
+    ):
         response = await source._execute_query(query)
 
         mock.patch("source._execute_query", return_value=response)
@@ -236,7 +242,9 @@ async def test_fetch_rows():
     query = "select * from table"
 
     # Execute
-    with mock.patch.object(aiomysql, "create_pool", return_value=mock_mysql_response()):
+    with mock.patch.object(
+        aiomysql, "create_pool", return_value=(await mock_mysql_response())
+    ):
         response = await source._execute_query(query)
 
         mock.patch("source._execute_query", return_value=response)
@@ -258,7 +266,9 @@ async def test_fetch_all_databases():
 
     query = "SHOW DATABASES"
 
-    with mock.patch.object(aiomysql, "create_pool", return_value=mock_mysql_response()):
+    with mock.patch.object(
+        aiomysql, "create_pool", return_value=(await mock_mysql_response())
+    ):
         response = await source._execute_query(query)
 
         mock.patch("source._execute_query", return_value=response)
@@ -293,7 +303,9 @@ async def test_get_docs():
     source.connection_pool.acquire = Connection
     source.connection_pool.acquire.cursor = Cursor
 
-    with mock.patch.object(aiomysql, "create_pool", return_value=mock_mysql_response()):
+    with mock.patch.object(
+        aiomysql, "create_pool", return_value=(await mock_mysql_response())
+    ):
         source.fetch_rows = mock.MagicMock(return_value=AsyncIter([{"a": 1, "b": 2}]))
 
     # Execute
