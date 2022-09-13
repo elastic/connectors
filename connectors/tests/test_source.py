@@ -46,6 +46,12 @@ def test_data_source_configuration():
     assert c["new"] == "one"
 
 
+def test_default():
+    c = DataSourceConfiguration(CONFIG)
+    assert c.get("database") == "sample_airbnb"
+    assert c.get("dd", 1) == 1
+
+
 class MyConnector:
     service_type = "yea"
 

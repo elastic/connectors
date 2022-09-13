@@ -43,6 +43,11 @@ class DataSourceConfiguration:
     def __getitem__(self, key):
         return self._config[key].value
 
+    def get(self, key, default=None):
+        if key not in self._config:
+            return default
+        return self._config[key].value
+
     def has_field(self, name):
         return name in self._config
 
