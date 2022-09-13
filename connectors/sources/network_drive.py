@@ -88,6 +88,16 @@ class NASDataSource(BaseDataSource):
         await loop.run_in_executor(executor=None, func=self.create_connection)
         logger.info("Successfully connected to the Network Drive")
 
+    async def close(self):
+        """Close all the open smb sessions"""
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            executor=None,
+            func=partial(
+                smbclient.delete_session, server=self.server_ip, port=self.port
+            ),
+        )
+
     async def get_files(self, path):
         """Fetches the metadata of the files present on given path
 
