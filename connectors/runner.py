@@ -111,6 +111,9 @@ class ConnectorService:
         logger.info(f"Service started, listening to events from {es_host}")
         try:
             while self.running:
+                if not (await self.connectors.kibana_ready()):
+                    continue
+
                 logger.debug(f"Polling every {self.idling} seconds")
                 try:
                     async for connector in self.connectors.get_list():

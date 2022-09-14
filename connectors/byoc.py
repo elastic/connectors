@@ -58,6 +58,13 @@ class BYOIndex(ESClient):
         logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
         self.bulk_queue_max_size = elastic_config.get("bulk_queue_max_size", 1024)
 
+    async def kibana_ready(self):
+        for index in (JOBS_INDEX, CONNECTORS_INDEX):
+            if not (await self.index_exist(index)):
+                logger.debug(f"{index} does not exist -- we won't poll")
+                return False
+        return True
+
     async def close(self):
         await purge_cache()
         await super().close()

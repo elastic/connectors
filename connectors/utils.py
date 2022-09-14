@@ -64,6 +64,17 @@ class ESClient:
     async def ping(self):
         return await self.client.ping()
 
+    async def index_exist(self, index):
+        if index.startswith("."):
+            expand_wildcards = "hidden"
+        else:
+            expand_wildcards = "open"
+
+        logger.debug(f"Checking index {index} exists")
+        return await self.client.indices.exists(
+            index=index, expand_wildcards=expand_wildcards
+        )
+
     async def wait(self):
         backoff = self.initial_backoff_duration
         start = time.time()
