@@ -83,7 +83,7 @@ mongo = {
         },
     },
     "index_name": "search-airbnb",
-    "service_type": "mongo",
+    "service_type": "mongodb",
     "status": "configured",
     "last_sync_status": "null",
     "last_sync_error": "",
