@@ -152,6 +152,7 @@ class ConnectorService:
                     self.raise_if_spurious(e)
 
                 if not one_sync:
+                    logger.debug(f"Sleeping for {self.idling} seconds")
                     await self._sleeps.sleep(self.idling)
                 else:
                     self.stop()

@@ -62,14 +62,13 @@ class BYOIndex(ESClient):
         await purge_cache()
         await super().close()
 
-    async def save(self, connector):
+    async def save(self, connector, fields):
         # we never update the configuration
-        document = dict(connector.doc_source)
-
-        # read only we never update
-        for key in "api_key_id", "pipeline", "scheduling", "configuration":
-            if key in document:
-                del document[key]
+        document = {}
+        for key, value in connector.doc_source.items():
+            if key not in fields:
+                continue
+            document[key] = value
 
         return await self.client.update(
             index=CONNECTORS_INDEX,
@@ -131,6 +130,7 @@ class SyncJob:
             "updated_at": self.created_at,
         }
         resp = await self.client.index(index=JOBS_INDEX, document=job_def)
+        await self.client.indices.refresh(index=JOBS_INDEX)
         self.job_id = resp["_id"]
         return self.job_id
 
@@ -149,16 +149,20 @@ class SyncJob:
 
         job_def["status"] = e2str(self.status)
 
-        return await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
+        try:
+            return await self.client.update(
+                index=JOBS_INDEX, id=self.job_id, doc=job_def
+            )
+        finally:
+            await self.client.indices.refresh(index=JOBS_INDEX)
 
 
 class BYOConnector:
     def __init__(self, index, connector_id, doc_source, bulk_queue_max_size=1024):
-        self.doc_source = doc_source
         self.id = connector_id
         self.index = index
-        self.update_config(doc_source)
         self.client = index.client
+        self.update_config(doc_source)
         self.doc_source["status"] = e2str(Status.CONNECTED)
         self.doc_source["last_seen"] = iso_utc()
         self._heartbeat_started = self._syncing = False
@@ -168,6 +172,7 @@ class BYOConnector:
         self.bulk_queue_max_size = bulk_queue_max_size
 
     def update_config(self, doc_source):
+        self.doc_source = doc_source
         self.native = doc_source.get("is_native", False)
         self.service_type = doc_source["service_type"]
         self.index_name = doc_source["index_name"]
@@ -184,11 +189,14 @@ class BYOConnector:
         if self.doc_source["status"] == e2str(Status.CONNECTED):
             return
         self.doc_source["status"] = e2str(Status.CONNECTED)
-        await self._write()
+        await self._write("status")
 
-    async def _write(self):
+    async def _write(self, *fields):
+        fields = list(fields)
+        if "last_seen" not in fields:
+            fields.append("last_seen")
         self.doc_source["last_seen"] = iso_utc()
-        await self.index.save(self)
+        await self.index.save(self, fields)
 
     async def heartbeat(self, delay):
         if self._heartbeat_started:
@@ -200,7 +208,7 @@ class BYOConnector:
                 logger.debug(f"*** BEAT every {delay} seconds")
                 if not self._syncing:
                     self.doc_source["last_seen"] = iso_utc()
-                    await self._write()
+                    await self._write("last_seen")
                 await asyncio.sleep(delay)
 
         self._hb = asyncio.create_task(_heartbeat())
@@ -210,6 +218,7 @@ class BYOConnector:
 
         If the function returns -1, no sync is scheduled.
         """
+        logger.debug(self.doc_source)
         if self.doc_source["sync_now"]:
             return 0
         if not self.scheduling["enabled"]:
@@ -222,7 +231,7 @@ class BYOConnector:
 
         self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
-        await self._write()
+        await self._write("sync_now", "last_sync_status")
 
         self._start_time = time.time()
         logger.info(f"Sync starts, Job id: {job_id}")
@@ -244,7 +253,8 @@ class BYOConnector:
         else:
             self.doc_source["last_sync_error"] = str(exception)
         self.doc_source["last_synced"] = iso_utc()
-        await self._write()
+        await self._write("last_sync_status", "last_sync_error", "last_synced")
+
         logger.info(
             f"Sync done: {indexed_count} indexed, {doc_deleted} "
             f" deleted. ({int(time.time() - self._start_time)} seconds)"
