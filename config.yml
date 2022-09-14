@@ -25,7 +25,7 @@ native_service_types:
 #connector_id: '1'
 
 sources:
-  mongo: connectors.sources.mongo:MongoDataSource
+  mongodb: connectors.sources.mongo:MongoDataSource
   s3: connectors.sources.aws:S3DataSource
   dir: connectors.sources.directory:DirectoryDataSource
   mysql: connectors.sources.mysql:MySqlDataSource
