@@ -60,8 +60,14 @@ class BYOIndex(ESClient):
 
     async def kibana_ready(self):
         for index in (JOBS_INDEX, CONNECTORS_INDEX):
-            if not (await self.index_exist(index)):
-                logger.debug(f"{index} does not exist -- we won't poll")
+            try:
+                if not (await self.index_exist(index)):
+                    logger.debug(f"{index} does not exist -- we won't poll")
+                    return False
+                await self.client.indices.refresh(index=index)
+            except ApiError as e:
+                logger.critical(f"The server returned {e.status_code}")
+                logger.critical(e.body, exc_info=True)
                 return False
         return True
 
