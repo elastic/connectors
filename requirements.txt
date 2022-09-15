@@ -1,4 +1,5 @@
 elasticsearch[async]>=8.4.1
+multidict
 aiomysql
 motor
 pyyaml
