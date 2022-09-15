@@ -1,6 +1,6 @@
 elasticsearch[async]>=8.4.1
 aiomysql
-motor>=3.0.0
+motor
 pyyaml>=6.0
 aioboto3>=9.6.0
 pytz>=2022.1
