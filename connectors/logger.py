@@ -19,6 +19,13 @@ def _formatter(prefix):
     )
 
 
+class ExtraLogger(logging.Logger):
+    def _log(self, level, msg, args, exc_info=None, extra=None):
+        if extra is None:
+            extra = {"service.name": "connectors-python"}
+        super(ExtraLogger, self)._log(level, msg, args, exc_info, extra)
+
+
 def set_logger(log_level=logging.INFO, filebeat=False):
     global logger
     if filebeat:
@@ -27,6 +34,7 @@ def set_logger(log_level=logging.INFO, filebeat=False):
         formatter = _formatter("FMWK")
 
     if logger is None:
+        logging.setLoggerClass(ExtraLogger)
         logger = logging.getLogger("connectors")
         handler = logging.StreamHandler()
         logger.addHandler(handler)
