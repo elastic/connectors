@@ -16,6 +16,7 @@ from connectors.quartz import QuartzCron
 
 class ESClient:
     def __init__(self, config):
+        self.config = config
         self.host = config["host"]
         self._sleeps = CancellableSleeps()
         options = {
