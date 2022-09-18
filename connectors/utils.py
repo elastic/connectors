@@ -22,6 +22,7 @@ class ESClient:
         options = {
             "hosts": [config["host"]],
             "request_timeout": config.get("request_timeout", 120),
+            "retry_on_timeout":  True
         }
         logger.debug(f"Host is {config['host']}")
 
