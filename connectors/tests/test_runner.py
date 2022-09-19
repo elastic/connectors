@@ -18,7 +18,6 @@ from connectors.conftest import assert_re
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 ES_CONFIG = os.path.join(os.path.dirname(__file__), "entsearch.yml")
 CONFIG_2 = os.path.join(os.path.dirname(__file__), "config_2.yml")
-CONFIG_KEEP_ALIVE = os.path.join(os.path.dirname(__file__), "config_keep_alive.yml")
 
 
 FAKE_CONFIG = {
@@ -456,12 +455,16 @@ async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_e
     )
 
     try:
-        service = ConnectorService(CONFIG_KEEP_ALIVE)
+        service = ConnectorService(CONFIG)
         asyncio.get_event_loop().call_soon(service.stop)
         await service.poll()
-    except Exception:
-        pass
+    except Exception as e:
+        print("START: CAUGHT EXCEPTION")
+        print(e)
+        print("END: CAUGHT EXCEPTION")
     finally:
         BYOConnector.sync = old_sync
+        for log in patch_logger.logs:
+            print(log)
 
     assert isinstance(patch_logger.logs[-3], Exception)
