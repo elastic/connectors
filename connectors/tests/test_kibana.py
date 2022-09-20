@@ -55,4 +55,4 @@ def test_main(patch_logger, mock_responses):
         )
         == 0
     )
-    assert patch_logger.logs[-1].endswith("Done")
+    patch_logger.assert_present("Done")
