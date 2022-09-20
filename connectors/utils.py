@@ -8,7 +8,7 @@ import logging
 import time
 import asyncio
 
-from elasticsearch import AsyncElasticsearch
+from elasticsearch import AsyncElasticsearch, ApiError
 
 from connectors.logger import set_extra_logger, logger
 from connectors.quartz import QuartzCron
@@ -64,7 +64,14 @@ class ESClient:
         await self.client.close()
 
     async def ping(self):
-        return await self.client.ping()
+        try:
+            await self.client.info()
+        except ApiError as e:
+            logger.error(f"The server returned a {e.status_code} code")
+            if e.info is not None and "error" in e.info and "reason" in e.info["error"]:
+                logger.error(e.info["error"]["reason"])
+            return False
+        return True
 
     async def wait(self):
         backoff = self.initial_backoff_duration
