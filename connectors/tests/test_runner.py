@@ -434,7 +434,7 @@ async def test_spurious(mock_responses, patch_logger, patch_ping, set_env):
     finally:
         BYOConnector.sync = old_sync
 
-    assert patch_logger.logs[-1].args[0] == "me"
+    assert patch_logger.logs[-2].args[0] == "me"
 
 
 @pytest.mark.asyncio
@@ -467,4 +467,4 @@ async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_e
     finally:
         BYOConnector.sync = old_sync
 
-    assert isinstance(patch_logger.logs[-3], Exception)
+    assert isinstance(patch_logger.logs[-4], Exception)

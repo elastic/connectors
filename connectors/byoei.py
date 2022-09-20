@@ -7,7 +7,6 @@
 Implementation of BYOEI protocol (+some ids collecting)
 """
 import time
-import traceback
 from collections import defaultdict
 import asyncio
 
@@ -204,8 +203,6 @@ class Fetcher:
                 )
                 await asyncio.sleep(0)
         except Exception as e:
-            logger.critical(e)
-            traceback.print_exc()
             logger.critical("The document fetcher failed", exc_info=True)
             await self._downloads.put("END")
             await self.queue.put("FETCH_ERROR")
