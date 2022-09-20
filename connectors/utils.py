@@ -68,7 +68,7 @@ class ESClient:
             await self.client.info()
         except ApiError as e:
             logger.error(f"The server returned a {e.status_code} code")
-            if "error" in e.info and "reason" in e.info["error"]:
+            if e.info is not None and "error" in e.info and "reason" in e.info["error"]:
                 logger.error(e.info["error"]["reason"])
             return False
         return True
