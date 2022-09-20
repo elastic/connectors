@@ -20,13 +20,13 @@ from connectors.utils import iso_utc, ESClient
 class Bulker:
     """Send bulk operations in batches by consuming a queue."""
 
-    def __init__(self, client, queue):
+    def __init__(self, client, queue, chunk_size):
         self.client = client
         self.queue = queue
         self.bulk_time = 0
         self.bulking = False
         self.ops = defaultdict(int)
-        self.chunk_size = 500
+        self.chunk_size = chunk_size
 
     async def _batch_bulk(self, operations):
         # todo treat result to retry errors like in async_streaming_bulk
@@ -321,7 +321,7 @@ class ElasticServer(ESClient):
         fetcher_task = asyncio.create_task(fetcher.run(generator))
 
         # start the bulker
-        bulker = Bulker(self.client, stream)
+        bulker = Bulker(self.client, stream, self.config.get("bulk_chunk_size", 500))
         bulker_task = asyncio.create_task(bulker.run())
 
         await asyncio.gather(fetcher_task, bulker_task)
