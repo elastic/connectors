@@ -46,7 +46,7 @@ A source class can be any Python class, and is declared into the
 .. code-block:: yaml
 
   sources:
-    mongo: connectors.sources.mongo:MongoDataSource
+    mongodb: connectors.sources.mongo:MongoDataSource
     s3: connectors.sources.aws:S3DataSource
 
 

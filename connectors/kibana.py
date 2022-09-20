@@ -83,7 +83,7 @@ def _parser():
         "--config-file", type=str, help="Configuration file", default=DEFAULT_CONFIG
     )
     parser.add_argument(
-        "--service-type", type=str, help="Service type", default="mongo"
+        "--service-type", type=str, help="Service type", default="mongodb"
     )
     parser.add_argument(
         "--index-name",
