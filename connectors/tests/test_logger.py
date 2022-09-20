@@ -28,6 +28,6 @@ def test_logger_filebeat():
     logger.debug("filbeat")
     ecs_log = logs[0]
 
-    # make sure it's JSON and we have service.name
+    # make sure it's JSON and we have service.type
     data = json.loads(ecs_log)
-    assert data["service"]["name"] == "connectors-python"
+    assert data["service"]["type"] == "connectors-python"

@@ -8,6 +8,7 @@ Logger -- sets the logging and provides a `logger` global object.
 """
 import logging
 import ecs_logging
+from connectors import __version__
 
 logger = None
 
@@ -22,7 +23,8 @@ def _formatter(prefix):
 class ExtraLogger(logging.Logger):
     def _log(self, level, msg, args, exc_info=None, extra=None):
         if extra is None:
-            extra = {"service.name": "connectors-python"}
+            extra = {"service.type": "connectors-python",
+                     "service.version": __version__}
         super(ExtraLogger, self)._log(level, msg, args, exc_info, extra)
 
 
