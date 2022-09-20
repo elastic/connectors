@@ -20,7 +20,6 @@ from connectors.utils import iso_utc, ESClient
 class Bulker:
     """Send bulk operations in batches by consuming a queue."""
 
-
     def __init__(self, client, queue, chunk_size, pipeline_settings):
         self.client = client
         self.queue = queue
@@ -331,7 +330,9 @@ class ElasticServer(ESClient):
         fetcher_task = asyncio.create_task(fetcher.run(generator))
 
         # start the bulker
-        bulker = Bulker(self.client, stream, self.config.get("bulk_chunk_size", 500), pipeline)
+        bulker = Bulker(
+            self.client, stream, self.config.get("bulk_chunk_size", 500), pipeline
+        )
         bulker_task = asyncio.create_task(bulker.run())
 
         await asyncio.gather(fetcher_task, bulker_task)
