@@ -5,29 +5,41 @@
 #
 import logging
 import json
+from contextlib import contextmanager
 
 import connectors.logger
 from connectors.logger import logger, set_logger
 
 
-def test_logger():
+@contextmanager
+def unset_logger():
+    old = connectors.logger.logger
     connectors.logger.logger = None
-    set_logger(logging.DEBUG)
-    assert logger.level == logging.DEBUG
+    try:
+        yield
+    finally:
+        if old is not None:
+            connectors.logger.logger = logger
+
+
+def test_logger():
+    with unset_logger():
+        logger = set_logger(logging.DEBUG)
+        assert logger.level == logging.DEBUG
 
 
 def test_logger_filebeat():
-    connectors.logger.logger = None
-    logger = set_logger(logging.DEBUG, filebeat=True)
-    logs = []
+    with unset_logger():
+        logger = set_logger(logging.DEBUG, filebeat=True)
+        logs = []
 
-    def _w(msg):
-        logs.append(msg)
+        def _w(msg):
+            logs.append(msg)
 
-    logger.handlers[0].stream.write = _w
-    logger.debug("filbeat")
-    ecs_log = logs[0]
+        logger.handlers[0].stream.write = _w
+        logger.debug("filbeat")
+        ecs_log = logs[0]
 
-    # make sure it's JSON and we have service.type
-    data = json.loads(ecs_log)
-    assert data["service"]["type"] == "connectors-python"
+        # make sure it's JSON and we have service.type
+        data = json.loads(ecs_log)
+        assert data["service"]["type"] == "connectors-python"
