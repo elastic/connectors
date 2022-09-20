@@ -26,11 +26,23 @@ class Logger:
         if exc_info:
             self.logs.append(traceback.format_exc())
 
-    def assert_present(self, msg):
+    def assert_instance(self, instance):
         for log in self.logs:
-            if msg in log:
+            if isinstance(log, instance):
                 return
-        raise AssertionError(f"{msg} not found in {self.logs}")
+        raise AssertionError(f"Could not find an instance of {instance}")
+
+    def assert_present(self, lines):
+        if isinstance(lines, str):
+            lines = [lines]
+        for msg in lines:
+            found = False
+            for log in self.logs:
+                if msg in log:
+                    found = True
+                    break
+            if not found:
+                raise AssertionError(f"'{msg}' not found in {self.logs}")
 
     error = exception = critical = info = debug
 
@@ -79,7 +91,7 @@ def patch_logger(silent=True):
 
     methods = ("exception", "error", "critical", "info", "debug")
     for method in methods:
-        setattr(logger, f"_old_{method}", method)
+        setattr(logger, f"_old_{method}", getattr(logger, method))
         setattr(logger, method, new_logger.info)
 
     try:
