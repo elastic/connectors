@@ -105,7 +105,7 @@ We require the connector to have a unit test and to have a 90% coverage reported
 
 If this first step pass, we'll start your Docker instance or configure your backend, then run::
 
-   make ftest NAME=mongo
+   make ftest NAME=mongodb
 
 This will configure the connector in Elasticsearch to run a full sync.
 The script will verify that the Elasticsearch index receives documents.
