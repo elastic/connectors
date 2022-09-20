@@ -20,19 +20,23 @@ from connectors.utils import iso_utc, ESClient
 class Bulker:
     """Send bulk operations in batches by consuming a queue."""
 
-    def __init__(self, client, queue, chunk_size):
+
+    def __init__(self, client, queue, chunk_size, pipeline_settings):
         self.client = client
         self.queue = queue
         self.bulk_time = 0
         self.bulking = False
         self.ops = defaultdict(int)
         self.chunk_size = chunk_size
+        self.pipeline_settings = pipeline_settings
 
     async def _batch_bulk(self, operations):
         # todo treat result to retry errors like in async_streaming_bulk
         start = time.time()
         try:
-            res = await self.client.bulk(operations=operations)
+            res = await self.client.bulk(
+                operations=operations, pipeline=self.pipeline_settings.name
+            )
         finally:
             self.bulk_time += time.time() - start
 
@@ -84,7 +88,13 @@ class Fetcher:
     """Grab data and add them in the queue for the bulker"""
 
     def __init__(
-        self, client, queue, index, existing_ids, existing_timestamps, queue_size=1024
+        self,
+        client,
+        queue,
+        index,
+        existing_ids,
+        existing_timestamps,
+        queue_size=1024,
     ):
         self.client = client
         self.queue = queue
@@ -294,7 +304,7 @@ class ElasticServer(ESClient):
         ):
             yield doc["_source"]
 
-    async def async_bulk(self, index, generator, queue_size=1024):
+    async def async_bulk(self, index, generator, pipeline, queue_size=1024):
         start = time.time()
         existing_ids = set()
         existing_timestamps = {}
@@ -321,7 +331,7 @@ class ElasticServer(ESClient):
         fetcher_task = asyncio.create_task(fetcher.run(generator))
 
         # start the bulker
-        bulker = Bulker(self.client, stream, self.config.get("bulk_chunk_size", 500))
+        bulker = Bulker(self.client, stream, self.config.get("bulk_chunk_size", 500), pipeline)
         bulker_task = asyncio.create_task(bulker.run())
 
         await asyncio.gather(fetcher_task, bulker_task)

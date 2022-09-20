@@ -7,3 +7,7 @@ include
 pyvenv.cfg
 *.egg-info
 __pycache__
+
+# jetbrains files
+.idea
+*.iml

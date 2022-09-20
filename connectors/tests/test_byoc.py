@@ -19,6 +19,7 @@ from connectors.byoc import (
     JobStatus,
     BYOIndex,
     _CONNECTORS_CACHE,
+    BYOConnector,
 )
 
 
@@ -239,14 +240,21 @@ async def test_sync_mongo(mock_responses, patch_logger):
         headers=headers,
     )
     mock_responses.put(
-        "http://nowhere.com:9200/_bulk",
+        "http://nowhere.com:9200/_bulk?pipeline=ent-search-generic-ingestion",
         payload={"items": []},
         headers=headers,
     )
 
     doc = {"_id": 1}
 
+    class StubIndex:
+        def __init__(self):
+            self.client = None
+
     class Data:
+        def __init__(self):
+            self.connector = self.make_connector()
+
         async def ping(self):
             pass
 
@@ -256,6 +264,16 @@ async def test_sync_mongo(mock_responses, patch_logger):
         async def get_docs(self, *args, **kw):
             for d in [doc, doc]:
                 yield {"_id": 1}, None
+
+        def make_connector(self):
+            index_name = "search-some-index"
+            connector_src = {
+                "service_type": "test",
+                "index_name": index_name,
+                "configuration": {},
+                "scheduling": {},
+            }
+            return BYOConnector(StubIndex(), "test", connector_src)
 
     es = ElasticServer(config)
     connectors = BYOIndex(config)

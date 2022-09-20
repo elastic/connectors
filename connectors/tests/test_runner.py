@@ -166,6 +166,7 @@ class FakeSource:
     service_type = "fake"
 
     def __init__(self, connector):
+        self.connector = connector
         if connector.configuration.has_field("raise"):
             raise Exception("I break on init")
         self.fail = connector.configuration.has_field("fail")
@@ -284,7 +285,7 @@ async def set_server_responses(mock_responses, config=FAKE_CONFIG):
         headers=headers,
     )
     mock_responses.put(
-        "http://nowhere.com:9200/_bulk",
+        "http://nowhere.com:9200/_bulk?pipeline=ent-search-generic-ingestion",
         payload={"items": []},
         headers=headers,
         repeat=True,
@@ -333,6 +334,8 @@ async def test_connector_service_poll_with_entsearch(
         service = ConnectorService(CONFIG)
         asyncio.get_event_loop().call_soon(service.stop)
         await service.poll()
+        for log in patch_logger.logs:
+            print(log)
         assert "Sync done: 1 indexed, 0  deleted. (0 seconds)" in patch_logger.logs
 
 
@@ -431,7 +434,7 @@ async def test_spurious(mock_responses, patch_logger, patch_ping, set_env):
     finally:
         BYOConnector.sync = old_sync
 
-    assert patch_logger.logs[-1].args[0] == "me"
+    assert patch_logger.logs[-2].args[0] == "me"
 
 
 @pytest.mark.asyncio
@@ -464,4 +467,4 @@ async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_e
     finally:
         BYOConnector.sync = old_sync
 
-    assert isinstance(patch_logger.logs[-3], Exception)
+    assert isinstance(patch_logger.logs[-4], Exception)
