@@ -157,7 +157,7 @@ def test_bad_config():
 async def test_connector_service_list(patch_logger, set_env):
     service = ConnectorService(CONFIG)
     await service.get_list()
-    assert patch_logger.logs == ["Registered connectors:", "- Fakey", "- Phatey"]
+    patch_logger.assert_present(["Registered connectors:", "- Fakey", "- Phatey"])
 
 
 class FakeSource:
@@ -300,7 +300,7 @@ async def test_connector_service_poll(
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
-    assert "Sync done: 1 indexed, 0  deleted. (0 seconds)" in patch_logger.logs
+    patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
 
 
 @pytest.mark.asyncio
@@ -322,7 +322,7 @@ async def test_connector_service_poll_not_native(
     service = ConnectorService(CONFIG_2)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
-    assert "Connector 1 of type fake not supported, ignoring" in patch_logger.logs
+    patch_logger.assert_present("Connector 1 of type fake not supported, ignoring")
 
 
 @pytest.mark.asyncio
@@ -336,7 +336,7 @@ async def test_connector_service_poll_with_entsearch(
         await service.poll()
         for log in patch_logger.logs:
             print(log)
-        assert "Sync done: 1 indexed, 0  deleted. (0 seconds)" in patch_logger.logs
+        patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
 
 
 @pytest.mark.asyncio
@@ -347,7 +347,7 @@ async def test_connector_service_poll_sync_now(
     service = ConnectorService(CONFIG)
     # one_sync means it won't loop forever
     await service.poll(sync_now=True, one_sync=True)
-    assert "Sync done: 1 indexed, 0  deleted. (0 seconds)" in patch_logger.logs
+    patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
 
 
 @pytest.mark.asyncio
@@ -359,7 +359,7 @@ async def test_connector_service_poll_sync_fails(
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
-    assert "The document fetcher failed" in patch_logger.logs
+    patch_logger.assert_present("The document fetcher failed")
 
 
 @pytest.mark.asyncio
@@ -371,7 +371,7 @@ async def test_connector_service_poll_unknown_service(
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
-    assert "Can't handle source of type UNKNOWN" in patch_logger.logs
+    patch_logger.assert_present("Can't handle source of type UNKNOWN")
 
 
 @pytest.mark.asyncio
@@ -394,7 +394,9 @@ def test_connector_service_run(mock_responses, patch_logger, set_env):
     args.config_file = CONFIG
     args.action = "list"
     assert run(args) == 0
-    assert patch_logger.logs == ["Registered connectors:", "- Fakey", "- Phatey", "Bye"]
+    patch_logger.assert_present(
+        ["Registered connectors:", "- Fakey", "- Phatey", "Bye"]
+    )
 
 
 @pytest.mark.asyncio
@@ -409,7 +411,7 @@ async def test_ping_fails(mock_responses, patch_logger, set_env):
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
-    assert patch_logger.logs[-1] == "http://nowhere.com:9200 seem down. Bye!"
+    patch_logger.assert_present("http://nowhere.com:9200 seem down. Bye!")
 
 
 @pytest.mark.asyncio
@@ -434,7 +436,9 @@ async def test_spurious(mock_responses, patch_logger, patch_ping, set_env):
     finally:
         BYOConnector.sync = old_sync
 
-    assert patch_logger.logs[-2].args[0] == "me"
+    patch_logger.assert_check(
+        lambda log: isinstance(log, Exception) and log.args[0] == "me"
+    )
 
 
 @pytest.mark.asyncio
@@ -467,4 +471,4 @@ async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_e
     finally:
         BYOConnector.sync = old_sync
 
-    assert isinstance(patch_logger.logs[-4], Exception)
+    patch_logger.assert_instance(Exception)

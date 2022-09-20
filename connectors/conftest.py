@@ -26,6 +26,30 @@ class Logger:
         if exc_info:
             self.logs.append(traceback.format_exc())
 
+    def assert_check(self, callable):
+        for log in self.logs:
+            if callable(log):
+                return
+        raise AssertionError(f"{callable} returned False for {self.logs}")
+
+    def assert_instance(self, instance):
+        for log in self.logs:
+            if isinstance(log, instance):
+                return
+        raise AssertionError(f"Could not find an instance of {instance}")
+
+    def assert_present(self, lines):
+        if isinstance(lines, str):
+            lines = [lines]
+        for msg in lines:
+            found = False
+            for log in self.logs:
+                if msg in log:
+                    found = True
+                    break
+            if not found:
+                raise AssertionError(f"'{msg}' not found in {self.logs}")
+
     error = exception = critical = info = debug
 
 
@@ -71,23 +95,17 @@ def patch_logger(silent=True):
 
     from connectors.logger import logger
 
-    logger._old_exception = logger.exception
-    logger._old_critical = logger.critical
-    logger._old_info = logger.info
-    logger._old_debug = logger.debug
-
-    logger.exception = new_logger.debug
-    logger.critical = new_logger.debug
-    logger.info = new_logger.debug
-    logger.debug = new_logger.debug
+    methods = ("exception", "error", "critical", "info", "debug")
+    for method in methods:
+        setattr(logger, f"_old_{method}", getattr(logger, method))
+        setattr(logger, method, new_logger.info)
 
     try:
         yield new_logger
     finally:
-        logger.exception = logger._old_exception
-        logger.critical = logger._old_critical
-        logger.info = logger._old_info
-        logger.debug = logger._old_debug
+        for method in methods:
+            setattr(logger, method, getattr(logger, f"_old_{method}"))
+            delattr(logger, f"_old_{method}")
 
 
 @pytest.fixture(scope="module")
