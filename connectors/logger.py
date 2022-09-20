@@ -6,6 +6,7 @@
 """
 Logger -- sets the logging and provides a `logger` global object.
 """
+from datetime import datetime
 import logging
 import ecs_logging
 from connectors import __version__
@@ -24,7 +25,9 @@ class ExtraLogger(logging.Logger):
     def _log(self, level, msg, args, exc_info=None, extra=None):
         if extra is None:
             extra = {"service.type": "connectors-python",
-                     "service.version": __version__}
+                     "service.version": __version__
+                     "labels.index_date": datetime.now().strftime('%Y.%m.%d')
+                    }
         super(ExtraLogger, self)._log(level, msg, args, exc_info, extra)
 
 
