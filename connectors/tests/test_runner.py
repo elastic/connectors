@@ -436,8 +436,9 @@ async def test_spurious(mock_responses, patch_logger, patch_ping, set_env):
     finally:
         BYOConnector.sync = old_sync
 
-    # XXX need a more sophisticated assert method
-    assert patch_logger.logs[-1].args[0] == "me"
+    patch_logger.assert_check(
+        lambda log: isinstance(log, Exception) and log.args[0] == "me"
+    )
 
 
 @pytest.mark.asyncio
