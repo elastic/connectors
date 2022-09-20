@@ -16,13 +16,15 @@ from connectors.quartz import QuartzCron
 
 class ESClient:
     def __init__(self, config):
-        self.host = config["host"]
+        self.config = config
+        self.host = config.get("host", "http://localhost:9200")
         self._sleeps = CancellableSleeps()
         options = {
-            "hosts": [config["host"]],
+            "hosts": [self.host],
             "request_timeout": config.get("request_timeout", 120),
+            "retry_on_timeout": config.get("retry_on_timeout", True),
         }
-        logger.debug(f"Host is {config['host']}")
+        logger.debug(f"Host is {self.host}")
 
         if "username" in config:
             if "api_key" in config:
