@@ -8,6 +8,7 @@ import sys
 import os
 import asyncio
 import re
+import traceback
 
 import pytest
 from aioresponses import aioresponses
@@ -18,10 +19,12 @@ class Logger:
         self.logs = []
         self.silent = silent
 
-    def debug(self, msg, exc_info=True):
+    def debug(self, msg, exc_info=False):
         if not self.silent:
             print(msg)
         self.logs.append(msg)
+        if exc_info:
+            self.logs.append(traceback.format_exc())
 
     error = exception = critical = info = debug
 
