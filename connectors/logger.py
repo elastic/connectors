@@ -6,8 +6,10 @@
 """
 Logger -- sets the logging and provides a `logger` global object.
 """
+from datetime import datetime
 import logging
 import ecs_logging
+from connectors import __version__
 
 logger = None
 
@@ -19,6 +21,20 @@ def _formatter(prefix):
     )
 
 
+class ExtraLogger(logging.Logger):
+    def _log(self, level, msg, args, exc_info=None, extra=None):
+        if extra is None:
+            extra = {}
+        extra.update(
+            {
+                "service.type": "connectors-python",
+                "service.version": __version__,
+                "labels.index_date": datetime.now().strftime("%Y.%m.%d"),
+            }
+        )
+        super(ExtraLogger, self)._log(level, msg, args, exc_info, extra)
+
+
 def set_logger(log_level=logging.INFO, filebeat=False):
     global logger
     if filebeat:
@@ -27,6 +43,7 @@ def set_logger(log_level=logging.INFO, filebeat=False):
         formatter = _formatter("FMWK")
 
     if logger is None:
+        logging.setLoggerClass(ExtraLogger)
         logger = logging.getLogger("connectors")
         handler = logging.StreamHandler()
         logger.addHandler(handler)
