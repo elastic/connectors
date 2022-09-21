@@ -168,7 +168,7 @@ class PipelineSettings:
         self.name = pipeline.get("name", "ent-search-generic-ingestion")
         self.extract_binary_content = pipeline.get("extract_binary_content", True)
         self.reduce_whitespace = pipeline.get("reduce_whitespace", True)
-        self.run_ml_inference = pipeline.get("run_ml_inference", False)
+        self.run_ml_inference = pipeline.get("run_ml_inference", True)
 
 
 class BYOConnector:
