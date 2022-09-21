@@ -128,7 +128,7 @@ class SyncJob:
             "deleted_document_count": 0,
             "indexed_document_count": 0,
             "created_at": self.created_at,
-            "updated_at": self.created_at,
+            "updated_at": None,
         }
         resp = await self.client.index(index=JOBS_INDEX, document=job_def)
         self.job_id = resp["_id"]
@@ -177,6 +177,7 @@ class BYOConnector:
         self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
 
     def update_config(self, doc_source):
+        self.sync_now = doc_source.get("sync_now", False)
         self.native = doc_source.get("is_native", False)
         self.service_type = doc_source["service_type"]
         self.index_name = doc_source["index_name"]
@@ -219,9 +220,11 @@ class BYOConnector:
 
         If the function returns -1, no sync is scheduled.
         """
-        if self.doc_source["sync_now"]:
+        if self.sync_now:
+            logger.debug("sync_now is true, syncing!")
             return 0
         if not self.scheduling["enabled"]:
+            logger.debug("scheduler is disabled")
             return -1
         return next_run(self.scheduling["interval"])
 
@@ -229,7 +232,7 @@ class BYOConnector:
         job = SyncJob(self.id, self.client)
         job_id = await job.start()
 
-        self.doc_source["sync_now"] = False
+        self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
         await self._write()
 
@@ -249,7 +252,7 @@ class BYOConnector:
 
         self.doc_source["last_sync_status"] = e2str(job.status)
         if exception is None:
-            self.doc_source["last_sync_error"] = ""
+            self.doc_source["last_sync_error"] = None
         else:
             self.doc_source["last_sync_error"] = str(exception)
         self.doc_source["last_synced"] = iso_utc()

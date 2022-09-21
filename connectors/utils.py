@@ -8,7 +8,11 @@ import logging
 import time
 import asyncio
 
-from elasticsearch import AsyncElasticsearch, ApiError
+from elasticsearch import (
+    AsyncElasticsearch,
+    ApiError,
+    ConnectionError as ElasticConnectionError,
+)
 
 from connectors.logger import set_extra_logger, logger
 from connectors.quartz import QuartzCron
@@ -70,6 +74,11 @@ class ESClient:
             logger.error(f"The server returned a {e.status_code} code")
             if e.info is not None and "error" in e.info and "reason" in e.info["error"]:
                 logger.error(e.info["error"]["reason"])
+            return False
+        except ElasticConnectionError as e:
+            logger.error("Could not connect to the server")
+            if e.message is not None:
+                logger.error(e.message)
             return False
         return True
 
