@@ -7,6 +7,7 @@ import asyncio
 import json
 from datetime import datetime
 
+from aioresponses import CallbackResult
 from elasticsearch import AsyncElasticsearch
 import pytest
 
@@ -47,30 +48,49 @@ async def test_sync_job(mock_responses):
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
     )
+
+    sent_docs = []
+
+    def callback(url, **kwargs):
+        sent_docs.append(json.loads(kwargs["data"]))
+        return CallbackResult(
+            body=json.dumps({"_id": "1"}), status=200, headers=headers
+        )
+
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc",
-        payload={"_id": "1"},
+        callback=callback,
         headers=headers,
     )
 
     mock_responses.put(
         "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc/1",
-        payload={"_id": "1"},
+        callback=callback,
         headers=headers,
     )
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_update/1",
-        headers=headers,
+        callback=callback,
         repeat=True,
     )
 
+    assert job.duration == -1
     await job.start()
     assert job.status == JobStatus.IN_PROGRESS
     assert job.job_id is not None
-
+    await asyncio.sleep(0.2)
     await job.done(12, 34)
     assert job.status == JobStatus.COMPLETED
     await client.close()
+    assert job.duration >= 0.2
+
+    # verify what was sent
+    assert len(sent_docs) == 2
+    doc, update = sent_docs
+    assert doc["status"] == "in_progress"
+    assert update["doc"]["status"] == "completed"
+    assert update["doc"]["indexed_document_count"] == 12
+    assert update["doc"]["deleted_document_count"] == 34
 
 
 mongo = {

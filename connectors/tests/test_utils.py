@@ -101,3 +101,16 @@ async def test_es_client_auth_error(mock_responses, patch_logger):
     await es_client.close()
     patch_logger.assert_present("The server returned a 401 code")
     patch_logger.assert_present("missing authentication credentials")
+
+
+@pytest.mark.asyncio
+async def test_es_client_no_server(patch_logger):
+    # if we can't reach the server, we need to catch it cleanly
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    es_client = ESClient(config)
+    assert not await es_client.ping()
+    await es_client.close()

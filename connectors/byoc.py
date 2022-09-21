@@ -8,6 +8,7 @@ Implementation of BYOC protocol.
 import asyncio
 from enum import Enum
 import time
+from datetime import datetime, timezone
 
 from connectors.utils import iso_utc, next_run, ESClient
 from connectors.logger import logger
@@ -115,9 +116,17 @@ class SyncJob:
     def __init__(self, connector_id, elastic_client):
         self.connector_id = connector_id
         self.client = elastic_client
-        self.created_at = iso_utc()
+        self.created_at = datetime.now(timezone.utc)
+        self.completed_at = None
         self.job_id = None
         self.status = None
+
+    @property
+    def duration(self):
+        if self.completed_at is None:
+            return -1
+        msec = (self.completed_at - self.created_at).microseconds
+        return round(msec / 9, 2)
 
     async def start(self):
         self.status = JobStatus.IN_PROGRESS
@@ -127,18 +136,20 @@ class SyncJob:
             "error": None,
             "deleted_document_count": 0,
             "indexed_document_count": 0,
-            "created_at": self.created_at,
-            "updated_at": None,
+            "created_at": iso_utc(self.created_at),
+            "completed_at": None,
         }
         resp = await self.client.index(index=JOBS_INDEX, document=job_def)
         self.job_id = resp["_id"]
         return self.job_id
 
     async def done(self, indexed_count=0, deleted_count=0, exception=None):
+        self.completed_at = datetime.now(timezone.utc)
+
         job_def = {
             "deleted_document_count": deleted_count,
             "indexed_document_count": indexed_count,
-            "updated_at": iso_utc(),
+            "completed_at": iso_utc(self.completed_at),
         }
 
         if exception is None:
