@@ -8,6 +8,7 @@ Implementation of BYOC protocol.
 import asyncio
 from enum import Enum
 import time
+from datetime import datetime, timezone
 
 from connectors.utils import iso_utc, next_run, ESClient
 from connectors.logger import logger
@@ -115,30 +116,40 @@ class SyncJob:
     def __init__(self, connector_id, elastic_client):
         self.connector_id = connector_id
         self.client = elastic_client
-        self.created_at = iso_utc()
+        self.created_at = datetime.now(timezone.utc)
+        self.completed_at = None
         self.job_id = None
         self.status = None
+
+    @property
+    def duration(self):
+        if self.completed_at is None:
+            return -1
+        msec = (self.completed_at - self.created_at).microseconds
+        return round(msec / 9, 2)
 
     async def start(self):
         self.status = JobStatus.IN_PROGRESS
         job_def = {
             "connector_id": self.connector_id,
             "status": e2str(self.status),
-            "error": "",
+            "error": None,
             "deleted_document_count": 0,
             "indexed_document_count": 0,
-            "created_at": self.created_at,
-            "updated_at": self.created_at,
+            "created_at": iso_utc(self.created_at),
+            "completed_at": None,
         }
         resp = await self.client.index(index=JOBS_INDEX, document=job_def)
         self.job_id = resp["_id"]
         return self.job_id
 
     async def done(self, indexed_count=0, deleted_count=0, exception=None):
+        self.completed_at = datetime.now(timezone.utc)
+
         job_def = {
-            "deleted_document_count": indexed_count,
-            "indexed_document_count": deleted_count,
-            "updated_at": iso_utc(),
+            "deleted_document_count": deleted_count,
+            "indexed_document_count": indexed_count,
+            "completed_at": iso_utc(self.completed_at),
         }
 
         if exception is None:
@@ -177,6 +188,7 @@ class BYOConnector:
         self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
 
     def update_config(self, doc_source):
+        self.sync_now = doc_source.get("sync_now", False)
         self.native = doc_source.get("is_native", False)
         self.service_type = doc_source["service_type"]
         self.index_name = doc_source["index_name"]
@@ -219,9 +231,11 @@ class BYOConnector:
 
         If the function returns -1, no sync is scheduled.
         """
-        if self.doc_source["sync_now"]:
+        if self.sync_now:
+            logger.debug("sync_now is true, syncing!")
             return 0
         if not self.scheduling["enabled"]:
+            logger.debug("scheduler is disabled")
             return -1
         return next_run(self.scheduling["interval"])
 
@@ -229,7 +243,7 @@ class BYOConnector:
         job = SyncJob(self.id, self.client)
         job_id = await job.start()
 
-        self.doc_source["sync_now"] = False
+        self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
         await self._write()
 
@@ -249,7 +263,7 @@ class BYOConnector:
 
         self.doc_source["last_sync_status"] = e2str(job.status)
         if exception is None:
-            self.doc_source["last_sync_error"] = ""
+            self.doc_source["last_sync_error"] = None
         else:
             self.doc_source["last_sync_error"] = str(exception)
         self.doc_source["last_synced"] = iso_utc()

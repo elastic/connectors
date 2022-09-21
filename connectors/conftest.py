@@ -44,7 +44,7 @@ class Logger:
         for msg in lines:
             found = False
             for log in self.logs:
-                if msg in log:
+                if isinstance(log, str) and msg in log:
                     found = True
                     break
             if not found:

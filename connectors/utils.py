@@ -3,12 +3,16 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import time
 import asyncio
 
-from elasticsearch import AsyncElasticsearch, ApiError
+from elasticsearch import (
+    AsyncElasticsearch,
+    ApiError,
+    ConnectionError as ElasticConnectionError,
+)
 
 from connectors.logger import set_extra_logger, logger
 from connectors.quartz import QuartzCron
@@ -71,6 +75,11 @@ class ESClient:
             if e.info is not None and "error" in e.info and "reason" in e.info["error"]:
                 logger.error(e.info["error"]["reason"])
             return False
+        except ElasticConnectionError as e:
+            logger.error("Could not connect to the server")
+            if e.message is not None:
+                logger.error(e.message)
+            return False
         return True
 
     async def wait(self):
@@ -96,7 +105,7 @@ class ESClient:
 
 def iso_utc(when=None):
     if when is None:
-        when = datetime.utcnow()
+        when = datetime.now(timezone.utc)
     return when.isoformat()
 
 
