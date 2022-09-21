@@ -124,7 +124,7 @@ class SyncJob:
         job_def = {
             "connector_id": self.connector_id,
             "status": e2str(self.status),
-            "error": "",
+            "error": None,
             "deleted_document_count": 0,
             "indexed_document_count": 0,
             "created_at": self.created_at,
@@ -136,8 +136,8 @@ class SyncJob:
 
     async def done(self, indexed_count=0, deleted_count=0, exception=None):
         job_def = {
-            "deleted_document_count": indexed_count,
-            "indexed_document_count": deleted_count,
+            "deleted_document_count": deleted_count,
+            "indexed_document_count": indexed_count,
             "updated_at": iso_utc(),
         }
 
