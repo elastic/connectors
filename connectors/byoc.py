@@ -259,6 +259,12 @@ class BYOConnector:
         logger.info(f"Sync starts, Job id: {job_id}")
         return job
 
+    async def sync_aborted(self, error):
+        self.doc_source["last_sync_status"] = e2str(JobStatus.ERROR)
+        self.doc_source["last_sync_error"] = str(error)
+        self.doc_source["last_synced"] = iso_utc()
+        await self._write()
+
     async def _sync_done(self, job, result, exception=None):
         doc_updated = result.get("doc_updated", 0)
         doc_created = result.get("doc_created", 0)
