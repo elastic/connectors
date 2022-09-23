@@ -8,6 +8,7 @@ import pytest
 import asyncio
 from unittest import mock
 from functools import partial
+import json
 
 from connectors.runner import ConnectorService, run
 from connectors.byoc import purge_cache as purge_connectors
@@ -242,14 +243,28 @@ async def set_server_responses(mock_responses, config=FAKE_CONFIG):
         headers=headers,
     )
 
+    def update_connector(url, **kw):
+        read_only_fields = [
+            "is_native",
+            "service_type",
+            "api_key_id",
+            "pipeline",
+            "scheduling",
+            "configuration",
+        ]
+        fields = json.loads(kw["data"])["doc"].keys()
+        for field in fields:
+            assert field not in read_only_fields
+
     mock_responses.put(
         "http://nowhere.com:9200/.elastic-connectors/_doc/1",
-        payload={"_id": "1"},
+        callback=update_connector,
         headers=headers,
     )
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_update/1",
         headers=headers,
+        callback=update_connector,
         repeat=True,
     )
     mock_responses.head(

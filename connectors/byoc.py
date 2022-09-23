@@ -40,6 +40,14 @@ class JobStatus(Enum):
     ERROR = 4
 
 
+READ_ONLY_FIELDS = (
+    "service_type",
+    "is_native",
+    "api_key_id",
+    "pipeline",
+    "scheduling",
+    "configuration",
+)
 _CONNECTORS_CACHE = {}
 
 
@@ -68,7 +76,7 @@ class BYOIndex(ESClient):
         document = dict(connector.doc_source)
 
         # read only we never update
-        for key in "api_key_id", "pipeline", "scheduling", "configuration":
+        for key in READ_ONLY_FIELDS:
             if key in document:
                 del document[key]
 
