@@ -405,11 +405,7 @@ async def test_connector_service_poll_buggy_service(
 ):
     def connectors_update(url, **kw):
         doc = json.loads(kw["data"])["doc"]
-        assert doc["last_sync_status"] == "error"
-        assert (
-            doc["last_sync_error"]
-            == "Could not instanciate test_runner:FakeSource for fake"
-        )
+        assert doc["error"] == "Could not instanciate test_runner:FakeSource for fake"
         return CallbackResult(status=200)
 
     await set_server_responses(
