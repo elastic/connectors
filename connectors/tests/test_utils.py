@@ -42,7 +42,9 @@ def test_esclient():
     # defaults
     config = {"username": "elastic", "password": "changeme"}
     es_client = ESClient(config)
-    assert es_client.host == "http://localhost:9200"
+    assert es_client.host.host == "localhost"
+    assert es_client.host.port == 9200
+    assert es_client.host.scheme == "http"
 
     # XXX find a more elegant way
     assert es_client.client._retry_on_timeout
