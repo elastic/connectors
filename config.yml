@@ -18,11 +18,8 @@ service:
   max_errors_span: 600
 
 native_service_types:
+  - mysql
   - s3
-  - mongodb
-
-# some id
-#connector_id: '1'
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
