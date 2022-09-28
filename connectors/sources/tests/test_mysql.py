@@ -116,7 +116,7 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-async def test_ping_negative():
+async def test_ping_negative(catch_stdout):
     """Test ping method of MySqlDataSource class with negative case"""
     # Setup
     source = create_source(MySqlDataSource)
