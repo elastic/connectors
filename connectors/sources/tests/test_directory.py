@@ -14,7 +14,7 @@ async def test_basics():
 
 
 @pytest.mark.asyncio
-async def test_get_docs(patch_logger):
+async def test_get_docs(patch_logger, catch_stdout):
     source = create_source(DirectoryDataSource)
     num = 0
     async for (doc, dl) in source.get_docs():
