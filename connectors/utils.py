@@ -13,6 +13,7 @@ from elasticsearch import (
     ApiError,
     ConnectionError as ElasticConnectionError,
 )
+from elastic_transport.client_utils import url_to_node_config
 
 from connectors.logger import set_extra_logger, logger
 from connectors.quartz import QuartzCron
@@ -21,7 +22,10 @@ from connectors.quartz import QuartzCron
 class ESClient:
     def __init__(self, config):
         self.config = config
-        self.host = config.get("host", "http://localhost:9200")
+        self.host = url_to_node_config(
+            config.get("host", "http://localhost:9200"),
+            use_default_ports_for_scheme=True,
+        )
         self._sleeps = CancellableSleeps()
         options = {
             "hosts": [self.host],

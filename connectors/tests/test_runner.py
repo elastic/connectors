@@ -22,6 +22,7 @@ CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 ES_CONFIG = os.path.join(os.path.dirname(__file__), "entsearch.yml")
 CONFIG_2 = os.path.join(os.path.dirname(__file__), "config_2.yml")
 CONFIG_KEEP_ALIVE = os.path.join(os.path.dirname(__file__), "config_keep_alive.yml")
+CONFIG_HTTPS = os.path.join(os.path.dirname(__file__), "config_https.yml")
 
 
 FAKE_CONFIG = {
@@ -210,39 +211,38 @@ class LargeFakeSource(FakeSource):
 
 
 async def set_server_responses(
-    mock_responses, config=FAKE_CONFIG, connectors_update=None
+    mock_responses, config=FAKE_CONFIG, connectors_update=None,
+    host="http://nowhere.com:9200",
 ):
     await purge_connectors()
     await purge_sources()
 
     headers = {"X-Elastic-Product": "Elasticsearch"}
 
+    mock_responses.post(f"{host}/.elastic-connectors/_refresh", headers=headers)
     mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
-    )
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
+        f"{host}/.elastic-connectors/_search?expand_wildcards=hidden",
         payload={"hits": {"hits": [{"_id": "1", "_source": config}]}},
         headers=headers,
     )
     mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc",
+        f"{host}/.elastic-connectors-sync-jobs/_doc",
         payload={"_id": "1"},
         headers=headers,
     )
     mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_update/1",
+        f"{host}/.elastic-connectors-sync-jobs/_update/1",
         headers=headers,
         repeat=True,
     )
     mock_responses.put(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc/1",
+        f"{host}/.elastic-connectors-sync-jobs/_doc/1",
         payload={"_id": "1"},
         headers=headers,
     )
 
     mock_responses.put(
-        "http://nowhere.com:9200/.elastic-connectors/_doc/1",
+        f"{host}/.elastic-connectors/_doc/1",
         payload={"_id": "1"},
         headers=headers,
     )
@@ -264,50 +264,48 @@ async def set_server_responses(
         connectors_update = update_connector
 
     mock_responses.put(
-        "http://nowhere.com:9200/.elastic-connectors/_doc/1",
+        f"{host}/.elastic-connectors/_doc/1",
         callback=update_connector,
         headers=headers,
     )
     mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_update/1",
+        f"{host}/.elastic-connectors/_update/1",
         headers=headers,
         callback=connectors_update,
         repeat=True,
     )
-    mock_responses.head(
-        "http://nowhere.com:9200/search-airbnb?expand_wildcards=open", headers=headers
-    )
+    mock_responses.head(f"{host}/search-airbnb?expand_wildcards=open", headers=headers)
     mock_responses.get(
-        "http://nowhere.com:9200/search-airbnb/_mapping?expand_wildcards=open",
+        f"{host}/search-airbnb/_mapping?expand_wildcards=open",
         payload={"search-airbnb": {"mappings": {}}},
         headers=headers,
     )
     mock_responses.put(
-        "http://nowhere.com:9200/search-airbnb/_mapping?expand_wildcards=open",
+        f"{host}/search-airbnb/_mapping?expand_wildcards=open",
         headers=headers,
     )
     mock_responses.get(
-        "http://nowhere.com:9200/search-airbnb",
+        f"{host}/search-airbnb",
         payload={"hits": {"hits": [{"_id": "1", "_source": config}]}},
         headers=headers,
     )
     mock_responses.get(
-        "http://nowhere.com:9200/search-airbnb/_search?scroll=5m",
+        f"{host}/search-airbnb/_search?scroll=5m",
         payload={"hits": {"hits": [{"_id": "1", "_source": config}]}},
         headers=headers,
     )
     mock_responses.post(
-        "http://nowhere.com:9200/search-airbnb/_search?scroll=5m",
+        f"{host}/search-airbnb/_search?scroll=5m",
         payload={"_id": "1"},
         headers=headers,
     )
     mock_responses.put(
-        "http://nowhere.com:9200/search-airbnb/_search?scroll=5m",
+        f"{host}/search-airbnb/_search?scroll=5m",
         payload={"_id": "1"},
         headers=headers,
     )
     mock_responses.put(
-        "http://nowhere.com:9200/_bulk?pipeline=ent-search-generic-ingestion",
+        f"{host}/_bulk?pipeline=ent-search-generic-ingestion",
         payload={"items": []},
         headers=headers,
         repeat=True,
@@ -320,6 +318,17 @@ async def test_connector_service_poll(
 ):
     await set_server_responses(mock_responses)
     service = ConnectorService(CONFIG)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll()
+    patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_https(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+    await set_server_responses(mock_responses, host="https://safenowhere.com:443")
+    service = ConnectorService(CONFIG_HTTPS)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
