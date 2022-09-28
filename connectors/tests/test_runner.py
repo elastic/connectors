@@ -9,7 +9,6 @@ import asyncio
 import json
 from unittest import mock
 from functools import partial
-import json
 from aioresponses import CallbackResult
 
 from connectors.runner import ConnectorService, run
@@ -358,7 +357,7 @@ async def test_connector_service_poll_not_native(
 
 @pytest.mark.asyncio
 async def test_connector_service_poll_with_entsearch(
-    mock_responses, patch_logger, patch_ping, set_env
+    mock_responses, patch_logger, patch_ping, set_env, catch_stdout
 ):
     with mock.patch.dict(os.environ, {"ENT_SEARCH_CONFIG_PATH": ES_CONFIG}):
         await set_server_responses(mock_responses)
