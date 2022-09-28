@@ -135,6 +135,7 @@ class ConnectorService:
                             )
                             continue
                         except DataSourceError as e:
+                            await connector.error(e)
                             logger.critical(e, exc_info=True)
                             self.raise_if_spurious(e)
                             continue

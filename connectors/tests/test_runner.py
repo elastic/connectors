@@ -6,9 +6,11 @@
 import os
 import pytest
 import asyncio
+import json
 from unittest import mock
 from functools import partial
 import json
+from aioresponses import CallbackResult
 
 from connectors.runner import ConnectorService, run
 from connectors.byoc import purge_cache as purge_connectors
@@ -207,7 +209,9 @@ class LargeFakeSource(FakeSource):
             yield {"_id": doc_id}, partial(self._dl, doc_id)
 
 
-async def set_server_responses(mock_responses, config=FAKE_CONFIG):
+async def set_server_responses(
+    mock_responses, config=FAKE_CONFIG, connectors_update=None
+):
     await purge_connectors()
     await purge_sources()
 
@@ -256,6 +260,9 @@ async def set_server_responses(mock_responses, config=FAKE_CONFIG):
         for field in fields:
             assert field not in read_only_fields
 
+    if connectors_update is None:
+        connectors_update = update_connector
+
     mock_responses.put(
         "http://nowhere.com:9200/.elastic-connectors/_doc/1",
         callback=update_connector,
@@ -264,7 +271,7 @@ async def set_server_responses(mock_responses, config=FAKE_CONFIG):
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_update/1",
         headers=headers,
-        callback=update_connector,
+        callback=connectors_update,
         repeat=True,
     )
     mock_responses.head(
@@ -393,11 +400,18 @@ async def test_connector_service_poll_unknown_service(
 async def test_connector_service_poll_buggy_service(
     mock_responses, patch_logger, patch_ping, set_env
 ):
+    def connectors_update(url, **kw):
+        doc = json.loads(kw["data"])["doc"]
+        assert doc["error"] == "Could not instanciate test_runner:FakeSource for fake"
+        return CallbackResult(status=200)
 
-    await set_server_responses(mock_responses, FAKE_CONFIG_BUGGY_SERVICE)
+    await set_server_responses(
+        mock_responses, FAKE_CONFIG_BUGGY_SERVICE, connectors_update=connectors_update
+    )
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
+
     for log in patch_logger.logs:
         if isinstance(log, DataSourceError):
             return
