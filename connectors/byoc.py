@@ -55,12 +55,10 @@ class JobStatus(Enum):
 
 
 READ_ONLY_FIELDS = (
-    "service_type",
     "is_native",
     "api_key_id",
     "pipeline",
     "scheduling",
-    "configuration",
 )
 
 
@@ -234,6 +232,16 @@ class BYOConnector:
     @property
     def status(self):
         return self._status
+
+    async def populate_service_type(self, service_type):
+        self.doc_source["service_type"] = service_type
+        self.update_config(self.doc_source)
+        await self._write()
+
+    async def populate_configuration(self, configuration):
+        self.doc_source["configuration"] = configuration
+        self.update_config(self.doc_source)
+        await self._write()
 
     async def close(self):
         self._closed = True

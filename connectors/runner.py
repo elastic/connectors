@@ -24,6 +24,7 @@ from connectors.logger import logger
 from connectors.source import (
     get_data_sources,
     get_data_source,
+    initialize_custom_connector,
     ServiceTypeNotSupportedError,
     DataSourceError,
 )
@@ -102,6 +103,7 @@ class ConnectorService:
             else:
                 # in other cases, we can
                 try:
+                    await initialize_custom_connector(connector, self.config)
                     data_source = get_data_source(connector, self.config)
                 except ServiceTypeNotSupportedError:
                     logger.debug(
