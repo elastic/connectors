@@ -120,12 +120,6 @@ class ConnectorService:
 
                     logger.debug(f"Polling every {self.idling} seconds")
 
-                    # Checking the indices/pipeline in the loop to be less strict about the boot ordering
-                    if not preflight_done:
-                        await self.connectors.preflight()
-                        preflight_done = True
-
-                    logger.debug(f"Polling every {self.idling} seconds")
                     async for connector in self.connectors.get_list():
                         # we only look at connectors we natively support or the
                         # ones where we have the connector_id explicitely
