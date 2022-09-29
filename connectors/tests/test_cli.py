@@ -19,7 +19,14 @@ def test_main(catch_stdout):
 
 def test_main_and_kill(catch_stdout, patch_logger, mock_responses):
     headers = {"X-Elastic-Product": "Elasticsearch"}
-    mock_responses.get("http://localhost:9200", headers=headers)
+    host = "http://localhost:9200"
+
+    mock_responses.get(host, headers=headers)
+    mock_responses.head(f"{host}/.elastic-connectors", headers=headers)
+    mock_responses.head(f"{host}/.elastic-connectors-sync-jobs", headers=headers)
+    mock_responses.get(
+        f"{host}/_ingest/pipeline/ent-search-generic-ingestion", headers=headers
+    )
 
     async def kill():
         os.kill(os.getpid(), signal.SIGTERM)
