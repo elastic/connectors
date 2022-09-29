@@ -210,7 +210,9 @@ class LargeFakeSource(FakeSource):
 
 
 async def set_server_responses(
-    mock_responses, config=FAKE_CONFIG, connectors_update=None,
+    mock_responses,
+    config=FAKE_CONFIG,
+    connectors_update=None,
     host="http://nowhere.com:9200",
 ):
     await purge_connectors()
