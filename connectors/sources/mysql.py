@@ -252,12 +252,14 @@ class MySqlDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        if isinstance(self.configuration["database"], str):
-            databases = [self.configuration["database"]]
-        elif self.configuration["database"] is None:
+        database_config = self.configuration["database"]
+        if isinstance(database_config, str):
+            dbs = database_config.split(",")
+            databases = list(map(lambda s: s.strip(), dbs))
+        elif database_config is None:
             databases = []
         else:
-            databases = self.configuration["database"]
+            databases = database_config
 
         if len(databases) == 0:
             databases = await self._fetch_all_databases()
