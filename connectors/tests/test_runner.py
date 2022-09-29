@@ -207,7 +207,12 @@ class LargeFakeSource(FakeSource):
             yield {"_id": doc_id}, partial(self._dl, doc_id)
 
 
-async def set_server_responses(mock_responses, config=FAKE_CONFIG):
+async def set_server_responses(
+    mock_responses,
+    config=FAKE_CONFIG,
+    connectors_update=None,
+    host="http://nowhere.com:9200",
+):
     await purge_connectors()
     await purge_sources()
 
