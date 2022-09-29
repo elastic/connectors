@@ -1,5 +1,6 @@
 # framework dependencies
 elasticsearch[async]>=8.4.1
+elastic-transport>=8.4.0
 ecs-logging>=2.0.0
 pytz>=2022.1
 aiohttp>=3.8.1
