@@ -9,7 +9,7 @@ ROOT_DIR="$SCRIPT_DIR/../.."
 cd $ROOT_DIR/connectors/sources/tests/fixtures/$NAME
 make run-stack
 # XXX make run-stack should be blocking until everythign is up and running by checking hbs
-sleep 60
+sleep 30
 
 $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug
 
