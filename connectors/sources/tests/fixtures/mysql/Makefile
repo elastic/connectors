@@ -2,7 +2,7 @@
 
 PYTHON=python3
 
-export VERSION=8.4.0-SNAPSHOT
+export VERSION=8.6.0-SNAPSHOT
 
 run-stack:
 	docker-compose up -d

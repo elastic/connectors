@@ -56,6 +56,12 @@ class Bulker:
             res = await self.client.bulk(
                 operations=operations, pipeline=self.pipeline_settings.name
             )
+            if res.get("errors"):
+                for item in res["items"]:
+                    for op, data in item.items():
+                        if "error" in data:
+                            logger.error(f"operation {op} failed, {data['error']}")
+                            raise Exception(data["error"]["reason"])
         finally:
             self.bulk_time += time.time() - start
 
@@ -318,6 +324,8 @@ class ElasticServer(ESClient):
             index=index,
             _source=["id", "timestamp"],
         ):
+            if "id" not in doc["_source"]:
+                doc["_source"]["id"] = doc["_id"]
             yield doc["_source"]
 
     async def async_bulk(self, index, generator, pipeline, queue_size=1024):
@@ -328,7 +336,8 @@ class ElasticServer(ESClient):
 
         async for es_doc in self.get_existing_ids(index):
             existing_ids.add(es_doc["id"])
-            existing_timestamps[es_doc["id"]] = es_doc["timestamp"]
+            if "timestamp" in es_doc:
+                existing_timestamps[es_doc["id"]] = es_doc["timestamp"]
 
         logger.debug(
             f"Found {len(existing_ids)} docs in {index} (duration "
