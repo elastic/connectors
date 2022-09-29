@@ -3,4 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-__version__ = "8.6.0.1"
+import os
+
+with open(os.path.join(os.path.dirname(__file__), "VERSION")) as f:
+    __version__ = f.read().strip()
