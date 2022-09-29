@@ -22,7 +22,4 @@ test:
 
 
 ftest:
-	bin/fake-kibana --index-name search-$(NAME) --service-type $(NAME) --debug
-	bin/elastic-ingest --one-sync --sync-now
-	bin/elastic-ingest --one-sync --sync-now
-	bin/python scripts/verify.py --index-name search-$(NAME) --service-type $(NAME) --size 3000
+	connectors/tests/ftest.sh $(NAME)
