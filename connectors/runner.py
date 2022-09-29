@@ -107,12 +107,18 @@ class ConnectorService:
             logger.critical(f"{es_host} seem down. Bye!")
             return -1
 
+        preflight_done = False
         es = ElasticServer(self.config["elasticsearch"])
         logger.info(f"Service started, listening to events from {es_host}")
         try:
             while self.running:
-                logger.debug(f"Polling every {self.idling} seconds")
                 try:
+                    # Checking the indices/pipeline in the loop to be less strict about the boot ordering
+                    if not preflight_done:
+                        await self.connectors.preflight()
+                        preflight_done = True
+
+                    logger.debug(f"Polling every {self.idling} seconds")
                     async for connector in self.connectors.get_list():
                         # we only look at connectors we natively support or the
                         # ones where we have the connector_id explicitely
