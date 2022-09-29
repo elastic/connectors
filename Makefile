@@ -12,7 +12,7 @@ install: bin/python
 lint:
 	bin/black connectors
 	bin/black setup.py
-	bin/flake8 connectors
+	bin/flake8 connectors --exclude fixtures
 	bin/flake8 setup.py
 	bin/black scripts
 	bin/flake8 scripts
