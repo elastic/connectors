@@ -41,6 +41,11 @@ def test_main(patch_logger, mock_responses):
     )
     mock_index_creation(".elastic-connectors-sync-jobs", mock_responses)
     mock_index_creation("data", mock_responses, hidden=False)
+    mock_responses.get(
+        "http://nowhere.com:9200/_ingest/pipeline/ent-search-generic-ingestion",
+        headers=headers,
+        repeat=True,
+    )
 
     assert (
         main(
