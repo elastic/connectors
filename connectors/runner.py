@@ -42,6 +42,10 @@ class ConnectorService:
         self.service_config = self.config["service"]
         self.idling = self.service_config["idling"]
         self.hb = self.service_config["heartbeat"]
+        self.preflight_max_attempts = int(
+            self.service_config.get("preflight_max_attempts", 10)
+        )
+        self.preflight_idle = int(self.service_config.get("preflight_idle", 30))
         self.running = False
         self._sleeper = None
         self._sleeps = CancellableSleeps()
@@ -107,17 +111,29 @@ class ConnectorService:
             logger.critical(f"{es_host} seem down. Bye!")
             return -1
 
-        preflight_done = False
         es = ElasticServer(self.config["elasticsearch"])
+
+        # pre-flight check
+        logger.info("Preflight checks")
+        attempts = 0
+        while self.running:
+            try:
+                # Checking the indices/pipeline in the loop to be less strict about the boot ordering
+                await self.connectors.preflight()
+                break
+            except Exception as e:
+                logger.warn(str(e))
+
+                if attempts > self.preflight_max_attempts:
+                    raise
+                else:
+                    attempts += 1
+                    await asyncio.sleep(self.preflight_idle)
+
         logger.info(f"Service started, listening to events from {es_host}")
         try:
             while self.running:
                 try:
-                    # Checking the indices/pipeline in the loop to be less strict about the boot ordering
-                    if not preflight_done:
-                        await self.connectors.preflight()
-                        preflight_done = True
-
                     logger.debug(f"Polling every {self.idling} seconds")
                     async for connector in self.connectors.get_list():
                         # we only look at connectors we natively support or the
