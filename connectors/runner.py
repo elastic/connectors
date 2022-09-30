@@ -25,6 +25,7 @@ from connectors.source import (
     get_data_sources,
     get_data_source,
     ServiceTypeNotConfiguredError,
+    ConnectorUpdateError,
     ServiceTypeNotSupportedError,
     DataSourceError,
 )
@@ -108,6 +109,9 @@ class ConnectorService:
                     logger.error(
                         f"Service type is not configured for connector {self.config['connector_id']}"
                     )
+                    return
+                except ConnectorUpdateError as e:
+                    logger.error(e)
                     return
                 except ServiceTypeNotSupportedError:
                     logger.debug(

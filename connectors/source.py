@@ -17,6 +17,9 @@ class ServiceTypeNotConfiguredError(Exception):
     pass
 
 
+class ConnectorUpdateError(Exception):
+    pass
+
 class DataSourceError(Exception):
     pass
 
@@ -65,7 +68,7 @@ class DataSourceConfiguration:
         return self._config.values()
 
     def is_empty(self):
-        return not self._config
+        return len(self._config) == 0
 
 
 class BaseDataSource:
@@ -149,8 +152,12 @@ async def get_data_source(connector, config):
         if not configured_service_type:
             logger.error(f"Service type is not configured for connector {configured_connector_id}")
             raise ServiceTypeNotConfiguredError('Service type is not configured.')
-        await connector.populate_service_type(configured_service_type)
-        logger.debug(f"Populated service type {configured_service_type} for connector {connector.id}")
+        try:
+            await connector.populate_service_type(configured_service_type)
+            logger.debug(f"Populated service type {configured_service_type} for connector {connector.id}")
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+            raise ConnectorUpdateError(f"Could not update service type for connector {connector.id}")
     service_type = connector.service_type
     if service_type not in config["sources"]:
         raise ServiceTypeNotSupportedError(service_type)
@@ -159,8 +166,12 @@ async def get_data_source(connector, config):
     try:
         source_klass = get_source_klass(fqn)
         if connector.configuration.is_empty():
-            await connector.populate_configuration(source_klass.get_default_configuration())
-            logger.debug(f"Populated configuration for connector {connector.id}")
+            try:
+                await connector.populate_configuration(source_klass.get_default_configuration())
+                logger.debug(f"Populated configuration for connector {connector.id}")
+            except Exception as e:
+                logger.critical(e, exc_info=True)
+                raise ConnectorUpdateError(f"Could not update configuration for connector {connector.id}")
         return source_klass(connector)
     except Exception as e:
         logger.critical(e, exc_info=True)
