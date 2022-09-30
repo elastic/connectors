@@ -137,41 +137,27 @@ def get_source_klass(fqn):
     module = importlib.import_module(module_name)
     return getattr(module, klass_name)
 
-
-def get_data_source(connector, config):
+async def get_data_source(connector, config):
     """Returns a source class instance, given a service type"""
+    if (connector.id == config["connector_id"] and connector.service_type is None):
+        await connector.populate_service_type(config["service_type"])
+        logger.debug(f"Populated service type {config['service_type']} for connector {connector.id}")
     service_type = connector.service_type
     if service_type not in config["sources"]:
         raise ServiceTypeNotSupportedError(service_type)
 
     fqn = config["sources"][service_type]
     try:
-        return get_source_klass(fqn)(connector)
+        source_klass = get_source_klass(fqn)
+        if connector.configuration.is_empty():
+            await connector.populate_configuration(source_klass.get_default_configuration())
+            logger.debug(f"Populated configuration for connector {connector.id}")
+        return source_klass(connector)
     except Exception as e:
         logger.critical(e, exc_info=True)
         raise DataSourceError(f"Could not instantiate {fqn} for {service_type}")
-
 
 def get_data_sources(config):
     """Returns an iterator of all registered sources."""
     for name, fqn in config["sources"].items():
         yield get_source_klass(fqn)
-
-async def initialize_custom_connector(connector, config):
-    """Update service_type and configuration for a custome connector if it's absent"""
-    if connector.id != config["connector_id"]:
-        return
-    if connector.service_type is None:
-        await connector.populate_service_type(config["service_type"])
-
-    if connector.configuration.is_empty():
-        if connector.service_type not in config["sources"]:
-            raise ServiceTypeNotSupportedError(connector.service_type)
-
-        fqn = config["sources"][connector.service_type]
-        try:
-            source_klass = get_source_klass(fqn)
-        except Exception as e:
-            logger.critical(e, exc_info=True)
-            raise DataSourceError(f"Could not get source class for {connector.service_type}")
-        await connector.populate_configuration(source_klass.get_default_configuration())

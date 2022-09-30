@@ -54,11 +54,16 @@ class JobStatus(Enum):
     ERROR = 7
 
 
-READ_ONLY_FIELDS = (
+CUSTOM_READ_ONLY_FIELDS = (
     "is_native",
     "api_key_id",
     "pipeline",
     "scheduling",
+)
+
+NATIVE_READ_ONLY_FIELDS = CUSTOM_READ_ONLY_FIELDS + (
+    "service_type",
+    "configuration",
 )
 
 
@@ -84,7 +89,7 @@ class BYOIndex(ESClient):
         document = dict(connector.doc_source)
 
         # read only we never update
-        for key in READ_ONLY_FIELDS:
+        for key in (NATIVE_READ_ONLY_FIELDS if connector.native else CUSTOM_READ_ONLY_FIELDS):
             if key in document:
                 del document[key]
 
@@ -116,6 +121,12 @@ class BYOIndex(ESClient):
 
         logger.debug(f"Found {len(resp['hits']['hits'])} connectors")
         for hit in resp["hits"]["hits"]:
+            yield BYOConnector(
+                    self,
+                    hit["_id"],
+                    hit["_source"],
+                    bulk_queue_max_size=self.bulk_queue_max_size,
+                )
             yield BYOConnector(
                 self,
                 hit["_id"],
