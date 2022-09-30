@@ -13,6 +13,10 @@ class ServiceTypeNotSupportedError(Exception):
     pass
 
 
+class ServiceTypeNotConfiguredError(Exception):
+    pass
+
+
 class DataSourceError(Exception):
     pass
 
@@ -139,9 +143,14 @@ def get_source_klass(fqn):
 
 async def get_data_source(connector, config):
     """Returns a source class instance, given a service type"""
-    if (connector.id == config["connector_id"] and connector.service_type is None):
-        await connector.populate_service_type(config["service_type"])
-        logger.debug(f"Populated service type {config['service_type']} for connector {connector.id}")
+    configured_connector_id = config.get("connector_id", "")
+    configured_service_type = config.get("service_type", "")
+    if (connector.id == configured_connector_id and connector.service_type is None):
+        if not configured_service_type:
+            logger.error(f"Service type is not configured for connector {configured_connector_id}")
+            raise ServiceTypeNotConfiguredError('Service type is not configured.')
+        await connector.populate_service_type(configured_service_type)
+        logger.debug(f"Populated service type {configured_service_type} for connector {connector.id}")
     service_type = connector.service_type
     if service_type not in config["sources"]:
         raise ServiceTypeNotSupportedError(service_type)
