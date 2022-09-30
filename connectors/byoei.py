@@ -39,8 +39,7 @@ class Bulker:
         index = doc["_index"]
 
         if operation == OP_INDEX:
-            return [{operation: {"_index": index, "_id": doc_id}},
-                    {"doc": doc["doc"]}]
+            return [{operation: {"_index": index, "_id": doc_id}}, doc["doc"]]
         if operation == OP_UPSERT:
             return [
                 {"update": {"_index": index, "_id": doc_id}},
