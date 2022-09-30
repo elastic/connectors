@@ -9,6 +9,7 @@ import asyncio
 import elasticsearch
 import logging
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
+import elasticsearch
 
 from envyaml import EnvYAML
 
@@ -29,6 +30,28 @@ async def prepare(service_type, index_name, config):
     es = ElasticServer(config["elasticsearch"])
 
     # add a dummy pipeline
+    try:
+        pipeline = await es.client.ingest.get_pipeline(
+            id="ent-search-generic-ingestion"
+        )
+    except elasticsearch.NotFoundError:
+        pipeline = {
+            "description": "My optional pipeline description",
+            "processors": [
+                {
+                    "set": {
+                        "description": "My optional processor description",
+                        "field": "my-keyword-field",
+                        "value": "foo",
+                    }
+                }
+            ],
+        }
+
+        await es.client.ingest.put_pipeline(
+            id="ent-search-generic-ingestion", body=pipeline
+        )
+
     try:
         pipeline = await es.client.ingest.get_pipeline(
             id="ent-search-generic-ingestion"

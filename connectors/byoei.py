@@ -17,6 +17,11 @@ from connectors.logger import logger
 from connectors.utils import iso_utc, ESClient
 
 
+OP_INDEX = "index"
+OP_UPSERT = "update"
+OP_DELETE = "delete"
+
+
 class Bulker:
     """Send bulk operations in batches by consuming a queue."""
 
@@ -29,6 +34,22 @@ class Bulker:
         self.chunk_size = chunk_size
         self.pipeline_settings = pipeline_settings
 
+    def _bulk_op(self, doc, operation=OP_INDEX):
+        doc_id = doc["_id"]
+        index = doc["_index"]
+
+        if operation == OP_INDEX:
+            return [{operation: {"_index": index, "_id": doc_id}},
+                    {"doc": doc["doc"]}]
+        if operation == OP_UPSERT:
+            return [
+                {"update": {"_index": index, "_id": doc_id}},
+                {"doc": doc["doc"], "doc_as_upsert": True},
+            ]
+        if operation == OP_DELETE:
+            return [{"_op_type": "delete", "_index": index, "_id": doc_id}]
+        raise TypeError(operation)
+
     async def _batch_bulk(self, operations):
         # todo treat result to retry errors like in async_streaming_bulk
         start = time.time()
@@ -36,6 +57,12 @@ class Bulker:
             res = await self.client.bulk(
                 operations=operations, pipeline=self.pipeline_settings.name
             )
+            if res.get("errors"):
+                for item in res["items"]:
+                    for op, data in item.items():
+                        if "error" in data:
+                            logger.error(f"operation {op} failed, {data['error']}")
+                            raise Exception(data["error"]["reason"])
         finally:
             self.bulk_time += time.time() - start
 
@@ -63,12 +90,7 @@ class Bulker:
 
             operation = doc["_op_type"]
             self.ops[operation] += 1
-
-            if operation in ("update", "create"):
-                batch.append({"update": {"_index": doc["_index"], "_id": doc["_id"]}})
-                batch.append({"doc": doc["doc"], "doc_as_upsert": True})
-            else:
-                batch.append({operation: {"_index": doc["_index"], "_id": doc["_id"]}})
+            batch.extend(self._bulk_op(doc, operation))
 
             if len(batch) >= self.chunk_size * 2:
                 ops.append(asyncio.create_task(self._batch_bulk(list(batch))))
@@ -127,13 +149,15 @@ class Fetcher:
                 continue
 
             self.total_downloads += 1
+
+            # This is an upsert because we're pusing content
+            # from attached file *after* the document was indexed
             await self.queue.put(
                 {
-                    "_op_type": "update",
+                    "_op_type": OP_UPSERT,
                     "_index": self.index,
                     "_id": data.pop("_id"),
                     "doc": data,
-                    "doc_as_upsert": True,
                 }
             )
 
@@ -185,10 +209,11 @@ class Fetcher:
                     )
 
                 if doc_id in self.existing_ids:
-                    operation = "update"
+                    # the doc exists but we are still overwiting it with `index`
+                    operation = OP_INDEX
                     self.total_docs_updated += 1
                 else:
-                    operation = "create"
+                    operation = OP_INDEX
                     self.total_docs_created += 1
 
                 await self.queue.put(
@@ -197,7 +222,6 @@ class Fetcher:
                         "_index": self.index,
                         "_id": doc_id,
                         "doc": doc,
-                        "doc_as_upsert": True,
                     }
                 )
                 await asyncio.sleep(0)
@@ -214,7 +238,7 @@ class Fetcher:
             if doc_id in seen_ids:
                 continue
             await self.queue.put(
-                {"_op_type": "delete", "_index": self.index, "_id": doc_id}
+                {"_op_type": OP_DELETE, "_index": self.index, "_id": doc_id}
             )
             self.total_docs_deleted += 1
 
@@ -301,6 +325,8 @@ class ElasticServer(ESClient):
             index=index,
             _source=["id", "timestamp"],
         ):
+            if "id" not in doc["_source"]:
+                doc["_source"]["id"] = doc["_id"]
             yield doc["_source"]
 
     async def async_bulk(self, index, generator, pipeline, queue_size=1024):
@@ -311,7 +337,8 @@ class ElasticServer(ESClient):
 
         async for es_doc in self.get_existing_ids(index):
             existing_ids.add(es_doc["id"])
-            existing_timestamps[es_doc["id"]] = es_doc["timestamp"]
+            if "timestamp" in es_doc:
+                existing_timestamps[es_doc["id"]] = es_doc["timestamp"]
 
         logger.debug(
             f"Found {len(existing_ids)} docs in {index} (duration "
