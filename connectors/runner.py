@@ -111,6 +111,7 @@ class ConnectorService:
             logger.critical(f"{es_host} seem down. Bye!")
             return -1
 
+        preflight_done = False
         es = ElasticServer(self.config["elasticsearch"])
 
         # pre-flight check

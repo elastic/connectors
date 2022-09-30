@@ -18,6 +18,7 @@ async def verify(service_type, index_name, size, config):
     auth = config["username"], config["password"]
     client = AsyncElasticsearch(hosts=[host], basic_auth=auth, request_timeout=120)
 
+    await client.indices.refresh(index=index_name)
     try:
         print(f"Verifying {index_name}...")
         resp = await client.count(index=index_name)
