@@ -6,7 +6,6 @@
 import sys
 import os
 import asyncio
-import elasticsearch
 import logging
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 import elasticsearch
