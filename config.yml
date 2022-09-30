@@ -9,7 +9,7 @@ elasticsearch:
   max_wait_duration: 120
   initial_backoff_duration: 1
   backoff_multiplier: 2
-  log_level: debug
+  log_level: info
 
 service:
   idling: 30
@@ -18,8 +18,7 @@ service:
   max_errors_span: 600
 
 native_service_types:
-  - s3
-  - mongodb
+  - mysql
 
 # some id
 #connector_id: '1'
