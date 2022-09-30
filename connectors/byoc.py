@@ -19,6 +19,7 @@ from connectors.index import defaults_for
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
+PIPELINE = "ent-search-generic-ingestion"
 
 
 def e2str(entry):
@@ -84,6 +85,11 @@ class BYOIndex(ESClient):
             index=CONNECTORS_INDEX,
             id=connector.id,
             doc=document,
+        )
+
+    async def preflight(self):
+        await self.check_exists(
+            indices=[CONNECTORS_INDEX, JOBS_INDEX], pipelines=[PIPELINE]
         )
 
     async def get_list(self):

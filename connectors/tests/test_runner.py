@@ -220,6 +220,11 @@ async def set_server_responses(
 
     headers = {"X-Elastic-Product": "Elasticsearch"}
 
+    mock_responses.head(f"{host}/.elastic-connectors", headers=headers)
+    mock_responses.head(f"{host}/.elastic-connectors-sync-jobs", headers=headers)
+    mock_responses.get(
+        f"{host}/_ingest/pipeline/ent-search-generic-ingestion", headers=headers
+    )
     mock_responses.post(f"{host}/.elastic-connectors/_refresh", headers=headers)
     mock_responses.post(
         f"{host}/.elastic-connectors/_search?expand_wildcards=hidden",
