@@ -41,9 +41,9 @@ release:
 	install
 	bin/python setup.py sdist
 
-ftest: bin/pytest bin/elastic-ingest
-	connectors/tests/ftest.sh $(NAME)
-
 run: 
 	install
 	bin/elastic-ingest --debug
+
+ftest:
+	bin/python connectors/tests/ftest.py $(NAME)
