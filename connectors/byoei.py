@@ -46,7 +46,7 @@ class Bulker:
                 {"doc": doc["doc"], "doc_as_upsert": True},
             ]
         if operation == OP_DELETE:
-            return [{"_op_type": "delete", "_index": index, "_id": doc_id}]
+            return [{operation: {"_index": index, "_id": doc_id}}]
         raise TypeError(operation)
 
     async def _batch_bulk(self, operations):
