@@ -95,6 +95,18 @@ class MySqlDataSource(BaseDataSource):
             logger.exception("Error while connecting to the MySQL Server.")
             raise
 
+    async def _stream_rows(self, query):
+        async with self.connection_pool.acquire() as connection:
+            async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+                await cursor.execute(query)
+                yield [column[0] for column in cursor.description]
+
+                rows = await cursor.fetchmany()
+                if len(rows) == 0:
+                    return
+                for row in rows:
+                    yield row
+
     async def _execute_query(self, query):
         """Executes the passed query on the MySQL server.
 
@@ -125,6 +137,7 @@ class MySqlDataSource(BaseDataSource):
 
         # Query to get all table names from a database
         query = QUERIES["ALL_TABLE"].format(database=database)
+
         _, query_response = await self._execute_query(query=query)
         if query_response:
             for table in query_response:
@@ -195,8 +208,6 @@ class MySqlDataSource(BaseDataSource):
             Dict: Document to be index
         """
 
-        column_names, query_response = await self._execute_query(query=query)
-
         # Query to get the table's primary key
         query = QUERIES["TABLE_PRIMARY_KEY"].format(database=database, table=table)
         _, columns = await self._execute_query(query=query)
@@ -212,10 +223,15 @@ class MySqlDataSource(BaseDataSource):
                 query=last_update_time_query
             )
 
+            query = QUERIES["TABLE_DATA"].format(database=database, table=table)
+            streamer = self._stream_rows(query=query)
+
+            column_names = await streamer.__anext__()
             for column_name in columns:
                 keys.append(column_name[0])
 
-            for row in query_response:
+
+            async for row in streamer:
                 row = dict(zip(column_names, row))
                 keys_value = ""
                 for key in keys:
