@@ -11,3 +11,6 @@ stop-stack:
 
 load-data:
 	./loadsample.sh
+
+remove-data:
+	echo "todo"

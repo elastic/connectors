@@ -20,6 +20,9 @@ install: bin/python
 load-data: install
 	bin/python ./loadsample.py
 
+remove-data: install
+	bin/python ./remove.py
+
 uninstall:
 	rm -rf bin
 	rm -rf include
