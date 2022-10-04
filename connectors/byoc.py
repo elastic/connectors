@@ -289,8 +289,11 @@ class BYOConnector:
         self.doc_source["last_sync_status"] = e2str(job.status)
         if exception is None:
             self.doc_source["last_sync_error"] = None
+            self.doc_source["error"] = None
         else:
             self.doc_source["last_sync_error"] = str(exception)
+            self.doc_source["error"] = str(exception)
+
         self.doc_source["last_synced"] = iso_utc()
         await self._write()
         logger.info(

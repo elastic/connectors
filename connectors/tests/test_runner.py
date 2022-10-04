@@ -428,18 +428,26 @@ async def test_connector_service_poll_clear_error(
     calls = []
 
     def upd(url, **kw):
-        pass
+        doc = json.loads(kw["data"])["doc"]
+        calls.append("connector:" + str(doc.get("error", "NOT THERE")))
 
     def jobs_update(url, **kw):
         doc = json.loads(kw["data"])["doc"]
-        calls.append(doc.get("error", "NOT THERE"))
+        calls.append("job:" + str(doc.get("error", "NOT THERE")))
 
     await set_server_responses(
         mock_responses, FAIL_ONCE_CONFIG, connectors_update=upd, jobs_update=jobs_update
     )
     await service.poll(one_sync=True)  # fails
     await service.poll(one_sync=True)  # works
-    assert calls == ["I fail while syncing", None]
+    assert calls == [
+        "connector:NOT THERE",  # from is_ready()
+        "job:I fail while syncing",  # first sync
+        "connector:I fail while syncing",  # first sync
+        "connector:NOT THERE",  # heartbeat
+        "job:None",  # second sync
+        "connector:None",  # second sync
+    ]
 
 
 @pytest.mark.asyncio
