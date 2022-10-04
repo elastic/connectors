@@ -604,9 +604,15 @@ async def test_connector_settings_change(
         bulk_call=bulk_call,
     )
 
-    # two polls, the second one gets a different pipeline
-    await service.poll(one_sync=True)
-    await service.poll(one_sync=True)
+    # prevent cache purging
+    with mock.patch("connectors.byoc.purge_cache"):
+        # two polls, the second one gets a different pipeline
+        await service.poll(one_sync=True)
+        await service.poll(one_sync=True)
+
+    await purge_connectors()
+    await purge_sources()
+    service.stop()
 
     # the first doc and second doc don't get the same pipeline
     assert indexed[0]["_extract_binary_content"]
