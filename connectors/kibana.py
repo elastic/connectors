@@ -8,8 +8,9 @@ import os
 import asyncio
 import logging
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
-import elasticsearch
+import json
 
+import elasticsearch
 from envyaml import EnvYAML
 
 from connectors.byoei import ElasticServer
@@ -21,6 +22,7 @@ from connectors.utils import validate_index_name
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
+DEFAULT_PIPELINE = os.path.join(os.path.dirname(__file__), "pipeline.json")
 
 
 # XXX simulating Kibana click-arounds
@@ -34,18 +36,12 @@ async def prepare(service_type, index_name, config):
             id="ent-search-generic-ingestion"
         )
     except elasticsearch.NotFoundError:
-        pipeline = {
-            "description": "My optional pipeline description",
-            "processors": [
-                {
-                    "set": {
-                        "description": "My optional processor description",
-                        "field": "my-keyword-field",
-                        "value": "foo",
-                    }
-                }
-            ],
-        }
+
+        with open(DEFAULT_PIPELINE) as f:
+            pipeline = {
+                "description": "My optional pipeline description",
+                "processors": json.loads(f.read()),
+            }
 
         await es.client.ingest.put_pipeline(
             id="ent-search-generic-ingestion", body=pipeline
