@@ -184,6 +184,12 @@ class PipelineSettings:
         self.reduce_whitespace = pipeline.get("reduce_whitespace", True)
         self.run_ml_inference = pipeline.get("run_ml_inference", True)
 
+    def __repr__(self):
+        return (
+            f"Pipeline {self.name} <binary: {self.extract_binary_content}, "
+            f"whitespace {self.reduce_whitespace}, ml inference {self.run_ml_inference}>"
+        )
+
 
 class BYOConnector:
     def __init__(self, index, connector_id, doc_source, bulk_queue_max_size=1024):
@@ -199,7 +205,6 @@ class BYOConnector:
         self._start_time = None
         self._hb = None
         self.bulk_queue_max_size = bulk_queue_max_size
-        self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
 
     def update_config(self, doc_source):
         self.sync_now = doc_source.get("sync_now", False)
@@ -208,6 +213,7 @@ class BYOConnector:
         self.index_name = doc_source["index_name"]
         self.configuration = DataSourceConfiguration(doc_source["configuration"])
         self.scheduling = doc_source["scheduling"]
+        self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
 
     async def close(self):
         self._closed = True
@@ -292,6 +298,8 @@ class BYOConnector:
         )
 
     async def prepare_docs(self, data_provider):
+        logger.debug(f'Using pipeline {self.pipeline}')
+
         async for doc, lazy_download in data_provider.get_docs():
             # adapt doc for pipeline settings
             doc["_extract_binary_content"] = self.pipeline.extract_binary_content

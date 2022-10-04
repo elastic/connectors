@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import copy
 import os
 import pytest
 import asyncio
@@ -34,6 +35,11 @@ FAKE_CONFIG = {
             "label": "MongoDB Collection",
         },
     },
+    "pipeline": {
+        "extract_binary_content": True,
+        "reduce_whitespace": True,
+        "run_ml_inference": True,
+    },
     "index_name": "search-airbnb",
     "service_type": "fake",
     "status": "configured",
@@ -47,6 +53,14 @@ FAKE_CONFIG = {
     "sync_now": True,
     "is_native": True,
 }
+
+FAKE_CONFIG_PIPELINE_CHANGED = copy.deepcopy(FAKE_CONFIG)
+FAKE_CONFIG_PIPELINE_CHANGED["pipeline"] = {
+    "extract_binary_content": False,
+    "reduce_whitespace": False,
+    "run_ml_inference": False,
+}
+
 
 FAKE_CONFIG_NOT_NATIVE = {
     "api_key_id": "",
@@ -72,7 +86,7 @@ FAKE_CONFIG_NOT_NATIVE = {
     "is_native": False,
 }
 
-LARGE_FAKE_CONFIG = dict(FAKE_CONFIG)
+LARGE_FAKE_CONFIG = copy.deepcopy(FAKE_CONFIG)
 LARGE_FAKE_CONFIG["service_type"] = "large_fake"
 
 
@@ -212,38 +226,61 @@ class LargeFakeSource(FakeSource):
 async def set_server_responses(
     mock_responses,
     config=FAKE_CONFIG,
+    connectors_read=None,
     connectors_update=None,
     host="http://nowhere.com:9200",
+    jobs_update=None,
+    bulk_call=None,
 ):
     await purge_connectors()
     await purge_sources()
 
     headers = {"X-Elastic-Product": "Elasticsearch"}
 
-    mock_responses.head(f"{host}/.elastic-connectors", headers=headers)
-    mock_responses.head(f"{host}/.elastic-connectors-sync-jobs", headers=headers)
-    mock_responses.get(
-        f"{host}/_ingest/pipeline/ent-search-generic-ingestion", headers=headers
+    mock_responses.head(f"{host}/.elastic-connectors", headers=headers, repeat=True)
+    mock_responses.head(
+        f"{host}/.elastic-connectors-sync-jobs", headers=headers, repeat=True
     )
-    mock_responses.post(f"{host}/.elastic-connectors/_refresh", headers=headers)
+    mock_responses.get(
+        f"{host}/_ingest/pipeline/ent-search-generic-ingestion",
+        headers=headers,
+        repeat=True,
+    )
+    mock_responses.post(
+        f"{host}/.elastic-connectors/_refresh", headers=headers, repeat=True
+    )
+
+    def _connectors_read(url, **kw):
+        return CallbackResult(
+            status=200, payload={"hits": {"hits": [{"_id": "1", "_source": config}]}}
+        )
+
+    if connectors_read is None:
+        connectors_read = _connectors_read
+
     mock_responses.post(
         f"{host}/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={"hits": {"hits": [{"_id": "1", "_source": config}]}},
         headers=headers,
+        callback=connectors_read,
+        repeat=True,
     )
     mock_responses.post(
         f"{host}/.elastic-connectors-sync-jobs/_doc",
         payload={"_id": "1"},
         headers=headers,
+        repeat=True,
     )
+
     mock_responses.post(
         f"{host}/.elastic-connectors-sync-jobs/_update/1",
         headers=headers,
+        callback=jobs_update,
         repeat=True,
     )
     mock_responses.put(
         f"{host}/.elastic-connectors-sync-jobs/_doc/1",
         payload={"_id": "1"},
+        callback=jobs_update,
         headers=headers,
     )
 
@@ -271,7 +308,7 @@ async def set_server_responses(
 
     mock_responses.put(
         f"{host}/.elastic-connectors/_doc/1",
-        callback=update_connector,
+        callback=connectors_update,
         headers=headers,
     )
     mock_responses.post(
@@ -280,39 +317,56 @@ async def set_server_responses(
         callback=connectors_update,
         repeat=True,
     )
-    mock_responses.head(f"{host}/search-airbnb?expand_wildcards=open", headers=headers)
+    mock_responses.head(
+        f"{host}/search-airbnb?expand_wildcards=open",
+        headers=headers,
+        repeat=True,
+    )
     mock_responses.get(
         f"{host}/search-airbnb/_mapping?expand_wildcards=open",
         payload={"search-airbnb": {"mappings": {}}},
         headers=headers,
+        repeat=True,
     )
     mock_responses.put(
         f"{host}/search-airbnb/_mapping?expand_wildcards=open",
         headers=headers,
+        repeat=True,
     )
     mock_responses.get(
         f"{host}/search-airbnb",
         payload={"hits": {"hits": [{"_id": "1", "_source": config}]}},
         headers=headers,
+        repeat=True,
     )
     mock_responses.get(
         f"{host}/search-airbnb/_search?scroll=5m",
         payload={"hits": {"hits": [{"_id": "1", "_source": config}]}},
         headers=headers,
+        repeat=True,
     )
     mock_responses.post(
         f"{host}/search-airbnb/_search?scroll=5m",
         payload={"_id": "1"},
         headers=headers,
+        repeat=True,
     )
     mock_responses.put(
         f"{host}/search-airbnb/_search?scroll=5m",
         payload={"_id": "1"},
         headers=headers,
+        repeat=True,
     )
+
+    def _bulk_call(url, **kw):
+        return CallbackResult(status=200, payload={"items": []})
+
+    if bulk_call is None:
+        bulk_call = _bulk_call
+
     mock_responses.put(
         f"{host}/_bulk?pipeline=ent-search-generic-ingestion",
-        payload={"items": []},
+        callback=bulk_call,
         headers=headers,
         repeat=True,
     )
@@ -516,3 +570,54 @@ async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_e
         BYOConnector.sync = old_sync
 
     patch_logger.assert_instance(Exception)
+
+
+@pytest.mark.asyncio
+async def test_connector_settings_change(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+    service = ConnectorService(CONFIG)
+
+    configs = [FAKE_CONFIG, FAKE_CONFIG_PIPELINE_CHANGED]
+    current = [-1]
+
+    # we want to simulate a settings change between two calls
+    # to make sure the pipeline settings get updated
+    def connectors_read(url, **kw):
+        current[0] += 1
+        source = configs[current[0]]
+        return CallbackResult(
+            status=200, payload={"hits": {"hits": [{"_id": "1", "_source": source}]}}
+        )
+
+    indexed = []
+
+    def bulk_call(url, **kw):
+        queries = [json.loads(call.strip()) for call in kw["data"].split(b"\n") if call]
+        indexed.append(queries[1])
+        return CallbackResult(status=200, payload={"items": []})
+
+    await set_server_responses(
+        mock_responses,
+        FAKE_CONFIG,
+        connectors_read=connectors_read,
+        bulk_call=bulk_call,
+    )
+
+    # prevent cache purging
+    with mock.patch("connectors.byoc.purge_cache"):
+        # two polls, the second one gets a different pipeline
+        await service.poll(one_sync=True)
+        await service.poll(one_sync=True)
+
+    await purge_connectors()
+    await purge_sources()
+    service.stop()
+
+    # the first doc and second doc don't get the same pipeline
+    assert indexed[0]["_extract_binary_content"]
+    assert indexed[0]["_reduce_whitespace"]
+    assert indexed[0]["_run_ml_inference"]
+    assert not indexed[1]["_extract_binary_content"]
+    assert not indexed[1]["_reduce_whitespace"]
+    assert not indexed[1]["_run_ml_inference"]
