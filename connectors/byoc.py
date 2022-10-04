@@ -184,6 +184,12 @@ class PipelineSettings:
         self.reduce_whitespace = pipeline.get("reduce_whitespace", True)
         self.run_ml_inference = pipeline.get("run_ml_inference", True)
 
+    def __repr__(self):
+        return (
+            f"Pipeline {self.name} <binary: {self.extract_binary_content}, "
+            f"whitespace {self.reduce_whitespace}, ml inference {self.run_ml_inference}>"
+        )
+
 
 class BYOConnector:
     def __init__(self, index, connector_id, doc_source, bulk_queue_max_size=1024):
