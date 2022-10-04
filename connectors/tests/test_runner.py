@@ -255,6 +255,7 @@ async def set_server_responses(
     mock_responses.head(f"{host}/.elastic-connectors", headers=headers, repeat=True)
     mock_responses.head(
         f"{host}/.elastic-connectors-sync-jobs", headers=headers, repeat=True
+    )
 
     mock_responses.get(
         f"{host}/_ingest/pipeline/ent-search-generic-ingestion",

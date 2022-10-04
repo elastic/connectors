@@ -302,7 +302,7 @@ class BYOConnector:
         )
 
     async def prepare_docs(self, data_provider):
-        logger.debug(f'Using pipeline {self.pipeline}')
+        logger.debug(f"Using pipeline {self.pipeline}")
 
         async for doc, lazy_download in data_provider.get_docs():
             # adapt doc for pipeline settings
