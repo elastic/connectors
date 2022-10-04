@@ -168,6 +168,7 @@ class SyncJob:
 
         if exception is None:
             self.status = JobStatus.COMPLETED
+            job_def["error"] = None
         else:
             self.status = JobStatus.ERROR
             job_def["error"] = str(exception)

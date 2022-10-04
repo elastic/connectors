@@ -88,6 +88,8 @@ FAKE_CONFIG_NOT_NATIVE = {
 
 LARGE_FAKE_CONFIG = copy.deepcopy(FAKE_CONFIG)
 LARGE_FAKE_CONFIG["service_type"] = "large_fake"
+FAIL_ONCE_CONFIG = dict(FAKE_CONFIG)
+FAIL_ONCE_CONFIG["service_type"] = "fail_once"
 
 
 FAKE_CONFIG_NO_SYNC = {
@@ -212,6 +214,19 @@ class FakeSource:
         return []
 
 
+class FailsThenWork(FakeSource):
+    """Buggy"""
+
+    service_type = "fail_once"
+    fail = True
+
+    async def get_docs(self):
+        if FailsThenWork.fail:
+            FailsThenWork.fail = False
+            raise Exception("I fail while syncing")
+        yield {"_id": 1}, partial(self._dl, 1)
+
+
 class LargeFakeSource(FakeSource):
     """Phatey"""
 
@@ -240,7 +255,7 @@ async def set_server_responses(
     mock_responses.head(f"{host}/.elastic-connectors", headers=headers, repeat=True)
     mock_responses.head(
         f"{host}/.elastic-connectors-sync-jobs", headers=headers, repeat=True
-    )
+
     mock_responses.get(
         f"{host}/_ingest/pipeline/ent-search-generic-ingestion",
         headers=headers,
@@ -403,6 +418,28 @@ async def test_connector_service_poll_large(
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
     assert_re(r"Sync done: 10001 indexed, 0  deleted", patch_logger.logs)
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_clear_error(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+    service = ConnectorService(CONFIG)
+    calls = []
+
+    def upd(url, **kw):
+        pass
+
+    def jobs_update(url, **kw):
+        doc = json.loads(kw["data"])["doc"]
+        calls.append(doc.get("error", "NOT THERE"))
+
+    await set_server_responses(
+        mock_responses, FAIL_ONCE_CONFIG, connectors_update=upd, jobs_update=jobs_update
+    )
+    await service.poll(one_sync=True)  # fails
+    await service.poll(one_sync=True)  # works
+    assert calls == ["I fail while syncing", None]
 
 
 @pytest.mark.asyncio
