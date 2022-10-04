@@ -199,7 +199,6 @@ class BYOConnector:
         self._start_time = None
         self._hb = None
         self.bulk_queue_max_size = bulk_queue_max_size
-        self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
 
     def update_config(self, doc_source):
         self.sync_now = doc_source.get("sync_now", False)
@@ -208,6 +207,7 @@ class BYOConnector:
         self.index_name = doc_source["index_name"]
         self.configuration = DataSourceConfiguration(doc_source["configuration"])
         self.scheduling = doc_source["scheduling"]
+        self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
 
     async def close(self):
         self._closed = True
