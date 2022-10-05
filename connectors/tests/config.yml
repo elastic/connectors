@@ -19,3 +19,4 @@ connector_id: '1'
 sources:
   fake: test_runner:FakeSource
   large_fake: test_runner:LargeFakeSource
+  fail_once: test_runner:FailsThenWork
