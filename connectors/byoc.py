@@ -168,6 +168,7 @@ class SyncJob:
 
         if exception is None:
             self.status = JobStatus.COMPLETED
+            job_def["error"] = None
         else:
             self.status = JobStatus.ERROR
             job_def["error"] = str(exception)
@@ -288,8 +289,11 @@ class BYOConnector:
         self.doc_source["last_sync_status"] = e2str(job.status)
         if exception is None:
             self.doc_source["last_sync_error"] = None
+            self.doc_source["error"] = None
         else:
             self.doc_source["last_sync_error"] = str(exception)
+            self.doc_source["error"] = str(exception)
+
         self.doc_source["last_synced"] = iso_utc()
         await self._write()
         logger.info(
@@ -298,7 +302,7 @@ class BYOConnector:
         )
 
     async def prepare_docs(self, data_provider):
-        logger.debug(f'Using pipeline {self.pipeline}')
+        logger.debug(f"Using pipeline {self.pipeline}")
 
         async for doc, lazy_download in data_provider.get_docs():
             # adapt doc for pipeline settings
