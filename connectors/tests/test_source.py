@@ -52,6 +52,7 @@ def test_default():
 
 
 class MyConnector:
+    id = '1'
     service_type = "yea"
 
     def __init__(self, *args):
