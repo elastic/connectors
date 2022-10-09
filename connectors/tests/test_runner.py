@@ -20,7 +20,6 @@ from connectors.conftest import assert_re
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 ES_CONFIG = os.path.join(os.path.dirname(__file__), "entsearch.yml")
 CONFIG_2 = os.path.join(os.path.dirname(__file__), "config_2.yml")
-CONFIG_KEEP_ALIVE = os.path.join(os.path.dirname(__file__), "config_keep_alive.yml")
 CONFIG_HTTPS = os.path.join(os.path.dirname(__file__), "config_https.yml")
 
 
@@ -603,7 +602,7 @@ async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_e
     )
 
     try:
-        service = ConnectorService(CONFIG_KEEP_ALIVE)
+        service = ConnectorService(CONFIG)
         asyncio.get_event_loop().call_soon(service.stop)
         await service.poll()
     except Exception:

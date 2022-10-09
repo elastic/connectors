@@ -49,7 +49,6 @@ class ConnectorService:
         self._sleeper = None
         self._sleeps = CancellableSleeps()
         self.connectors = None
-        self.keep_alive = self.service_config.get("keep_alive", False)
 
     def ent_search_config(self):
         if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
