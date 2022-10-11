@@ -81,6 +81,12 @@ class MySqlDataSource(BaseDataSource):
                 "label": "Friendly name for the connector",
                 "type": "str",
             },
+            "fetch_size": {
+                "value": 10,
+                "label": "How many rows to fetch on each call",
+                "type": "int",
+            },
+
         }
 
     async def ping(self):
@@ -96,12 +102,13 @@ class MySqlDataSource(BaseDataSource):
             raise
 
     async def _stream_rows(self, query):
+        size = int(self.configuration.get("fetch_size", 10))
         async with self.connection_pool.acquire() as connection:
             async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
                 await cursor.execute(query)
                 yield [column[0] for column in cursor.description]
 
-                rows = await cursor.fetchmany()
+                rows = await cursor.fetchmany(size=size)
                 if len(rows) == 0:
                     return
                 for row in rows:
