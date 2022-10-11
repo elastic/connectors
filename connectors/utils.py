@@ -114,12 +114,12 @@ class ESClient:
 
     async def check_exists(self, indices, pipelines):
         for index in indices:
-            logger.debug("Checking for index {index} presence")
+            logger.debug(f"Checking for index {index} presence")
             if not await self.client.indices.exists(index=index):
                 raise PreflightCheckError(f"Cloud not find index {index}")
 
         for pipeline in pipelines:
-            logger.debug("Checking for pipeline {pipeline} presence")
+            logger.debug(f"Checking for pipeline {pipeline} presence")
             try:
                 await self.client.ingest.get_pipeline(id=pipeline)
             except NotFoundError:
