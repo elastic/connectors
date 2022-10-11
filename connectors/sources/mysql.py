@@ -82,11 +82,10 @@ class MySqlDataSource(BaseDataSource):
                 "type": "str",
             },
             "fetch_size": {
-                "value": 30,
+                "value": 50,
                 "label": "How many rows to fetch on each call",
                 "type": "int",
             },
-
         }
 
     async def ping(self):
@@ -101,19 +100,27 @@ class MySqlDataSource(BaseDataSource):
             logger.exception("Error while connecting to the MySQL Server.")
             raise
 
-    async def _stream_rows(self, query):
-        size = int(self.configuration.get("fetch_size", 30))
-        logger.debug(f"Streaming MYSQL data {size} rows at a time")
+    async def _stream_rows(self, database, table, query):
+        size = int(self.configuration.get("fetch_size", 50))
+        logger.debug(f"Streaming {database}.{table} {size} rows at a time")
+
         async with self.connection_pool.acquire() as connection:
+            count = 0
             async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
                 await cursor.execute(query)
                 yield [column[0] for column in cursor.description]
 
-                rows = await cursor.fetchmany(size=size)
-                if len(rows) == 0:
-                    return
-                for row in rows:
-                    yield row
+                while True:
+                    rows = await cursor.fetchmany(size=size)
+                    if len(rows) == 0:
+                        break
+
+                    for row in rows:
+                        yield row
+
+                    count += len(rows)
+                    if count % 100 == 0:
+                        logger.debug(f"Collected {count} rows in {database}.{table}")
 
     async def _execute_query(self, query):
         """Executes the passed query on the MySQL server.
@@ -232,12 +239,11 @@ class MySqlDataSource(BaseDataSource):
             )
 
             query = QUERIES["TABLE_DATA"].format(database=database, table=table)
-            streamer = self._stream_rows(query=query)
+            streamer = self._stream_rows(database, table, query=query)
 
             column_names = await streamer.__anext__()
             for column_name in columns:
                 keys.append(column_name[0])
-
 
             async for row in streamer:
                 row = dict(zip(column_names, row))

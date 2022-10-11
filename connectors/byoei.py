@@ -47,6 +47,7 @@ class Bulker:
             ]
         if operation == OP_DELETE:
             return [{operation: {"_index": index, "_id": doc_id}}]
+
         raise TypeError(operation)
 
     async def _batch_bulk(self, operations):
@@ -73,7 +74,6 @@ class Bulker:
 
     async def run(self):
         batch = []
-        ops = []
         self.bulk_time = 0
         self.bulking = True
         docs_ended = downloads_ended = False
@@ -94,17 +94,16 @@ class Bulker:
             self.ops[operation] += 1
             batch.extend(self._bulk_op(doc, operation))
 
-            if len(batch) >= self.chunk_size * 2:
-                ops.append(asyncio.create_task(self._batch_bulk(list(batch))))
+            if len(batch) >= self.chunk_size:
+                logger.debug(f"Sending a batch of {len(batch)} ops")
+                await self._batch_bulk(batch)
                 batch.clear()
 
             await asyncio.sleep(0)
 
         if len(batch) > 0:
-            ops.append(asyncio.create_task(self._batch_bulk(list(batch))))
+            await self._batch_bulk(batch)
             batch.clear()
-
-        await asyncio.gather(*ops)
 
 
 class Fetcher:
@@ -185,7 +184,6 @@ class Fetcher:
             async for doc in generator:
                 doc, lazy_download = doc
                 doc_id = doc["id"] = doc.pop("_id")
-                logger.debug(f"Looking at {doc_id}")
                 seen_ids.add(doc_id)
 
                 # If the doc has a timestamp, we can use it to see if it has
@@ -195,7 +193,6 @@ class Fetcher:
                 # For them we update the docs in any case.
                 if "timestamp" in doc:
                     if self.existing_timestamps.get(doc_id, "") == doc["timestamp"]:
-                        logger.debug(f"Skipping {doc_id}")
                         # cancel the download
                         if lazy_download is not None:
                             await lazy_download(doit=False)
@@ -361,7 +358,7 @@ class ElasticServer(ESClient):
 
         # start the bulker
         bulker = Bulker(
-            self.client, stream, self.config.get("bulk_chunk_size", 500), pipeline
+            self.client, stream, self.config.get("bulk_chunk_size", 150), pipeline
         )
         bulker_task = asyncio.create_task(bulker.run())
 
