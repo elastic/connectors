@@ -199,8 +199,8 @@ async def test_serialize():
 
 
 @pytest.mark.asyncio
-async def test_create_document():
-    """This function test create_document method of MySQL"""
+async def test_fetch_documents():
+    """This function test fetch_documents method of MySQL"""
     # Setup
     source = create_source(MySqlDataSource)
 
@@ -218,7 +218,7 @@ async def test_create_document():
 
         mock.patch("source._execute_query", return_value=response)
 
-    response = source.create_document(
+    response = source.fetch_documents(
         database="database_name", table="table_name", query=query
     )
 

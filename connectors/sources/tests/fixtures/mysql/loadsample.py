@@ -29,7 +29,7 @@ def main():
         sql_query = f"CREATE TABLE IF NOT EXISTS customers_{table} (name VARCHAR(255), age int, description LONGTEXT, PRIMARY KEY (name))"
         cursor.execute(sql_query)
         raws = []
-        for raw_id in range(800):
+        for raw_id in range(10000):
             raws.append((f"user_{raw_id}", raw_id, BIG_TEXT))
         sql_query = f"INSERT INTO customers_{table}" + "(name, age, description) VALUES (%s, %s, %s)"
         cursor.executemany(sql_query, raws)

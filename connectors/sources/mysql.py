@@ -82,7 +82,7 @@ class MySqlDataSource(BaseDataSource):
                 "type": "str",
             },
             "fetch_size": {
-                "value": 10,
+                "value": 30,
                 "label": "How many rows to fetch on each call",
                 "type": "int",
             },
@@ -102,7 +102,8 @@ class MySqlDataSource(BaseDataSource):
             raise
 
     async def _stream_rows(self, query):
-        size = int(self.configuration.get("fetch_size", 10))
+        size = int(self.configuration.get("fetch_size", 30))
+        logger.debug(f"Streaming MYSQL data {size} rows at a time")
         async with self.connection_pool.acquire() as connection:
             async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
                 await cursor.execute(query)
@@ -155,7 +156,7 @@ class MySqlDataSource(BaseDataSource):
                 query = QUERIES["TABLE_DATA"].format(
                     database=database, table=table_name
                 )
-                async for row in self.create_document(
+                async for row in self.fetch_documents(
                     database=database, table=table_name, query=query
                 ):
                     yield row
@@ -203,7 +204,7 @@ class MySqlDataSource(BaseDataSource):
 
         return doc
 
-    async def create_document(self, database, table, query):
+    async def fetch_documents(self, database, table, query):
         """Fetches all the table entires and format them in an Elasticsearch document
 
         Args:
