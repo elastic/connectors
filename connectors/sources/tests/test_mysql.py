@@ -55,6 +55,9 @@ class Cursor:
         """This method returns object of Return class"""
         return Result()
 
+    async def fetchmany(self):
+        return [["table1"], ["table2"]]
+
     def execute(self, query):
         """This method returns future object"""
         futures_object = asyncio.Future()
