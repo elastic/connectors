@@ -205,7 +205,7 @@ class MySqlDataSource(BaseDataSource):
         return doc
 
     async def fetch_documents(self, database, table, query):
-        """Fetches all the table entires and format them in an Elasticsearch document
+        """Fetches all the table entries and format them in Elasticsearch documents
 
         Args:
             database (str): Name of database

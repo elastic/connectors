@@ -11,20 +11,21 @@ import string
 DATABASE_NAME = "customerinfo"
 
 
-def random_text(k=50380):
+def random_text(k=1024*20):
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=k))
 
 BIG_TEXT = random_text()
 
 
 def main():
-    """Method for generating 15k document for mysql"""
+    """30 tables of 10001 rows each. each row is ~ 1024*20 bytes
+    """
     database = connect(host="127.0.0.1", port=3306, user="root", password="changeme")
     cursor = database.cursor()
     cursor.execute(f"DROP DATABASE IF EXISTS {DATABASE_NAME}")
     cursor.execute(f"CREATE DATABASE {DATABASE_NAME}")
     cursor.execute(f"USE {DATABASE_NAME}")
-    for table in range(50):
+    for table in range(30):
         print(f"Adding data in {table}...")
         sql_query = f"CREATE TABLE IF NOT EXISTS customers_{table} (name VARCHAR(255), age int, description LONGTEXT, PRIMARY KEY (name))"
         cursor.execute(sql_query)
