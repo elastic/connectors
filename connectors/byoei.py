@@ -103,7 +103,6 @@ class Bulker:
 
         if len(batch) > 0:
             await self._batch_bulk(batch)
-            batch.clear()
 
 
 class Fetcher:
