@@ -1,12 +1,7 @@
 # Releasing the Connectors project
 
-The version scheme we use is **MAJOR.MINOR.PATCH.BUILD** and stored in the [VERSION](https://github.com/elastic/connectors-ruby/blob/main/VERSION) file
+The version scheme we use is **MAJOR.MINOR.PATCH.BUILD** and stored in the [VERSION](https://github.com/elastic/connectors-python/blob/main/connectors/VERSION) file
 at the root of this repository.
-
-## RubyGem Account
-
-When releasing Gems, you will be asked for an Email and Password.
-Look into the Vault in the `ent-search-team/rubygem` secret.
 
 ## Unified release
 
@@ -23,7 +18,7 @@ To release Connectors:
 - PR these changes to the appropriate Connectors release branch
 - Run `make release`
 
-A Gem will be published to RubyGems: #TODO: change the name, what's gonna be the new gem, if any is needed? https://rubygems.org/gems/connectors.
+A package will be generated in `dist/`
 
 Take care of the branching (minor releases only):
 
@@ -32,7 +27,8 @@ Take care of the branching (minor releases only):
 
 After the Elastic unified release is complete
 
-- Update the **BUILD** version ([example PR](https://github.com/elastic/connectors-ruby/pull/81)). Note that the Connectors project does not immediately bump to the next **PATCH** version. That wont happen until that patch release's FF date.
+- Update the **BUILD** version ([example PR](https://github.com/elastic/connectors-ruby/pull/81)). 
+Note that the Connectors project does not immediately bump to the next **PATCH** version. That wont happen until that patch release's FF date.
 
 ## In-Between releases
 

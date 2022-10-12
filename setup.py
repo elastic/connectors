@@ -18,7 +18,7 @@ install_requires = []
 description = ""
 
 for file_ in ("README",):
-    with open("%s.rst" % file_) as f:
+    with open("%s.md" % file_) as f:
         description += f.read() + "\n\n"
 
 

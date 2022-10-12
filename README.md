@@ -43,5 +43,3 @@ The `elastic-ingest` CLI will be installed on your system:
 - [Security Policy](docs/SECURITY.md)
 - [Elastic-internal guide](docs/INTERNAL.md)
 - [Connector Protocol](https://github.com/elastic/connectors-ruby/blob/main/docs/CONNECTOR_PROTOCOL.md)
-
-To implement a new source, check `CONTRIBUTE.rst <CONTRIBUTE.rst>`_
