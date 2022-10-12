@@ -7,7 +7,6 @@ from connectors.source import (
     Field,
     DataSourceConfiguration,
     get_source_klass,
-    get_data_source,
     get_data_sources,
 )
 
@@ -61,13 +60,6 @@ class MyConnector:
 
 def test_get_source_klass():
     assert get_source_klass("test_source:MyConnector") is MyConnector
-
-
-def test_data_source():
-    connector = MyConnector()
-    settings = {"sources": {"yea": "test_source:MyConnector"}}
-    source = get_data_source(connector, settings)
-    assert get_data_source(connector, settings) is source  # cache
 
 
 def test_get_data_sources():
