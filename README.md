@@ -20,7 +20,7 @@ Provides a CLI to ingest documents into Elasticsearch, following BYOC & BYOEI st
 
 To install the CLI, run:
 
-   $ make install
+    $ make install
 
 The `elastic-ingest` CLI will be installed on your system:
 
