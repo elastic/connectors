@@ -21,6 +21,7 @@ CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 ES_CONFIG = os.path.join(os.path.dirname(__file__), "entsearch.yml")
 CONFIG_2 = os.path.join(os.path.dirname(__file__), "config_2.yml")
 CONFIG_HTTPS = os.path.join(os.path.dirname(__file__), "config_https.yml")
+CONFIG_MEM = os.path.join(os.path.dirname(__file__), "config_mem.yml")
 
 
 FAKE_CONFIG = {
@@ -392,6 +393,8 @@ async def test_connector_service_poll(
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
+    # we want to make sure we DON'T get memory usage report
+    patch_logger.assert_not_present("===> Largest memory usage:")
 
 
 @pytest.mark.asyncio
@@ -455,6 +458,18 @@ async def test_connector_service_poll_not_native(
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
     patch_logger.assert_present("Connector 1 of type fake not supported, ignoring")
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_trace_mem(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+    await set_server_responses(mock_responses, FAKE_CONFIG)
+    service = ConnectorService(CONFIG_MEM)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll()
+    # we want to make sure we get memory usage report
+    patch_logger.assert_present("===> Largest memory usage:")
 
 
 @pytest.mark.asyncio

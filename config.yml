@@ -16,6 +16,7 @@ service:
   heartbeat: 300
   max_errors: 20
   max_errors_span: 600
+  trace_mem: false
 
 native_service_types:
   - mysql
