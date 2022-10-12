@@ -104,10 +104,8 @@ class MySqlDataSource(BaseDataSource):
             self.connection_pool = await aiomysql.create_pool(**self.connection_string)
         try:
             async with self.connection_pool.acquire() as connection:
-                if await connection.ping():
-                    logger.info("Successfully connected to the MySQL Server.")
-                else:
-                    raise Exception("The server responded False")
+                await connection.ping()
+                logger.info("Successfully connected to the MySQL Server.")
         except Exception:
             logger.exception("Error while connecting to the MySQL Server.")
             raise

@@ -110,7 +110,7 @@ async def mock_mysql_response():
 async def test_ping():
     """Test ping method of MySQL"""
     # Setup
-    source = create_source(MySqlDataSource, host="nowhere")
+    source = create_source(MySqlDataSource)
 
     mock_response = asyncio.Future()
     mock_response.set_result(mock.MagicMock())
@@ -127,7 +127,7 @@ async def test_ping():
 async def test_ping_negative(catch_stdout):
     """Test ping method of MySqlDataSource class with negative case"""
     # Setup
-    source = create_source(MySqlDataSource)
+    source = create_source(MySqlDataSource, host="nowhere")
 
     with pytest.raises(Exception):
         # Execute
