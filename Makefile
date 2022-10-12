@@ -25,3 +25,6 @@ release: install
 
 ftest:
 	connectors/tests/ftest.sh $(NAME)
+
+run: install
+	bin/elastic-ingest --debug
