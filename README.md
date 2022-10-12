@@ -20,13 +20,9 @@ Provides a CLI to ingest documents into Elasticsearch, following BYOC & BYOEI st
 
 To install the CLI, run:
 
-.. code-block:: bash
-
    $ make install
 
 The `elastic-ingest` CLI will be installed on your system:
-
-.. code-block:: bash
 
     $ bin/elastic-ingest --help
     usage: elastic-ingest [-h] [--action {poll,list}] [-c CONFIG_FILE] [--debug]
