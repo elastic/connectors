@@ -44,6 +44,8 @@ class Result:
 class Cursor:
     """This class contains methods which returns dummy response"""
 
+    first_call = True
+
     async def __aenter__(self):
         """Make a dummy database connection and return it"""
         return self
@@ -55,8 +57,11 @@ class Cursor:
         """This method returns object of Return class"""
         return Result()
 
-    async def fetchmany(self):
-        return [["table1"], ["table2"]]
+    async def fetchmany(self, size=1):
+        if self.first_call:
+            self.first_call = False
+            return [["table1"], ["table2"]]
+        return []
 
     def execute(self, query):
         """This method returns future object"""
@@ -105,7 +110,7 @@ async def mock_mysql_response():
 async def test_ping():
     """Test ping method of MySQL"""
     # Setup
-    source = create_source(MySqlDataSource)
+    source = create_source(MySqlDataSource, host="nowhere")
 
     mock_response = asyncio.Future()
     mock_response.set_result(mock.MagicMock())
@@ -254,7 +259,7 @@ async def test_fetch_rows():
 
     # Assert
     async for row in source.fetch_rows(database="database_name"):
-        assert row.get("_id")
+        assert "_id" in row
 
 
 @pytest.mark.asyncio

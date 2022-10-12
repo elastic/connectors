@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """MySQL source module responsible to fetch documents from MySQL"""
+import asyncio
+import gc
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -88,14 +90,24 @@ class MySqlDataSource(BaseDataSource):
             },
         }
 
+    async def close(self):
+        if self.connection_pool is None:
+            return
+        self.connection_pool.close()
+        await self.connection_pool.wait_closed()
+        self.connection_pool = None
+
     async def ping(self):
         """Verify the connection with MySQL server"""
-        try:
+        logger.info("Pinging MySQL...")
+        if self.connection_pool is None:
             self.connection_pool = await aiomysql.create_pool(**self.connection_string)
-
+        try:
             async with self.connection_pool.acquire() as connection:
-                await connection.ping()
-                logger.info("Successfully connected to the MySQL Server.")
+                if await connection.ping():
+                    logger.info("Successfully connected to the MySQL Server.")
+                else:
+                    raise Exception("The server responded False")
         except Exception:
             logger.exception("Error while connecting to the MySQL Server.")
             raise
@@ -108,10 +120,13 @@ class MySqlDataSource(BaseDataSource):
             count = 0
             async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
                 await cursor.execute(query)
+
+                # sending back column names
                 yield [column[0] for column in cursor.description]
 
                 while True:
                     rows = await cursor.fetchmany(size=size)
+
                     if len(rows) == 0:
                         break
 
@@ -119,8 +134,12 @@ class MySqlDataSource(BaseDataSource):
                         yield row
 
                     count += len(rows)
-                    if count % 100 == 0:
-                        logger.debug(f"Collected {count} rows in {database}.{table}")
+                    if count > 100:
+                        logger.info(f"Collected {count} rows in {database}.{table}")
+                        count = 0
+                    await asyncio.sleep(0)
+
+            gc.collect()
 
     async def _execute_query(self, query):
         """Executes the passed query on the MySQL server.
@@ -149,7 +168,6 @@ class MySqlDataSource(BaseDataSource):
         Yields:
             Dict: Row document to index
         """
-
         # Query to get all table names from a database
         query = QUERIES["ALL_TABLE"].format(database=database)
 
@@ -240,7 +258,6 @@ class MySqlDataSource(BaseDataSource):
 
             query = QUERIES["TABLE_DATA"].format(database=database, table=table)
             streamer = self._stream_rows(database, table, query=query)
-
             column_names = await streamer.__anext__()
             for column_name in columns:
                 keys.append(column_name[0])
@@ -298,3 +315,4 @@ class MySqlDataSource(BaseDataSource):
         for database in databases:
             async for row in self.fetch_rows(database=database):
                 yield row, None
+            await asyncio.sleep(0)

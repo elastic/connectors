@@ -154,10 +154,10 @@ async def test_get_existing_ids(mock_responses):
 
     es = ElasticServer(config)
     ids = []
-    async for doc in es.get_existing_ids("search-some-index"):
-        ids.append(doc["id"])
+    async for doc_id, ts in es.get_existing_ids("search-some-index"):
+        ids.append(doc_id)
 
-    assert ids == ["1", "2"]
+    assert ids == [b"1", b"2"]
     await es.close()
 
 

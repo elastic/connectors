@@ -7,6 +7,7 @@
 Implementation of BYOEI protocol (+some ids collecting)
 """
 import time
+import gc
 from collections import defaultdict
 import asyncio
 
@@ -70,6 +71,10 @@ class Bulker:
             self.bulk_time += time.time() - start
 
         logger.info(dict(self.ops))
+
+        # force-collect now to avoid fragmentation
+        del operations
+        gc.collect()
         return res
 
     async def run(self):
@@ -95,7 +100,6 @@ class Bulker:
             batch.extend(self._bulk_op(doc, operation))
 
             if len(batch) >= self.chunk_size:
-                logger.debug(f"Sending a batch of {len(batch)} ops")
                 await self._batch_bulk(batch)
                 batch.clear()
 
@@ -114,7 +118,6 @@ class Fetcher:
         queue,
         index,
         existing_ids,
-        existing_timestamps,
         queue_size=1024,
     ):
         self.client = client
@@ -125,13 +128,20 @@ class Fetcher:
         self._downloads = asyncio.Queue(maxsize=queue_size)
         self.loop = asyncio.get_event_loop()
         self.existing_ids = existing_ids
-        self.existing_timestamps = existing_timestamps
         self.sync_runs = False
         self.total_downloads = 0
         self.total_docs_updated = 0
         self.total_docs_created = 0
         self.total_docs_deleted = 0
         self.fetch_error = None
+
+    def __str__(self):
+        return (
+            "Fetcher <"
+            f"create: {self.total_docs_created} |"
+            f"update: {self.total_docs_updated} |"
+            f"delete: {self.total_docs_deleted}>"
+        )
 
     # XXX this can be defferred
     async def get_attachments(self):
@@ -177,26 +187,41 @@ class Fetcher:
     async def get_docs(self, generator):
         logger.info("Starting doc lookups")
         self.sync_runs = True
-
-        seen_ids = set()
+        count = 0
         try:
             async for doc in generator:
                 doc, lazy_download = doc
-                doc_id = doc["id"] = doc.pop("_id")
-                seen_ids.add(doc_id)
+                count += 1
+                if count % 100 == 0:
+                    logger.info(str(self))
 
-                # If the doc has a timestamp, we can use it to see if it has
-                # been modified. This reduces the bulk size a *lot*
-                #
-                # Some backends do not know how to do this so it's optional.
-                # For them we update the docs in any case.
-                if "timestamp" in doc:
-                    if self.existing_timestamps.get(doc_id, "") == doc["timestamp"]:
+                doc_id = doc["id"] = doc.pop("_id")
+
+                if doc_id.encode("utf8") in self.existing_ids:
+                    # pop out of self.existing_ids
+                    ts = self.existing_ids.pop(doc_id.encode("utf8"), b"").decode(
+                        "utf8"
+                    )
+
+                    # If the doc has a timestamp, we can use it to see if it has
+                    # been modified. This reduces the bulk size a *lot*
+                    #
+                    # Some backends do not know how to do this so it's optional.
+                    # For them we update the docs in any case.
+                    if "timestamp" in doc and ts == doc["timestamp"]:
                         # cancel the download
                         if lazy_download is not None:
                             await lazy_download(doit=False)
                         continue
+                    else:
+                        doc["timestamp"] = iso_utc()
+
+                    # the doc exists but we are still overwiting it with `index`
+                    operation = OP_INDEX
+                    self.total_docs_updated += 1
                 else:
+                    operation = OP_INDEX
+                    self.total_docs_created += 1
                     doc["timestamp"] = iso_utc()
 
                 if lazy_download is not None:
@@ -205,14 +230,6 @@ class Fetcher:
                             lazy_download(doit=True, timestamp=doc["timestamp"])
                         )
                     )
-
-                if doc_id in self.existing_ids:
-                    # the doc exists but we are still overwiting it with `index`
-                    operation = OP_INDEX
-                    self.total_docs_updated += 1
-                else:
-                    operation = OP_INDEX
-                    self.total_docs_created += 1
 
                 await self.queue.put(
                     {
@@ -232,11 +249,16 @@ class Fetcher:
 
         # We delete any document that existed in Elasticsearch that was not
         # returned by the backend.
-        for doc_id in self.existing_ids:
-            if doc_id in seen_ids:
-                continue
+        #
+        # Since we popped out every seen doc, existing_ids has now the ids to delete
+        logger.debug(f"Delete {len(self.existing_ids)} docs from Elasticsearch")
+        for doc_id in self.existing_ids.keys():
             await self.queue.put(
-                {"_op_type": OP_DELETE, "_index": self.index, "_id": doc_id}
+                {
+                    "_op_type": OP_DELETE,
+                    "_index": self.index,
+                    "_id": doc_id.decode("utf8"),
+                }
             )
             self.total_docs_deleted += 1
 
@@ -310,8 +332,18 @@ class ElasticServer(ESClient):
             doc_id += 1
 
     async def get_existing_ids(self, index):
-        """Returns an iterator on the `id` and `timestamp` fields of all documents in an index."""
+        """Returns an iterator on the `id` and `timestamp` fields of all documents in an index.
 
+
+        WARNING
+
+        This function will load all ids in memory -- on very large indices,
+        depending on the id length, it can be quite large.
+
+        It returns bytes instead of strings to spare a bit of memory.
+
+        300,000 ids will be around 50MiB
+        """
         logger.debug(f"Scanning existing index {index}")
         try:
             await self.client.indices.get(index=index)
@@ -323,24 +355,20 @@ class ElasticServer(ESClient):
             index=index,
             _source=["id", "timestamp"],
         ):
-            if "id" not in doc["_source"]:
-                doc["_source"]["id"] = doc["_id"]
-            yield doc["_source"]
+            doc_id = doc["_source"].get("id", doc["_id"])
+            ts = doc["_source"].get("timestamp")
+            if ts is not None:
+                ts = ts.encode()
+            # use bytes to reduce size
+            yield doc_id.encode(), ts
 
     async def async_bulk(self, index, generator, pipeline, queue_size=1024):
         start = time.time()
-        existing_ids = set()
-        existing_timestamps = {}
         stream = asyncio.Queue(maxsize=queue_size)
-
-        async for es_doc in self.get_existing_ids(index):
-            existing_ids.add(es_doc["id"])
-            if "timestamp" in es_doc:
-                existing_timestamps[es_doc["id"]] = es_doc["timestamp"]
-
+        existing_ids = {k: v async for (k, v) in self.get_existing_ids(index)}
         logger.debug(
             f"Found {len(existing_ids)} docs in {index} (duration "
-            f"{int(time.time() - start)} seconds)"
+            f"{int(time.time() - start)} seconds) "
         )
         logger.debug(f"Size of ids in memory is {get_size(existing_ids)}MiB")
 
@@ -350,14 +378,13 @@ class ElasticServer(ESClient):
             stream,
             index,
             existing_ids,
-            existing_timestamps,
             queue_size=queue_size,
         )
         fetcher_task = asyncio.create_task(fetcher.run(generator))
 
         # start the bulker
         bulker = Bulker(
-            self.client, stream, self.config.get("bulk_chunk_size", 150), pipeline
+            self.client, stream, self.config.get("bulk_chunk_size", 100), pipeline
         )
         bulker_task = asyncio.create_task(bulker.run())
 
