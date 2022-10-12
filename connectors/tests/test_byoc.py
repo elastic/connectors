@@ -19,7 +19,6 @@ from connectors.byoc import (
     SyncJob,
     JobStatus,
     BYOIndex,
-    _CONNECTORS_CACHE,
     BYOConnector,
 )
 
@@ -38,8 +37,6 @@ def test_utc():
 
 @pytest.mark.asyncio
 async def test_sync_job(mock_responses):
-    _CONNECTORS_CACHE.clear()
-
     client = AsyncElasticsearch(hosts=["http://nowhere.com:9200"])
 
     job = SyncJob("connector-id", client)
@@ -119,8 +116,6 @@ mongo = {
 
 @pytest.mark.asyncio
 async def test_heartbeat(mock_responses):
-    _CONNECTORS_CACHE.clear()
-
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
@@ -156,8 +151,6 @@ async def test_heartbeat(mock_responses):
 
 @pytest.mark.asyncio
 async def test_connectors_get_list(mock_responses):
-    _CONNECTORS_CACHE.clear()
-
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
@@ -182,8 +175,6 @@ async def test_connectors_get_list(mock_responses):
 
 @pytest.mark.asyncio
 async def test_sync_mongo(mock_responses, patch_logger):
-    _CONNECTORS_CACHE.clear()
-
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(

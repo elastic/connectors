@@ -13,15 +13,13 @@ from functools import partial
 from aioresponses import CallbackResult
 
 from connectors.runner import ConnectorService, run
-from connectors.byoc import purge_cache as purge_connectors
-from connectors.source import DataSourceError, purge_cache as purge_sources
+from connectors.source import DataSourceError
 from connectors.conftest import assert_re
 
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 ES_CONFIG = os.path.join(os.path.dirname(__file__), "entsearch.yml")
 CONFIG_2 = os.path.join(os.path.dirname(__file__), "config_2.yml")
-CONFIG_KEEP_ALIVE = os.path.join(os.path.dirname(__file__), "config_keep_alive.yml")
 CONFIG_HTTPS = os.path.join(os.path.dirname(__file__), "config_https.yml")
 
 
@@ -247,9 +245,6 @@ async def set_server_responses(
     jobs_update=None,
     bulk_call=None,
 ):
-    await purge_connectors()
-    await purge_sources()
-
     headers = {"X-Elastic-Product": "Elasticsearch"}
 
     mock_responses.head(f"{host}/.elastic-connectors", headers=headers, repeat=True)
@@ -517,7 +512,7 @@ async def test_connector_service_poll_buggy_service(
 ):
     def connectors_update(url, **kw):
         doc = json.loads(kw["data"])["doc"]
-        assert doc["error"] == "Could not instanciate test_runner:FakeSource for fake"
+        assert doc["error"] == "Could not instantiate test_runner:FakeSource for fake"
         return CallbackResult(status=200)
 
     await set_server_responses(
@@ -607,7 +602,7 @@ async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_e
     )
 
     try:
-        service = ConnectorService(CONFIG_KEEP_ALIVE)
+        service = ConnectorService(CONFIG)
         asyncio.get_event_loop().call_soon(service.stop)
         await service.poll()
     except Exception:
@@ -650,14 +645,10 @@ async def test_connector_settings_change(
         bulk_call=bulk_call,
     )
 
-    # prevent cache purging
-    with mock.patch("connectors.byoc.purge_cache"):
-        # two polls, the second one gets a different pipeline
-        await service.poll(one_sync=True)
-        await service.poll(one_sync=True)
+    # two polls, the second one gets a different pipeline
+    await service.poll(one_sync=True)
+    await service.poll(one_sync=True)
 
-    await purge_connectors()
-    await purge_sources()
     service.stop()
 
     # the first doc and second doc don't get the same pipeline

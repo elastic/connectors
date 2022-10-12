@@ -49,17 +49,6 @@ READ_ONLY_FIELDS = (
     "scheduling",
     "configuration",
 )
-_CONNECTORS_CACHE = {}
-
-
-async def purge_cache():
-    for connector in _CONNECTORS_CACHE.values():
-        try:
-            await connector.close()
-        except Exception as e:
-            logger.critical(e, exc_info=True)
-        await asyncio.sleep(0)
-    _CONNECTORS_CACHE.clear()
 
 
 class BYOIndex(ESClient):
@@ -67,10 +56,6 @@ class BYOIndex(ESClient):
         super().__init__(elastic_config)
         logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
         self.bulk_queue_max_size = elastic_config.get("bulk_queue_max_size", 1024)
-
-    async def close(self):
-        await purge_cache()
-        await super().close()
 
     async def save(self, connector):
         # we never update the configuration
@@ -109,21 +94,12 @@ class BYOIndex(ESClient):
 
         logger.debug(f"Found {len(resp['hits']['hits'])} connectors")
         for hit in resp["hits"]["hits"]:
-            connector_id = hit["_id"]
-            if connector_id not in _CONNECTORS_CACHE:
-                logger.debug(
-                    f"=> id: {connector_id}, service_type: {hit['_source']['service_type']}"
-                )
-                _CONNECTORS_CACHE[connector_id] = BYOConnector(
-                    self,
-                    connector_id,
-                    hit["_source"],
-                    bulk_queue_max_size=self.bulk_queue_max_size,
-                )
-            else:
-                _CONNECTORS_CACHE[connector_id].update_config(hit["_source"])
-
-            yield _CONNECTORS_CACHE[connector_id]
+            yield BYOConnector(
+                self,
+                hit["_id"],
+                hit["_source"],
+                bulk_queue_max_size=self.bulk_queue_max_size,
+            )
 
 
 class SyncJob:
