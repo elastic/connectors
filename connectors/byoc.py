@@ -82,9 +82,15 @@ class BYOIndex(ESClient):
         await self.client.indices.refresh(index=CONNECTORS_INDEX)
 
         try:
+            # we're grabbing only configured, connected or error entries
+            status_queries = [
+                {"term": {"status": e2str(status)}}
+                for status in (Status.CONFIGURED, Status.CONNECTED, Status.ERROR)
+            ]
+
             resp = await self.client.search(
                 index=CONNECTORS_INDEX,
-                query={"match_all": {}},
+                query={"bool": {"should": status_queries}},
                 size=20,
                 expand_wildcards="hidden",
             )
