@@ -37,9 +37,3 @@
 * `cd` into your connectors checkout
 * run `make install` to get the latest dependencies
 * run `make run` to start Connectors.
-
-##### Register your local Connectors with Enterprise Search
-* TBD
-
-### Minimal manual tests
-* TBD

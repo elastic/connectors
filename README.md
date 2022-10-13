@@ -1,10 +1,8 @@
-# Elastic Enterprise Search Python connectors
+# Elastic Python connectors
 
 ![logo](logo-enterprise-search.png)
 
-The home of Elastic Enterprise Connector Clients written in Python. This
-repository contains the framework for customizing Elastic Enterprise Search
-native connectors, or writing your own connectors for advanced use cases.
+The home of Elastic connector service and native connectors. This repository contains the framework for customizing Elastic native connectors, or writing your own connectors for advanced use cases.
 
 **The connector will be operated by an administrative user from within Kibana.**
 
@@ -13,28 +11,7 @@ native connectors, or writing your own connectors for advanced use cases.
 > general release (GA) features. Elastic plans to promote this feature to GA in
 > a future release.
 
-
-## Installation
-
-Provides a CLI to ingest documents into Elasticsearch, following BYOC & BYOEI standards.
-
-To install the CLI, run:
-
-    $ make install
-
-The `elastic-ingest` CLI will be installed on your system:
-
-    $ bin/elastic-ingest --help
-    usage: elastic-ingest [-h] [--action {poll,list}] [-c CONFIG_FILE] [--debug]
-
-    optional arguments:
-    -h, --help            show this help message and exit
-    --action {poll,list}  What elastic-ingest should do
-    -c CONFIG_FILE, --config-file CONFIG_FILE
-                            Configuration file
-    --debug               Run the event loop in debug mode
-
-## Other guides
+## Guides
 
 - [Code of Conduct](https://www.elastic.co/community/codeofconduct)
 - [Getting Support](docs/SUPPORT.md)
@@ -43,3 +20,5 @@ The `elastic-ingest` CLI will be installed on your system:
 - [Security Policy](docs/SECURITY.md)
 - [Elastic-internal guide](docs/INTERNAL.md)
 - [Connector Protocol](https://github.com/elastic/connectors-ruby/blob/main/docs/CONNECTOR_PROTOCOL.md)
+- [Configuration](docs/CONFIG.md)
+- [Contribution guide](docs/CONTRIBUTING.md)
