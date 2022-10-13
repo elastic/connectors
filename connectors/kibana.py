@@ -8,8 +8,8 @@ import os
 import asyncio
 import logging
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
-import elasticsearch
 
+import elasticsearch
 from envyaml import EnvYAML
 
 from connectors.byoei import ElasticServer
@@ -21,6 +21,27 @@ from connectors.utils import validate_index_name
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
+DEFAULT_PIPELINE = {
+    "version": 1,
+    "description": "For testing",
+    "processors": [
+        {
+            "remove": {
+                "tag": "remove_meta_fields",
+                "description": "Remove meta fields",
+                "field": [
+                    "_attachment",
+                    "_attachment_indexed_chars",
+                    "_extracted_attachment",
+                    "_extract_binary_content",
+                    "_reduce_whitespace",
+                    "_run_ml_inference",
+                ],
+                "ignore_missing": True,
+            }
+        }
+    ],
+}
 
 
 # XXX simulating Kibana click-arounds
@@ -34,21 +55,8 @@ async def prepare(service_type, index_name, config):
             id="ent-search-generic-ingestion"
         )
     except elasticsearch.NotFoundError:
-        pipeline = {
-            "description": "My optional pipeline description",
-            "processors": [
-                {
-                    "set": {
-                        "description": "My optional processor description",
-                        "field": "my-keyword-field",
-                        "value": "foo",
-                    }
-                }
-            ],
-        }
-
         await es.client.ingest.put_pipeline(
-            id="ent-search-generic-ingestion", body=pipeline
+            id="ent-search-generic-ingestion", body=DEFAULT_PIPELINE
         )
 
     try:
