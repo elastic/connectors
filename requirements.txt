@@ -6,6 +6,8 @@ pytz>=2022.1
 aiohttp>=3.8.1
 pyyaml>=6.0
 envyaml>=1.10.211231
+pympler>=1.0.1
+guppy3>=3.1.2
 
 # tests
 black>=22.6.0
