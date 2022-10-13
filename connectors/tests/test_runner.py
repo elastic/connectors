@@ -398,6 +398,30 @@ async def test_connector_service_poll(
 
 
 @pytest.mark.asyncio
+async def test_connector_service_poll_unconfigured(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+    # we should not sync a connector that is not configured
+    # let's make sure we query Elasticsearch with that filtering
+    def _connectors_read(url, **kw):
+        query = json.loads(kw["data"])["query"]["bool"]["should"]
+        assert query == [
+            {"term": {"status": "configured"}},
+            {"term": {"status": "connected"}},
+            {"term": {"status": "error"}},
+        ]
+        return CallbackResult(status=200, payload={"hits": {"hits": []}})
+
+    await set_server_responses(mock_responses, connectors_read=_connectors_read)
+    service = ConnectorService(CONFIG)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll()
+
+    # let's assert that no sync was done
+    patch_logger.assert_present("Found 0 connectors")
+
+
+@pytest.mark.asyncio
 async def test_connector_service_poll_https(
     mock_responses, patch_logger, patch_ping, set_env
 ):
