@@ -291,20 +291,37 @@ class BYOConnector:
             yield doc, lazy_download
 
     async def sync(self, data_provider, elastic_server, idling, sync_now=False):
-        service_type = self.service_type
-        if not sync_now:
-            next_sync = self.next_sync()
-            if next_sync == -1 or next_sync - idling > 0:
-                logger.debug(
-                    f"Next sync for {service_type} due in {int(next_sync)} seconds"
-                )
-                return
-        else:
-            logger.info("Sync forced")
+        # If anything bad happens before we create a sync job
+        # (like bad scheduling config, etc)
+        #
+        # we will raise the error in the logs here and let Kibana knows
+        # by toggling the status and setting the error and status field
+        try:
+            service_type = self.service_type
+            if not sync_now:
+                next_sync = self.next_sync()
+                if next_sync == -1 or next_sync - idling > 0:
+                    logger.debug(
+                        f"Next sync for {service_type} due in {int(next_sync)} seconds"
+                    )
+                    # if we don't sync, we still want to make sure we tell kibana we are connected
+                    self._status = Status.CONNECTED
+                    self.doc_source["status"] = e2str(self._status)
+                    await self._write()
+                    return
+            else:
+                logger.info("Sync forced")
 
-        if not await data_provider.changed():
-            logger.debug(f"No change in {service_type} data provider, skipping...")
-            return
+            if not await data_provider.changed():
+                logger.debug(f"No change in {service_type} data provider, skipping...")
+                return
+        except Exception as exc:
+            self.doc_source["last_sync_error"] = str(exc)
+            self.doc_source["error"] = str(exc)
+            self._status = Status.ERROR
+            self.doc_source["status"] = e2str(self._status)
+            await self._write()
+            raise
 
         logger.debug(f"Syncing '{service_type}'")
         self._syncing = True
