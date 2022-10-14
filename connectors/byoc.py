@@ -82,15 +82,9 @@ class BYOIndex(ESClient):
         await self.client.indices.refresh(index=CONNECTORS_INDEX)
 
         try:
-            # we're grabbing only configured, connected or error entries
-            status_queries = [
-                {"term": {"status": e2str(status)}}
-                for status in (Status.CONFIGURED, Status.CONNECTED, Status.ERROR)
-            ]
-
             resp = await self.client.search(
                 index=CONNECTORS_INDEX,
-                query={"bool": {"should": status_queries}},
+                query={"match_all": {}},
                 size=20,
                 expand_wildcards="hidden",
             )
@@ -182,7 +176,6 @@ class BYOConnector:
         self.index = index
         self.update_config(doc_source)
         self.client = index.client
-        self.doc_source["status"] = e2str(Status.CONNECTED)
         self.doc_source["last_seen"] = iso_utc()
         self._heartbeat_started = self._syncing = False
         self._closed = False
@@ -191,6 +184,7 @@ class BYOConnector:
         self.bulk_queue_max_size = bulk_queue_max_size
 
     def update_config(self, doc_source):
+        self._status = Status[doc_source["status"].upper()]
         self.sync_now = doc_source.get("sync_now", False)
         self.native = doc_source.get("is_native", False)
         self.service_type = doc_source["service_type"]
@@ -199,30 +193,28 @@ class BYOConnector:
         self.scheduling = doc_source["scheduling"]
         self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
 
+    @property
+    def status(self):
+        return self._status
+
     async def close(self):
         self._closed = True
         if self._heartbeat_started:
             self._hb.cancel()
             self._heartbeat_started = False
 
-    async def is_ready(self):
-        if self.doc_source["status"] == e2str(Status.CONNECTED):
-            return
-        self.doc_source["status"] = e2str(Status.CONNECTED)
-        await self._write()
-
     async def _write(self):
         self.doc_source["last_seen"] = iso_utc()
         await self.index.save(self)
 
-    async def heartbeat(self, delay):
+    def start_heartbeat(self, delay):
         if self._heartbeat_started:
             return
         self._heartbeat_started = True
 
         async def _heartbeat():
             while not self._closed:
-                logger.debug(f"*** BEAT every {delay} seconds")
+                logger.info(f"*** Connector {self.id} HEARTBEAT")
                 if not self._syncing:
                     self.doc_source["last_seen"] = iso_utc()
                     await self._write()
@@ -249,6 +241,8 @@ class BYOConnector:
 
         self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
+        self._status = Status.CONNECTED
+        self.doc_source["status"] = e2str(self._status)
         await self._write()
 
         self._start_time = time.time()
@@ -276,6 +270,8 @@ class BYOConnector:
         else:
             self.doc_source["last_sync_error"] = str(exception)
             self.doc_source["error"] = str(exception)
+            self._status = Status.ERROR
+            self.doc_source["status"] = e2str(self._status)
 
         self.doc_source["last_synced"] = iso_utc()
         await self._write()

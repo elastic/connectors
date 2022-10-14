@@ -52,6 +52,10 @@ FAKE_CONFIG = {
     "sync_now": True,
     "is_native": True,
 }
+FAKE_CONFIG_CREATED = copy.deepcopy(FAKE_CONFIG)
+FAKE_CONFIG_CREATED["status"] = "created"
+FAKE_CONFIG_NEEDS_CONFIG = copy.deepcopy(FAKE_CONFIG)
+FAKE_CONFIG_NEEDS_CONFIG["status"] = "needs_configuration"
 
 FAKE_CONFIG_PIPELINE_CHANGED = copy.deepcopy(FAKE_CONFIG)
 FAKE_CONFIG_PIPELINE_CHANGED["pipeline"] = {
@@ -402,23 +406,34 @@ async def test_connector_service_poll_unconfigured(
     mock_responses, patch_logger, patch_ping, set_env
 ):
     # we should not sync a connector that is not configured
-    # let's make sure we query Elasticsearch with that filtering
-    def _connectors_read(url, **kw):
-        query = json.loads(kw["data"])["query"]["bool"]["should"]
-        assert query == [
-            {"term": {"status": "configured"}},
-            {"term": {"status": "connected"}},
-            {"term": {"status": "error"}},
-        ]
-        return CallbackResult(status=200, payload={"hits": {"hits": []}})
+    # but still send out an heartbeat
 
-    await set_server_responses(mock_responses, connectors_read=_connectors_read)
+    await set_server_responses(mock_responses, FAKE_CONFIG_NEEDS_CONFIG)
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
 
-    # let's assert that no sync was done
-    patch_logger.assert_present("Found 0 connectors")
+    patch_logger.assert_present("*** Connector 1 HEARTBEAT")
+    patch_logger.assert_present("Found 1 connector")
+    patch_logger.assert_present("Can't sync with status `needs_configuration`")
+    patch_logger.assert_not_present("Sync done")
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_just_created(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+    # we should not sync a connector that is not configured
+    # but still send out an heartbeat
+    await set_server_responses(mock_responses, FAKE_CONFIG_CREATED)
+    service = ConnectorService(CONFIG)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll()
+
+    patch_logger.assert_present("*** Connector 1 HEARTBEAT")
+    patch_logger.assert_present("Found 1 connector")
+    patch_logger.assert_present("Can't sync with status `created`")
+    patch_logger.assert_not_present("Sync done")
 
 
 @pytest.mark.asyncio
@@ -463,6 +478,7 @@ async def test_connector_service_poll_clear_error(
     )
     await service.poll(one_sync=True)  # fails
     await service.poll(one_sync=True)  # works
+
     assert calls == [
         "connector:NOT THERE",  # from is_ready()
         "job:I fail while syncing",  # first sync
