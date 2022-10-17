@@ -2,7 +2,9 @@
 
 ![logo](logo-enterprise-search.png)
 
-The home of Elastic connector service and native connectors. This repository contains the framework for customizing Elastic native connectors, or writing your own connectors for advanced use cases.
+The home of Elastic connector service and native connectors in Python language. This repository contains the framework for customizing Elastic native connectors, or writing your own connectors for advanced use cases.
+
+If you are looking for the implementation in Ruby, See [connectors-ruby](https://github.com/elastic/connectors-ruby).
 
 **The connector will be operated by an administrative user from within Kibana.**
 

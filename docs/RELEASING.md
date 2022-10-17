@@ -10,10 +10,10 @@ For example, when shipping for `8.1.2`, the version is `8.1.2.0`.
 
 To release Connectors:
 
-1. Set the VERSION file to the new/incremented version on the release branch
-2. Make sure all tests and linter pass with `make lint test`
-3. PR these changes to the appropriate Connectors release branch
-4. Run `make release`
+1. Make sure all tests and linter pass with `make lint test`
+2. Run `make release`
+3. Set the [VERSION](../connectors/VERSION) file to the new/incremented version on the release branch
+4. PR this change to the appropriate Connectors release branch
 
 A package will be generated in `dist/`
 
