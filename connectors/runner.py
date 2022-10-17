@@ -27,7 +27,7 @@ from connectors.source import (
     ServiceTypeNotSupportedError,
     DataSourceError,
 )
-from connectors.utils import CancellableSleeps, trace_mem
+from connectors.utils import CancellableSleeps, trace_mem, get_rss
 
 
 class ConnectorService:
@@ -51,6 +51,7 @@ class ConnectorService:
         self._sleeps = CancellableSleeps()
         self.connectors = None
         self.trace_mem = self.service_config.get("trace_mem", False)
+        self.max_rss = self.service_config.get("max_rss", -1)
 
     def ent_search_config(self):
         if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
@@ -130,7 +131,7 @@ class ConnectorService:
 
     async def poll(self, one_sync=False, sync_now=True):
         """Main event loop."""
-        self.connectors = BYOIndex(self.config["elasticsearch"])
+        self.connectors = BYOIndex(self.config)
         es_host = self.config["elasticsearch"]["host"]
         self.running = True
         native_service_types = self.config.get("native_service_types", [])
@@ -188,6 +189,14 @@ class ConnectorService:
                         if one_sync:
                             self.stop()
                             break
+
+                        if self.max_rss != -1 and get_rss() > self.max_rss:
+                            logger.info(
+                                f"Max RSS reached {get_rss()}, graceful shutdown"
+                            )
+                            self.stop()
+                            break
+
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)

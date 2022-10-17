@@ -60,7 +60,8 @@ READ_ONLY_FIELDS = (
 
 
 class BYOIndex(ESClient):
-    def __init__(self, elastic_config):
+    def __init__(self, config):
+        elastic_config = config["elasticsearch"]
         super().__init__(elastic_config)
         logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
         self.bulk_queue_max_size = elastic_config.get(
@@ -69,6 +70,7 @@ class BYOIndex(ESClient):
         self.bulk_display_every = elastic_config.get(
             "bulk_display_every", DEFAULT_DISPLAY_EVERY
         )
+        self.max_peak_rss = config["service"].get("max_peak_rss", -1)
 
     async def save(self, connector):
         # we never update the configuration
@@ -113,6 +115,7 @@ class BYOIndex(ESClient):
                 hit["_source"],
                 bulk_queue_max_size=self.bulk_queue_max_size,
                 bulk_display_every=self.bulk_display_every,
+                max_peak_rss=self.max_peak_rss,
             )
 
 
@@ -190,6 +193,7 @@ class BYOConnector:
         doc_source,
         bulk_queue_max_size=DEFAULT_QUEUE_SIZE,
         bulk_display_every=DEFAULT_DISPLAY_EVERY,
+        max_peak_rss=-1
     ):
         self.doc_source = doc_source
         self.id = connector_id
@@ -203,6 +207,7 @@ class BYOConnector:
         self._hb = None
         self.bulk_queue_max_size = bulk_queue_max_size
         self.bulk_display_every = bulk_display_every
+        self.max_peak_rss = max_peak_rss
 
     def update_config(self, doc_source):
         self._status = Status[doc_source["status"].upper()]
@@ -370,6 +375,7 @@ class BYOConnector:
                 data_provider.connector.pipeline,
                 queue_size=self.bulk_queue_max_size,
                 display_every=self.bulk_display_every,
+                max_peak_rss=self.max_peak_rss,
             )
             await self._sync_done(job, result)
 

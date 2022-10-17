@@ -18,6 +18,10 @@ service:
   max_errors: 20
   max_errors_span: 600
   trace_mem: false
+  # 300MB
+  max_rss: 307200
+  # 400MB
+  max_peak_rss: 409600
 
 native_service_types:
   - mysql

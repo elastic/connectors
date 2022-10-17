@@ -21,6 +21,7 @@ from elastic_transport.client_utils import url_to_node_config
 from guppy import hpy
 from pympler import asizeof
 from cstriggers.core.trigger import QuartzCron
+import psutil
 
 from connectors.logger import set_extra_logger, logger
 
@@ -253,3 +254,9 @@ def trace_mem(activated=False):
 def get_size(ob):
     """Returns size in MiB"""
     return round(asizeof.asizeof(ob) / (1024 * 1024), 2)
+
+
+def get_rss():
+    """Returns the current RSS in KiB"""
+    p = psutil.Process()
+    return round(p.memory_info().rss / 1024.0, 2)

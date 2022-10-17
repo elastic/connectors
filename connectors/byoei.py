@@ -18,6 +18,7 @@ from connectors.utils import (
     iso_utc,
     ESClient,
     get_size,
+    get_rss,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_QUEUE_SIZE,
     DEFAULT_DISPLAY_EVERY,
@@ -32,7 +33,7 @@ OP_DELETE = "delete"
 class Bulker:
     """Send bulk operations in batches by consuming a queue."""
 
-    def __init__(self, client, queue, chunk_size, pipeline_settings):
+    def __init__(self, client, queue, chunk_size, pipeline_settings, max_peak_rss):
         self.client = client
         self.queue = queue
         self.bulk_time = 0
@@ -40,6 +41,7 @@ class Bulker:
         self.ops = defaultdict(int)
         self.chunk_size = chunk_size
         self.pipeline_settings = pipeline_settings
+        self.max_peak_rss = max_peak_rss
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -75,6 +77,10 @@ class Bulker:
                             raise Exception(data["error"]["reason"])
         finally:
             self.bulk_time += time.time() - start
+
+        if self.max_peak_rss != -1 and get_rss() > self.max_peak_rss:
+            logger.error("Memory is bloating, stopping this sync")
+            raise Exception("Out of memory")
 
         logger.info(dict(self.ops))
         return res
@@ -364,6 +370,7 @@ class ElasticServer(ESClient):
         pipeline,
         queue_size=DEFAULT_QUEUE_SIZE,
         display_every=DEFAULT_DISPLAY_EVERY,
+        max_peak_rss=-1
     ):
         start = time.time()
         stream = asyncio.Queue(maxsize=queue_size)
@@ -389,8 +396,9 @@ class ElasticServer(ESClient):
         bulker = Bulker(
             self.client,
             stream,
-            self.config.get("bulk_chunk_size", DEFAULT_CHUNK_SIZE),
+            self.config.get("bulk_chunk_size", 500),
             pipeline,
+            max_peak_rss,
         )
         bulker_task = asyncio.create_task(bulker.run())
 
