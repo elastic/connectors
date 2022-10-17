@@ -305,9 +305,11 @@ class BYOConnector:
                         f"Next sync for {service_type} due in {int(next_sync)} seconds"
                     )
                     # if we don't sync, we still want to make sure we tell kibana we are connected
-                    self._status = Status.CONNECTED
-                    self.doc_source["status"] = e2str(self._status)
-                    await self._write()
+                    # if the status is different from comnected
+                    if self._status != Status.CONNECTED:
+                        self._status = Status.CONNECTED
+                        self.doc_source["status"] = e2str(self._status)
+                        await self._write()
                     return
             else:
                 logger.info("Sync forced")
