@@ -128,17 +128,11 @@ class BaseDataSource:
         raise NotImplementedError
 
 
-_IMPORTED = {}
-
-
 def get_source_klass(fqn):
     """Converts a Fully Qualified Name into a class instance."""
-    if fqn in _IMPORTED:
-        return _IMPORTED[fqn]
     module_name, klass_name = fqn.split(":")
     module = importlib.import_module(module_name)
-    _IMPORTED[fqn] = getattr(module, klass_name)
-    return _IMPORTED[fqn]
+    return getattr(module, klass_name)
 
 
 def get_data_source(connector, config):

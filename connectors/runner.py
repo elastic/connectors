@@ -137,16 +137,14 @@ class ConnectorService:
         es = ElasticServer(self.config["elasticsearch"])
 
         # pre-flight check
+        attempts = 0
         while self.running:
-            logger.info("Preflight checks")
-            attempts = 0
+            logger.info("Preflight checks...")
             try:
                 # Checking the indices/pipeline in the loop to be less strict about the boot ordering
                 await self.connectors.preflight()
                 break
-            except Exception as e:
-                logger.warn(str(e))
-
+            except Exception:
                 if attempts > self.preflight_max_attempts:
                     raise
                 else:
@@ -169,9 +167,7 @@ class ConnectorService:
                             continue
 
                         await self._one_sync(connector, es, sync_now)
-                        if not one_sync:
-                            await self._sleeps.sleep(self.idling)
-                        else:
+                        if one_sync:
                             self.stop()
                             break
                 except Exception as e:

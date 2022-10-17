@@ -7,7 +7,6 @@
 Implementation of BYOEI protocol (+some ids collecting)
 """
 import time
-import gc
 from collections import defaultdict
 import asyncio
 
@@ -71,10 +70,6 @@ class Bulker:
             self.bulk_time += time.time() - start
 
         logger.info(dict(self.ops))
-
-        # force-collect now to avoid fragmentation
-        del operations
-        gc.collect()
         return res
 
     async def run(self):
