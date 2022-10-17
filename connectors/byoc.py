@@ -318,7 +318,6 @@ class BYOConnector:
                 logger.debug(f"No change in {service_type} data provider, skipping...")
                 return
         except Exception as exc:
-            self.doc_source["last_sync_error"] = str(exc)
             self.doc_source["error"] = str(exc)
             self._status = Status.ERROR
             self.doc_source["status"] = e2str(self._status)
