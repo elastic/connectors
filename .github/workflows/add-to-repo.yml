@@ -1,0 +1,40 @@
+name: Copy to enterprise-search-team
+
+# When issues are added to this repo, add a linked issue in elastic/enterprise-search-team for visibility
+
+on:
+  issues:
+    types:
+      - opened
+
+jobs:
+  add-issue-to-enterprise-search-team:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: octokit/graphql-action@v2.x
+        id: add_issue_to_enterprise_search_team
+        with:
+          # To find a repository ID, open the target repo, e.g. https://github.com/richkuz/repo2, right-click, View Page Source, search for data-type="repository"
+          # This is the ID of the elastic/enterprise-search-team repository:
+          targetrepoid: "MDEwOlJlcG9zaXRvcnkyMzY3OTA3NjU"
+          query: |
+            mutation CreateIssue($targetrepoid:ID!) {
+              createIssue(
+                input: {
+                  repositoryId: $targetrepoid,
+                  title: "${{ github.event.issue.title }}",
+                  # Optionally add any labels to the issue.
+                  # To find a label ID, see https://gist.github.com/richkuz/b3f500c0c539ff0b7c21b6c58db7bab2
+                  labelIds: ["MDU6TGFiZWwxODgzNTE1OTI1"],
+                  body: "Issue created in another repo, replicated here for visibility: ${{ github.event.issue.html_url }}"
+                }
+              ) {
+                issue {
+                  number
+                  body
+                }
+              }
+            }
+        env:
+          # The default GITHUB_TOKEN env var doesn't have enough scope.
+          GITHUB_TOKEN: ${{ secrets.ENT_SEARCH_GH_ACTION_TOKEN }}
