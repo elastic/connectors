@@ -15,7 +15,6 @@ import asyncio
 import signal
 import time
 import functools
-import gc
 
 from envyaml import EnvYAML
 
@@ -120,68 +119,72 @@ class ConnectorService:
         self.connectors = BYOIndex(self.config["elasticsearch"])
         es_host = self.config["elasticsearch"]["host"]
         self.running = True
+        native_service_types = self.config.get("native_service_types", [])
+        logger.debug(f"Native support for {', '.join(native_service_types)}")
 
+        # XXX we can support multiple connectors but Ruby can't so let's use a
+        # single id
+        # connectors_ids = self.config.get("connectors_ids", [])
+        if "connector_id" in self.config:
+            connectors_ids = [self.config.get("connector_id")]
+        else:
+            connectors_ids = []
+
+        if not (await self.connectors.wait()):
+            logger.critical(f"{es_host} seem down. Bye!")
+            return -1
+
+        es = ElasticServer(self.config["elasticsearch"])
+
+        # pre-flight check
         while self.running:
-            with trace_mem(self.trace_mem):
-                self.connectors = BYOIndex(self.config["elasticsearch"])
-                es_host = self.config["elasticsearch"]["host"]
-                native_service_types = self.config.get("native_service_types", [])
-                logger.debug(f"Native support for {', '.join(native_service_types)}")
+            logger.info("Preflight checks")
+            attempts = 0
+            try:
+                # Checking the indices/pipeline in the loop to be less strict about the boot ordering
+                await self.connectors.preflight()
+                break
+            except Exception as e:
+                logger.warn(str(e))
 
-                # XXX we can support multiple connectors but Ruby can't so let's use a
-                # single id
-                # connectors_ids = self.config.get("connectors_ids", [])
-                if "connector_id" in self.config:
-                    connectors_ids = [self.config.get("connector_id")]
+                if attempts > self.preflight_max_attempts:
+                    raise
                 else:
-                    connectors_ids = []
+                    attempts += 1
+                    await asyncio.sleep(self.preflight_idle)
 
-                if not (await self.connectors.wait()):
-                    logger.critical(f"{es_host} seem down. Bye!")
-                    return -1
-
-                es = ElasticServer(self.config["elasticsearch"])
-
-                # pre-flight check
-                while True:
-                    logger.info("Preflight checks")
-                    attempts = 0
-                    try:
-                        # Checking the indices/pipeline in the loop to be less strict about the boot ordering
-                        await self.connectors.preflight()
-                        break
-                    except Exception as e:
-                        logger.warn(str(e))
-
-                        if attempts > self.preflight_max_attempts:
-                            raise
-                        else:
-                            attempts += 1
-                            await asyncio.sleep(self.preflight_idle)
-
-                logger.info(f"Service started, listening to events from {es_host}")
+        logger.info(f"Service started, listening to events from {es_host}")
+        try:
+            while self.running:
                 try:
-                    try:
-                        logger.debug(f"Polling every {self.idling} seconds")
-                        async for connector in self.connectors.get_list():
-                            if (
-                                connector.service_type not in native_service_types
-                                and connector.id not in connectors_ids
-                            ):
-                                logger.debug(
-                                    f"Connector {connector.id} of type {connector.service_type} not supported, ignoring"
-                                )
-                                continue
+                    logger.debug(f"Polling every {self.idling} seconds")
+                    async for connector in self.connectors.get_list():
+                        if (
+                            connector.service_type not in native_service_types
+                            and connector.id not in connectors_ids
+                        ):
+                            logger.debug(
+                                f"Connector {connector.id} of type {connector.service_type} not supported, ignoring"
+                            )
+                            continue
 
                         await self._one_sync(connector, es, sync_now)
-                finally:
-                    await self.connectors.close()
-                    await es.close()
-                    if not one_sync:
-                        await self._sleeps.sleep(self.idling)
-                    else:
-                        self.stop()
-                        break
+                        if not one_sync:
+                            await self._sleeps.sleep(self.idling)
+                        else:
+                            self.stop()
+                            break
+                except Exception as e:
+                    logger.critical(e, exc_info=True)
+                    self.raise_if_spurious(e)
+
+                if not one_sync:
+                    await self._sleeps.sleep(self.idling)
+                else:
+                    self.stop()
+        finally:
+            await self.connectors.close()
+            await es.close()
 
         return 0
 
