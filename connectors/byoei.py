@@ -211,8 +211,6 @@ class Fetcher:
                         if lazy_download is not None:
                             await lazy_download(doit=False)
                         continue
-                    else:
-                        doc["timestamp"] = iso_utc()
 
                     # the doc exists but we are still overwiting it with `index`
                     operation = OP_INDEX
