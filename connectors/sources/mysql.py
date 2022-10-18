@@ -23,6 +23,7 @@ QUERIES = {
     "TABLE_PRIMARY_KEY": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'",
     "TABLE_LAST_UPDATE_TIME": "SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}'",
 }
+DEFAULT_FETCH_SIZE = 50
 
 
 class MySqlDataSource(BaseDataSource):
@@ -84,7 +85,7 @@ class MySqlDataSource(BaseDataSource):
                 "type": "str",
             },
             "fetch_size": {
-                "value": 50,
+                "value": DEFAULT_FETCH_SIZE,
                 "label": "How many rows to fetch on each call",
                 "type": "int",
             },
@@ -111,7 +112,7 @@ class MySqlDataSource(BaseDataSource):
             raise
 
     async def _stream_rows(self, database, table, query):
-        size = int(self.configuration.get("fetch_size", 50))
+        size = int(self.configuration.get("fetch_size", DEFAULT_FETCH_SIZE))
         logger.debug(f"Streaming {database}.{table} {size} rows at a time")
 
         async with self.connection_pool.acquire() as connection:

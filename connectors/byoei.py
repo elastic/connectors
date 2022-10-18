@@ -20,6 +20,9 @@ from connectors.utils import iso_utc, ESClient, get_size
 OP_INDEX = "index"
 OP_UPSERT = "update"
 OP_DELETE = "delete"
+DEFAULT_CHUNK_SIZE = 100
+DEFAULT_QUEUE_SIZE = 1024
+DEFAULT_DISPLAY_EVERY = 100
 
 
 class Bulker:
@@ -108,7 +111,13 @@ class Fetcher:
     """Grab data and add them in the queue for the bulker"""
 
     def __init__(
-        self, client, queue, index, existing_ids, queue_size=1024, display_every=100
+        self,
+        client,
+        queue,
+        index,
+        existing_ids,
+        queue_size=DEFAULT_QUEUE_SIZE,
+        display_every=DEFAULT_DISPLAY_EVERY,
     ):
         self.client = client
         self.queue = queue
@@ -347,7 +356,12 @@ class ElasticServer(ESClient):
             yield doc_id, ts
 
     async def async_bulk(
-        self, index, generator, pipeline, queue_size=1024, display_every=100
+        self,
+        index,
+        generator,
+        pipeline,
+        queue_size=DEFAULT_QUEUE_SIZE,
+        display_every=DEFAULT_DISPLAY_EVERY,
     ):
         start = time.time()
         stream = asyncio.Queue(maxsize=queue_size)
@@ -371,7 +385,10 @@ class ElasticServer(ESClient):
 
         # start the bulker
         bulker = Bulker(
-            self.client, stream, self.config.get("bulk_chunk_size", 100), pipeline
+            self.client,
+            stream,
+            self.config.get("bulk_chunk_size", DEFAULT_CHUNK_SIZE),
+            pipeline,
         )
         bulker_task = asyncio.create_task(bulker.run())
 
