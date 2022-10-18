@@ -101,7 +101,7 @@ class BYOIndex(ESClient):
                 hit["_id"],
                 hit["_source"],
                 bulk_queue_max_size=self.bulk_queue_max_size,
-                bulk_display_every=self.bulk_display_every
+                bulk_display_every=self.bulk_display_every,
             )
 
 
@@ -172,8 +172,14 @@ class PipelineSettings:
 
 
 class BYOConnector:
-    def __init__(self, index, connector_id, doc_source,
-                 bulk_queue_max_size=1024, bulk_display_every=100):
+    def __init__(
+        self,
+        index,
+        connector_id,
+        doc_source,
+        bulk_queue_max_size=1024,
+        bulk_display_every=100,
+    ):
         self.doc_source = doc_source
         self.id = connector_id
         self.index = index

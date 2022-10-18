@@ -188,11 +188,9 @@ class Fetcher:
 
                 doc_id = doc["id"] = doc.pop("_id")
 
-                if doc_id.encode("utf8") in self.existing_ids:
+                if doc_id in self.existing_ids:
                     # pop out of self.existing_ids
-                    ts = self.existing_ids.pop(doc_id.encode("utf8"), b"").decode(
-                        "utf8"
-                    )
+                    ts = self.existing_ids.pop(doc_id)
 
                     # If the doc has a timestamp, we can use it to see if it has
                     # been modified. This reduces the bulk size a *lot*
@@ -248,7 +246,7 @@ class Fetcher:
                 {
                     "_op_type": OP_DELETE,
                     "_index": self.index,
-                    "_id": doc_id.decode("utf8"),
+                    "_id": doc_id,
                 }
             )
             self.total_docs_deleted += 1
@@ -331,8 +329,6 @@ class ElasticServer(ESClient):
         This function will load all ids in memory -- on very large indices,
         depending on the id length, it can be quite large.
 
-        It returns bytes instead of strings to spare a bit of memory.
-
         300,000 ids will be around 50MiB
         """
         logger.debug(f"Scanning existing index {index}")
@@ -348,10 +344,7 @@ class ElasticServer(ESClient):
         ):
             doc_id = doc["_source"].get("id", doc["_id"])
             ts = doc["_source"].get("timestamp")
-            if ts is not None:
-                ts = ts.encode()
-            # use bytes to reduce size
-            yield doc_id.encode(), ts
+            yield doc_id, ts
 
     async def async_bulk(
         self, index, generator, pipeline, queue_size=1024, display_every=100
