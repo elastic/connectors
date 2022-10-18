@@ -115,7 +115,7 @@ mongo = {
 
 
 @pytest.mark.asyncio
-async def test_heartbeat(mock_responses):
+async def test_heartbeat(mock_responses, patch_logger):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
@@ -137,11 +137,10 @@ async def test_heartbeat(mock_responses):
 
     connectors = BYOIndex(config)
     conns = []
-    loop = asyncio.get_event_loop()
 
     async for connector in connectors.get_list():
-        loop.create_task(connector.heartbeat(0.2))
-        loop.create_task(connector.heartbeat(1.0))  # NO-OP
+        connector.start_heartbeat(0.2)
+        connector.start_heartbeat(1.0)  # NO-OP
         conns.append(connector)
 
     await asyncio.sleep(0.4)
@@ -283,6 +282,7 @@ async def test_sync_mongo(mock_responses, patch_logger):
                 "index_name": index_name,
                 "configuration": {},
                 "scheduling": {},
+                "status": "created",
             }
             return BYOConnector(StubIndex(), "test", connector_src)
 

@@ -176,7 +176,6 @@ class BYOConnector:
         self.index = index
         self.update_config(doc_source)
         self.client = index.client
-        self.doc_source["status"] = e2str(Status.CONNECTED)
         self.doc_source["last_seen"] = iso_utc()
         self._heartbeat_started = self._syncing = False
         self._closed = False
@@ -185,6 +184,7 @@ class BYOConnector:
         self.bulk_queue_max_size = bulk_queue_max_size
 
     def update_config(self, doc_source):
+        self._status = Status[doc_source["status"].upper()]
         self.sync_now = doc_source.get("sync_now", False)
         self.native = doc_source.get("is_native", False)
         self.service_type = doc_source["service_type"]
@@ -193,30 +193,28 @@ class BYOConnector:
         self.scheduling = doc_source["scheduling"]
         self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
 
+    @property
+    def status(self):
+        return self._status
+
     async def close(self):
         self._closed = True
         if self._heartbeat_started:
             self._hb.cancel()
             self._heartbeat_started = False
 
-    async def is_ready(self):
-        if self.doc_source["status"] == e2str(Status.CONNECTED):
-            return
-        self.doc_source["status"] = e2str(Status.CONNECTED)
-        await self._write()
-
     async def _write(self):
         self.doc_source["last_seen"] = iso_utc()
         await self.index.save(self)
 
-    async def heartbeat(self, delay):
+    def start_heartbeat(self, delay):
         if self._heartbeat_started:
             return
         self._heartbeat_started = True
 
         async def _heartbeat():
             while not self._closed:
-                logger.debug(f"*** BEAT every {delay} seconds")
+                logger.info(f"*** Connector {self.id} HEARTBEAT")
                 if not self._syncing:
                     self.doc_source["last_seen"] = iso_utc()
                     await self._write()
@@ -243,6 +241,8 @@ class BYOConnector:
 
         self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
+        self._status = Status.CONNECTED
+        self.doc_source["status"] = e2str(self._status)
         await self._write()
 
         self._start_time = time.time()
@@ -270,6 +270,8 @@ class BYOConnector:
         else:
             self.doc_source["last_sync_error"] = str(exception)
             self.doc_source["error"] = str(exception)
+            self._status = Status.ERROR
+            self.doc_source["status"] = e2str(self._status)
 
         self.doc_source["last_synced"] = iso_utc()
         await self._write()
@@ -289,20 +291,38 @@ class BYOConnector:
             yield doc, lazy_download
 
     async def sync(self, data_provider, elastic_server, idling, sync_now=False):
-        service_type = self.service_type
-        if not sync_now:
-            next_sync = self.next_sync()
-            if next_sync == -1 or next_sync - idling > 0:
-                logger.debug(
-                    f"Next sync for {service_type} due in {int(next_sync)} seconds"
-                )
-                return
-        else:
-            logger.info("Sync forced")
+        # If anything bad happens before we create a sync job
+        # (like bad scheduling config, etc)
+        #
+        # we will raise the error in the logs here and let Kibana knows
+        # by toggling the status and setting the error and status field
+        try:
+            service_type = self.service_type
+            if not sync_now:
+                next_sync = self.next_sync()
+                if next_sync == -1 or next_sync - idling > 0:
+                    logger.debug(
+                        f"Next sync for {service_type} due in {int(next_sync)} seconds"
+                    )
+                    # if we don't sync, we still want to make sure we tell kibana we are connected
+                    # if the status is different from comnected
+                    if self._status != Status.CONNECTED:
+                        self._status = Status.CONNECTED
+                        self.doc_source["status"] = e2str(self._status)
+                        await self._write()
+                    return
+            else:
+                logger.info("Sync forced")
 
-        if not await data_provider.changed():
-            logger.debug(f"No change in {service_type} data provider, skipping...")
-            return
+            if not await data_provider.changed():
+                logger.debug(f"No change in {service_type} data provider, skipping...")
+                return
+        except Exception as exc:
+            self.doc_source["error"] = str(exc)
+            self._status = Status.ERROR
+            self.doc_source["status"] = e2str(self._status)
+            await self._write()
+            raise
 
         logger.debug(f"Syncing '{service_type}'")
         self._syncing = True
