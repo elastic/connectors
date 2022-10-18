@@ -108,12 +108,7 @@ class Fetcher:
     """Grab data and add them in the queue for the bulker"""
 
     def __init__(
-        self,
-        client,
-        queue,
-        index,
-        existing_ids,
-        queue_size=1024,
+        self, client, queue, index, existing_ids, queue_size=1024, display_every=100
     ):
         self.client = client
         self.queue = queue
@@ -129,6 +124,7 @@ class Fetcher:
         self.total_docs_created = 0
         self.total_docs_deleted = 0
         self.fetch_error = None
+        self.display_every = display_every
 
     def __str__(self):
         return (
@@ -187,7 +183,7 @@ class Fetcher:
             async for doc in generator:
                 doc, lazy_download = doc
                 count += 1
-                if count % 100 == 0:
+                if count % self.display_every == 0:
                     logger.info(str(self))
 
                 doc_id = doc["id"] = doc.pop("_id")
@@ -357,7 +353,9 @@ class ElasticServer(ESClient):
             # use bytes to reduce size
             yield doc_id.encode(), ts
 
-    async def async_bulk(self, index, generator, pipeline, queue_size=1024):
+    async def async_bulk(
+        self, index, generator, pipeline, queue_size=1024, display_every=100
+    ):
         start = time.time()
         stream = asyncio.Queue(maxsize=queue_size)
         existing_ids = {k: v async for (k, v) in self.get_existing_ids(index)}
@@ -374,6 +372,7 @@ class ElasticServer(ESClient):
             index,
             existing_ids,
             queue_size=queue_size,
+            display_every=display_every,
         )
         fetcher_task = asyncio.create_task(fetcher.run(generator))
 

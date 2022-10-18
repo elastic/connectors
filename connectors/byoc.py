@@ -57,6 +57,7 @@ class BYOIndex(ESClient):
         super().__init__(elastic_config)
         logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
         self.bulk_queue_max_size = elastic_config.get("bulk_queue_max_size", 1024)
+        self.bulk_display_every = elastic_config.get("bulk_display_every", 100)
 
     async def save(self, connector):
         # we never update the configuration
@@ -100,6 +101,7 @@ class BYOIndex(ESClient):
                 hit["_id"],
                 hit["_source"],
                 bulk_queue_max_size=self.bulk_queue_max_size,
+                bulk_display_every=self.bulk_display_every
             )
 
 
@@ -170,7 +172,8 @@ class PipelineSettings:
 
 
 class BYOConnector:
-    def __init__(self, index, connector_id, doc_source, bulk_queue_max_size=1024):
+    def __init__(self, index, connector_id, doc_source,
+                 bulk_queue_max_size=1024, bulk_display_every=100):
         self.doc_source = doc_source
         self.id = connector_id
         self.index = index
@@ -183,6 +186,7 @@ class BYOConnector:
         self._start_time = None
         self._hb = None
         self.bulk_queue_max_size = bulk_queue_max_size
+        self.bulk_display_every = bulk_display_every
 
     def update_config(self, doc_source):
         self.sync_now = doc_source.get("sync_now", False)
@@ -325,6 +329,7 @@ class BYOConnector:
                 self.prepare_docs(data_provider),
                 data_provider.connector.pipeline,
                 queue_size=self.bulk_queue_max_size,
+                display_every=self.bulk_display_every,
             )
             await self._sync_done(job, result)
 
