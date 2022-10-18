@@ -69,18 +69,22 @@ async def get_roles(*args):
 
 
 @pytest.mark.asyncio
+@mock.patch(
+    "aioboto3.resources.collection.AIOResourceCollection", AIOResourceCollection
+)
+@mock.patch("aiobotocore.client.AioBaseClient", S3Object)
+@mock.patch(
+    "aiobotocore.utils.AioInstanceMetadataFetcher.retrieve_iam_role_credentials",
+    get_roles,
+)
 async def test_get_docs(patch_logger, mock_aws):
     source = create_source(S3DataSource)
-    with (mock.patch("aioboto3.resources.collection.AIOResourceCollection", AIOResourceCollection),
-          mock.patch("aiobotocore.client.AioBaseClient", S3Object),
-          mock.patch("aiobotocore.utils.AioInstanceMetadataFetcher.retrieve_iam_role_credentials", get_roles)):
-
-        num = 0
-        async for (doc, dl) in source.get_docs():
-            assert doc["_id"] in (
-                "dd7ec931179c4dcb6a8ffb8b8786d20b",
-                "f5776ce002083f17f7a8f8f37568a092",
-            )
-            data = await dl(doit=True, timestamp="xx")
-            assert data["text"] == "xxxxx"
-            num += 1
+    num = 0
+    async for (doc, dl) in source.get_docs():
+        assert doc["_id"] in (
+            "dd7ec931179c4dcb6a8ffb8b8786d20b",
+            "f5776ce002083f17f7a8f8f37568a092",
+        )
+        data = await dl(doit=True, timestamp="xx")
+        assert data["text"] == "xxxxx"
+        num += 1

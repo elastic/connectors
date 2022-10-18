@@ -1,4 +1,4 @@
-.PHONY: black test
+.PHONY: black test lint run ftest install dev
 
 PYTHON=python3
 
@@ -7,6 +7,8 @@ bin/python:
 
 install: bin/python
 	bin/pip install -r requirements.txt
+
+dev: install
 	bin/python setup.py develop
 
 lint:
@@ -17,7 +19,10 @@ lint:
 	bin/black scripts
 	bin/flake8 scripts
 
-test:
+bin/pytest: dev
+	bin/pip install -r test-requirements.txt
+
+test:	bin/pytest
 	bin/pytest --cov-report term-missing --cov-report html --cov=connectors -sv connectors/tests connectors/sources/tests
 
 release: install
