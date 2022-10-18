@@ -5,7 +5,6 @@
 #
 """MySQL source module responsible to fetch documents from MySQL"""
 import asyncio
-import gc
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -137,8 +136,6 @@ class MySqlDataSource(BaseDataSource):
                         logger.info(f"Collected {count} rows in {database}.{table}")
                         count = 0
                     await asyncio.sleep(0)
-
-            gc.collect()
 
     async def _execute_query(self, query):
         """Executes the passed query on the MySQL server.
