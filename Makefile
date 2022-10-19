@@ -20,6 +20,11 @@ lint:
 test:
 	bin/pytest --cov-report term-missing --cov-report html --cov=connectors -sv connectors/tests connectors/sources/tests
 
+release: install
+	bin/python setup.py sdist
 
 ftest:
 	connectors/tests/ftest.sh $(NAME)
+
+run: install
+	bin/elastic-ingest --debug
