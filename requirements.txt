@@ -10,16 +10,6 @@ guppy3>=3.1.2
 cron-schedule-triggers==0.0.11
 pytz>=2019.3
 
-# tests
-black>=22.6.0
-flake8>=4.0.1
-aioresponses>=0.7.3
-pytest>=7.1.2
-pytest-cov>=3.0.0
-pytest-asyncio>=0.19.0
-pytest-randomly>=3.12.0
-
-
 # please put your connectors deps below this line
 # mysql
 aiomysql==0.1.1
