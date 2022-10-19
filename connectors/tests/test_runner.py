@@ -61,6 +61,7 @@ FAKE_CONFIG_NEEDS_CONFIG = copy.deepcopy(FAKE_CONFIG)
 FAKE_CONFIG_NEEDS_CONFIG["status"] = "needs_configuration"
 FAKE_CONFIG_NO_SYNC = copy.deepcopy(FAKE_CONFIG)
 FAKE_CONFIG_NO_SYNC["sync_now"] = False
+FAKE_CONFIG_NO_SYNC["scheduling"]["enabled"] = False
 FAKE_CONFIG_PIPELINE_CHANGED = copy.deepcopy(FAKE_CONFIG)
 FAKE_CONFIG_PIPELINE_CHANGED["pipeline"] = {
     "extract_binary_content": False,
