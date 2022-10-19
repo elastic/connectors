@@ -20,9 +20,9 @@ from elasticsearch import (
 from elastic_transport.client_utils import url_to_node_config
 from guppy import hpy
 from pympler import asizeof
+from cstriggers.core.trigger import QuartzCron
 
 from connectors.logger import set_extra_logger, logger
-from connectors.quartz import QuartzCron
 
 
 class ESClient:
