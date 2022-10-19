@@ -48,11 +48,19 @@ FAKE_CONFIG = {
     "last_seen": "",
     "created_at": "",
     "updated_at": "",
-    "scheduling": {"enabled": True, "interval": "0 * * * *"},
+    "scheduling": {"enabled": True, "interval": "0 * * * * *"},
     "sync_now": True,
     "is_native": True,
 }
-
+FAKE_CONFIG_CRON_BROKEN = copy.deepcopy(FAKE_CONFIG)
+FAKE_CONFIG_CRON_BROKEN["sync_now"] = False
+FAKE_CONFIG_CRON_BROKEN["scheduling"]["interval"] = "0 * * * *"
+FAKE_CONFIG_CREATED = copy.deepcopy(FAKE_CONFIG)
+FAKE_CONFIG_CREATED["status"] = "created"
+FAKE_CONFIG_NEEDS_CONFIG = copy.deepcopy(FAKE_CONFIG)
+FAKE_CONFIG_NEEDS_CONFIG["status"] = "needs_configuration"
+FAKE_CONFIG_NO_SYNC = copy.deepcopy(FAKE_CONFIG)
+FAKE_CONFIG_NO_SYNC["sync_now"] = False
 FAKE_CONFIG_PIPELINE_CHANGED = copy.deepcopy(FAKE_CONFIG)
 FAKE_CONFIG_PIPELINE_CHANGED["pipeline"] = {
     "extract_binary_content": False,
@@ -89,30 +97,6 @@ LARGE_FAKE_CONFIG = copy.deepcopy(FAKE_CONFIG)
 LARGE_FAKE_CONFIG["service_type"] = "large_fake"
 FAIL_ONCE_CONFIG = dict(FAKE_CONFIG)
 FAIL_ONCE_CONFIG["service_type"] = "fail_once"
-
-
-FAKE_CONFIG_NO_SYNC = {
-    "api_key_id": "",
-    "configuration": {
-        "host": {"value": "mongodb://127.0.0.1:27021", "label": "MongoDB Host"},
-        "database": {"value": "sample_airbnb", "label": "MongoDB Database"},
-        "collection": {
-            "value": "listingsAndReviews",
-            "label": "MongoDB Collection",
-        },
-    },
-    "index_name": "search-airbnb",
-    "service_type": "fake",
-    "status": "configured",
-    "last_sync_status": "null",
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
-    "scheduling": {"enabled": False, "interval": "0 * * * *"},
-    "sync_now": False,
-}
 
 
 FAKE_CONFIG_FAIL_SERVICE = {
@@ -398,6 +382,91 @@ async def test_connector_service_poll(
 
 
 @pytest.mark.asyncio
+async def test_connector_service_poll_unconfigured(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+    # we should not sync a connector that is not configured
+    # but still send out an heartbeat
+
+    await set_server_responses(mock_responses, FAKE_CONFIG_NEEDS_CONFIG)
+    service = ConnectorService(CONFIG)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll()
+
+    patch_logger.assert_present("*** Connector 1 HEARTBEAT")
+    patch_logger.assert_present("Found 1 connector")
+    patch_logger.assert_present("Can't sync with status `needs_configuration`")
+    patch_logger.assert_not_present("Sync done")
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_no_sync_but_status_updated(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+
+    calls = []
+
+    def upd(url, **kw):
+        doc = json.loads(kw["data"])["doc"]
+        calls.append(doc)
+
+    # if a connector is correctly configured but we don't sync (not scheduled)
+    # we still want to tell kibana we are connected
+    await set_server_responses(
+        mock_responses, FAKE_CONFIG_NO_SYNC, connectors_update=upd
+    )
+    service = ConnectorService(CONFIG)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll(sync_now=False)
+
+    patch_logger.assert_present("*** Connector 1 HEARTBEAT")
+    patch_logger.assert_present("Found 1 connector")
+    patch_logger.assert_present("Next sync for fake due in")
+    patch_logger.assert_not_present("Sync done")
+    assert calls[-1]["status"] == "connected"
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_cron_broken(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+
+    calls = []
+
+    def upd(url, **kw):
+        doc = json.loads(kw["data"])["doc"]
+        calls.append(doc)
+
+    # if a connector is correctly configured but we don't sync (not scheduled)
+    # we still want to tell kibana we are connected
+    await set_server_responses(
+        mock_responses, FAKE_CONFIG_CRON_BROKEN, connectors_update=upd
+    )
+    service = ConnectorService(CONFIG)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll(sync_now=False)
+    patch_logger.assert_not_present("Sync done")
+    assert calls[0]["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_just_created(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+    # we should not sync a connector that is not configured
+    # but still send out an heartbeat
+    await set_server_responses(mock_responses, FAKE_CONFIG_CREATED)
+    service = ConnectorService(CONFIG)
+    asyncio.get_event_loop().call_soon(service.stop)
+    await service.poll()
+
+    patch_logger.assert_present("*** Connector 1 HEARTBEAT")
+    patch_logger.assert_present("Found 1 connector")
+    patch_logger.assert_present("Can't sync with status `created`")
+    patch_logger.assert_not_present("Sync done")
+
+
+@pytest.mark.asyncio
 async def test_connector_service_poll_https(
     mock_responses, patch_logger, patch_ping, set_env
 ):
@@ -439,6 +508,7 @@ async def test_connector_service_poll_clear_error(
     )
     await service.poll(one_sync=True)  # fails
     await service.poll(one_sync=True)  # works
+
     assert calls == [
         "connector:NOT THERE",  # from is_ready()
         "job:I fail while syncing",  # first sync
