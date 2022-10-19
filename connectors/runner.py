@@ -144,10 +144,14 @@ class ConnectorService:
                 # Checking the indices/pipeline in the loop to be less strict about the boot ordering
                 await self.connectors.preflight()
                 break
-            except Exception:
+            except Exception as e:
                 if attempts > self.preflight_max_attempts:
                     raise
                 else:
+                    logger.warn(
+                        f"Attempt {attempts+1}/{self.preflight_max_attempts} failed. Retrying..."
+                    )
+                    logger.warn(str(e))
                     attempts += 1
                     await asyncio.sleep(self.preflight_idle)
 
