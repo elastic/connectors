@@ -14,15 +14,19 @@ from elasticsearch import NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan
 
 from connectors.logger import logger
-from connectors.utils import iso_utc, ESClient, get_size
+from connectors.utils import (
+    iso_utc,
+    ESClient,
+    get_size,
+    DEFAULT_CHUNK_SIZE,
+    DEFAULT_QUEUE_SIZE,
+    DEFAULT_DISPLAY_EVERY,
+)
 
 
 OP_INDEX = "index"
 OP_UPSERT = "update"
 OP_DELETE = "delete"
-DEFAULT_CHUNK_SIZE = 100
-DEFAULT_QUEUE_SIZE = 1024
-DEFAULT_DISPLAY_EVERY = 100
 
 
 class Bulker:

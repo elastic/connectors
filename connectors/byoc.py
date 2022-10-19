@@ -11,7 +11,13 @@ from enum import Enum
 import time
 from datetime import datetime, timezone
 
-from connectors.utils import iso_utc, next_run, ESClient
+from connectors.utils import (
+    iso_utc,
+    next_run,
+    ESClient,
+    DEFAULT_QUEUE_SIZE,
+    DEFAULT_DISPLAY_EVERY,
+)
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration
 from elasticsearch.exceptions import ApiError
@@ -56,8 +62,12 @@ class BYOIndex(ESClient):
     def __init__(self, elastic_config):
         super().__init__(elastic_config)
         logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
-        self.bulk_queue_max_size = elastic_config.get("bulk_queue_max_size", 1024)
-        self.bulk_display_every = elastic_config.get("bulk_display_every", 100)
+        self.bulk_queue_max_size = elastic_config.get(
+            "bulk_queue_max_size", DEFAULT_QUEUE_SIZE
+        )
+        self.bulk_display_every = elastic_config.get(
+            "bulk_display_every", DEFAULT_DISPLAY_EVERY
+        )
 
     async def save(self, connector):
         # we never update the configuration
@@ -177,8 +187,8 @@ class BYOConnector:
         index,
         connector_id,
         doc_source,
-        bulk_queue_max_size=1024,
-        bulk_display_every=100,
+        bulk_queue_max_size=DEFAULT_QUEUE_SIZE,
+        bulk_display_every=DEFAULT_DISPLAY_EVERY,
     ):
         self.doc_source = doc_source
         self.id = connector_id
