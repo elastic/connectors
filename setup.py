@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import sys
-import os
 from setuptools import setup, find_packages
 
 if sys.version_info.major != 3:
@@ -30,14 +29,13 @@ with open("requirements.txt") as f:
     reqs = f.readlines()
     for req in reqs:
         req = req.strip()
-        if req == '' or req.startswith('#'):
+        if req == "" or req.startswith("#"):
             continue
-        install_requires.append(req.split('=')[0])
+        install_requires.append(req.split("=")[0])
 
 
-for file_ in ("README",):
-    with open("%s.md" % file_) as f:
-        description += f.read() + "\n\n"
+with open("README.md") as f:
+    long_description = f.read()
 
 
 classifiers = [
@@ -52,6 +50,7 @@ setup(
     version=__version__,
     packages=find_packages(),
     description=("Elastic Search Connectors."),
+    long_description=long_description,
     author="Ingestion Team",
     author_email="tarek@ziade.org",
     include_package_data=True,
