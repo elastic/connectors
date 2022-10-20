@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import sys
+import os
 from setuptools import setup, find_packages
 
 if sys.version_info.major != 3:
@@ -13,9 +14,26 @@ if sys.version_info.minor < 10:
 
 from connectors import __version__  # NOQA
 
-install_requires = []
 
-description = ""
+# We feed install_requires with `requirements.txt` but we unpin versions so we
+# don't enforce them and trap folks into dependency hell. (only works with `==` here)
+#
+# A proper production installation will do the following sequence:
+#
+# $ pip install -r requirements.txt
+# $ pip install elasticsearch-connectors
+#
+# Because the *pinned* dependencies is what we tested
+#
+install_requires = []
+with open("requirements.txt") as f:
+    reqs = f.readlines()
+    for req in reqs:
+        req = req.strip()
+        if req == '' or req.startswith('#'):
+            continue
+        install_requires.append(req.split('=')[0])
+
 
 for file_ in ("README",):
     with open("%s.md" % file_) as f:
