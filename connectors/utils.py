@@ -25,6 +25,11 @@ from cstriggers.core.trigger import QuartzCron
 from connectors.logger import set_extra_logger, logger
 
 
+DEFAULT_CHUNK_SIZE = 100
+DEFAULT_QUEUE_SIZE = 1024
+DEFAULT_DISPLAY_EVERY = 100
+
+
 class ESClient:
     def __init__(self, config):
         self.config = config
