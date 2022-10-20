@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """MySQL source module responsible to fetch documents from MySQL"""
+import asyncio
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -21,6 +22,7 @@ QUERIES = {
     "TABLE_PRIMARY_KEY": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'",
     "TABLE_LAST_UPDATE_TIME": "SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}'",
 }
+DEFAULT_FETCH_SIZE = 50
 
 
 class MySqlDataSource(BaseDataSource):
@@ -81,19 +83,59 @@ class MySqlDataSource(BaseDataSource):
                 "label": "Friendly name for the connector",
                 "type": "str",
             },
+            "fetch_size": {
+                "value": DEFAULT_FETCH_SIZE,
+                "label": "How many rows to fetch on each call",
+                "type": "int",
+            },
         }
+
+    async def close(self):
+        if self.connection_pool is None:
+            return
+        self.connection_pool.close()
+        await self.connection_pool.wait_closed()
+        self.connection_pool = None
 
     async def ping(self):
         """Verify the connection with MySQL server"""
-        try:
+        logger.info("Pinging MySQL...")
+        if self.connection_pool is None:
             self.connection_pool = await aiomysql.create_pool(**self.connection_string)
-
+        try:
             async with self.connection_pool.acquire() as connection:
                 await connection.ping()
                 logger.info("Successfully connected to the MySQL Server.")
         except Exception:
             logger.exception("Error while connecting to the MySQL Server.")
             raise
+
+    async def _stream_rows(self, database, table, query):
+        size = int(self.configuration.get("fetch_size", DEFAULT_FETCH_SIZE))
+        logger.debug(f"Streaming {database}.{table} {size} rows at a time")
+
+        async with self.connection_pool.acquire() as connection:
+            count = 0
+            async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+                await cursor.execute(query)
+
+                # sending back column names
+                yield [column[0] for column in cursor.description]
+
+                while True:
+                    rows = await cursor.fetchmany(size=size)
+
+                    if len(rows) == 0:
+                        break
+
+                    for row in rows:
+                        yield row
+
+                    count += len(rows)
+                    if count > 100:
+                        logger.info(f"Collected {count} rows in {database}.{table}")
+                        count = 0
+                    await asyncio.sleep(0)
 
     async def _execute_query(self, query):
         """Executes the passed query on the MySQL server.
@@ -122,9 +164,9 @@ class MySqlDataSource(BaseDataSource):
         Yields:
             Dict: Row document to index
         """
-
         # Query to get all table names from a database
         query = QUERIES["ALL_TABLE"].format(database=database)
+
         _, query_response = await self._execute_query(query=query)
         if query_response:
             for table in query_response:
@@ -135,7 +177,7 @@ class MySqlDataSource(BaseDataSource):
                 query = QUERIES["TABLE_DATA"].format(
                     database=database, table=table_name
                 )
-                async for row in self.create_document(
+                async for row in self.fetch_documents(
                     database=database, table=table_name, query=query
                 ):
                     yield row
@@ -183,8 +225,8 @@ class MySqlDataSource(BaseDataSource):
 
         return doc
 
-    async def create_document(self, database, table, query):
-        """Fetches all the table entires and format them in an Elasticsearch document
+    async def fetch_documents(self, database, table, query):
+        """Fetches all the table entries and format them in Elasticsearch documents
 
         Args:
             database (str): Name of database
@@ -194,8 +236,6 @@ class MySqlDataSource(BaseDataSource):
         Yields:
             Dict: Document to be index
         """
-
-        column_names, query_response = await self._execute_query(query=query)
 
         # Query to get the table's primary key
         query = QUERIES["TABLE_PRIMARY_KEY"].format(database=database, table=table)
@@ -212,10 +252,13 @@ class MySqlDataSource(BaseDataSource):
                 query=last_update_time_query
             )
 
+            query = QUERIES["TABLE_DATA"].format(database=database, table=table)
+            streamer = self._stream_rows(database, table, query=query)
+            column_names = await streamer.__anext__()
             for column_name in columns:
                 keys.append(column_name[0])
 
-            for row in query_response:
+            async for row in streamer:
                 row = dict(zip(column_names, row))
                 keys_value = ""
                 for key in keys:
@@ -268,3 +311,4 @@ class MySqlDataSource(BaseDataSource):
         for database in databases:
             async for row in self.fetch_rows(database=database):
                 yield row, None
+            await asyncio.sleep(0)

@@ -191,7 +191,7 @@ class FakeSource:
     async def get_docs(self):
         if self.fail:
             raise Exception("I fail while syncing")
-        yield {"_id": 1}, partial(self._dl, 1)
+        yield {"_id": "1"}, partial(self._dl, "1")
 
     @classmethod
     def get_default_configuration(cls):
@@ -208,7 +208,7 @@ class FailsThenWork(FakeSource):
         if FailsThenWork.fail:
             FailsThenWork.fail = False
             raise Exception("I fail while syncing")
-        yield {"_id": 1}, partial(self._dl, 1)
+        yield {"_id": "1"}, partial(self._dl, "1")
 
 
 class LargeFakeSource(FakeSource):
