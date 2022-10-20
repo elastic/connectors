@@ -39,6 +39,7 @@ class ConnectorService:
         self.config = EnvYAML(config_file)
         self.ent_search_config()
         self.service_config = self.config["service"]
+        self.trace_mem = self.service_config.get("trace_mem", False)
         self.idling = self.service_config["idling"]
         self.hb = self.service_config["heartbeat"]
         self.preflight_max_attempts = int(
@@ -150,19 +151,21 @@ class ConnectorService:
         es = ElasticServer(self.config["elasticsearch"])
 
         # pre-flight check
-        logger.info("Preflight checks")
         attempts = 0
         while self.running:
+            logger.info("Preflight checks...")
             try:
                 # Checking the indices/pipeline in the loop to be less strict about the boot ordering
                 await self.connectors.preflight()
                 break
             except Exception as e:
-                logger.warn(str(e))
-
                 if attempts > self.preflight_max_attempts:
                     raise
                 else:
+                    logger.warn(
+                        f"Attempt {attempts+1}/{self.preflight_max_attempts} failed. Retrying..."
+                    )
+                    logger.warn(str(e))
                     attempts += 1
                     await asyncio.sleep(self.preflight_idle)
 
@@ -172,8 +175,6 @@ class ConnectorService:
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
                     async for connector in self.connectors.get_list():
-                        # we only look at connectors we natively support or the
-                        # ones where we have the connector_id explicitely
                         if (
                             connector.service_type not in native_service_types
                             and connector.id not in connectors_ids
@@ -184,7 +185,6 @@ class ConnectorService:
                             continue
 
                         await self._one_sync(connector, es, sync_now)
-
                         if one_sync:
                             self.stop()
                             break
@@ -199,6 +199,7 @@ class ConnectorService:
         finally:
             await self.connectors.close()
             await es.close()
+
         return 0
 
     async def get_list(self):
