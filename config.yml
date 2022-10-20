@@ -4,6 +4,7 @@ elasticsearch:
   password: changeme
   ssl: true
   bulk_queue_max_size: 1024
+  bulk_display_every: 100
   bulk_chunk_size: 150
   request_timeout: 120
   max_wait_duration: 120
