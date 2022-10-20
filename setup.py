@@ -8,8 +8,8 @@ from setuptools import setup, find_packages
 
 if sys.version_info.major != 3:
     raise ValueError("Requires Python 3")
-if sys.version_info.minor < 6:
-    raise ValueError("Requires Python 3.6 or superior")
+if sys.version_info.minor < 10:
+    raise ValueError("Requires Python 3.10 or superior.")
 
 from connectors import __version__  # NOQA
 
