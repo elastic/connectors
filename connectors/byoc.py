@@ -321,9 +321,12 @@ class BYOConnector:
             if not sync_now:
                 next_sync = self.next_sync()
                 if next_sync == -1 or next_sync - idling > 0:
-                    logger.debug(
-                        f"Next sync for {service_type} due in {int(next_sync)} seconds"
-                    )
+                    if next_sync == -1:
+                        logger.debug(f"Scheduling is disabled for {service_type}")
+                    else:
+                        logger.debug(
+                            f"Next sync for {service_type} due in {int(next_sync)} seconds"
+                        )
                     # if we don't sync, we still want to make sure we tell kibana we are connected
                     # if the status is different from comnected
                     if self._status != Status.CONNECTED:
