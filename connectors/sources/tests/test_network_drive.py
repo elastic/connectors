@@ -16,6 +16,9 @@ from connectors.sources.network_drive import NASDataSource
 from connectors.sources.tests.support import create_source
 from smbprotocol.exceptions import LogonFailure, SMBOSError
 
+READ_COUNT = 0
+MAX_CHUNK_SIZE = 65536
+
 
 def mock_file(name):
     """Generates the smbprotocol object for a file
@@ -56,8 +59,29 @@ def mock_folder(name):
     mock_response.name = name
     mock_response.path = f"\\1.2.3.4/dummy_path/{name}"
     mock_response.is_dir.return_value = True
-
+    mock_stats = {}
+    mock_stats["file_id"] = mock.Mock()
+    mock_stats["file_id"].get_value.return_value = "122"
+    mock_stats["allocation_size"] = mock.Mock()
+    mock_stats["allocation_size"].get_value.return_value = "200"
+    mock_stats["creation_time"] = mock.Mock()
+    mock_stats["creation_time"].get_value.return_value = datetime.datetime(
+        2022, 2, 11, 12, 12, 30
+    )
+    mock_stats["change_time"] = mock.Mock()
+    mock_stats["change_time"].get_value.return_value = datetime.datetime(
+        2022, 5, 21, 12, 12, 30
+    )
+    mock_response._dir_info.fields = mock_stats
     return mock_response
+
+
+def side_effect_function(MAX_CHUNK_SIZE):
+    global READ_COUNT
+    if READ_COUNT:
+        return None
+    READ_COUNT += 1
+    return "MOCK...."
 
 
 def test_get_configuration():
@@ -151,25 +175,35 @@ async def test_get_files(dir_mock):
     # Setup
     source = create_source(NASDataSource)
     path = "\\1.2.3.4/dummy_path"
-    dir_mock.return_value = [
-        mock_file(name="a1.md"),
-        mock_folder(name="A"),
-        mock_folder(name="C"),
+    dir_mock.return_value = [mock_file(name="a1.md"), mock_folder(name="A")]
+    expected_output = [
+        {
+            "_id": "1",
+            "timestamp": "2022-04-21T12:12:30",
+            "path": "\\1.2.3.4/dummy_path/a1.md",
+            "title": "a1.md",
+            "created_at": "2022-01-11T12:12:30",
+            "size": "30",
+            "type": "file",
+        },
+        {
+            "_id": "122",
+            "timestamp": "2022-05-21T12:12:30",
+            "path": "\\1.2.3.4/dummy_path/A",
+            "title": "A",
+            "created_at": "2022-02-11T12:12:30",
+            "size": "200",
+            "type": "folder",
+        },
     ]
-    expected_output = {
-        "_id": "1",
-        "timestamp": "2022-04-21T12:12:30",
-        "path": "\\1.2.3.4/dummy_path/a1.md",
-        "title": "a1.md",
-        "created_at": "2022-01-11T12:12:30",
-        "size": "30",
-    }
 
     # Execute
+    response = []
     async for file in source.get_files(path=path):
+        response.append(file)
 
-        # Assert
-        assert file == expected_output
+    # Assert
+    assert response == expected_output
 
 
 @mock.patch("smbclient.open_file")
@@ -211,6 +245,8 @@ async def test_get_content(file_mock):
         "size": "50",
     }
 
+    mocked_content_response = "Mock..."
+
     expected_output = {
         "_id": "1",
         "timestamp": "2022-04-21T12:12:30",
@@ -218,6 +254,7 @@ async def test_get_content(file_mock):
     }
 
     # Execute
+    source.fetch_file_content = mock.MagicMock(return_value=mocked_content_response)
     actual_response = await source.get_content(mock_response, doit=True)
 
     # Assert
@@ -278,3 +315,25 @@ async def test_get_doc(mock_get_files, mock_walk):
 
         # Assert
         mock_get_files.assert_awaited()
+
+
+@mock.patch("smbclient.open_file")
+def test_fetch_file_when_file_is_accessible(file_mock):
+    """Tests the open_file method of smbclient when file can be accessed
+
+    Args:
+        file_mock (patch): The patch of open_file method
+    """
+    # Setup
+    source = create_source(NASDataSource)
+    path = "\\1.2.3.4/Users/file1.txt"
+
+    file_mock.return_value.__enter__.return_value.read = mock.MagicMock(
+        side_effect=side_effect_function
+    )
+
+    # Execute
+    response = source.fetch_file_content(path=path)
+
+    # Assert
+    assert response == "MOCK...."

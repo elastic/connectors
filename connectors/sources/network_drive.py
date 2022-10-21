@@ -12,9 +12,11 @@ from functools import partial
 import smbclient
 from connectors.logger import logger
 from connectors.source import BaseDataSource
+from connectors.utils import iso_utc
 from smbprotocol.exceptions import SMBException, SMBOSError
 
 SUPPORTED_FILETYPE = [".py", ".rst", ".rb", ".sh", ".md", ".txt"]
+MAX_CHUNK_SIZE = 65536
 
 
 class NASDataSource(BaseDataSource):
@@ -99,7 +101,7 @@ class NASDataSource(BaseDataSource):
         )
 
     async def get_files(self, path):
-        """Fetches the metadata of the files present on given path
+        """Fetches the metadata of the files and folders present on given path
 
         Args:
             path (str): The path of a folder in the Network Drive
@@ -112,20 +114,16 @@ class NASDataSource(BaseDataSource):
             logger.exception(f"Error while scanning the path {path}. Error {exception}")
 
         for file in files:
-            if not file.is_dir():
-                document = {"path": file.path}
-                file_details = file._dir_info.fields
-
-                document["size"] = file_details["allocation_size"].get_value()
-                document["_id"] = file_details["file_id"].get_value()
-                document["created_at"] = (
-                    file_details["creation_time"].get_value().isoformat()
-                )
-                document["timestamp"] = (
-                    file_details["change_time"].get_value().isoformat()
-                )
-                document["title"] = file.name
-                yield document
+            file_details = file._dir_info.fields
+            yield {
+                "path": file.path,
+                "size": file_details["allocation_size"].get_value(),
+                "_id": file_details["file_id"].get_value(),
+                "created_at": iso_utc(file_details["creation_time"].get_value()),
+                "timestamp": iso_utc(file_details["change_time"].get_value()),
+                "type": "folder" if file.is_dir() else "file",
+                "title": file.name
+            }
 
     def fetch_file_content(self, path):
         """Fetches the file content from the given drive path
@@ -137,7 +135,11 @@ class NASDataSource(BaseDataSource):
             with smbclient.open_file(
                 path=path, encoding="utf-8", errors="ignore"
             ) as file:
-                return file.read()
+                file_content, chunk = "", True
+                while chunk:
+                    chunk = file.read(MAX_CHUNK_SIZE) or ""
+                    file_content += chunk
+                return file_content
         except SMBOSError as error:
             logger.error(
                 f"Cannot read the contents of file on path:{path}. Error {error}"
@@ -173,9 +175,9 @@ class NASDataSource(BaseDataSource):
         }
 
     async def get_docs(self):
-        """Executes the logic to fetch files in async manner.
+        """Executes the logic to fetch files and folders in async manner.
         Yields:
-            dictionary: Dictionary containing the Network Drive files as documents
+            dictionary: Dictionary containing the Network Drive files and folders as documents
         """
         loop = asyncio.get_running_loop()
         directory_details = await loop.run_in_executor(
@@ -184,4 +186,7 @@ class NASDataSource(BaseDataSource):
         )
         for path, _, _ in directory_details:
             async for file in self.get_files(path=path):
-                yield file, partial(self.get_content, file)
+                if file["type"] == "folder":
+                    yield file, None
+                else:
+                    yield file, partial(self.get_content, file)

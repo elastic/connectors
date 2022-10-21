@@ -2,7 +2,7 @@
 
 PYTHON=python3
 
-export VERSION=8.4.0-SNAPSHOT
+export VERSION=8.5.0-SNAPSHOT
 
 run-stack:
 	docker-compose up -d
@@ -19,6 +19,9 @@ install: bin/python
 
 load-data: install
 	bin/python ./loadsample.py
+
+remove-data: install
+	bin/python ./remove.py
 
 uninstall:
 	rm -rf bin
