@@ -9,8 +9,15 @@ Implementation of BYOC protocol.
 import asyncio
 from enum import Enum
 import time
+from datetime import datetime, timezone
 
-from connectors.utils import iso_utc, next_run, ESClient
+from connectors.utils import (
+    iso_utc,
+    next_run,
+    ESClient,
+    DEFAULT_QUEUE_SIZE,
+    DEFAULT_DISPLAY_EVERY,
+)
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration
 from elasticsearch.exceptions import ApiError
@@ -19,6 +26,7 @@ from connectors.index import defaults_for
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
+PIPELINE = "ent-search-generic-ingestion"
 
 
 def e2str(entry):
@@ -40,37 +48,50 @@ class JobStatus(Enum):
     ERROR = 4
 
 
-_CONNECTORS_CACHE = {}
-
-
-async def purge_cache():
-    for connector in _CONNECTORS_CACHE.values():
-        try:
-            await connector.close()
-        except Exception as e:
-            logger.critical(e, exc_info=True)
-        await asyncio.sleep(0)
-    _CONNECTORS_CACHE.clear()
+READ_ONLY_FIELDS = (
+    "service_type",
+    "is_native",
+    "api_key_id",
+    "pipeline",
+    "scheduling",
+    "configuration",
+)
 
 
 class BYOIndex(ESClient):
     def __init__(self, elastic_config):
         super().__init__(elastic_config)
         logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
-        self.bulk_queue_max_size = elastic_config.get("bulk_queue_max_size", 1024)
-
-    async def close(self):
-        await purge_cache()
-        await super().close()
+        self.bulk_queue_max_size = elastic_config.get(
+            "bulk_queue_max_size", DEFAULT_QUEUE_SIZE
+        )
+        self.bulk_display_every = elastic_config.get(
+            "bulk_display_every", DEFAULT_DISPLAY_EVERY
+        )
 
     async def save(self, connector):
-        return await self.client.index(
+        # we never update the configuration
+        document = dict(connector.doc_source)
+
+        # read only we never update
+        for key in READ_ONLY_FIELDS:
+            if key in document:
+                del document[key]
+
+        return await self.client.update(
             index=CONNECTORS_INDEX,
             id=connector.id,
-            document=dict(connector.doc_source),
+            doc=document,
+        )
+
+    async def preflight(self):
+        await self.check_exists(
+            indices=[CONNECTORS_INDEX, JOBS_INDEX], pipelines=[PIPELINE]
         )
 
     async def get_list(self):
+        await self.client.indices.refresh(index=CONNECTORS_INDEX)
+
         try:
             resp = await self.client.search(
                 index=CONNECTORS_INDEX,
@@ -83,85 +104,118 @@ class BYOIndex(ESClient):
             logger.critical(e.body, exc_info=True)
             return
 
+        logger.debug(f"Found {len(resp['hits']['hits'])} connectors")
         for hit in resp["hits"]["hits"]:
-            connector_id = hit["_id"]
-            if connector_id not in _CONNECTORS_CACHE:
-                _CONNECTORS_CACHE[connector_id] = BYOConnector(
-                    self,
-                    connector_id,
-                    hit["_source"],
-                    bulk_queue_max_size=self.bulk_queue_max_size,
-                )
-            else:
-                _CONNECTORS_CACHE[connector_id].update_config(hit["_source"])
-
-            yield _CONNECTORS_CACHE[connector_id]
+            yield BYOConnector(
+                self,
+                hit["_id"],
+                hit["_source"],
+                bulk_queue_max_size=self.bulk_queue_max_size,
+                bulk_display_every=self.bulk_display_every,
+            )
 
 
 class SyncJob:
     def __init__(self, connector_id, elastic_client):
         self.connector_id = connector_id
         self.client = elastic_client
-        self.created_at = iso_utc()
+        self.created_at = datetime.now(timezone.utc)
+        self.completed_at = None
         self.job_id = None
         self.status = None
+
+    @property
+    def duration(self):
+        if self.completed_at is None:
+            return -1
+        msec = (self.completed_at - self.created_at).microseconds
+        return round(msec / 9, 2)
 
     async def start(self):
         self.status = JobStatus.IN_PROGRESS
         job_def = {
             "connector_id": self.connector_id,
             "status": e2str(self.status),
-            "error": "",
+            "error": None,
             "deleted_document_count": 0,
             "indexed_document_count": 0,
-            "created_at": self.created_at,
-            "updated_at": self.created_at,
+            "created_at": iso_utc(self.created_at),
+            "completed_at": None,
         }
         resp = await self.client.index(index=JOBS_INDEX, document=job_def)
         self.job_id = resp["_id"]
         return self.job_id
 
     async def done(self, indexed_count=0, deleted_count=0, exception=None):
+        self.completed_at = datetime.now(timezone.utc)
+
         job_def = {
-            "deleted_document_count": indexed_count,
-            "indexed_document_count": deleted_count,
-            "updated_at": iso_utc(),
+            "deleted_document_count": deleted_count,
+            "indexed_document_count": indexed_count,
+            "completed_at": iso_utc(self.completed_at),
         }
 
         if exception is None:
             self.status = JobStatus.COMPLETED
+            job_def["error"] = None
         else:
             self.status = JobStatus.ERROR
             job_def["error"] = str(exception)
 
         job_def["status"] = e2str(self.status)
 
-        return await self.client.index(
-            index=JOBS_INDEX, id=self.job_id, document=job_def
+        return await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
+
+
+class PipelineSettings:
+    def __init__(self, pipeline):
+        self.name = pipeline.get("name", "ent-search-generic-ingestion")
+        self.extract_binary_content = pipeline.get("extract_binary_content", True)
+        self.reduce_whitespace = pipeline.get("reduce_whitespace", True)
+        self.run_ml_inference = pipeline.get("run_ml_inference", True)
+
+    def __repr__(self):
+        return (
+            f"Pipeline {self.name} <binary: {self.extract_binary_content}, "
+            f"whitespace {self.reduce_whitespace}, ml inference {self.run_ml_inference}>"
         )
 
 
 class BYOConnector:
-    def __init__(self, index, connector_id, doc_source, bulk_queue_max_size=1024):
+    def __init__(
+        self,
+        index,
+        connector_id,
+        doc_source,
+        bulk_queue_max_size=DEFAULT_QUEUE_SIZE,
+        bulk_display_every=DEFAULT_DISPLAY_EVERY,
+    ):
         self.doc_source = doc_source
         self.id = connector_id
         self.index = index
         self.update_config(doc_source)
         self.client = index.client
-        self.doc_source["status"] = e2str(Status.CONNECTED)
         self.doc_source["last_seen"] = iso_utc()
         self._heartbeat_started = self._syncing = False
         self._closed = False
         self._start_time = None
         self._hb = None
         self.bulk_queue_max_size = bulk_queue_max_size
+        self.bulk_display_every = bulk_display_every
 
     def update_config(self, doc_source):
+        self._status = Status[doc_source["status"].upper()]
+        self.sync_now = doc_source.get("sync_now", False)
         self.native = doc_source.get("is_native", False)
         self.service_type = doc_source["service_type"]
         self.index_name = doc_source["index_name"]
         self.configuration = DataSourceConfiguration(doc_source["configuration"])
         self.scheduling = doc_source["scheduling"]
+        self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
+
+    @property
+    def status(self):
+        return self._status
 
     async def close(self):
         self._closed = True
@@ -173,14 +227,14 @@ class BYOConnector:
         self.doc_source["last_seen"] = iso_utc()
         await self.index.save(self)
 
-    async def heartbeat(self, delay):
+    def start_heartbeat(self, delay):
         if self._heartbeat_started:
             return
         self._heartbeat_started = True
 
         async def _heartbeat():
             while not self._closed:
-                logger.debug(f"*** BEAT every {delay} seconds")
+                logger.info(f"*** Connector {self.id} HEARTBEAT")
                 if not self._syncing:
                     self.doc_source["last_seen"] = iso_utc()
                     await self._write()
@@ -193,9 +247,11 @@ class BYOConnector:
 
         If the function returns -1, no sync is scheduled.
         """
-        if self.doc_source["sync_now"]:
+        if self.sync_now:
+            logger.debug("sync_now is true, syncing!")
             return 0
         if not self.scheduling["enabled"]:
+            logger.debug("scheduler is disabled")
             return -1
         return next_run(self.scheduling["interval"])
 
@@ -203,13 +259,19 @@ class BYOConnector:
         job = SyncJob(self.id, self.client)
         job_id = await job.start()
 
-        self.doc_source["sync_now"] = False
+        self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
+        self._status = Status.CONNECTED
+        self.doc_source["status"] = e2str(self._status)
         await self._write()
 
         self._start_time = time.time()
         logger.info(f"Sync starts, Job id: {job_id}")
         return job
+
+    async def error(self, error):
+        self.doc_source["error"] = str(error)
+        await self._write()
 
     async def _sync_done(self, job, result, exception=None):
         doc_updated = result.get("doc_updated", 0)
@@ -223,9 +285,14 @@ class BYOConnector:
 
         self.doc_source["last_sync_status"] = e2str(job.status)
         if exception is None:
-            self.doc_source["last_sync_error"] = ""
+            self.doc_source["last_sync_error"] = None
+            self.doc_source["error"] = None
         else:
             self.doc_source["last_sync_error"] = str(exception)
+            self.doc_source["error"] = str(exception)
+            self._status = Status.ERROR
+            self.doc_source["status"] = e2str(self._status)
+
         self.doc_source["last_synced"] = iso_utc()
         await self._write()
         logger.info(
@@ -233,29 +300,61 @@ class BYOConnector:
             f" deleted. ({int(time.time() - self._start_time)} seconds)"
         )
 
-    async def sync(self, data_provider, elastic_server, idling, sync_now=False):
-        service_type = self.service_type
-        if not sync_now:
-            next_sync = self.next_sync()
-            if next_sync == -1 or next_sync - idling > 0:
-                logger.debug(
-                    f"Next sync for {service_type} due in {int(next_sync)} seconds"
-                )
-                return
-        else:
-            logger.info("Sync forced")
+    async def prepare_docs(self, data_provider):
+        logger.debug(f"Using pipeline {self.pipeline}")
 
-        if not await data_provider.changed():
-            logger.debug(f"No change in {service_type} data provider, skipping...")
-            return
+        async for doc, lazy_download in data_provider.get_docs():
+            # adapt doc for pipeline settings
+            doc["_extract_binary_content"] = self.pipeline.extract_binary_content
+            doc["_reduce_whitespace"] = self.pipeline.reduce_whitespace
+            doc["_run_ml_inference"] = self.pipeline.run_ml_inference
+            yield doc, lazy_download
+
+    async def sync(self, data_provider, elastic_server, idling, sync_now=False):
+        # If anything bad happens before we create a sync job
+        # (like bad scheduling config, etc)
+        #
+        # we will raise the error in the logs here and let Kibana knows
+        # by toggling the status and setting the error and status field
+        try:
+            service_type = self.service_type
+            if not sync_now:
+                next_sync = self.next_sync()
+                if next_sync == -1 or next_sync - idling > 0:
+                    logger.debug(
+                        f"Next sync for {service_type} due in {int(next_sync)} seconds"
+                    )
+                    # if we don't sync, we still want to make sure we tell kibana we are connected
+                    # if the status is different from comnected
+                    if self._status != Status.CONNECTED:
+                        self._status = Status.CONNECTED
+                        self.doc_source["status"] = e2str(self._status)
+                        await self._write()
+                    return
+            else:
+                logger.info("Sync forced")
+
+            if not await data_provider.changed():
+                logger.debug(f"No change in {service_type} data provider, skipping...")
+                return
+        except Exception as exc:
+            self.doc_source["error"] = str(exc)
+            self._status = Status.ERROR
+            self.doc_source["status"] = e2str(self._status)
+            await self._write()
+            raise
 
         logger.debug(f"Syncing '{service_type}'")
         self._syncing = True
         job = await self._sync_starts()
         try:
+            logger.debug(f"Pinging the {data_provider} backend")
+            await data_provider.ping()
+            await asyncio.sleep(0)
+
             # TODO: where do we get language_code and analysis_icu?
             mappings, settings = defaults_for(is_connectors_index=True)
-            await data_provider.ping()
+            logger.debug("Preparing the index")
             await elastic_server.prepare_index(
                 self.index_name, mappings=mappings, settings=settings
             )
@@ -263,8 +362,10 @@ class BYOConnector:
 
             result = await elastic_server.async_bulk(
                 self.index_name,
-                data_provider.get_docs(),
+                self.prepare_docs(data_provider),
+                data_provider.connector.pipeline,
                 queue_size=self.bulk_queue_max_size,
+                display_every=self.bulk_display_every,
             )
             await self._sync_done(job, result)
 

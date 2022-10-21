@@ -11,8 +11,10 @@ class FakeConnector:
         self.configuration = DataSourceConfiguration(config)
 
 
-def create_source(klass):
+def create_source(klass, **extras):
     config = klass.get_default_configuration()
+    for k, v in extras.items():
+        config[k] = {"value": v}
     conn = FakeConnector(config)
     return klass(conn)
 

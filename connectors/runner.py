@@ -19,16 +19,15 @@ import functools
 from envyaml import EnvYAML
 
 from connectors.byoei import ElasticServer
-from connectors.byoc import BYOIndex
+from connectors.byoc import BYOIndex, Status, e2str
 from connectors.logger import logger
 from connectors.source import (
     get_data_sources,
     get_data_source,
     ServiceTypeNotSupportedError,
     DataSourceError,
-    purge_cache as purge_sources,
 )
-from connectors.utils import CancellableSleeps
+from connectors.utils import CancellableSleeps, trace_mem
 
 
 class ConnectorService:
@@ -40,13 +39,18 @@ class ConnectorService:
         self.config = EnvYAML(config_file)
         self.ent_search_config()
         self.service_config = self.config["service"]
+        self.trace_mem = self.service_config.get("trace_mem", False)
         self.idling = self.service_config["idling"]
         self.hb = self.service_config["heartbeat"]
+        self.preflight_max_attempts = int(
+            self.service_config.get("preflight_max_attempts", 10)
+        )
+        self.preflight_idle = int(self.service_config.get("preflight_idle", 30))
         self.running = False
         self._sleeper = None
         self._sleeps = CancellableSleeps()
         self.connectors = None
-        self.keep_alive = self.service_config.get("keep_alive", False)
+        self.trace_mem = self.service_config.get("trace_mem", False)
 
     def ent_search_config(self):
         if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
@@ -86,13 +90,51 @@ class ConnectorService:
         if self.connectors is not None:
             self.connectors.stop_waiting()
 
+    async def _one_sync(self, connector, es, sync_now):
+        with trace_mem(self.trace_mem):
+            if connector.native:
+                logger.debug(f"Connector {connector.id} natively supported")
+
+            if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
+                # we can't sync in that state
+                logger.info(f"Can't sync with status `{e2str(connector.status)}`")
+                data_source = None
+            else:
+                # in other cases, we can
+                try:
+                    data_source = get_data_source(connector, self.config)
+                except ServiceTypeNotSupportedError:
+                    logger.debug(
+                        f"Can't handle source of type {connector.service_type}"
+                    )
+                    return
+                except DataSourceError as e:
+                    await connector.error(e)
+                    logger.critical(e, exc_info=True)
+                    self.raise_if_spurious(e)
+                    return
+
+            try:
+                # the heartbeat is always triggered
+                connector.start_heartbeat(self.hb)
+
+                # we trigger a sync
+                if data_source is not None:
+                    await connector.sync(data_source, es, self.idling, sync_now)
+
+                await asyncio.sleep(0)
+            finally:
+                await connector.close()
+                if data_source is not None:
+                    await data_source.close()
+
     async def poll(self, one_sync=False, sync_now=True):
         """Main event loop."""
-        loop = asyncio.get_event_loop()
         self.connectors = BYOIndex(self.config["elasticsearch"])
         es_host = self.config["elasticsearch"]["host"]
         self.running = True
         native_service_types = self.config.get("native_service_types", [])
+        logger.debug(f"Native support for {', '.join(native_service_types)}")
 
         # XXX we can support multiple connectors but Ruby can't so let's use a
         # single id
@@ -107,14 +149,32 @@ class ConnectorService:
             return -1
 
         es = ElasticServer(self.config["elasticsearch"])
+
+        # pre-flight check
+        attempts = 0
+        while self.running:
+            logger.info("Preflight checks...")
+            try:
+                # Checking the indices/pipeline in the loop to be less strict about the boot ordering
+                await self.connectors.preflight()
+                break
+            except Exception as e:
+                if attempts > self.preflight_max_attempts:
+                    raise
+                else:
+                    logger.warn(
+                        f"Attempt {attempts+1}/{self.preflight_max_attempts} failed. Retrying..."
+                    )
+                    logger.warn(str(e))
+                    attempts += 1
+                    await asyncio.sleep(self.preflight_idle)
+
         logger.info(f"Service started, listening to events from {es_host}")
         try:
             while self.running:
-                logger.debug(f"Polling every {self.idling} seconds")
                 try:
+                    logger.debug(f"Polling every {self.idling} seconds")
                     async for connector in self.connectors.get_list():
-                        # we only look at connectors we natively support or the
-                        # ones where we have the connector_id explicitely
                         if (
                             connector.service_type not in native_service_types
                             and connector.id not in connectors_ids
@@ -124,24 +184,7 @@ class ConnectorService:
                             )
                             continue
 
-                        if connector.native:
-                            logger.debug(f"Connector {connector.id} natively supported")
-                        try:
-                            data_source = get_data_source(connector, self.config)
-                        except ServiceTypeNotSupportedError:
-                            logger.debug(
-                                f"Can't handle source of type {connector.service_type}"
-                            )
-                            continue
-                        except DataSourceError as e:
-                            logger.critical(e, exc_info=True)
-                            self.raise_if_spurious(e)
-                            continue
-
-                        loop.create_task(connector.heartbeat(self.hb))
-                        await connector.sync(data_source, es, self.idling, sync_now)
-                        await asyncio.sleep(0)
-
+                        await self._one_sync(connector, es, sync_now)
                         if one_sync:
                             self.stop()
                             break
@@ -151,12 +194,12 @@ class ConnectorService:
 
                 if not one_sync:
                     await self._sleeps.sleep(self.idling)
-
-                if not self.keep_alive:
-                    await purge_sources()
+                else:
+                    self.stop()
         finally:
             await self.connectors.close()
             await es.close()
+
         return 0
 
     async def get_list(self):

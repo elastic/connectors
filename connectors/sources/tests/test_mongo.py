@@ -14,20 +14,15 @@ from connectors.sources.tests.support import create_source, assert_basics
 
 
 @pytest.mark.asyncio
-async def test_basics():
-    with (
-        mock.patch(
-            "pymongo.topology.Topology._select_servers_loop",
-            lambda *x: [mock.MagicMock()],
-        ),
-        mock.patch("pymongo.mongo_client.MongoClient._get_socket"),
-    ):
-        await assert_basics(MongoDataSource, "host", "mongodb://127.0.0.1:27021")
+@mock.patch(
+    "pymongo.topology.Topology._select_servers_loop", lambda *x: [mock.MagicMock()]
+)
+@mock.patch("pymongo.mongo_client.MongoClient._get_socket")
+async def test_basics(*args):
+    await assert_basics(MongoDataSource, "host", "mongodb://127.0.0.1:27021")
 
 
-@pytest.mark.asyncio
-async def test_get_docs(patch_logger):
-
+def build_resp():
     doc1 = {"id": "one", "tuple": (1, 2, 3), "date": datetime.now()}
     doc2 = {"id": "two", "dict": {"a": "b"}, "decimal": Decimal128("0.0005")}
 
@@ -40,22 +35,24 @@ async def test_get_docs(patch_logger):
 
     resp = mock.MagicMock()
     resp.docs = [Docs()]
+    return resp
 
-    with (
-        mock.patch(
-            "pymongo.topology.Topology._select_servers_loop",
-            lambda *x: [mock.MagicMock()],
-        ),
-        mock.patch("pymongo.mongo_client.MongoClient._get_socket"),
-        mock.patch("connectors.sources.mongo.MongoDataSource.watch"),
-        mock.patch(
-            "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: resp
-        ),
-    ):
-        source = create_source(MongoDataSource)
-        num = 0
-        async for (doc, dl) in source.get_docs():
-            assert doc["id"] in ("one", "two")
-            num += 1
 
-        assert num == 2
+@pytest.mark.asyncio
+@mock.patch(
+    "pymongo.topology.Topology._select_servers_loop", lambda *x: [mock.MagicMock()]
+)
+@mock.patch("pymongo.mongo_client.MongoClient._get_socket")
+@mock.patch("connectors.sources.mongo.MongoDataSource.watch")
+@mock.patch(
+    "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
+)
+async def test_get_docs(patch_logger, *args):
+
+    source = create_source(MongoDataSource)
+    num = 0
+    async for (doc, dl) in source.get_docs():
+        assert doc["id"] in ("one", "two")
+        num += 1
+
+    assert num == 2

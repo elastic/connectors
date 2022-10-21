@@ -5,6 +5,8 @@
 #
 import datetime
 import pytest
+
+from connectors.byoc import PipelineSettings
 from connectors.byoei import ElasticServer
 
 
@@ -12,6 +14,9 @@ from connectors.byoei import ElasticServer
 async def test_prepare_index(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
+    )
     mock_responses.head(
         "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
         headers=headers,
@@ -119,7 +124,7 @@ def set_responses(mock_responses, ts=None):
     )
 
     mock_responses.put(
-        "http://nowhere.com:9200/_bulk",
+        "http://nowhere.com:9200/_bulk?pipeline=ent-search-generic-ingestion",
         payload={
             "took": 7,
             "errors": False,
@@ -149,8 +154,8 @@ async def test_get_existing_ids(mock_responses):
 
     es = ElasticServer(config)
     ids = []
-    async for doc in es.get_existing_ids("search-some-index"):
-        ids.append(doc["id"])
+    async for doc_id, ts in es.get_existing_ids("search-some-index"):
+        ids.append(doc_id)
 
     assert ids == ["1", "2"]
     await es.close()
@@ -162,6 +167,7 @@ async def test_async_bulk(mock_responses, patch_logger):
     set_responses(mock_responses)
 
     es = ElasticServer(config)
+    pipeline = PipelineSettings({})
 
     async def get_docs():
         async def _dl_none(doit=True, timestamp=None):
@@ -175,10 +181,10 @@ async def test_async_bulk(mock_responses, patch_logger):
         yield {"_id": "1", "timestamp": datetime.datetime.now().isoformat()}, _dl
         yield {"_id": "3"}, _dl_none
 
-    res = await es.async_bulk("search-some-index", get_docs())
+    res = await es.async_bulk("search-some-index", get_docs(), pipeline)
 
     assert res == {
-        "bulk_operations": {"create": 1, "delete": 1, "update": 2},
+        "bulk_operations": {"index": 2, "delete": 1, "update": 1},
         "doc_created": 1,
         "doc_deleted": 1,
         "attachment_extracted": 1,
@@ -188,10 +194,10 @@ async def test_async_bulk(mock_responses, patch_logger):
 
     # two syncs
     set_responses(mock_responses)
-    res = await es.async_bulk("search-some-index", get_docs())
+    res = await es.async_bulk("search-some-index", get_docs(), pipeline)
 
     assert res == {
-        "bulk_operations": {"create": 1, "delete": 1, "update": 2},
+        "bulk_operations": {"index": 2, "delete": 1, "update": 1},
         "doc_created": 1,
         "doc_deleted": 1,
         "attachment_extracted": 1,
@@ -209,6 +215,7 @@ async def test_async_bulk_same_ts(mock_responses, patch_logger):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses, ts)
     es = ElasticServer(config)
+    pipeline = PipelineSettings({})
 
     async def get_docs():
         async def _dl(doit=True, timestamp=None):
@@ -219,10 +226,10 @@ async def test_async_bulk_same_ts(mock_responses, patch_logger):
         yield {"_id": "1", "timestamp": ts}, _dl
         yield {"_id": "3", "timestamp": ts}, None
 
-    res = await es.async_bulk("search-some-index", get_docs())
+    res = await es.async_bulk("search-some-index", get_docs(), pipeline)
 
     assert res == {
-        "bulk_operations": {"create": 1, "delete": 1},
+        "bulk_operations": {"index": 1, "delete": 1},
         "doc_created": 1,
         "doc_deleted": 1,
         "attachment_extracted": 0,
@@ -231,10 +238,10 @@ async def test_async_bulk_same_ts(mock_responses, patch_logger):
     }
 
     set_responses(mock_responses, ts)
-    res = await es.async_bulk("search-some-index", get_docs())
+    res = await es.async_bulk("search-some-index", get_docs(), pipeline)
 
     assert res == {
-        "bulk_operations": {"create": 1, "delete": 1},
+        "bulk_operations": {"index": 1, "delete": 1},
         "doc_created": 1,
         "doc_deleted": 1,
         "attachment_extracted": 0,

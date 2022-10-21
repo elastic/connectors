@@ -24,16 +24,20 @@ services:
     networks:
       - esnet
 
-  mongo:
-    container_name: mongo
-    image: mongo:latest
+  mysql:
+    container_name: mysql
+    image: mysql:latest
+    environment:
+      MYSQL_ROOT_PASSWORD: changeme
+    command: --default-authentication-plugin=mysql_native_password
     volumes:
-      - mongo:/data/db
+      - mysql:/data/mysql
     networks:
-      - mongo-network
+      - mysql-network
     ports:
-      - 27021:27017
+      - 3306:3306
     restart: always
+
   kibana:
     image: docker.elastic.co/kibana/kibana:${VERSION}
     ports:
@@ -84,12 +88,12 @@ services:
       - esnet
 
 networks:
-  mongo-network:
+  mysql-network:
     driver: bridge
   esnet:
 
 volumes:
   esdata:
     driver: local
-  mongo:
+  mysql:
     driver: local

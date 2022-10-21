@@ -7,6 +7,7 @@ import asyncio
 import json
 from datetime import datetime
 
+from aioresponses import CallbackResult
 from elasticsearch import AsyncElasticsearch
 import pytest
 
@@ -18,7 +19,7 @@ from connectors.byoc import (
     SyncJob,
     JobStatus,
     BYOIndex,
-    _CONNECTORS_CACHE,
+    BYOConnector,
 )
 
 
@@ -36,31 +37,57 @@ def test_utc():
 
 @pytest.mark.asyncio
 async def test_sync_job(mock_responses):
-    _CONNECTORS_CACHE.clear()
-
     client = AsyncElasticsearch(hosts=["http://nowhere.com:9200"])
 
     job = SyncJob("connector-id", client)
 
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
+    )
+
+    sent_docs = []
+
+    def callback(url, **kwargs):
+        sent_docs.append(json.loads(kwargs["data"]))
+        return CallbackResult(
+            body=json.dumps({"_id": "1"}), status=200, headers=headers
+        )
+
+    mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc",
-        payload={"_id": "1"},
+        callback=callback,
         headers=headers,
     )
 
     mock_responses.put(
         "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc/1",
-        payload={"_id": "1"},
+        callback=callback,
         headers=headers,
     )
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_update/1",
+        callback=callback,
+        repeat=True,
+    )
+
+    assert job.duration == -1
     await job.start()
     assert job.status == JobStatus.IN_PROGRESS
     assert job.job_id is not None
-
+    await asyncio.sleep(0.2)
     await job.done(12, 34)
     assert job.status == JobStatus.COMPLETED
     await client.close()
+    assert job.duration >= 0.2
+
+    # verify what was sent
+    assert len(sent_docs) == 2
+    doc, update = sent_docs
+    assert doc["status"] == "in_progress"
+    assert update["doc"]["status"] == "completed"
+    assert update["doc"]["indexed_document_count"] == 12
+    assert update["doc"]["deleted_document_count"] == 34
 
 
 mongo = {
@@ -74,7 +101,7 @@ mongo = {
         },
     },
     "index_name": "search-airbnb",
-    "service_type": "mongo",
+    "service_type": "mongodb",
     "status": "configured",
     "last_sync_status": "null",
     "last_sync_error": "",
@@ -88,11 +115,12 @@ mongo = {
 
 
 @pytest.mark.asyncio
-async def test_heartbeat(mock_responses):
-    _CONNECTORS_CACHE.clear()
-
+async def test_heartbeat(mock_responses, patch_logger):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
+    )
 
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
@@ -109,11 +137,10 @@ async def test_heartbeat(mock_responses):
 
     connectors = BYOIndex(config)
     conns = []
-    loop = asyncio.get_event_loop()
 
     async for connector in connectors.get_list():
-        loop.create_task(connector.heartbeat(0.2))
-        loop.create_task(connector.heartbeat(1.0))  # NO-OP
+        connector.start_heartbeat(0.2)
+        connector.start_heartbeat(1.0)  # NO-OP
         conns.append(connector)
 
     await asyncio.sleep(0.4)
@@ -123,10 +150,11 @@ async def test_heartbeat(mock_responses):
 
 @pytest.mark.asyncio
 async def test_connectors_get_list(mock_responses):
-    _CONNECTORS_CACHE.clear()
-
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
+    )
 
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
@@ -146,10 +174,11 @@ async def test_connectors_get_list(mock_responses):
 
 @pytest.mark.asyncio
 async def test_sync_mongo(mock_responses, patch_logger):
-    _CONNECTORS_CACHE.clear()
-
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
+    )
 
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
@@ -161,6 +190,11 @@ async def test_sync_mongo(mock_responses, patch_logger):
         payload={"_id": "1"},
         headers=headers,
     )
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_update/1",
+        headers=headers,
+        repeat=True,
+    )
     mock_responses.put(
         "http://nowhere.com:9200/.elastic-connectors/_doc/1",
         payload={"_id": "1"},
@@ -170,6 +204,11 @@ async def test_sync_mongo(mock_responses, patch_logger):
         "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc",
         payload={"_id": "1"},
         headers=headers,
+    )
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_update/1",
+        headers=headers,
+        repeat=True,
     )
     mock_responses.put(
         "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc/1",
@@ -211,14 +250,21 @@ async def test_sync_mongo(mock_responses, patch_logger):
         headers=headers,
     )
     mock_responses.put(
-        "http://nowhere.com:9200/_bulk",
+        "http://nowhere.com:9200/_bulk?pipeline=ent-search-generic-ingestion",
         payload={"items": []},
         headers=headers,
     )
 
     doc = {"_id": 1}
 
+    class StubIndex:
+        def __init__(self):
+            self.client = None
+
     class Data:
+        def __init__(self):
+            self.connector = self.make_connector()
+
         async def ping(self):
             pass
 
@@ -228,6 +274,17 @@ async def test_sync_mongo(mock_responses, patch_logger):
         async def get_docs(self, *args, **kw):
             for d in [doc, doc]:
                 yield {"_id": 1}, None
+
+        def make_connector(self):
+            index_name = "search-some-index"
+            connector_src = {
+                "service_type": "test",
+                "index_name": index_name,
+                "configuration": {},
+                "scheduling": {},
+                "status": "created",
+            }
+            return BYOConnector(StubIndex(), "test", connector_src)
 
     es = ElasticServer(config)
     connectors = BYOIndex(config)

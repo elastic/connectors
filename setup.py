@@ -6,8 +6,10 @@
 import sys
 from setuptools import setup, find_packages
 
-if sys.version_info < (3, 7):
-    raise ValueError("Requires Python 3.7 or superior")
+if sys.version_info.major != 3:
+    raise ValueError("Requires Python 3")
+if sys.version_info.minor < 6:
+    raise ValueError("Requires Python 3.6 or superior")
 
 from connectors import __version__  # NOQA
 
@@ -16,7 +18,7 @@ install_requires = []
 description = ""
 
 for file_ in ("README",):
-    with open("%s.rst" % file_) as f:
+    with open("%s.md" % file_) as f:
         description += f.read() + "\n\n"
 
 

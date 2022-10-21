@@ -3,25 +3,48 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import time
 import asyncio
+import tracemalloc
+import gc
+import contextlib
 
-from elasticsearch import AsyncElasticsearch
+from elasticsearch import (
+    AsyncElasticsearch,
+    ApiError,
+    ConnectionError as ElasticConnectionError,
+    NotFoundError,
+)
+from elastic_transport.client_utils import url_to_node_config
+from guppy import hpy
+from pympler import asizeof
+from cstriggers.core.trigger import QuartzCron
 
 from connectors.logger import set_extra_logger, logger
-from connectors.quartz import QuartzCron
+
+
+DEFAULT_CHUNK_SIZE = 100
+DEFAULT_QUEUE_SIZE = 1024
+DEFAULT_DISPLAY_EVERY = 100
 
 
 class ESClient:
     def __init__(self, config):
-        self.host = config["host"]
+        self.config = config
+        self.host = url_to_node_config(
+            config.get("host", "http://localhost:9200"),
+            use_default_ports_for_scheme=True,
+        )
         self._sleeps = CancellableSleeps()
         options = {
-            "hosts": [config["host"]],
+            "hosts": [self.host],
             "request_timeout": config.get("request_timeout", 120),
+            "retry_on_timeout": config.get("retry_on_timeout", True),
         }
+        logger.debug(f"Host is {self.host}")
+
         if "username" in config:
             if "api_key" in config:
                 raise KeyError("You can't use basic auth and Api Key at the same time")
@@ -60,7 +83,19 @@ class ESClient:
         await self.client.close()
 
     async def ping(self):
-        return await self.client.ping()
+        try:
+            await self.client.info()
+        except ApiError as e:
+            logger.error(f"The server returned a {e.status_code} code")
+            if e.info is not None and "error" in e.info and "reason" in e.info["error"]:
+                logger.error(e.info["error"]["reason"])
+            return False
+        except ElasticConnectionError as e:
+            logger.error("Could not connect to the server")
+            if e.message is not None:
+                logger.error(e.message)
+            return False
+        return True
 
     async def wait(self):
         backoff = self.initial_backoff_duration
@@ -82,10 +117,23 @@ class ESClient:
         await self.close()
         return False
 
+    async def check_exists(self, indices, pipelines):
+        for index in indices:
+            logger.debug(f"Checking for index {index} presence")
+            if not await self.client.indices.exists(index=index):
+                raise PreflightCheckError(f"Cloud not find index {index}")
+
+        for pipeline in pipelines:
+            logger.debug(f"Checking for pipeline {pipeline} presence")
+            try:
+                await self.client.ingest.get_pipeline(id=pipeline)
+            except NotFoundError:
+                raise PreflightCheckError(f"Cloud not find pipeline {pipeline}")
+
 
 def iso_utc(when=None):
     if when is None:
-        when = datetime.utcnow()
+        when = datetime.now(timezone.utc)
     return when.isoformat()
 
 
@@ -106,6 +154,10 @@ INVALID_NAME = "..", "."
 
 
 class InvalidIndexNameError(ValueError):
+    pass
+
+
+class PreflightCheckError(Exception):
     pass
 
 
@@ -148,3 +200,56 @@ class CancellableSleeps:
     def cancel(self):
         for task in self._sleeps:
             task.cancel()
+
+
+def _snapshot():
+    if not tracemalloc.is_tracing():
+        tracemalloc.start()
+    logger.info("Taking a memory snapshot")
+    gc.collect()
+    trace = tracemalloc.take_snapshot()
+    return trace.filter_traces(
+        (
+            tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
+            tracemalloc.Filter(False, "<frozen importlib._bootstrap_external>"),
+            tracemalloc.Filter(False, "<unknown>"),
+            tracemalloc.Filter(False, tracemalloc.__file__),
+        )
+    )
+
+
+@contextlib.contextmanager
+def trace_mem(activated=False):
+    if not activated:
+        yield
+    else:
+        hp = hpy()
+        heap_before = hp.heap()
+        before = _snapshot()
+        try:
+            yield
+        finally:
+            after = _snapshot()
+            heap_after = hp.heap()
+            leftover = heap_after - heap_before
+            logger.info(leftover)
+            largest = after.statistics("traceback")[0]
+            logger.info("===> Largest memory usage:")
+            for line in largest.traceback.format():
+                logger.info(line)
+            logger.info("<===")
+            stats = after.statistics("filename")
+            logger.info("===> Top 5 stats grouped by filename")
+            for s in stats[:5]:
+                logger.info(s)
+            logger.info("<===")
+            top_stats = after.compare_to(before, "lineno")
+            logger.info("===> Memory snapshot diff top 5")
+            for stat in top_stats[:5]:
+                logger.info(stat)
+            logger.info("<===")
+
+
+def get_size(ob):
+    """Returns size in MiB"""
+    return round(asizeof.asizeof(ob) / (1024 * 1024), 2)

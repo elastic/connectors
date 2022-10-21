@@ -17,7 +17,17 @@ def test_main(catch_stdout):
     assert catch_stdout.read().strip() == __version__
 
 
-def test_main_and_kill(catch_stdout, patch_logger):
+def test_main_and_kill(catch_stdout, patch_logger, mock_responses):
+    headers = {"X-Elastic-Product": "Elasticsearch"}
+    host = "http://localhost:9200"
+
+    mock_responses.get(host, headers=headers)
+    mock_responses.head(f"{host}/.elastic-connectors", headers=headers)
+    mock_responses.head(f"{host}/.elastic-connectors-sync-jobs", headers=headers)
+    mock_responses.get(
+        f"{host}/_ingest/pipeline/ent-search-generic-ingestion", headers=headers
+    )
+
     async def kill():
         os.kill(os.getpid(), signal.SIGTERM)
 

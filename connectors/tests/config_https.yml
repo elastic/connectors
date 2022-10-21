@@ -1,5 +1,5 @@
 elasticsearch:
-  host: http://nowhere.com:9200
+  host: https://safenowhere.com
   user: elastic
   password: ${elasticsearch.password}
   bulk_queue_max_size: 1024
@@ -19,4 +19,3 @@ connector_id: '1'
 sources:
   fake: test_runner:FakeSource
   large_fake: test_runner:LargeFakeSource
-  fail_once: test_runner:FailsThenWork
