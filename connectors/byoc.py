@@ -27,6 +27,7 @@ from connectors.index import defaults_for
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 PIPELINE = "ent-search-generic-ingestion"
+SYNC_DISABLED = -1
 
 
 def e2str(entry):
@@ -245,14 +246,14 @@ class BYOConnector:
     def next_sync(self):
         """Returns in seconds when the next sync should happen.
 
-        If the function returns -1, no sync is scheduled.
+        If the function returns SYNC_DISABLED, no sync is scheduled.
         """
         if self.sync_now:
             logger.debug("sync_now is true, syncing!")
             return 0
         if not self.scheduling["enabled"]:
             logger.debug("scheduler is disabled")
-            return -1
+            return SYNC_DISABLED
         return next_run(self.scheduling["interval"])
 
     async def _sync_starts(self):
@@ -320,8 +321,8 @@ class BYOConnector:
             service_type = self.service_type
             if not sync_now:
                 next_sync = self.next_sync()
-                if next_sync == -1 or next_sync - idling > 0:
-                    if next_sync == -1:
+                if next_sync == SYNC_DISABLED or next_sync - idling > 0:
+                    if next_sync == SYNC_DISABLED:
                         logger.debug(f"Scheduling is disabled for {service_type}")
                     else:
                         logger.debug(
