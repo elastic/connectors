@@ -208,7 +208,7 @@ class ConnectorService:
             logger.info(f"- {source.__doc__.strip()}")
         return 0
 
-    def shutdown(self, sig, coro):
+    def shutdown(self, sig):
         logger.info(f"Caught {sig.name}. Gracefull shutdown.")
         self.stop()
 
@@ -216,22 +216,27 @@ class ConnectorService:
 def run(args):
     """Runner"""
     service = ConnectorService(args.config_file)
-    loop = asyncio.get_event_loop()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.get_event_loop_policy().get_event_loop()
+        if loop is None:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
     if args.action == "list":
-        coro = asyncio.ensure_future(service.get_list())
+        coro = service.get_list()
     else:
-        coro = asyncio.ensure_future(service.poll(args.one_sync, args.sync_now))
+        coro = service.poll(args.one_sync, args.sync_now)
 
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, functools.partial(service.shutdown, sig, coro))
+        loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
 
     try:
-        loop.run_until_complete(coro)
-        logger.info("Bye")
-        return coro.result()
+        return loop.run_until_complete(coro)
     except asyncio.CancelledError:
-        logger.info("Bye")
         return 0
+    finally:
+        logger.info("Bye")
 
     return -1
