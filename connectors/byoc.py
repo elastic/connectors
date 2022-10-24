@@ -20,7 +20,7 @@ from connectors.utils import (
 )
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration
-from elasticsearch.exceptions import ApiError
+from elasticsearch.exceptions import ApiError, ConflictError
 from connectors.index import defaults_for
 
 
@@ -79,10 +79,16 @@ class BYOIndex(ESClient):
             if key in document:
                 del document[key]
 
+        seq_no, primary_term = connector.version
+
+        # this will raise a ConflictError if the document is outdated
         return await self.client.update(
             index=CONNECTORS_INDEX,
             id=connector.id,
             doc=document,
+            if_seq_no=seq_no,
+            if_primary_term=primary_term,
+            retry_on_conflict=False,
         )
 
     async def preflight(self):
@@ -111,9 +117,25 @@ class BYOIndex(ESClient):
                 self,
                 hit["_id"],
                 hit["_source"],
+                version=(hit["_seq_no"], hit["_primary_term"]),
                 bulk_queue_max_size=self.bulk_queue_max_size,
                 bulk_display_every=self.bulk_display_every,
             )
+
+    async def get_connector_status(self, connector_id):
+        try:
+            resp = await self.client.get(
+                index=CONNECTORS_INDEX,
+                id=connector_id,
+                source_includes=["last_sync_status", "sync_now", "status", "last_seen"],
+            )
+        except ApiError as e:
+            logger.critical(f"The server returned {e.status_code}")
+            logger.critical(e.body, exc_info=True)
+            return
+
+        version = resp["_seq_no"], resp["_primary_term"]
+        return version, resp["_source"]
 
 
 class SyncJob:
@@ -188,13 +210,14 @@ class BYOConnector:
         index,
         connector_id,
         doc_source,
+        version,
         bulk_queue_max_size=DEFAULT_QUEUE_SIZE,
         bulk_display_every=DEFAULT_DISPLAY_EVERY,
     ):
         self.doc_source = doc_source
         self.id = connector_id
         self.index = index
-        self.update_config(doc_source)
+        self.update_config(doc_source, version)
         self.client = index.client
         self.doc_source["last_seen"] = iso_utc()
         self._heartbeat_started = self._syncing = False
@@ -204,7 +227,7 @@ class BYOConnector:
         self.bulk_queue_max_size = bulk_queue_max_size
         self.bulk_display_every = bulk_display_every
 
-    def update_config(self, doc_source):
+    def update_config(self, doc_source, version):
         self._status = Status[doc_source["status"].upper()]
         self.sync_now = doc_source.get("sync_now", False)
         self.native = doc_source.get("is_native", False)
@@ -213,6 +236,11 @@ class BYOConnector:
         self.configuration = DataSourceConfiguration(doc_source["configuration"])
         self.scheduling = doc_source["scheduling"]
         self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
+        self._version = version
+
+    @property
+    def version(self):
+        return self._version
 
     @property
     def status(self):
@@ -257,16 +285,41 @@ class BYOConnector:
         return next_run(self.scheduling["interval"])
 
     async def _sync_starts(self):
+        # current flags values
+        old_sync_now = self.doc_source["sync_now"]
+        old_last_sync_status = self.doc_source["last_sync_status"]
+        old_status = self.doc_source["status"]
+
+        # set the flags
+        self.doc_source["sync_now"] = False
+        self.doc_source["last_sync_status"] = e2str(JobStatus.IN_PROGRESS)
+        self.doc_source["status"] = e2str(Status.CONNECTED)
+
+        try:
+            await self._write()
+        except ConflictError:
+            # the doc was updated by someone else, let's make sure
+            # no one else is already starting a sync
+            new_version, flags = await self.index.get_connector_status(self.id)
+
+            if flags["last_sync_status"] == e2str(JobStatus.IN_PROGRESS):
+                last_seen = flags["last_seen"]
+                # XXX we need to check if a job is still in progress
+                # we need for this a heartbeat at the job level
+                # https://github.com/elastic/enterprise-search-team/issues/3140
+                logger.info("A sync is already in progress, giving up...")
+                # set back the internal state -- we know we're outdated
+                self.doc_source["sync_now"] = old_sync_now
+                self.doc_source["last_sync_status"] = old_last_sync_status
+                self.doc_source["status"] = old_status
+                return
+
+        self.sync_now = False
+        self._status = Status.CONNECTED
+        self._start_time = time.time()
         job = SyncJob(self.id, self.client)
         job_id = await job.start()
 
-        self.sync_now = self.doc_source["sync_now"] = False
-        self.doc_source["last_sync_status"] = e2str(job.status)
-        self._status = Status.CONNECTED
-        self.doc_source["status"] = e2str(self._status)
-        await self._write()
-
-        self._start_time = time.time()
         logger.info(f"Sync starts, Job id: {job_id}")
         return job
 
@@ -351,6 +404,12 @@ class BYOConnector:
         logger.debug(f"Syncing '{service_type}'")
         self._syncing = True
         job = await self._sync_starts()
+
+        if job is None:
+            self._syncing = False
+            self._start_time = None
+            return
+
         try:
             logger.debug(f"Pinging the {data_provider} backend")
             await data_provider.ping()
