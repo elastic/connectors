@@ -2,5 +2,5 @@
 set -euo pipefail
 
 docker run --rm -v $PWD:/ci -w=/ci \
-    python:latest \
+    python:3.10 \
     /bin/bash -c  'make install PYTHON=python && make test'
