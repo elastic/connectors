@@ -114,9 +114,18 @@ mongo = {
 }
 
 
+CONFIG = {
+    "elasticsearch": {
+        "host": "http://nowhere.com:9200",
+        "user": "tarek",
+        "password": "blah",
+    },
+    "service": {"max_rss": 307200, "max_peak_rss": 409600},
+}
+
+
 @pytest.mark.asyncio
 async def test_heartbeat(mock_responses, patch_logger):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
@@ -135,7 +144,7 @@ async def test_heartbeat(mock_responses, patch_logger):
             headers=headers,
         )
 
-    connectors = BYOIndex(config)
+    connectors = BYOIndex(CONFIG)
     conns = []
 
     async for connector in connectors.get_list():
@@ -150,7 +159,6 @@ async def test_heartbeat(mock_responses, patch_logger):
 
 @pytest.mark.asyncio
 async def test_connectors_get_list(mock_responses):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
@@ -162,7 +170,7 @@ async def test_connectors_get_list(mock_responses):
         headers=headers,
     )
 
-    connectors = BYOIndex(config)
+    connectors = BYOIndex(CONFIG)
     conns = []
 
     async for connector in connectors.get_list():
@@ -174,7 +182,6 @@ async def test_connectors_get_list(mock_responses):
 
 @pytest.mark.asyncio
 async def test_sync_mongo(mock_responses, patch_logger):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
@@ -286,8 +293,8 @@ async def test_sync_mongo(mock_responses, patch_logger):
             }
             return BYOConnector(StubIndex(), "test", connector_src)
 
-    es = ElasticServer(config)
-    connectors = BYOIndex(config)
+    es = ElasticServer(CONFIG["elasticsearch"])
+    connectors = BYOIndex(CONFIG)
     try:
         async for connector in connectors.get_list():
             await connector.sync(Data(), es, 0)

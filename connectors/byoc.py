@@ -193,7 +193,7 @@ class BYOConnector:
         doc_source,
         bulk_queue_max_size=DEFAULT_QUEUE_SIZE,
         bulk_display_every=DEFAULT_DISPLAY_EVERY,
-        max_peak_rss=-1
+        max_peak_rss=-1,
     ):
         self.doc_source = doc_source
         self.id = connector_id

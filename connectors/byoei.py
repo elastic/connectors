@@ -19,7 +19,6 @@ from connectors.utils import (
     ESClient,
     get_size,
     get_rss,
-    DEFAULT_CHUNK_SIZE,
     DEFAULT_QUEUE_SIZE,
     DEFAULT_DISPLAY_EVERY,
 )
@@ -370,7 +369,7 @@ class ElasticServer(ESClient):
         pipeline,
         queue_size=DEFAULT_QUEUE_SIZE,
         display_every=DEFAULT_DISPLAY_EVERY,
-        max_peak_rss=-1
+        max_peak_rss=-1,
     ):
         start = time.time()
         stream = asyncio.Queue(maxsize=queue_size)
