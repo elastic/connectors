@@ -94,7 +94,6 @@ class Bulker:
             operation = doc["_op_type"]
             self.ops[operation] += 1
             batch.extend(self._bulk_op(doc, operation))
-
             if len(batch) >= self.chunk_size or get_size(batch) > self.chunk_mem_size:
                 await self._batch_bulk(batch)
                 batch.clear()
