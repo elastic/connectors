@@ -11,6 +11,10 @@ Configuration lives in [config.yml](../config.yml).
   - `ca_certs`: Path to a CA bundle.
   - `bulk_display_every`: The number of docs between each counters display. Defaults to 100.
   - `bulk_queue_max_size`: The max size of the bulk queue. Defaults to 1024.
+  - `bulk_queue_max_mem_size`: The max size in MB of the bulk queue. When it's reached, the next put
+     operation waits for the queue size to get under that limit. Defaults to 25.
+  - `bulk_chunk_max_mem_size`: The max size in MB of a bulk request. When the next request being
+     prepared reaches that size, the query is emited even if `bulk_chunk_size` is not yet reached. Defaults to 5.
   - `bulk_chunk_size`: The max size of the bulk operation to Elasticsearch. Defaults to 500.
   - `retry_on_timeout`: Whether to retry on request timeout. Defaults to `true`.
   - `request_timeout`: The request timeout to be passed to transport in options. Defaults to 120.
@@ -39,7 +43,7 @@ When you have an Enterprise Search deployment on Elastic Cloud post 8.5.0, the c
 
 ### Run the connector service in native mode
 
-1. Make sure the service types of supported native connectors are configured in `native_service_types`. 
+1. Make sure the service types of supported native connectors are configured in `native_service_types`.
 2. Configure the Elasticsearch connection, with basic auth (`username` and `password`), or with API key (generated via _Stack Management_ > _Security_ > _API keys_ > _Create API key_). Make sure the user or the API key has at least the privileges to `manage`, `read` and `write` the connector index (`.elastic-connectors`), the connector job index (`.elastic-connectors-sync-jobs`) and the connector content indices (`search-*`).
 3. Run the connector service with
     ```shell
