@@ -177,7 +177,8 @@ class Fetcher:
                 else:
                     operation = OP_INDEX
                     self.total_docs_created += 1
-                    doc["timestamp"] = iso_utc()
+                    if "timestamp" not in doc:
+                        doc["timestamp"] = iso_utc()
 
                 if lazy_download is not None:
                     data = await lazy_download(doit=True, timestamp=doc["timestamp"])
