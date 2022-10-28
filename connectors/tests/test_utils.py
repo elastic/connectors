@@ -3,13 +3,17 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import asyncio
+import time
 import pytest
+from pympler import asizeof
 import base64
 from connectors.utils import (
     next_run,
     validate_index_name,
     InvalidIndexNameError,
     ESClient,
+    MemQueue,
 )
 
 
@@ -116,3 +120,39 @@ async def test_es_client_no_server(patch_logger):
     es_client = ESClient(config)
     assert not await es_client.ping()
     await es_client.close()
+
+
+@pytest.mark.asyncio
+async def test_mem_queue(patch_logger):
+
+    queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=2)
+    await queue.put("small stuff")
+
+    assert not queue.mem_full()
+    assert queue.qmemsize() == asizeof.asizeof("small stuff")
+
+    # let's pile up until it can't accept anymore stuff
+    while True:
+        try:
+            await queue.put("x" * 100)
+        except asyncio.QueueFull:
+            break
+
+    when = []
+    # then next put will block until we release some memory
+
+    async def add_data():
+        when.append(time.time())
+        # this call gets throttled for at the most 2s before it breaks
+        await queue.put("DATA" * 10)
+        when.append(time.time())
+
+    async def remove_data():
+        await asyncio.sleep(0.1)
+        await queue.get()
+        await asyncio.sleep(0)
+        await queue.get()  # removes the 2kb
+        assert not queue.mem_full()
+
+    await asyncio.gather(remove_data(), add_data())
+    assert when[1] - when[0] > 0.1

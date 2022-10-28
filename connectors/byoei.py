@@ -20,7 +20,10 @@ from connectors.utils import (
     get_size,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_QUEUE_SIZE,
+    DEFAULT_QUEUE_MEM_SIZE,
+    DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_DISPLAY_EVERY,
+    MemQueue,
 )
 
 
@@ -32,7 +35,7 @@ OP_DELETE = "delete"
 class Bulker:
     """Send bulk operations in batches by consuming a queue."""
 
-    def __init__(self, client, queue, chunk_size, pipeline_settings):
+    def __init__(self, client, queue, chunk_size, pipeline_settings, chunk_mem_size):
         self.client = client
         self.queue = queue
         self.bulk_time = 0
@@ -40,6 +43,7 @@ class Bulker:
         self.ops = defaultdict(int)
         self.chunk_size = chunk_size
         self.pipeline_settings = pipeline_settings
+        self.chunk_mem_size = chunk_mem_size
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -101,7 +105,7 @@ class Bulker:
             self.ops[operation] += 1
             batch.extend(self._bulk_op(doc, operation))
 
-            if len(batch) >= self.chunk_size:
+            if len(batch) >= self.chunk_size or get_size(batch) > self.chunk_mem_size:
                 await self._batch_bulk(batch)
                 batch.clear()
 
@@ -364,9 +368,11 @@ class ElasticServer(ESClient):
         pipeline,
         queue_size=DEFAULT_QUEUE_SIZE,
         display_every=DEFAULT_DISPLAY_EVERY,
+        queue_mem_size=DEFAULT_QUEUE_MEM_SIZE,
+        chunk_mem_size=DEFAULT_CHUNK_MEM_SIZE,
     ):
         start = time.time()
-        stream = asyncio.Queue(maxsize=queue_size)
+        stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
         existing_ids = {k: v async for (k, v) in self.get_existing_ids(index)}
         logger.debug(
             f"Found {len(existing_ids)} docs in {index} (duration "
@@ -391,6 +397,7 @@ class ElasticServer(ESClient):
             stream,
             self.config.get("bulk_chunk_size", DEFAULT_CHUNK_SIZE),
             pipeline,
+            chunk_mem_size=chunk_mem_size,
         )
         bulker_task = asyncio.create_task(bulker.run())
 
