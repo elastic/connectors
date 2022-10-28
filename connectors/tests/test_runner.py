@@ -217,9 +217,11 @@ class LargeFakeSource(FakeSource):
     service_type = "large_fake"
 
     async def get_docs(self):
-        for i in range(10001):
+        for i in range(1000):
             doc_id = str(i + 1)
-            yield {"_id": doc_id}, partial(self._dl, doc_id)
+            yield {"_id": doc_id, "data": "big" * 1024 * 1024}, partial(
+                self._dl, doc_id
+            )
 
 
 async def set_server_responses(
@@ -486,7 +488,11 @@ async def test_connector_service_poll_large(
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
-    assert_re(r"Sync done: 10001 indexed, 0  deleted", patch_logger.logs)
+
+    # let's make sure we are seeing bulk batches of various sizes
+    assert_re("Sending a batch of 18 ops -- 27.01MiB", patch_logger.logs)
+    assert_re("Sending a batch of 100 ops -- 0.05MiB", patch_logger.logs)
+    assert_re(r"Sync done: 1000 indexed, 0  deleted", patch_logger.logs)
 
 
 @pytest.mark.asyncio
