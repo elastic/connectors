@@ -22,6 +22,7 @@ ES_CONFIG = os.path.join(os.path.dirname(__file__), "entsearch.yml")
 CONFIG_2 = os.path.join(os.path.dirname(__file__), "config_2.yml")
 CONFIG_HTTPS = os.path.join(os.path.dirname(__file__), "config_https.yml")
 CONFIG_MEM = os.path.join(os.path.dirname(__file__), "config_mem.yml")
+MEM_CONFIG = os.path.join(os.path.dirname(__file__), "memconfig.yml")
 
 
 FAKE_CONFIG = {
@@ -217,9 +218,11 @@ class LargeFakeSource(FakeSource):
     service_type = "large_fake"
 
     async def get_docs(self):
-        for i in range(10001):
+        for i in range(1001):
             doc_id = str(i + 1)
-            yield {"_id": doc_id}, partial(self._dl, doc_id)
+            yield {"_id": doc_id, "data": "big" * 1024 * 1024}, partial(
+                self._dl, doc_id
+            )
 
 
 async def set_server_responses(
@@ -483,10 +486,14 @@ async def test_connector_service_poll_large(
     mock_responses, patch_logger, patch_ping, set_env
 ):
     await set_server_responses(mock_responses, LARGE_FAKE_CONFIG)
-    service = ConnectorService(CONFIG)
+    service = ConnectorService(MEM_CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
-    assert_re(r"Sync done: 10001 indexed, 0  deleted", patch_logger.logs)
+
+    # let's make sure we are seeing bulk batches of various sizes
+    assert_re("Sending a batch of 14 ops -- 15.01MiB", patch_logger.logs)
+    assert_re("Sending a batch of 30 ops -- 3.02MiB", patch_logger.logs)
+    assert_re(r"Sync done: 1001 indexed, 0  deleted", patch_logger.logs)
 
 
 @pytest.mark.asyncio
