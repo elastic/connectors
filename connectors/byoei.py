@@ -372,7 +372,7 @@ class ElasticServer(ESClient):
         chunk_mem_size=DEFAULT_CHUNK_MEM_SIZE,
     ):
         start = time.time()
-        stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size)
+        stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
         existing_ids = {k: v async for (k, v) in self.get_existing_ids(index)}
         logger.debug(
             f"Found {len(existing_ids)} docs in {index} (duration "

@@ -258,19 +258,20 @@ def get_size(ob):
 
 
 class MemQueue(asyncio.Queue):
-    def __init__(self, maxsize=0, maxmemsize=0):
+    def __init__(self, maxsize=0, maxmemsize=0, refresh_interval=1.0):
         super().__init__(maxsize)
         self.maxmemsize = maxmemsize
+        self.refresh_interval = refresh_interval
         self._current_memsize = 0
 
     def _get(self):
         item = self._queue.popleft()
-        self._current_memsize -= get_size(item)
+        self._current_memsize -= asizeof.asizeof(item)
         return item
 
     def _put(self, item):
         self._queue.append(item)
-        self._current_memsize += get_size(item)
+        self._current_memsize += asizeof.asizeof(item)
 
     def mem_full(self):
         if self.maxmemsize == 0:
@@ -282,5 +283,5 @@ class MemQueue(asyncio.Queue):
 
     async def put(self, item):
         while self.mem_full():
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(self.refresh_interval)
         return await super().put(item)
