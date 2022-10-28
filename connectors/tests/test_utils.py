@@ -125,23 +125,26 @@ async def test_es_client_no_server(patch_logger):
 @pytest.mark.asyncio
 async def test_mem_queue(patch_logger):
 
-    queue = MemQueue(maxmemsize=1024, refresh_interval=0)  # 1kb max
+    queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=2)
     await queue.put("small stuff")
 
     assert not queue.mem_full()
     assert queue.qmemsize() == asizeof.asizeof("small stuff")
 
-    # let's add 2kb+
-    await queue.put("data" * 2048)
-    assert queue.mem_full()
+    # let's pile up until it can't accept anymore stuff
+    while True:
+        try:
+            await queue.put("x" * 100)
+        except asyncio.QueueFull:
+            break
 
     when = []
     # then next put will block until we release some memory
 
     async def add_data():
         when.append(time.time())
-        # this call gets throttled
-        await queue.put("DATA")
+        # this call gets throttled for at the most 2s before it breaks
+        await queue.put("DATA" * 10)
         when.append(time.time())
 
     async def remove_data():
@@ -151,5 +154,5 @@ async def test_mem_queue(patch_logger):
         await queue.get()  # removes the 2kb
         assert not queue.mem_full()
 
-    await asyncio.gather(add_data(), remove_data())
+    await asyncio.gather(remove_data(), add_data())
     assert when[1] - when[0] > 0.1
