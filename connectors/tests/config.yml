@@ -20,3 +20,4 @@ sources:
   fake: test_runner:FakeSource
   large_fake: test_runner:LargeFakeSource
   fail_once: test_runner:FailsThenWork
+  fake_ts: test_runner:FakeSourceTS
