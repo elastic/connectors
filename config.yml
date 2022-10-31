@@ -23,12 +23,13 @@ service:
 
 native_service_types:
   - mysql
+  - aws
 
 # some id
 #connector_id: '1'
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
-  s3: connectors.sources.aws:S3DataSource
+  aws: connectors.sources.aws:S3DataSource
   dir: connectors.sources.directory:DirectoryDataSource
   mysql: connectors.sources.mysql:MySqlDataSource
