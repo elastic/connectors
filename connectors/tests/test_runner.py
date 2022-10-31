@@ -491,9 +491,9 @@ async def test_connector_service_poll_large(
     await service.poll()
 
     # let's make sure we are seeing bulk batches of various sizes
-    assert_re("Sending a batch of 14 ops -- 15.01MiB", patch_logger.logs)
-    assert_re("Sending a batch of 30 ops -- 3.02MiB", patch_logger.logs)
-    assert_re(r"Sync done: 1001 indexed, 0  deleted", patch_logger.logs)
+    assert_re(".*15.01MiB", patch_logger.logs)
+    assert_re(".*3.0MiB", patch_logger.logs)
+    assert_re("Sync done: 1001 indexed, 0  deleted", patch_logger.logs)
 
 
 @pytest.mark.asyncio

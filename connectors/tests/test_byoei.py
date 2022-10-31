@@ -184,7 +184,7 @@ async def test_async_bulk(mock_responses, patch_logger):
     res = await es.async_bulk("search-some-index", get_docs(), pipeline)
 
     assert res == {
-        "bulk_operations": {"index": 2, "delete": 1, "update": 1},
+        "bulk_operations": {"index": 2, "delete": 1},
         "doc_created": 1,
         "doc_deleted": 1,
         "attachment_extracted": 1,
@@ -197,7 +197,7 @@ async def test_async_bulk(mock_responses, patch_logger):
     res = await es.async_bulk("search-some-index", get_docs(), pipeline)
 
     assert res == {
-        "bulk_operations": {"index": 2, "delete": 1, "update": 1},
+        "bulk_operations": {"index": 2, "delete": 1},
         "doc_created": 1,
         "doc_deleted": 1,
         "attachment_extracted": 1,
