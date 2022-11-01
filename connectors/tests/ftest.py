@@ -33,8 +33,8 @@ os.chdir(os.path.join(ROOT_DIR, "connectors", "sources", "tests", "fixtures", na
 run_cmd(
     f"{BIN_DIR}/fake-kibana --index-name search-{name} --service-type {name} --debug"
 )
-run_cmd(f"{BIN_DIR}/elastic-ingest --one-sync --sync-now")
-run_cmd(f"{BIN_DIR}/elastic-ingest --one-sync --sync-now")
+run_cmd(f"{BIN_DIR}/elastic-ingest --one-sync --sync-now --debug")
+run_cmd(f"{BIN_DIR}/elastic-ingest --one-sync --sync-now --debug")
 run_cmd(
     f"{BIN_DIR}/python {ROOT_DIR}/scripts/verify.py --index-name search-{name} --service-type {name} --size 3000"
 )
