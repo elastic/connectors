@@ -6,8 +6,9 @@
 import os
 import asyncio
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
-import yaml
 from elasticsearch import AsyncElasticsearch
+from connectors.utils import EnvFirstYAML
+
 
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
 
@@ -71,7 +72,7 @@ def main(args=None):
         raise IOError(f"{config_file} does not exist")
 
     with open(config_file) as f:
-        config = yaml.safe_load(f)
+        config = EnvFirstYAML(config_file)
 
     loop = asyncio.get_event_loop()
     try:
