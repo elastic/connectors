@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import os
 from datetime import datetime, timezone
 import logging
 import time
@@ -21,6 +22,7 @@ from elastic_transport.client_utils import url_to_node_config
 from guppy import hpy
 from pympler import asizeof
 from cstriggers.core.trigger import QuartzCron
+from envyaml import EnvYAML
 
 from connectors.logger import set_extra_logger, logger
 
@@ -297,3 +299,32 @@ class MemQueue(asyncio.Queue):
     async def put(self, item):
         await self._wait_for_room(item)
         return await super().put(item)
+
+
+class EnvFirstYAML(EnvYAML):
+    def __init__(
+        self,
+        yaml_file=None,
+        env_file=None,
+        include_environment=True,
+        strict=True,
+        flatten=True,
+        **kwargs,
+    ):
+        super().__init__(
+            yaml_file, env_file, include_environment, strict, flatten, **kwargs
+        )
+
+        root = self._EnvYAML__cfg
+
+        # overwrite the config with os.environ (flat *and* non-flat keys)
+        for key, value in os.environ.items():
+            root[key] = value
+            if "." in key:
+                ns_keys = key.split(".")
+                current = root
+                for subkey in ns_keys[:-1]:
+                    if subkey not in current:
+                        current[subkey] = {}
+                    current = current[subkey]
+                current[ns_keys[-1]] = value

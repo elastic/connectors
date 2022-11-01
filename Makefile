@@ -1,6 +1,6 @@
 .PHONY: test lint run ftest install dev
 
-PYTHON=python3.10
+PYTHON ?= python3.10
 
 bin/python:
 	$(PYTHON) -m venv .
@@ -19,7 +19,7 @@ bin/elastic-ingest: bin/python
 bin/black: bin/python
 	bin/pip install -r requirements.txt
 	bin/pip install -r test-requirements.txt
-	
+
 
 bin/pytest: bin/python
 	bin/pip install -r requirements.txt
@@ -41,7 +41,7 @@ release:
 	install
 	bin/python setup.py sdist
 
-run: 
+run:
 	install
 	bin/elastic-ingest --debug
 

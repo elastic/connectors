@@ -16,8 +16,6 @@ import signal
 import time
 import functools
 
-from envyaml import EnvYAML
-
 from connectors.byoei import ElasticServer
 from connectors.byoc import BYOIndex, Status, e2str
 from connectors.logger import logger
@@ -27,7 +25,7 @@ from connectors.source import (
     ServiceTypeNotSupportedError,
     DataSourceError,
 )
-from connectors.utils import CancellableSleeps, trace_mem
+from connectors.utils import CancellableSleeps, trace_mem, EnvFirstYAML
 
 
 class ConnectorService:
@@ -36,7 +34,7 @@ class ConnectorService:
         self.errors = [0, time.time()]
         if not os.path.exists(config_file):
             raise IOError(f"{config_file} does not exist")
-        self.config = EnvYAML(config_file)
+        self.config = EnvFirstYAML(config_file)
         self.ent_search_config()
         self.service_config = self.config["service"]
         self.trace_mem = self.service_config.get("trace_mem", False)
@@ -56,7 +54,7 @@ class ConnectorService:
         if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
             return
         logger.info("Found ENT_SEARCH_CONFIG_PATH, loading ent-search config")
-        ent_search_config = EnvYAML(os.environ["ENT_SEARCH_CONFIG_PATH"])
+        ent_search_config = EnvFirstYAML(os.environ["ENT_SEARCH_CONFIG_PATH"])
         for field in (
             "elasticsearch.host",
             "elasticsearch.username",
@@ -130,6 +128,10 @@ class ConnectorService:
 
     async def poll(self, one_sync=False, sync_now=True):
         """Main event loop."""
+        print(self.config["elasticsearch"])
+        print(self.config["elasticsearch"]["host"])
+        print(os.environ)
+
         self.connectors = BYOIndex(self.config["elasticsearch"])
         es_host = self.config["elasticsearch"]["host"]
         self.running = True

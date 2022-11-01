@@ -10,12 +10,11 @@ import logging
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 import elasticsearch
-from envyaml import EnvYAML
 
 from connectors.byoei import ElasticServer
 from connectors.logger import logger, set_logger
 from connectors.source import get_source_klass
-from connectors.utils import validate_index_name
+from connectors.utils import validate_index_name, EnvFirstYAML
 
 
 CONNECTORS_INDEX = ".elastic-connectors"
@@ -164,7 +163,7 @@ def main(args=None):
         raise IOError(f"{config_file} does not exist")
 
     set_logger(args.debug and logging.DEBUG or logging.INFO)
-    config = EnvYAML(config_file)
+    config = EnvFirstYAML(config_file)
     try:
         asyncio.run(prepare(args.service_type, args.index_name, config))
     except (asyncio.CancelledError, KeyboardInterrupt):

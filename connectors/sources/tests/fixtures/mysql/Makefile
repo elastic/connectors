@@ -1,6 +1,6 @@
 .PHONY: run-stack stop-stack load-data
 
-PYTHON=python3
+PYTHON ?= python3.10
 
 export VERSION=8.6.0-SNAPSHOT
 
