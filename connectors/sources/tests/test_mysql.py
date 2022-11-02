@@ -233,7 +233,7 @@ async def test_fetch_documents():
             "Database": "database_name",
             "Table": "table_name",
             "_id": "database_name_table_name_",
-            "timestamp": "table1",
+            "_timestamp": "table1",
         }
 
 
