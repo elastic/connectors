@@ -44,13 +44,12 @@ class Result:
 class Cursor:
     """This class contains methods which returns dummy response"""
 
-    first_call = True
-
     async def __aenter__(self):
         """Make a dummy database connection and return it"""
         return self
 
     def __init__(self, *args, **kw):
+        self.first_call = True
         self.description = [["Database"]]
 
     def fetchall(self):
@@ -58,10 +57,16 @@ class Cursor:
         return Result()
 
     async def fetchmany(self, size=1):
+        """This method returns response of fetchmany"""
         if self.first_call:
             self.first_call = False
             return [["table1"], ["table2"]]
+        if self.is_connection_lost:
+            raise Exception("Incomplete Read Error")
         return []
+
+    async def scroll(self, *args, **kw):
+        raise Exception("Incomplete Read Error")
 
     def execute(self, query):
         """This method returns future object"""
@@ -211,6 +216,30 @@ async def test__execute_query_negative():
 
 
 @pytest.mark.asyncio
+async def test__stream_rows():
+    """Test _stream_rows method of MySQL with retry"""
+    # Setup
+    source = create_source(MySqlDataSource)
+
+    source.connection_pool = await mock_mysql_response()
+    source.connection_pool.acquire = Connection
+    source.connection_pool.acquire.cursor = Cursor
+    source.connection_pool.acquire.cursor.is_connection_lost = True
+
+    with mock.patch.object(
+        aiomysql, "create_pool", return_value=(await mock_mysql_response())
+    ):
+        # Execute
+        streamer = source._stream_rows(
+            database="database", table="table", query="select * from database.table"
+        )
+
+        with pytest.raises(Exception):
+            async for response in streamer:
+                response
+
+
+@pytest.mark.asyncio
 async def test_serialize():
     """This function test serialize method of MySQL"""
     # Setup
@@ -250,6 +279,7 @@ async def test_fetch_documents():
     source.connection_pool = await mock_mysql_response()
     source.connection_pool.acquire = Connection
     source.connection_pool.acquire.cursor = Cursor
+    source.connection_pool.acquire.cursor.is_connection_lost = False
 
     query = "select * from table"
 
@@ -284,6 +314,7 @@ async def test_fetch_rows():
     source.connection_pool = await mock_mysql_response()
     source.connection_pool.acquire = Connection
     source.connection_pool.acquire.cursor = Cursor
+    source.connection_pool.acquire.cursor.is_connection_lost = False
 
     query = "select * from table"
 

@@ -24,6 +24,7 @@ QUERIES = {
 }
 DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
+DEFAULT_WAIT_MULTIPLIER = 2
 
 
 class MySqlDataSource(BaseDataSource):
@@ -44,6 +45,9 @@ class MySqlDataSource(BaseDataSource):
             "db": None,
             "maxsize": MAX_POOL_SIZE,
         }
+        self.retry_count = int(
+            self.configuration.get("retry_count", DEFAULT_RETRY_COUNT)
+        )
         self.connection_pool = None
 
     @classmethod
@@ -138,7 +142,7 @@ class MySqlDataSource(BaseDataSource):
         # rows_fetched: Rows fetched counter
         # cursor_position: Mocked cursor position
         rows_fetched = cursor_position = 0
-        while retry <= int(self.configuration.get("retry_count", DEFAULT_RETRY_COUNT)):
+        while retry <= self.retry_count:
             try:
                 async with self.connection_pool.acquire() as connection:
                     async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
@@ -179,11 +183,13 @@ class MySqlDataSource(BaseDataSource):
                 )
                 break
             except Exception as exception:
-                logger.exception(
-                    f"Retry count: {retry} out of {DEFAULT_RETRY_COUNT} for rows in {database}.{table}. Exception: {exception}"
+                logger.warn(
+                    f"Retry count: {retry} out of {self.retry_count} for rows in {database}.{table}. Exception: {exception}"
                 )
+                if retry == self.retry_count:
+                    raise exception
                 cursor_position = rows_fetched
-                await asyncio.sleep(2**retry)
+                await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry)
                 retry += 1
 
     async def _execute_query(self, query):
