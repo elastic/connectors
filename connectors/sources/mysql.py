@@ -26,6 +26,7 @@ DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
 
+
 class MySqlDataSource(BaseDataSource):
     """Class to fetch and modify documents from MySQL server"""
 
@@ -59,27 +60,27 @@ class MySqlDataSource(BaseDataSource):
         return {
             "host": {
                 "value": "127.0.0.1",
-                "label": "MySQL Host",
+                "label": "Host",
                 "type": "str",
             },
             "port": {
                 "value": 3306,
-                "label": "MySQL Port",
+                "label": "Port",
                 "type": "int",
             },
             "user": {
                 "value": "root",
-                "label": "MySQL Username",
+                "label": "Username",
                 "type": "str",
             },
             "password": {
                 "value": "changeme",
-                "label": "MySQL Password",
+                "label": "Password",
                 "type": "str",
             },
             "database": {
                 "value": ["customerinfo"],
-                "label": "List of MySQL Databases",
+                "label": "Databases",
                 "type": "list",
             },
             "connector_name": {
