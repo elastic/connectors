@@ -71,9 +71,16 @@ async def get_roles(*args):
 @pytest.mark.asyncio
 async def test_get_docs(patch_logger, mock_aws):
     source = create_source(S3DataSource)
-    with (mock.patch("aioboto3.resources.collection.AIOResourceCollection", AIOResourceCollection),
-          mock.patch("aiobotocore.client.AioBaseClient", S3Object),
-          mock.patch("aiobotocore.utils.AioInstanceMetadataFetcher.retrieve_iam_role_credentials", get_roles)):
+    with (
+        mock.patch(
+            "aioboto3.resources.collection.AIOResourceCollection", AIOResourceCollection
+        ),
+        mock.patch("aiobotocore.client.AioBaseClient", S3Object),
+        mock.patch(
+            "aiobotocore.utils.AioInstanceMetadataFetcher.retrieve_iam_role_credentials",
+            get_roles,
+        ),
+    ):
 
         num = 0
         async for (doc, dl) in source.get_docs():

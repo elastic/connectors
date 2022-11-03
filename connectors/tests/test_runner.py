@@ -10,7 +10,6 @@ import asyncio
 import json
 from unittest import mock
 from functools import partial
-import json
 from aioresponses import CallbackResult
 
 from connectors.runner import ConnectorService, run

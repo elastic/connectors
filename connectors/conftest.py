@@ -38,6 +38,14 @@ class Logger:
                 return
         raise AssertionError(f"Could not find an instance of {instance}")
 
+    def assert_not_present(self, lines):
+        if isinstance(lines, str):
+            lines = [lines]
+        for msg in lines:
+            for log in self.logs:
+                if isinstance(log, str) and msg in log:
+                    raise AssertionError(f"'{msg}' found in {self.logs}")
+
     def assert_present(self, lines):
         if isinstance(lines, str):
             lines = [lines]
