@@ -46,4 +46,8 @@ run:
 	bin/elastic-ingest --debug
 
 ftest:
-	bin/python connectors/tests/ftest.py $(NAME)
+	cd connectors/sources/tests/fixtures/$(NAME); PYTHON=$(PWD)/bin/python make run-stack
+	sleep 30
+	cd connectors/sources/tests/fixtures/$(NAME); PYTHON=$(PWD)/bin/python make load-data
+	- bin/python connectors/tests/ftest.py $(NAME)
+	cd connectors/sources/tests/fixtures/$(NAME); PYTHON=$(PWD)/bin/python make stop-stack
