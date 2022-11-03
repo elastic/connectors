@@ -99,7 +99,7 @@ async def mock_mysql_response():
 
 
 @pytest.mark.asyncio
-async def test_ping():
+async def test_ping(patch_logger):
     """Test ping method of MySQL"""
     # Setup
     source = create_source(MySqlDataSource)
@@ -116,7 +116,7 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-async def test_ping_negative(catch_stdout):
+async def test_ping_negative(catch_stdout, patch_logger):
     """Test ping method of MySqlDataSource class with negative case"""
     # Setup
     source = create_source(MySqlDataSource)
