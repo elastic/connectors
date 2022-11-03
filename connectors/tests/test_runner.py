@@ -69,6 +69,8 @@ FAKE_CONFIG_PIPELINE_CHANGED["pipeline"] = {
     "reduce_whitespace": False,
     "run_ml_inference": False,
 }
+FAKE_CONFIG_TS = copy.deepcopy(FAKE_CONFIG)
+FAKE_CONFIG_TS["service_type"] = "fake_ts"
 
 
 FAKE_CONFIG_NOT_NATIVE = {
@@ -187,7 +189,7 @@ class FakeSource:
     async def _dl(self, doc_id, timestamp=None, doit=None):
         if not doit:
             return
-        return {"_id": doc_id, "timestamp": timestamp, "text": "xx"}
+        return {"_id": doc_id, "_timestamp": timestamp, "text": "xx"}
 
     async def get_docs(self):
         if self.fail:
@@ -197,6 +199,18 @@ class FakeSource:
     @classmethod
     def get_default_configuration(cls):
         return []
+
+
+class FakeSourceTS(FakeSource):
+    """Fake source with stable TS"""
+
+    service_type = "fake_ts"
+    ts = "2022-10-31T09:04:35.277558"
+
+    async def get_docs(self):
+        if self.fail:
+            raise Exception("I fail while syncing")
+        yield {"_id": "1", "_timestamp": self.ts}, partial(self._dl, "1")
 
 
 class FailsThenWork(FakeSource):
@@ -573,6 +587,26 @@ async def test_connector_service_poll_sync_now(
     # one_sync means it won't loop forever
     await service.poll(sync_now=True, one_sync=True)
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_sync_ts(
+    mock_responses, patch_logger, patch_ping, set_env
+):
+    indexed = []
+
+    def bulk_call(url, **kw):
+        queries = [json.loads(call.strip()) for call in kw["data"].split(b"\n") if call]
+        indexed.append(queries[1])
+        return CallbackResult(status=200, payload={"items": []})
+
+    await set_server_responses(mock_responses, FAKE_CONFIG_TS, bulk_call=bulk_call)
+    service = ConnectorService(CONFIG)
+    await service.poll(sync_now=True, one_sync=True)
+    patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
+
+    # make sure we kept the original ts
+    assert indexed[0]["_timestamp"] == FakeSourceTS.ts
 
 
 @pytest.mark.asyncio

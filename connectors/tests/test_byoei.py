@@ -89,8 +89,8 @@ def set_responses(mock_responses, ts=None):
         payload={"_id": "1"},
         headers=headers,
     )
-    source_1 = {"id": "1", "timestamp": ts}
-    source_2 = {"id": "2", "timestamp": ts}
+    source_1 = {"id": "1", "_timestamp": ts}
+    source_2 = {"id": "2", "_timestamp": ts}
 
     mock_responses.post(
         "http://nowhere.com:9200/search-some-index/_search?scroll=5m",
@@ -176,9 +176,9 @@ async def test_async_bulk(mock_responses, patch_logger):
         async def _dl(doit=True, timestamp=None):
             if not doit:
                 return
-            return {"TEXT": "DATA", "timestamp": timestamp, "_id": "1"}
+            return {"TEXT": "DATA", "_timestamp": timestamp, "_id": "1"}
 
-        yield {"_id": "1", "timestamp": datetime.datetime.now().isoformat()}, _dl
+        yield {"_id": "1", "_timestamp": datetime.datetime.now().isoformat()}, _dl
         yield {"_id": "3"}, _dl_none
 
     res = await es.async_bulk("search-some-index", get_docs(), pipeline)
@@ -221,10 +221,10 @@ async def test_async_bulk_same_ts(mock_responses, patch_logger):
         async def _dl(doit=True, timestamp=None):
             if not doit:
                 return  # Canceled
-            return {"TEXT": "DATA", "timestamp": timestamp, "_id": "1"}
+            return {"TEXT": "DATA", "_timestamp": timestamp, "_id": "1"}
 
-        yield {"_id": "1", "timestamp": ts}, _dl
-        yield {"_id": "3", "timestamp": ts}, None
+        yield {"_id": "1", "_timestamp": ts}, _dl
+        yield {"_id": "3", "_timestamp": ts}, None
 
     res = await es.async_bulk("search-some-index", get_docs(), pipeline)
 
