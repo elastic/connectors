@@ -1,6 +1,5 @@
 import os
 import sys
-import time
 import shlex
 import subprocess
 
@@ -23,13 +22,6 @@ else:
 curdir = os.getcwd()
 os.chdir(os.path.join(ROOT_DIR, "connectors", "sources", "tests", "fixtures", name))
 
-#run_cmd("make run-stack")
-
-# XXX make run-stack should be blocking until everythign is up and running by checking hbs
-#time.sleep(30)
-
-#run_cmd("docker ps -a")
-#time.sleep(240)
 run_cmd(
     f"{BIN_DIR}/fake-kibana --index-name search-{name} --service-type {name} --debug"
 )

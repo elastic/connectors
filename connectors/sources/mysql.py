@@ -37,7 +37,7 @@ class MySqlDataSource(BaseDataSource):
         """
         super().__init__(connector=connector)
         self.connection_string = {
-            "host": os.environ.get('mysql.host', self.configuration["host"]),
+            "host": os.environ.get("mysql.host", self.configuration["host"]),
             "port": int(self.configuration["port"]),
             "user": self.configuration["user"],
             "password": self.configuration["password"],
