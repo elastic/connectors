@@ -482,7 +482,7 @@ async def test_connector_service_poll_large(
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.poll()
-    assert_re(r"Sync done: 10001 indexed, 0 deleted", patch_logger.logs)
+    assert_re(r"Sync done: 10001 indexed, 0  deleted", patch_logger.logs)
 
 
 @pytest.mark.asyncio
