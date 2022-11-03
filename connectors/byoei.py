@@ -17,7 +17,6 @@ from connectors.logger import logger
 from connectors.utils import (
     iso_utc,
     ESClient,
-    get_size,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_QUEUE_SIZE,
     DEFAULT_DISPLAY_EVERY,
