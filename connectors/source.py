@@ -135,33 +135,18 @@ def get_source_klass(fqn):
     return getattr(module, klass_name)
 
 
-_CACHED_SOURCES = {}
-
-
 def get_data_source(connector, config):
     """Returns a source class instance, given a service type"""
     service_type = connector.service_type
-    if service_type not in _CACHED_SOURCES:
-        if service_type not in config["sources"]:
-            raise ServiceTypeNotSupportedError(service_type)
+    if service_type not in config["sources"]:
+        raise ServiceTypeNotSupportedError(service_type)
 
-        fqn = config["sources"][service_type]
-        try:
-            _CACHED_SOURCES[service_type] = get_source_klass(fqn)(connector)
-        except Exception as e:
-            logger.critical(e, exc_info=True)
-            raise DataSourceError(f"Could not instanciate {fqn} for {service_type}")
-
-    return _CACHED_SOURCES[service_type]
-
-
-async def purge_cache():
-    for connector in _CACHED_SOURCES.values():
-        try:
-            await connector.close()
-        except Exception as e:
-            logger.critical(e, exc_info=True)
-    _CACHED_SOURCES.clear()
+    fqn = config["sources"][service_type]
+    try:
+        return get_source_klass(fqn)(connector)
+    except Exception as e:
+        logger.critical(e, exc_info=True)
+        raise DataSourceError(f"Could not instantiate {fqn} for {service_type}")
 
 
 def get_data_sources(config):
