@@ -44,6 +44,8 @@ class Result:
 class Cursor:
     """This class contains methods which returns dummy response"""
 
+    first_call = True
+
     async def __aenter__(self):
         """Make a dummy database connection and return it"""
         return self
@@ -54,6 +56,12 @@ class Cursor:
     def fetchall(self):
         """This method returns object of Return class"""
         return Result()
+
+    async def fetchmany(self, size=1):
+        if self.first_call:
+            self.first_call = False
+            return [["table1"], ["table2"]]
+        return []
 
     def execute(self, query):
         """This method returns future object"""
@@ -119,7 +127,7 @@ async def test_ping(patch_logger):
 async def test_ping_negative(catch_stdout, patch_logger):
     """Test ping method of MySqlDataSource class with negative case"""
     # Setup
-    source = create_source(MySqlDataSource)
+    source = create_source(MySqlDataSource, host="nowhere")
 
     with pytest.raises(Exception):
         # Execute
@@ -196,8 +204,8 @@ async def test_serialize():
 
 
 @pytest.mark.asyncio
-async def test_create_document():
-    """This function test create_document method of MySQL"""
+async def test_fetch_documents():
+    """This function test fetch_documents method of MySQL"""
     # Setup
     source = create_source(MySqlDataSource)
 
@@ -215,7 +223,7 @@ async def test_create_document():
 
         mock.patch("source._execute_query", return_value=response)
 
-    response = source.create_document(
+    response = source.fetch_documents(
         database="database_name", table="table_name", query=query
     )
 
@@ -251,7 +259,7 @@ async def test_fetch_rows():
 
     # Assert
     async for row in source.fetch_rows(database="database_name"):
-        assert row.get("_id")
+        assert "_id" in row
 
 
 @pytest.mark.asyncio
