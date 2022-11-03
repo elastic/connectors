@@ -45,10 +45,13 @@ class Status(Enum):
 
 
 class JobStatus(Enum):
-    NULL = 1
+    PENDING = 1
     IN_PROGRESS = 2
-    COMPLETED = 3
-    ERROR = 4
+    CANCELING = 3
+    CANCELED = 4
+    SUSPENDED = 5
+    COMPLETED = 6
+    ERROR = 7
 
 
 READ_ONLY_FIELDS = (
