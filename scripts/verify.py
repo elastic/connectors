@@ -71,9 +71,7 @@ def main(args=None):
     if not os.path.exists(config_file):
         raise IOError(f"{config_file} does not exist")
 
-    with open(config_file) as f:
-        config = EnvFirstYAML(config_file)
-
+    config = EnvFirstYAML(config_file)
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(

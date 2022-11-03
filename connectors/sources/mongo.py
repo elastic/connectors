@@ -18,12 +18,12 @@ class MongoDataSource(BaseDataSource):
     def __init__(self, connector):
         super().__init__(connector)
         self.client = AsyncIOMotorClient(
-            self.configuration["host"],
+            self._get_option("host"),
             directConnection=True,
             connectTimeoutMS=120,
             socketTimeoutMS=120,
         )
-        self.db = self.client[self.configuration["database"]]
+        self.db = self.client[self._get_option("database")]
         self._first_sync = self._dirty = True
 
     async def watch(self, collection):
@@ -80,7 +80,7 @@ class MongoDataSource(BaseDataSource):
 
     async def get_docs(self):
         logger.debug("Grabbing collection info")
-        collection = self.db[self.configuration["collection"]]
+        collection = self.db[self._get_option("collection")]
 
         if self._first_sync:
             logger.debug("First Sync!")

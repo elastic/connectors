@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """MySQL source module responsible to fetch documents from MySQL"""
-import os
 import asyncio
 from datetime import date, datetime
 from decimal import Decimal
@@ -37,10 +36,10 @@ class MySqlDataSource(BaseDataSource):
         """
         super().__init__(connector=connector)
         self.connection_string = {
-            "host": os.environ.get("mysql.host", self.configuration["host"]),
-            "port": int(self.configuration["port"]),
-            "user": self.configuration["user"],
-            "password": self.configuration["password"],
+            "host": self._get_option("host"),
+            "port": int(self._get_option("port")),
+            "user": self._get_option("user"),
+            "password": self._get_option("password"),
             "db": None,
             "maxsize": MAX_POOL_SIZE,
         }

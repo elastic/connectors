@@ -5,6 +5,7 @@
 #
 """ Helpers to build sources + FQN-based Registry
 """
+import os
 import importlib
 from connectors.logger import logger
 
@@ -67,9 +68,27 @@ class BaseDataSource:
     def __init__(self, connector):
         self.connector = connector
         self.configuration = connector.configuration
+        self._default_config = self.get_default_configuration()
 
     def __str__(self):
         return f"Datasource `{self.__class__.__doc__}`"
+
+    def _get_option(self, name):
+        """Returns the option value by looking in this order:
+
+        - `service_type.name` in the environment
+        - the configuration object
+        - the default value returned by `get_default_configuration`
+        """
+        if name in self._default_config:
+            default = self._default_config[name]["value"]
+        else:
+            default = None
+
+        return os.environ.get(
+            f"{self.connector.service_type}.{name}",
+            self.configuration.get(name, default),
+        )
 
     @classmethod
     def get_default_configuration(cls):

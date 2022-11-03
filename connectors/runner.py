@@ -128,10 +128,6 @@ class ConnectorService:
 
     async def poll(self, one_sync=False, sync_now=True):
         """Main event loop."""
-        print(self.config["elasticsearch"])
-        print(self.config["elasticsearch"]["host"])
-        print(os.environ)
-
         self.connectors = BYOIndex(self.config["elasticsearch"])
         es_host = self.config["elasticsearch"]["host"]
         self.running = True

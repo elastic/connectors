@@ -9,6 +9,7 @@ from connectors.source import DataSourceConfiguration
 class FakeConnector:
     def __init__(self, config):
         self.configuration = DataSourceConfiguration(config)
+        self.service_type = "fake"
 
 
 def create_source(klass, **extras):
