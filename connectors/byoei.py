@@ -27,6 +27,7 @@ from connectors.utils import (
 OP_INDEX = "index"
 OP_UPSERT = "update"
 OP_DELETE = "delete"
+TIMESTAMP_FIELD = "_timestamp"
 
 
 class Bulker:
@@ -161,7 +162,7 @@ class Fetcher:
                     #
                     # Some backends do not know how to do this so it's optional.
                     # For them we update the docs in any case.
-                    if "timestamp" in doc and ts == doc["timestamp"]:
+                    if TIMESTAMP_FIELD in doc and ts == doc[TIMESTAMP_FIELD]:
                         # cancel the download
                         if lazy_download is not None:
                             await lazy_download(doit=False)
@@ -173,10 +174,11 @@ class Fetcher:
                 else:
                     operation = OP_INDEX
                     self.total_docs_created += 1
-                    doc["timestamp"] = iso_utc()
+                    if TIMESTAMP_FIELD not in doc:
+                        doc[TIMESTAMP_FIELD] = iso_utc()
 
                 if lazy_download is not None:
-                    data = await lazy_download(doit=True, timestamp=doc["timestamp"])
+                    data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
                     if data is not None:
                         self.total_downloads += 1
                         data.pop("_id", None)
@@ -281,7 +283,7 @@ class ElasticServer(ESClient):
             doc_id += 1
 
     async def get_existing_ids(self, index):
-        """Returns an iterator on the `id` and `timestamp` fields of all documents in an index.
+        """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
 
 
         WARNING
@@ -300,10 +302,10 @@ class ElasticServer(ESClient):
         async for doc in async_scan(
             client=self.client,
             index=index,
-            _source=["id", "timestamp"],
+            _source=["id", TIMESTAMP_FIELD],
         ):
             doc_id = doc["_source"].get("id", doc["_id"])
-            ts = doc["_source"].get("timestamp")
+            ts = doc["_source"].get(TIMESTAMP_FIELD)
             yield doc_id, ts
 
     async def async_bulk(
