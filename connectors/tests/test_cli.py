@@ -17,7 +17,7 @@ def test_main(catch_stdout):
     assert catch_stdout.read().strip() == __version__
 
 
-def test_main_and_kill(catch_stdout, patch_logger, mock_responses):
+def test_main_and_kill(patch_logger, mock_responses):
     headers = {"X-Elastic-Product": "Elasticsearch"}
     host = "http://localhost:9200"
 
@@ -31,5 +31,8 @@ def test_main_and_kill(catch_stdout, patch_logger, mock_responses):
     async def kill():
         os.kill(os.getpid(), signal.SIGTERM)
 
-    asyncio.ensure_future(kill())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.create_task(kill())
+
     main([])

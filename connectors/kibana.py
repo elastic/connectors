@@ -165,9 +165,8 @@ def main(args=None):
 
     set_logger(args.debug and logging.DEBUG or logging.INFO)
     config = EnvYAML(config_file)
-    loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(prepare(args.service_type, args.index_name, config))
+        asyncio.run(prepare(args.service_type, args.index_name, config))
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("Bye")
 

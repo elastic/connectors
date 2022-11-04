@@ -17,6 +17,8 @@ from connectors.utils import (
     ESClient,
     DEFAULT_QUEUE_SIZE,
     DEFAULT_DISPLAY_EVERY,
+    DEFAULT_QUEUE_MEM_SIZE,
+    DEFAULT_CHUNK_MEM_SIZE,
 )
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration
@@ -27,6 +29,7 @@ from connectors.index import defaults_for
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 PIPELINE = "ent-search-generic-ingestion"
+SYNC_DISABLED = -1
 
 
 def e2str(entry):
@@ -42,10 +45,13 @@ class Status(Enum):
 
 
 class JobStatus(Enum):
-    NULL = 1
+    PENDING = 1
     IN_PROGRESS = 2
-    COMPLETED = 3
-    ERROR = 4
+    CANCELING = 3
+    CANCELED = 4
+    SUSPENDED = 5
+    COMPLETED = 6
+    ERROR = 7
 
 
 READ_ONLY_FIELDS = (
@@ -67,6 +73,12 @@ class BYOIndex(ESClient):
         )
         self.bulk_display_every = elastic_config.get(
             "bulk_display_every", DEFAULT_DISPLAY_EVERY
+        )
+        self.bulk_queue_max_mem_size = elastic_config.get(
+            "bulk_queue_max_mem_size", DEFAULT_QUEUE_MEM_SIZE
+        )
+        self.bulk_chunk_max_mem_size = elastic_config.get(
+            "bulk_chunk_max_mem_size", DEFAULT_CHUNK_MEM_SIZE
         )
 
     async def save(self, connector):
@@ -112,6 +124,8 @@ class BYOIndex(ESClient):
                 hit["_source"],
                 bulk_queue_max_size=self.bulk_queue_max_size,
                 bulk_display_every=self.bulk_display_every,
+                bulk_queue_max_mem_size=self.bulk_queue_max_mem_size,
+                bulk_chunk_max_mem_size=self.bulk_chunk_max_mem_size,
             )
 
 
@@ -189,6 +203,8 @@ class BYOConnector:
         doc_source,
         bulk_queue_max_size=DEFAULT_QUEUE_SIZE,
         bulk_display_every=DEFAULT_DISPLAY_EVERY,
+        bulk_queue_max_mem_size=DEFAULT_QUEUE_MEM_SIZE,
+        bulk_chunk_max_mem_size=DEFAULT_CHUNK_MEM_SIZE,
     ):
         self.doc_source = doc_source
         self.id = connector_id
@@ -202,6 +218,8 @@ class BYOConnector:
         self._hb = None
         self.bulk_queue_max_size = bulk_queue_max_size
         self.bulk_display_every = bulk_display_every
+        self.bulk_queue_max_mem_size = bulk_queue_max_mem_size
+        self.bulk_chunk_max_mem_size = bulk_chunk_max_mem_size
 
     def update_config(self, doc_source):
         self._status = Status[doc_source["status"].upper()]
@@ -245,14 +263,14 @@ class BYOConnector:
     def next_sync(self):
         """Returns in seconds when the next sync should happen.
 
-        If the function returns -1, no sync is scheduled.
+        If the function returns SYNC_DISABLED, no sync is scheduled.
         """
         if self.sync_now:
             logger.debug("sync_now is true, syncing!")
             return 0
         if not self.scheduling["enabled"]:
             logger.debug("scheduler is disabled")
-            return -1
+            return SYNC_DISABLED
         return next_run(self.scheduling["interval"])
 
     async def _sync_starts(self):
@@ -320,10 +338,13 @@ class BYOConnector:
             service_type = self.service_type
             if not sync_now:
                 next_sync = self.next_sync()
-                if next_sync == -1 or next_sync - idling > 0:
-                    logger.debug(
-                        f"Next sync for {service_type} due in {int(next_sync)} seconds"
-                    )
+                if next_sync == SYNC_DISABLED or next_sync - idling > 0:
+                    if next_sync == SYNC_DISABLED:
+                        logger.debug(f"Scheduling is disabled for {service_type}")
+                    else:
+                        logger.debug(
+                            f"Next sync for {service_type} due in {int(next_sync)} seconds"
+                        )
                     # if we don't sync, we still want to make sure we tell kibana we are connected
                     # if the status is different from comnected
                     if self._status != Status.CONNECTED:
@@ -366,6 +387,8 @@ class BYOConnector:
                 data_provider.connector.pipeline,
                 queue_size=self.bulk_queue_max_size,
                 display_every=self.bulk_display_every,
+                queue_mem_size=self.bulk_queue_max_mem_size,
+                chunk_mem_size=self.bulk_chunk_max_mem_size,
             )
             await self._sync_done(job, result)
 
