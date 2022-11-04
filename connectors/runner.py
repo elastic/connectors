@@ -27,7 +27,7 @@ from connectors.source import (
     ServiceTypeNotSupportedError,
     DataSourceError,
 )
-from connectors.utils import CancellableSleeps
+from connectors.utils import CancellableSleeps, trace_mem
 
 
 class ConnectorService:
@@ -50,6 +50,7 @@ class ConnectorService:
         self._sleeper = None
         self._sleeps = CancellableSleeps()
         self.connectors = None
+        self.trace_mem = self.service_config.get("trace_mem", False)
 
     def ent_search_config(self):
         if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
@@ -90,39 +91,42 @@ class ConnectorService:
             self.connectors.stop_waiting()
 
     async def _one_sync(self, connector, es, sync_now):
-        if connector.native:
-            logger.debug(f"Connector {connector.id} natively supported")
+        with trace_mem(self.trace_mem):
+            if connector.native:
+                logger.debug(f"Connector {connector.id} natively supported")
 
-        if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
-            # we can't sync in that state
-            logger.info(f"Can't sync with status `{e2str(connector.status)}`")
-            data_source = None
-        else:
-            # in other cases, we can
+            if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
+                # we can't sync in that state
+                logger.info(f"Can't sync with status `{e2str(connector.status)}`")
+                data_source = None
+            else:
+                # in other cases, we can
+                try:
+                    data_source = get_data_source(connector, self.config)
+                except ServiceTypeNotSupportedError:
+                    logger.debug(
+                        f"Can't handle source of type {connector.service_type}"
+                    )
+                    return
+                except DataSourceError as e:
+                    await connector.error(e)
+                    logger.critical(e, exc_info=True)
+                    self.raise_if_spurious(e)
+                    return
+
             try:
-                data_source = get_data_source(connector, self.config)
-            except ServiceTypeNotSupportedError:
-                logger.debug(f"Can't handle source of type {connector.service_type}")
-                return
-            except DataSourceError as e:
-                await connector.error(e)
-                logger.critical(e, exc_info=True)
-                self.raise_if_spurious(e)
-                return
+                # the heartbeat is always triggered
+                connector.start_heartbeat(self.hb)
 
-        try:
-            # the heartbeat is always triggered
-            connector.start_heartbeat(self.hb)
+                # we trigger a sync
+                if data_source is not None:
+                    await connector.sync(data_source, es, self.idling, sync_now)
 
-            # we trigger a sync
-            if data_source is not None:
-                await connector.sync(data_source, es, self.idling, sync_now)
-
-            await asyncio.sleep(0)
-        finally:
-            await connector.close()
-            if data_source is not None:
-                await data_source.close()
+                await asyncio.sleep(0)
+            finally:
+                await connector.close()
+                if data_source is not None:
+                    await data_source.close()
 
     async def poll(self, one_sync=False, sync_now=True):
         """Main event loop."""
