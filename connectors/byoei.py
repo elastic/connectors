@@ -188,7 +188,7 @@ class Fetcher:
                     if data is not None:
                         self.total_downloads += 1
                         data.pop("_id", None)
-                        data.pop("timestamp", None)
+                        data.pop(TIMESTAMP_FIELD, None)
                         doc.update(data)
 
                 await self.queue.put(
