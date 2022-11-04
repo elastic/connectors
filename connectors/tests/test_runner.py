@@ -62,6 +62,7 @@ FAKE_CONFIG_NEEDS_CONFIG = copy.deepcopy(FAKE_CONFIG)
 FAKE_CONFIG_NEEDS_CONFIG["status"] = "needs_configuration"
 FAKE_CONFIG_NO_SYNC = copy.deepcopy(FAKE_CONFIG)
 FAKE_CONFIG_NO_SYNC["sync_now"] = False
+FAKE_CONFIG_NO_SYNC["scheduling"]["enabled"] = False
 FAKE_CONFIG_PIPELINE_CHANGED = copy.deepcopy(FAKE_CONFIG)
 FAKE_CONFIG_PIPELINE_CHANGED["pipeline"] = {
     "extract_binary_content": False,
@@ -438,7 +439,7 @@ async def test_connector_service_poll_no_sync_but_status_updated(
 
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Found 1 connector")
-    patch_logger.assert_present("Next sync for fake due in")
+    patch_logger.assert_present("Scheduling is disabled")
     patch_logger.assert_not_present("Sync done")
     assert calls[-1]["status"] == "connected"
 
