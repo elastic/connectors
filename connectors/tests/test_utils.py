@@ -15,7 +15,7 @@ from connectors.utils import (
 
 def test_next_run():
 
-    assert next_run("1 * * * * *") < 70.0
+    assert next_run("1 * * * * *") < 120.0
     assert next_run("* * * * * *") == 0
 
     # this should get parsed

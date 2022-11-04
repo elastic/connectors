@@ -178,7 +178,9 @@ class Fetcher:
                         doc[TIMESTAMP_FIELD] = iso_utc()
 
                 if lazy_download is not None:
-                    data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
+                    data = await lazy_download(
+                        doit=True, timestamp=doc[TIMESTAMP_FIELD]
+                    )
                     if data is not None:
                         self.total_downloads += 1
                         data.pop("_id", None)
