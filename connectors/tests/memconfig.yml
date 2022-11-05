@@ -2,10 +2,11 @@ elasticsearch:
   host: http://nowhere.com:9200
   user: elastic
   password: ${elasticsearch.password}
-  bulk_queue_max_size: 1024
-  bulk_chunk_size: 500
-  bulk_chunk_max_mem_size: 15
-  bulk_queue_max_mem_size: 25
+  bulk:
+    queue_max_size: 1024
+    chunk_size: 500
+    chunk_max_mem_size: 15
+    queue_max_mem_size: 25
   max_wait_duration: 1
   initial_backoff_duration: 0
   backoff_multiplier: 0
