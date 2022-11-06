@@ -6,6 +6,7 @@
 """
 Implementation of BYOEI protocol (+some ids collecting)
 """
+import copy
 import time
 from collections import defaultdict
 import asyncio
@@ -44,7 +45,7 @@ class Bulker:
         self.ops = defaultdict(int)
         self.chunk_size = chunk_size
         self.pipeline_settings = pipeline_settings
-        self.chunk_mem_size = chunk_mem_size
+        self.chunk_mem_size = chunk_mem_size * 1024 * 1024
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -88,17 +89,20 @@ class Bulker:
         batch = []
         self.bulk_time = 0
         self.bulking = True
+        bulk_size = 0
+
         while True:
-            doc = await self.queue.get()
+            doc_size, doc = await self.queue.get()
             if doc in ("END_DOCS", "FETCH_ERROR"):
                 break
             operation = doc["_op_type"]
             self.ops[operation] += 1
             batch.extend(self._bulk_op(doc, operation))
-
-            if len(batch) >= self.chunk_size or get_size(batch) > self.chunk_mem_size:
-                await self._batch_bulk(batch)
+            bulk_size += doc_size
+            if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size:
+                await self._batch_bulk(copy.copy(batch))
                 batch.clear()
+                bulk_size = 0
 
             await asyncio.sleep(0)
 
