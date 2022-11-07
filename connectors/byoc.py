@@ -228,7 +228,7 @@ class BYOConnector:
         self.bulk_chunk_max_mem_size = bulk_chunk_max_mem_size
 
     def _update_config(self, doc_source):
-        self._status = Status[doc_source["status"].upper()]
+        self.status = doc_source["status"]
         self.sync_now = doc_source.get("sync_now", False)
         self.native = doc_source.get("is_native", False)
         self._service_type = doc_source["service_type"]
@@ -241,6 +241,16 @@ class BYOConnector:
     @property
     def status(self):
         return self._status
+
+    @status.setter
+    def status(self, value):
+        if isinstance(value, str):
+            value = Status[value.upper()]
+        if not isinstance(value, Status):
+            raise TypeError(value)
+
+        self._status = value
+        self.doc_source["status"] = e2str(self._status)
 
     @property
     def service_type(self):
@@ -261,12 +271,12 @@ class BYOConnector:
         status = (
             Status.CONFIGURED
             if all(
-                isinstance(value, dict) and value["value"] is not None
+                isinstance(value, dict) and value.get("value") is not None
                 for value in value.values()
             )
             else Status.NEEDS_CONFIGURATION
         )
-        self.doc_source["status"] = status.name.lower()
+        self.doc_source["status"] = e2str(status)
         self._update_config(self.doc_source)
 
     async def close(self):
@@ -316,8 +326,7 @@ class BYOConnector:
 
         self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
-        self._status = Status.CONNECTED
-        self.doc_source["status"] = e2str(self._status)
+        self.status = Status.CONNECTED
         await self.sync_doc()
 
         self._start_time = time.time()
@@ -345,8 +354,7 @@ class BYOConnector:
         else:
             self.doc_source["last_sync_error"] = str(exception)
             self.doc_source["error"] = str(exception)
-            self._status = Status.ERROR
-            self.doc_source["status"] = e2str(self._status)
+            self.status = Status.ERROR
 
         self.doc_source["last_synced"] = iso_utc()
         await self.sync_doc()
@@ -384,9 +392,8 @@ class BYOConnector:
                         )
                     # if we don't sync, we still want to make sure we tell kibana we are connected
                     # if the status is different from comnected
-                    if self._status != Status.CONNECTED:
-                        self._status = Status.CONNECTED
-                        self.doc_source["status"] = e2str(self._status)
+                    if self.status != Status.CONNECTED:
+                        self.status = Status.CONNECTED
                         await self.sync_doc()
                     return
             else:
@@ -397,8 +404,7 @@ class BYOConnector:
                 return
         except Exception as exc:
             self.doc_source["error"] = str(exc)
-            self._status = Status.ERROR
-            self.doc_source["status"] = e2str(self._status)
+            self.status = Status.ERROR
             await self.sync_doc()
             raise
 
