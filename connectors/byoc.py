@@ -247,6 +247,15 @@ class BYOConnector:
 
     async def populate_configuration(self, configuration):
         self.doc_source["configuration"] = configuration
+        status = (
+            Status.CONFIGURED
+            if all(
+                isinstance(value, dict) and value["value"] is not None
+                for value in configuration.values()
+            )
+            else Status.NEEDS_CONFIGURATION
+        )
+        self.doc_source["status"] = status.name.lower()
         self.update_config(self.doc_source)
         await self._write()
 

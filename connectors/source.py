@@ -40,13 +40,14 @@ class DataSourceConfiguration:
 
     def __init__(self, config):
         self._config = {}
-        for key, value in config.items():
-            self.set_field(
-                key,
-                value.get("label"),
-                value.get("value", ""),
-                value.get("type", "str"),
-            )
+        if config is not None:
+            for key, value in config.items():
+                self.set_field(
+                    key,
+                    value.get("label"),
+                    value.get("value", ""),
+                    value.get("type", "str"),
+                )
 
     def __getitem__(self, key):
         return self._config[key].value
@@ -150,6 +151,9 @@ async def get_data_source(connector, config):
     """Returns a source class instance, given a service type"""
     configured_connector_id = config.get("connector_id", "")
     configured_service_type = config.get("service_type", "")
+    logger.info(
+        f"connector.id = {connector.id}, connector.service_type = {connector.service_type}, configured_connector_id = {configured_connector_id}, configured_service_type = {configured_service_type}"
+    )
     if connector.id == configured_connector_id and connector.service_type is None:
         if not configured_service_type:
             logger.error(
@@ -176,7 +180,7 @@ async def get_data_source(connector, config):
         if connector.configuration.is_empty():
             try:
                 await connector.populate_configuration(
-                    source_klass.get_default_configuration()
+                    source_klass.get_default_configuration() or {}
                 )
                 logger.debug(f"Populated configuration for connector {connector.id}")
             except Exception as e:
