@@ -156,6 +156,9 @@ async def get_data_source(connector, config):
     """
     configured_connector_id = config.get("connector_id", "")
     configured_service_type = config.get("service_type", "")
+
+    # XXX I could not write a test for this. what would be the scenario
+    # to have  `connector.service_type is None` ?
     if connector.id == configured_connector_id and connector.service_type is None:
         if not configured_service_type:
             logger.error(
@@ -172,7 +175,7 @@ async def get_data_source(connector, config):
     try:
         source_klass = get_source_klass(fqn)
         if connector.configuration.is_empty():
-            connector.config = source_klass.get_default_configuration()
+            connector.configuration = source_klass.get_default_configuration()
             logger.debug(f"Populated configuration for connector {connector.id}")
 
         # sync state if needed (when service type or configuration is updated)

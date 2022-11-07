@@ -332,3 +332,6 @@ async def test_properties(mock_responses):
     connector.configuration = {"cool": {"value": "foo"}, "cool2": {"value": "baz"}}
 
     assert connector.status == Status.CONFIGURED
+
+    with pytest.raises(TypeError):
+        connector.status = 1234
