@@ -216,7 +216,7 @@ class ConnectorService:
         return 0
 
     def shutdown(self, sig):
-        logger.info(f"Caught {sig.name}. Gracefully shutdown.")
+        logger.info(f"Caught {sig.name}. Graceful shutdown.")
         self.stop()
 
 
