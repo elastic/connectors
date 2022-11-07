@@ -122,7 +122,7 @@ class NASDataSource(BaseDataSource):
                 "created_at": iso_utc(file_details["creation_time"].get_value()),
                 "timestamp": iso_utc(file_details["change_time"].get_value()),
                 "type": "folder" if file.is_dir() else "file",
-                "title": file.name
+                "title": file.name,
             }
 
     def fetch_file_content(self, path):
@@ -179,11 +179,8 @@ class NASDataSource(BaseDataSource):
         Yields:
             dictionary: Dictionary containing the Network Drive files and folders as documents
         """
-        loop = asyncio.get_running_loop()
-        directory_details = await loop.run_in_executor(
-            executor=None,
-            func=partial(smbclient.walk, top=rf"\\{self.server_ip}/{self.drive_path}"),
-        )
+        directory_details = smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}")
+
         for path, _, _ in directory_details:
             async for file in self.get_files(path=path):
                 if file["type"] == "folder":
