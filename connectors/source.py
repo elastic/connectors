@@ -156,23 +156,13 @@ async def get_data_source(connector, config):
     """
     configured_connector_id = config.get("connector_id", "")
     configured_service_type = config.get("service_type", "")
-
     if connector.id == configured_connector_id and connector.service_type is None:
         if not configured_service_type:
             logger.error(
                 f"Service type is not configured for connector {configured_connector_id}"
             )
             raise ServiceTypeNotConfiguredError("Service type is not configured.")
-        try:
-            await connector.populate_service_type(configured_service_type)
-            logger.debug(
-                f"Populated service type {configured_service_type} for connector {connector.id}"
-            )
-        except Exception as e:
-            logger.critical(e, exc_info=True)
-            raise ConnectorUpdateError(
-                f"Could not update service type for connector {connector.id}"
-            )
+        connector.service_type = configured_service_type
 
     service_type = connector.service_type
     if service_type not in config["sources"]:
@@ -182,20 +172,17 @@ async def get_data_source(connector, config):
     try:
         source_klass = get_source_klass(fqn)
         if connector.configuration.is_empty():
-            try:
-                default_config = source_klass.get_default_configuration()
-            except Exception:
-                # XXX do we really need to push {} to Elasticsearch ?
-                default_config = {}
+            connector.config = source_klass.get_default_configuration()
+            logger.debug(f"Populated configuration for connector {connector.id}")
 
-            try:
-                await connector.populate_configuration(default_config)
-                logger.debug(f"Populated configuration for connector {connector.id}")
-            except Exception as e:
-                logger.critical(e, exc_info=True)
-                raise ConnectorUpdateError(
-                    f"Could not update configuration for connector {connector.id}"
-                )
+        # sync state if needed (when service type or configuration is updated)
+        try:
+            await connector.sync_doc(force=False)
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+            raise ConnectorUpdateError(
+                f"Could not update configuration for connector {connector.id}"
+            )
 
         return source_klass(connector)
     except Exception as e:
