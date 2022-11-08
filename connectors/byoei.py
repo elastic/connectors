@@ -6,6 +6,7 @@
 """
 Implementation of BYOEI protocol (+some ids collecting)
 """
+import copy
 import time
 from collections import defaultdict
 import asyncio
@@ -30,6 +31,7 @@ from connectors.utils import (
 OP_INDEX = "index"
 OP_UPSERT = "update"
 OP_DELETE = "delete"
+TIMESTAMP_FIELD = "_timestamp"
 
 
 class Bulker:
@@ -43,7 +45,7 @@ class Bulker:
         self.ops = defaultdict(int)
         self.chunk_size = chunk_size
         self.pipeline_settings = pipeline_settings
-        self.chunk_mem_size = chunk_mem_size
+        self.chunk_mem_size = chunk_mem_size * 1024 * 1024
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -87,27 +89,20 @@ class Bulker:
         batch = []
         self.bulk_time = 0
         self.bulking = True
-        docs_ended = downloads_ended = False
+        bulk_size = 0
+
         while True:
-            doc = await self.queue.get()
+            doc_size, doc = await self.queue.get()
             if doc in ("END_DOCS", "FETCH_ERROR"):
-                docs_ended = True
-            if doc == "END_DOWNLOADS":
-                downloads_ended = True
-
-            if docs_ended and downloads_ended:
                 break
-
-            if doc in ("END_DOCS", "END_DOWNLOADS", "FETCH_ERROR"):
-                continue
-
             operation = doc["_op_type"]
             self.ops[operation] += 1
             batch.extend(self._bulk_op(doc, operation))
-
-            if len(batch) >= self.chunk_size or get_size(batch) > self.chunk_mem_size:
-                await self._batch_bulk(batch)
+            bulk_size += doc_size
+            if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size:
+                await self._batch_bulk(copy.copy(batch))
                 batch.clear()
+                bulk_size = 0
 
             await asyncio.sleep(0)
 
@@ -132,7 +127,6 @@ class Fetcher:
         self.bulk_time = 0
         self.bulking = False
         self.index = index
-        self._downloads = asyncio.Queue(maxsize=queue_size)
         self.loop = asyncio.get_event_loop()
         self.existing_ids = existing_ids
         self.sync_runs = False
@@ -151,46 +145,8 @@ class Fetcher:
             f"delete: {self.total_docs_deleted}>"
         )
 
-    # XXX this can be defferred
-    async def get_attachments(self):
-        logger.info("Starting downloads")
-
-        while self.sync_runs:
-            coro = await self._downloads.get()
-            if coro == "END":
-                break
-
-            data = await coro
-            await asyncio.sleep(0)
-
-            if data is None:
-                continue
-
-            self.total_downloads += 1
-
-            # This is an upsert because we're pusing content
-            # from attached file *after* the document was indexed
-            await self.queue.put(
-                {
-                    "_op_type": OP_UPSERT,
-                    "_index": self.index,
-                    "_id": data.pop("_id"),
-                    "doc": data,
-                }
-            )
-
-            if divmod(self.total_downloads, 10)[-1] == 0:
-                logger.info(f"Downloaded {self.total_downloads} files.")
-
-            await asyncio.sleep(0)
-
-        await self.queue.put("END_DOWNLOADS")
-        logger.info(f"Downloads done {self.total_downloads} files.")
-
     async def run(self, generator):
-        t1 = self.loop.create_task(self.get_docs(generator))
-        t2 = self.loop.create_task(self.get_attachments())
-        await asyncio.gather(t1, t2)
+        await self.get_docs(generator)
 
     async def get_docs(self, generator):
         logger.info("Starting doc lookups")
@@ -214,7 +170,7 @@ class Fetcher:
                     #
                     # Some backends do not know how to do this so it's optional.
                     # For them we update the docs in any case.
-                    if "timestamp" in doc and ts == doc["timestamp"]:
+                    if TIMESTAMP_FIELD in doc and ts == doc[TIMESTAMP_FIELD]:
                         # cancel the download
                         if lazy_download is not None:
                             await lazy_download(doit=False)
@@ -226,14 +182,18 @@ class Fetcher:
                 else:
                     operation = OP_INDEX
                     self.total_docs_created += 1
-                    doc["timestamp"] = iso_utc()
+                    if TIMESTAMP_FIELD not in doc:
+                        doc[TIMESTAMP_FIELD] = iso_utc()
 
                 if lazy_download is not None:
-                    await self._downloads.put(
-                        self.loop.create_task(
-                            lazy_download(doit=True, timestamp=doc["timestamp"])
-                        )
+                    data = await lazy_download(
+                        doit=True, timestamp=doc[TIMESTAMP_FIELD]
                     )
+                    if data is not None:
+                        self.total_downloads += 1
+                        data.pop("_id", None)
+                        data.pop(TIMESTAMP_FIELD, None)
+                        doc.update(data)
 
                 await self.queue.put(
                     {
@@ -246,7 +206,6 @@ class Fetcher:
                 await asyncio.sleep(0)
         except Exception as e:
             logger.critical("The document fetcher failed", exc_info=True)
-            await self._downloads.put("END")
             await self.queue.put("FETCH_ERROR")
             self.fetch_error = e
             return
@@ -266,7 +225,6 @@ class Fetcher:
             )
             self.total_docs_deleted += 1
 
-        await self._downloads.put("END")
         await self.queue.put("END_DOCS")
 
 
@@ -274,7 +232,6 @@ class ElasticServer(ESClient):
     def __init__(self, elastic_config):
         logger.debug(f"ElasticServer connecting to {elastic_config['host']}")
         super().__init__(elastic_config)
-        self._downloads = []
         self.loop = asyncio.get_event_loop()
 
     async def prepare_index(
@@ -336,7 +293,7 @@ class ElasticServer(ESClient):
             doc_id += 1
 
     async def get_existing_ids(self, index):
-        """Returns an iterator on the `id` and `timestamp` fields of all documents in an index.
+        """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
 
 
         WARNING
@@ -355,10 +312,10 @@ class ElasticServer(ESClient):
         async for doc in async_scan(
             client=self.client,
             index=index,
-            _source=["id", "timestamp"],
+            _source=["id", TIMESTAMP_FIELD],
         ):
             doc_id = doc["_source"].get("id", doc["_id"])
-            ts = doc["_source"].get("timestamp")
+            ts = doc["_source"].get(TIMESTAMP_FIELD)
             yield doc_id, ts
 
     async def async_bulk(

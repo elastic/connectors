@@ -1,5 +1,5 @@
 # framework dependencies
-elasticsearch[async]==8.4.3
+elasticsearch[async]==8.5.0
 elastic-transport==8.4.0
 ecs-logging==2.0.0
 aiohttp==3.8.3
