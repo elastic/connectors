@@ -166,6 +166,7 @@ async def get_data_source(connector, config):
             )
             raise ServiceTypeNotConfiguredError("Service type is not configured.")
         connector.service_type = configured_service_type
+        logger.debug(f"Populated service type for connector {connector.id}")
 
     service_type = connector.service_type
     if service_type not in config["sources"]:

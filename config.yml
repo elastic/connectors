@@ -22,10 +22,11 @@ service:
   trace_mem: false
 
 native_service_types:
-  - mysql
+  - mongodb
 
 # some id
-#connector_id: '1'
+connector_id: 'WTHqV4QBO_lgw7YQkNd_'
+service_type: mysql
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
