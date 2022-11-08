@@ -172,6 +172,14 @@ async def test_connectors_get_list(mock_responses):
     await connectors.close()
 
 
+class StubIndex:
+    def __init__(self):
+        self.client = None
+
+    async def save(self, connector):
+        pass
+
+
 @pytest.mark.asyncio
 async def test_sync_mongo(mock_responses, patch_logger):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
@@ -257,10 +265,6 @@ async def test_sync_mongo(mock_responses, patch_logger):
 
     doc = {"_id": 1}
 
-    class StubIndex:
-        def __init__(self):
-            self.client = None
-
     class Data:
         def __init__(self):
             self.connector = self.make_connector()
@@ -295,3 +299,39 @@ async def test_sync_mongo(mock_responses, patch_logger):
     finally:
         await connectors.close()
         await es.close()
+
+
+@pytest.mark.asyncio
+async def test_properties(mock_responses):
+
+    connector_src = {
+        "service_type": "test",
+        "index_name": "search-some-index",
+        "configuration": {},
+        "scheduling": {},
+        "status": "created",
+    }
+
+    connector = BYOConnector(StubIndex(), "test", connector_src)
+
+    assert connector.status == Status.CREATED
+    assert connector.service_type == "test"
+    connector.service_type = "test2"
+    assert connector.service_type == "test2"
+    assert connector._dirty
+
+    await connector.sync_doc()
+    assert not connector._dirty
+
+    # setting some config with a value that is None
+    connector.configuration = {"cool": {"value": "foo"}, "cool2": {"value": None}}
+
+    assert connector.status == Status.NEEDS_CONFIGURATION
+
+    # setting some config
+    connector.configuration = {"cool": {"value": "foo"}, "cool2": {"value": "baz"}}
+
+    assert connector.status == Status.CONFIGURED
+
+    with pytest.raises(TypeError):
+        connector.status = 1234

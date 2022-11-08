@@ -54,12 +54,15 @@ class JobStatus(Enum):
     ERROR = 7
 
 
-READ_ONLY_FIELDS = (
-    "service_type",
+CUSTOM_READ_ONLY_FIELDS = (
     "is_native",
     "api_key_id",
     "pipeline",
     "scheduling",
+)
+
+NATIVE_READ_ONLY_FIELDS = CUSTOM_READ_ONLY_FIELDS + (
+    "service_type",
     "configuration",
 )
 
@@ -86,7 +89,9 @@ class BYOIndex(ESClient):
         document = dict(connector.doc_source)
 
         # read only we never update
-        for key in READ_ONLY_FIELDS:
+        for key in (
+            NATIVE_READ_ONLY_FIELDS if connector.native else CUSTOM_READ_ONLY_FIELDS
+        ):
             if key in document:
                 del document[key]
 
@@ -209,7 +214,8 @@ class BYOConnector:
         self.doc_source = doc_source
         self.id = connector_id
         self.index = index
-        self.update_config(doc_source)
+        self._update_config(doc_source)
+        self._dirty = False
         self.client = index.client
         self.doc_source["last_seen"] = iso_utc()
         self._heartbeat_started = self._syncing = False
@@ -221,19 +227,57 @@ class BYOConnector:
         self.bulk_queue_max_mem_size = bulk_queue_max_mem_size
         self.bulk_chunk_max_mem_size = bulk_chunk_max_mem_size
 
-    def update_config(self, doc_source):
-        self._status = Status[doc_source["status"].upper()]
+    def _update_config(self, doc_source):
+        self.status = doc_source["status"]
         self.sync_now = doc_source.get("sync_now", False)
         self.native = doc_source.get("is_native", False)
-        self.service_type = doc_source["service_type"]
+        self._service_type = doc_source["service_type"]
         self.index_name = doc_source["index_name"]
-        self.configuration = DataSourceConfiguration(doc_source["configuration"])
+        self._configuration = DataSourceConfiguration(doc_source["configuration"])
         self.scheduling = doc_source["scheduling"]
         self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
+        self._dirty = True
 
     @property
     def status(self):
         return self._status
+
+    @status.setter
+    def status(self, value):
+        if isinstance(value, str):
+            value = Status[value.upper()]
+        if not isinstance(value, Status):
+            raise TypeError(value)
+
+        self._status = value
+        self.doc_source["status"] = e2str(self._status)
+
+    @property
+    def service_type(self):
+        return self._service_type
+
+    @service_type.setter
+    def service_type(self, value):
+        self._service_type = self.doc_source["service_type"] = value
+        self._update_config(self.doc_source)
+
+    @property
+    def configuration(self):
+        return self._configuration
+
+    @configuration.setter
+    def configuration(self, value):
+        self.doc_source["configuration"] = value
+        status = (
+            Status.CONFIGURED
+            if all(
+                isinstance(value, dict) and value.get("value") is not None
+                for value in value.values()
+            )
+            else Status.NEEDS_CONFIGURATION
+        )
+        self.doc_source["status"] = e2str(status)
+        self._update_config(self.doc_source)
 
     async def close(self):
         self._closed = True
@@ -241,9 +285,12 @@ class BYOConnector:
             self._hb.cancel()
             self._heartbeat_started = False
 
-    async def _write(self):
+    async def sync_doc(self, force=True):
+        if not self._dirty and not force:
+            return
         self.doc_source["last_seen"] = iso_utc()
         await self.index.save(self)
+        self._dirty = False
 
     def start_heartbeat(self, delay):
         if self._heartbeat_started:
@@ -255,7 +302,7 @@ class BYOConnector:
                 logger.info(f"*** Connector {self.id} HEARTBEAT")
                 if not self._syncing:
                     self.doc_source["last_seen"] = iso_utc()
-                    await self._write()
+                    await self.sync_doc()
                 await asyncio.sleep(delay)
 
         self._hb = asyncio.create_task(_heartbeat())
@@ -279,9 +326,8 @@ class BYOConnector:
 
         self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
-        self._status = Status.CONNECTED
-        self.doc_source["status"] = e2str(self._status)
-        await self._write()
+        self.status = Status.CONNECTED
+        await self.sync_doc()
 
         self._start_time = time.time()
         logger.info(f"Sync starts, Job id: {job_id}")
@@ -289,7 +335,7 @@ class BYOConnector:
 
     async def error(self, error):
         self.doc_source["error"] = str(error)
-        await self._write()
+        await self.sync_doc()
 
     async def _sync_done(self, job, result, exception=None):
         doc_updated = result.get("doc_updated", 0)
@@ -308,11 +354,10 @@ class BYOConnector:
         else:
             self.doc_source["last_sync_error"] = str(exception)
             self.doc_source["error"] = str(exception)
-            self._status = Status.ERROR
-            self.doc_source["status"] = e2str(self._status)
+            self.status = Status.ERROR
 
         self.doc_source["last_synced"] = iso_utc()
-        await self._write()
+        await self.sync_doc()
         logger.info(
             f"Sync done: {indexed_count} indexed, {doc_deleted} "
             f" deleted. ({int(time.time() - self._start_time)} seconds)"
@@ -347,10 +392,9 @@ class BYOConnector:
                         )
                     # if we don't sync, we still want to make sure we tell kibana we are connected
                     # if the status is different from comnected
-                    if self._status != Status.CONNECTED:
-                        self._status = Status.CONNECTED
-                        self.doc_source["status"] = e2str(self._status)
-                        await self._write()
+                    if self.status != Status.CONNECTED:
+                        self.status = Status.CONNECTED
+                        await self.sync_doc()
                     return
             else:
                 logger.info("Sync forced")
@@ -360,9 +404,8 @@ class BYOConnector:
                 return
         except Exception as exc:
             self.doc_source["error"] = str(exc)
-            self._status = Status.ERROR
-            self.doc_source["status"] = e2str(self._status)
-            await self._write()
+            self.status = Status.ERROR
+            await self.sync_doc()
             raise
 
         logger.debug(f"Syncing '{service_type}'")
