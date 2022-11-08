@@ -15,6 +15,7 @@ from aiohttp.client_exceptions import ServerTimeoutError
 from aiobotocore.config import AioConfig
 from aiobotocore.utils import logger as aws_logger
 from botocore.exceptions import ClientError
+from contextlib import asynccontextmanager
 from connectors.logger import logger, set_extra_logger
 from connectors.source import BaseDataSource
 
@@ -40,7 +41,7 @@ class S3DataSource(BaseDataSource):
         super().__init__(connector)
         self.session = aioboto3.Session()
         self.loop = asyncio.get_event_loop()
-        set_extra_logger(aws_logger, log_level=logging.INFO, prefix="S3")
+        set_extra_logger(aws_logger, log_level=logging.DEBUG, prefix="S3")
         set_extra_logger("aioboto3.resources", log_level=logging.INFO, prefix="S3")
         self.bucket_list = []
         self.config = AioConfig(
@@ -49,12 +50,18 @@ class S3DataSource(BaseDataSource):
             retries={"max_attempts": self.configuration["max_attempts"]},
         )
 
+    @asynccontextmanager
+    async def client(self, **kwargs):
+        """This method creates client object."""
+        async with self.session.client(
+            service_name="s3", config=self.config, endpoint_url=ENDPOINT_URL, **kwargs
+        ) as s3:
+            yield s3
+
     async def ping(self):
         """Verify the connection with AWS"""
         try:
-            async with self.session.client(
-                service_name="s3", config=self.config, endpoint_url=ENDPOINT_URL
-            ) as s3:
+            async with self.client() as s3:
                 self.bucket_list = await s3.list_buckets()
                 logger.info("Successfully connected to AWS Server.")
         except Exception:
@@ -82,12 +89,7 @@ class S3DataSource(BaseDataSource):
             logger.debug(f"{filename} can't be extracted")
             return
         logger.debug(f"Downloading {filename}")
-        async with self.session.client(
-            service_name="s3",
-            config=self.config,
-            endpoint_url=ENDPOINT_URL,
-            region_name=region,
-        ) as s3:
+        async with self.client(region_name=region) as s3:
             try:
                 resp = await s3.get_object(Bucket=bucket, Key=filename)
                 await asyncio.sleep(0)
@@ -105,13 +107,14 @@ class S3DataSource(BaseDataSource):
                     exception.response.get("Error", {}).get("Code")
                     == "InvalidObjectState"
                 ):
-                    logger.error(
+                    logger.warn(
                         f"{filename} of {bucket} is archived and inaccessible until restored. Error: {exception}"
                     )
                 else:
                     logger.error(
                         f"Something went wrong while extracting data from {filename} of {bucket}. Error: {exception}"
                     )
+                    raise
 
     async def get_bucket_region(self, bucket_name):
         """This method return the name of region for a bucket.
@@ -121,9 +124,7 @@ class S3DataSource(BaseDataSource):
         """
         region = None
         try:
-            async with self.session.client(
-                service_name="s3", config=self.config, endpoint_url=ENDPOINT_URL
-            ) as s3:
+            async with self.client() as s3:
                 response = await s3.get_bucket_location(
                     Bucket=bucket_name,
                 )
@@ -139,10 +140,7 @@ class S3DataSource(BaseDataSource):
         Returns:
             list: List of buckets
         """
-        bucket_list = []
-        for bucket in self.bucket_list["Buckets"]:
-            bucket_list.append(bucket["Name"])
-        return bucket_list
+        return [bucket["Name"] for bucket in self.bucket_list["Buckets"]]
 
     async def get_docs(self):
         """Get documents from Amazon S3
