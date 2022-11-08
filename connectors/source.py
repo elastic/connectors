@@ -157,8 +157,6 @@ async def get_data_source(connector, config):
     configured_connector_id = config.get("connector_id", "")
     configured_service_type = config.get("service_type", "")
 
-    # XXX I could not write a test for this. what would be the scenario
-    # to have  `connector.service_type is None` ?
     if connector.id == configured_connector_id and connector.service_type is None:
         if not configured_service_type:
             logger.error(

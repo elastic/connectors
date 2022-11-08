@@ -98,9 +98,11 @@ async def test_get_custom_data_source_no_service_type(mock_responses):
             pass
 
     # generic empty doc created by the user through the Kibana UI
+    # when it's created that way, the service type is None,
+    # so it's up to the connector to set it back to its value
     doc = {
         "status": "created",
-        "service_type": "banana",
+        "service_type": None,
         "index_name": "test",
         "configuration": {},
         "scheduling": {"enabled": False},
