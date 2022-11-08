@@ -307,11 +307,9 @@ async def set_server_responses(
     def update_connector(url, **kw):
         read_only_fields = [
             "is_native",
-            "service_type",
             "api_key_id",
             "pipeline",
             "scheduling",
-            "configuration",
         ]
         fields = json.loads(kw["data"])["doc"].keys()
         for field in fields:
@@ -455,7 +453,8 @@ async def test_connector_service_poll_cron_broken(
         doc = json.loads(kw["data"])["doc"]
         calls.append(doc)
 
-    # if a connector is correctly configured but we don't sync (not scheduled)
+    # if a connector is correctly configured but we don't sync because the cron
+    # is broken
     # we still want to tell kibana we are connected
     await set_server_responses(
         mock_responses, FAKE_CONFIG_CRON_BROKEN, connectors_update=upd
