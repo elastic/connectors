@@ -23,13 +23,14 @@ from connectors.utils import (
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration
 from elasticsearch.exceptions import ApiError
-from connectors.index import defaults_for
+from connectors.index import defaults_for, DEFAULT_LANGUAGE
 
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 PIPELINE = "ent-search-generic-ingestion"
 SYNC_DISABLED = -1
+DEFAULT_ANALYSIS_ICU = False
 
 
 def e2str(entry):
@@ -83,6 +84,8 @@ class BYOIndex(ESClient):
         self.bulk_chunk_max_mem_size = elastic_config.get(
             "bulk_chunk_max_mem_size", DEFAULT_CHUNK_MEM_SIZE
         )
+        self.language_code = elastic_config.get("language_code", DEFAULT_LANGUAGE)
+        self.analysis_icu = elastic_config.get("analysis_icu", DEFAULT_ANALYSIS_ICU)
 
     async def save(self, connector):
         # we never update the configuration
@@ -131,6 +134,8 @@ class BYOIndex(ESClient):
                 bulk_display_every=self.bulk_display_every,
                 bulk_queue_max_mem_size=self.bulk_queue_max_mem_size,
                 bulk_chunk_max_mem_size=self.bulk_chunk_max_mem_size,
+                language_code=self.language_code,
+                analysis_icu=self.analysis_icu,
             )
 
 
@@ -210,6 +215,8 @@ class BYOConnector:
         bulk_display_every=DEFAULT_DISPLAY_EVERY,
         bulk_queue_max_mem_size=DEFAULT_QUEUE_MEM_SIZE,
         bulk_chunk_max_mem_size=DEFAULT_CHUNK_MEM_SIZE,
+        language_code=DEFAULT_LANGUAGE,
+        analysis_icu=DEFAULT_ANALYSIS_ICU,
     ):
         self.doc_source = doc_source
         self.id = connector_id
@@ -226,6 +233,8 @@ class BYOConnector:
         self.bulk_display_every = bulk_display_every
         self.bulk_queue_max_mem_size = bulk_queue_max_mem_size
         self.bulk_chunk_max_mem_size = bulk_chunk_max_mem_size
+        self.language_code = language_code
+        self.analysis_icu = analysis_icu
 
     def _update_config(self, doc_source):
         self.status = doc_source["status"]
@@ -416,8 +425,11 @@ class BYOConnector:
             await data_provider.ping()
             await asyncio.sleep(0)
 
-            # TODO: where do we get language_code and analysis_icu?
-            mappings, settings = defaults_for(is_connectors_index=True)
+            mappings, settings = defaults_for(
+                is_connectors_index=True,
+                language_code=self.language_code,
+                analysis_icu=self.analysis_icu,
+            )
             logger.debug("Preparing the index")
             await elastic_server.prepare_index(
                 self.index_name, mappings=mappings, settings=settings
