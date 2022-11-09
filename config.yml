@@ -23,6 +23,7 @@ service:
 
 native_service_types:
   - mysql
+  - network_drive
   - aws
 
 # some id
@@ -33,3 +34,4 @@ sources:
   aws: connectors.sources.aws:S3DataSource
   dir: connectors.sources.directory:DirectoryDataSource
   mysql: connectors.sources.mysql:MySqlDataSource
+  network_drive: connectors.sources.network_drive:NASDataSource
