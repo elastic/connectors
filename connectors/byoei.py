@@ -5,6 +5,12 @@
 #
 """
 Implementation of BYOEI protocol (+some ids collecting)
+
+
+`ElasticServer` is orchestrating a sync by creating a queue that
+is filled by `Fetcher`, a wrapper on the top of the documents generator and
+consumed by `Bulker`, a class that aggretates documents in batches for the bulk
+API
 """
 import copy
 import time
@@ -40,7 +46,19 @@ def get_mb_size(ob):
 
 
 class Bulker:
-    """Send bulk operations in batches by consuming a queue."""
+    """Send bulk operations in batches by consuming a queue.
+
+    This class runs a coroutine that gets operations out of a `queue` and collects them to
+    build and send bulk requests using a `client`
+
+    The bulk requests are controlled in several ways:
+    - `chunk_size` -- a maximum number of operations to send per request
+    - `chunk_mem_size` -- a maximum size in MiB for the each bulk request
+    - `max_concurrency` -- a maximum number of concurrent bulk requests
+
+    Extra options:
+    - `pipeline_settings` -- ingest pipeline settings to pass to the bulk API
+    """
 
     def __init__(
         self,
@@ -135,7 +153,11 @@ class Bulker:
 
 
 class Fetcher:
-    """Grab data and add them in the queue for the bulker"""
+    """Grabs data and adds them in the queue for the bulker.
+
+    This class runs a coroutine that puts docs in `queue`, given
+    a document generator.
+    """
 
     def __init__(
         self,
@@ -254,6 +276,16 @@ class Fetcher:
 
 
 class ElasticServer(ESClient):
+    """This class is the sync orchestrator.
+
+    It does the following in `async_bulk`
+
+    - grabs all ids on Elasticsearch for the index
+    - creates a MemQueue to hold documents to stream
+    - runs a `Fetcher` (producer) and a `Bulker` (consumer) against the queue
+    - once they are both over, returns totals
+    """
+
     def __init__(self, elastic_config):
         logger.debug(f"ElasticServer connecting to {elastic_config['host']}")
         super().__init__(elastic_config)
