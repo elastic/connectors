@@ -268,12 +268,12 @@ class MemQueue(asyncio.Queue):
         self.refresh_timeout = refresh_timeout
 
     def _get(self):
-        item = self._queue.popleft()
-        self._current_memsize -= asizeof.asizeof(item)
-        return item
+        item_size, item = self._queue.popleft()
+        self._current_memsize -= item_size
+        return item_size, item
 
     def _put(self, item):
-        self._current_memsize += asizeof.asizeof(item)
+        self._current_memsize += item[0]
         self._queue.append(item)
 
     def mem_full(self):
@@ -287,13 +287,14 @@ class MemQueue(asyncio.Queue):
     async def _wait_for_room(self, item):
         item_size = asizeof.asizeof(item)
         if self._current_memsize + item_size <= self.maxmemsize:
-            return
+            return item_size
         start = time.time()
         while self._current_memsize + item_size >= self.maxmemsize:
             if time.time() - start >= self.refresh_timeout:
                 raise asyncio.QueueFull()
             await asyncio.sleep(self.refresh_interval)
+        return item_size
 
     async def put(self, item):
-        await self._wait_for_room(item)
-        return await super().put(item)
+        item_size = await self._wait_for_room(item)
+        return await super().put((item_size, item))
