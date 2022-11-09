@@ -6,11 +6,18 @@
 """
 Implementation of BYOEI protocol (+some ids collecting)
 
+`ElasticServer` is orchestrating a sync by:
 
-`ElasticServer` is orchestrating a sync by creating a queue that
-is filled by `Fetcher`, a wrapper on the top of the documents generator and
-consumed by `Bulker`, a class that aggretates documents in batches for the bulk
-API
+- creating a queue
+- launching a `Fetcher`, a wrapper on the top of the documents generator
+- launching a `Bulker`, a class that aggregates documents and run the bulk API
+
+
+                  ElasticServer.async_bulk(generator)
+                               |
+                               |
+Elasticsearch <== Bulker <== queue <== Fetcher <== generator
+
 """
 import copy
 import time
