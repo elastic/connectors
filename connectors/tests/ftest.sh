@@ -15,11 +15,13 @@ $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug
 
 make load-data
 
-$ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+$ROOT_DIR/bin/python -m memray run -f -o $NAME-sync.bin $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+$ROOT_DIR/bin/python -m memray flamegraph -f $NAME-sync.bin
 
 make remove-data
 
-$ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+$ROOT_DIR/bin/python -m memray run -f -o $NAME-sync-modified-source.bin $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
 $ROOT_DIR/bin/python $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size 3000
+$ROOT_DIR/bin/python -m memray flamegraph -f $NAME-sync-modified-source.bin
 
 make stop-stack
