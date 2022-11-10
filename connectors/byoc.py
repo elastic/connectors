@@ -153,7 +153,9 @@ class SyncJob:
     async def start(self):
         self.status = JobStatus.IN_PROGRESS
         job_def = {
-            "connector_id": self.connector_id,
+            "connector": {
+                "id": self.connector_id,
+            },
             "status": e2str(self.status),
             "error": None,
             "deleted_document_count": 0,
