@@ -149,7 +149,8 @@ async def test_mem_queue(patch_logger):
 
     async def remove_data():
         await asyncio.sleep(0.1)
-        await queue.get()
+        size, item = await queue.get()
+        assert (size, item) == (64, "small stuff")
         await asyncio.sleep(0)
         await queue.get()  # removes the 2kb
         assert not queue.mem_full()

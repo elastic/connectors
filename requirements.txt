@@ -19,3 +19,6 @@ motor==3.0.0
 
 # aws
 aioboto3==10.1.0
+
+# network drive
+smbprotocol>=1.9.0

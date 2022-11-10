@@ -320,7 +320,7 @@ class MySqlDataSource(BaseDataSource):
                 row.update(
                     {
                         "_id": f"{database}_{table}_{keys_value}",
-                        "timestamp": last_update_time[0][0],
+                        "_timestamp": last_update_time[0][0],
                         "Database": database,
                         "Table": table,
                     }
