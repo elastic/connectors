@@ -5,6 +5,8 @@
 #
 import asyncio
 import json
+import os
+from envyaml import EnvYAML
 from datetime import datetime
 
 from aioresponses import CallbackResult
@@ -21,6 +23,9 @@ from connectors.byoc import (
     BYOIndex,
     BYOConnector,
 )
+
+
+CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
 
 def test_e2str():
@@ -335,3 +340,32 @@ async def test_properties(mock_responses):
 
     with pytest.raises(TypeError):
         connector.status = 1234
+
+
+@pytest.mark.asyncio
+async def test_connectors_properties(mock_responses, set_env):
+    """Verifies that the BYOConnector class has access to analysis_icu and language_code form config.
+
+    Args:
+        mock_responses (aioresponses.core.aioresponses): Fixture to mock the requests made.
+        set_env (None): Fixture to environment variable for config yml.
+    """
+    config = EnvYAML(CONFIG)
+    headers = {"X-Elastic-Product": "Elasticsearch"}
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
+    )
+
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
+        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
+        headers=headers,
+    )
+
+    connectors = BYOIndex(config["elasticsearch"])
+
+    async for connector in connectors.get_list():
+        assert connector.analysis_icu == config["elasticsearch"]["analysis_icu"]
+        assert connector.language_code == config["elasticsearch"]["language_code"]
+
+    await connectors.close()
