@@ -3,6 +3,13 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+"""Monitors the service by dumping metrics every 10 seconds in a CSV file
+
+example usage:
+
+    bin/python scripts/perf.py bin/elastic-ingest --debug
+
+"""
 import subprocess
 import psutil
 import sys
