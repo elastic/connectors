@@ -18,6 +18,9 @@ import csv
 import matplotlib.pyplot as plt
 
 
+REFRESH = 10
+
+
 def generate_plot(path):
     x = []
     rss = []
@@ -28,7 +31,7 @@ def generate_plot(path):
         for i, row in enumerate(lines):
             if i == 0:
                 continue
-            x.append(i * 10)  # time to start in sec
+            x.append(i * REFRESH)  # time to start in sec
             mib = round(int(row[0]) / (1024 * 1024), 2)
             rss.append(mib)  # rss
             # cpu.append(row[-1])
@@ -46,7 +49,7 @@ def generate_plot(path):
 
 
 class WatchedProcess:
-    def __init__(self, cmd, report_file, every=5):
+    def __init__(self, cmd, report_file, every=REFRESH):
         self.cmd = cmd
         self.proc = None
         self.proc_info = None
