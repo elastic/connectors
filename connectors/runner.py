@@ -24,8 +24,6 @@ from connectors.logger import logger
 from connectors.source import (
     get_data_sources,
     get_data_source,
-    ServiceTypeNotConfiguredError,
-    ConnectorUpdateError,
     ServiceTypeNotSupportedError,
     DataSourceError,
 )
@@ -97,29 +95,24 @@ class ConnectorService:
             if connector.native:
                 logger.debug(f"Connector {connector.id} natively supported")
 
-            try:
-                data_source = await get_data_source(connector, self.config)
-            except ServiceTypeNotConfiguredError:
-                logger.error(
-                    f"Service type is not configured for connector {self.config['connector_id']}"
-                )
-                return
-            except ConnectorUpdateError as e:
-                logger.error(e)
-                return
-            except ServiceTypeNotSupportedError:
-                logger.debug(f"Can't handle source of type {connector.service_type}")
-                return
-            except DataSourceError as e:
-                await connector.error(e)
-                logger.critical(e, exc_info=True)
-                self.raise_if_spurious(e)
-                return
-
             if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
                 # we can't sync in that state
                 logger.info(f"Can't sync with status `{e2str(connector.status)}`")
                 data_source = None
+            else:
+                # in other cases, we can
+                try:
+                    data_source = get_data_source(connector, self.config)
+                except ServiceTypeNotSupportedError:
+                    logger.debug(
+                        f"Can't handle source of type {connector.service_type}"
+                    )
+                    return
+                except DataSourceError as e:
+                    await connector.error(e)
+                    logger.critical(e, exc_info=True)
+                    self.raise_if_spurious(e)
+                    return
 
             try:
                 # the heartbeat is always triggered
@@ -216,7 +209,7 @@ class ConnectorService:
         return 0
 
     def shutdown(self, sig):
-        logger.info(f"Caught {sig.name}. Graceful shutdown.")
+        logger.info(f"Caught {sig.name}. Gracefull shutdown.")
         self.stop()
 
 

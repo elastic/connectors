@@ -179,7 +179,7 @@ async def test_get_files(dir_mock):
     expected_output = [
         {
             "_id": "1",
-            "timestamp": "2022-04-21T12:12:30",
+            "_timestamp": "2022-04-21T12:12:30",
             "path": "\\1.2.3.4/dummy_path/a1.md",
             "title": "a1.md",
             "created_at": "2022-01-11T12:12:30",
@@ -188,7 +188,7 @@ async def test_get_files(dir_mock):
         },
         {
             "_id": "122",
-            "timestamp": "2022-05-21T12:12:30",
+            "_timestamp": "2022-05-21T12:12:30",
             "path": "\\1.2.3.4/dummy_path/A",
             "title": "A",
             "created_at": "2022-02-11T12:12:30",
@@ -239,7 +239,7 @@ async def test_get_content(file_mock):
 
     mock_response = {
         "id": "1",
-        "timestamp": "2022-04-21T12:12:30",
+        "_timestamp": "2022-04-21T12:12:30",
         "title": "file1.txt",
         "path": "\\1.2.3.4/Users/folder1/file1.txt",
         "size": "50",
@@ -249,7 +249,7 @@ async def test_get_content(file_mock):
 
     expected_output = {
         "_id": "1",
-        "timestamp": "2022-04-21T12:12:30",
+        "_timestamp": "2022-04-21T12:12:30",
         "text": "Mock...",
     }
 
@@ -268,7 +268,7 @@ async def test_get_content_when_doit_false():
     source = create_source(NASDataSource)
     mock_response = {
         "id": "1",
-        "timestamp": "2022-04-21T12:12:30",
+        "_timestamp": "2022-04-21T12:12:30",
         "title": "file1.txt",
     }
 
@@ -286,7 +286,7 @@ async def test_get_content_when_file_type_not_supported():
     source = create_source(NASDataSource)
     mock_response = {
         "id": "1",
-        "timestamp": "2022-04-21T12:12:30",
+        "_timestamp": "2022-04-21T12:12:30",
         "title": "file2.xml",
     }
 
