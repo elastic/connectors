@@ -16,6 +16,7 @@ import sys
 import asyncio
 import csv
 import matplotlib.pyplot as plt
+import time
 
 
 REFRESH = 10
@@ -90,6 +91,7 @@ class WatchedProcess:
             await asyncio.sleep(self.every)
 
     async def run(self):
+        start = time.time()
         try:
             self.proc = subprocess.Popen(self.cmd)
             while self.proc.pid is None:
@@ -98,12 +100,12 @@ class WatchedProcess:
             await self._probe()
         finally:
             self.report_file.close()
+        print(f"total seconds {time.time()-start}")
 
 
 def main():
     report = "report.csv"
     p = WatchedProcess(sys.argv[1:], report)
-
     asyncio.run(p.run())
     generate_plot(report)
 
