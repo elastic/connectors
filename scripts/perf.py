@@ -15,10 +15,38 @@ import psutil
 import sys
 import asyncio
 import csv
+import matplotlib.pyplot as plt
+
+
+def generate_plot(path):
+    x = []
+    rss = []
+    cpu = []
+
+    with open(path) as csvfile:
+        lines = csv.reader(csvfile, delimiter=",")
+        for i, row in enumerate(lines):
+            if i == 0:
+                continue
+            x.append(i * 10)  # time to start in sec
+            mib = round(int(row[0]) / (1024 * 1024), 2)
+            rss.append(mib)  # rss
+            # cpu.append(row[-1])
+
+    # plt.plot(x, cpu, color="r", linestyle="dashed", marker="o", label="CPU %")
+    plt.plot(x, rss, color="g", linestyle="dashed", marker="o", label="RSS")
+
+    plt.xticks(rotation=25)
+    plt.xlabel("Duration")
+    plt.ylabel("MiB")
+    plt.title("Performance Report", fontsize=20)
+    plt.grid()
+    plt.legend()
+    plt.savefig("report.png")
 
 
 class WatchedProcess:
-    def __init__(self, cmd, report_file, every=10):
+    def __init__(self, cmd, report_file, every=5):
         self.cmd = cmd
         self.proc = None
         self.proc_info = None
@@ -74,6 +102,7 @@ def main():
     p = WatchedProcess(sys.argv[1:], report)
 
     asyncio.run(p.run())
+    generate_plot(report)
 
 
 main()
