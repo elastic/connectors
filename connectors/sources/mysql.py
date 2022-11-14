@@ -55,27 +55,27 @@ class MySqlDataSource(BaseDataSource):
         return {
             "host": {
                 "value": "127.0.0.1",
-                "label": "MySQL Host",
+                "label": "Host",
                 "type": "str",
             },
             "port": {
                 "value": 3306,
-                "label": "MySQL Port",
+                "label": "Port",
                 "type": "int",
             },
             "user": {
                 "value": "root",
-                "label": "MySQL Username",
+                "label": "Username",
                 "type": "str",
             },
             "password": {
                 "value": "changeme",
-                "label": "MySQL Password",
+                "label": "Password",
                 "type": "str",
             },
             "database": {
                 "value": ["customerinfo"],
-                "label": "List of MySQL Databases",
+                "label": "Databases",
                 "type": "list",
             },
             "connector_name": {
