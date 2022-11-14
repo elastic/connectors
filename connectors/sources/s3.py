@@ -24,6 +24,7 @@ SUPPORTED_CONTENT_TYPE = [
 ]
 SUPPORTED_FILETYPE = [".py", ".rst", ".rb", ".sh", ".md", ".txt"]
 ONE_MEGA = 1048576
+DEFAULT_PAGE_SIZE = 100
 ENDPOINT_URL = os.getenv(
     key="ENDPOINT_URL", default=None
 )  # For end to end tests set this environment variable with target host.
@@ -101,7 +102,7 @@ class S3DataSource(BaseDataSource):
                         break
                     data += chunk.decode("utf8", errors="ignore")
                 logger.debug(f"Downloaded {len(data)} for {filename}")
-                return {"timestamp": timestamp, "text": data, "_id": doc["id"]}
+                return {"_timestamp": timestamp, "text": data, "_id": doc["id"]}
             except (ClientError, ServerTimeoutError, AioReadTimeoutError) as exception:
                 if (
                     exception.response.get("Error", {}).get("Code")
@@ -152,6 +153,7 @@ class S3DataSource(BaseDataSource):
             dictionary: Document from Amazon S3.
         """
         bucket_list = self.configuration["buckets"] or self.get_bucket_list()
+        page_size = int(self.configuration.get("page_size", DEFAULT_PAGE_SIZE))
         for bucket in bucket_list:
             region_name = await self.get_bucket_region(bucket)
             async with self.session.resource(
@@ -164,7 +166,7 @@ class S3DataSource(BaseDataSource):
                     bucket_obj = await s3.Bucket(bucket)
                     await asyncio.sleep(0)
 
-                    async for obj_summary in bucket_obj.objects.all():
+                    async for obj_summary in bucket_obj.objects.page_size(page_size):
                         doc_id = md5(
                             f"{bucket}/{obj_summary.key}".encode("utf8")
                         ).hexdigest()
@@ -176,7 +178,7 @@ class S3DataSource(BaseDataSource):
                             "bucket": bucket,
                             "owner": (await obj_summary.owner).get("DisplayName"),
                             "storage_class": await obj_summary.storage_class,
-                            "timestamp": (await obj_summary.last_modified).isoformat(),
+                            "_timestamp": (await obj_summary.last_modified).isoformat(),
                         }
 
                         yield doc, partial(
@@ -213,6 +215,11 @@ class S3DataSource(BaseDataSource):
             "max_attempts": {
                 "value": 5,
                 "label": "Maximum retry attempts",
+                "type": "int",
+            },
+            "page_size": {
+                "value": DEFAULT_PAGE_SIZE,
+                "label": "Maximum size of page",
                 "type": "int",
             },
             "connector_name": {

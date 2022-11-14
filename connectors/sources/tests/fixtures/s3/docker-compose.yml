@@ -73,7 +73,7 @@ services:
     networks:
       - esnet
 
-  aws:
+  s3:
     image: motoserver/moto
     ports:
       - 5000:5000

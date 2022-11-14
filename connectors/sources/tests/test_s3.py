@@ -8,7 +8,7 @@ from unittest import mock
 
 import aioboto3
 import pytest
-from connectors.sources.aws import S3DataSource
+from connectors.sources.s3 import S3DataSource
 from connectors.sources.tests.support import assert_basics, create_source
 
 
@@ -200,7 +200,7 @@ async def test_get_content(patch_logger, mock_aws):
         response = await source._get_content(
             {"id": 1, "filename": "a.txt", "bucket": "dummy"}, "region", doit=1
         )
-        assert response == {"timestamp": None, "text": "xxxxx", "_id": 1}
+        assert response == {"_timestamp": None, "text": "xxxxx", "_id": 1}
 
 
 @pytest.mark.asyncio
