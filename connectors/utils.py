@@ -25,11 +25,12 @@ from cstriggers.core.trigger import QuartzCron
 from connectors.logger import set_extra_logger, logger
 
 
-DEFAULT_CHUNK_SIZE = 100
+DEFAULT_CHUNK_SIZE = 500
 DEFAULT_QUEUE_SIZE = 1024
 DEFAULT_DISPLAY_EVERY = 100
 DEFAULT_QUEUE_MEM_SIZE = 5
 DEFAULT_CHUNK_MEM_SIZE = 25
+DEFAULT_MAX_CONCURRENCY = 5
 
 
 class ESClient:
@@ -253,8 +254,8 @@ def trace_mem(activated=False):
 
 
 def get_size(ob):
-    """Returns size in MiB"""
-    return round(asizeof.asizeof(ob) / (1024 * 1024), 2)
+    """Returns size in Bytes"""
+    return asizeof.asizeof(ob)
 
 
 class MemQueue(asyncio.Queue):
@@ -285,13 +286,14 @@ class MemQueue(asyncio.Queue):
         return self._current_memsize
 
     async def _wait_for_room(self, item):
-        item_size = asizeof.asizeof(item)
+        item_size = get_size(item)
         if self._current_memsize + item_size <= self.maxmemsize:
             return item_size
         start = time.time()
         while self._current_memsize + item_size >= self.maxmemsize:
             if time.time() - start >= self.refresh_timeout:
                 raise asyncio.QueueFull()
+            logger.debug("Queue Full")
             await asyncio.sleep(self.refresh_interval)
         return item_size
 
