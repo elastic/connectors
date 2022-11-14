@@ -120,7 +120,7 @@ class NASDataSource(BaseDataSource):
                 "size": file_details["allocation_size"].get_value(),
                 "_id": file_details["file_id"].get_value(),
                 "created_at": iso_utc(file_details["creation_time"].get_value()),
-                "timestamp": iso_utc(file_details["change_time"].get_value()),
+                "_timestamp": iso_utc(file_details["change_time"].get_value()),
                 "type": "folder" if file.is_dir() else "file",
                 "title": file.name,
             }
@@ -170,7 +170,7 @@ class NASDataSource(BaseDataSource):
 
         return {
             "_id": file["id"],
-            "timestamp": file["timestamp"],
+            "_timestamp": file["_timestamp"],
             "text": content,
         }
 

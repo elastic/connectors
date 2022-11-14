@@ -5,6 +5,19 @@
 #
 """
 Implementation of BYOEI protocol (+some ids collecting)
+
+`ElasticServer` is orchestrating a sync by:
+
+- creating a queue
+- launching a `Fetcher`, a wrapper on the top of the documents generator
+- launching a `Bulker`, a class that aggregates documents and run the bulk API
+
+
+                  ElasticServer.async_bulk(generator)
+                               |
+                               |
+Elasticsearch <== Bulker <== queue <== Fetcher <== generator
+
 """
 import copy
 import time
@@ -24,6 +37,7 @@ from connectors.utils import (
     DEFAULT_QUEUE_MEM_SIZE,
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_DISPLAY_EVERY,
+    DEFAULT_MAX_CONCURRENCY,
     MemQueue,
 )
 
@@ -34,10 +48,35 @@ OP_DELETE = "delete"
 TIMESTAMP_FIELD = "_timestamp"
 
 
-class Bulker:
-    """Send bulk operations in batches by consuming a queue."""
+def get_mb_size(ob):
+    """Returns the size of ob in MiB"""
+    return round(get_size(ob) / (1024 * 1024), 2)
 
-    def __init__(self, client, queue, chunk_size, pipeline_settings, chunk_mem_size):
+
+class Bulker:
+    """Send bulk operations in batches by consuming a queue.
+
+    This class runs a coroutine that gets operations out of a `queue` and collects them to
+    build and send bulk requests using a `client`
+
+    The bulk requests are controlled in several ways:
+    - `chunk_size` -- a maximum number of operations to send per request
+    - `chunk_mem_size` -- a maximum size in MiB for the each bulk request
+    - `max_concurrency` -- a maximum number of concurrent bulk requests
+
+    Extra options:
+    - `pipeline_settings` -- ingest pipeline settings to pass to the bulk API
+    """
+
+    def __init__(
+        self,
+        client,
+        queue,
+        chunk_size,
+        pipeline_settings,
+        chunk_mem_size,
+        max_concurrency,
+    ):
         self.client = client
         self.queue = queue
         self.bulk_time = 0
@@ -46,6 +85,8 @@ class Bulker:
         self.chunk_size = chunk_size
         self.pipeline_settings = pipeline_settings
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
+        self.max_concurrent_bulks = max_concurrency
+        self.concurrent_bulks = []
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -63,16 +104,17 @@ class Bulker:
 
         raise TypeError(operation)
 
-    async def _batch_bulk(self, operations):
+    async def _batch_bulk(self, task_num, operations):
         # todo treat result to retry errors like in async_streaming_bulk
         logger.debug(
-            f"Sending a batch of {len(operations)} ops -- {get_size(operations)}MiB"
+            f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
         )
         start = time.time()
         try:
             res = await self.client.bulk(
                 operations=operations, pipeline=self.pipeline_settings.name
             )
+
             if res.get("errors"):
                 for item in res["items"]:
                     for op, data in item.items():
@@ -82,7 +124,6 @@ class Bulker:
         finally:
             self.bulk_time += time.time() - start
 
-        logger.info(dict(self.ops))
         return res
 
     async def run(self):
@@ -98,20 +139,33 @@ class Bulker:
             operation = doc["_op_type"]
             self.ops[operation] += 1
             batch.extend(self._bulk_op(doc, operation))
+
             bulk_size += doc_size
             if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size:
-                await self._batch_bulk(copy.copy(batch))
+                t = asyncio.create_task(
+                    self._batch_bulk(len(self.concurrent_bulks) + 1, copy.copy(batch))
+                )
+                self.concurrent_bulks.append(t)
+                t.add_done_callback(self.concurrent_bulks.remove)
                 batch.clear()
                 bulk_size = 0
 
+            while len(self.concurrent_bulks) >= self.max_concurrent_bulks:
+                await asyncio.sleep(0)
+
             await asyncio.sleep(0)
 
+        await asyncio.gather(*self.concurrent_bulks)
         if len(batch) > 0:
-            await self._batch_bulk(batch)
+            await self._batch_bulk(1, batch)
 
 
 class Fetcher:
-    """Grab data and add them in the queue for the bulker"""
+    """Grabs data and adds them in the queue for the bulker.
+
+    This class runs a coroutine that puts docs in `queue`, given
+    a document generator.
+    """
 
     def __init__(
         self,
@@ -229,6 +283,16 @@ class Fetcher:
 
 
 class ElasticServer(ESClient):
+    """This class is the sync orchestrator.
+
+    It does the following in `async_bulk`
+
+    - grabs all ids on Elasticsearch for the index
+    - creates a MemQueue to hold documents to stream
+    - runs a `Fetcher` (producer) and a `Bulker` (consumer) against the queue
+    - once they are both over, returns totals
+    """
+
     def __init__(self, elastic_config):
         logger.debug(f"ElasticServer connecting to {elastic_config['host']}")
         super().__init__(elastic_config)
@@ -323,11 +387,17 @@ class ElasticServer(ESClient):
         index,
         generator,
         pipeline,
-        queue_size=DEFAULT_QUEUE_SIZE,
-        display_every=DEFAULT_DISPLAY_EVERY,
-        queue_mem_size=DEFAULT_QUEUE_MEM_SIZE,
-        chunk_mem_size=DEFAULT_CHUNK_MEM_SIZE,
+        options=None,
     ):
+        if options is None:
+            options = {}
+        queue_size = options.get("queue_max_size", DEFAULT_QUEUE_SIZE)
+        display_every = options.get("display_every", DEFAULT_DISPLAY_EVERY)
+        queue_mem_size = options.get("queue_max_mem_size", DEFAULT_QUEUE_MEM_SIZE)
+        chunk_mem_size = options.get("chunk_max_mem_size", DEFAULT_CHUNK_MEM_SIZE)
+        max_concurrency = options.get("max_concurrency", DEFAULT_MAX_CONCURRENCY)
+        chunk_size = options.get("chunk_size", DEFAULT_CHUNK_SIZE)
+
         start = time.time()
         stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
         existing_ids = {k: v async for (k, v) in self.get_existing_ids(index)}
@@ -335,7 +405,7 @@ class ElasticServer(ESClient):
             f"Found {len(existing_ids)} docs in {index} (duration "
             f"{int(time.time() - start)} seconds) "
         )
-        logger.debug(f"Size of ids in memory is {get_size(existing_ids)}MiB")
+        logger.debug(f"Size of ids in memory is {get_mb_size(existing_ids)}MiB")
 
         # start the fetcher
         fetcher = Fetcher(
@@ -352,9 +422,10 @@ class ElasticServer(ESClient):
         bulker = Bulker(
             self.client,
             stream,
-            self.config.get("bulk_chunk_size", DEFAULT_CHUNK_SIZE),
+            chunk_size,
             pipeline,
             chunk_mem_size=chunk_mem_size,
+            max_concurrency=max_concurrency,
         )
         bulker_task = asyncio.create_task(bulker.run())
 

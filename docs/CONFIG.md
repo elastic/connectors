@@ -9,13 +9,15 @@ Configuration lives in [config.yml](../config.yml).
   - `api_key`: The API key for Elasticsearch connection. You can't set `api_key` when basic auth is used.
   - `ssl`: Whether SSL is used for the Elasticsearch connection.
   - `ca_certs`: Path to a CA bundle.
-  - `bulk_display_every`: The number of docs between each counters display. Defaults to 100.
-  - `bulk_queue_max_size`: The max size of the bulk queue. Defaults to 1024.
-  - `bulk_queue_max_mem_size`: The max size in MB of the bulk queue. When it's reached, the next put
-     operation waits for the queue size to get under that limit. Defaults to 25.
-  - `bulk_chunk_max_mem_size`: The max size in MB of a bulk request. When the next request being
-     prepared reaches that size, the query is emited even if `bulk_chunk_size` is not yet reached. Defaults to 5.
-  - `bulk_chunk_size`: The max size of the bulk operation to Elasticsearch. Defaults to 500.
+  - `bulk`: Options for the Bulk API calls behavior
+    - `display_every`: The number of docs between each counters display. Defaults to 100.
+    - `queue_max_size`: The max size of the bulk queue. Defaults to 1024.
+    - `queue_max_mem_size`: The max size in MB of the bulk queue. When it's reached, the next put
+       operation waits for the queue size to get under that limit. Defaults to 25.
+    - `chunk_max_mem_size`: The max size in MB of a bulk request. When the next request being
+       prepared reaches that size, the query is emitted even if `chunk_size` is not yet reached. Defaults to 5.
+    - `chunk_size`: The max size of the bulk operation to Elasticsearch. Defaults to 500.
+    - `max_concurrency`: Maximum number of concurrent bulk requests. Defaults to 5.
   - `retry_on_timeout`: Whether to retry on request timeout. Defaults to `true`.
   - `request_timeout`: The request timeout to be passed to transport in options. Defaults to 120.
   - `max_wait_duration`: The maximum wait duration (in seconds) for the Elasticsearch connection. Defaults to 60.
