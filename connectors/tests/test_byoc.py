@@ -288,7 +288,7 @@ async def test_sync_mongo(mock_responses, patch_logger):
                 "scheduling": {},
                 "status": "created",
             }
-            return BYOConnector(StubIndex(), "test", connector_src)
+            return BYOConnector(StubIndex(), "test", connector_src, {})
 
     es = ElasticServer(config)
     connectors = BYOIndex(config)
@@ -312,7 +312,7 @@ async def test_properties(mock_responses):
         "status": "created",
     }
 
-    connector = BYOConnector(StubIndex(), "test", connector_src)
+    connector = BYOConnector(StubIndex(), "test", connector_src, {})
 
     assert connector.status == Status.CREATED
     assert connector.service_type == "test"
