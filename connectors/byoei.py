@@ -49,6 +49,7 @@ TIMESTAMP_FIELD = "_timestamp"
 
 
 def get_mb_size(ob):
+    """Returns the size of ob in MiB"""
     return round(get_size(ob) / (1024 * 1024), 2)
 
 
@@ -248,7 +249,6 @@ class Fetcher:
                         data.pop(TIMESTAMP_FIELD, None)
                         doc.update(data)
 
-                # logger.debug("Fetcher put")
                 await self.queue.put(
                     {
                         "_op_type": operation,

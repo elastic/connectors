@@ -15,7 +15,7 @@ Configuration lives in [config.yml](../config.yml).
     - `queue_max_mem_size`: The max size in MB of the bulk queue. When it's reached, the next put
        operation waits for the queue size to get under that limit. Defaults to 25.
     - `chunk_max_mem_size`: The max size in MB of a bulk request. When the next request being
-       prepared reaches that size, the query is emited even if `bulk_chunk_size` is not yet reached. Defaults to 5.
+       prepared reaches that size, the query is emitted even if `chunk_size` is not yet reached. Defaults to 5.
     - `chunk_size`: The max size of the bulk operation to Elasticsearch. Defaults to 500.
     - `max_concurrency`: Maximum number of concurrent bulk requests. Defaults to 5.
   - `retry_on_timeout`: Whether to retry on request timeout. Defaults to `true`.
