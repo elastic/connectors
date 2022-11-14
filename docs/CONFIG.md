@@ -22,7 +22,7 @@ Configuration lives in [config.yml](../config.yml).
   - `initial_backoff_duration`: The initial backoff duration (in seconds). Defaults to 5.
   - `backoff_multiplier`: The backoff multiplier. Defaults to 2.
   - `log_level`: Elasticsearch log level. Defaults to `INFO`.
-  - `language_code`: The language code. Defaults to `en`.
+  - `language_code`: The language code used when creating a mapping for an index. Defaults to `en`.
   - `analysis_icu`: Whether to use icu analysis or not. Defaults to `false`.
 - `service`: Connector service related configurations.
   - `idling`: The interval (in seconds) to poll connectors from Elasticsearch.
