@@ -107,7 +107,7 @@ async def test_get_custom_data_source_no_service_type(mock_responses):
         "configuration": {},
         "scheduling": {"enabled": False},
     }
-    connector = BYOConnector(Index(), "1", doc)
+    connector = BYOConnector(Index(), "1", doc, {})
 
     config = {
         "connector_id": "1",
