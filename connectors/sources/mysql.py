@@ -23,7 +23,8 @@ QUERIES = {
     "TABLE_LAST_UPDATE_TIME": "SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}'",
 }
 DEFAULT_FETCH_SIZE = 50
-
+DEFAULT_RETRY_COUNT = 3
+DEFAULT_WAIT_MULTIPLIER = 2
 
 class MySqlDataSource(BaseDataSource):
     """Class to fetch and modify documents from MySQL server"""
@@ -43,6 +44,9 @@ class MySqlDataSource(BaseDataSource):
             "db": None,
             "maxsize": MAX_POOL_SIZE,
         }
+        self.retry_count = int(
+            self.configuration.get("retry_count", DEFAULT_RETRY_COUNT)
+        )
         self.connection_pool = None
 
     @classmethod
@@ -88,6 +92,11 @@ class MySqlDataSource(BaseDataSource):
                 "label": "How many rows to fetch on each call",
                 "type": "int",
             },
+            "retry_count": {
+                "value": DEFAULT_RETRY_COUNT,
+                "label": "How many retry count for fetching rows on each call",
+                "type": "int",
+            },
         }
 
     async def close(self):
@@ -111,31 +120,76 @@ class MySqlDataSource(BaseDataSource):
             raise
 
     async def _stream_rows(self, database, table, query):
+        """Executes the passed query on the MySQL server.
+
+        Args:
+            database (str): Name of database
+            table (str): Name of table
+            query (str): MySql query to be executed.
+
+        Yields:
+            list: Column names and query response
+        """
+
         size = int(self.configuration.get("fetch_size", DEFAULT_FETCH_SIZE))
         logger.debug(f"Streaming {database}.{table} {size} rows at a time")
 
-        async with self.connection_pool.acquire() as connection:
-            count = 0
-            async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
-                await cursor.execute(query)
+        # retry: Current retry counter
+        # yield_once: Yield(fields) once flag
+        retry = yield_once = 1
 
-                # sending back column names
-                yield [column[0] for column in cursor.description]
+        # rows_fetched: Rows fetched counter
+        # cursor_position: Mocked cursor position
+        rows_fetched = cursor_position = 0
+        while retry <= self.retry_count:
+            try:
+                async with self.connection_pool.acquire() as connection:
+                    async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+                        await cursor.execute(query)
 
-                while True:
-                    rows = await cursor.fetchmany(size=size)
+                        # sending back column names only once
+                        if yield_once:
+                            yield [column[0] for column in cursor.description]
+                            yield_once = 0
 
-                    if len(rows) == 0:
+                        # setting cursor position where it was failed
+                        if cursor_position:
+                            await cursor.scroll(cursor_position, mode="absolute")
+                            logger.debug(
+                                f"Cursor moved to {cursor_position} position for {database}.{table}"
+                            )
+
+                        while True:
+                            rows = await cursor.fetchmany(size=size)
+                            rows_length = len(rows)
+
+                            # resetting cursor position & retry to 0 for next batch
+                            if cursor_position:
+                                cursor_position = retry = 0
+
+                            if not rows_length:
+                                break
+
+                            for row in rows:
+                                yield row
+
+                            rows_fetched += rows_length
+                            await asyncio.sleep(0)
                         break
-
-                    for row in rows:
-                        yield row
-
-                    count += len(rows)
-                    if count > 100:
-                        logger.info(f"Collected {count} rows in {database}.{table}")
-                        count = 0
-                    await asyncio.sleep(0)
+            except IndexError as exception:
+                logger.exception(
+                    f"None of rows fetched from {rows_fetched} rows in {database}.{table}. Exception: {exception}"
+                )
+                break
+            except Exception as exception:
+                logger.warn(
+                    f"Retry count: {retry} out of {self.retry_count} for rows in {database}.{table}. Exception: {exception}"
+                )
+                if retry == self.retry_count:
+                    raise exception
+                cursor_position = rows_fetched
+                await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry)
+                retry += 1
 
     async def _execute_query(self, query):
         """Executes the passed query on the MySQL server.
