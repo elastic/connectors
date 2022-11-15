@@ -116,7 +116,7 @@ class BYOIndex(ESClient):
                 self,
                 hit["_id"],
                 hit["_source"],
-                bulk_options=self.bulk_options
+                bulk_options=self.bulk_options,
                 language_code=self.language_code,
                 analysis_icu=self.analysis_icu,
             )
