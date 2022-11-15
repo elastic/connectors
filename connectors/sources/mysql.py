@@ -16,7 +16,6 @@ from connectors.source import BaseDataSource
 
 MAX_POOL_SIZE = 10
 QUERIES = {
-    "ALL_DATABASE": "SHOW DATABASES",
     "ALL_TABLE": "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}'",
     "TABLE_DATA": "SELECT * FROM {database}.{table}",
     "TABLE_PRIMARY_KEY": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'",
@@ -25,6 +24,7 @@ QUERIES = {
 DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
+
 
 class MySqlDataSource(BaseDataSource):
     """Class to fetch and modify documents from MySQL server"""
@@ -331,19 +331,6 @@ class MySqlDataSource(BaseDataSource):
                 f"Skipping {table} table from database {database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
             )
 
-    async def _fetch_all_databases(self):
-        """Fetches all user databases
-
-        Returns:
-            List: List of databases
-        """
-
-        # Query to get all databases
-        query = QUERIES["ALL_DATABASE"]
-        _, query_response = await self._execute_query(query=query)
-        databases = [database[0] for database in query_response]
-        return databases
-
     async def get_docs(self):
         """Executes the logic to fetch databases, tables and rows in async manner.
 
@@ -351,16 +338,16 @@ class MySqlDataSource(BaseDataSource):
             dictionary: Row dictionary containing meta-data of the row.
         """
         database_config = self.configuration["database"]
-        if isinstance(database_config, str):
+        if not database_config:
+            logger.info(
+                "No database passed in the configuration. Stopping the iteration."
+            )
+            return
+        elif isinstance(database_config, str):
             dbs = database_config.split(",")
             databases = list(map(lambda s: s.strip(), dbs))
-        elif database_config is None:
-            databases = []
         else:
             databases = database_config
-
-        if len(databases) == 0:
-            databases = await self._fetch_all_databases()
 
         for database in databases:
             async for row in self.fetch_rows(database=database):

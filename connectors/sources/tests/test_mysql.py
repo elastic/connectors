@@ -331,32 +331,6 @@ async def test_fetch_rows():
         assert "_id" in row
 
 
-@pytest.mark.asyncio
-async def test_fetch_all_databases():
-    """This function test fetch_all_databases method of MySQL"""
-    # Setup
-    source = create_source(MySqlDataSource)
-
-    source.connection_pool = await mock_mysql_response()
-    source.connection_pool.acquire = Connection
-    source.connection_pool.acquire.cursor = Cursor
-
-    query = "SHOW DATABASES"
-
-    with mock.patch.object(
-        aiomysql, "create_pool", return_value=(await mock_mysql_response())
-    ):
-        response = await source._execute_query(query)
-
-        mock.patch("source._execute_query", return_value=response)
-
-    # Execute
-    response = await source._fetch_all_databases()
-
-    # Assert
-    assert response == ["table1", "table2"]
-
-
 class AsyncIter:
     """This Class is use to return async generator"""
 
@@ -413,24 +387,19 @@ async def test_get_docs_with_str():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_none():
-    """Test get docs method of MySql with input as none for database field"""
+async def test_get_docs_with_empty():
+    """Test get docs method of MySql with input as empty for database field"""
     # Setup
     source = create_source(MySqlDataSource)
-    source.configuration.set_field(name="database", value=None)
+    source.configuration.set_field(name="database", value="")
 
     source.connection_pool = await mock_mysql_response()
     source.connection_pool.acquire = Connection
     source.connection_pool.acquire.cursor = Cursor
 
-    with mock.patch.object(
-        aiomysql, "create_pool", return_value=(await mock_mysql_response())
-    ):
-        source.fetch_rows = mock.MagicMock(return_value=AsyncIter([{"a": 1, "b": 2}]))
-
     # Execute
     async for doc, _ in source.get_docs():
-        assert doc == {"a": 1, "b": 2}
+        assert doc is None
 
 
 @pytest.mark.asyncio
