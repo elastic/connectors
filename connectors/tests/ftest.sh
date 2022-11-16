@@ -3,6 +3,9 @@ set -exu
 set -o pipefail
 
 NAME=$1
+MEMPROFILE=$2
+PERF_METRICS=$3
+
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR="$SCRIPT_DIR/../.."
 
@@ -14,12 +17,25 @@ sleep 30
 $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug
 
 make load-data
+if [ $MEMPROFILE == $PERF_METRICS ]  && [ $PERF_METRICS == "yes" ]
+then
+    $ROOT_DIR/bin/perf8 --psutil --memray -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
 
-$ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+elif [ $MEMPROFILE == "yes" ]
+then
+    $ROOT_DIR/bin/perf8 --memray -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
 
-make remove-data
+elif  [ $PERF_METRICS == "yes" ] 
+then
+    $ROOT_DIR/bin/perf8 --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
 
-$ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
-$ROOT_DIR/bin/python $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size 3000
+else
+    $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+fi
 
-make stop-stack
+    make remove-data
+
+    $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+    $ROOT_DIR/bin/python $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size 3000
+
+    make stop-stack
