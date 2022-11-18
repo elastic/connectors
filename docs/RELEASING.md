@@ -21,6 +21,7 @@ Take care of the branching (minor releases only):
 
 - Increment the VERSION on main to match the next minor release
 - Create a new maintenance branch
+- Make sure the `.backportrc.json` is updated. The previous minor is added to `targetBranchChoices` and the new minor is used in `branchLabelMapping`
 
 After the Elastic unified release is complete
 
