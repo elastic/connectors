@@ -4,7 +4,11 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import sys
+import os
 from setuptools import setup, find_packages
+
+
+ARCH = os.uname().machine
 
 if sys.version_info.major != 3:
     raise ValueError("Requires Python 3")
@@ -25,7 +29,7 @@ from connectors import __version__  # NOQA
 # Because the *pinned* dependencies is what we tested
 #
 install_requires = []
-with open("requirements.txt") as f:
+with open(os.path.join("requirements", f"{ARCH}.txt")) as f:
     reqs = f.readlines()
     for req in reqs:
         req = req.strip()
