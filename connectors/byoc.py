@@ -27,6 +27,8 @@ JOBS_INDEX = ".elastic-connectors-sync-jobs"
 PIPELINE = "ent-search-generic-ingestion"
 SYNC_DISABLED = -1
 DEFAULT_ANALYSIS_ICU = False
+ON_DEMAND = 'on-demand'
+SCHEDULED = 'scheduled'
 
 
 def e2str(entry):
@@ -138,7 +140,7 @@ class SyncJob:
         msec = (self.completed_at - self.created_at).microseconds
         return round(msec / 9, 2)
 
-    async def start(self, trigger_method="scheduled"):
+    async def start(self, trigger_method=SCHEDULED):
         self.status = JobStatus.IN_PROGRESS
         job_def = {
             "connector": {
@@ -311,7 +313,7 @@ class BYOConnector:
 
     async def _sync_starts(self):
         job = SyncJob(self.id, self.client)
-        job_id = await job.start("on-demand" if self.sync_now else "scheduled")
+        job_id = await job.start(ON_DEMAND if self.sync_now else SCHEDULED)
 
         self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
