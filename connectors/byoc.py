@@ -138,12 +138,13 @@ class SyncJob:
         msec = (self.completed_at - self.created_at).microseconds
         return round(msec / 9, 2)
 
-    async def start(self):
+    async def start(self, trigger_method="scheduled"):
         self.status = JobStatus.IN_PROGRESS
         job_def = {
             "connector": {
                 "id": self.connector_id,
             },
+            "trigger_method": trigger_method,
             "status": e2str(self.status),
             "error": None,
             "deleted_document_count": 0,
@@ -310,7 +311,7 @@ class BYOConnector:
 
     async def _sync_starts(self):
         job = SyncJob(self.id, self.client)
-        job_id = await job.start()
+        job_id = await job.start("on-demand" if self.sync_now else "scheduled")
 
         self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
@@ -385,6 +386,7 @@ class BYOConnector:
                         await self.sync_doc()
                     return
             else:
+                self.sync_now = self.doc_source["sync_now"] = True
                 logger.info("Sync forced")
 
             if not await data_provider.changed():
