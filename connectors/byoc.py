@@ -53,6 +53,11 @@ class JobStatus(Enum):
     ERROR = 7
 
 
+class JobTriggerMethod(Enum):
+    ON_DEMAND = 1
+    SCHEDULED = 2
+
+
 CUSTOM_READ_ONLY_FIELDS = (
     "is_native",
     "api_key_id",
@@ -140,13 +145,13 @@ class SyncJob:
         msec = (self.completed_at - self.created_at).microseconds
         return round(msec / 9, 2)
 
-    async def start(self, trigger_method=SCHEDULED):
+    async def start(self, trigger_method=JobTriggerMethod.SCHEDULED):
         self.status = JobStatus.IN_PROGRESS
         job_def = {
             "connector": {
                 "id": self.connector_id,
             },
-            "trigger_method": trigger_method,
+            "trigger_method": e2str(trigger_method),
             "status": e2str(self.status),
             "error": None,
             "deleted_document_count": 0,
@@ -313,7 +318,8 @@ class BYOConnector:
 
     async def _sync_starts(self):
         job = SyncJob(self.id, self.client)
-        job_id = await job.start(ON_DEMAND if self.sync_now else SCHEDULED)
+        trigger_method = JobTriggerMethod.ON_DEMAND if self.sync_now else JobTriggerMethod.SCHEDULED
+        job_id = await job.start(trigger_method)
 
         self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
