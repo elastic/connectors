@@ -99,8 +99,8 @@ class MySqlDataSource(BaseDataSource):
         await self.connection_pool.wait_closed()
         self.connection_pool = None
 
-    def _validate_connection_fields(self):
-        """Validates whether user input is empty or not for connection string
+    def _validate_configuration(self):
+        """Validates whether user input is empty or not for configuration fields and validate type for port
 
         Raises:
             Exception: Configured keys can't be empty
@@ -108,7 +108,7 @@ class MySqlDataSource(BaseDataSource):
         connection_fields = ["host", "port", "user", "password", "database"]
         empty_connection_fields = []
         for field in connection_fields:
-            if not self.configuration[field]:
+            if self.configuration[field] == "":
                 empty_connection_fields.append(field)
 
         if empty_connection_fields:
@@ -120,12 +120,12 @@ class MySqlDataSource(BaseDataSource):
             isinstance(self.configuration["port"], str)
             and not self.configuration["port"].isnumeric()
         ):
-            raise Exception("Configured port can't include string literal.")
+            raise Exception("Configured port has to be an integer.")
 
     async def ping(self):
         """Verify the connection with MySQL server"""
         logger.info("Validating MySQL Configuration...")
-        self._validate_connection_fields()
+        self._validate_configuration()
         connection_string = {
             "host": self.configuration["host"],
             "port": int(self.configuration["port"]),

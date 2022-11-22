@@ -427,7 +427,7 @@ async def test_get_docs():
 
 
 @pytest.mark.asyncio
-async def test__validate_databases():
+async def test_validate_databases():
     """This function test _validate_databases method of MySQL"""
     # Setup
     source = create_source(MySqlDataSource)
@@ -450,3 +450,25 @@ async def test__validate_databases():
 
     # Assert
     assert response == []
+
+
+def test_validate_configuration():
+    """This function test _validate_configuration method of MySQL"""
+    # Setup
+    source = create_source(MySqlDataSource)
+    source.configuration.set_field(name="host", value="")
+
+    # Execute
+    with pytest.raises(Exception):
+        source._validate_configuration()
+
+
+def test_validate_configuration_with_port():
+    """This function test _validate_configuration method with port str input of MySQL"""
+    # Setup
+    source = create_source(MySqlDataSource)
+    source.configuration.set_field(name="port", value="port")
+
+    # Execute
+    with pytest.raises(Exception):
+        source._validate_configuration()
