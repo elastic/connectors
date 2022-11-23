@@ -331,32 +331,6 @@ async def test_fetch_rows():
         assert "_id" in row
 
 
-@pytest.mark.asyncio
-async def test_fetch_all_databases():
-    """This function test fetch_all_databases method of MySQL"""
-    # Setup
-    source = create_source(MySqlDataSource)
-
-    source.connection_pool = await mock_mysql_response()
-    source.connection_pool.acquire = Connection
-    source.connection_pool.acquire.cursor = Cursor
-
-    query = "SHOW DATABASES"
-
-    with mock.patch.object(
-        aiomysql, "create_pool", return_value=(await mock_mysql_response())
-    ):
-        response = await source._execute_query(query)
-
-        mock.patch("source._execute_query", return_value=response)
-
-    # Execute
-    response = await source._fetch_all_databases()
-
-    # Assert
-    assert response == ["table1", "table2"]
-
-
 class AsyncIter:
     """This Class is use to return async generator"""
 
@@ -386,9 +360,10 @@ async def test_get_docs_with_list():
     ):
         source.fetch_rows = mock.MagicMock(return_value=AsyncIter([{"a": 1, "b": 2}]))
 
-    # Execute
-    async for doc, _ in source.get_docs():
-        assert doc == {"a": 1, "b": 2}
+    with mock.patch.object(MySqlDataSource, "_validate_databases", return_value=([])):
+        # Execute
+        async for doc, _ in source.get_docs():
+            assert doc == {"a": 1, "b": 2}
 
 
 @pytest.mark.asyncio
@@ -407,30 +382,27 @@ async def test_get_docs_with_str():
     ):
         source.fetch_rows = mock.MagicMock(return_value=AsyncIter([{"a": 1, "b": 2}]))
 
-    # Execute
-    async for doc, _ in source.get_docs():
-        assert doc == {"a": 1, "b": 2}
+    with mock.patch.object(MySqlDataSource, "_validate_databases", return_value=([])):
+        # Execute
+        async for doc, _ in source.get_docs():
+            assert doc == {"a": 1, "b": 2}
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_none():
-    """Test get docs method of MySql with input as none for database field"""
+async def test_get_docs_with_empty():
+    """Test get docs method of MySql with input as empty for database field"""
     # Setup
     source = create_source(MySqlDataSource)
-    source.configuration.set_field(name="database", value=None)
+    source.configuration.set_field(name="database", value="")
 
     source.connection_pool = await mock_mysql_response()
     source.connection_pool.acquire = Connection
     source.connection_pool.acquire.cursor = Cursor
 
-    with mock.patch.object(
-        aiomysql, "create_pool", return_value=(await mock_mysql_response())
-    ):
-        source.fetch_rows = mock.MagicMock(return_value=AsyncIter([{"a": 1, "b": 2}]))
-
     # Execute
-    async for doc, _ in source.get_docs():
-        assert doc == {"a": 1, "b": 2}
+    with pytest.raises(Exception):
+        async for doc, _ in source.get_docs():
+            doc
 
 
 @pytest.mark.asyncio
@@ -448,6 +420,55 @@ async def test_get_docs():
     ):
         source.fetch_rows = mock.MagicMock(return_value=AsyncIter([{"a": 1, "b": 2}]))
 
+    with mock.patch.object(MySqlDataSource, "_validate_databases", return_value=([])):
+        # Execute
+        async for doc, _ in source.get_docs():
+            assert doc == {"a": 1, "b": 2}
+
+
+@pytest.mark.asyncio
+async def test_validate_databases():
+    """This function test _validate_databases method of MySQL"""
+    # Setup
+    source = create_source(MySqlDataSource)
+
+    source.connection_pool = await mock_mysql_response()
+    source.connection_pool.acquire = Connection
+    source.connection_pool.acquire.cursor = Cursor
+
+    query = "SHOW DATABASES"
+
+    with mock.patch.object(
+        aiomysql, "create_pool", return_value=(await mock_mysql_response())
+    ):
+        response = await source._execute_query(query)
+
+        mock.patch("source._execute_query", return_value=response)
+
     # Execute
-    async for doc, _ in source.get_docs():
-        assert doc == {"a": 1, "b": 2}
+    response = await source._validate_databases([])
+
+    # Assert
+    assert response == []
+
+
+def test_validate_configuration():
+    """This function test _validate_configuration method of MySQL"""
+    # Setup
+    source = create_source(MySqlDataSource)
+    source.configuration.set_field(name="host", value="")
+
+    # Execute
+    with pytest.raises(Exception):
+        source._validate_configuration()
+
+
+def test_validate_configuration_with_port():
+    """This function test _validate_configuration method with port str input of MySQL"""
+    # Setup
+    source = create_source(MySqlDataSource)
+    source.configuration.set_field(name="port", value="port")
+
+    # Execute
+    with pytest.raises(Exception):
+        source._validate_configuration()
