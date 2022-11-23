@@ -26,6 +26,7 @@ DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
 
+
 class MySqlDataSource(BaseDataSource):
     """Class to fetch and modify documents from MySQL server"""
 
@@ -36,14 +37,6 @@ class MySqlDataSource(BaseDataSource):
             connector (BYOConnector): Object of the BYOConnector class
         """
         super().__init__(connector=connector)
-        self.connection_string = {
-            "host": self.configuration["host"],
-            "port": int(self.configuration["port"]),
-            "user": self.configuration["user"],
-            "password": self.configuration["password"],
-            "db": None,
-            "maxsize": MAX_POOL_SIZE,
-        }
         self.retry_count = int(
             self.configuration.get("retry_count", DEFAULT_RETRY_COUNT)
         )
@@ -106,11 +99,44 @@ class MySqlDataSource(BaseDataSource):
         await self.connection_pool.wait_closed()
         self.connection_pool = None
 
+    def _validate_configuration(self):
+        """Validates whether user input is empty or not for configuration fields and validate type for port
+
+        Raises:
+            Exception: Configured keys can't be empty
+        """
+        connection_fields = ["host", "port", "user", "password", "database"]
+        empty_connection_fields = []
+        for field in connection_fields:
+            if self.configuration[field] == "":
+                empty_connection_fields.append(field)
+
+        if empty_connection_fields:
+            raise Exception(
+                f"Configured keys: {empty_connection_fields} can't be empty."
+            )
+
+        if (
+            isinstance(self.configuration["port"], str)
+            and not self.configuration["port"].isnumeric()
+        ):
+            raise Exception("Configured port has to be an integer.")
+
     async def ping(self):
         """Verify the connection with MySQL server"""
+        logger.info("Validating MySQL Configuration...")
+        self._validate_configuration()
+        connection_string = {
+            "host": self.configuration["host"],
+            "port": int(self.configuration["port"]),
+            "user": self.configuration["user"],
+            "password": self.configuration["password"],
+            "db": None,
+            "maxsize": MAX_POOL_SIZE,
+        }
         logger.info("Pinging MySQL...")
         if self.connection_pool is None:
-            self.connection_pool = await aiomysql.create_pool(**self.connection_string)
+            self.connection_pool = await aiomysql.create_pool(**connection_string)
         try:
             async with self.connection_pool.acquire() as connection:
                 await connection.ping()
@@ -331,18 +357,21 @@ class MySqlDataSource(BaseDataSource):
                 f"Skipping {table} table from database {database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
             )
 
-    async def _fetch_all_databases(self):
-        """Fetches all user databases
+    async def _validate_databases(self, databases):
+        """Validates all user input databases
+
+        Args:
+            databases (list): User input databases
 
         Returns:
-            List: List of databases
+            List: List of invalid databases
         """
 
         # Query to get all databases
         query = QUERIES["ALL_DATABASE"]
         _, query_response = await self._execute_query(query=query)
-        databases = [database[0] for database in query_response]
-        return databases
+        accessible_databases = [database[0] for database in query_response]
+        return list(set(databases) - set(accessible_databases))
 
     async def get_docs(self):
         """Executes the logic to fetch databases, tables and rows in async manner.
@@ -354,13 +383,14 @@ class MySqlDataSource(BaseDataSource):
         if isinstance(database_config, str):
             dbs = database_config.split(",")
             databases = list(map(lambda s: s.strip(), dbs))
-        elif database_config is None:
-            databases = []
         else:
             databases = database_config
 
-        if len(databases) == 0:
-            databases = await self._fetch_all_databases()
+        inaccessible_databases = await self._validate_databases(databases=databases)
+        if inaccessible_databases:
+            raise Exception(
+                f"Configured databases: {inaccessible_databases} are inaccessible for user {self.configuration['user']}."
+            )
 
         for database in databases:
             async for row in self.fetch_rows(database=database):
