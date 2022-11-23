@@ -27,8 +27,6 @@ JOBS_INDEX = ".elastic-connectors-sync-jobs"
 PIPELINE = "ent-search-generic-ingestion"
 SYNC_DISABLED = -1
 DEFAULT_ANALYSIS_ICU = False
-ON_DEMAND = 'on-demand'
-SCHEDULED = 'scheduled'
 
 
 def e2str(entry):
@@ -394,7 +392,7 @@ class BYOConnector:
                         await self.sync_doc()
                     return
             else:
-                self.sync_now = self.doc_source["sync_now"] = True
+                self.sync_now = True
                 logger.info("Sync forced")
 
             if not await data_provider.changed():
