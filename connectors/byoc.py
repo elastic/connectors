@@ -207,6 +207,18 @@ class PipelineSettings:
 
 
 class BYOConnector:
+    """Represents one doc in `.elastic-connectors` and triggers sync.
+
+    The pattern to use it is:
+
+        await connector.prepare(config)
+        await connector.start_heartbeat(delay)
+        try:
+            await connector.sync(es)
+        finally:
+            await connector.close()
+    """
+
     def __init__(
         self,
         index,
