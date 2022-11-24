@@ -19,15 +19,18 @@ import functools
 from envyaml import EnvYAML
 
 from connectors.byoei import ElasticServer
-from connectors.byoc import BYOIndex, Status, e2str
-from connectors.logger import logger
-from connectors.source import (
-    get_data_sources,
-    get_data_source,
+from connectors.byoc import (
+    BYOIndex,
+    Status,
+    e2str,
     ServiceTypeNotConfiguredError,
     ConnectorUpdateError,
     ServiceTypeNotSupportedError,
     DataSourceError,
+)
+from connectors.logger import logger
+from connectors.source import (
+    get_data_sources,
 )
 from connectors.utils import CancellableSleeps, trace_mem
 
@@ -97,13 +100,8 @@ class ConnectorService:
             if connector.native:
                 logger.debug(f"Connector {connector.id} natively supported")
 
-            do_not_sync = connector.status in (
-                Status.CREATED,
-                Status.NEEDS_CONFIGURATION,
-            )
-
             try:
-                data_source = await get_data_source(connector, self.config, do_not_sync)
+                await connector.prepare(self.config)
             except ServiceTypeNotConfiguredError:
                 logger.error(
                     f"Service type is not configured for connector {self.config['connector_id']}"
@@ -121,24 +119,20 @@ class ConnectorService:
                 self.raise_if_spurious(e)
                 return
 
-            if do_not_sync:
-                # we can't sync in that state
-                logger.info(f"Can't sync with status `{e2str(connector.status)}`")
-                data_source = None
-
             try:
                 # the heartbeat is always triggered
                 connector.start_heartbeat(self.hb)
 
                 # we trigger a sync
-                if data_source is not None:
-                    await connector.sync(data_source, es, self.idling, sync_now)
+                if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
+                    # we can't sync in that state
+                    logger.info(f"Can't sync with status `{e2str(connector.status)}`")
+                else:
+                    await connector.sync(es, self.idling, sync_now)
 
                 await asyncio.sleep(0)
             finally:
                 await connector.close()
-                if data_source is not None:
-                    await data_source.close()
 
     async def poll(self, one_sync=False, sync_now=True):
         """Main event loop."""
