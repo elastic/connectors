@@ -1,0 +1,11 @@
+aiohttp==3.8.3
+elasticsearch[async]==8.5.0
+elastic-transport==8.4.0
+pyyaml==6.0
+envyaml==1.10.211231
+ecs-logging==2.0.0
+envyaml==1.10.211231
+pympler==1.0.1
+guppy3==3.1.2
+cron-schedule-triggers==0.0.11
+pytz==2019.3
