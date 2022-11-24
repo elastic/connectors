@@ -17,7 +17,7 @@ from connectors.utils import (
     ESClient,
 )
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration
+from connectors.source import DataSourceConfiguration, get_source_klass
 from elasticsearch.exceptions import ApiError
 from connectors.index import defaults_for, DEFAULT_LANGUAGE
 
@@ -62,6 +62,22 @@ NATIVE_READ_ONLY_FIELDS = CUSTOM_READ_ONLY_FIELDS + (
     "service_type",
     "configuration",
 )
+
+
+class ServiceTypeNotSupportedError(Exception):
+    pass
+
+
+class ServiceTypeNotConfiguredError(Exception):
+    pass
+
+
+class ConnectorUpdateError(Exception):
+    pass
+
+
+class DataSourceError(Exception):
+    pass
 
 
 class BYOIndex(ESClient):
@@ -191,6 +207,18 @@ class PipelineSettings:
 
 
 class BYOConnector:
+    """Represents one doc in `.elastic-connectors` and triggers sync.
+
+    The pattern to use it is:
+
+        await connector.prepare(config)
+        await connector.start_heartbeat(delay)
+        try:
+            await connector.sync(es)
+        finally:
+            await connector.close()
+    """
+
     def __init__(
         self,
         index,
@@ -214,6 +242,8 @@ class BYOConnector:
         self.bulk_options = bulk_options
         self.language_code = language_code
         self.analysis_icu = analysis_icu
+        self.source_klass = None
+        self.data_provider = None
 
     def _update_config(self, doc_source):
         self.status = doc_source["status"]
@@ -272,6 +302,9 @@ class BYOConnector:
         if self._heartbeat_started:
             self._hb.cancel()
             self._heartbeat_started = False
+        if self.data_provider is not None:
+            await self.data_provider.close()
+            self.data_provider = None
 
     async def sync_doc(self, force=True):
         if not self._dirty and not force:
@@ -361,12 +394,60 @@ class BYOConnector:
             doc["_run_ml_inference"] = self.pipeline.run_ml_inference
             yield doc, lazy_download
 
-    async def sync(self, data_provider, elastic_server, idling, sync_now=False):
+    async def prepare(self, config):
+        """Prepares the connector, given a configuration
+
+        If the connector id and the service is in the config, we want to
+        populate the service type and then sets the default configuration.
+
+        Returns the source class.
+        """
+        configured_connector_id = config.get("connector_id", "")
+        configured_service_type = config.get("service_type", "")
+
+        if self.id == configured_connector_id and self.service_type is None:
+            if not configured_service_type:
+                logger.error(
+                    f"Service type is not configured for connector {configured_connector_id}"
+                )
+                raise ServiceTypeNotConfiguredError("Service type is not configured.")
+            self.service_type = configured_service_type
+            logger.debug(f"Populated service type for connector {self.id}")
+
+        service_type = self.service_type
+        if service_type not in config["sources"]:
+            raise ServiceTypeNotSupportedError(service_type)
+
+        fqn = config["sources"][service_type]
+        try:
+            source_klass = get_source_klass(fqn)
+            if self.configuration.is_empty():
+                self.configuration = source_klass.get_default_configuration()
+                logger.debug(f"Populated configuration for connector {self.id}")
+
+            # sync state if needed (when service type or configuration is updated)
+            try:
+                await self.sync_doc(force=False)
+            except Exception as e:
+                logger.critical(e, exc_info=True)
+                raise ConnectorUpdateError(
+                    f"Could not update configuration for connector {self.id}"
+                )
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+            raise DataSourceError(f"Could not instantiate {fqn} for {service_type}")
+
+        self.source_klass = source_klass
+
+    async def sync(self, elastic_server, idling, sync_now=False):
         # If anything bad happens before we create a sync job
         # (like bad scheduling config, etc)
         #
         # we will raise the error in the logs here and let Kibana knows
         # by toggling the status and setting the error and status field
+        if self.source_klass is None:
+            raise Exception("Can't call `sync()` before `prepare()`")
+
         try:
             service_type = self.service_type
             if not sync_now:
@@ -387,7 +468,15 @@ class BYOConnector:
             else:
                 logger.info("Sync forced")
 
-            if not await data_provider.changed():
+            try:
+                self.data_provider = self.source_klass(self)
+            except Exception as e:
+                logger.critical(e, exc_info=True)
+                raise DataSourceError(
+                    f"Could not instantiate {self.source_klass} for {service_type}"
+                )
+
+            if not await self.data_provider.changed():
                 logger.debug(f"No change in {service_type} data provider, skipping...")
                 return
         except Exception as exc:
@@ -400,8 +489,8 @@ class BYOConnector:
         self._syncing = True
         job = await self._sync_starts()
         try:
-            logger.debug(f"Pinging the {data_provider} backend")
-            await data_provider.ping()
+            logger.debug(f"Pinging the {self.data_provider} backend")
+            await self.data_provider.ping()
             await asyncio.sleep(0)
 
             mappings, settings = defaults_for(
@@ -417,8 +506,8 @@ class BYOConnector:
 
             result = await elastic_server.async_bulk(
                 self.index_name,
-                self.prepare_docs(data_provider),
-                data_provider.connector.pipeline,
+                self.prepare_docs(self.data_provider),
+                self.data_provider.connector.pipeline,
                 options=self.bulk_options,
             )
             await self._sync_done(job, result)
