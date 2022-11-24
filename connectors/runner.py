@@ -97,8 +97,13 @@ class ConnectorService:
             if connector.native:
                 logger.debug(f"Connector {connector.id} natively supported")
 
+            do_not_sync = connector.status in (
+                Status.CREATED,
+                Status.NEEDS_CONFIGURATION,
+            )
+
             try:
-                data_source = await get_data_source(connector, self.config)
+                data_source = await get_data_source(connector, self.config, do_not_sync)
             except ServiceTypeNotConfiguredError:
                 logger.error(
                     f"Service type is not configured for connector {self.config['connector_id']}"
@@ -116,7 +121,7 @@ class ConnectorService:
                 self.raise_if_spurious(e)
                 return
 
-            if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
+            if do_not_sync:
                 # we can't sync in that state
                 logger.info(f"Can't sync with status `{e2str(connector.status)}`")
                 data_source = None

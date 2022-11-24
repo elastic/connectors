@@ -147,7 +147,7 @@ def get_source_klass(fqn):
     return getattr(module, klass_name)
 
 
-async def get_data_source(connector, config):
+async def get_data_source(connector, config, do_not_sync):
     """Returns a source class instance, given a service type
 
 
@@ -185,6 +185,9 @@ async def get_data_source(connector, config):
             raise ConnectorUpdateError(
                 f"Could not update configuration for connector {connector.id}"
             )
+
+        if do_not_sync:
+            return None
 
         return source_klass(connector)
     except Exception as e:
