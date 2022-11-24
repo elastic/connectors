@@ -4,7 +4,14 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import sys
+import os
 from setuptools import setup, find_packages
+
+
+try:
+    ARCH = os.uname().machine
+except Exception:
+    ARCH = "x86_64"
 
 if sys.version_info.major != 3:
     raise ValueError("Requires Python 3")
@@ -19,19 +26,38 @@ from connectors import __version__  # NOQA
 #
 # A proper production installation will do the following sequence:
 #
-# $ pip install -r requirements.txt
+# $ pip install -r requirements/`uname -n`.txt
 # $ pip install elasticsearch-connectors
 #
 # Because the *pinned* dependencies is what we tested
 #
-install_requires = []
-with open("requirements.txt") as f:
-    reqs = f.readlines()
-    for req in reqs:
-        req = req.strip()
-        if req == "" or req.startswith("#"):
-            continue
-        install_requires.append(req.split("=")[0])
+
+
+def read_reqs(req_file):
+    deps = []
+    reqs_dir, __ = os.path.split(req_file)
+
+    with open(req_file) as f:
+        reqs = f.readlines()
+        for req in reqs:
+            req = req.strip()
+            if req == "" or req.startswith("#"):
+                continue
+            if req.startswith("-r"):
+                subreq_file = req.split("-r")[-1].strip()
+                subreq_file = os.path.join(reqs_dir, subreq_file)
+                for subreq in read_reqs(subreq_file):
+                    dep = subreq.split("=")[0]
+                    if dep not in deps:
+                        deps.append(dep)
+            else:
+                dep = req.split("=")[0]
+                if dep not in deps:
+                    deps.append(dep)
+    return deps
+
+
+install_requires = read_reqs(os.path.join("requirements", f"{ARCH}.txt"))
 
 
 with open("README.md") as f:
