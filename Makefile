@@ -19,7 +19,7 @@ bin/elastic-ingest: bin/python
 
 bin/black: bin/python
 	bin/pip install -r requirements/$(ARCH).txt
-	bin/pip install -r test-requirements/$(ARCH).txt
+	bin/pip install -r requirements/tests.txt
 	
 
 bin/pytest: bin/python
