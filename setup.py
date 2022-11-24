@@ -8,7 +8,10 @@ import os
 from setuptools import setup, find_packages
 
 
-ARCH = os.uname().machine
+try:
+    ARCH = os.uname().machine
+except Exception:
+    ARCH = 'x86_64'
 
 if sys.version_info.major != 3:
     raise ValueError("Requires Python 3")
