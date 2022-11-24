@@ -13,7 +13,7 @@ from functools import partial
 from aioresponses import CallbackResult
 
 from connectors.runner import ConnectorService, run
-from connectors.source import DataSourceError
+from connectors.byoc import DataSourceError
 from connectors.conftest import assert_re
 
 
@@ -638,7 +638,10 @@ async def test_connector_service_poll_buggy_service(
 ):
     def connectors_update(url, **kw):
         doc = json.loads(kw["data"])["doc"]
-        assert doc["error"] == "Could not instantiate test_runner:FakeSource for fake"
+        assert (
+            doc["error"]
+            == "Could not instantiate <class 'test_runner.FakeSource'> for fake"
+        )
         return CallbackResult(status=200)
 
     await set_server_responses(
@@ -651,6 +654,7 @@ async def test_connector_service_poll_buggy_service(
     for log in patch_logger.logs:
         if isinstance(log, DataSourceError):
             return
+
     raise AssertionError
 
 
