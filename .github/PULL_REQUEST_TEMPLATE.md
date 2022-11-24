@@ -17,6 +17,13 @@ items that may help during the review.-->
 - [ ] Covered the changes with automated tests
 - [ ] Tested the changes locally
 
+### Cloud Review Checklist
+
+Once the Jenkins artifact is ready, run a local cloud instance and:
+
+- [ ] Make sure running a custom connector still works
+- [ ] Make sure running a native connector still works
+
 #### Changes Requiring Extra Attention
 
 <!--Please call out any changes that require special attention from the
