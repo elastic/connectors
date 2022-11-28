@@ -1,8 +1,7 @@
 .PHONY: test lint run ftest install dev
 
 PYTHON=python3.10
-MEMPROFILE?=no
-PERF_METRICS?=no
+PERF8?=no
 
 bin/python:
 	$(PYTHON) -m venv .
@@ -44,7 +43,7 @@ release:
 	bin/python setup.py sdist
 
 ftest: bin/pytest bin/elastic-ingest
-	connectors/tests/ftest.sh $(NAME) $(MEMPROFILE) $(PERF_METRICS)
+	connectors/tests/ftest.sh $(NAME) $(PERF8)
 
 run: 
 	install
