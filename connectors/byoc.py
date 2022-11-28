@@ -20,6 +20,8 @@ from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
 from elasticsearch.exceptions import ApiError
 from connectors.index import defaults_for, DEFAULT_LANGUAGE
+from connectors.utils.index import Index
+from connectors.utils.document import Document
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
@@ -85,7 +87,7 @@ class DataSourceError(Exception):
     pass
 
 
-class BYOIndex(ESClient):
+class BYOIndex(Index):
     def __init__(self, elastic_config):
         super().__init__(elastic_config)
         logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
@@ -93,6 +95,7 @@ class BYOIndex(ESClient):
         self.bulk_options = elastic_config.get("bulk", {})
         self.language_code = elastic_config.get("language_code", DEFAULT_LANGUAGE)
         self.analysis_icu = elastic_config.get("analysis_icu", DEFAULT_ANALYSIS_ICU)
+        self.connectors_index = Index(CONNECTORS_INDEX, elastic_config)
 
     async def save(self, connector):
         # we never update the configuration
@@ -159,6 +162,16 @@ class BYOIndex(ESClient):
                 language_code=self.language_code,
                 analysis_icu=self.analysis_icu,
             )
+
+    def _create_object(self, doc_source):
+        yield BYOConnector(
+            self,
+            doc_source["_id"],
+            doc_source["_source"],
+            bulk_options=self.bulk_options,
+            language_code=self.language_code,
+            analysis_icu=self.analysis_icu,
+        )
 
     async def _query_with_pagination(self, index, query, page_size=DEFAULT_PAGE_SIZE):
         count = 0
@@ -279,6 +292,9 @@ class BYOConnector:
         language_code=DEFAULT_LANGUAGE,
         analysis_icu=DEFAULT_ANALYSIS_ICU,
     ):
+        # execute Document.__init__
+        super().__init__(index=index, id=connector_id, doc_source=doc_source)
+
         self.doc_source = doc_source
         self.id = connector_id
         self.index = index
