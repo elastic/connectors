@@ -20,6 +20,8 @@ from connectors.logger import logger
 from connectors.source import DataSourceConfiguration
 from elasticsearch.exceptions import ApiError
 from connectors.index import defaults_for, DEFAULT_LANGUAGE
+from connectors.utils.index import Index
+from connectors.utils.document import Document
 
 
 CONNECTORS_INDEX = ".elastic-connectors"
@@ -64,7 +66,7 @@ NATIVE_READ_ONLY_FIELDS = CUSTOM_READ_ONLY_FIELDS + (
 )
 
 
-class BYOIndex(ESClient):
+class BYOIndex(Index):
     def __init__(self, elastic_config):
         super().__init__(elastic_config)
         logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
@@ -72,6 +74,7 @@ class BYOIndex(ESClient):
         self.bulk_options = elastic_config.get("bulk", {})
         self.language_code = elastic_config.get("language_code", DEFAULT_LANGUAGE)
         self.analysis_icu = elastic_config.get("analysis_icu", DEFAULT_ANALYSIS_ICU)
+        self.connectors_index = Index(CONNECTORS_INDEX, elastic_config)
 
     async def save(self, connector):
         # we never update the configuration
@@ -95,31 +98,15 @@ class BYOIndex(ESClient):
             indices=[CONNECTORS_INDEX, JOBS_INDEX], pipelines=[PIPELINE]
         )
 
-    async def get_list(self):
-        await self.client.indices.refresh(index=CONNECTORS_INDEX)
-
-        try:
-            resp = await self.client.search(
-                index=CONNECTORS_INDEX,
-                query={"match_all": {}},
-                size=20,
-                expand_wildcards="hidden",
-            )
-        except ApiError as e:
-            logger.critical(f"The server returned {e.status_code}")
-            logger.critical(e.body, exc_info=True)
-            return
-
-        logger.debug(f"Found {len(resp['hits']['hits'])} connectors")
-        for hit in resp["hits"]["hits"]:
-            yield BYOConnector(
-                self,
-                hit["_id"],
-                hit["_source"],
-                bulk_options=self.bulk_options,
-                language_code=self.language_code,
-                analysis_icu=self.analysis_icu,
-            )
+    def _create_object(self, doc_source):
+        yield BYOConnector(
+            self,
+            doc_source["_id"],
+            doc_source["_source"],
+            bulk_options=self.bulk_options,
+            language_code=self.language_code,
+            analysis_icu=self.analysis_icu,
+        )
 
 
 class SyncJob:
@@ -190,7 +177,7 @@ class PipelineSettings:
         )
 
 
-class BYOConnector:
+class BYOConnector(Document):
     def __init__(
         self,
         index,
@@ -200,6 +187,9 @@ class BYOConnector:
         language_code=DEFAULT_LANGUAGE,
         analysis_icu=DEFAULT_ANALYSIS_ICU,
     ):
+        # execute Document.__init__
+        super().__init__(index=index, id=connector_id, doc_source=doc_source)
+
         self.doc_source = doc_source
         self.id = connector_id
         self.index = index
