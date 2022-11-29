@@ -5,9 +5,13 @@
 #
 import asyncio
 import time
+<<<<<<< HEAD
 import functools
 import base64
 
+=======
+from unittest import mock
+>>>>>>> 45bc92f (Add a spec to cover NotImplementedError)
 import pytest
 from pympler import asizeof
 
@@ -17,8 +21,12 @@ from connectors.utils import (
     InvalidIndexNameError,
     ESClient,
     MemQueue,
+<<<<<<< HEAD
     get_base64_value,
     ConcurrentTasks,
+=======
+    EsIndex
+>>>>>>> 45bc92f (Add a spec to cover NotImplementedError)
 )
 
 
@@ -239,3 +247,20 @@ async def test_concurrent_runner_high_concurrency(patch_logger):
     await runner.join()
     assert results == list(range(1000))
     assert second_results == [3]
+
+
+@pytest.mark.asyncio
+async def test_es_index_create_object_error(mock_responses, patch_logger):
+    headers = {"X-Elastic-Product": "Elasticsearch"}
+    config = {
+            "username": "elastic",
+            "password": "changeme",
+            "host": "http://nowhere.com:9200",
+        }
+    index = EsIndex('index', config)
+    mock_responses.post("http://nowhere.com:9200/index/_refresh", headers=headers, status=200)
+
+    mock_responses.post("http://nowhere.com:9200/index/_search?expand_wildcards=hidden", headers=headers, status=200, payload={ "hits": { "hits":  [ { "id": 1 }] }})
+    with pytest.raises(NotImplementedError) as e_info:
+        async for c in index.get_docs():
+            c
