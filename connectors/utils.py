@@ -300,3 +300,52 @@ class MemQueue(asyncio.Queue):
     async def put(self, item):
         item_size = await self._wait_for_room(item)
         return await super().put((item_size, item))
+
+
+class EsDocument:
+  def __init__(self, elastic_index, id, doc_source):
+    self.elastic_index = elastic_index
+    self.id = id
+    self.doc_source = doc_source
+
+  async def reload(self):
+    resp = await self.elastic_client.get(
+      index_name=self.index_name,
+      id=self.id
+    )
+
+    return resp
+
+  async def update(self):
+    print("reload placeholder")
+
+
+class EsIndex(ESClient):
+  def __init__(self, index_name, elastic_config):
+    # initialize elasticsearch client
+    super().__init__(elastic_config)
+    self.index_name = index_name
+    self.elastic_config = elastic_config
+
+  def _create_object(self, doc):
+    raise NotImplementedError
+
+  async def get_docs(self):
+    await self.client.indices.refresh(index=self.index_name)
+
+    try:
+        resp = await self.client.search(
+            index=self.index_name,
+            query={"match_all": {}},
+            size=20,
+            expand_wildcards="hidden",
+        )
+    except ApiError as e:
+        logger.critical(f"The server returned {e.status_code}")
+        logger.critical(e.body, exc_info=True)
+        return
+
+    logger.debug(f"Found {len(resp['hits']['hits'])} documents")
+    for doc in resp["hits"]["hits"]:
+      print(type(self._create_object(doc)))
+      yield self._create_object(doc)
