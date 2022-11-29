@@ -5,6 +5,7 @@
 #
 import asyncio
 import time
+from unittest import mock
 import pytest
 from pympler import asizeof
 import base64
@@ -14,6 +15,7 @@ from connectors.utils import (
     InvalidIndexNameError,
     ESClient,
     MemQueue,
+    EsIndex
 )
 
 
@@ -157,3 +159,20 @@ async def test_mem_queue(patch_logger):
 
     await asyncio.gather(remove_data(), add_data())
     assert when[1] - when[0] > 0.1
+
+
+@pytest.mark.asyncio
+async def test_es_index_create_object_error(mock_responses, patch_logger):
+    headers = {"X-Elastic-Product": "Elasticsearch"}
+    config = {
+            "username": "elastic",
+            "password": "changeme",
+            "host": "http://nowhere.com:9200",
+        }
+    index = EsIndex('index', config)
+    mock_responses.post("http://nowhere.com:9200/index/_refresh", headers=headers, status=200)
+
+    mock_responses.post("http://nowhere.com:9200/index/_search?expand_wildcards=hidden", headers=headers, status=200, payload={ "hits": { "hits":  [ { "id": 1 }] }})
+    with pytest.raises(NotImplementedError) as e_info:
+        async for c in index.get_docs():
+            c
