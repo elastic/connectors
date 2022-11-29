@@ -202,7 +202,7 @@ async def test_get_content(patch_logger, mock_aws):
             "region",
             doit=1,
         )
-        assert response == {'_timestamp': None, '_attachment': 'eHh4eHg=', '_id': 1}
+        assert response == {"_timestamp": None, "_attachment": "eHh4eHg=", "_id": 1}
 
 
 @pytest.mark.asyncio

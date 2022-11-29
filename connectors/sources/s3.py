@@ -64,6 +64,9 @@ class S3DataSource(BaseDataSource):
             connect_timeout=self.configuration["connect_timeout"],
             retries={"max_attempts": self.configuration["max_attempts"]},
         )
+        self.enable_content_extraction = self.configuration.get(
+            "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION
+        )
 
     @asynccontextmanager
     async def client(self, **kwargs):
@@ -96,12 +99,7 @@ class S3DataSource(BaseDataSource):
             dictionary: Document of file content
         """
         # Reuse the same for all files
-        if not (
-            doit
-            and self.configuration.get(
-                "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION
-            )
-        ):
+        if not (doit and self.enable_content_extraction):
             return
         filename = doc["filename"]
         bucket = doc["bucket"]
