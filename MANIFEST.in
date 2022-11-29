@@ -1,3 +1,4 @@
-include Makefile README.rst config.yml CONTRIBUTE.rst LICENSE requirements.txt
+include Makefile README.rst config.yml CONTRIBUTE.rst LICENSE
 recursive-include connectors/ *.yml
+recursive-include requirements/ *.txt
 include connectors/VERSION
