@@ -20,8 +20,8 @@ from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
 from elasticsearch.exceptions import ApiError
 from connectors.index import defaults_for, DEFAULT_LANGUAGE
-from connectors.es_utils.es_index import EsIndex
-from connectors.es_utils.es_document import EsDocument
+from connectors.utils import EsIndex
+from connectors.utils import EsDocument
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
