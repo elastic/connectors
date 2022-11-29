@@ -349,7 +349,9 @@ class BYOConnector:
 
     async def _sync_starts(self):
         job = SyncJob(self.id, self.client)
-        trigger_method = JobTriggerMethod.ON_DEMAND if self.sync_now else JobTriggerMethod.SCHEDULED
+        trigger_method = (
+            JobTriggerMethod.ON_DEMAND if self.sync_now else JobTriggerMethod.SCHEDULED
+        )
         job_id = await job.start(trigger_method)
 
         self.sync_now = self.doc_source["sync_now"] = False

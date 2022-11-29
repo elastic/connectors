@@ -41,7 +41,6 @@ class S3DataSource(BaseDataSource):
         """
         super().__init__(connector)
         self.session = aioboto3.Session()
-        self.loop = asyncio.get_event_loop()
         set_extra_logger(aws_logger, log_level=logging.DEBUG, prefix="S3")
         set_extra_logger("aioboto3.resources", log_level=logging.INFO, prefix="S3")
         self.bucket_list = []
@@ -108,7 +107,7 @@ class S3DataSource(BaseDataSource):
                     exception.response.get("Error", {}).get("Code")
                     == "InvalidObjectState"
                 ):
-                    logger.warn(
+                    logger.warning(
                         f"{filename} of {bucket} is archived and inaccessible until restored. Error: {exception}"
                     )
                 else:
@@ -131,7 +130,7 @@ class S3DataSource(BaseDataSource):
                 )
                 region = response.get("LocationConstraint")
         except ClientError:
-            logger.warn("Unable to fetch the region")
+            logger.warning("Unable to fetch the region")
 
         return region
 
@@ -185,7 +184,7 @@ class S3DataSource(BaseDataSource):
                             self._get_content, doc=doc, region=region_name
                         )
                 except Exception as exception:
-                    logger.warn(
+                    logger.warning(
                         f"Something went wrong while fetching documents from {bucket}. Error: {exception}"
                     )
 

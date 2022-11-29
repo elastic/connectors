@@ -237,7 +237,7 @@ async def test_get_docs(patch_logger, mock_aws):
     # Setup
     source = create_source(S3DataSource)
     source.get_bucket_location = mock.Mock(
-        return_value=create_fake_coroutine("ap-south-1")
+        return_value=await create_fake_coroutine("ap-south-1")
     )
     with mock.patch(
         "aioboto3.resources.collection.AIOResourceCollection", AIOResourceCollection
