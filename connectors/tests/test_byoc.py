@@ -143,7 +143,7 @@ async def test_heartbeat(mock_responses, patch_logger):
     connectors = BYOIndex(config)
     conns = []
 
-    async for connector in connectors.get_list():
+    async for connector in connectors.get_docs():
         connector.start_heartbeat(0.2)
         connector.start_heartbeat(1.0)  # NO-OP
         conns.append(connector)
@@ -170,7 +170,7 @@ async def test_connectors_get_list(mock_responses):
     connectors = BYOIndex(config)
     conns = []
 
-    async for connector in connectors.get_list():
+    async for connector in connectors.get_docs():
         conns.append(connector)
 
     assert len(conns) == 1
@@ -298,7 +298,7 @@ async def test_sync_mongo(mock_responses, patch_logger):
     es = ElasticServer(config)
     connectors = BYOIndex(config)
     try:
-        async for connector in connectors.get_list():
+        async for connector in connectors.get_docs():
             await connector.sync(Data(), es, 0)
             await connector.close()
     finally:
@@ -364,7 +364,7 @@ async def test_connectors_properties(mock_responses, set_env):
 
     connectors = BYOIndex(config["elasticsearch"])
 
-    async for connector in connectors.get_list():
+    async for connector in connectors.get_docs():
         assert connector.analysis_icu == config["elasticsearch"]["analysis_icu"]
         assert connector.language_code == config["elasticsearch"]["language_code"]
 
