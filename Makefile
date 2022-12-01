@@ -2,6 +2,7 @@
 
 PYTHON=python3.10
 ARCH=$(shell uname -m)
+PERF8?=no
 
 bin/python:
 	$(PYTHON) -m venv .
@@ -43,7 +44,7 @@ release:
 	bin/python setup.py sdist
 
 ftest: bin/pytest bin/elastic-ingest
-	connectors/tests/ftest.sh $(NAME)
+	connectors/tests/ftest.sh $(NAME) $(PERF8)
 
 run: 
 	install
