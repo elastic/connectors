@@ -26,6 +26,7 @@ DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
 
+
 class MySqlDataSource(BaseDataSource):
     """Class to fetch and modify documents from MySQL server"""
 
@@ -94,7 +95,7 @@ class MySqlDataSource(BaseDataSource):
     async def close(self):
         if self.connection_pool is None:
             return
-        self.connection_pool.close()
+        await self.connection_pool.close()
         await self.connection_pool.wait_closed()
         self.connection_pool = None
 
@@ -207,7 +208,7 @@ class MySqlDataSource(BaseDataSource):
                 )
                 break
             except Exception as exception:
-                logger.warn(
+                logger.warning(
                     f"Retry count: {retry} out of {self.retry_count} for rows in {database}.{table}. Exception: {exception}"
                 )
                 if retry == self.retry_count:
@@ -261,7 +262,7 @@ class MySqlDataSource(BaseDataSource):
                 ):
                     yield row
         else:
-            logger.warn(
+            logger.warning(
                 f"Fetched 0 tables for the database: {database}. Either the database has no tables or the user does not have access to this database."
             )
 
@@ -352,7 +353,7 @@ class MySqlDataSource(BaseDataSource):
                 )
                 yield self.serialize(doc=row)
         else:
-            logger.warn(
+            logger.warning(
                 f"Skipping {table} table from database {database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
             )
 
