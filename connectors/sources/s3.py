@@ -10,6 +10,7 @@ from functools import partial
 from hashlib import md5
 
 import aioboto3
+from io import BytesIO
 from aiobotocore.response import AioReadTimeoutError
 from aiohttp.client_exceptions import ServerTimeoutError
 from aiobotocore.config import AioConfig
@@ -25,17 +26,29 @@ SUPPORTED_CONTENT_TYPE = [
     "text/plain",
 ]
 SUPPORTED_FILETYPE = [
+    ".txt",
     ".py",
     ".rst",
-    ".rb",
-    ".sh",
-    ".md",
-    ".txt",
-    ".pdf",
+    ".html",
+    ".markdown",
     ".json",
     ".xml",
     ".csv",
+    ".md",
+    ".ppt",
+    ".rtf",
+    ".docx",
+    ".odt",
+    ".xls",
+    ".xlsx",
+    ".rb",
+    ".paper",
+    ".sh",
+    ".pptx",
+    ".pdf",
+    ".doc",
 ]
+MAX_CHUNK_SIZE = 1048576
 DEFAULT_MAX_FILE_SIZE = 10485760
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_CONTENT_EXTRACTION = True
@@ -116,10 +129,19 @@ class S3DataSource(BaseDataSource):
             try:
                 resp = await s3.get_object(Bucket=bucket, Key=filename)
                 await asyncio.sleep(0)
-                data = get_base64_value(content=await resp["Body"].read())
-
-                logger.debug(f"Downloaded {len(data)} for {filename}")
-                return {"_timestamp": timestamp, "_attachment": data, "_id": doc["id"]}
+                file_content, chunk = BytesIO(), True
+                while chunk:
+                    chunk = await resp["Body"].read(MAX_CHUNK_SIZE) or b""
+                    file_content.write(chunk)
+                file_content.seek(0)
+                data = file_content.read()
+                file_content.close()
+                logger.debug(f"Downloaded {filename} for {doc['size']} bytes ")
+                return {
+                    "_timestamp": timestamp,
+                    "_attachment": get_base64_value(content=data),
+                    "_id": doc["id"],
+                }
             except (ClientError, ServerTimeoutError, AioReadTimeoutError) as exception:
                 if (
                     exception.response.get("Error", {}).get("Code")
