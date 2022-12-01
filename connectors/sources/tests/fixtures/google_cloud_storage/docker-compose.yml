@@ -34,6 +34,9 @@ services:
       MOCKSERVER_WATCH_INITIALIZATION_JSON: "true"
       MOCKSERVER_PROPERTY_FILE: /google_cloud_storage/mockserver.properties
       MOCKSERVER_INITIALIZATION_JSON_PATH: /google_cloud_storage/mocked_http_responses.json
+      MOCKSERVER_LOG_LEVEL: "ERROR"
+      MOCKSERVER_MAX_EXPECTATIONS: 2000
+      MOCKSERVER_MAX_LOG_ENTRIES: 2000
     volumes:
       - type: bind
         source: .
