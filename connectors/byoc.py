@@ -117,30 +117,40 @@ class BYOIndex(ESClient):
         )
 
     async def get_connectors(self, native_service_types=[], connectors_ids=[]):
+        if len(native_service_types) == 0 and len(connectors_ids) == 0:
+            return
+
         await self.client.indices.refresh(index=CONNECTORS_INDEX)
 
-        query = {
+        native_connectors_query = {
             "bool": {
-                "should": [
-                    {
-                        "bool": {
-                            "filter": [
-                                {"term": {"is_native": True}},
-                                {"terms": {"service_type": native_service_types}},
-                            ]
-                        }
-                    },
-                    {
-                        "bool": {
-                            "filter": [
-                                {"term": {"is_native": False}},
-                                {"terms": {"_id": connectors_ids}},
-                            ]
-                        }
-                    },
+                "filter": [
+                    {"term": {"is_native": True}},
+                    {"terms": {"service_type": native_service_types}},
                 ]
             }
         }
+        custom_connectors_query = {
+            "bool": {
+                "filter": [
+                    {"term": {"is_native": False}},
+                    {"terms": {"_id": connectors_ids}},
+                ]
+            }
+        }
+        if len(native_service_types) > 0 and len(connectors_ids) > 0:
+            query = {
+                "bool": {
+                    "should": [
+                        native_connectors_query,
+                        custom_connectors_query
+                    ]
+                }
+            }
+        elif len(native_service_types) > 0:
+            query = native_connectors_query
+        else:
+            query = custom_connectors_query
 
         async for connector in self._query_with_pagination(CONNECTORS_INDEX, query):
             yield BYOConnector(

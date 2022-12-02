@@ -185,7 +185,6 @@ class ConnectorService:
                     ):
                         await self._one_sync(connector, es, sync_now)
                         if one_sync:
-                            self.stop()
                             break
                 except Exception as e:
                     logger.critical(e, exc_info=True)
@@ -193,9 +192,8 @@ class ConnectorService:
 
                 if not one_sync:
                     await self._sleeps.sleep(self.idling)
-                else:
-                    self.stop()
         finally:
+            self.stop()
             await self.connectors.close()
             await es.close()
 
