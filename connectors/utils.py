@@ -350,3 +350,28 @@ def get_event_loop():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
     return loop
+
+
+class ConcurrentRunner:
+    def __init__(self, max_concurrency=5, results_cb=None):
+        self.max_concurrency = 5
+        self.tasks = []
+        self.results_cb = results_cb
+
+    def _cb(self, fut):
+        self.tasks.remove(fut)
+        if self.results_cb is not None:
+            if fut.exception():
+                raise fut.exception()
+            self.results_cb(fut.result())
+
+    async def put(self, coro):
+        while len(self.tasks) >= self.max_concurrency:
+            await asyncio.sleep(0)
+        fut = asyncio.create_task(coro())
+        self.tasks.append(fut)
+        fut.add_done_callback(self._cb)
+        return fut
+
+    async def wait(self):
+        await asyncio.gather(*self.tasks)

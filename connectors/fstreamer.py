@@ -1,5 +1,17 @@
-#!/usr/bin/env python
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
+""" File streamer service.
 
+Provides:
+
+- `FileUploadService` -- watches a dir for files to upload to Elasticsearch
+- `can_drop()` -- returns True is there's space to drop a file
+- `drop_file()` -- used by the producer to drop files on disk
+
+"""
 # TODO
 #
 # - harden all requests (catch errors, retries)
@@ -18,8 +30,8 @@ import aiofiles
 # using some connectors stuff since we'll end up there
 #
 from connectors.logger import logger
-from connectors.utils import CancellableSleeps, Service, get_event_loop
-
+from connectors.utils import (CancellableSleeps, Service, get_event_loop,
+                              ConcurrentRunner)
 
 # 250MB max disk size
 MAX_DIR_SIZE = 250 * 1024 * 1024
@@ -89,33 +101,6 @@ async def drop_file(
         f.write(json.dumps(desc))
 
     logger.info(f"Dropped {desc_file}")
-
-
-# to be moved in connectors.utils and reused in byoei
-#
-class ConcurrentRunner:
-    def __init__(self, max_concurrency=5, results_cb=None):
-        self.max_concurrency = 5
-        self.tasks = []
-        self.results_cb = results_cb
-
-    def _cb(self, fut):
-        self.tasks.remove(fut)
-        if self.results_cb is not None:
-            if fut.exception():
-                raise fut.exception()
-            self.results_cb(fut.result())
-
-    async def put(self, coro):
-        while len(self.tasks) >= self.max_concurrency:
-            await asyncio.sleep(0)
-        fut = asyncio.create_task(coro())
-        self.tasks.append(fut)
-        fut.add_done_callback(self._cb)
-        return fut
-
-    async def wait(self):
-        await asyncio.gather(*self.tasks)
 
 
 class FileUploadService(Service):
