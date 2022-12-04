@@ -31,6 +31,7 @@ attachments:
   results_dir: /tmp/attachments/results
   idling: 30
   max_disk_size: 250
+  max_concurrency: 5
 
 native_service_types:
   - mysql

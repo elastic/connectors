@@ -8,8 +8,7 @@
 Provides:
 
 - `FileUploadService` -- watches a dir for files to upload to Elasticsearch
-- `can_drop()` -- returns True is there's space to drop a file
-- `drop_file()` -- used by the producer to drop files on disk
+- `FileDrop` -- used by the producer to drop files on disk
 
 """
 # TODO
@@ -82,7 +81,7 @@ class FileDrop:
     async def drop_file(self, gen, name, filename, index, doc_id):
         """Writes a file by chunks using the async generator and then a desc file
 
-        Once the desc file hit the disk, it'll be picked up by FileUploadService.
+        When the desc file hits the disk, it'll be picked up by FileUploadService.
         """
         if not self.can_drop(self.drop_dir):
             raise OSError("Limit reached")
@@ -114,11 +113,15 @@ class FileDrop:
 
 
 class FileUploadService(Service):
-    """Watches a directory for files and send them."""
+    """Watches a directory for files and sends them by chunks
+
+    Uses `Transfer-Encoding: chunked`
+    """
 
     def __init__(self, args):
         super().__init__(args)
         self._config = self.config["attachments"]
+        self.max_concurrency = self._config["max_concurrency"]
         self.directory = self._prepare_dir("drop")
         self.idle_time = self._config.get("idling", 30)
         self.log_directory = self._prepare_dir("logs")
@@ -184,7 +187,10 @@ class FileUploadService(Service):
                 logger.error(f"Failed to ingest {filename}")
                 logger.error(json.dumps(resp))
 
-        runner = ConcurrentRunner(results_cb=track_results)
+        runner = ConcurrentRunner(
+            max_concurrency=self.max_concurrency, results_cb=track_results
+        )
+
         for file in os.listdir(self.directory):
             if not file.endswith(".json"):
                 continue
