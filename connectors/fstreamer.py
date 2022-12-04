@@ -95,12 +95,18 @@ class FileDrop:
 
         # the file is now on disk, let's create the desc
         desc = {
+            # XXX maybe its overkill for v1 since a node only connects to a
+            # single ES
             "host": self.elastic_config["host"],
             # XXX add suport for API key
             "user": self.elastic_config["user"],
             "password": self.elastic_config["password"],
             "filename": filename,
             "index": index,
+            # XXX how do we know this value when the initial sync of the doc is
+            # not done yet. we might need to use the source id
+            # and at sync time, query for the corresponding ES doc id
+            # and send it only once it's there..
             "doc_id": doc_id,
             "name": name,
         }
