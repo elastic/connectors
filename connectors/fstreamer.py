@@ -22,7 +22,6 @@ import os
 import json
 import functools
 
-import asyncio
 import aiohttp
 import aiofiles
 
@@ -30,11 +29,16 @@ import aiofiles
 # using some connectors stuff since we'll end up there
 #
 from connectors.logger import logger
-from connectors.utils import (CancellableSleeps, Service, get_event_loop,
-                              ConcurrentRunner)
+from connectors.utils import (
+    CancellableSleeps,
+    Service,
+    get_event_loop,
+    ConcurrentRunner,
+)
 
 # 250MB max disk size
-MAX_DIR_SIZE = 250 * 1024 * 1024
+ONE_MEG = 104 * 1024
+DEFAULT_MAX_DIR_SIZE = 250
 BASE64 = "base64"
 
 
@@ -62,56 +66,71 @@ async def file_to_pipeline(filename, chunk_size=1024 * 128):
             os.remove(b64_file)
 
 
-def can_drop(drop_directory):
-    current_size = sum(
-        d.stat().st_size for d in os.scandir(drop_directory) if d.is_file()
-    )
-    return current_size <= MAX_DIR_SIZE
+class FileDrop:
+    def __init__(self, config):
+        self.config = config
+        self.drop_dir = self.config["attachments"]["drop_dir"]
+        self.max_disk_size = self.config["attachments"]["max_disk_size"] * ONE_MEG
+        self.elastic_config = self.config["elastic_search"]
 
+    def can_drop(self, drop_directory):
+        current_size = sum(
+            d.stat().st_size for d in os.scandir(drop_directory) if d.is_file()
+        )
+        return current_size <= self.max_disk_size
 
-async def drop_file(
-    gen, drop_directory, name, filename, index, doc_id, host, user, password
-):
-    """Writes a file by chunks using the async generator and then a desc file
+    async def drop_file(self, gen, name, filename, index, doc_id):
+        """Writes a file by chunks using the async generator and then a desc file
 
-    Once the desc file hit the disk, it'll be picked up by FileUploadService.
-    """
-    if not can_drop(drop_directory):
-        raise OSError("Limit reached")
+        Once the desc file hit the disk, it'll be picked up by FileUploadService.
+        """
+        if not self.can_drop(self.drop_dir):
+            raise OSError("Limit reached")
 
-    target = os.path.join(drop_directory, filename)
-    async with aiofiles.open(target, "wb") as f:
-        async for chunk in gen():
-            f.write(chunk)
+        target = os.path.join(self.drop_dir, filename)
+        async with aiofiles.open(target, "wb") as f:
+            async for chunk in gen():
+                f.write(chunk)
 
-    logger.info(f"Dropped {filename}")
+        logger.info(f"Dropped {filename}")
 
-    # the file is now on disk, let's create the desc
-    desc = {
-        "host": host,
-        "user": user,
-        "password": password,
-        "filename": filename,
-        "index": index,
-        "doc_id": doc_id,
-        "name": name,
-    }
-    desc_file = os.path.join(drop_directory, os.path.splitext(0) + ".json")
-    with open(desc_file, "w") as f:
-        f.write(json.dumps(desc))
+        # the file is now on disk, let's create the desc
+        desc = {
+            "host": self.elastic_config["host"],
+            # XXX add suport for API key
+            "user": self.elastic_config["user"],
+            "password": self.elastic_config["password"],
+            "filename": filename,
+            "index": index,
+            "doc_id": doc_id,
+            "name": name,
+        }
 
-    logger.info(f"Dropped {desc_file}")
+        desc_file = os.path.join(self.drop_dir, os.path.splitext(0) + ".json")
+        with open(desc_file, "w") as f:
+            f.write(json.dumps(desc))
+
+        logger.info(f"Dropped {desc_file}")
 
 
 class FileUploadService(Service):
     """Watches a directory for files and send them."""
 
     def __init__(self, args):
-        self.directory = args.directory
-        self.idle_time = args.idle_time
+        super().__init__(args)
+        self._config = self.config["attachments"]
+        self.directory = self._prepare_dir("drop")
+        self.idle_time = self._config.get("idling", 30)
+        self.log_directory = self._prepare_dir("logs")
+        self.results_directory = self._prepare_dir("results")
         self.running = False
-        self.log_directory = args.log_directory
         self._sleeps = CancellableSleeps()
+
+    def _prepare_dir(self, name):
+        default_dir = os.path.join(os.path.dirname(self.config_file), "attachments")
+        path = self._config.get(f"{name}_dir", os.path.join(default_dir, name))
+        os.makedirs(path, exist_ok=True)
+        return path
 
     async def run(self):
         self.running = True
@@ -135,7 +154,7 @@ class FileUploadService(Service):
         )
         logger.info(f"[{fn}] Sending by chunks to {url}")
         headers = {"Content-Type": "application/json"}
-        result = os.path.join(self.log_directory, fn + ".json")
+        result = os.path.join(self.results_directory, fn + ".json")
         worked = False
         resp = None
 

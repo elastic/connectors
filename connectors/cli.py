@@ -24,7 +24,7 @@ def _parser():
         "--action",
         type=str,
         default="poll",
-        choices=["poll", "list"],
+        choices=["poll", "list", "streamer"],
         help="What elastic-ingest should do",
     )
 
