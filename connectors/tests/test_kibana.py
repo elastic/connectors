@@ -72,7 +72,13 @@ def test_main(patch_logger, mock_responses):
 
 @pytest.mark.asyncio
 async def test_upsert_index(mock_responses):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    config = {
+        "elasticsearch": {
+            "host": "http://nowhere.com:9200",
+            "user": "tarek",
+            "password": "blah",
+        }
+    }
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers

@@ -37,11 +37,26 @@ DOC_TWO = {"_id": 2, "_timestamp": TIMESTAMP}
 SYNC_RULES_ENABLED = True
 SYNC_RULES_DISABLED = False
 
+CONFIG = {
+    "elasticsearch": {
+        "host": "http://nowhere.com:9200",
+        "user": "tarek",
+        "password": "blah",
+    },
+    "attachments": {
+        "drop_dir": "/tmp/attachments/drop",
+        "logs_dir": "/tmp/attachments/logs",
+        "results_dir": "/tmp/attachments/results",
+        "idling": 30,
+        "max_disk_size": 250,
+        "max_concurrency": 5,
+    },
+}
+
 
 @pytest.mark.asyncio
 async def test_prepare_content_index_raise_error_when_index_name_invalid():
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    es = ElasticServer(config)
+    es = ElasticServer(CONFIG)
 
     with pytest.raises(ContentIndexNameInvalid):
         await es.prepare_content_index("lalalalalalalala woohooo")
@@ -51,7 +66,6 @@ async def test_prepare_content_index_raise_error_when_index_name_invalid():
 async def test_prepare_content_index_raise_error_when_index_does_not_exist(
     mock_responses,
 ):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
@@ -67,7 +81,7 @@ async def test_prepare_content_index_raise_error_when_index_does_not_exist(
         headers=headers,
     )
 
-    es = ElasticServer(config)
+    es = ElasticServer(CONFIG)
 
     with pytest.raises(IndexMissing):
         await es.prepare_content_index("search-new-index")
@@ -75,7 +89,6 @@ async def test_prepare_content_index_raise_error_when_index_does_not_exist(
 
 @pytest.mark.asyncio
 async def test_prepare_content_index(mock_responses):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     # prepare-index, with mappings
     mappings = {"properties": {"name": {"type": "keyword"}}}
@@ -93,10 +106,8 @@ async def test_prepare_content_index(mock_responses):
         headers=headers,
     )
 
-    es = ElasticServer(config)
-
+    es = ElasticServer(CONFIG)
     await es.prepare_content_index("search-new-index", mappings=mappings)
-
     await es.close()
 
 
@@ -169,10 +180,9 @@ def set_responses(mock_responses, ts=None):
 
 @pytest.mark.asyncio
 async def test_get_existing_ids(mock_responses):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses)
 
-    es = ElasticServer(config)
+    es = ElasticServer(CONFIG)
     ids = []
     async for doc_id, ts in es.get_existing_ids("search-some-index"):
         ids.append(doc_id)
@@ -183,10 +193,8 @@ async def test_get_existing_ids(mock_responses):
 
 @pytest.mark.asyncio
 async def test_async_bulk(mock_responses, patch_logger):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses)
-
-    es = ElasticServer(config)
+    es = ElasticServer(CONFIG)
     pipeline = Pipeline({})
 
     async def get_docs():
@@ -231,9 +239,8 @@ async def test_async_bulk(mock_responses, patch_logger):
 @pytest.mark.asyncio
 async def test_async_bulk_same_ts(mock_responses, patch_logger):
     ts = datetime.datetime.now().isoformat()
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses, ts)
-    es = ElasticServer(config)
+    es = ElasticServer(CONFIG)
     pipeline = Pipeline({})
 
     async def get_docs():

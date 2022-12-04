@@ -6,15 +6,15 @@
 """
 Demo of a standalone source
 """
-import functools
 import hashlib
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import aiofiles
+
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
 DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_DIR = os.environ.get("SYSTEM_DIR", os.path.dirname(__file__))
@@ -31,6 +31,7 @@ class DirectoryDataSource(BaseDataSource):
         self.directory = os.path.abspath(self.configuration["directory"])
         self.pattern = self.configuration["pattern"]
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
+        self.max_file_size = self.configuration["max_file_size"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -39,6 +40,11 @@ class DirectoryDataSource(BaseDataSource):
                 "value": DEFAULT_DIR,
                 "label": "Directory path",
                 "type": "str",
+            },
+            "max_file_size": {
+                "value": 20 * 1024 * 1024,
+                "label": "Maximum file size",
+                "type": "int",
             },
             "pattern": {
                 "value": "**/*.*",
@@ -61,21 +67,17 @@ class DirectoryDataSource(BaseDataSource):
     def get_id(self, path):
         return hashlib.md5(str(path).encode("utf8")).hexdigest()
 
-    async def _download(self, path, timestamp=None, doit=None):
-        if not (
-            self.enable_content_extraction
-            and doit
-            and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES
-        ):
-            return
+    async def close(self):
+        pass
 
+    async def _download(self, path):
+        chunk_size = 1024 * 128
         print(f"Reading {path}")
-        with open(file=path, mode="rb") as f:
-            return {
-                "_id": self.get_id(path),
-                "_timestamp": timestamp,
-                "_attachment": get_base64_value(f.read()),
-            }
+        async with aiofiles.open(path, "rb") as f:
+            chunk = (await f.read(chunk_size)).strip()
+            while chunk:
+                yield chunk
+                chunk = (await f.read(chunk_size)).strip()
 
     async def get_docs(self, filtering=None):
         logger.debug(f"Reading {self.directory}...")
@@ -85,8 +87,12 @@ class DirectoryDataSource(BaseDataSource):
             if not path_object.is_file():
                 continue
 
-            # download coroutine
-            download_coro = functools.partial(self._download, str(path_object))
+            fstat = path_object.stat()
+
+            # get the file size
+            if fstat.st_size >= self.max_file_size:
+                logger.debug(f"Discard large file {str(path_object)}")
+                continue
 
             # get the last modified value of the file
             stat = path_object.stat()
@@ -108,6 +114,9 @@ class DirectoryDataSource(BaseDataSource):
                 "size": stat.st_size,
                 "_timestamp": ts.isoformat(),
                 "_id": self.get_id(path_object),
+                "_attachment": self._download(str(path_object)),
+                "_attachment_name": path_object.name,
+                "_attachment_filename": path_object.name,
             }
 
-            yield doc, download_coro
+            yield doc, None

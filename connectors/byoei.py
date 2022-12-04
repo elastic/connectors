@@ -22,7 +22,9 @@ Elasticsearch <== Bulker <== queue <== Fetcher <== generator
 import asyncio
 import copy
 import functools
+import os
 import time
+import types
 from collections import defaultdict
 
 from elasticsearch import NotFoundError as ElasticNotFoundError
@@ -199,6 +201,7 @@ class Fetcher:
         sync_rules_enabled=False,
         display_every=DEFAULT_DISPLAY_EVERY,
         concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
+        config=None,
     ):
         if filter_ is None:
             filter_ = Filter()
@@ -220,6 +223,18 @@ class Fetcher:
         )
         self.display_every = display_every
         self.concurrent_downloads = concurrent_downloads
+        if config is None:
+            config = {}
+        self.config = config
+        attachments_config = config.get("attachments", {})
+        drop_dir = attachments_config.get("drop_dir", "dropdir")
+        os.makedirs(drop_dir, exist_ok=True)
+
+        from connectors.services.fstreamer.dropper import UploadDir
+
+        self.file_dropper = UploadDir(
+            drop_dir, attachments_config.get("max_disk_size", 250) * 1024 * 1024
+        )
 
     def __str__(self):
         return (
@@ -314,7 +329,30 @@ class Fetcher:
                         }
                     )
 
-                await asyncio.sleep(0)
+                if "_attachment" in doc and isinstance(
+                    doc["_attachment"], types.AsyncGeneratorType
+                ):
+                    # we have an async generator, we drop the file on disk
+                    gen = doc["_attachment"]
+                    name = doc["_attachment_name"]
+                    filename = doc["_attachment_filename"]
+
+                    await self.file_dropper.drop_file(
+                        gen,
+                        self.config["elasticsearch"],
+                        name,
+                        filename,
+                        self.index,
+                        doc_id,
+                    )
+
+                    for field in (
+                        "_attachment",
+                        "_attachment_name",
+                        "_attachment_filename",
+                    ):
+                        del doc[field]
+
         except Exception as e:
             logger.critical("The document fetcher failed", exc_info=True)
             await self.queue.put("FETCH_ERROR")
@@ -361,10 +399,12 @@ class ElasticServer(ESClient):
     - once they are both over, returns totals
     """
 
-    def __init__(self, elastic_config):
+    def __init__(self, config):
+        elastic_config = config["elasticsearch"]
         logger.debug(f"ElasticServer connecting to {elastic_config['host']}")
         super().__init__(elastic_config)
         self.loop = asyncio.get_event_loop()
+        self.config = config
 
     async def prepare_content_index(self, index, *, mappings=None):
         """Creates the index, given a mapping if it does not exists."""
@@ -478,6 +518,7 @@ class ElasticServer(ESClient):
             sync_rules_enabled=sync_rules_enabled,
             display_every=display_every,
             concurrent_downloads=concurrent_downloads,
+            config=self.config,
         )
         fetcher_task = asyncio.create_task(fetcher.run(generator))
 

@@ -138,7 +138,7 @@ class JobSchedulingService(BaseService):
             f"Service started, listening to events from {self.es_config['host']}"
         )
 
-        es = ElasticServer(self.es_config)
+        es = ElasticServer(self.config)
         try:
             while self.running:
                 # creating a pool of task for every round

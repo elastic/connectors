@@ -95,7 +95,7 @@ async def prepare(service_type, index_name, config, filtering=None):
         filtering = []
 
     klass = get_source_klass(config["sources"][service_type])
-    es = ElasticServer(config["elasticsearch"])
+    es = ElasticServer(config)
 
     # add a dummy pipeline
     try:
@@ -174,7 +174,7 @@ async def prepare(service_type, index_name, config, filtering=None):
                 "reduce_whitespace": True,
                 "run_ml_inference": True,
             },
-            "sync_now": False,
+            "sync_now": True,
             "is_native": True,
         }
 
