@@ -86,6 +86,7 @@ setup(
     entry_points="""
       [console_scripts]
       elastic-ingest = connectors.cli:main
+      elastic-filestreamer = connectors.fstreamer.service:main
       fake-kibana = connectors.kibana:main
       """,
 )
