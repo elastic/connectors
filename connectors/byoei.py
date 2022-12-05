@@ -23,6 +23,7 @@ import copy
 import time
 from collections import defaultdict
 import asyncio
+import functools
 
 from elasticsearch import NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan
@@ -39,6 +40,7 @@ from connectors.utils import (
     DEFAULT_DISPLAY_EVERY,
     DEFAULT_MAX_CONCURRENCY,
     MemQueue,
+    ConcurrentRunner,
 )
 
 
@@ -132,6 +134,10 @@ class Bulker:
         self.bulking = True
         bulk_size = 0
 
+        runner = ConcurrentRunner(
+            max_concurrency=self.concurrent_bulks,
+        )
+
         while True:
             doc_size, doc = await self.queue.get()
             if doc in ("END_DOCS", "FETCH_ERROR"):
@@ -142,20 +148,19 @@ class Bulker:
 
             bulk_size += doc_size
             if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size:
-                t = asyncio.create_task(
-                    self._batch_bulk(len(self.concurrent_bulks) + 1, copy.copy(batch))
+                await runner.put(
+                    functools.partial(
+                        self._batch_bulk,
+                        len(self.concurrent_bulks) + 1,
+                        copy.copy(batch),
+                    )
                 )
-                self.concurrent_bulks.append(t)
-                t.add_done_callback(self.concurrent_bulks.remove)
                 batch.clear()
                 bulk_size = 0
 
-            while len(self.concurrent_bulks) >= self.max_concurrent_bulks:
-                await asyncio.sleep(0)
-
             await asyncio.sleep(0)
 
-        await asyncio.gather(*self.concurrent_bulks)
+        await runner.wait()
         if len(batch) > 0:
             await self._batch_bulk(1, batch)
 

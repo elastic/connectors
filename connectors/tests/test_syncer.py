@@ -157,13 +157,12 @@ FAKE_CONFIG_UNKNOWN_SERVICE = {
 class Args:
     def __init__(self, config_file, **options):
         self.config_file = config_file
-        self.one_sync = options.get('one_sync', False)
-        self.sync_now = options.get('sync_now', False)
+        self.one_sync = options.get("one_sync", False)
+        self.sync_now = options.get("sync_now", False)
 
 
 def create_service(config_file, **options):
     return ConnectorService(Args(config_file, **options))
-
 
 
 def test_bad_config():
