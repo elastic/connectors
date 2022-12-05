@@ -84,8 +84,6 @@ def _parser():
 
 def run(args):
     """Runner"""
-    loop = get_event_loop()
-
     # just display the list of connectors
     if args.action == "list":
         logger.info("Registered connectors:")
@@ -101,6 +99,7 @@ def run(args):
         service = ConnectorService(args)
 
     coro = service.run()
+    loop = get_event_loop()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
