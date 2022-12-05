@@ -20,9 +20,9 @@ from envyaml import EnvYAML
 from connectors.logger import logger, set_logger
 from connectors.source import get_data_sources
 from connectors.utils import get_event_loop
-from connectors.syncer import ConnectorService
-from connectors.fstreamer import FileUploadService
 from connectors import __version__
+from connectors.services.syncer import ConnectorService
+from connectors.services.fstreamer import FileUploadService
 
 
 def _parser():

@@ -304,6 +304,7 @@ class MemQueue(asyncio.Queue):
         return await super().put((item_size, item))
 
 
+# XXX move to connectors/services/base.py
 class Service:
     def __init__(self, args):
         self.args = args

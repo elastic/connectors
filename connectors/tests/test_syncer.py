@@ -12,7 +12,7 @@ from unittest import mock
 from functools import partial
 from aioresponses import CallbackResult
 
-from connectors.syncer import ConnectorService
+from connectors.services.syncer import ConnectorService
 from connectors.byoc import DataSourceError
 from connectors.conftest import assert_re
 
