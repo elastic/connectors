@@ -24,10 +24,11 @@ from connectors.byoc import (
     DataSourceError,
 )
 from connectors.logger import logger
-from connectors.utils import CancellableSleeps, trace_mem, Service
+from connectors.utils import CancellableSleeps, trace_mem
+from connectors.services.base import BaseService
 
 
-class ConnectorService(Service):
+class ConnectorService(BaseService):
     def __init__(self, args):
         super().__init__(args)
         self.errors = [0, time.time()]

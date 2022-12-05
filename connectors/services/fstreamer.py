@@ -27,10 +27,11 @@ import aiofiles
 from connectors.logger import logger
 from connectors.utils import (
     CancellableSleeps,
-    Service,
     get_event_loop,
     ConcurrentRunner,
 )
+from connectors.services.base import BaseService
+
 
 # 250MB max disk size
 ONE_MEG = 104 * 1024
@@ -97,7 +98,7 @@ class FileDrop:
         logger.info(f"Dropped {desc_file}")
 
 
-class FileUploadService(Service):
+class FileUploadService(BaseService):
     """Watches a directory for files and sends them by chunks
 
     Uses `Transfer-Encoding: chunked`

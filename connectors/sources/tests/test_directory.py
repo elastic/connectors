@@ -22,7 +22,7 @@ async def test_get_docs(patch_logger, catch_stdout):
         if "__init__.py" in doc["path"]:
             continue
         # consuming the generator
-        data = b''
+        data = b""
         async for chunk in doc["_attachment"]:
             data += chunk
         assert len(data) > 0
