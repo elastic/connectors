@@ -18,5 +18,5 @@ service:
 connector_id: '1'
 
 sources:
-  fake: test_runner:FakeSource
-  large_fake: test_runner:LargeFakeSource
+  fake: test_syncer:FakeSource
+  large_fake: test_syncer:LargeFakeSource

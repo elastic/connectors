@@ -32,6 +32,7 @@ def run(args):
         config = EnvYAML(args.config_file)
         for source in get_data_sources(config):
             logger.info(f"- {source.__doc__.strip()}")
+        logger.info("Bye")
         return 0
 
     if args.action == "streamer":
