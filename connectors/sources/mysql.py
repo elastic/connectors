@@ -26,6 +26,7 @@ DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
 
+
 class MySqlDataSource(BaseDataSource):
     """Class to fetch and modify documents from MySQL server"""
 
@@ -36,14 +37,6 @@ class MySqlDataSource(BaseDataSource):
             connector (BYOConnector): Object of the BYOConnector class
         """
         super().__init__(connector=connector)
-        self.connection_string = {
-            "host": self.configuration["host"],
-            "port": int(self.configuration["port"]),
-            "user": self.configuration["user"],
-            "password": self.configuration["password"],
-            "db": None,
-            "maxsize": MAX_POOL_SIZE,
-        }
         self.retry_count = int(
             self.configuration.get("retry_count", DEFAULT_RETRY_COUNT)
         )
@@ -106,11 +99,44 @@ class MySqlDataSource(BaseDataSource):
         await self.connection_pool.wait_closed()
         self.connection_pool = None
 
+    def _validate_configuration(self):
+        """Validates whether user input is empty or not for configuration fields and validate type for port
+
+        Raises:
+            Exception: Configured keys can't be empty
+        """
+        connection_fields = ["host", "port", "user", "password", "database"]
+        empty_connection_fields = []
+        for field in connection_fields:
+            if self.configuration[field] == "":
+                empty_connection_fields.append(field)
+
+        if empty_connection_fields:
+            raise Exception(
+                f"Configured keys: {empty_connection_fields} can't be empty."
+            )
+
+        if (
+            isinstance(self.configuration["port"], str)
+            and not self.configuration["port"].isnumeric()
+        ):
+            raise Exception("Configured port has to be an integer.")
+
     async def ping(self):
         """Verify the connection with MySQL server"""
+        logger.info("Validating MySQL Configuration...")
+        self._validate_configuration()
+        connection_string = {
+            "host": self.configuration["host"],
+            "port": int(self.configuration["port"]),
+            "user": self.configuration["user"],
+            "password": self.configuration["password"],
+            "db": None,
+            "maxsize": MAX_POOL_SIZE,
+        }
         logger.info("Pinging MySQL...")
         if self.connection_pool is None:
-            self.connection_pool = await aiomysql.create_pool(**self.connection_string)
+            self.connection_pool = await aiomysql.create_pool(**connection_string)
         try:
             async with self.connection_pool.acquire() as connection:
                 await connection.ping()
@@ -119,20 +145,18 @@ class MySqlDataSource(BaseDataSource):
             logger.exception("Error while connecting to the MySQL Server.")
             raise
 
-    async def _stream_rows(self, database, table, query):
+    async def _connect(self, query, fetch_many=False):
         """Executes the passed query on the MySQL server.
 
         Args:
-            database (str): Name of database
-            table (str): Name of table
             query (str): MySql query to be executed.
+            fetch_many (boolean): Should use fetchmany to fetch the response.
 
         Yields:
             list: Column names and query response
         """
 
         size = int(self.configuration.get("fetch_size", DEFAULT_FETCH_SIZE))
-        logger.debug(f"Streaming {database}.{table} {size} rows at a time")
 
         # retry: Current retry counter
         # yield_once: Yield(fields) once flag
@@ -147,43 +171,44 @@ class MySqlDataSource(BaseDataSource):
                     async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
                         await cursor.execute(query)
 
-                        # sending back column names only once
-                        if yield_once:
-                            yield [column[0] for column in cursor.description]
-                            yield_once = 0
+                        if fetch_many:
+                            # sending back column names only once
+                            if yield_once:
+                                yield [column[0] for column in cursor.description]
+                                yield_once = False
 
-                        # setting cursor position where it was failed
-                        if cursor_position:
-                            await cursor.scroll(cursor_position, mode="absolute")
-                            logger.debug(
-                                f"Cursor moved to {cursor_position} position for {database}.{table}"
-                            )
-
-                        while True:
-                            rows = await cursor.fetchmany(size=size)
-                            rows_length = len(rows)
-
-                            # resetting cursor position & retry to 0 for next batch
+                            # setting cursor position where it was failed
                             if cursor_position:
-                                cursor_position = retry = 0
+                                await cursor.scroll(cursor_position, mode="absolute")
 
-                            if not rows_length:
-                                break
+                            while True:
+                                rows = await cursor.fetchmany(size=size)
+                                rows_length = len(rows)
 
-                            for row in rows:
-                                yield row
+                                # resetting cursor position & retry to 0 for next batch
+                                if cursor_position:
+                                    cursor_position = retry = 0
 
-                            rows_fetched += rows_length
-                            await asyncio.sleep(0)
+                                if not rows_length:
+                                    break
+
+                                for row in rows:
+                                    yield row
+
+                                rows_fetched += rows_length
+                                await asyncio.sleep(0)
+                        else:
+                            yield await cursor.fetchall()
                         break
+
             except IndexError as exception:
                 logger.exception(
-                    f"None of rows fetched from {rows_fetched} rows in {database}.{table}. Exception: {exception}"
+                    f"None of responses fetched from {rows_fetched} rows. Exception: {exception}"
                 )
                 break
             except Exception as exception:
-                logger.warn(
-                    f"Retry count: {retry} out of {self.retry_count} for rows in {database}.{table}. Exception: {exception}"
+                logger.warning(
+                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
                 )
                 if retry == self.retry_count:
                     raise exception
@@ -191,52 +216,32 @@ class MySqlDataSource(BaseDataSource):
                 await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry)
                 retry += 1
 
-    async def _execute_query(self, query):
-        """Executes the passed query on the MySQL server.
-
-        Args:
-            query (str): MySql query to be executed.
-
-        Returns:
-            list, tuple: Column names and query response
-        """
-
-        async with self.connection_pool.acquire() as connection:
-            async with connection.cursor() as cursor:
-                await cursor.execute(query)
-                response = cursor.fetchall().result()
-                column_names = [column[0] for column in cursor.description]
-                return column_names, response
-
     async def fetch_rows(self, database):
         """Fetches all the rows from all the tables of the database.
 
         Args:
             database (str): Name of database
-            query (str): Query to fetch database tables
 
         Yields:
             Dict: Row document to index
         """
         # Query to get all table names from a database
         query = QUERIES["ALL_TABLE"].format(database=database)
+        response = await self._connect(query=query).__anext__()
 
-        _, query_response = await self._execute_query(query=query)
-        if query_response:
-            for table in query_response:
+        if response:
+            for table in response:
                 table_name = table[0]
                 logger.debug(f"Found table: {table_name} in database: {database}.")
 
                 # Query to get table's data
-                query = QUERIES["TABLE_DATA"].format(
-                    database=database, table=table_name
-                )
+                query = QUERIES["TABLE_DATA"].format(database=database, table=table_name)
                 async for row in self.fetch_documents(
                     database=database, table=table_name, query=query
                 ):
                     yield row
         else:
-            logger.warn(
+            logger.warning(
                 f"Fetched 0 tables for the database: {database}. Either the database has no tables or the user does not have access to this database."
             )
 
@@ -293,24 +298,24 @@ class MySqlDataSource(BaseDataSource):
 
         # Query to get the table's primary key
         query = QUERIES["TABLE_PRIMARY_KEY"].format(database=database, table=table)
-        _, columns = await self._execute_query(query=query)
+        response = await self._connect(query=query).__anext__()
 
         keys = []
-        if columns:
+        for column_name in response:
+            keys.append(column_name[0])
+
+        if keys:
 
             # Query to get the table's last update time
-            last_update_time_query = QUERIES["TABLE_LAST_UPDATE_TIME"].format(
+            query = QUERIES["TABLE_LAST_UPDATE_TIME"].format(
                 database=database, table=table
             )
-            _, last_update_time = await self._execute_query(
-                query=last_update_time_query
-            )
+            response = await self._connect(query=query).__anext__()
+            last_update_time = response[0][0]
 
             query = QUERIES["TABLE_DATA"].format(database=database, table=table)
-            streamer = self._stream_rows(database, table, query=query)
+            streamer = self._connect(query=query, fetch_many=True)
             column_names = await streamer.__anext__()
-            for column_name in columns:
-                keys.append(column_name[0])
 
             async for row in streamer:
                 row = dict(zip(column_names, row))
@@ -320,29 +325,33 @@ class MySqlDataSource(BaseDataSource):
                 row.update(
                     {
                         "_id": f"{database}_{table}_{keys_value}",
-                        "_timestamp": last_update_time[0][0],
+                        "_timestamp": last_update_time,
                         "Database": database,
                         "Table": table,
                     }
                 )
                 yield self.serialize(doc=row)
         else:
-            logger.warn(
+            logger.warning(
                 f"Skipping {table} table from database {database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
             )
 
-    async def _fetch_all_databases(self):
-        """Fetches all user databases
+    async def _validate_databases(self, databases):
+        """Validates all user input databases
+
+        Args:
+            databases (list): User input databases
 
         Returns:
-            List: List of databases
+            List: List of invalid databases
         """
 
         # Query to get all databases
         query = QUERIES["ALL_DATABASE"]
-        _, query_response = await self._execute_query(query=query)
-        databases = [database[0] for database in query_response]
-        return databases
+        response = await self._connect(query=query).__anext__()
+
+        accessible_databases = [database[0] for database in response]
+        return list(set(databases) - set(accessible_databases))
 
     async def get_docs(self):
         """Executes the logic to fetch databases, tables and rows in async manner.
@@ -354,13 +363,14 @@ class MySqlDataSource(BaseDataSource):
         if isinstance(database_config, str):
             dbs = database_config.split(",")
             databases = list(map(lambda s: s.strip(), dbs))
-        elif database_config is None:
-            databases = []
         else:
             databases = database_config
 
-        if len(databases) == 0:
-            databases = await self._fetch_all_databases()
+        inaccessible_databases = await self._validate_databases(databases=databases)
+        if inaccessible_databases:
+            raise Exception(
+                f"Configured databases: {inaccessible_databases} are inaccessible for user {self.configuration['user']}."
+            )
 
         for database in databases:
             async for row in self.fetch_rows(database=database):
