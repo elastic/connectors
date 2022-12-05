@@ -12,7 +12,7 @@ from unittest import mock
 from functools import partial
 from aioresponses import CallbackResult
 
-from connectors.runner import ConnectorService, run
+from connectors.syncer import ConnectorService
 from connectors.byoc import DataSourceError
 from connectors.conftest import assert_re
 
@@ -668,16 +668,6 @@ async def test_connector_service_poll_buggy_service(
             return
 
     raise AssertionError
-
-
-def test_connector_service_run(mock_responses, patch_logger, set_env):
-    args = mock.MagicMock()
-    args.config_file = CONFIG
-    args.action = "list"
-    assert run(args) == 0
-    patch_logger.assert_present(
-        ["Registered connectors:", "- Fakey", "- Phatey", "Bye"]
-    )
 
 
 @pytest.mark.asyncio
