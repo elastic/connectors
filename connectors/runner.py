@@ -184,8 +184,8 @@ class ConnectorService:
                         native_service_types, connectors_ids
                     ):
                         await self._one_sync(connector, es, sync_now)
-                        if one_sync:
-                            break
+                    if one_sync:
+                        break
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
