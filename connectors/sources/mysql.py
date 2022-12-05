@@ -95,7 +95,7 @@ class MySqlDataSource(BaseDataSource):
     async def close(self):
         if self.connection_pool is None:
             return
-        await self.connection_pool.close()
+        self.connection_pool.close()
         await self.connection_pool.wait_closed()
         self.connection_pool = None
 
