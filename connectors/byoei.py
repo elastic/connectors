@@ -24,6 +24,7 @@ import time
 from collections import defaultdict
 import asyncio
 import functools
+import types
 
 from elasticsearch import NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan
@@ -253,6 +254,25 @@ class Fetcher:
                         data.pop("_id", None)
                         data.pop(TIMESTAMP_FIELD, None)
                         doc.update(data)
+
+                if "_attachment" in doc and isinstance(
+                    doc["_attachment"], types.AsyncGeneratorType
+                ):
+                    # we have an async generator, we drop the file on disk
+                    gen = doc["_attachment"]
+                    name = doc["_attachment_name"]
+                    filename = doc["_attachment_filename"]
+
+                    await self.file_dropper.drop_file(
+                        gen, name, filename, self.index, doc_id
+                    )
+
+                    for field in (
+                        "_attachment",
+                        "_attachment_name",
+                        "_attachment_filename",
+                    ):
+                        del doc[field]
 
                 await self.queue.put(
                     {

@@ -21,7 +21,10 @@ async def test_get_docs(patch_logger, catch_stdout):
         num += 1
         if "__init__.py" in doc["path"]:
             continue
-        data = await dl(doit=True, timestamp="xx")
-        assert len(data["text"]) > 0
+        # consuming the generator
+        data = b''
+        async for chunk in doc["_attachment"]:
+            data += chunk
+        assert len(data) > 0
 
     assert num > 3

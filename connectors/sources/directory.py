@@ -9,9 +9,9 @@ Demo of a standalone source
 import os
 from pathlib import Path
 import hashlib
-import functools
 from datetime import datetime, timezone
 
+import aiofiles
 
 HERE = os.path.dirname(__file__)
 
@@ -47,22 +47,20 @@ class DirectoryDataSource:
     def get_id(self, path):
         return hashlib.md5(str(path).encode("utf8")).hexdigest()
 
-    async def _download(self, path, timestamp=None, doit=None):
-        if not doit:
-            return
-
+    async def _download(self, path):
+        chunk_size = 1024 * 128
         print(f"Reading {path}")
-        with open(path) as f:
-            return {"_id": self.get_id(path), "timestamp": timestamp, "text": f.read()}
+        async with aiofiles.open(path, "rb") as f:
+            chunk = (await f.read(chunk_size)).strip()
+            while chunk:
+                yield chunk
+                chunk = (await f.read(chunk_size)).strip()
 
     async def get_docs(self):
         root_directory = Path(self.directory)
         for path_object in root_directory.glob(self.pattern):
             if not path_object.is_file():
                 continue
-
-            # download coroutine
-            download_coro = functools.partial(self._download, str(path_object))
 
             # get the last modified value of the file
             ts = path_object.stat().st_mtime
@@ -73,6 +71,9 @@ class DirectoryDataSource:
                 "path": str(path_object),
                 "timestamp": ts.isoformat(),
                 "_id": self.get_id(path_object),
+                "_attachment": self._download(str(path_object)),
+                "_attachment_name": path_object.name,
+                "_attachment_filename": path_object.name,
             }
 
-            yield doc, download_coro
+            yield doc, None
