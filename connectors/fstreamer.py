@@ -24,9 +24,6 @@ import functools
 import aiohttp
 import aiofiles
 
-#
-# using some connectors stuff since we'll end up there
-#
 from connectors.logger import logger
 from connectors.utils import (
     CancellableSleeps,
@@ -38,38 +35,20 @@ from connectors.utils import (
 # 250MB max disk size
 ONE_MEG = 104 * 1024
 DEFAULT_MAX_DIR_SIZE = 250
+
+# Program to encode in base64 -- we could compile a SIMD-aware one
+# for an extra performance boost
 BASE64 = "base64"
-
-
-def to_b64(filename):
-    cmd = f"{BASE64} {filename} > {filename}.b64"
-    logger.info(f"[{os.path.basename(filename)}] Running {cmd}")
-    os.system(cmd)
-    return f"{filename}.b64"
-
-
-async def file_to_pipeline(filename, chunk_size=1024 * 128):
-    """Convert a file into a streamable Elasticsearch request."""
-    b64_file = await get_event_loop().run_in_executor(None, to_b64, filename)
-
-    try:
-        async with aiofiles.open(filename, "rb") as f:
-            yield b'{"data":"'
-            chunk = (await f.read(chunk_size)).strip()
-            while chunk:
-                yield chunk
-                chunk = (await f.read(chunk_size)).strip()
-            yield b'"}'
-    finally:
-        if os.path.exists(b64_file):
-            os.remove(b64_file)
 
 
 class FileDrop:
     def __init__(self, config):
         self.config = config
         self.drop_dir = self.config["attachments"]["drop_dir"]
-        self.max_disk_size = self.config["attachments"]["max_disk_size"] * ONE_MEG
+        self.max_disk_size = (
+            self.config["attachments"].get("max_disk_size", DEFAULT_MAX_DIR_SIZE)
+            * ONE_MEG
+        )
         self.elastic_config = self.config["elastic_search"]
 
     def can_drop(self, drop_directory):
@@ -135,29 +114,50 @@ class FileUploadService(Service):
         self.running = False
         self._sleeps = CancellableSleeps()
 
+    def _to_b64(self, filename):
+        """Calls the system base64 utility to create a base64-encoded file
+
+        The base64 utility is a stream encoder, the file will not be fully
+        loaded into memory.
+
+        This is a blocking method.
+        """
+        cmd = f"{BASE64} {filename} > {filename}.b64"
+        logger.info(f"[{os.path.basename(filename)}] Running {cmd}")
+        os.system(cmd)
+        return f"{filename}.b64"
+
+    async def _file_to_pipeline(self, filename, chunk_size=1024 * 128):
+        """Convert a file into a streamable Elasticsearch request.
+
+        - Calls `_to_b64` in a separate thread so we don't block
+        - Reads the base64 file by chunks an provide an async generator
+        """
+        b64_file = await get_event_loop().run_in_executor(None, self._to_b64, filename)
+
+        try:
+            async with aiofiles.open(filename, "rb") as f:
+                yield b'{"data":"'
+                chunk = (await f.read(chunk_size)).strip()
+                while chunk:
+                    yield chunk
+                    chunk = (await f.read(chunk_size)).strip()
+                yield b'"}'
+        finally:
+            if os.path.exists(b64_file):
+                os.remove(b64_file)
+
     def _prepare_dir(self, name):
         default_dir = os.path.join(os.path.dirname(self.config_file), "attachments")
         path = self._config.get(f"{name}_dir", os.path.join(default_dir, name))
         os.makedirs(path, exist_ok=True)
         return path
 
-    async def run(self):
-        self.running = True
-        logger.info(f"Watching {self.directory}")
-        while self.running:
-            await self._process_dir()
-            logger.info(f"Sleeping for {self.idle_time}s")
-            await self._sleeps.sleep(self.idle_time)
-
-    def shutdown(self, *args, **kw):
-        self.running = False
-        self._sleeps.cancel()
-
-    async def send_attachment(self, desc_file, desc):
+    async def _send_attachment(self, desc_file, desc):
         fn = desc["filename"]
 
         filename = os.path.join(self.directory, fn)
-        gen = functools.partial(file_to_pipeline, filename)
+        gen = functools.partial(self._file_to_pipeline, filename)
         url = (
             f"{desc['host']}/{desc['index']}/_doc/{desc['doc_id']}?pipeline=attachment"
         )
@@ -205,7 +205,22 @@ class FileUploadService(Service):
                 desc = json.loads(await f.read())
                 logger.info(f"Processing {desc['name']}")
                 await runner.put(
-                    functools.partial(self.send_attachment, desc_file, desc)
+                    functools.partial(self._send_attachment, desc_file, desc)
                 )
 
         await runner.wait()
+
+    #
+    # public APIS
+    #
+    async def run(self):
+        self.running = True
+        logger.info(f"Watching {self.directory}")
+        while self.running:
+            await self._process_dir()
+            logger.info(f"Sleeping for {self.idle_time}s")
+            await self._sleeps.sleep(self.idle_time)
+
+    def shutdown(self, *args, **kw):
+        self.running = False
+        self._sleeps.cancel()
