@@ -25,6 +25,6 @@ async def test_get_docs(patch_logger, catch_stdout):
         data = b""
         async for chunk in doc["_attachment"]:
             data += chunk
-        assert len(data) > 0
+        assert len(data) > 0, doc
 
     assert num > 3

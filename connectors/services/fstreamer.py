@@ -47,10 +47,10 @@ BASE64 = "base64"
 class FileDrop:
     def __init__(self, config):
         self.config = config
-        self.drop_dir = self.config["attachments"]["drop_dir"]
+        aconfig = self.config["attachments"]
+        self.drop_dir = aconfig["drop_dir"]
         self.max_disk_size = (
-            self.config["attachments"].get("max_disk_size", DEFAULT_MAX_DIR_SIZE)
-            * ONE_MEG
+            aconfig.get("max_disk_size", DEFAULT_MAX_DIR_SIZE) * ONE_MEG
         )
         self.elastic_config = self.config["elasticsearch"]
 
@@ -109,8 +109,8 @@ class FileUploadService(BaseService):
 
     def __init__(self, args):
         super().__init__(args)
-        self._config = self.config["attachments"]
-        self.max_concurrency = self._config["max_concurrency"]
+        self._config = self.config.get("attachments", {})
+        self.max_concurrency = self._config.get("max_concurrency", 5)
         self.directory = self._prepare_dir("drop")
         self.idle_time = self._config.get("idling", 30)
         self.log_directory = self._prepare_dir("logs")

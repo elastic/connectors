@@ -209,7 +209,22 @@ class Data:
 
 @pytest.mark.asyncio
 async def test_sync_mongo(mock_responses, patch_logger):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    config = {
+        "elasticsearch": {
+            "host": "http://nowhere.com:9200",
+            "user": "tarek",
+            "password": "blah",
+        },
+        "attachments": {
+            "drop_dir": "/tmp/attachments/drop",
+            "logs_dir": "/tmp/attachments/logs",
+            "results_dir": "/tmp/attachments/results",
+            "idling": 30,
+            "max_disk_size": 250,
+            "max_concurrency": 5,
+        },
+    }
+
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
@@ -291,7 +306,7 @@ async def test_sync_mongo(mock_responses, patch_logger):
     )
 
     es = ElasticServer(config)
-    connectors = BYOIndex(config)
+    connectors = BYOIndex(config["elasticsearch"])
     service_config = {"sources": {"mongodb": "connectors.tests.test_byoc:Data"}}
 
     try:
