@@ -24,14 +24,15 @@ sleep 30
 
 $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug
 
-#make load-data
+make load-data
+
 if [[ $PERF8 == "yes" ]]
 then
     if [[ $PLATFORM == "darwin" ]]
     then
-      $ROOT_DIR/bin/perf8 --memray --pyspy --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
-    else
       $ROOT_DIR/bin/perf8 --memray --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+    else
+      $ROOT_DIR/bin/perf8 --memray --pyspy --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
     fi
 else
     $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
