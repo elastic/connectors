@@ -338,3 +338,31 @@ class MemQueue(asyncio.Queue):
     async def put(self, item):
         item_size = await self._wait_for_room(item)
         return await super().put((item_size, item))
+
+
+class ConcurrentRunner:
+    def __init__(self, max_concurrency=5, results_cb=None):
+        self.max_concurrency = 5
+        self.tasks = []
+        self.results_cb = results_cb
+
+    def __len__(self):
+        return len(self.tasks)
+
+    def _cb(self, fut):
+        self.tasks.remove(fut)
+        if self.results_cb is not None:
+            if fut.exception():
+                raise fut.exception()
+            self.results_cb(fut.result())
+
+    async def put(self, coro):
+        while len(self.tasks) >= self.max_concurrency:
+            await asyncio.sleep(0)
+        fut = asyncio.create_task(coro())
+        self.tasks.append(fut)
+        fut.add_done_callback(self._cb)
+        return fut
+
+    async def wait(self):
+        await asyncio.gather(*self.tasks)
