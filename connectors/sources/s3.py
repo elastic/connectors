@@ -22,9 +22,6 @@ from connectors.source import BaseDataSource
 from connectors.utils import get_base64_value
 
 
-SUPPORTED_CONTENT_TYPE = [
-    "text/plain",
-]
 SUPPORTED_FILETYPE = [
     ".txt",
     ".py",
