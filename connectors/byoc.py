@@ -21,12 +21,12 @@ from connectors.source import DataSourceConfiguration, get_source_klass
 from elasticsearch.exceptions import ApiError
 from connectors.index import defaults_for, DEFAULT_LANGUAGE
 
-
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 PIPELINE = "ent-search-generic-ingestion"
 SYNC_DISABLED = -1
 DEFAULT_ANALYSIS_ICU = False
+DEFAULT_PAGE_SIZE = 100
 
 
 def e2str(entry):
@@ -116,31 +116,78 @@ class BYOIndex(ESClient):
             indices=[CONNECTORS_INDEX, JOBS_INDEX], pipelines=[PIPELINE]
         )
 
-    async def get_list(self):
-        await self.client.indices.refresh(index=CONNECTORS_INDEX)
-
-        try:
-            resp = await self.client.search(
-                index=CONNECTORS_INDEX,
-                query={"match_all": {}},
-                size=20,
-                expand_wildcards="hidden",
-            )
-        except ApiError as e:
-            logger.critical(f"The server returned {e.status_code}")
-            logger.critical(e.body, exc_info=True)
+    async def get_connectors(self, native_service_types=[], connectors_ids=[]):
+        if len(native_service_types) == 0 and len(connectors_ids) == 0:
             return
 
-        logger.debug(f"Found {len(resp['hits']['hits'])} connectors")
-        for hit in resp["hits"]["hits"]:
+        await self.client.indices.refresh(index=CONNECTORS_INDEX)
+
+        native_connectors_query = {
+            "bool": {
+                "filter": [
+                    {"term": {"is_native": True}},
+                    {"terms": {"service_type": native_service_types}},
+                ]
+            }
+        }
+        custom_connectors_query = {
+            "bool": {
+                "filter": [
+                    {"term": {"is_native": False}},
+                    {"terms": {"_id": connectors_ids}},
+                ]
+            }
+        }
+        if len(native_service_types) > 0 and len(connectors_ids) > 0:
+            query = {
+                "bool": {
+                    "should": [
+                        native_connectors_query,
+                        custom_connectors_query
+                    ]
+                }
+            }
+        elif len(native_service_types) > 0:
+            query = native_connectors_query
+        else:
+            query = custom_connectors_query
+
+        async for connector in self._query_with_pagination(CONNECTORS_INDEX, query):
             yield BYOConnector(
                 self,
-                hit["_id"],
-                hit["_source"],
+                connector["_id"],
+                connector["_source"],
                 bulk_options=self.bulk_options,
                 language_code=self.language_code,
                 analysis_icu=self.analysis_icu,
             )
+
+    async def _query_with_pagination(self, index, query, page_size=DEFAULT_PAGE_SIZE):
+        count = 0
+        offset = 0
+
+        while True:
+            try:
+                resp = await self.client.search(
+                    index=index,
+                    query=query,
+                    from_=offset,
+                    size=page_size,
+                    expand_wildcards="hidden",
+                )
+            except ApiError as e:
+                logger.critical(f"The server returned {e.status_code}")
+                logger.critical(e.body, exc_info=True)
+                return
+
+            hits = resp["hits"]["hits"]
+            total = resp["hits"]["total"]["value"]
+            count += len(hits)
+            for hit in hits:
+                yield hit
+            if count >= total:
+                break
+            offset += len(hits)
 
 
 class SyncJob:
