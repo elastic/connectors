@@ -12,16 +12,23 @@ import hashlib
 from datetime import datetime, timezone
 
 import aiofiles
+from connectors.source import BaseDataSource
+from connectors.utils import logger
+
 
 HERE = os.path.dirname(__file__)
 
 
-class DirectoryDataSource:
+class DirectoryDataSource(BaseDataSource):
     """Directory"""
 
     def __init__(self, connector):
+        super().__init__(connector)
         self.directory = connector.configuration["directory"]
         self.pattern = connector.configuration["pattern"]
+        self.max_file_size = int(
+            connector.configuration.get("max_file_size", 20 * 1024 * 1024)
+        )
 
     @classmethod
     def get_default_configuration(cls):
@@ -31,8 +38,13 @@ class DirectoryDataSource:
                 "label": "Directory",
                 "type": "str",
             },
+            "max_file_size": {
+                "value": 20 * 1024 * 1024,
+                "label": "Maximum file size",
+                "type": "int",
+            },
             "pattern": {
-                "value": "**/*.py",
+                "value": "**/*.*",
                 "label": "File glob-like pattern",
                 "type": "str",
             },
@@ -46,6 +58,9 @@ class DirectoryDataSource:
 
     def get_id(self, path):
         return hashlib.md5(str(path).encode("utf8")).hexdigest()
+
+    async def close(self):
+        pass
 
     async def _download(self, path):
         chunk_size = 1024 * 128
@@ -62,8 +77,15 @@ class DirectoryDataSource:
             if not path_object.is_file():
                 continue
 
+            fstat = path_object.stat()
+
+            # get the file size
+            if fstat.st_size >= self.max_file_size:
+                logger.debug(f"Discard large file {str(path_object)}")
+                continue
+
             # get the last modified value of the file
-            ts = path_object.stat().st_mtime
+            ts = fstat.st_mtime
             ts = datetime.fromtimestamp(ts, tz=timezone.utc)
 
             # send back as a doc

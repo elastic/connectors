@@ -47,7 +47,7 @@ DEFAULT_PIPELINE = {
 # XXX simulating Kibana click-arounds
 async def prepare(service_type, index_name, config):
     klass = get_source_klass(config["sources"][service_type])
-    es = ElasticServer(config["elasticsearch"])
+    es = ElasticServer(config)
 
     # add a dummy pipeline
     try:

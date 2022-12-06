@@ -37,6 +37,7 @@ native_service_types:
   - mysql
   - network_drive
   - s3
+  - dir
 
 # some id
 #connector_id: '1'

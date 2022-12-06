@@ -43,6 +43,7 @@ from connectors.utils import (
     MemQueue,
     ConcurrentRunner,
 )
+from connectors.services.fstreamer import FileDrop
 
 
 OP_INDEX = "index"
@@ -181,6 +182,7 @@ class Fetcher:
         existing_ids,
         queue_size=DEFAULT_QUEUE_SIZE,
         display_every=DEFAULT_DISPLAY_EVERY,
+        config=None,
     ):
         self.client = client
         self.queue = queue
@@ -196,6 +198,7 @@ class Fetcher:
         self.total_docs_deleted = 0
         self.fetch_error = None
         self.display_every = display_every
+        self.file_dropper = FileDrop(config)
 
     def __str__(self):
         return (
@@ -318,10 +321,12 @@ class ElasticServer(ESClient):
     - once they are both over, returns totals
     """
 
-    def __init__(self, elastic_config):
+    def __init__(self, config):
+        elastic_config = config["elasticsearch"]
         logger.debug(f"ElasticServer connecting to {elastic_config['host']}")
         super().__init__(elastic_config)
         self.loop = asyncio.get_event_loop()
+        self.config = config
 
     async def prepare_index(
         self, index, *, docs=None, settings=None, mappings=None, delete_first=False
@@ -440,6 +445,7 @@ class ElasticServer(ESClient):
             existing_ids,
             queue_size=queue_size,
             display_every=display_every,
+            config=self.config,
         )
         fetcher_task = asyncio.create_task(fetcher.run(generator))
 

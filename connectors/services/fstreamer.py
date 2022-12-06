@@ -33,8 +33,10 @@ from connectors.utils import (
 from connectors.services.base import BaseService
 
 
+SUPPORTED_TEXT_FILETYPE = [".py", ".rst", ".rb", ".sh", ".md", ".txt"]
+
 # 250MB max disk size
-ONE_MEG = 104 * 1024
+ONE_MEG = 1024 * 1024
 DEFAULT_MAX_DIR_SIZE = 250
 
 # Program to encode in base64 -- we could compile a SIMD-aware one
@@ -50,7 +52,7 @@ class FileDrop:
             self.config["attachments"].get("max_disk_size", DEFAULT_MAX_DIR_SIZE)
             * ONE_MEG
         )
-        self.elastic_config = self.config["elastic_search"]
+        self.elastic_config = self.config["elasticsearch"]
 
     def can_drop(self, drop_directory):
         current_size = sum(
@@ -64,14 +66,15 @@ class FileDrop:
         When the desc file hits the disk, it'll be picked up by FileUploadService.
         """
         if not self.can_drop(self.drop_dir):
-            raise OSError("Limit reached")
+            raise OSError(f"Limit of {self.max_disk_size} bytes reached")
 
-        target = os.path.join(self.drop_dir, filename)
+        key = f"{index}-{doc_id}-{filename}"
+        target = os.path.join(self.drop_dir, key)
         async with aiofiles.open(target, "wb") as f:
-            async for chunk in gen():
-                f.write(chunk)
+            async for chunk in gen:
+                await f.write(chunk)
 
-        logger.info(f"Dropped {filename}")
+        logger.info(f"Dropped {key}")
 
         # the file is now on disk, let's create the desc
         desc = {
@@ -79,19 +82,19 @@ class FileDrop:
             # single ES
             "host": self.elastic_config["host"],
             # XXX add suport for API key
-            "user": self.elastic_config["user"],
+            "user": self.elastic_config["username"],
             "password": self.elastic_config["password"],
-            "filename": filename,
+            "filename": key,
             "index": index,
             # XXX how do we know this value when the initial sync of the doc is
             # not done yet. we might need to use the source id
             # and at sync time, query for the corresponding ES doc id
             # and send it only once it's there..
             "doc_id": doc_id,
-            "name": name,
+            "name": filename,
         }
 
-        desc_file = os.path.join(self.drop_dir, os.path.splitext(0) + ".json")
+        desc_file = os.path.join(self.drop_dir, os.path.splitext(key)[0] + ".json")
         with open(desc_file, "w") as f:
             f.write(json.dumps(desc))
 
@@ -136,9 +139,13 @@ class FileUploadService(BaseService):
         """
         b64_file = await get_event_loop().run_in_executor(None, self._to_b64, filename)
 
+        # XXX adding .txt to all known text files
+        if os.path.splitext(filename)[-1] in SUPPORTED_TEXT_FILETYPE:
+            filename += ".txt"
+
         try:
-            async with aiofiles.open(filename, "rb") as f:
-                yield b'{"data":"'
+            async with aiofiles.open(b64_file, "rb") as f:
+                yield b'{"filename":"' + filename.encode("utf8") + b'","data":"'
                 chunk = (await f.read(chunk_size)).strip()
                 while chunk:
                     yield chunk
@@ -156,7 +163,6 @@ class FileUploadService(BaseService):
 
     async def _send_attachment(self, desc_file, desc):
         fn = desc["filename"]
-
         filename = os.path.join(self.directory, fn)
         gen = functools.partial(self._file_to_pipeline, filename)
         url = (
