@@ -20,6 +20,7 @@ Provides:
 import os
 import json
 import functools
+import re
 
 import aiohttp
 import aiofiles
@@ -42,6 +43,7 @@ DEFAULT_MAX_DIR_SIZE = 250
 # Program to encode in base64 -- we could compile a SIMD-aware one
 # for an extra performance boost
 BASE64 = "base64"
+SANITIZER = re.compile("[^0-9a-zA-Z]+")
 
 
 class FileDrop:
@@ -60,6 +62,9 @@ class FileDrop:
         )
         return current_size <= self.max_disk_size
 
+    def _sanitize(self, name):
+        return SANITIZER.sub("-", name)
+
     async def drop_file(self, gen, name, filename, index, doc_id):
         """Writes a file by chunks using the async generator and then a desc file
 
@@ -68,7 +73,7 @@ class FileDrop:
         if not self.can_drop(self.drop_dir):
             raise OSError(f"Limit of {self.max_disk_size} bytes reached")
 
-        key = f"{index}-{doc_id}-{filename}"
+        key = f"{index}-{doc_id}-{self._sanitize(filename)}"
         target = os.path.join(self.drop_dir, key)
         async with aiofiles.open(target, "wb") as f:
             async for chunk in gen:
