@@ -5,9 +5,12 @@
 #
 import asyncio
 import time
+import functools
+import base64
+
 import pytest
 from pympler import asizeof
-import base64
+
 from connectors.utils import (
     next_run,
     validate_index_name,
@@ -15,6 +18,7 @@ from connectors.utils import (
     ESClient,
     MemQueue,
     get_base64_value,
+    ConcurrentRunner,
 )
 
 
@@ -164,3 +168,44 @@ def test_get_base64_value():
     """This test verify get_base64_value method and convert encoded data into base64"""
     expected_result = get_base64_value("dummy".encode("utf-8"))
     assert expected_result == "ZHVtbXk="
+
+
+@pytest.mark.asyncio
+async def test_concurrent_runner(patch_logger):
+    results = []
+
+    def _cb(result):
+        results.append(result)
+
+    async def coro(i):
+        await asyncio.sleep(0.1)
+        return i
+
+    runner = ConcurrentRunner(results_cb=_cb)
+    for i in range(10):
+        await runner.put(functools.partial(coro, i))
+
+    await runner.wait()
+    assert results == list(range(10))
+
+
+@pytest.mark.asyncio
+async def test_concurrent_runner_fails(patch_logger):
+    results = []
+
+    def _cb(result):
+        results.append(result)
+
+    async def coro(i):
+        await asyncio.sleep(0.1)
+        if i == 5:
+            raise Exception("I FAILED")
+        return i
+
+    runner = ConcurrentRunner(results_cb=_cb)
+    for i in range(10):
+        await runner.put(functools.partial(coro, i))
+
+    with pytest.raises(Exception):
+        await runner.wait()
+>>>>>>> 368b707 (added coverage)
