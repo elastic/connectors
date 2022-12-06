@@ -266,7 +266,7 @@ async def set_server_responses(
 
     def _connectors_read(url, **kw):
         return CallbackResult(
-            status=200, payload={"hits": {"hits": [{"_id": "1", "_source": config}]}}
+            status=200, payload={"hits": {"hits": [{"_id": "1", "_source": config}], "total": {"value": 1}}}
         )
 
     if connectors_read is None:
@@ -410,7 +410,6 @@ async def test_connector_service_poll_unconfigured(
     await service.poll()
 
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
-    patch_logger.assert_present("Found 1 connector")
     patch_logger.assert_present("Can't sync with status `needs_configuration`")
     patch_logger.assert_not_present("Sync done")
 
@@ -436,7 +435,6 @@ async def test_connector_service_poll_no_sync_but_status_updated(
     await service.poll(sync_now=False)
 
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
-    patch_logger.assert_present("Found 1 connector")
     patch_logger.assert_present("Scheduling is disabled")
     patch_logger.assert_not_present("Sync done")
     assert calls[-1]["status"] == "connected"
@@ -478,7 +476,6 @@ async def test_connector_service_poll_just_created(
     await service.poll()
 
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
-    patch_logger.assert_present("Found 1 connector")
     patch_logger.assert_present("Can't sync with status `created`")
     patch_logger.assert_not_present("Sync done")
 
@@ -538,17 +535,6 @@ async def test_connector_service_poll_clear_error(
         "job:None",  # second sync
         "connector:None",  # second sync
     ]
-
-
-@pytest.mark.asyncio
-async def test_connector_service_poll_not_native(
-    mock_responses, patch_logger, patch_ping, set_env
-):
-    await set_server_responses(mock_responses, FAKE_CONFIG_NOT_NATIVE)
-    service = ConnectorService(CONFIG_2)
-    asyncio.get_event_loop().call_soon(service.stop)
-    await service.poll()
-    patch_logger.assert_present("Connector 1 of type fake not supported, ignoring")
 
 
 @pytest.mark.asyncio
@@ -727,7 +713,7 @@ async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_e
 
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={"hits": {"hits": [{"_id": "1", "_source": FAKE_CONFIG}]}},
+        payload={"hits": {"hits": [{"_id": "1", "_source": FAKE_CONFIG}], "total": {"value": 1}}},
         headers=headers,
     )
 
@@ -758,7 +744,7 @@ async def test_connector_settings_change(
         current[0] += 1
         source = configs[current[0]]
         return CallbackResult(
-            status=200, payload={"hits": {"hits": [{"_id": "1", "_source": source}]}}
+            status=200, payload={"hits": {"hits": [{"_id": "1", "_source": source}], "total": {"value": 1}}}
         )
 
     indexed = []

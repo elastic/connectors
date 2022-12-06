@@ -130,7 +130,7 @@ async def test_heartbeat(mock_responses, patch_logger):
 
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
+        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}},
         headers=headers,
     )
 
@@ -144,7 +144,7 @@ async def test_heartbeat(mock_responses, patch_logger):
     connectors = BYOIndex(config)
     conns = []
 
-    async for connector in connectors.get_list():
+    async for connector in connectors.get_connectors(['mongodb']):
         connector.start_heartbeat(0.2)
         connector.start_heartbeat(1.0)  # NO-OP
         conns.append(connector)
@@ -164,14 +164,14 @@ async def test_connectors_get_list(mock_responses):
 
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
+        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}},
         headers=headers,
     )
 
     connectors = BYOIndex(config)
     conns = []
 
-    async for connector in connectors.get_list():
+    async for connector in connectors.get_connectors(['mongodb']):
         conns.append(connector)
 
     assert len(conns) == 1
@@ -217,7 +217,7 @@ async def test_sync_mongo(mock_responses, patch_logger):
 
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
+        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}},
         headers=headers,
     )
     mock_responses.put(
@@ -295,7 +295,7 @@ async def test_sync_mongo(mock_responses, patch_logger):
     service_config = {"sources": {"mongodb": "connectors.tests.test_byoc:Data"}}
 
     try:
-        async for connector in connectors.get_list():
+        async for connector in connectors.get_connectors(['mongodb']):
             await connector.prepare(service_config)
             await connector.sync(es, 0)
             await connector.close()
@@ -356,13 +356,13 @@ async def test_connectors_properties(mock_responses, set_env):
 
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
+        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}},
         headers=headers,
     )
 
     connectors = BYOIndex(config["elasticsearch"])
 
-    async for connector in connectors.get_list():
+    async for connector in connectors.get_connectors(['mongodb']):
         assert connector.analysis_icu == config["elasticsearch"]["analysis_icu"]
         assert connector.language_code == config["elasticsearch"]["language_code"]
 
