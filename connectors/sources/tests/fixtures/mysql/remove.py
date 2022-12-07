@@ -14,7 +14,7 @@ def main():
     database = connect(host="127.0.0.1", port=3306, user="root", password="changeme")
     cursor = database.cursor()
     cursor.execute(f"USE {DATABASE_NAME}")
-    for table in range(5):
+    for table in range(15):
         print(f"Working on table {table}...")
         rows = [(f"user_{row_id}",) for row_id in random.sample(range(1, 1000), 10)]
         print(rows)

@@ -25,7 +25,7 @@ def main():
     cursor.execute(f"DROP DATABASE IF EXISTS {DATABASE_NAME}")
     cursor.execute(f"CREATE DATABASE {DATABASE_NAME}")
     cursor.execute(f"USE {DATABASE_NAME}")
-    for table in range(5):
+    for table in range(30):
         print(f"Adding data in {table}...")
         sql_query = f"CREATE TABLE IF NOT EXISTS customers_{table} (name VARCHAR(255), age int, description LONGTEXT, PRIMARY KEY (name))"
         cursor.execute(sql_query)
