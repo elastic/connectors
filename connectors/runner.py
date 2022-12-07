@@ -191,8 +191,7 @@ class ConnectorService:
                 finally:
                     if one_sync:
                         break
-                if not one_sync:
-                    await self._sleeps.sleep(self.idling)
+                await self._sleeps.sleep(self.idling)
         finally:
             self.stop()
             await self.connectors.close()
