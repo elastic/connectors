@@ -341,28 +341,33 @@ class MemQueue(asyncio.Queue):
 
 
 class ConcurrentRunner:
-    def __init__(self, max_concurrency=5, results_cb=None):
+    def __init__(self, max_concurrency=5, results_callback=None):
         self.max_concurrency = max_concurrency
         self.tasks = []
-        self.results_cb = results_cb
+        self.results_callback = results_callback
+        self._task_over = asyncio.Event()
 
     def __len__(self):
         return len(self.tasks)
 
-    def _cb(self, fut):
-        self.tasks.remove(fut)
-        if self.results_cb is not None:
-            if fut.exception():
+    def _callback(self, task):
+        self.tasks.remove(task)
+        self._task_over.set()
+        if self.results_callback is not None:
+            if task.exception():
                 raise fut.exception()
-            self.results_cb(fut.result())
+            self.results_callback(task.result())
 
-    async def put(self, coro):
-        while len(self.tasks) >= self.max_concurrency:
-            await asyncio.sleep(0)
-        fut = asyncio.create_task(coro())
-        self.tasks.append(fut)
-        fut.add_done_callback(self._cb)
-        return fut
+    async def put(self, coroutine):
+        # If self.tasks has reached its max size, we wait for one task to finish
+        if len(self.tasks) >= self.max_concurrency:
+            await self._task_over.wait()
+            # rearm
+            self._task_over.clear()
+        task = asyncio.create_task(coroutine())
+        self.tasks.append(task)
+        task.add_done_callback(self._callback)
+        return task
 
     async def wait(self):
         await asyncio.gather(*self.tasks)

@@ -181,7 +181,7 @@ async def test_concurrent_runner(patch_logger):
         await asyncio.sleep(0.1)
         return i
 
-    runner = ConcurrentRunner(results_cb=_cb)
+    runner = ConcurrentRunner(results_callback=_cb)
     for i in range(10):
         await runner.put(functools.partial(coro, i))
 
@@ -202,10 +202,29 @@ async def test_concurrent_runner_fails(patch_logger):
             raise Exception("I FAILED")
         return i
 
-    runner = ConcurrentRunner(results_cb=_cb)
+    runner = ConcurrentRunner(results_callback=_cb)
     for i in range(10):
         await runner.put(functools.partial(coro, i))
 
     with pytest.raises(Exception):
         await runner.wait()
->>>>>>> 368b707 (added coverage)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_runner_high_concurrency(patch_logger):
+    results = []
+
+    def _cb(result):
+        results.append(result)
+
+    async def coro(i):
+        await asyncio.sleep(0)
+        return i
+
+    runner = ConcurrentRunner(results_callback=_cb)
+    for i in range(1000):
+        await runner.put(functools.partial(coro, i))
+
+    await runner.wait()
+    assert results == list(range(1000))
+>>>>>>> cde899f (use an event to unblock put)
