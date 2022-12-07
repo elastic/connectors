@@ -342,7 +342,7 @@ class MemQueue(asyncio.Queue):
 
 class ConcurrentRunner:
     def __init__(self, max_concurrency=5, results_cb=None):
-        self.max_concurrency = 5
+        self.max_concurrency = max_concurrency
         self.tasks = []
         self.results_cb = results_cb
 
