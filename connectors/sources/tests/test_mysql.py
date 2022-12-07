@@ -54,7 +54,9 @@ class Cursor:
 
     def fetchall(self):
         """This method returns object of Return class"""
-        return Result()
+        futures_object = asyncio.Future()
+        futures_object.set_result([["table1"], ["table2"]])
+        return futures_object
 
     async def fetchmany(self, size=1):
         """This method returns response of fetchmany"""
@@ -178,46 +180,8 @@ async def test_ping_negative(catch_stdout):
 
 
 @pytest.mark.asyncio
-async def test__execute_query():
-    """Test _execute_query method of MySQL"""
-    # Setup
-    source = create_source(MySqlDataSource)
-
-    source.connection_pool = await mock_mysql_response()
-    source.connection_pool.acquire = Connection
-    source.connection_pool.acquire.cursor = Cursor
-
-    # Execute
-    with mock.patch.object(
-        aiomysql, "create_pool", return_value=(await mock_mysql_response())
-    ):
-        response = await source._execute_query(query="select * from table")
-
-        # Assert
-        assert response == (["Database"], [["table1"], ["table2"]])
-
-
-@pytest.mark.asyncio
-async def test__execute_query_negative():
-    """Test _execute_query method of MySQL"""
-    # Setup
-    source = create_source(MySqlDataSource)
-
-    source.connection_pool = await mock_mysql_response()
-    source.connection_pool.acquire = Connection
-    source.connection_pool.acquire.cursor = Cursor
-
-    # Execute
-    with mock.patch.object(
-        aiomysql, "create_pool", return_value=(await mock_mysql_response())
-    ):
-        with pytest.raises(Exception):
-            await source._execute_query()
-
-
-@pytest.mark.asyncio
-async def test__stream_rows():
-    """Test _stream_rows method of MySQL with retry"""
+async def test_connect_with_retry():
+    """Test _connect method of MySQL with retry"""
     # Setup
     source = create_source(MySqlDataSource)
 
@@ -230,8 +194,8 @@ async def test__stream_rows():
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
         # Execute
-        streamer = source._stream_rows(
-            database="database", table="table", query="select * from database.table"
+        streamer = source._connect(
+            query="select * from database.table", fetch_many=True
         )
 
         with pytest.raises(Exception):
@@ -287,9 +251,9 @@ async def test_fetch_documents():
     with mock.patch.object(
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
-        response = await source._execute_query(query)
+        response = source._connect(query)
 
-        mock.patch("source._execute_query", return_value=response)
+        mock.patch("source._connect", return_value=response)
 
     response = source.fetch_documents(
         database="database_name", table="table_name", query=query
@@ -322,9 +286,9 @@ async def test_fetch_rows():
     with mock.patch.object(
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
-        response = await source._execute_query(query)
+        response = source._connect(query)
 
-        mock.patch("source._execute_query", return_value=response)
+        mock.patch("source._connect", return_value=response)
 
     # Assert
     async for row in source.fetch_rows(database="database_name"):
@@ -441,9 +405,9 @@ async def test_validate_databases():
     with mock.patch.object(
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
-        response = await source._execute_query(query)
+        response = source._connect(query)
 
-        mock.patch("source._execute_query", return_value=response)
+        mock.patch("source._connect", return_value=response)
 
     # Execute
     response = await source._validate_databases([])
