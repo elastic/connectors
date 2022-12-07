@@ -155,20 +155,12 @@ class ConnectorService(BaseService):
             while self.running:
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
-                    async for connector in self.connectors.get_connectors():
-                        if (
-                            connector.service_type not in native_service_types
-                            and connector.id not in connectors_ids
-                        ):
-                            logger.debug(
-                                f"Connector {connector.id} of type {connector.service_type} not supported, ignoring"
-                            )
-                            continue
-
+                    async for connector in self.connectors.get_connectors(
+                        native_service_types, connectors_ids
+                    ):
                         await self._one_sync(connector, es, sync_now)
-                        if one_sync:
-                            self.stop()
-                            break
+                    if one_sync:
+                        break
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
@@ -177,7 +169,7 @@ class ConnectorService(BaseService):
                         break
                 await self._sleeps.sleep(self.idling)
         finally:
+            self.stop()
             await self.connectors.close()
             await es.close()
-
         return 0
