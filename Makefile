@@ -1,4 +1,4 @@
-.PHONY: test lint run ftest install dev
+.PHONY: test lint autoformat run ftest install dev
 
 PYTHON=python3.10
 ARCH=$(shell uname -m)
@@ -28,13 +28,17 @@ bin/pytest: bin/python
 	bin/pip install -r requirements/tests.txt
 
 lint: bin/python bin/black bin/elastic-ingest
-	bin/black connectors
-	bin/black setup.py
+	bin/black --check connectors
+	bin/black --check setup.py
 	bin/flake8 connectors --exclude fixtures
 	bin/flake8 setup.py
-	bin/black scripts
+	bin/black --check scripts
 	bin/flake8 scripts
 
+autoformat: bin/python bin/black bin/elastic-ingest
+	bin/black connectors
+	bin/black setup.py
+	bin/black scripts
 
 test:	bin/pytest bin/elastic-ingest
 	bin/pytest --cov-report term-missing --cov-report html --cov=connectors -sv connectors/tests connectors/sources/tests
