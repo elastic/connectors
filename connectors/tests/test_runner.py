@@ -266,7 +266,13 @@ async def set_server_responses(
 
     def _connectors_read(url, **kw):
         return CallbackResult(
-            status=200, payload={"hits": {"hits": [{"_id": "1", "_source": config}], "total": {"value": 1}}}
+            status=200,
+            payload={
+                "hits": {
+                    "hits": [{"_id": "1", "_source": config}],
+                    "total": {"value": 1},
+                }
+            },
         )
 
     if connectors_read is None:
@@ -713,7 +719,12 @@ async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_e
 
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={"hits": {"hits": [{"_id": "1", "_source": FAKE_CONFIG}], "total": {"value": 1}}},
+        payload={
+            "hits": {
+                "hits": [{"_id": "1", "_source": FAKE_CONFIG}],
+                "total": {"value": 1},
+            }
+        },
         headers=headers,
     )
 
@@ -744,7 +755,13 @@ async def test_connector_settings_change(
         current[0] += 1
         source = configs[current[0]]
         return CallbackResult(
-            status=200, payload={"hits": {"hits": [{"_id": "1", "_source": source}], "total": {"value": 1}}}
+            status=200,
+            payload={
+                "hits": {
+                    "hits": [{"_id": "1", "_source": source}],
+                    "total": {"value": 1},
+                }
+            },
         )
 
     indexed = []
