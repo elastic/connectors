@@ -355,7 +355,7 @@ class ConcurrentTasks:
         self._task_over.set()
         if self.results_callback is not None:
             if task.exception():
-                raise fut.exception()
+                raise task.exception()
             self.results_callback(task.result())
 
     async def put(self, coroutine):
