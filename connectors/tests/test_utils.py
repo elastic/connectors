@@ -181,7 +181,7 @@ async def test_concurrent_runner(patch_logger):
         await asyncio.sleep(0.1)
         return i
 
-    runner = ConcurrentRunner(results_callback=_cb)
+    runner = ConcurrentTasks(results_callback=_cb)
     for i in range(10):
         await runner.put(functools.partial(coro, i))
 
@@ -202,7 +202,7 @@ async def test_concurrent_runner_fails(patch_logger):
             raise Exception("I FAILED")
         return i
 
-    runner = ConcurrentRunner(results_callback=_cb)
+    runner = ConcurrentTasks(results_callback=_cb)
     for i in range(10):
         await runner.put(functools.partial(coro, i))
 
@@ -221,7 +221,7 @@ async def test_concurrent_runner_high_concurrency(patch_logger):
         await asyncio.sleep(0)
         return i
 
-    runner = ConcurrentRunner(results_callback=_cb)
+    runner = ConcurrentTasks(results_callback=_cb)
     for i in range(1000):
         await runner.put(functools.partial(coro, i))
 

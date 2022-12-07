@@ -340,7 +340,7 @@ class MemQueue(asyncio.Queue):
         return await super().put((item_size, item))
 
 
-class ConcurrentRunner:
+class ConcurrentTasks:
     def __init__(self, max_concurrency=5, results_callback=None):
         self.max_concurrency = max_concurrency
         self.tasks = []

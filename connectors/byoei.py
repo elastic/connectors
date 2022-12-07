@@ -40,7 +40,7 @@ from connectors.utils import (
     DEFAULT_DISPLAY_EVERY,
     DEFAULT_MAX_CONCURRENCY,
     MemQueue,
-    ConcurrentRunner,
+    ConcurrentTasks,
 )
 
 
@@ -88,7 +88,7 @@ class Bulker:
         self.pipeline_settings = pipeline_settings
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.max_concurrent_bulks = max_concurrency
-        self.bulk_runner = ConcurrentRunner(max_concurrency=max_concurrency)
+        self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -108,7 +108,7 @@ class Bulker:
 
     async def _batch_bulk(self, operations):
         # todo treat result to retry errors like in async_streaming_bulk
-        task_num = len(self.bulk_runner)
+        task_num = len(self.bulk_tasks)
 
         logger.debug(
             f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
@@ -146,7 +146,7 @@ class Bulker:
 
             bulk_size += doc_size
             if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size:
-                await self.bulk_runner.put(
+                await self.bulk_tasks.put(
                     functools.partial(
                         self._batch_bulk,
                         copy.copy(batch),
@@ -157,7 +157,7 @@ class Bulker:
 
             await asyncio.sleep(0)
 
-        await self.bulk_runner.wait()
+        await self.bulk_tasks.wait()
         if len(batch) > 0:
             await self._batch_bulk(batch)
 
