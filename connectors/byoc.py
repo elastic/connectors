@@ -140,12 +140,7 @@ class BYOIndex(ESClient):
         }
         if len(native_service_types) > 0 and len(connectors_ids) > 0:
             query = {
-                "bool": {
-                    "should": [
-                        native_connectors_query,
-                        custom_connectors_query
-                    ]
-                }
+                "bool": {"should": [native_connectors_query, custom_connectors_query]}
             }
         elif len(native_service_types) > 0:
             query = native_connectors_query

@@ -235,7 +235,9 @@ class MySqlDataSource(BaseDataSource):
                 logger.debug(f"Found table: {table_name} in database: {database}.")
 
                 # Query to get table's data
-                query = QUERIES["TABLE_DATA"].format(database=database, table=table_name)
+                query = QUERIES["TABLE_DATA"].format(
+                    database=database, table=table_name
+                )
                 async for row in self.fetch_documents(
                     database=database, table=table_name, query=query
                 ):
