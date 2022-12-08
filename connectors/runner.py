@@ -180,17 +180,15 @@ class ConnectorService:
             while self.running:
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
-
                     async for connector in self.connectors.get_connectors(
                         native_service_types, connectors_ids
                     ):
                         await self._one_sync(connector, es, sync_now)
+                    if one_sync:
+                        break
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
-                finally:
-                    if one_sync:
-                        break
                 if not one_sync:
                     await self._sleeps.sleep(self.idling)
         finally:
