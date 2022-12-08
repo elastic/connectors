@@ -240,7 +240,9 @@ async def test_get_content(file_mock):
     """
     # Setup
     source = create_source(NASDataSource)
-    file_mock.return_value.__enter__.return_value.read.return_value = bytes("Mock....", 'utf-8')
+    file_mock.return_value.__enter__.return_value.read.return_value = bytes(
+        "Mock....", "utf-8"
+    )
 
     mock_response = {
         "id": "1",

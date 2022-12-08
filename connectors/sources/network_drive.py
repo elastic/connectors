@@ -166,7 +166,7 @@ class NASDataSource(BaseDataSource):
         """
         try:
             with smbclient.open_file(
-                path=path, encoding="utf-8", errors="ignore", mode='rb'
+                path=path, encoding="utf-8", errors="ignore", mode="rb"
             ) as file:
                 file_content, chunk = BytesIO(), True
                 while chunk:

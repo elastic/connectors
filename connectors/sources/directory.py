@@ -89,8 +89,12 @@ class DirectoryDataSource:
             return
 
         print(f"Reading {path}")
-        with open(file=path, mode='rb') as f:
-            return {"_id": self.get_id(path), "timestamp": timestamp, "_attachment": get_base64_value(f.read())}
+        with open(file=path, mode="rb") as f:
+            return {
+                "_id": self.get_id(path),
+                "timestamp": timestamp,
+                "_attachment": get_base64_value(f.read()),
+            }
 
     async def get_docs(self):
         root_directory = Path(self.directory)
