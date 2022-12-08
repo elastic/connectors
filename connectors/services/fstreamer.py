@@ -29,7 +29,7 @@ from connectors.logger import logger
 from connectors.utils import (
     CancellableSleeps,
     get_event_loop,
-    ConcurrentRunner,
+    ConcurrentTasks,
 )
 from connectors.services.base import BaseService
 
@@ -136,7 +136,7 @@ class FileUploadService(BaseService):
         This is a blocking method.
         """
         cmd = f"{BASE64} {filename} > {filename}.b64"
-        logger.info(f"[{os.path.basename(filename)}] Running {cmd}")
+        logger.debug(f"[{os.path.basename(filename)}] Running {cmd}")
         os.system(cmd)
         return f"{filename}.b64"
 
@@ -175,7 +175,7 @@ class FileUploadService(BaseService):
         filename = os.path.join(self.directory, fn)
         gen = functools.partial(self._file_to_pipeline, filename)
         url = f"{self.elastic_config['host']}/{desc['index']}/_doc/{desc['doc_id']}?pipeline=attachment"
-        logger.info(f"[{fn}] Sending by chunks to {url}")
+        logger.debug(f"[{fn}] Sending by chunks to {url}")
         headers = {"Content-Type": "application/json"}
         result = os.path.join(self.results_directory, fn + ".json")
         worked = False
@@ -184,9 +184,9 @@ class FileUploadService(BaseService):
         async with session.put(url, data=gen(), headers=headers) as resp:
             async with aiofiles.open(result, "w") as f:
                 resp = await resp.json()
-                logger.info(f"[{fn}] Done, results in {result}")
+                logger.debug(f"[{fn}] Done, results in {result}")
                 if resp.get("result") in ("updated", "created"):
-                    logger.info(f"document was {resp['result']}")
+                    logger.debug(f"document was {resp['result']}")
                     worked = True
                 await f.write(json.dumps(resp))
 
@@ -195,11 +195,16 @@ class FileUploadService(BaseService):
     async def _process_dir(self):
         logger.info("Scanning now...")
 
+        sent = [0]
+
         def track_results(result):
             worked, filename, desc_file, resp = result
             if worked:
                 os.remove(filename)
                 os.remove(desc_file)
+                sent[0] += 1
+                if sent[0] % 10 == 0:
+                    logger.info(f"Sent {sent[0]} files.")
             else:
                 logger.error(f"Failed to ingest {filename}")
                 logger.error(json.dumps(resp))
@@ -210,8 +215,8 @@ class FileUploadService(BaseService):
             )
         ) as session:
 
-            runner = ConcurrentRunner(
-                max_concurrency=self.max_concurrency, results_cb=track_results
+            runner = ConcurrentTasks(
+                max_concurrency=self.max_concurrency, results_callback=track_results
             )
 
             for file in os.listdir(self.directory):
@@ -220,7 +225,7 @@ class FileUploadService(BaseService):
                 desc_file = os.path.join(self.directory, file)
                 async with aiofiles.open(desc_file) as f:
                     desc = json.loads(await f.read())
-                    logger.info(f"Processing {desc['name']}")
+                    logger.debug(f"Processing {desc['name']}")
                     await runner.put(
                         functools.partial(
                             self._send_attachment, desc_file, desc, session

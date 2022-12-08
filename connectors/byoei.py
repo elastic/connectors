@@ -41,7 +41,7 @@ from connectors.utils import (
     DEFAULT_DISPLAY_EVERY,
     DEFAULT_MAX_CONCURRENCY,
     MemQueue,
-    ConcurrentRunner,
+    ConcurrentTasks,
 )
 from connectors.services.fstreamer import FileDrop
 
@@ -136,7 +136,7 @@ class Bulker:
         self.bulking = True
         bulk_size = 0
 
-        runner = ConcurrentRunner(
+        runner = ConcurrentTasks(
             max_concurrency=self.concurrent_bulks,
         )
 

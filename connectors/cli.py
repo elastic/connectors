@@ -23,6 +23,8 @@ from connectors.utils import get_event_loop
 from connectors import __version__
 from connectors.services.syncer import ConnectorService
 from connectors.services.fstreamer import FileUploadService
+import uvloop
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
 def _parser():
