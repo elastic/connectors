@@ -17,6 +17,7 @@ from connectors.utils import get_base64_value, TIKA_SUPPORTED_FILETYPES
 HERE = os.path.dirname(__file__)
 DEFAULT_CONTENT_EXTRACTION = True
 
+
 class DirectoryDataSource:
     """Directory"""
 
