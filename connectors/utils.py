@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from datetime import datetime, timezone
+import base64
 import logging
 import time
 import asyncio
@@ -120,7 +121,12 @@ class ESClient:
         await self.close()
         return False
 
-    async def check_exists(self, indices, pipelines):
+    async def check_exists(self, indices=None, pipelines=None):
+        if indices is None:
+            indices = []
+        if pipelines is None:
+            pipelines = []
+
         for index in indices:
             logger.debug(f"Checking for index {index} presence")
             if not await self.client.indices.exists(index=index):
@@ -256,6 +262,15 @@ def trace_mem(activated=False):
 def get_size(ob):
     """Returns size in Bytes"""
     return asizeof.asizeof(ob)
+
+
+def get_base64_value(content):
+    """
+    Returns the converted file passed into a base64 encoded value
+    Args:
+           content (byte): Object content in bytes
+    """
+    return base64.b64encode(content).decode("utf-8")
 
 
 class MemQueue(asyncio.Queue):

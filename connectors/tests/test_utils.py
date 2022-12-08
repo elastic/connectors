@@ -14,6 +14,7 @@ from connectors.utils import (
     InvalidIndexNameError,
     ESClient,
     MemQueue,
+    get_base64_value,
 )
 
 
@@ -157,3 +158,9 @@ async def test_mem_queue(patch_logger):
 
     await asyncio.gather(remove_data(), add_data())
     assert when[1] - when[0] > 0.1
+
+
+def test_get_base64_value():
+    """This test verify get_base64_value method and convert encoded data into base64"""
+    expected_result = get_base64_value("dummy".encode("utf-8"))
+    assert expected_result == "ZHVtbXk="
