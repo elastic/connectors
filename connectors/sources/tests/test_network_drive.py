@@ -11,6 +11,7 @@ from unittest import mock
 
 import pytest
 import smbclient
+from io import BytesIO
 from connectors.source import DataSourceConfiguration
 from connectors.sources.network_drive import NASDataSource
 from connectors.sources.tests.support import create_source
@@ -77,11 +78,15 @@ def mock_folder(name):
 
 
 def side_effect_function(MAX_CHUNK_SIZE):
+    """Dynamically changing return values during reading a file in chunks
+    Args:
+        MAX_CHUNK_SIZE: Maximum bytes allowed to be read at a given time
+    """
     global READ_COUNT
     if READ_COUNT:
         return None
     READ_COUNT += 1
-    return "MOCK...."
+    return b"Mock...."
 
 
 def test_get_configuration():
@@ -235,7 +240,9 @@ async def test_get_content(file_mock):
     """
     # Setup
     source = create_source(NASDataSource)
-    file_mock.return_value.__enter__.return_value.read.return_value = "Mock..."
+    file_mock.return_value.__enter__.return_value.read.return_value = bytes(
+        "Mock....", "utf-8"
+    )
 
     mock_response = {
         "id": "1",
@@ -245,12 +252,12 @@ async def test_get_content(file_mock):
         "size": "50",
     }
 
-    mocked_content_response = "Mock..."
+    mocked_content_response = BytesIO(b"Mock....")
 
     expected_output = {
         "_id": "1",
         "_timestamp": "2022-04-21T12:12:30",
-        "text": "Mock...",
+        "_attachment": "TW9jay4uLi4=",
     }
 
     # Execute
@@ -280,6 +287,25 @@ async def test_get_content_when_doit_false():
 
 
 @pytest.mark.asyncio
+async def test_get_content_when_file_size_is_large():
+    """Test the module responsible for fetching the content of the file if it is not extractable"""
+    # Setup
+    source = create_source(NASDataSource)
+    mock_response = {
+        "id": "1",
+        "_timestamp": "2022-04-21T12:12:30",
+        "title": "file1.txt",
+        "size": "20000000000",
+    }
+
+    # Execute
+    actual_response = await source.get_content(mock_response, doit=True)
+
+    # Assert
+    assert actual_response is None
+
+
+@pytest.mark.asyncio
 async def test_get_content_when_file_type_not_supported():
     """Test get_content method when the file content type is not supported"""
     # Setup
@@ -287,7 +313,7 @@ async def test_get_content_when_file_type_not_supported():
     mock_response = {
         "id": "1",
         "_timestamp": "2022-04-21T12:12:30",
-        "title": "file2.xml",
+        "title": "file2.dmg",
     }
 
     # Execute
@@ -336,4 +362,4 @@ def test_fetch_file_when_file_is_accessible(file_mock):
     response = source.fetch_file_content(path=path)
 
     # Assert
-    assert response == "MOCK...."
+    assert response.read() == b"Mock...."
