@@ -190,6 +190,7 @@ class ConnectorService:
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
+
                 if not one_sync:
                     await self._sleeps.sleep(self.idling)
         finally:
