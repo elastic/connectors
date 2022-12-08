@@ -112,9 +112,7 @@ class BYOIndex(ESClient):
         )
 
     async def preflight(self):
-        await self.check_exists(
-            indices=[CONNECTORS_INDEX, JOBS_INDEX], pipelines=[PIPELINE]
-        )
+        await self.check_exists(indices=[CONNECTORS_INDEX, JOBS_INDEX])
 
     async def get_connectors(self, native_service_types=[], connectors_ids=[]):
         if len(native_service_types) == 0 and len(connectors_ids) == 0:

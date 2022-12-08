@@ -120,7 +120,12 @@ class ESClient:
         await self.close()
         return False
 
-    async def check_exists(self, indices, pipelines):
+    async def check_exists(self, indices=None, pipelines=None):
+        if indices is None:
+            indices = []
+        if pipelines is None:
+            pipelines = []
+
         for index in indices:
             logger.debug(f"Checking for index {index} presence")
             if not await self.client.indices.exists(index=index):
