@@ -112,9 +112,7 @@ class BYOIndex(ESClient):
         )
 
     async def preflight(self):
-        await self.check_exists(
-            indices=[CONNECTORS_INDEX, JOBS_INDEX], pipelines=[PIPELINE]
-        )
+        await self.check_exists(indices=[CONNECTORS_INDEX, JOBS_INDEX])
 
     async def get_list(self):
         await self.client.indices.refresh(index=CONNECTORS_INDEX)
