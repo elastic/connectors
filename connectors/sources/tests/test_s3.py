@@ -198,9 +198,11 @@ async def test_get_content(patch_logger, mock_aws):
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
         response = await source._get_content(
-            {"id": 1, "filename": "a.txt", "bucket": "dummy"}, "region", doit=1
+            {"id": 1, "filename": "a.txt", "bucket": "dummy", "size": 1000000},
+            "region",
+            doit=1,
         )
-        assert response == {"_timestamp": None, "text": "xxxxx", "_id": 1}
+        assert response == {"_timestamp": None, "_attachment": "eHh4eHg=", "_id": 1}
 
 
 @pytest.mark.asyncio
@@ -225,6 +227,34 @@ async def test_get_content_when_not_doit(patch_logger, mock_aws):
             {"id": 1, "filename": "a.txt", "bucket": "dummy"}, "region"
         )
         assert response is None
+
+
+@pytest.mark.asyncio
+async def test_get_content_when_size_is_large(patch_logger, mock_aws):
+    """Test get_content method of S3DataSource when size is greater than max size"""
+    # Setup
+    source = create_source(S3DataSource)
+    with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
+        response = await source._get_content(
+            {"id": 1, "filename": "a.txt", "bucket": "dummy", "size": 20000000000},
+            "region",
+            doit=1,
+        )
+        assert response is None
+
+
+@pytest.mark.asyncio
+async def test_pdf_file(patch_logger, mock_aws):
+    """Test get_content method of S3DataSource for pdf file"""
+    # Setup
+    source = create_source(S3DataSource)
+    with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
+        response = await source._get_content(
+            {"id": 1, "filename": "dummy.pdf", "bucket": "dummy", "size": 1000000},
+            "region",
+            doit=1,
+        )
+        assert response == {"_timestamp": None, "_attachment": "eHh4eHg=", "_id": 1}
 
 
 async def get_roles(*args):

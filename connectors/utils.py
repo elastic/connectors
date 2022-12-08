@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from datetime import datetime, timezone
+import base64
 import logging
 import time
 import asyncio
@@ -261,6 +262,15 @@ def trace_mem(activated=False):
 def get_size(ob):
     """Returns size in Bytes"""
     return asizeof.asizeof(ob)
+
+
+def get_base64_value(content):
+    """
+    Returns the converted file passed into a base64 encoded value
+    Args:
+           content (byte): Object content in bytes
+    """
+    return base64.b64encode(content).decode("utf-8")
 
 
 class MemQueue(asyncio.Queue):
