@@ -96,7 +96,7 @@ class Connection:
         """This method returns object of Result class"""
         return Cursor
 
-    async def close():
+    def close():
         """This method close the connection"""
         pass
 
