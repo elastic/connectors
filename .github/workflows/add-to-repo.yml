@@ -25,7 +25,7 @@ jobs:
                   title: "${{ github.event.issue.title }}",
                   # Optionally add any labels to the issue.
                   # To find a label ID, see https://gist.github.com/richkuz/b3f500c0c539ff0b7c21b6c58db7bab2
-                  labelIds: ["MDU6TGFiZWwxODgzNTE1OTI1"],
+                  labelIds: ["MDU6TGFiZWwxODgzNTE1OTI1", "LA_kwDODh0j7c8AAAABECcVpA", "LA_kwDODh0j7c8AAAABA_AcdA"],
                   body: "Issue created in another repo, replicated here for visibility: ${{ github.event.issue.html_url }}"
                 }
               ) {
