@@ -1,7 +1,8 @@
 elasticsearch:
-  host: http://localhost:9200
+  host: http://0.0.0.0:9200
   username: elastic
   password: changeme
+  #api_key: "MFBsaTdvUUItV3hiQW5jQVNCNVI6NkNlZDFKVUJTLXFYaV9SV01jYVNQUQ=="
   ssl: true
   bulk:
     queue_max_size: 1024
@@ -41,6 +42,8 @@ native_service_types:
 
 # some id
 #connector_id: '1'
+connector_id: "y_li7oQB-WxbAncAOR7Z"
+service_type: dir
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource

@@ -91,10 +91,7 @@ class FileDrop:
         desc = {
             # XXX maybe its overkill for v1 since a node only connects to a
             # single ES
-            "host": self.elastic_config["host"],
             # XXX add suport for API key
-            "user": self.elastic_config["username"],
-            "password": self.elastic_config["password"],
             "filename": key,
             "index": index,
             # XXX how do we know this value when the initial sync of the doc is
@@ -120,6 +117,7 @@ class FileUploadService(BaseService):
 
     def __init__(self, args):
         super().__init__(args)
+        self.elastic_config = self.config["elasticsearch"]
         self._config = self.config.get("attachments", {})
         self.max_concurrency = self._config.get("max_concurrency", 5)
         self.directory = self._prepare_dir("drop")
@@ -142,7 +140,7 @@ class FileUploadService(BaseService):
         os.system(cmd)
         return f"{filename}.b64"
 
-    async def _file_to_pipeline(self, filename, chunk_size=1024 * 128):
+    async def _file_to_pipeline(self, filename, chunk_size=1024 * 1024):
         """Convert a file into a streamable Elasticsearch request.
 
         - Calls `_to_b64` in a separate thread so we don't block
@@ -172,30 +170,25 @@ class FileUploadService(BaseService):
         os.makedirs(path, exist_ok=True)
         return path
 
-    async def _send_attachment(self, desc_file, desc):
+    async def _send_attachment(self, desc_file, desc, session):
         fn = desc["filename"]
         filename = os.path.join(self.directory, fn)
         gen = functools.partial(self._file_to_pipeline, filename)
-        url = (
-            f"{desc['host']}/{desc['index']}/_doc/{desc['doc_id']}?pipeline=attachment"
-        )
+        url = f"{self.elastic_config['host']}/{desc['index']}/_doc/{desc['doc_id']}?pipeline=attachment"
         logger.info(f"[{fn}] Sending by chunks to {url}")
         headers = {"Content-Type": "application/json"}
         result = os.path.join(self.results_directory, fn + ".json")
         worked = False
         resp = None
 
-        async with aiohttp.ClientSession(
-            auth=aiohttp.BasicAuth(desc["user"], desc["password"])
-        ) as session:
-            async with session.put(url, data=gen(), headers=headers) as resp:
-                async with aiofiles.open(result, "w") as f:
-                    resp = await resp.json()
-                    logger.info(f"[{fn}] Done, results in {result}")
-                    if resp.get("result") in ("updated", "created"):
-                        logger.info(f"document was {resp['result']}")
-                        worked = True
-                    await f.write(json.dumps(resp))
+        async with session.put(url, data=gen(), headers=headers) as resp:
+            async with aiofiles.open(result, "w") as f:
+                resp = await resp.json()
+                logger.info(f"[{fn}] Done, results in {result}")
+                if resp.get("result") in ("updated", "created"):
+                    logger.info(f"document was {resp['result']}")
+                    worked = True
+                await f.write(json.dumps(resp))
 
         return worked, filename, desc_file, resp
 
@@ -211,22 +204,30 @@ class FileUploadService(BaseService):
                 logger.error(f"Failed to ingest {filename}")
                 logger.error(json.dumps(resp))
 
-        runner = ConcurrentRunner(
-            max_concurrency=self.max_concurrency, results_cb=track_results
-        )
+        async with aiohttp.ClientSession(
+            auth=aiohttp.BasicAuth(
+                self.elastic_config["username"], self.elastic_config["password"]
+            )
+        ) as session:
 
-        for file in os.listdir(self.directory):
-            if not file.endswith(".json"):
-                continue
-            desc_file = os.path.join(self.directory, file)
-            async with aiofiles.open(desc_file) as f:
-                desc = json.loads(await f.read())
-                logger.info(f"Processing {desc['name']}")
-                await runner.put(
-                    functools.partial(self._send_attachment, desc_file, desc)
-                )
+            runner = ConcurrentRunner(
+                max_concurrency=self.max_concurrency, results_cb=track_results
+            )
 
-        await runner.wait()
+            for file in os.listdir(self.directory):
+                if not file.endswith(".json"):
+                    continue
+                desc_file = os.path.join(self.directory, file)
+                async with aiofiles.open(desc_file) as f:
+                    desc = json.loads(await f.read())
+                    logger.info(f"Processing {desc['name']}")
+                    await runner.put(
+                        functools.partial(
+                            self._send_attachment, desc_file, desc, session
+                        )
+                    )
+
+            await runner.wait()
 
     #
     # public APIS

@@ -34,7 +34,7 @@ class DirectoryDataSource(BaseDataSource):
     def get_default_configuration(cls):
         return {
             "directory": {
-                "value": HERE,
+                "value": "/Users/tarekziade/Library/Mobile Documents",
                 "label": "Directory",
                 "type": "str",
             },

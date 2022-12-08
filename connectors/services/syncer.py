@@ -137,7 +137,7 @@ class ConnectorService(BaseService):
             logger.info("Preflight checks...")
             try:
                 # Checking the indices/pipeline in the loop to be less strict about the boot ordering
-                await self.connectors.preflight()
+                # await self.connectors.preflight()
                 break
             except Exception as e:
                 if attempts > self.preflight_max_attempts:
