@@ -1,4 +1,4 @@
-.PHONY: test lint autoformat run ftest install dev
+.PHONY: test lint autoformat run ftest install dev release
 
 PYTHON=python3.10
 ARCH=$(shell uname -m)
@@ -43,13 +43,11 @@ autoformat: bin/python bin/black bin/elastic-ingest
 test:	bin/pytest bin/elastic-ingest
 	bin/pytest --cov-report term-missing --cov-report html --cov=connectors -sv connectors/tests connectors/sources/tests
 
-release:
-	install
+release: install
 	bin/python setup.py sdist
 
 ftest: bin/pytest bin/elastic-ingest
 	connectors/tests/ftest.sh $(NAME) $(PERF8)
 
-run: 
-	install
+run: install
 	bin/elastic-ingest --debug
