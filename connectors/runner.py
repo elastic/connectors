@@ -180,7 +180,6 @@ class ConnectorService:
             while self.running:
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
-
                     async for connector in self.connectors.get_connectors(
                         native_service_types, connectors_ids
                     ):
