@@ -57,9 +57,15 @@ class FileDrop:
         self.elastic_config = self.config["elasticsearch"]
 
     def can_drop(self, drop_directory):
-        current_size = sum(
-            d.stat().st_size for d in os.scandir(drop_directory) if d.is_file()
-        )
+        current_size = 0
+        for item in os.scandir(drop_directory):
+            try:
+                if not item.is_file():
+                    continue
+                current_size += d.stat().st_size
+            except Exception:
+                pass
+
         return current_size <= self.max_disk_size
 
     def _sanitize(self, name):
