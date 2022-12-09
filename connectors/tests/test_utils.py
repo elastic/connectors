@@ -221,10 +221,19 @@ async def test_concurrent_runner_high_concurrency(patch_logger):
         await asyncio.sleep(0)
         return i
 
+    s_results = []
+
+    def _second_cb(result):
+        s_results.append(result)
+
     runner = ConcurrentTasks(results_callback=_cb)
     for i in range(1000):
-        await runner.put(functools.partial(coro, i))
+        if i == 3:
+            cb = _second_cb
+        else:
+            cb = None
+        await runner.put(functools.partial(coro, i), result_callback=cb)
 
     await runner.wait()
     assert results == list(range(1000))
->>>>>>> cde899f (use an event to unblock put)
+    assert s_results == [3]
