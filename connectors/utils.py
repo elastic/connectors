@@ -32,6 +32,29 @@ DEFAULT_DISPLAY_EVERY = 100
 DEFAULT_QUEUE_MEM_SIZE = 5
 DEFAULT_CHUNK_MEM_SIZE = 25
 DEFAULT_MAX_CONCURRENCY = 5
+TIKA_SUPPORTED_FILETYPES = [
+    ".txt",
+    ".py",
+    ".rst",
+    ".html",
+    ".markdown",
+    ".json",
+    ".xml",
+    ".csv",
+    ".md",
+    ".ppt",
+    ".rtf",
+    ".docx",
+    ".odt",
+    ".xls",
+    ".xlsx",
+    ".rb",
+    ".paper",
+    ".sh",
+    ".pptx",
+    ".pdf",
+    ".doc",
+]
 
 
 class ESClient:

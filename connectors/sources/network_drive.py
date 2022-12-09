@@ -13,32 +13,10 @@ import smbclient
 from io import BytesIO
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import iso_utc, get_base64_value
+from connectors.utils import iso_utc, get_base64_value, TIKA_SUPPORTED_FILETYPES
 from smbprotocol.exceptions import SMBException, SMBOSError
 
-SUPPORTED_FILETYPE = [
-    ".txt",
-    ".py",
-    ".rst",
-    ".html",
-    ".markdown",
-    ".json",
-    ".xml",
-    ".csv",
-    ".md",
-    ".ppt",
-    ".rtf",
-    ".docx",
-    ".odt",
-    ".xls",
-    ".xlsx",
-    ".rb",
-    ".paper",
-    ".sh",
-    ".pptx",
-    ".pdf",
-    ".doc",
-]
+
 MAX_CHUNK_SIZE = 65536
 DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_FILE_SIZE_LIMIT = 10485760
@@ -193,7 +171,7 @@ class NASDataSource(BaseDataSource):
         if not (
             self.enable_content_extraction
             and doit
-            and os.path.splitext(file["title"])[-1] in SUPPORTED_FILETYPE
+            and os.path.splitext(file["title"])[-1] in TIKA_SUPPORTED_FILETYPES
             and file["size"]
         ):
             return
