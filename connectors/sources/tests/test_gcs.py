@@ -8,7 +8,6 @@
 import argparse
 import asyncio
 import json
-import os
 from unittest import mock
 
 import pytest
@@ -19,7 +18,7 @@ from aiogoogle.models import Response, Request
 from connectors.source import DataSourceConfiguration
 from connectors.sources.gcs import GoogleCloudStorageDataSource
 
-SERVICE_ACCOUNT_CREDENTIAL_PATH = "./path-to-credentials.json"
+SERVICE_ACCOUNT_CREDENTIALS = '{"project_id": "dummy123"}'
 API_NAME = "storage"
 API_VERSION = "v1"
 
@@ -31,13 +30,9 @@ def get_mocked_source_object():
         GoogleCloudStorageDataSource: Mocked object of the data source class.
     """
     connector = argparse.Namespace()
-    connector.configuration = {"credentials_path": SERVICE_ACCOUNT_CREDENTIAL_PATH}
-    dummy_json_data = {"project_id": "dummy123"}
-    with open(
-        file=SERVICE_ACCOUNT_CREDENTIAL_PATH, mode="w", encoding="UTF-8"
-    ) as credentials:
-        json.dump(obj=dummy_json_data, fp=credentials, indent=4)
-
+    connector.configuration = {
+        "service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS
+    }
     mocked_gcs_object = GoogleCloudStorageDataSource(connector=connector)
     return mocked_gcs_object
 
@@ -57,7 +52,23 @@ def test_get_configuration():
 
     # Assert
 
-    assert config["credentials_path"] == "gcs_dummy_credentials.json"
+    assert type(config["service_account_credentials"]) == str
+    assert json.loads(
+        config["service_account_credentials"].encode("unicode_escape").decode()
+    )
+
+
+@pytest.mark.asyncio
+async def test_empty_configuration():
+    """Tests the validity of the configurations passed to the Google Cloud source class."""
+
+    # Setup
+    connector = argparse.Namespace()
+    connector.configuration = {"service_account_credentials": ""}
+
+    # Execute
+    with pytest.raises(Exception, match="service_account_credentials can't be empty."):
+        _ = GoogleCloudStorageDataSource(connector=connector)
 
 
 @pytest.mark.asyncio
@@ -81,11 +92,6 @@ async def test_ping_for_successful_connection():
     ):
         await mocked_gcs_object.ping()
 
-    # Cleanup
-
-    if os.path.exists(path=SERVICE_ACCOUNT_CREDENTIAL_PATH):
-        os.remove(path=SERVICE_ACCOUNT_CREDENTIAL_PATH)
-
 
 @pytest.mark.asyncio
 async def test_ping_for_failed_connection():
@@ -99,11 +105,6 @@ async def test_ping_for_failed_connection():
 
     with pytest.raises(Exception, match="None could not be converted to *"):
         await mocked_gcs_object.ping()
-
-    # Cleanup
-
-    if os.path.exists(path=SERVICE_ACCOUNT_CREDENTIAL_PATH):
-        os.remove(path=SERVICE_ACCOUNT_CREDENTIAL_PATH)
 
 
 @pytest.mark.parametrize(
@@ -214,10 +215,6 @@ async def test_fetch_buckets():
     # Assert
     assert bucket_list == expected_bucket_list
 
-    # Cleanup
-    if os.path.exists(path=SERVICE_ACCOUNT_CREDENTIAL_PATH):
-        os.remove(path=SERVICE_ACCOUNT_CREDENTIAL_PATH)
-
 
 @pytest.mark.asyncio
 async def test_fetch_blobs():
@@ -266,10 +263,6 @@ async def test_fetch_blobs():
             ):
                 # Assert
                 assert blob_result == dummy_blob_response
-
-    # Cleanup
-    if os.path.exists(path=SERVICE_ACCOUNT_CREDENTIAL_PATH):
-        os.remove(path=SERVICE_ACCOUNT_CREDENTIAL_PATH)
 
 
 @pytest.mark.asyncio
@@ -323,10 +316,6 @@ async def test_get_docs():
             async for blob_document in mocked_gcs_object.get_docs():
                 assert blob_document[0] == expected_blob_document
 
-    # Cleanup
-    if os.path.exists(path=SERVICE_ACCOUNT_CREDENTIAL_PATH):
-        os.remove(path=SERVICE_ACCOUNT_CREDENTIAL_PATH)
-
 
 @pytest.mark.asyncio
 async def test_get_docs_when_no_buckets_present():
@@ -355,10 +344,6 @@ async def test_get_docs_when_no_buckets_present():
         with mock.patch.object(ServiceAccountManager, "refresh"):
             async for blob_document in mocked_gcs_object.get_docs():
                 assert blob_document[0] is None
-
-    # Cleanup
-    if os.path.exists(path=SERVICE_ACCOUNT_CREDENTIAL_PATH):
-        os.remove(path=SERVICE_ACCOUNT_CREDENTIAL_PATH)
 
 
 @pytest.mark.asyncio
@@ -408,10 +393,6 @@ async def test_get_content():
         )
         assert content == expected_blob_document
 
-    # Cleanup
-    if os.path.exists(path=SERVICE_ACCOUNT_CREDENTIAL_PATH):
-        os.remove(path=SERVICE_ACCOUNT_CREDENTIAL_PATH)
-
 
 @pytest.mark.asyncio
 async def test_get_content_when_type_not_supported():
@@ -455,10 +436,6 @@ async def test_get_content_when_type_not_supported():
         blob=blob_document,
     )
     assert content is None
-
-    # Cleanup
-    if os.path.exists(path=SERVICE_ACCOUNT_CREDENTIAL_PATH):
-        os.remove(path=SERVICE_ACCOUNT_CREDENTIAL_PATH)
 
 
 @pytest.mark.asyncio
@@ -504,22 +481,17 @@ async def test_get_content_when_file_size_is_large():
     )
     assert content is None
 
-    # Cleanup
-    if os.path.exists(path=SERVICE_ACCOUNT_CREDENTIAL_PATH):
-        os.remove(path=SERVICE_ACCOUNT_CREDENTIAL_PATH)
-
 
 @pytest.mark.asyncio
 async def test_api_call_for_attribute_error():
-    """Tests the ping functionality when connection can not be established to Google Cloud Storage."""
+    """Tests the _api_call method when resource attribute is not present in the getattr."""
 
     # Setup
 
     mocked_gcs_object = get_mocked_source_object()
 
     # Execute
-
-    try:
+    with pytest.raises(AttributeError):
         async for _ in mocked_gcs_object._api_call(
             resource="buckets_dummy",
             method="list",
@@ -528,10 +500,3 @@ async def test_api_call_for_attribute_error():
             userProject=mocked_gcs_object.user_project_id,
         ):
             print("Method called successfully....")
-    except AttributeError as error:
-        print(f"Attribute error: {error}")
-
-    # Cleanup
-
-    if os.path.exists(path=SERVICE_ACCOUNT_CREDENTIAL_PATH):
-        os.remove(path=SERVICE_ACCOUNT_CREDENTIAL_PATH)
