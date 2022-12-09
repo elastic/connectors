@@ -146,8 +146,6 @@ async def test_close_with_connection_pool():
     """Test close method of MySql with connection pool"""
     # Setup
     source = create_source(MySqlDataSource)
-
-    mock_response = asyncio.Future()
     source.connection_pool = ConnectionPool()
     source.connection_pool.acquire = Connection
 
