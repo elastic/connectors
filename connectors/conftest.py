@@ -103,7 +103,7 @@ def patch_logger(silent=True):
 
     from connectors.logger import logger
 
-    methods = ("exception", "error", "critical", "info", "debug")
+    methods = ("exception", "error", "critical", "info", "debug", "warning")
     for method in methods:
         setattr(logger, f"_old_{method}", getattr(logger, method))
         setattr(logger, method, new_logger.info)

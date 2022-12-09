@@ -109,6 +109,14 @@ class Connection:
         pass
 
 
+class ConnectionPool:
+    def close(self):
+        pass
+
+    async def wait_closed(self):
+        pass
+
+
 async def mock_mysql_response():
     """Creates mock response
 
@@ -139,14 +147,16 @@ async def test_close_with_connection_pool():
     # Setup
     source = create_source(MySqlDataSource)
 
-    source.connection_pool = Connection
+    mock_response = asyncio.Future()
+    source.connection_pool = ConnectionPool()
+    source.connection_pool.acquire = Connection
 
     # Execute
     await source.close()
 
 
 @pytest.mark.asyncio
-async def test_ping():
+async def test_ping(patch_logger):
     """Test ping method of MySQL"""
     # Setup
     source = create_source(MySqlDataSource)
@@ -163,7 +173,7 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-async def test_ping_negative(catch_stdout):
+async def test_ping_negative(patch_logger):
     """Test ping method of MySqlDataSource class with negative case"""
     # Setup
     source = create_source(MySqlDataSource)
@@ -180,7 +190,7 @@ async def test_ping_negative(catch_stdout):
 
 
 @pytest.mark.asyncio
-async def test_connect_with_retry():
+async def test_connect_with_retry(patch_logger):
     """Test _connect method of MySQL with retry"""
     # Setup
     source = create_source(MySqlDataSource)
