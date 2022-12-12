@@ -174,16 +174,16 @@ def test_get_base64_value():
 async def test_concurrent_runner(patch_logger):
     results = []
 
-    def _cb(result):
+    def _results_callback(result):
         results.append(result)
 
-    async def coro(i):
+    async def coroutine(i):
         await asyncio.sleep(0.1)
         return i
 
-    runner = ConcurrentTasks(results_callback=_cb)
+    runner = ConcurrentTasks(results_callback=_results_callback)
     for i in range(10):
-        await runner.put(functools.partial(coro, i))
+        await runner.put(functools.partial(coroutine, i))
 
     await runner.wait()
     assert results == list(range(10))
@@ -193,47 +193,49 @@ async def test_concurrent_runner(patch_logger):
 async def test_concurrent_runner_fails(patch_logger):
     results = []
 
-    def _cb(result):
+    def _results_callback(result):
         results.append(result)
 
-    async def coro(i):
+    async def coroutine(i):
         await asyncio.sleep(0.1)
         if i == 5:
             raise Exception("I FAILED")
         return i
 
-    runner = ConcurrentTasks(results_callback=_cb)
+    runner = ConcurrentTasks(results_callback=_results_callback)
     for i in range(10):
-        await runner.put(functools.partial(coro, i))
+        await runner.put(functools.partial(coroutine, i))
 
     with pytest.raises(Exception):
         await runner.wait()
+
+    assert 5 not in results
 
 
 @pytest.mark.asyncio
 async def test_concurrent_runner_high_concurrency(patch_logger):
     results = []
 
-    def _cb(result):
+    def _results_callback(result):
         results.append(result)
 
-    async def coro(i):
+    async def coroutine(i):
         await asyncio.sleep(0)
         return i
 
-    s_results = []
+    second_results = []
 
-    def _second_cb(result):
-        s_results.append(result)
+    def _second_callback(result):
+        second_results.append(result)
 
-    runner = ConcurrentTasks(results_callback=_cb)
+    runner = ConcurrentTasks(results_callback=_results_callback)
     for i in range(1000):
         if i == 3:
-            cb = _second_cb
+            callback = _second_callback
         else:
-            cb = None
-        await runner.put(functools.partial(coro, i), result_callback=cb)
+            callback = None
+        await runner.put(functools.partial(coroutine, i), result_callback=callback)
 
     await runner.wait()
     assert results == list(range(1000))
-    assert s_results == [3]
+    assert second_results == [3]

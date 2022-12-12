@@ -391,5 +391,7 @@ class ConcurrentTasks:
         )
         return task
 
-    async def wait(self):
+    async def join(self):
+        """Wait for all tasks to finish.
+        """
         await asyncio.gather(*self.tasks)

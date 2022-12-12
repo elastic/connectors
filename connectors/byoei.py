@@ -157,7 +157,7 @@ class Bulker:
 
             await asyncio.sleep(0)
 
-        await self.bulk_tasks.wait()
+        await self.bulk_tasks.join()
         if len(batch) > 0:
             await self._batch_bulk(batch)
 
