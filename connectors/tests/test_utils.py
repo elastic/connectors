@@ -18,7 +18,7 @@ from connectors.utils import (
     ESClient,
     MemQueue,
     get_base64_value,
-    ConcurrentRunner,
+    ConcurrentTasks,
 )
 
 
