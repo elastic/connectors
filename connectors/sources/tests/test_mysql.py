@@ -96,14 +96,6 @@ class Connection:
         """This method returns object of Result class"""
         return Cursor
 
-    def close():
-        """This method close the connection"""
-        pass
-
-    async def wait_closed():
-        """This method waits before closing the connection"""
-        pass
-
     async def __aexit__(self, exception_type, exception_value, exception_traceback):
         """Make sure the dummy database connection gets closed"""
         pass
