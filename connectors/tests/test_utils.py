@@ -185,7 +185,7 @@ async def test_concurrent_runner(patch_logger):
     for i in range(10):
         await runner.put(functools.partial(coroutine, i))
 
-    await runner.wait()
+    await runner.join()
     assert results == list(range(10))
 
 
@@ -207,7 +207,7 @@ async def test_concurrent_runner_fails(patch_logger):
         await runner.put(functools.partial(coroutine, i))
 
     with pytest.raises(Exception):
-        await runner.wait()
+        await runner.join()
 
     assert 5 not in results
 
@@ -236,6 +236,6 @@ async def test_concurrent_runner_high_concurrency(patch_logger):
             callback = None
         await runner.put(functools.partial(coroutine, i), result_callback=callback)
 
-    await runner.wait()
+    await runner.join()
     assert results == list(range(1000))
     assert second_results == [3]
