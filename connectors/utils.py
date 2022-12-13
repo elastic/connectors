@@ -11,6 +11,7 @@ import asyncio
 import tracemalloc
 import gc
 import contextlib
+import functools
 
 from elasticsearch import (
     AsyncElasticsearch,
@@ -338,3 +339,58 @@ class MemQueue(asyncio.Queue):
     async def put(self, item):
         item_size = await self._wait_for_room(item)
         return await super().put((item_size, item))
+
+
+class ConcurrentTasks:
+    """Async task manager.
+
+    Can be used to trigger concurrent async tasks with a maximum
+    concurrency value.
+
+    - `max_concurrency`: max concurrent tasks allowed, default: 5
+    - `results_callback`: when provided, synchronous funciton called with the result of each task.
+    """
+
+    def __init__(self, max_concurrency=5, results_callback=None):
+        self.max_concurrency = max_concurrency
+        self.tasks = []
+        self.results_callback = results_callback
+        self._task_over = asyncio.Event()
+
+    def __len__(self):
+        return len(self.tasks)
+
+    def _callback(self, task, result_callback=None):
+        self.tasks.remove(task)
+        self._task_over.set()
+        if task.exception():
+            raise task.exception()
+        if result_callback is not None:
+            result_callback(task.result())
+        # global callback
+        if self.results_callback is not None:
+            self.results_callback(task.result())
+
+    async def put(self, coroutine, result_callback=None):
+        """Adds a coroutine for immediate execution.
+
+        If the number of running tasks reach `max_concurrency`, this
+        function will block and wait for a free slot.
+
+        If provided, `result_callback` will be called when the task is done.
+        """
+        # If self.tasks has reached its max size, we wait for one task to finish
+        if len(self.tasks) >= self.max_concurrency:
+            await self._task_over.wait()
+            # rearm
+            self._task_over.clear()
+        task = asyncio.create_task(coroutine())
+        self.tasks.append(task)
+        task.add_done_callback(
+            functools.partial(self._callback, result_callback=result_callback)
+        )
+        return task
+
+    async def join(self):
+        """Wait for all tasks to finish."""
+        await asyncio.gather(*self.tasks)

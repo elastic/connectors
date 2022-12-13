@@ -22,6 +22,7 @@ Elasticsearch <== Bulker <== queue <== Fetcher <== generator
 import copy
 import time
 from collections import defaultdict
+import functools
 import asyncio
 
 from elasticsearch import NotFoundError as ElasticNotFoundError
@@ -39,6 +40,7 @@ from connectors.utils import (
     DEFAULT_DISPLAY_EVERY,
     DEFAULT_MAX_CONCURRENCY,
     MemQueue,
+    ConcurrentTasks,
 )
 
 
@@ -86,7 +88,7 @@ class Bulker:
         self.pipeline_settings = pipeline_settings
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.max_concurrent_bulks = max_concurrency
-        self.concurrent_bulks = []
+        self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -104,8 +106,10 @@ class Bulker:
 
         raise TypeError(operation)
 
-    async def _batch_bulk(self, task_num, operations):
+    async def _batch_bulk(self, operations):
         # todo treat result to retry errors like in async_streaming_bulk
+        task_num = len(self.bulk_tasks)
+
         logger.debug(
             f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
         )
@@ -142,22 +146,20 @@ class Bulker:
 
             bulk_size += doc_size
             if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size:
-                t = asyncio.create_task(
-                    self._batch_bulk(len(self.concurrent_bulks) + 1, copy.copy(batch))
+                await self.bulk_tasks.put(
+                    functools.partial(
+                        self._batch_bulk,
+                        copy.copy(batch),
+                    )
                 )
-                self.concurrent_bulks.append(t)
-                t.add_done_callback(self.concurrent_bulks.remove)
                 batch.clear()
                 bulk_size = 0
 
-            while len(self.concurrent_bulks) >= self.max_concurrent_bulks:
-                await asyncio.sleep(0)
-
             await asyncio.sleep(0)
 
-        await asyncio.gather(*self.concurrent_bulks)
+        await self.bulk_tasks.join()
         if len(batch) > 0:
-            await self._batch_bulk(1, batch)
+            await self._batch_bulk(batch)
 
 
 class Fetcher:
