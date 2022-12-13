@@ -12,7 +12,7 @@ from unittest import mock
 from functools import partial
 from aioresponses import CallbackResult
 
-from connectors.services.syncer import ConnectorService
+from connectors.services.sync import SyncService
 from connectors.byoc import DataSourceError
 from connectors.conftest import assert_re
 
@@ -162,7 +162,7 @@ class Args:
 
 
 def create_service(config_file, **options):
-    return ConnectorService(Args(config_file, **options))
+    return SyncService(Args(config_file, **options))
 
 
 def test_bad_config():

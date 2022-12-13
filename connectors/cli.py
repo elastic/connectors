@@ -21,7 +21,7 @@ from connectors.logger import logger, set_logger
 from connectors.source import get_data_sources
 from connectors.utils import get_event_loop
 from connectors import __version__
-from connectors.services.syncer import ConnectorService
+from connectors.services.sync import SyncService
 
 
 def _parser():
@@ -92,7 +92,7 @@ def run(args):
         logger.info("Bye")
         return 0
 
-    service = ConnectorService(args)
+    service = SyncService(args)
     coro = service.run()
     loop = get_event_loop()
 

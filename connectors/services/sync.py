@@ -28,7 +28,7 @@ from connectors.utils import CancellableSleeps, trace_mem
 from connectors.services.base import BaseService
 
 
-class ConnectorService(BaseService):
+class SyncService(BaseService):
     def __init__(self, args):
         super().__init__(args)
         self.errors = [0, time.time()]
