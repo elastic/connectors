@@ -9,12 +9,12 @@ import pytest
 import asyncio
 import json
 from unittest import mock
-from functools import partial
 from aioresponses import CallbackResult
 
 from connectors.services.sync import SyncService
 from connectors.byoc import DataSourceError
 from connectors.conftest import assert_re
+from connectors.tests.fake_sources import FakeSourceTS
 
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
@@ -168,79 +168,6 @@ def create_service(config_file, **options):
 def test_bad_config():
     with pytest.raises(OSError):
         create_service("BEEUUUAH")
-
-
-class FakeSource:
-    """Fakey"""
-
-    service_type = "fake"
-
-    def __init__(self, connector):
-        self.connector = connector
-        if connector.configuration.has_field("raise"):
-            raise Exception("I break on init")
-        self.fail = connector.configuration.has_field("fail")
-
-    async def changed(self):
-        return True
-
-    async def ping(self):
-        pass
-
-    async def close(self):
-        pass
-
-    async def _dl(self, doc_id, timestamp=None, doit=None):
-        if not doit:
-            return
-        return {"_id": doc_id, "_timestamp": timestamp, "text": "xx"}
-
-    async def get_docs(self):
-        if self.fail:
-            raise Exception("I fail while syncing")
-        yield {"_id": "1"}, partial(self._dl, "1")
-
-    @classmethod
-    def get_default_configuration(cls):
-        return []
-
-
-class FakeSourceTS(FakeSource):
-    """Fake source with stable TS"""
-
-    service_type = "fake_ts"
-    ts = "2022-10-31T09:04:35.277558"
-
-    async def get_docs(self):
-        if self.fail:
-            raise Exception("I fail while syncing")
-        yield {"_id": "1", "_timestamp": self.ts}, partial(self._dl, "1")
-
-
-class FailsThenWork(FakeSource):
-    """Buggy"""
-
-    service_type = "fail_once"
-    fail = True
-
-    async def get_docs(self):
-        if FailsThenWork.fail:
-            FailsThenWork.fail = False
-            raise Exception("I fail while syncing")
-        yield {"_id": "1"}, partial(self._dl, "1")
-
-
-class LargeFakeSource(FakeSource):
-    """Phatey"""
-
-    service_type = "large_fake"
-
-    async def get_docs(self):
-        for i in range(1001):
-            doc_id = str(i + 1)
-            yield {"_id": doc_id, "data": "big" * 1024 * 1024}, partial(
-                self._dl, doc_id
-            )
 
 
 async def set_server_responses(
@@ -636,7 +563,7 @@ async def test_connector_service_poll_buggy_service(
         doc = json.loads(kw["data"])["doc"]
         assert (
             doc["error"]
-            == "Could not instantiate <class 'test_sync.FakeSource'> for fake"
+            == "Could not instantiate <class 'fake_sources.FakeSource'> for fake"
         )
         return CallbackResult(status=200)
 
