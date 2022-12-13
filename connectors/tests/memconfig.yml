@@ -20,6 +20,6 @@ service:
 connector_id: '1'
 
 sources:
-  fake: test_syncer:FakeSource
-  large_fake: test_syncer:LargeFakeSource
-  fail_once: test_syncer:FailsThenWork
+  fake: test_sync:FakeSource
+  large_fake: test_sync:LargeFakeSource
+  fail_once: test_sync:FailsThenWork

@@ -636,7 +636,7 @@ async def test_connector_service_poll_buggy_service(
         doc = json.loads(kw["data"])["doc"]
         assert (
             doc["error"]
-            == "Could not instantiate <class 'test_syncer.FakeSource'> for fake"
+            == "Could not instantiate <class 'test_sync.FakeSource'> for fake"
         )
         return CallbackResult(status=200)
 
