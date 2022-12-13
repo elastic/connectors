@@ -102,7 +102,7 @@ def test_get_configuration():
 
 
 @pytest.mark.asyncio
-async def test_ping_for_successful_connection():
+async def test_ping_for_successful_connection(patch_logger):
     """Tests the ping functionality for ensuring connection to the Network Drive."""
     # Setup
     expected_response = True
@@ -153,7 +153,7 @@ def test_create_connection_with_invalid_credentials(session_mock):
 
 @mock.patch("smbclient.scandir")
 @pytest.mark.asyncio
-async def test_get_files_with_invalid_path(dir_mock):
+async def test_get_files_with_invalid_path(dir_mock, patch_logger):
     """Tests the scandir method of smbclient throws error on invalid path
 
     Args:
@@ -212,7 +212,7 @@ async def test_get_files(dir_mock):
 
 
 @mock.patch("smbclient.open_file")
-def test_fetch_file_when_file_is_inaccessible(file_mock):
+def test_fetch_file_when_file_is_inaccessible(file_mock, patch_logger):
     """Tests the open_file method of smbclient throws error when file cannot be accessed
 
     Args:
@@ -287,7 +287,7 @@ async def test_get_content_when_doit_false():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_file_size_is_large():
+async def test_get_content_when_file_size_is_large(patch_logger):
     """Test the module responsible for fetching the content of the file if it is not extractable"""
     # Setup
     source = create_source(NASDataSource)
