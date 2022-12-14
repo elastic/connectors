@@ -32,16 +32,19 @@ from connectors import __version__  # NOQA
 # Because the *pinned* dependencies is what we tested
 #
 
+
 def extract_req(req):
-    req = req.strip().split(';')
+    req = req.strip().split(";")
     if len(req) > 1:
         env_marker = req[-1]
-        env_marker = env_marker.replace(' ', '').strip()
+        env_marker = env_marker.replace(" ", "").strip()
         # for now we just recognize sys_platform
-        if 'sys_platform==' in env_marker:
-            target = env_marker.split('!=')[-1].strip()
+        if "sys_platform==" in env_marker:
+            target = env_marker.split("!=")[-1].strip()
             target = target.strip('"').strip("'")
-            import pdb; pdb.set_trace()
+            import pdb
+
+            pdb.set_trace()
             if sys.platform == target:
                 return None
     req = req[0]
