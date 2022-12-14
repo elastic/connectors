@@ -245,8 +245,6 @@ async def test_fetch_documents():
     source.connection_pool.acquire.cursor = Cursor
     source.connection_pool.acquire.cursor.is_connection_lost = False
 
-    query = "select * from table"
-
     # Execute
     with mock.patch.object(
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
@@ -256,7 +254,7 @@ async def test_fetch_documents():
         mock.patch("source._connect", return_value=response)
 
     response = source.fetch_documents(
-        database="database_name", table="table_name", query=query
+        database="database_name", table="table_name"
     )
 
     # Assert
