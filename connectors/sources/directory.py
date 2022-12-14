@@ -11,34 +11,11 @@ from pathlib import Path
 import hashlib
 import functools
 from datetime import datetime, timezone
-from connectors.utils import get_base64_value
+from connectors.utils import get_base64_value, TIKA_SUPPORTED_FILETYPES
 
 
 HERE = os.path.dirname(__file__)
 DEFAULT_CONTENT_EXTRACTION = True
-SUPPORTED_FILETYPE = [
-    ".txt",
-    ".py",
-    ".rst",
-    ".html",
-    ".markdown",
-    ".json",
-    ".xml",
-    ".csv",
-    ".md",
-    ".ppt",
-    ".rtf",
-    ".docx",
-    ".odt",
-    ".xls",
-    ".xlsx",
-    ".rb",
-    ".paper",
-    ".sh",
-    ".pptx",
-    ".pdf",
-    ".doc",
-]
 
 
 class DirectoryDataSource:
@@ -84,7 +61,7 @@ class DirectoryDataSource:
         if not (
             self.enable_content_extraction
             and doit
-            and os.path.splitext(path)[-1] in SUPPORTED_FILETYPE
+            and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES
         ):
             return
 

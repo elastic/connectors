@@ -6,9 +6,13 @@
 import asyncio
 import os
 import signal
+from unittest import mock
 
-from connectors.cli import main
+from connectors.cli import main, run
 from connectors import __version__
+
+
+CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
 
 def test_main(catch_stdout):
@@ -36,3 +40,13 @@ def test_main_and_kill(patch_logger, mock_responses):
     loop.create_task(kill())
 
     main([])
+
+
+def test_run(mock_responses, patch_logger, set_env):
+    args = mock.MagicMock()
+    args.config_file = CONFIG
+    args.action = "list"
+    assert run(args) == 0
+    patch_logger.assert_present(
+        ["Registered connectors:", "- Fakey", "- Phatey", "Bye"]
+    )

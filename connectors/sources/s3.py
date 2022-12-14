@@ -19,32 +19,9 @@ from botocore.exceptions import ClientError
 from contextlib import asynccontextmanager
 from connectors.logger import logger, set_extra_logger
 from connectors.source import BaseDataSource
-from connectors.utils import get_base64_value
+from connectors.utils import get_base64_value, TIKA_SUPPORTED_FILETYPES
 
 
-SUPPORTED_FILETYPE = [
-    ".txt",
-    ".py",
-    ".rst",
-    ".html",
-    ".markdown",
-    ".json",
-    ".xml",
-    ".csv",
-    ".md",
-    ".ppt",
-    ".rtf",
-    ".docx",
-    ".odt",
-    ".xls",
-    ".xlsx",
-    ".rb",
-    ".paper",
-    ".sh",
-    ".pptx",
-    ".pdf",
-    ".doc",
-]
 MAX_CHUNK_SIZE = 1048576
 DEFAULT_MAX_FILE_SIZE = 10485760
 DEFAULT_PAGE_SIZE = 100
@@ -112,7 +89,7 @@ class S3DataSource(BaseDataSource):
             return
         filename = doc["filename"]
         bucket = doc["bucket"]
-        if os.path.splitext(filename)[-1] not in SUPPORTED_FILETYPE:
+        if os.path.splitext(filename)[-1] not in TIKA_SUPPORTED_FILETYPES:
             logger.debug(f"{filename} can't be extracted")
             return
         if doc["size"] > DEFAULT_MAX_FILE_SIZE:

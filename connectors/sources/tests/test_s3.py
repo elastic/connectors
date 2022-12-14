@@ -13,7 +13,7 @@ from connectors.sources.tests.support import assert_basics, create_source
 
 
 @pytest.mark.asyncio
-async def test_basics():
+async def test_basics(patch_logger):
     """Test get_default_configuration method of S3DataSource"""
     with mock.patch(
         "aioboto3.resources.collection.AIOResourceCollection", AIOResourceCollection
@@ -136,7 +136,7 @@ async def create_fake_coroutine(data):
 
 
 @pytest.mark.asyncio
-async def test_ping():
+async def test_ping(patch_logger):
     """Test ping method of S3DataSource class"""
     # Setup
     source = create_source(S3DataSource)
@@ -149,7 +149,7 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-async def test_ping_negative():
+async def test_ping_negative(patch_logger):
     """Test ping method of S3DataSource class with negative case"""
     # Setup
     source = create_source(S3DataSource)
@@ -177,7 +177,7 @@ async def test_get_bucket_region():
 
 
 @pytest.mark.asyncio
-async def test_get_bucket_region_negative(caplog):
+async def test_get_bucket_region_negative(caplog, patch_logger):
     """Test get_bucket_region method of S3DataSource for negative case"""
     # Setup
     source = create_source(S3DataSource)

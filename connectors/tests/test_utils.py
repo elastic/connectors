@@ -5,9 +5,12 @@
 #
 import asyncio
 import time
+import functools
+import base64
+
 import pytest
 from pympler import asizeof
-import base64
+
 from connectors.utils import (
     next_run,
     validate_index_name,
@@ -15,6 +18,7 @@ from connectors.utils import (
     ESClient,
     MemQueue,
     get_base64_value,
+    ConcurrentTasks,
 )
 
 
@@ -164,3 +168,74 @@ def test_get_base64_value():
     """This test verify get_base64_value method and convert encoded data into base64"""
     expected_result = get_base64_value("dummy".encode("utf-8"))
     assert expected_result == "ZHVtbXk="
+
+
+@pytest.mark.asyncio
+async def test_concurrent_runner(patch_logger):
+    results = []
+
+    def _results_callback(result):
+        results.append(result)
+
+    async def coroutine(i):
+        await asyncio.sleep(0.1)
+        return i
+
+    runner = ConcurrentTasks(results_callback=_results_callback)
+    for i in range(10):
+        await runner.put(functools.partial(coroutine, i))
+
+    await runner.join()
+    assert results == list(range(10))
+
+
+@pytest.mark.asyncio
+async def test_concurrent_runner_fails(patch_logger):
+    results = []
+
+    def _results_callback(result):
+        results.append(result)
+
+    async def coroutine(i):
+        await asyncio.sleep(0.1)
+        if i == 5:
+            raise Exception("I FAILED")
+        return i
+
+    runner = ConcurrentTasks(results_callback=_results_callback)
+    for i in range(10):
+        await runner.put(functools.partial(coroutine, i))
+
+    with pytest.raises(Exception):
+        await runner.join()
+
+    assert 5 not in results
+
+
+@pytest.mark.asyncio
+async def test_concurrent_runner_high_concurrency(patch_logger):
+    results = []
+
+    def _results_callback(result):
+        results.append(result)
+
+    async def coroutine(i):
+        await asyncio.sleep(0)
+        return i
+
+    second_results = []
+
+    def _second_callback(result):
+        second_results.append(result)
+
+    runner = ConcurrentTasks(results_callback=_results_callback)
+    for i in range(1000):
+        if i == 3:
+            callback = _second_callback
+        else:
+            callback = None
+        await runner.put(functools.partial(coroutine, i), result_callback=callback)
+
+    await runner.join()
+    assert results == list(range(1000))
+    assert second_results == [3]
