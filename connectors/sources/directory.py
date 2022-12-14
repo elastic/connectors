@@ -11,9 +11,11 @@ from pathlib import Path
 import hashlib
 import functools
 from datetime import datetime, timezone
+from connectors.utils import get_base64_value, TIKA_SUPPORTED_FILETYPES
 
 
 HERE = os.path.dirname(__file__)
+DEFAULT_CONTENT_EXTRACTION = True
 
 
 class DirectoryDataSource:
@@ -22,6 +24,9 @@ class DirectoryDataSource:
     def __init__(self, connector):
         self.directory = connector.configuration["directory"]
         self.pattern = connector.configuration["pattern"]
+        self.enable_content_extraction = connector.configuration.get(
+            "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION
+        )
 
     @classmethod
     def get_default_configuration(cls):
@@ -36,6 +41,11 @@ class DirectoryDataSource:
                 "label": "File glob-like pattern",
                 "type": "str",
             },
+            "enable_content_extraction": {
+                "value": DEFAULT_CONTENT_EXTRACTION,
+                "label": "Flag to check if content extraction is enabled or not",
+                "type": "bool",
+            },
         }
 
     async def ping(self):
@@ -48,12 +58,20 @@ class DirectoryDataSource:
         return hashlib.md5(str(path).encode("utf8")).hexdigest()
 
     async def _download(self, path, timestamp=None, doit=None):
-        if not doit:
+        if not (
+            self.enable_content_extraction
+            and doit
+            and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES
+        ):
             return
 
         print(f"Reading {path}")
-        with open(path) as f:
-            return {"_id": self.get_id(path), "timestamp": timestamp, "text": f.read()}
+        with open(file=path, mode="rb") as f:
+            return {
+                "_id": self.get_id(path),
+                "timestamp": timestamp,
+                "_attachment": get_base64_value(f.read()),
+            }
 
     async def get_docs(self):
         root_directory = Path(self.directory)

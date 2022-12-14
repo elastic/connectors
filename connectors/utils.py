@@ -4,12 +4,14 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from datetime import datetime, timezone
+import base64
 import logging
 import time
 import asyncio
 import tracemalloc
 import gc
 import contextlib
+import functools
 
 from elasticsearch import (
     AsyncElasticsearch,
@@ -31,6 +33,29 @@ DEFAULT_DISPLAY_EVERY = 100
 DEFAULT_QUEUE_MEM_SIZE = 5
 DEFAULT_CHUNK_MEM_SIZE = 25
 DEFAULT_MAX_CONCURRENCY = 5
+TIKA_SUPPORTED_FILETYPES = [
+    ".txt",
+    ".py",
+    ".rst",
+    ".html",
+    ".markdown",
+    ".json",
+    ".xml",
+    ".csv",
+    ".md",
+    ".ppt",
+    ".rtf",
+    ".docx",
+    ".odt",
+    ".xls",
+    ".xlsx",
+    ".rb",
+    ".paper",
+    ".sh",
+    ".pptx",
+    ".pdf",
+    ".doc",
+]
 
 
 class ESClient:
@@ -120,7 +145,12 @@ class ESClient:
         await self.close()
         return False
 
-    async def check_exists(self, indices, pipelines):
+    async def check_exists(self, indices=None, pipelines=None):
+        if indices is None:
+            indices = []
+        if pipelines is None:
+            pipelines = []
+
         for index in indices:
             logger.debug(f"Checking for index {index} presence")
             if not await self.client.indices.exists(index=index):
@@ -258,6 +288,15 @@ def get_size(ob):
     return asizeof.asizeof(ob)
 
 
+def get_base64_value(content):
+    """
+    Returns the converted file passed into a base64 encoded value
+    Args:
+           content (byte): Object content in bytes
+    """
+    return base64.b64encode(content).decode("utf-8")
+
+
 class MemQueue(asyncio.Queue):
     def __init__(
         self, maxsize=0, maxmemsize=0, refresh_interval=1.0, refresh_timeout=60
@@ -300,3 +339,69 @@ class MemQueue(asyncio.Queue):
     async def put(self, item):
         item_size = await self._wait_for_room(item)
         return await super().put((item_size, item))
+
+
+class ConcurrentTasks:
+    """Async task manager.
+
+    Can be used to trigger concurrent async tasks with a maximum
+    concurrency value.
+
+    - `max_concurrency`: max concurrent tasks allowed, default: 5
+    - `results_callback`: when provided, synchronous funciton called with the result of each task.
+    """
+
+    def __init__(self, max_concurrency=5, results_callback=None):
+        self.max_concurrency = max_concurrency
+        self.tasks = []
+        self.results_callback = results_callback
+        self._task_over = asyncio.Event()
+
+    def __len__(self):
+        return len(self.tasks)
+
+    def _callback(self, task, result_callback=None):
+        self.tasks.remove(task)
+        self._task_over.set()
+        if task.exception():
+            raise task.exception()
+        if result_callback is not None:
+            result_callback(task.result())
+        # global callback
+        if self.results_callback is not None:
+            self.results_callback(task.result())
+
+    async def put(self, coroutine, result_callback=None):
+        """Adds a coroutine for immediate execution.
+
+        If the number of running tasks reach `max_concurrency`, this
+        function will block and wait for a free slot.
+
+        If provided, `result_callback` will be called when the task is done.
+        """
+        # If self.tasks has reached its max size, we wait for one task to finish
+        if len(self.tasks) >= self.max_concurrency:
+            await self._task_over.wait()
+            # rearm
+            self._task_over.clear()
+        task = asyncio.create_task(coroutine())
+        self.tasks.append(task)
+        task.add_done_callback(
+            functools.partial(self._callback, result_callback=result_callback)
+        )
+        return task
+
+    async def join(self):
+        """Wait for all tasks to finish."""
+        await asyncio.gather(*self.tasks)
+
+
+def get_event_loop():
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.get_event_loop_policy().get_event_loop()
+        if loop is None:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    return loop

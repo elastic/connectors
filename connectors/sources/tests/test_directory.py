@@ -22,6 +22,6 @@ async def test_get_docs(patch_logger, catch_stdout):
         if "__init__.py" in doc["path"]:
             continue
         data = await dl(doit=True, timestamp="xx")
-        assert len(data["text"]) > 0
+        assert len(data["_attachment"]) > 0
 
     assert num > 3
