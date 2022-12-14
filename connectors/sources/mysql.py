@@ -234,12 +234,8 @@ class MySqlDataSource(BaseDataSource):
                 table_name = table[0]
                 logger.debug(f"Found table: {table_name} in database: {database}.")
 
-                # Query to get table's data
-                query = QUERIES["TABLE_DATA"].format(
-                    database=database, table=table_name
-                )
                 async for row in self.fetch_documents(
-                    database=database, table=table_name, query=query
+                    database=database, table=table_name
                 ):
                     yield row
         else:
@@ -286,13 +282,12 @@ class MySqlDataSource(BaseDataSource):
 
         return doc
 
-    async def fetch_documents(self, database, table, query):
+    async def fetch_documents(self, database, table):
         """Fetches all the table entries and format them in Elasticsearch documents
 
         Args:
             database (str): Name of database
             table (str): Name of table
-            query (str): Query to execute
 
         Yields:
             Dict: Document to be index
