@@ -12,16 +12,6 @@ Event loop
 """
 import asyncio
 import time
-import functools
-
-# activate uvloop if present
-try:
-    import uvloop
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-except Exception:
-    pass
-
-from envyaml import EnvYAML
 
 from connectors.byoei import ElasticServer
 from connectors.byoc import (

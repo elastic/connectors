@@ -32,6 +32,22 @@ from connectors import __version__  # NOQA
 # Because the *pinned* dependencies is what we tested
 #
 
+def extract_req(req):
+    req = req.strip().split(';')
+    if len(req) > 1:
+        env_marker = req[-1]
+        env_marker = env_marker.replace(' ', '').strip()
+        # for now we just recognize sys_platform
+        if 'sys_platform==' in env_marker:
+            target = env_marker.split('!=')[-1].strip()
+            target = target.strip('"').strip("'")
+            import pdb; pdb.set_trace()
+            if sys.platform == target:
+                return None
+    req = req[0]
+    req = req.split("=")
+    return req[0]
+
 
 def read_reqs(req_file):
     deps = []
@@ -47,12 +63,13 @@ def read_reqs(req_file):
                 subreq_file = req.split("-r")[-1].strip()
                 subreq_file = os.path.join(reqs_dir, subreq_file)
                 for subreq in read_reqs(subreq_file):
-                    dep = subreq.split("=")[0]
-                    if dep not in deps:
+
+                    dep = extract_req(subreq)
+                    if dep is not None and dep not in deps:
                         deps.append(dep)
             else:
-                dep = req.split("=")[0]
-                if dep not in deps:
+                dep = extract_req(req)
+                if dep is not None and dep not in deps:
                     deps.append(dep)
     return deps
 
