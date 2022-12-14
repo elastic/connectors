@@ -22,6 +22,7 @@ from connectors.source import get_data_sources
 from connectors.utils import get_event_loop
 from connectors import __version__
 from connectors.services.sync import SyncService
+from connectors.services.attachments import AttachmentService
 
 
 def _parser():
@@ -31,7 +32,7 @@ def _parser():
         "--action",
         type=str,
         default="poll",
-        choices=["poll", "list"],
+        choices=["poll", "list", "attachements"],
         help="What elastic-ingest should do",
     )
 
@@ -92,7 +93,11 @@ def run(args):
         logger.info("Bye")
         return 0
 
-    service = SyncService(args)
+    if args.action == 'attachements':
+        service = AttachmentService(args)
+    else:
+        service = SyncService(args)
+
     coro = service.run()
     loop = get_event_loop()
 
