@@ -11,10 +11,12 @@ import os
 import urllib.parse
 from functools import partial
 
+from aiofiles.tempfile import TemporaryFile
 from aiogoogle import Aiogoogle
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
+from connectors.utils import get_base64_value, TIKA_SUPPORTED_FILETYPES
 from connectors.source import BaseDataSource
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
@@ -38,7 +40,6 @@ BLOB_ADAPTER = {
     "version": "generation",
     "bucket_name": "bucket",
 }
-SUPPORTED_FILETYPE = [".py", ".rst", ".rb", ".sh", ".md", ".txt"]
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
 DEFAULT_CONTENT_EXTRACTION = True
@@ -282,35 +283,41 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with id, timestamp & text
         """
-        if not (
-            self.enable_content_extraction
-            and doit
-            and os.path.splitext(blob["name"])[-1] in SUPPORTED_FILETYPE
-            and int(blob["size"])
-        ):
+        blob_size = int(blob["size"])
+        if not (self.enable_content_extraction and doit and blob_size):
             return
 
-        if int(blob["size"]) > DEFAULT_FILE_SIZE_LIMIT:
+        blob_name = blob["name"]
+        if os.path.splitext(blob_name)[-1] not in TIKA_SUPPORTED_FILETYPES:
+            logger.debug(f"{blob_name} can't be extracted")
+            return
+
+        if blob_size > DEFAULT_FILE_SIZE_LIMIT:
             logger.warning(
-                f"File size {int(blob['size'])} of file {blob['name']} is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
+                f"File size {blob_size} of file {blob_name} is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
             )
             return
-
-        content_text = await anext(
-            self._api_call(
-                resource="objects",
-                method="get",
-                bucket=blob["bucket_name"],
-                object=blob["name"],
-                alt="media",
-                userProject=self.user_project_id,
+        logger.debug(f"Downloading {blob_name}")
+        content = b""
+        async with TemporaryFile("wb+") as async_buffer:
+            await anext(
+                self._api_call(
+                    resource="objects",
+                    method="get",
+                    bucket=blob["bucket_name"],
+                    object=blob_name,
+                    alt="media",
+                    userProject=self.user_project_id,
+                    pipe_to=async_buffer,
+                )
             )
-        )
-
+            await async_buffer.seek(0)
+            content = await async_buffer.read()
+        logger.debug(f"Downloaded {blob_name} for {blob_size} bytes ")
         return {
             "_id": blob["id"],
             "_timestamp": blob["_timestamp"],
-            "text": content_text,
+            "_attachment": get_base64_value(content=content),
         }
 
     async def get_docs(self):

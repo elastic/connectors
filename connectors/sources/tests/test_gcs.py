@@ -372,9 +372,9 @@ async def test_get_content():
     expected_blob_document = {
         "_id": "bucket_1/blob_1/123123123",
         "_timestamp": "2011-10-12T00:01:00Z",
-        "text": "storage dummy store",
+        "_attachment": "",
     }
-    blob_content_response = "storage dummy store"
+    blob_content_response = ""
 
     # Execute and Assert
     with mock.patch.object(
@@ -409,7 +409,7 @@ async def test_get_content_when_type_not_supported():
         "last_updated": "2011-10-12T00:01:00Z",
         "metadata": None,
         "name": "blob_1.cc",
-        "size": None,
+        "size": "15",
         "storage_class": None,
         "_timestamp": "2011-10-12T00:01:00Z",
         "type": None,
