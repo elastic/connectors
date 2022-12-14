@@ -17,5 +17,5 @@ service:
 connectors_id: 'blah'
 
 sources:
-  fake: test_runner:FakeSource
+  fake: fake_sources:FakeSource
 

@@ -20,7 +20,7 @@ service:
 connector_id: '1'
 
 sources:
-  fake: test_runner:FakeSource
-  large_fake: test_runner:LargeFakeSource
-  fail_once: test_runner:FailsThenWork
-  fake_ts: test_runner:FakeSourceTS
+  fake: fake_sources:FakeSource
+  large_fake: fake_sources:LargeFakeSource
+  fail_once: fake_sources:FailsThenWork
+  fake_ts: fake_sources:FakeSourceTS

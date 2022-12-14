@@ -6,15 +6,22 @@
 """
 Command Line Interface.
 
-Parses arguments and call connectors.runner.run with them.
+Parses arguments and call run() with them.
 """
 from argparse import ArgumentParser
 import os
 import logging
+import asyncio
+import signal
+import functools
 
+from envyaml import EnvYAML
+
+from connectors.logger import logger, set_logger
+from connectors.source import get_data_sources
+from connectors.utils import get_event_loop
 from connectors import __version__
-from connectors.runner import run
-from connectors.logger import set_logger
+from connectors.services.sync import SyncService
 
 
 def _parser():
@@ -72,6 +79,34 @@ def _parser():
     )
 
     return parser
+
+
+def run(args):
+    """Runner"""
+    # just display the list of connectors
+    if args.action == "list":
+        logger.info("Registered connectors:")
+        config = EnvYAML(args.config_file)
+        for source in get_data_sources(config):
+            logger.info(f"- {source.__doc__.strip()}")
+        logger.info("Bye")
+        return 0
+
+    service = SyncService(args)
+    coro = service.run()
+    loop = get_event_loop()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
+
+    try:
+        return loop.run_until_complete(coro)
+    except asyncio.CancelledError:
+        return 0
+    finally:
+        logger.info("Bye")
+
+    return -1
 
 
 def main(args=None):

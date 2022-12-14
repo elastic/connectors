@@ -10,13 +10,8 @@ Event loop
 - instanciates connector plugins
 - mirrors an Elasticsearch index with a collection of documents
 """
-import os
 import asyncio
-import signal
 import time
-import functools
-
-from envyaml import EnvYAML
 
 from connectors.byoei import ElasticServer
 from connectors.byoc import (
@@ -29,20 +24,14 @@ from connectors.byoc import (
     DataSourceError,
 )
 from connectors.logger import logger
-from connectors.source import (
-    get_data_sources,
-)
 from connectors.utils import CancellableSleeps, trace_mem
+from connectors.services.base import BaseService
 
 
-class ConnectorService:
-    def __init__(self, config_file):
-        self.config_file = config_file
+class SyncService(BaseService):
+    def __init__(self, args):
+        super().__init__(args)
         self.errors = [0, time.time()]
-        if not os.path.exists(config_file):
-            raise IOError(f"{config_file} does not exist")
-        self.config = EnvYAML(config_file)
-        self.ent_search_config()
         self.service_config = self.config["service"]
         self.trace_mem = self.service_config.get("trace_mem", False)
         self.idling = self.service_config["idling"]
@@ -56,22 +45,6 @@ class ConnectorService:
         self._sleeps = CancellableSleeps()
         self.connectors = None
         self.trace_mem = self.service_config.get("trace_mem", False)
-
-    def ent_search_config(self):
-        if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
-            return
-        logger.info("Found ENT_SEARCH_CONFIG_PATH, loading ent-search config")
-        ent_search_config = EnvYAML(os.environ["ENT_SEARCH_CONFIG_PATH"])
-        for field in (
-            "elasticsearch.host",
-            "elasticsearch.username",
-            "elasticsearch.password",
-        ):
-            sub = field.split(".")[-1]
-            if field not in ent_search_config:
-                continue
-            logger.debug(f"Overriding {field}")
-            self.config["elasticsearch"][sub] = ent_search_config[field]
 
     def raise_if_spurious(self, exception):
         errors, first = self.errors
@@ -134,8 +107,10 @@ class ConnectorService:
             finally:
                 await connector.close()
 
-    async def poll(self, one_sync=False, sync_now=True):
+    async def run(self):
         """Main event loop."""
+        one_sync = self.args.one_sync
+        sync_now = self.args.sync_now
         self.connectors = BYOIndex(self.config["elasticsearch"])
         es_host = self.config["elasticsearch"]["host"]
         self.running = True
@@ -180,11 +155,12 @@ class ConnectorService:
             while self.running:
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
-
                     async for connector in self.connectors.get_connectors(
                         native_service_types, connectors_ids
                     ):
                         await self._one_sync(connector, es, sync_now)
+                    if one_sync:
+                        break
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
@@ -196,44 +172,4 @@ class ConnectorService:
             self.stop()
             await self.connectors.close()
             await es.close()
-
         return 0
-
-    async def get_list(self):
-        logger.info("Registered connectors:")
-        for source in get_data_sources(self.config):
-            logger.info(f"- {source.__doc__.strip()}")
-        return 0
-
-    def shutdown(self, sig):
-        logger.info(f"Caught {sig.name}. Graceful shutdown.")
-        self.stop()
-
-
-def run(args):
-    """Runner"""
-    service = ConnectorService(args.config_file)
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.get_event_loop_policy().get_event_loop()
-        if loop is None:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-    if args.action == "list":
-        coro = service.get_list()
-    else:
-        coro = service.poll(args.one_sync, args.sync_now)
-
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
-
-    try:
-        return loop.run_until_complete(coro)
-    except asyncio.CancelledError:
-        return 0
-    finally:
-        logger.info("Bye")
-
-    return -1
