@@ -1,0 +1,32 @@
+elasticsearch:
+   host: http://host.docker.internal:9200
+   username: elastic
+   password: changeme
+   ssl: true
+   bulk_queue_max_size: 1024
+   bulk_display_every: 100
+   bulk_chunk_size: 150
+   request_timeout: 120
+   max_wait_duration: 120
+   initial_backoff_duration: 1
+   backoff_multiplier: 2
+   log_level: info
+
+ service:
+   idling: 30
+   heartbeat: 300
+   max_errors: 20
+   max_errors_span: 600
+   trace_mem: false
+
+ native_service_types:
+   - mysql
+
+ # some id
+ #connector_id: '1'
+
+ sources:
+   mongodb: connectors.sources.mongo:MongoDataSource
+   s3: connectors.sources.aws:S3DataSource
+   dir: connectors.sources.directory:DirectoryDataSource
+   mysql: connectors.sources.mysql:MySqlDataSource
