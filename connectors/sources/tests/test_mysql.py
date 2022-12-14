@@ -5,6 +5,7 @@
 #
 """Tests the MySQL source class methods"""
 import asyncio
+import ssl
 import datetime
 import decimal
 import random
@@ -106,6 +107,14 @@ class ConnectionPool:
         pass
 
     async def wait_closed(self):
+        pass
+
+
+class mock_ssl:
+    """This class contains methods which returns dummy ssl context"""
+
+    def load_verify_locations(self, cadata):
+        """This method verify locations"""
         pass
 
 
@@ -436,3 +445,14 @@ def test_validate_configuration_with_port():
     # Execute
     with pytest.raises(Exception):
         source._validate_configuration()
+
+
+def test_ssl_context():
+    """This function test _ssl_context with dummy certificate"""
+    # Setup
+    certificate = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
+    source = create_source(MySqlDataSource)
+
+    # Execute
+    with mock.patch.object(ssl, "create_default_context", return_value=mock_ssl()):
+        source._ssl_context(certificate=certificate)
