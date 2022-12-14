@@ -32,7 +32,7 @@ def _parser():
         "--action",
         type=str,
         default="poll",
-        choices=["poll", "list", "attachements"],
+        choices=["poll", "list", "attachments"],
         help="What elastic-ingest should do",
     )
 
@@ -93,7 +93,7 @@ def run(args):
         logger.info("Bye")
         return 0
 
-    if args.action == 'attachements':
+    if args.action == 'attachments':
         service = AttachmentService(args)
     else:
         service = SyncService(args)

@@ -232,7 +232,7 @@ class AttachmentService(BaseService):
                         )
                     )
 
-            await runner.wait()
+            await runner.join()
 
     #
     # public APIS
