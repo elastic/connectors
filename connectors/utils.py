@@ -414,51 +414,46 @@ def get_event_loop(uvloop=False):
             asyncio.set_event_loop(loop)
     return loop
 
+DEFAULT_PAGE_SIZE = 100
 
-class EsDocument:
-  def __init__(self, elastic_index, id, doc_source):
-    self.elastic_index = elastic_index
-    self.id = id
-    self.doc_source = doc_source
+class ESIndex(ESClient):
+    def __init__(self, index_name, elastic_config):
+        # initialize elasticsearch client
+        super().__init__(elastic_config)
+        self.index_name = index_name
+        self.elastic_config = elastic_config
 
-  async def reload(self):
-    resp = await self.elastic_client.get(
-      index_name=self.index_name,
-      id=self.id
-    )
+    def _create_object(self, doc):
+        raise NotImplementedError
 
-    return resp
+    async def get_docs(self, query=None, page_size=DEFAULT_PAGE_SIZE):
+        await self.client.indices.refresh(index=self.index_name)
 
-  async def update(self):
-    print("reload placeholder")
+        if query is None:
+            query = { "match_all": {} }
 
+        count = 0
+        offset = 0
 
-class EsIndex(ESClient):
-  def __init__(self, index_name, elastic_config):
-    # initialize elasticsearch client
-    super().__init__(elastic_config)
-    self.index_name = index_name
-    self.elastic_config = elastic_config
+        while True:
+            try:
+                resp = await self.client.search(
+                    index=self.index_name,
+                    query=query,
+                    from_=offset,
+                    size=page_size,
+                    expand_wildcards="hidden",
+                )
+            except ApiError as e:
+                logger.critical(f"The server returned {e.status_code}")
+                logger.critical(e.body, exc_info=True)
+                return
 
-  def _create_object(self, doc):
-    raise NotImplementedError
-
-  async def get_docs(self):
-    await self.client.indices.refresh(index=self.index_name)
-
-    try:
-        resp = await self.client.search(
-            index=self.index_name,
-            query={"match_all": {}},
-            size=20,
-            expand_wildcards="hidden",
-        )
-    except ApiError as e:
-        logger.critical(f"The server returned {e.status_code}")
-        logger.critical(e.body, exc_info=True)
-        return
-
-    logger.debug(f"Found {len(resp['hits']['hits'])} documents")
-    for doc in resp["hits"]["hits"]:
-      print(type(self._create_object(doc)))
-      yield self._create_object(doc)
+            hits = resp["hits"]["hits"]
+            total = resp["hits"]["total"]["value"]
+            count += len(hits)
+            for hit in hits:
+                yield self._create_object(hit)
+            if count >= total:
+                break
+            offset += len(hits)

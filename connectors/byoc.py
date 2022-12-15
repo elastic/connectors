@@ -20,15 +20,14 @@ from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
 from elasticsearch.exceptions import ApiError
 from connectors.index import defaults_for, DEFAULT_LANGUAGE
-from connectors.utils import EsIndex
-from connectors.utils import EsDocument
+from connectors.utils import ESIndex
+# from connectors.utils import ESDocument
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 PIPELINE = "ent-search-generic-ingestion"
 SYNC_DISABLED = -1
 DEFAULT_ANALYSIS_ICU = False
-DEFAULT_PAGE_SIZE = 100
 
 
 def e2str(entry):
@@ -71,7 +70,6 @@ NATIVE_READ_ONLY_FIELDS = CUSTOM_READ_ONLY_FIELDS + (
 )
 
 
-<<<<<<< HEAD
 class ServiceTypeNotSupportedError(Exception):
     pass
 
@@ -88,13 +86,11 @@ class DataSourceError(Exception):
     pass
 
 
-class BYOIndex(Index):
-=======
-class BYOIndex(EsIndex):
->>>>>>> bc84afa (First step of EsIndex integration)
+class BYOIndex(ESIndex):
     def __init__(self, elastic_config):
-        super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
         logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
+        # initilize ESIndex instance
+        super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
         # grab all bulk options
         self.bulk_options = elastic_config.get("bulk", {})
         self.language_code = elastic_config.get("language_code", DEFAULT_LANGUAGE)
@@ -117,10 +113,11 @@ class BYOIndex(EsIndex):
             doc=document,
         )
 
+    # @TODO move to ESIndex?
     async def preflight(self):
         await self.check_exists(indices=[CONNECTORS_INDEX, JOBS_INDEX])
 
-    async def get_connectors(self, native_service_types=None, connectors_ids=None):
+    def build_docs_query(self, native_service_types=None, connectors_ids=None):
         if native_service_types is None:
             native_service_types = []
         if connectors_ids is None:
@@ -128,8 +125,6 @@ class BYOIndex(EsIndex):
 
         if len(native_service_types) == 0 and len(connectors_ids) == 0:
             return
-
-        await self.client.indices.refresh(index=CONNECTORS_INDEX)
 
         native_connectors_query = {
             "bool": {
@@ -139,6 +134,7 @@ class BYOIndex(EsIndex):
                 ]
             }
         }
+
         custom_connectors_query = {
             "bool": {
                 "filter": [
@@ -156,15 +152,7 @@ class BYOIndex(EsIndex):
         else:
             query = custom_connectors_query
 
-        async for connector in self._query_with_pagination(CONNECTORS_INDEX, query):
-            yield BYOConnector(
-                self,
-                connector["_id"],
-                connector["_source"],
-                bulk_options=self.bulk_options,
-                language_code=self.language_code,
-                analysis_icu=self.analysis_icu,
-            )
+        return query
 
     def _create_object(self, doc_source):
         return BYOConnector(
@@ -175,34 +163,6 @@ class BYOIndex(EsIndex):
             language_code=self.language_code,
             analysis_icu=self.analysis_icu,
         )
-
-    async def _query_with_pagination(self, index, query, page_size=DEFAULT_PAGE_SIZE):
-        count = 0
-        offset = 0
-
-        while True:
-            try:
-                resp = await self.client.search(
-                    index=index,
-                    query=query,
-                    from_=offset,
-                    size=page_size,
-                    expand_wildcards="hidden",
-                )
-            except ApiError as e:
-                logger.critical(f"The server returned {e.status_code}")
-                logger.critical(e.body, exc_info=True)
-                return
-
-            hits = resp["hits"]["hits"]
-            total = resp["hits"]["total"]["value"]
-            count += len(hits)
-            for hit in hits:
-                yield hit
-            if count >= total:
-                break
-            offset += len(hits)
-
 
 class SyncJob:
     def __init__(self, connector_id, elastic_client):
@@ -273,7 +233,7 @@ class PipelineSettings:
         )
 
 
-class BYOConnector(EsDocument):
+class BYOConnector:
     """Represents one doc in `.elastic-connectors` and triggers sync.
 
     The pattern to use it is:
@@ -295,8 +255,6 @@ class BYOConnector(EsDocument):
         language_code=DEFAULT_LANGUAGE,
         analysis_icu=DEFAULT_ANALYSIS_ICU,
     ):
-        # execute Document.__init__
-        super().__init__(elastic_index=elastic_index, id=connector_id, doc_source=doc_source)
 
         self.doc_source = doc_source
         self.id = connector_id

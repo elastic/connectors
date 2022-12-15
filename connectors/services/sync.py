@@ -155,9 +155,9 @@ class SyncService(BaseService):
             while self.running:
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
-                    async for connector in self.connectors.get_connectors(
-                        native_service_types, connectors_ids
-                    ):
+                    query = self.connectors.build_docs_query(native_service_types, connectors_ids)
+
+                    async for connector in self.connectors.get_docs(query=query):
                         await self._one_sync(connector, es, sync_now)
                     if one_sync:
                         break
