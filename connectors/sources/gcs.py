@@ -47,8 +47,8 @@ DEFAULT_FILE_SIZE_LIMIT = 10485760
 STORAGE_EMULATOR_HOST = os.getenv(
     key="STORAGE_EMULATOR_HOST", default=None
 )  # For end to end tests set this environment variable with target host.
-RUNNING_FTEST = bool(
-    os.getenv(key="RUNNING_FTEST", default=None)
+RUNNING_FTEST = (
+    "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
 DEFAULT_PEM_FILE = (
     os.path.join(
@@ -101,9 +101,19 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Returns:
             dictionary: Default configuration.
         """
+        default_credentials = {
+            "type": "service_account",
+            "project_id": "dummy_project_id",
+            "private_key_id": "abc",
+            "private_key": open(DEFAULT_PEM_FILE).read(),
+            "client_email": "123-abc@developer.gserviceaccount.com",
+            "client_id": "123-abc.apps.googleusercontent.com",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "http://localhost:443/token",
+        }
         return {
             "service_account_credentials": {
-                "value": f'{{"type": "service_account","project_id": "dummy_project_id","private_key_id": "abc","private_key": {json.dumps(open(DEFAULT_PEM_FILE).read())} ,"client_email": "123-abc@developer.gserviceaccount.com","client_id": "123-abc.apps.googleusercontent.com","auth_uri": "https://accounts.google.com/o/oauth2/auth","token_uri": "http://localhost:443/token"}}',
+                "value": json.dumps(default_credentials),
                 "label": "JSON string for Google cloud service account",
                 "type": "str",
             },
