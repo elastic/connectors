@@ -5,13 +5,9 @@
 #
 import asyncio
 import time
-<<<<<<< HEAD
 import functools
 import base64
 
-=======
-from unittest import mock
->>>>>>> 45bc92f (Add a spec to cover NotImplementedError)
 import pytest
 from pympler import asizeof
 
@@ -21,12 +17,8 @@ from connectors.utils import (
     InvalidIndexNameError,
     ESClient,
     MemQueue,
-<<<<<<< HEAD
     get_base64_value,
     ConcurrentTasks,
-=======
-    EsIndex
->>>>>>> 45bc92f (Add a spec to cover NotImplementedError)
 )
 
 
