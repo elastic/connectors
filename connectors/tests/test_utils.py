@@ -261,6 +261,6 @@ async def test_es_index_create_object_error(mock_responses, patch_logger):
         status=200,
         payload={"hits": {"total": {"value": 1}, "hits": [{"id": 1}]}},
     )
-    with pytest.raises(NotImplementedError) as e_info:
+    with pytest.raises(NotImplementedError) as _:
         async for c in index.get_all_docs():
             c

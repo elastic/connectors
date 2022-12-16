@@ -14,11 +14,9 @@ from datetime import datetime, timezone
 from connectors.utils import (
     iso_utc,
     next_run,
-    ESClient,
 )
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
-from elasticsearch.exceptions import ApiError
 from connectors.index import defaults_for, DEFAULT_LANGUAGE
 from connectors.utils import ESIndex
 
