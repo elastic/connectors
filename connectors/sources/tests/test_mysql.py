@@ -204,7 +204,7 @@ async def test_connect_with_retry(patch_logger):
     ):
         # Execute
         streamer = source._connect(
-            query="select * from database.table", fetch_many=True
+            query_name="select * from database.table", fetch_many=True
         )
 
         with pytest.raises(Exception):
@@ -254,19 +254,17 @@ async def test_fetch_documents():
     source.connection_pool.acquire.cursor = Cursor
     source.connection_pool.acquire.cursor.is_connection_lost = False
 
-    query = "select * from table"
+    query_name = "select * from table"
 
     # Execute
     with mock.patch.object(
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
-        response = source._connect(query)
+        response = source._connect(query_name)
 
         mock.patch("source._connect", return_value=response)
 
-    response = source.fetch_documents(
-        database="database_name", table="table_name", query=query
-    )
+    response = source.fetch_documents(database="database_name", table="table_name")
 
     # Assert
     async for document in response:
