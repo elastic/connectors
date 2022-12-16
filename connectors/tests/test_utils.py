@@ -255,5 +255,5 @@ async def test_es_index_create_object_error(mock_responses, patch_logger):
 
     mock_responses.post("http://nowhere.com:9200/index/_search?expand_wildcards=hidden", headers=headers, status=200, payload={ "hits": { "total": { "value": 1 },  "hits":  [ { "id": 1 }] }})
     with pytest.raises(NotImplementedError) as e_info:
-        async for c in index.get_docs():
+        async for c in index.get_all_docs():
             c

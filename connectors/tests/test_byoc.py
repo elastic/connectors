@@ -147,7 +147,7 @@ async def test_heartbeat(mock_responses, patch_logger):
     conns = []
 
     query = connectors.build_docs_query([["mongodb"]])
-    async for connector in connectors.get_docs(query=query):
+    async for connector in connectors.get_all_docs(query=query):
         connector.start_heartbeat(0.2)
         connector.start_heartbeat(1.0)  # NO-OP
         conns.append(connector)
@@ -176,7 +176,7 @@ async def test_connectors_get_list(mock_responses):
     connectors = BYOIndex(config)
     conns = []
     query = connectors.build_docs_query([["mongodb"]])
-    async for connector in connectors.get_docs(query=query):
+    async for connector in connectors.get_all_docs(query=query):
         conns.append(connector)
 
     assert len(conns) == 1
@@ -303,7 +303,7 @@ async def test_sync_mongo(mock_responses, patch_logger):
 
     try:
         query = connectors.build_docs_query([["mongodb"]])
-        async for connector in connectors.get_docs(query=query):
+        async for connector in connectors.get_all_docs(query=query):
             await connector.prepare(service_config)
             await connector.sync(es, 0)
             await connector.close()
@@ -373,7 +373,7 @@ async def test_connectors_properties(mock_responses, set_env):
     connectors = BYOIndex(config["elasticsearch"])
 
     query = connectors.build_docs_query([["mongodb"]])
-    async for connector in connectors.get_docs(query=query):
+    async for connector in connectors.get_all_docs(query=query):
         assert connector.analysis_icu == config["elasticsearch"]["analysis_icu"]
         assert connector.language_code == config["elasticsearch"]["language_code"]
 
