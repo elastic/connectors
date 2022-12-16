@@ -396,7 +396,15 @@ class ConcurrentTasks:
         await asyncio.gather(*self.tasks)
 
 
-def get_event_loop():
+def get_event_loop(uvloop=False):
+    if uvloop:
+        # activate uvloop if lib is present
+        try:
+            import uvloop
+
+            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+        except Exception:
+            pass
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
