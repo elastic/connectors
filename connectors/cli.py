@@ -78,6 +78,13 @@ def _parser():
         help="Runs a single sync and exits.",
     )
 
+    parser.add_argument(
+        "--uvloop",
+        action="store_true",
+        default=False,
+        help="Use uvloop if possible",
+    )
+
     return parser
 
 
@@ -94,7 +101,7 @@ def run(args):
 
     service = SyncService(args)
     coro = service.run()
-    loop = get_event_loop()
+    loop = get_event_loop(args.uvloop)
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
