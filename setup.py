@@ -6,7 +6,7 @@
 import sys
 import os
 from setuptools import setup, find_packages
-
+from setuptools._vendor.packaging.markers import Marker
 
 try:
     ARCH = os.uname().machine
@@ -36,17 +36,10 @@ from connectors import __version__  # NOQA
 def extract_req(req):
     req = req.strip().split(";")
     if len(req) > 1:
-        env_marker = req[-1]
-        env_marker = env_marker.replace(" ", "").strip()
-        # for now we just recognize sys_platform
-        if "sys_platform==" in env_marker:
-            target = env_marker.split("!=")[-1].strip()
-            target = target.strip('"').strip("'")
-            import pdb
-
-            pdb.set_trace()
-            if sys.platform == target:
-                return None
+        env_marker = req[-1].strip()
+        marker = Marker(env_marker)
+        if not marker.evaluate():
+            return None
     req = req[0]
     req = req.split("=")
     return req[0]
