@@ -163,6 +163,7 @@ class BYOIndex(ESIndex):
             analysis_icu=self.analysis_icu,
         )
 
+
 class SyncJob:
     def __init__(self, connector_id, elastic_client):
         self.connector_id = connector_id

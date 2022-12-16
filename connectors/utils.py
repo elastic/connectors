@@ -414,7 +414,9 @@ def get_event_loop(uvloop=False):
             asyncio.set_event_loop(loop)
     return loop
 
+
 DEFAULT_PAGE_SIZE = 100
+
 
 class ESIndex(ESClient):
     """
@@ -458,7 +460,7 @@ class ESIndex(ESClient):
         await self.client.indices.refresh(index=self.index_name)
 
         if query is None:
-            query = { "match_all": {} }
+            query = {"match_all": {}}
 
         count = 0
         offset = 0
