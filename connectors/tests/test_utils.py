@@ -19,6 +19,7 @@ from connectors.utils import (
     MemQueue,
     get_base64_value,
     ConcurrentTasks,
+    ESIndex
 )
 
 
@@ -249,10 +250,10 @@ async def test_es_index_create_object_error(mock_responses, patch_logger):
             "password": "changeme",
             "host": "http://nowhere.com:9200",
         }
-    index = EsIndex('index', config)
+    index = ESIndex('index', config)
     mock_responses.post("http://nowhere.com:9200/index/_refresh", headers=headers, status=200)
 
-    mock_responses.post("http://nowhere.com:9200/index/_search?expand_wildcards=hidden", headers=headers, status=200, payload={ "hits": { "hits":  [ { "id": 1 }] }})
+    mock_responses.post("http://nowhere.com:9200/index/_search?expand_wildcards=hidden", headers=headers, status=200, payload={ "hits": { "total": { "value": 1 },  "hits":  [ { "id": 1 }] }})
     with pytest.raises(NotImplementedError) as e_info:
         async for c in index.get_docs():
             c
