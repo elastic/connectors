@@ -50,13 +50,13 @@ STORAGE_EMULATOR_HOST = os.getenv(
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
-DEFAULT_PEM_FILE = (
-    os.path.join(
-        os.path.dirname(__file__),
-        "tests/fixtures/gcs",
-        "service_account_dummy_cert.pem",
-    ),
-)[0]
+DEFAULT_PEM_FILE = os.path.join(
+    os.path.dirname(__file__),
+    "tests",
+    "fixtures",
+    "gcs",
+    "service_account_dummy_cert.pem",
+)
 
 
 class GoogleCloudStorageDataSource(BaseDataSource):
