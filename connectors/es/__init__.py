@@ -4,9 +4,9 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from connectors.es.index import ESIndex  # NOQA
-from connectors.es.settings import (
+from connectors.es.settings import (  # NOQA
     Mappings,
     Settings,
     defaults_for,
     DEFAULT_LANGUAGE,
-)  # NOQA
+)
