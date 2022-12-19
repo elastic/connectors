@@ -6,7 +6,7 @@
 import sys
 import os
 from setuptools import setup, find_packages
-
+from setuptools._vendor.packaging.markers import Marker
 
 try:
     ARCH = os.uname().machine
@@ -33,6 +33,18 @@ from connectors import __version__  # NOQA
 #
 
 
+def extract_req(req):
+    req = req.strip().split(";")
+    if len(req) > 1:
+        env_marker = req[-1].strip()
+        marker = Marker(env_marker)
+        if not marker.evaluate():
+            return None
+    req = req[0]
+    req = req.split("=")
+    return req[0]
+
+
 def read_reqs(req_file):
     deps = []
     reqs_dir, __ = os.path.split(req_file)
@@ -47,12 +59,13 @@ def read_reqs(req_file):
                 subreq_file = req.split("-r")[-1].strip()
                 subreq_file = os.path.join(reqs_dir, subreq_file)
                 for subreq in read_reqs(subreq_file):
-                    dep = subreq.split("=")[0]
-                    if dep not in deps:
+
+                    dep = extract_req(subreq)
+                    if dep is not None and dep not in deps:
                         deps.append(dep)
             else:
-                dep = req.split("=")[0]
-                if dep not in deps:
+                dep = extract_req(req)
+                if dep is not None and dep not in deps:
                     deps.append(dep)
     return deps
 
