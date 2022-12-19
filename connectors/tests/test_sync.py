@@ -488,10 +488,16 @@ async def test_connector_service_poll_trace_mem(
 
 @pytest.mark.asyncio
 async def test_connector_service_poll_with_entsearch(
-    mock_responses, patch_logger, patch_ping, set_env, catch_stdout
+    mock_responses, patch_logger, patch_ping, set_env  # , catch_stdout
 ):
     with mock.patch.dict(os.environ, {"ENT_SEARCH_CONFIG_PATH": ES_CONFIG}):
-        await set_server_responses(mock_responses)
+
+        def connectors_read(url, **kw):
+            assert kw["headers"]["x-elastic-auth"] == "SomeYeahValue"
+
+            return CallbackResult(status=200, payload={})
+
+        await set_server_responses(mock_responses, connectors_update=connectors_read)
         service = create_service(CONFIG)
         asyncio.get_event_loop().call_soon(service.stop)
         await service.run()
