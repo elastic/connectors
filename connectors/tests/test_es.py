@@ -5,7 +5,6 @@
 #
 
 import pytest
-
 from connectors.es import ESIndex
 
 
@@ -29,5 +28,5 @@ async def test_es_index_create_object_error(mock_responses, patch_logger):
         payload={"hits": {"total": {"value": 1}, "hits": [{"id": 1}]}},
     )
     with pytest.raises(NotImplementedError) as _:
-        async for c in index.get_all_docs():
-            c
+        async for doc_ in index.get_all_docs():
+            pass
