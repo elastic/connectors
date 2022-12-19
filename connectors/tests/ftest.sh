@@ -20,6 +20,9 @@ fi
 
 
 cd $ROOT_DIR/connectors/sources/tests/fixtures/$NAME
+
+export RUNNING_FTEST=True
+
 make run-stack
 
 # XXX make run-stack should be blocking until everythign is up and running by checking hbs

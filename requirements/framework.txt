@@ -8,4 +8,5 @@ pympler==1.0.1
 guppy3==3.1.2
 cron-schedule-triggers==0.0.11
 pytz==2019.3
+aiogoogle>=4.2.0
 uvloop==0.17.0; sys_platform != 'win32'

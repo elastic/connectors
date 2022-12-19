@@ -2,3 +2,4 @@ include Makefile README.rst config.yml CONTRIBUTE.rst LICENSE
 recursive-include connectors/ *.yml
 recursive-include requirements/ *.txt
 include connectors/VERSION
+include connectors/sources/tests/fixtures/gcs/service_account_dummy_cert.pem
