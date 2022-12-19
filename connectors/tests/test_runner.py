@@ -565,7 +565,7 @@ async def test_connector_service_poll_trace_mem(
 
 @pytest.mark.asyncio
 async def test_connector_service_poll_with_entsearch(
-    mock_responses, patch_logger, patch_ping, set_env  # , catch_stdout
+    mock_responses, patch_logger, patch_ping, set_env, catch_stdout
 ):
     with mock.patch.dict(os.environ, {"ENT_SEARCH_CONFIG_PATH": ES_CONFIG}):
         def connectors_read(url, **kw):
@@ -574,7 +574,7 @@ async def test_connector_service_poll_with_entsearch(
             return CallbackResult(status=200, payload={})
 
         await set_server_responses(mock_responses, connectors_update=connectors_read)
-        service = create_service(CONFIG)
+        service = ConnectorService(CONFIG)
         asyncio.get_event_loop().call_soon(service.stop)
         await service.poll()
         for log in patch_logger.logs:
