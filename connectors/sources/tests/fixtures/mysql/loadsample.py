@@ -6,9 +6,11 @@
 from mysql.connector import connect
 import random
 import string
+import os
 
 
 DATABASE_NAME = "customerinfo"
+NUM_TABLES = int(os.environ.get('NUM_TABLES', '30'))
 
 
 def random_text(k=1024 * 20):
@@ -25,7 +27,7 @@ def main():
     cursor.execute(f"DROP DATABASE IF EXISTS {DATABASE_NAME}")
     cursor.execute(f"CREATE DATABASE {DATABASE_NAME}")
     cursor.execute(f"USE {DATABASE_NAME}")
-    for table in range(30):
+    for table in range(NUM_TABLES):
         print(f"Adding data in {table}...")
         sql_query = f"CREATE TABLE IF NOT EXISTS customers_{table} (name VARCHAR(255), age int, description LONGTEXT, PRIMARY KEY (name))"
         cursor.execute(sql_query)

@@ -30,9 +30,9 @@ if [[ $PERF8 == "yes" ]]
 then
     if [[ $PLATFORM == "darwin" ]]
     then
-      $ROOT_DIR/bin/perf8 --memray --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+      $ROOT_DIR/bin/perf8 -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --uvloop --debug
     else
-      $ROOT_DIR/bin/perf8 --memray --pyspy --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+      $ROOT_DIR/bin/perf8 -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --pyspy --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
     fi
 else
     $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
