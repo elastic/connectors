@@ -5,7 +5,7 @@
 #
 import pytest
 import json
-from connectors.index import (
+from connectors.es.settings import (
     Mappings,
     Settings,
     UnsupportedLanguageCode,

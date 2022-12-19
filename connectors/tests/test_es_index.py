@@ -5,7 +5,7 @@
 #
 
 import pytest
-from connectors.es import ESIndex
+from connectors.es.index import ESIndex
 
 
 @pytest.mark.asyncio
