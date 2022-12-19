@@ -18,7 +18,7 @@ from connectors.utils import (
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
 from connectors.index import defaults_for, DEFAULT_LANGUAGE
-from connectors.utils import ESIndex
+from connectors.es import ESIndex
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"

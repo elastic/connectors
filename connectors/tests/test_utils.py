@@ -19,7 +19,6 @@ from connectors.utils import (
     MemQueue,
     get_base64_value,
     ConcurrentTasks,
-    ESIndex,
 )
 
 
@@ -240,27 +239,3 @@ async def test_concurrent_runner_high_concurrency(patch_logger):
     await runner.join()
     assert results == list(range(1000))
     assert second_results == [3]
-
-
-@pytest.mark.asyncio
-async def test_es_index_create_object_error(mock_responses, patch_logger):
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-    config = {
-        "username": "elastic",
-        "password": "changeme",
-        "host": "http://nowhere.com:9200",
-    }
-    index = ESIndex("index", config)
-    mock_responses.post(
-        "http://nowhere.com:9200/index/_refresh", headers=headers, status=200
-    )
-
-    mock_responses.post(
-        "http://nowhere.com:9200/index/_search?expand_wildcards=hidden",
-        headers=headers,
-        status=200,
-        payload={"hits": {"total": {"value": 1}, "hits": [{"id": 1}]}},
-    )
-    with pytest.raises(NotImplementedError) as _:
-        async for c in index.get_all_docs():
-            c
