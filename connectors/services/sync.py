@@ -12,6 +12,7 @@ Event loop
 """
 import asyncio
 import time
+import os
 
 from connectors.byoei import ElasticServer
 from connectors.byoc import (
@@ -108,6 +109,15 @@ class SyncService(BaseService):
                 await connector.close()
 
     async def run(self):
+        if "PERF8" in os.environ:
+            import perf8
+
+            async with perf8.measure():
+                return await self._run()
+        else:
+            return await self._run()
+
+    async def _run(self):
         """Main event loop."""
         one_sync = self.args.one_sync
         sync_now = self.args.sync_now
@@ -155,9 +165,11 @@ class SyncService(BaseService):
             while self.running:
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
-                    async for connector in self.connectors.get_connectors(
+                    query = self.connectors.build_docs_query(
                         native_service_types, connectors_ids
-                    ):
+                    )
+
+                    async for connector in self.connectors.get_all_docs(query=query):
                         await self._one_sync(connector, es, sync_now)
                     if one_sync:
                         break

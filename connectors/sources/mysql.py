@@ -5,6 +5,7 @@
 #
 """MySQL source module responsible to fetch documents from MySQL"""
 import asyncio
+import ssl
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -25,6 +26,8 @@ QUERIES = {
 DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
+DEFAULT_SSL_DISABLED = True
+DEFAULT_SSL_CA = None
 
 
 class MySqlDataSource(BaseDataSource):
@@ -41,6 +44,8 @@ class MySqlDataSource(BaseDataSource):
             self.configuration.get("retry_count", DEFAULT_RETRY_COUNT)
         )
         self.connection_pool = None
+        self.ssl_disabled = self.configuration.get("ssl_disabled", DEFAULT_SSL_DISABLED)
+        self.certificate = self.configuration.get("ssl_ca", DEFAULT_SSL_CA)
 
     @classmethod
     def get_default_configuration(cls):
@@ -90,6 +95,16 @@ class MySqlDataSource(BaseDataSource):
                 "label": "How many retry count for fetching rows on each call",
                 "type": "int",
             },
+            "ssl_disabled": {
+                "value": DEFAULT_SSL_DISABLED,
+                "label": "SSL verification will be enabled or not",
+                "type": "bool",
+            },
+            "ssl_ca": {
+                "value": DEFAULT_SSL_CA,
+                "label": "SSL certificate",
+                "type": "str",
+            },
         }
 
     async def close(self):
@@ -122,6 +137,25 @@ class MySqlDataSource(BaseDataSource):
         ):
             raise Exception("Configured port has to be an integer.")
 
+        if not (self.ssl_disabled or self.certificate):
+            raise Exception("SSL certificate must be configured.")
+
+    def _ssl_context(self, certificate):
+        """Convert string to pem format and create a SSL context
+
+        Args:
+            certificate (str): certificate in string format
+
+        Returns:
+            ssl_context: SSL context with certificate
+        """
+        certificate = certificate.replace(" ", "\n")
+        pem_format = " ".join(certificate.split("\n", 1))
+        pem_format = " ".join(pem_format.rsplit("\n", 1))
+        ctx = ssl.create_default_context()
+        ctx.load_verify_locations(cadata=pem_format)
+        return ctx
+
     async def ping(self):
         """Verify the connection with MySQL server"""
         logger.info("Validating MySQL Configuration...")
@@ -133,6 +167,9 @@ class MySqlDataSource(BaseDataSource):
             "password": self.configuration["password"],
             "db": None,
             "maxsize": MAX_POOL_SIZE,
+            "ssl": self._ssl_context(certificate=self.certificate)
+            if not self.ssl_disabled
+            else None,
         }
         logger.info("Pinging MySQL...")
         if self.connection_pool is None:
@@ -145,17 +182,19 @@ class MySqlDataSource(BaseDataSource):
             logger.exception("Error while connecting to the MySQL Server.")
             raise
 
-    async def _connect(self, query, fetch_many=False):
+    async def _connect(self, query_name, fetch_many=False, **query_kwargs):
         """Executes the passed query on the MySQL server.
 
         Args:
-            query (str): MySql query to be executed.
+            query_name (str): MySql query name to be executed.
+            query_kwargs (dict): Query kwargs to format the query.
             fetch_many (boolean): Should use fetchmany to fetch the response.
 
         Yields:
             list: Column names and query response
         """
 
+        query = QUERIES[query_name].format(**query_kwargs)
         size = int(self.configuration.get("fetch_size", DEFAULT_FETCH_SIZE))
 
         # retry: Current retry counter
@@ -226,25 +265,20 @@ class MySqlDataSource(BaseDataSource):
             Dict: Row document to index
         """
         # Query to get all table names from a database
-        query = QUERIES["ALL_TABLE"].format(database=database)
-        response = await self._connect(query=query).__anext__()
+        response = await anext(self._connect(query_name="ALL_TABLE", database=database))
 
         if response:
             for table in response:
                 table_name = table[0]
                 logger.debug(f"Found table: {table_name} in database: {database}.")
 
-                # Query to get table's data
-                query = QUERIES["TABLE_DATA"].format(
-                    database=database, table=table_name
-                )
                 async for row in self.fetch_documents(
-                    database=database, table=table_name, query=query
+                    database=database, table=table_name
                 ):
                     yield row
         else:
             logger.warning(
-                f"Fetched 0 tables for the database: {database}. Either the database has no tables or the user does not have access to this database."
+                f"Fetched 0 tables for the database: {database}. As database has no tables."
             )
 
     def serialize(self, doc):
@@ -286,21 +320,23 @@ class MySqlDataSource(BaseDataSource):
 
         return doc
 
-    async def fetch_documents(self, database, table, query):
+    async def fetch_documents(self, database, table):
         """Fetches all the table entries and format them in Elasticsearch documents
 
         Args:
             database (str): Name of database
             table (str): Name of table
-            query (str): Query to execute
 
         Yields:
             Dict: Document to be index
         """
 
         # Query to get the table's primary key
-        query = QUERIES["TABLE_PRIMARY_KEY"].format(database=database, table=table)
-        response = await self._connect(query=query).__anext__()
+        response = await anext(
+            self._connect(
+                query_name="TABLE_PRIMARY_KEY", database=database, table=table
+            )
+        )
 
         keys = []
         for column_name in response:
@@ -309,15 +345,18 @@ class MySqlDataSource(BaseDataSource):
         if keys:
 
             # Query to get the table's last update time
-            query = QUERIES["TABLE_LAST_UPDATE_TIME"].format(
-                database=database, table=table
+            response = await anext(
+                self._connect(
+                    query_name="TABLE_LAST_UPDATE_TIME", database=database, table=table
+                )
             )
-            response = await self._connect(query=query).__anext__()
             last_update_time = response[0][0]
 
-            query = QUERIES["TABLE_DATA"].format(database=database, table=table)
-            streamer = self._connect(query=query, fetch_many=True)
-            column_names = await streamer.__anext__()
+            # Query to get the table's data
+            streamer = self._connect(
+                query_name="TABLE_DATA", fetch_many=True, database=database, table=table
+            )
+            column_names = await anext(streamer)
 
             async for row in streamer:
                 row = dict(zip(column_names, row))
@@ -349,8 +388,7 @@ class MySqlDataSource(BaseDataSource):
         """
 
         # Query to get all databases
-        query = QUERIES["ALL_DATABASE"]
-        response = await self._connect(query=query).__anext__()
+        response = await anext(self._connect(query_name="ALL_DATABASE"))
         accessible_databases = [database[0] for database in response]
         return list(set(databases) - set(accessible_databases))
 
