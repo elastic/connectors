@@ -5,8 +5,13 @@
 #
 from mysql.connector import connect
 import random
+import os
 
+
+DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
 DATABASE_NAME = "customerinfo"
+_SIZES = {"small": 5, "medium": 10, "large": 30}
+NUM_TABLES = _SIZES[DATA_SIZE]
 
 
 def main():
@@ -14,7 +19,7 @@ def main():
     database = connect(host="127.0.0.1", port=3306, user="root", password="changeme")
     cursor = database.cursor()
     cursor.execute(f"USE {DATABASE_NAME}")
-    for table in range(15):
+    for table in range(NUM_TABLES):
         print(f"Working on table {table}...")
         rows = [(f"user_{row_id}",) for row_id in random.sample(range(1, 1000), 10)]
         print(rows)
