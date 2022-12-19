@@ -8,6 +8,9 @@ PERF8=$2
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR="$SCRIPT_DIR/../.."
 PLATFORM='unknown'
+export REFRESH_RATE="${REFRESH_RATE:-5}"
+export DATA_SIZE="${DATA_SIZE:-medium}"
+
 unamestr=$(uname)
 if [[ "$unamestr" == 'Linux' ]]; then
    PLATFORM='linux'
@@ -30,9 +33,9 @@ if [[ $PERF8 == "yes" ]]
 then
     if [[ $PLATFORM == "darwin" ]]
     then
-      $ROOT_DIR/bin/perf8 --memray --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+      $ROOT_DIR/bin/perf8 --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
     else
-      $ROOT_DIR/bin/perf8 --memray --pyspy --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+      $ROOT_DIR/bin/perf8 --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --pyspy --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
     fi
 else
     $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
