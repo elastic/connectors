@@ -109,7 +109,7 @@ class SyncService(BaseService):
                 await connector.close()
 
     async def run(self):
-        if 'PERF8' in os.environ:
+        if "PERF8" in os.environ:
             import perf8
 
             async with perf8.measure():

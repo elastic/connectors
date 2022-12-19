@@ -8,8 +8,10 @@ import random
 import os
 
 
+DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
 DATABASE_NAME = "customerinfo"
-NUM_TABLES = int(os.environ.get('NUM_TABLES', '30'))
+_SIZES = {"small": 5, "medium": 10, "large": 30}
+NUM_TABLES = _SIZES[DATA_SIZE]
 
 
 def main():
