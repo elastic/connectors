@@ -14,19 +14,17 @@ from datetime import datetime, timezone
 from connectors.utils import (
     iso_utc,
     next_run,
-    ESClient,
 )
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
-from elasticsearch.exceptions import ApiError
 from connectors.index import defaults_for, DEFAULT_LANGUAGE
+from connectors.es import ESIndex
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 PIPELINE = "ent-search-generic-ingestion"
 SYNC_DISABLED = -1
 DEFAULT_ANALYSIS_ICU = False
-DEFAULT_PAGE_SIZE = 100
 
 
 def e2str(entry):
@@ -85,10 +83,11 @@ class DataSourceError(Exception):
     pass
 
 
-class BYOIndex(ESClient):
+class BYOIndex(ESIndex):
     def __init__(self, elastic_config):
-        super().__init__(elastic_config)
         logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
+        # initilize ESIndex instance
+        super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
         # grab all bulk options
         self.bulk_options = elastic_config.get("bulk", {})
         self.language_code = elastic_config.get("language_code", DEFAULT_LANGUAGE)
@@ -111,10 +110,11 @@ class BYOIndex(ESClient):
             doc=document,
         )
 
+    # @TODO move to ESIndex?
     async def preflight(self):
         await self.check_exists(indices=[CONNECTORS_INDEX, JOBS_INDEX])
 
-    async def get_connectors(self, native_service_types=None, connectors_ids=None):
+    def build_docs_query(self, native_service_types=None, connectors_ids=None):
         if native_service_types is None:
             native_service_types = []
         if connectors_ids is None:
@@ -122,8 +122,6 @@ class BYOIndex(ESClient):
 
         if len(native_service_types) == 0 and len(connectors_ids) == 0:
             return
-
-        await self.client.indices.refresh(index=CONNECTORS_INDEX)
 
         native_connectors_query = {
             "bool": {
@@ -133,6 +131,7 @@ class BYOIndex(ESClient):
                 ]
             }
         }
+
         custom_connectors_query = {
             "bool": {
                 "filter": [
@@ -150,42 +149,17 @@ class BYOIndex(ESClient):
         else:
             query = custom_connectors_query
 
-        async for connector in self._query_with_pagination(CONNECTORS_INDEX, query):
-            yield BYOConnector(
-                self,
-                connector["_id"],
-                connector["_source"],
-                bulk_options=self.bulk_options,
-                language_code=self.language_code,
-                analysis_icu=self.analysis_icu,
-            )
+        return query
 
-    async def _query_with_pagination(self, index, query, page_size=DEFAULT_PAGE_SIZE):
-        count = 0
-        offset = 0
-
-        while True:
-            try:
-                resp = await self.client.search(
-                    index=index,
-                    query=query,
-                    from_=offset,
-                    size=page_size,
-                    expand_wildcards="hidden",
-                )
-            except ApiError as e:
-                logger.critical(f"The server returned {e.status_code}")
-                logger.critical(e.body, exc_info=True)
-                return
-
-            hits = resp["hits"]["hits"]
-            total = resp["hits"]["total"]["value"]
-            count += len(hits)
-            for hit in hits:
-                yield hit
-            if count >= total:
-                break
-            offset += len(hits)
+    def _create_object(self, doc_source):
+        return BYOConnector(
+            self,
+            doc_source["_id"],
+            doc_source["_source"],
+            bulk_options=self.bulk_options,
+            language_code=self.language_code,
+            analysis_icu=self.analysis_icu,
+        )
 
 
 class SyncJob:
@@ -272,19 +246,20 @@ class BYOConnector:
 
     def __init__(
         self,
-        index,
+        elastic_index,
         connector_id,
         doc_source,
         bulk_options,
         language_code=DEFAULT_LANGUAGE,
         analysis_icu=DEFAULT_ANALYSIS_ICU,
     ):
+
         self.doc_source = doc_source
         self.id = connector_id
-        self.index = index
+        self.index = elastic_index
         self._update_config(doc_source)
         self._dirty = False
-        self.client = index.client
+        self.client = elastic_index.client
         self.doc_source["last_seen"] = iso_utc()
         self._heartbeat_started = self._syncing = False
         self._closed = False
