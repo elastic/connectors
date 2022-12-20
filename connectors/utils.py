@@ -100,6 +100,8 @@ class ESClient:
         self.max_wait_duration = config.get("max_wait_duration", 60)
         self.initial_backoff_duration = config.get("initial_backoff_duration", 5)
         self.backoff_multiplier = config.get("backoff_multiplier", 2)
+        if "headers" in config:
+            options["headers"] = config["headers"]
         self.client = AsyncElasticsearch(**options)
         self._keep_waiting = True
 
