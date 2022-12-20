@@ -66,6 +66,7 @@ class ConnectorService:
             "elasticsearch.host",
             "elasticsearch.username",
             "elasticsearch.password",
+            "elasticsearch.headers",
         ):
             sub = field.split(".")[-1]
             if field not in ent_search_config:
