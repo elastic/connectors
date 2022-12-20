@@ -27,6 +27,9 @@ bin/pytest: bin/python
 	bin/pip install -r requirements/$(ARCH).txt
 	bin/pip install -r requirements/tests.txt
 
+clean:
+	rm -rf bin lib include
+
 lint: bin/python bin/black bin/elastic-ingest
 	bin/black --check connectors
 	bin/black --check setup.py
