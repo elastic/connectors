@@ -23,8 +23,8 @@ from connectors.utils import (
 
 
 def test_next_run():
-
-    assert next_run("1 * * * * *") < 70.0
+    # can run within two minutes
+    assert next_run("1 * * * * *") < 120
     assert next_run("* * * * * *") == 0
 
     # this should get parsed
