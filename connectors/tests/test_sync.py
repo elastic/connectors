@@ -488,7 +488,7 @@ async def test_connector_service_poll_trace_mem(
 
 @pytest.mark.asyncio
 async def test_connector_service_poll_with_entsearch(
-    mock_responses, patch_logger, patch_ping, set_env  # , catch_stdout
+    mock_responses, patch_logger, patch_ping, set_env, catch_stdout
 ):
     with mock.patch.dict(os.environ, {"ENT_SEARCH_CONFIG_PATH": ES_CONFIG}):
 
