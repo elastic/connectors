@@ -5,8 +5,8 @@
 #
 from elasticsearch import ApiError
 
+from connectors.es import ESClient
 from connectors.logger import logger
-from connectors.utils import ESClient
 
 DEFAULT_PAGE_SIZE = 100
 

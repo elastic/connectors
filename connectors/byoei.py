@@ -28,6 +28,7 @@ from collections import defaultdict
 from elasticsearch import NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan
 
+from connectors.es import ESClient
 from connectors.logger import logger
 from connectors.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
@@ -37,7 +38,6 @@ from connectors.utils import (
     DEFAULT_QUEUE_MEM_SIZE,
     DEFAULT_QUEUE_SIZE,
     ConcurrentTasks,
-    ESClient,
     MemQueue,
     get_size,
     iso_utc,
