@@ -3,10 +3,10 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import sys
-import os
 import asyncio
 import logging
+import os
+import sys
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 import elasticsearch
@@ -16,7 +16,6 @@ from connectors.byoei import ElasticServer
 from connectors.logger import logger, set_logger
 from connectors.source import get_source_klass
 from connectors.utils import validate_index_name
-
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"

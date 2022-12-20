@@ -16,8 +16,8 @@ from aiogoogle import Aiogoogle
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
-from connectors.utils import get_base64_value, TIKA_SUPPORTED_FILETYPES
 from connectors.source import BaseDataSource
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
 CLOUD_STORAGE_BASE_URL = "https://console.cloud.google.com/storage/browser/_details/"

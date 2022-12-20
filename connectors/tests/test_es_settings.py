@@ -3,17 +3,14 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import pytest
 import json
-from connectors.es.settings import (
-    Mappings,
-    Settings,
-    UnsupportedLanguageCode,
-    DEFAULT_LANGUAGE,
-    NON_ICU_ANALYSIS_SETTINGS,
-    ICU_ANALYSIS_SETTINGS,
-    defaults_for,
-)
+
+import pytest
+
+from connectors.es.settings import (DEFAULT_LANGUAGE, ICU_ANALYSIS_SETTINGS,
+                                    NON_ICU_ANALYSIS_SETTINGS, Mappings,
+                                    Settings, UnsupportedLanguageCode,
+                                    defaults_for)
 
 EXPECTED_CONNECTORS_PROPS = ["id", "_subextracted_as_of", "_subextracted_version"]
 

@@ -4,8 +4,9 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import pytest
-from connectors.sources.directory import DirectoryDataSource, HERE
-from connectors.sources.tests.support import create_source, assert_basics
+
+from connectors.sources.directory import HERE, DirectoryDataSource
+from connectors.sources.tests.support import assert_basics, create_source
 
 
 @pytest.mark.asyncio

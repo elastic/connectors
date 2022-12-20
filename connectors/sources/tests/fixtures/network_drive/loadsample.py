@@ -5,9 +5,10 @@
 #
 """Network Drive module responsible to generate file/folder(s) on Network Drive server.
 """
-import smbclient
 import random
 import string
+
+import smbclient
 
 SERVER = "127.0.0.1"
 NUMBER_OF_SMALL_FILES = 10000

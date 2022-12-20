@@ -13,7 +13,7 @@ from unittest import mock
 import pytest
 from aiogoogle import Aiogoogle
 from aiogoogle.auth.managers import ServiceAccountManager
-from aiogoogle.models import Response, Request
+from aiogoogle.models import Request, Response
 
 from connectors.source import DataSourceConfiguration
 from connectors.sources.gcs import GoogleCloudStorageDataSource

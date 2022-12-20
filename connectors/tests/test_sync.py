@@ -3,19 +3,19 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import copy
-import os
-import pytest
 import asyncio
+import copy
 import json
+import os
 from unittest import mock
+
+import pytest
 from aioresponses import CallbackResult
 
-from connectors.services.sync import SyncService
 from connectors.byoc import DataSourceError
 from connectors.conftest import assert_re
+from connectors.services.sync import SyncService
 from connectors.tests.fake_sources import FakeSourceTS
-
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 ES_CONFIG = os.path.join(os.path.dirname(__file__), "entsearch.yml")

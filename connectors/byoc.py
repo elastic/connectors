@@ -7,17 +7,14 @@
 Implementation of BYOC protocol.
 """
 import asyncio
-from enum import Enum
 import time
 from datetime import datetime, timezone
+from enum import Enum
 
-from connectors.utils import (
-    iso_utc,
-    next_run,
-)
+from connectors.es import DEFAULT_LANGUAGE, ESIndex, defaults_for
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
-from connectors.es import ESIndex, defaults_for, DEFAULT_LANGUAGE
+from connectors.utils import iso_utc, next_run
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
