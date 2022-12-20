@@ -29,11 +29,19 @@ from elasticsearch import NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan
 
 from connectors.logger import logger
-from connectors.utils import (DEFAULT_CHUNK_MEM_SIZE, DEFAULT_CHUNK_SIZE,
-                              DEFAULT_DISPLAY_EVERY, DEFAULT_MAX_CONCURRENCY,
-                              DEFAULT_QUEUE_MEM_SIZE, DEFAULT_QUEUE_SIZE,
-                              ConcurrentTasks, ESClient, MemQueue, get_size,
-                              iso_utc)
+from connectors.utils import (
+    DEFAULT_CHUNK_MEM_SIZE,
+    DEFAULT_CHUNK_SIZE,
+    DEFAULT_DISPLAY_EVERY,
+    DEFAULT_MAX_CONCURRENCY,
+    DEFAULT_QUEUE_MEM_SIZE,
+    DEFAULT_QUEUE_SIZE,
+    ConcurrentTasks,
+    ESClient,
+    MemQueue,
+    get_size,
+    iso_utc,
+)
 
 OP_INDEX = "index"
 OP_UPSERT = "update"

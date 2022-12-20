@@ -15,8 +15,7 @@ from smbprotocol.exceptions import SMBException, SMBOSError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import (TIKA_SUPPORTED_FILETYPES, get_base64_value,
-                              iso_utc)
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value, iso_utc
 
 MAX_CHUNK_SIZE = 65536
 DEFAULT_CONTENT_EXTRACTION = True

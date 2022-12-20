@@ -14,9 +14,15 @@ import asyncio
 import os
 import time
 
-from connectors.byoc import (BYOIndex, ConnectorUpdateError, DataSourceError,
-                             ServiceTypeNotConfiguredError,
-                             ServiceTypeNotSupportedError, Status, e2str)
+from connectors.byoc import (
+    BYOIndex,
+    ConnectorUpdateError,
+    DataSourceError,
+    ServiceTypeNotConfiguredError,
+    ServiceTypeNotSupportedError,
+    Status,
+    e2str,
+)
 from connectors.byoei import ElasticServer
 from connectors.logger import logger
 from connectors.services.base import BaseService

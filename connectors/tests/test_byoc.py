@@ -13,8 +13,15 @@ from aioresponses import CallbackResult
 from elasticsearch import AsyncElasticsearch
 from envyaml import EnvYAML
 
-from connectors.byoc import (BYOConnector, BYOIndex, JobStatus, Status,
-                             SyncJob, e2str, iso_utc)
+from connectors.byoc import (
+    BYOConnector,
+    BYOIndex,
+    JobStatus,
+    Status,
+    SyncJob,
+    e2str,
+    iso_utc,
+)
 from connectors.byoei import ElasticServer
 from connectors.source import BaseDataSource
 

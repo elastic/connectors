@@ -5,8 +5,13 @@
 #
 import pytest
 
-from connectors.source import (BaseDataSource, DataSourceConfiguration, Field,
-                               get_data_sources, get_source_klass)
+from connectors.source import (
+    BaseDataSource,
+    DataSourceConfiguration,
+    Field,
+    get_data_sources,
+    get_source_klass,
+)
 
 CONFIG = {
     "host": {

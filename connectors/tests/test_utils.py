@@ -11,9 +11,15 @@ import time
 import pytest
 from pympler import asizeof
 
-from connectors.utils import (ConcurrentTasks, ESClient, InvalidIndexNameError,
-                              MemQueue, get_base64_value, next_run,
-                              validate_index_name)
+from connectors.utils import (
+    ConcurrentTasks,
+    ESClient,
+    InvalidIndexNameError,
+    MemQueue,
+    get_base64_value,
+    next_run,
+    validate_index_name,
+)
 
 
 def test_next_run():
