@@ -8,9 +8,8 @@ import os
 import signal
 from unittest import mock
 
-from connectors.cli import main, run
 from connectors import __version__
-
+from connectors.cli import main, run
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 

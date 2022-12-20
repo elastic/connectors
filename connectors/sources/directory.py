@@ -6,13 +6,13 @@
 """
 Demo of a standalone source
 """
-import os
-from pathlib import Path
-import hashlib
 import functools
+import hashlib
+import os
 from datetime import datetime, timezone
-from connectors.utils import get_base64_value, TIKA_SUPPORTED_FILETYPES
+from pathlib import Path
 
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
 HERE = os.path.dirname(__file__)
 DEFAULT_CONTENT_EXTRACTION = True

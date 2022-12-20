@@ -3,29 +3,25 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from datetime import datetime, timezone
-import base64
-import logging
-import time
 import asyncio
-import tracemalloc
-import gc
+import base64
 import contextlib
 import functools
+import gc
+import logging
+import time
+import tracemalloc
+from datetime import datetime, timezone
 
-from elasticsearch import (
-    AsyncElasticsearch,
-    ApiError,
-    ConnectionError as ElasticConnectionError,
-    NotFoundError,
-)
+from cstriggers.core.trigger import QuartzCron
 from elastic_transport.client_utils import url_to_node_config
+from elasticsearch import ApiError, AsyncElasticsearch
+from elasticsearch import ConnectionError as ElasticConnectionError
+from elasticsearch import NotFoundError
 from guppy import hpy
 from pympler import asizeof
-from cstriggers.core.trigger import QuartzCron
 
-from connectors.logger import set_extra_logger, logger
-
+from connectors.logger import logger, set_extra_logger
 
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_QUEUE_SIZE = 1024

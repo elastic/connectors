@@ -4,21 +4,21 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-import time
-import functools
 import base64
+import functools
+import time
 
 import pytest
 from pympler import asizeof
 
 from connectors.utils import (
-    next_run,
-    validate_index_name,
-    InvalidIndexNameError,
+    ConcurrentTasks,
     ESClient,
+    InvalidIndexNameError,
     MemQueue,
     get_base64_value,
-    ConcurrentTasks,
+    next_run,
+    validate_index_name,
 )
 
 

@@ -5,6 +5,7 @@
 #
 
 import pytest
+
 from connectors.es.index import ESIndex
 
 

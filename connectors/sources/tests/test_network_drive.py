@@ -7,15 +7,16 @@
 """
 import asyncio
 import datetime
+from io import BytesIO
 from unittest import mock
 
 import pytest
 import smbclient
-from io import BytesIO
+from smbprotocol.exceptions import LogonFailure, SMBOSError
+
 from connectors.source import DataSourceConfiguration
 from connectors.sources.network_drive import NASDataSource
 from connectors.sources.tests.support import create_source
-from smbprotocol.exceptions import LogonFailure, SMBOSError
 
 READ_COUNT = 0
 MAX_CHUNK_SIZE = 65536

@@ -8,6 +8,7 @@ from unittest import mock
 
 import aioboto3
 import pytest
+
 from connectors.sources.s3 import S3DataSource
 from connectors.sources.tests.support import assert_basics, create_source
 

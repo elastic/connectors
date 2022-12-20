@@ -6,21 +6,21 @@
 import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
 from functools import partial
 from hashlib import md5
+from io import BytesIO
 
 import aioboto3
-from io import BytesIO
-from aiobotocore.response import AioReadTimeoutError
-from aiohttp.client_exceptions import ServerTimeoutError
 from aiobotocore.config import AioConfig
+from aiobotocore.response import AioReadTimeoutError
 from aiobotocore.utils import logger as aws_logger
+from aiohttp.client_exceptions import ServerTimeoutError
 from botocore.exceptions import ClientError
-from contextlib import asynccontextmanager
+
 from connectors.logger import logger, set_extra_logger
 from connectors.source import BaseDataSource
-from connectors.utils import get_base64_value, TIKA_SUPPORTED_FILETYPES
-
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
 MAX_CHUNK_SIZE = 1048576
 DEFAULT_MAX_FILE_SIZE = 10485760

@@ -5,8 +5,8 @@
 #
 from connectors.es.index import ESIndex  # NOQA
 from connectors.es.settings import (  # NOQA
+    DEFAULT_LANGUAGE,
     Mappings,
     Settings,
     defaults_for,
-    DEFAULT_LANGUAGE,
 )

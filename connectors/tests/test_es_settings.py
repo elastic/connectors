@@ -3,15 +3,17 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import pytest
 import json
+
+import pytest
+
 from connectors.es.settings import (
+    DEFAULT_LANGUAGE,
+    ICU_ANALYSIS_SETTINGS,
+    NON_ICU_ANALYSIS_SETTINGS,
     Mappings,
     Settings,
     UnsupportedLanguageCode,
-    DEFAULT_LANGUAGE,
-    NON_ICU_ANALYSIS_SETTINGS,
-    ICU_ANALYSIS_SETTINGS,
     defaults_for,
 )
 

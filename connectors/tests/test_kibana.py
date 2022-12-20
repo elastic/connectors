@@ -5,8 +5,8 @@
 #
 import os
 from unittest import mock
-from connectors.kibana import main
 
+from connectors.kibana import main
 
 HERE = os.path.dirname(__file__)
 

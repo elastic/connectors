@@ -5,10 +5,10 @@
 #
 """Tests the MySQL source class methods"""
 import asyncio
-import ssl
 import datetime
 import decimal
 import random
+import ssl
 from decimal import Decimal
 from unittest import mock
 

@@ -11,22 +11,22 @@ Event loop
 - mirrors an Elasticsearch index with a collection of documents
 """
 import asyncio
-import time
 import os
+import time
 
-from connectors.byoei import ElasticServer
 from connectors.byoc import (
     BYOIndex,
+    ConnectorUpdateError,
+    DataSourceError,
+    ServiceTypeNotConfiguredError,
+    ServiceTypeNotSupportedError,
     Status,
     e2str,
-    ServiceTypeNotConfiguredError,
-    ConnectorUpdateError,
-    ServiceTypeNotSupportedError,
-    DataSourceError,
 )
+from connectors.byoei import ElasticServer
 from connectors.logger import logger
-from connectors.utils import CancellableSleeps, trace_mem
 from connectors.services.base import BaseService
+from connectors.utils import CancellableSleeps, trace_mem
 
 
 class SyncService(BaseService):

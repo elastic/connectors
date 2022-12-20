@@ -31,6 +31,7 @@ clean:
 	rm -rf bin lib include
 
 lint: bin/python bin/black bin/elastic-ingest
+	bin/isort --check . --sp .isort.cfg
 	bin/black --check connectors
 	bin/black --check setup.py
 	bin/flake8 connectors --exclude fixtures
@@ -39,6 +40,7 @@ lint: bin/python bin/black bin/elastic-ingest
 	bin/flake8 scripts
 
 autoformat: bin/python bin/black bin/elastic-ingest
+	bin/isort . --sp .isort.cfg
 	bin/black connectors
 	bin/black setup.py
 	bin/black scripts

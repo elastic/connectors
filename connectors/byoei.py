@@ -19,30 +19,29 @@ Implementation of BYOEI protocol (+some ids collecting)
 Elasticsearch <== Bulker <== queue <== Fetcher <== generator
 
 """
+import asyncio
 import copy
+import functools
 import time
 from collections import defaultdict
-import functools
-import asyncio
 
 from elasticsearch import NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan
 
 from connectors.logger import logger
 from connectors.utils import (
-    iso_utc,
-    ESClient,
-    get_size,
-    DEFAULT_CHUNK_SIZE,
-    DEFAULT_QUEUE_SIZE,
-    DEFAULT_QUEUE_MEM_SIZE,
     DEFAULT_CHUNK_MEM_SIZE,
+    DEFAULT_CHUNK_SIZE,
     DEFAULT_DISPLAY_EVERY,
     DEFAULT_MAX_CONCURRENCY,
-    MemQueue,
+    DEFAULT_QUEUE_MEM_SIZE,
+    DEFAULT_QUEUE_SIZE,
     ConcurrentTasks,
+    ESClient,
+    MemQueue,
+    get_size,
+    iso_utc,
 )
-
 
 OP_INDEX = "index"
 OP_UPSERT = "update"

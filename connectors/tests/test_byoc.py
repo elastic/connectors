@@ -6,25 +6,24 @@
 import asyncio
 import json
 import os
-from envyaml import EnvYAML
 from datetime import datetime
 
+import pytest
 from aioresponses import CallbackResult
 from elasticsearch import AsyncElasticsearch
-import pytest
+from envyaml import EnvYAML
 
-from connectors.source import BaseDataSource
-from connectors.byoei import ElasticServer
 from connectors.byoc import (
-    e2str,
-    Status,
-    iso_utc,
-    SyncJob,
-    JobStatus,
-    BYOIndex,
     BYOConnector,
+    BYOIndex,
+    JobStatus,
+    Status,
+    SyncJob,
+    e2str,
+    iso_utc,
 )
-
+from connectors.byoei import ElasticServer
+from connectors.source import BaseDataSource
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 

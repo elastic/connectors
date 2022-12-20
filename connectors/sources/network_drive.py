@@ -8,14 +8,14 @@
 import asyncio
 import os
 from functools import partial
+from io import BytesIO
 
 import smbclient
-from io import BytesIO
-from connectors.logger import logger
-from connectors.source import BaseDataSource
-from connectors.utils import iso_utc, get_base64_value, TIKA_SUPPORTED_FILETYPES
 from smbprotocol.exceptions import SMBException, SMBOSError
 
+from connectors.logger import logger
+from connectors.source import BaseDataSource
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value, iso_utc
 
 MAX_CHUNK_SIZE = 65536
 DEFAULT_CONTENT_EXTRACTION = True

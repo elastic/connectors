@@ -3,9 +3,10 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import sys
 import os
-from setuptools import setup, find_packages
+import sys
+
+from setuptools import find_packages, setup
 from setuptools._vendor.packaging.markers import Marker
 
 try:
@@ -19,7 +20,6 @@ if sys.version_info.minor < 10:
     raise ValueError("Requires Python 3.10 or superior.")
 
 from connectors import __version__  # NOQA
-
 
 # We feed install_requires with `requirements.txt` but we unpin versions so we
 # don't enforce them and trap folks into dependency hell. (only works with `==` here)

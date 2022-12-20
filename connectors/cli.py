@@ -8,20 +8,20 @@ Command Line Interface.
 
 Parses arguments and call run() with them.
 """
-from argparse import ArgumentParser
-import os
-import logging
 import asyncio
-import signal
 import functools
+import logging
+import os
+import signal
+from argparse import ArgumentParser
 
 from envyaml import EnvYAML
 
+from connectors import __version__
 from connectors.logger import logger, set_logger
+from connectors.services.sync import SyncService
 from connectors.source import get_data_sources
 from connectors.utils import get_event_loop
-from connectors import __version__
-from connectors.services.sync import SyncService
 
 
 def _parser():

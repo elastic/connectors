@@ -3,11 +3,11 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import io
-import sys
-import os
 import asyncio
+import io
+import os
 import re
+import sys
 import traceback
 
 import pytest
