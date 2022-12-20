@@ -1,6 +1,8 @@
 # tests
 black>=22.6.0
 flake8>=4.0.1
+flake8-import-order>=0.18.2
+isort>=5.11.3
 aioresponses>=0.7.3
 pytest>=7.1.2
 pytest-cov>=3.0.0

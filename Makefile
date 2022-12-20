@@ -42,6 +42,9 @@ autoformat: bin/python bin/black bin/elastic-ingest
 	bin/black connectors
 	bin/black setup.py
 	bin/black scripts
+	bin/isort connectors
+	bin/isort setup.py
+	bin/isort scripts
 
 test:	bin/pytest bin/elastic-ingest
 	bin/pytest --cov-report term-missing --cov-report html --cov=connectors -sv connectors/tests connectors/sources/tests
