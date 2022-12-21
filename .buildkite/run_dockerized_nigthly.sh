@@ -39,11 +39,8 @@ sleep 120
 make load-data
 
 cd $ROOT
-/usr/bin/python3.10 -m venv .
-bin/pip install -r requirements/$ARCH.txt
-bin/python setup.py develop
-
-export PYTHON=bin/python
+sudo python3.10 -m pip install -r requirements/$ARCH.txt
+sudo python3.10 -m pip install .
 
 make ftest NAME=mysql
 
