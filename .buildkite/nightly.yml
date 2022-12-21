@@ -4,5 +4,8 @@ agents:
   useVault: false
 
 steps:
-  - command:
-    - ".buildkite/run_nigthly.sh"
+  - label: "🔨 Performance and functional test"
+    command:
+      - ".buildkite/run_nigthly.sh"
+    artifact_paths:
+      - "perf8-ftest-report/**/*"
