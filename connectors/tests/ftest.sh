@@ -22,9 +22,10 @@ elif [[ "$unamestr" == 'Darwin' ]]; then
 fi
 
 
-cd $ROOT_DIR/connectors/sources/tests/fixtures/$NAME
+cd $ROOT_DIR/connectors/sources/tests/fixtures
 
-$PYTHON -m pip install -r requirements.txt
+$PYTHON -m pip install -r $NAME/requirements.txt
+
 
 export RUNNING_FTEST=True
 
@@ -35,7 +36,7 @@ sleep 30
 
 $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug
 
-$PYTHON ./loadsample.py
+$PYTHON fixture.py --name $NAME --action load
 
 if [[ $PERF8 == "yes" ]]
 then
@@ -49,7 +50,8 @@ else
     $ELASTIC_INGEST --one-sync --sync-now --debug
 fi
 
-$PYTHON ./remove.py
+$PYTHON fixture.py --name $NAME --action remove
+
 
 $ELASTIC_INGEST --one-sync --sync-now --debug
 $PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size 3000

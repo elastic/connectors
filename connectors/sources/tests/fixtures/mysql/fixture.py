@@ -22,8 +22,8 @@ def random_text(k=1024 * 20):
 BIG_TEXT = random_text()
 
 
-def main():
-    """30 tables of 10001 rows each. each row is ~ 1024*20 bytes"""
+def load():
+    """N tables of 10001 rows each. each row is ~ 1024*20 bytes"""
     database = connect(host="127.0.0.1", port=3306, user="root", password="changeme")
     cursor = database.cursor()
     cursor.execute(f"DROP DATABASE IF EXISTS {DATABASE_NAME}")
@@ -44,5 +44,15 @@ def main():
     database.commit()
 
 
-if __name__ == "__main__":
-    main()
+def remove():
+    """Removes 10 random items per table"""
+    database = connect(host="127.0.0.1", port=3306, user="root", password="changeme")
+    cursor = database.cursor()
+    cursor.execute(f"USE {DATABASE_NAME}")
+    for table in range(NUM_TABLES):
+        print(f"Working on table {table}...")
+        rows = [(f"user_{row_id}",) for row_id in random.sample(range(1, 1000), 10)]
+        print(rows)
+        sql_query = f"DELETE from customers_{table} where name=%s"
+        cursor.executemany(sql_query, rows)
+    database.commit()
