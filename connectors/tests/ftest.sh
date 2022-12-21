@@ -10,7 +10,7 @@ ROOT_DIR="$SCRIPT_DIR/../.."
 PLATFORM='unknown'
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
-PERF8=${PERF8:-$ROOT_DIR/bin/perf8}
+PERF8_BIN=${PERF8_BIN:-$ROOT_DIR/bin/perf8}
 PYTHON=${PYTHON:-$ROOT_DIR/bin/python}
 ELASTIC_INGEST=${ELASTIC_INGEST:-$ROOT_DIR/bin/elastic-ingest}
 
@@ -41,9 +41,9 @@ if [[ $PERF8 == "yes" ]]
 then
     if [[ $PLATFORM == "darwin" ]]
     then
-      $PERF8 --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
     else
-      $PERF8 --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --pyspy --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --pyspy --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
     fi
 else
     $ELASTIC_INGEST --one-sync --sync-now --debug

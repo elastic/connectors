@@ -32,7 +32,7 @@ ROOT=$(realpath $BASEDIR/../)
 cd $ROOT
 
 /usr/bin/python3.10 -m venv .
-export PERF8=$ROOT/bin/perf8
+export PERF8_BIN=$ROOT/bin/perf8
 export PYTHON=$ROOT/bin/python
 export PIP=$ROOT/bin/pip
 export DATA_SIZE=small
