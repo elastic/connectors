@@ -36,6 +36,7 @@ export PERF8=$ROOT/bin/perf8
 export PYTHON=$ROOT/bin/python
 export PIP=$ROOT/bin/pip
 export DATA_SIZE=small
+export VERSION=8.7.0-SNAPSHOT
 
 $PIP install -r requirements/tests.txt
 $PIP install -r requirements/x86_64.txt
