@@ -32,6 +32,7 @@ ROOT=$(realpath $BASEDIR/../)
 cd $ROOT/connectors/sources/tests/fixtures/mysql
 
 export DATA_SIZE=small
+export PYTHON=/usr/bin/python3.10
 
 make run-stack
 sleep 120
@@ -39,8 +40,10 @@ sleep 120
 make load-data
 
 cd $ROOT
-sudo python3.10 -m pip install -r requirements/$ARCH.txt
-sudo python3.10 -m pip install .
+$PYTHON -m venv .
+bin/pip install -r requirements/$ARCH.txt
+bin/python setup.py develop
+
 
 make ftest NAME=mysql
 
