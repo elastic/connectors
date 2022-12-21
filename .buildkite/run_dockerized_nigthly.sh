@@ -3,9 +3,8 @@ set -euo pipefail
 
 sudo apt-get update
 sudo apt-get install ca-certificates curl gnupg lsb-release -y
-mkdir -p /etc/apt/keyrings
+sudo mkdir -p /etc/apt/keyrings
 
-# update docker and docker-compose
 ARCH=`dpkg --print-architecture`
 RELEASE=`lsb_release -cs`
 curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
