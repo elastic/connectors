@@ -14,10 +14,12 @@ Each fixture needs to implement the following:
 fixture.py
 ==========
 
-This file must contain two functions:
+This file may contain four functions (all optional):
 
 - load -- loads data in the backend
 - remove -- removes random data in the backend
+- setup -- called before the docker is started
+- teardown -- called after the docker has been teared down
 
 requirements.txt
 ================

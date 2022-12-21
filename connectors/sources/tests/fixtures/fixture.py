@@ -18,7 +18,7 @@ def _parser():
         "--action",
         type=str,
         default="load",
-        choices=["load", "remove", "start_stack", "stop_stack"],
+        choices=["load", "remove", "start_stack", "stop_stack", "setup", "teardown"],
     )
 
     parser.add_argument("--name", type=str, help="fixture to run", default="mysql")
@@ -46,9 +46,11 @@ def main(args=None):
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
-    func = getattr(module, args.action)
-
-    return func()
+    if hasattr(module, args.action):
+        func = getattr(module, args.action)
+        return func()
+    else:
+        print(f"Fixture {args.name} does not have an {args.action} action, skipping")
 
 
 if __name__ == "__main__":

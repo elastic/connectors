@@ -19,3 +19,8 @@ steps:
       - ".buildkite/run_nigthly.sh s3"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Google Cloud Storage"
+    command:
+      - ".buildkite/run_nigthly.sh gcs"
+    artifact_paths:
+      - "perf8-report-*/**/*"
