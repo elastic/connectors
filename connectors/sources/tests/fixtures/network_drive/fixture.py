@@ -13,6 +13,7 @@ import smbclient
 SERVER = "127.0.0.1"
 NUMBER_OF_SMALL_FILES = 10000
 NUMBER_OF_LARGE_FILES = 2000
+NUMBER_OF_FILES_TO_BE_DELETED = 10
 USERNAME = "admin"
 PASSWORD = "abc@123"
 
@@ -80,7 +81,7 @@ def generate_large_files():
         raise
 
 
-if __name__ == "__main__":
+def load():
     if NUMBER_OF_SMALL_FILES:
         generate_small_files()
     generate_folder()
@@ -89,3 +90,24 @@ if __name__ == "__main__":
     print(
         f"Loaded {NUMBER_OF_LARGE_FILES} large files, {NUMBER_OF_SMALL_FILES} small files, and 1 folder on network drive server."
     )
+
+
+def remove():
+    """Method for deleting 10 random files from Network Drive server"""
+    try:
+        smbclient.register_session(server=SERVER, username=USERNAME, password=PASSWORD)
+
+        print("Started deleting files from network drive server....")
+
+        for number in range(0, NUMBER_OF_FILES_TO_BE_DELETED):
+            smbclient.remove(rf"\\{SERVER}/Folder1/file{number}.txt")
+            smbclient.remove(rf"\\{SERVER}/Folder1/.deleted/file{number}.txt")
+
+        print(
+            f"Deleted {NUMBER_OF_FILES_TO_BE_DELETED} files from network drive server...."
+        )
+    except Exception as error:
+        print(
+            f"Error occurred while deleting files from Network Drive server. Error: {error}"
+        )
+        raise
