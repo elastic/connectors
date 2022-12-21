@@ -18,7 +18,7 @@ sudo systemctl start docker
 echo "Installing Python 3.10"
 sudo apt-get remove python3-pip python3-setuptools -y
 sudo DEBIAN_FRONTEND=noninteractive apt install software-properties-common -y
-sudo add-apt-repository ppa:deadsnakes/ppa
+sudo add-apt-repository ppa:deadsnakes/ppa -y
 sudo TZ=UTC DEBIAN_FRONTEND=noninteractive apt install --no-install-recommends python3.10 python3.10-dev -y
 
 
