@@ -3,6 +3,7 @@ agents:
   machineType: "n1-standard-8"
   useVault: false
 
+# should use https://buildkite.com/docs/tutorials/parallel-builds
 steps:
   - label: "🔨 MySQL"
     command:
