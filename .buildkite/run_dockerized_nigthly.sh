@@ -33,7 +33,7 @@ cd $ROOT/connectors/sources/tests/fixtures/mysql
 
 export DATA_SIZE=small
 export PYTHON=/usr/bin/python3.10
-
+export PIP=/usr/bin/python3.10 -m pip
 make run-stack
 sleep 120
 

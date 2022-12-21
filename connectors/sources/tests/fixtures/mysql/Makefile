@@ -1,6 +1,7 @@
 .PHONY: run-stack stop-stack load-data
 
 PYTHON ?= python3.10
+PIP ?= bin/pip
 
 export VERSION=8.6.0-SNAPSHOT
 
@@ -13,15 +14,14 @@ stop-stack:
 bin/python:
 	$(PYTHON) -m venv .
 
-install: bin/python
-	bin/pip install -U pip
-	bin/pip install mysql-connector-python
+install:
+	$(PIP) install mysql-connector-python
 
 load-data: install
-	bin/python ./loadsample.py
+	$(PYTHON) ./loadsample.py
 
 remove-data: install
-	bin/python ./remove.py
+	$(PYTHON) ./remove.py
 
 uninstall:
 	rm -rf bin
