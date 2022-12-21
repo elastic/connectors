@@ -43,7 +43,5 @@ $PIP install -r requirements/x86_64.txt
 $PYTHON setup.py develop
 $PIP install py-spy
 
-# running the e2e tests
-connectors/tests/ftest.sh mysql yes
-connectors/tests/ftest.sh network_drive yes
-connectors/tests/ftest.sh s3 yes
+# running the e2e test
+connectors/tests/ftest.sh $1 yes
