@@ -24,16 +24,18 @@ fi
 
 cd $ROOT_DIR/connectors/sources/tests/fixtures/$NAME
 
+$PYTHON -m pip install -r requirements.txt
+
 export RUNNING_FTEST=True
 
-make run-stack
+docker compose up -d
 
 # XXX make run-stack should be blocking until everythign is up and running by checking hbs
 sleep 30
 
 $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug
 
-make load-data
+$PYTHON ./loadsample.py
 
 if [[ $PERF8 == "yes" ]]
 then
@@ -47,9 +49,9 @@ else
     $ELASTIC_INGEST --one-sync --sync-now --debug
 fi
 
-make remove-data
+$PYTHON ./remove.py
 
 $ELASTIC_INGEST --one-sync --sync-now --debug
 $PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size 3000
 
-make stop-stack
+docker compose down --volumes

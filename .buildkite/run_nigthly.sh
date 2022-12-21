@@ -41,14 +41,4 @@ $PIP install -r requirements/tests.txt
 $PIP install -r requirements/x86_64.txt
 $PYTHON setup.py develop
 
-cd $ROOT/connectors/sources/tests/fixtures/mysql
-make run-stack
-sleep 120
-
-make load-data
-
-cd $ROOT
-make ftest NAME=mysql
-
-cd $ROOT/connectors/sources/tests/fixtures/mysql
-make stop-stack
+connectors/tests/ftest.sh mysql yes

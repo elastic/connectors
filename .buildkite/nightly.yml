@@ -5,4 +5,4 @@ agents:
 
 steps:
   - command:
-    - ".buildkite/run_dockerized_nigthly.sh"
+    - ".buildkite/run_nigthly.sh"
