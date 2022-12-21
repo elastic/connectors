@@ -41,5 +41,6 @@ export VERSION=8.7.0-SNAPSHOT
 $PIP install -r requirements/tests.txt
 $PIP install -r requirements/x86_64.txt
 $PYTHON setup.py develop
+$PIP install py-spy
 
 connectors/tests/ftest.sh mysql yes
