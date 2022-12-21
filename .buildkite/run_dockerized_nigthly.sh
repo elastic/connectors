@@ -5,6 +5,7 @@ sudo apt-get update
 sudo apt-get install ca-certificates curl gnupg lsb-release -y
 sudo mkdir -p /etc/apt/keyrings
 
+echo "Installing Docker & Docker Compose"
 ARCH=`dpkg --print-architecture`
 RELEASE=`lsb_release -cs`
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -12,6 +13,15 @@ echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] https://download.d
 sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 sudo systemctl start docker
+
+# installs Python 3.10
+echo "Installing Python 3.10"
+sudo apt upgrade -y --no-install-recommends
+sudo apt-get remove python3-pip python3-setuptools -y
+sudo apt install software-properties-common -y
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo TZ=UTC apt install --no-install-recommends python3.10 python3.10-dev -y
+curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python3.10
 
 
 BASEDIR=$(realpath $(dirname $0))
