@@ -10,6 +10,9 @@ ROOT_DIR="$SCRIPT_DIR/../.."
 PLATFORM='unknown'
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
+PERF8=${PERF8:-$ROOT_DIR/bin/perf8}
+PYTHON=${PYTHON:-$ROOT_DIR/bin/python}
+ELASTIC_INGEST=${ELASTIC_INGEST:-$ROOT_DIR/bin/elastic-ingest}
 
 unamestr=$(uname)
 if [[ "$unamestr" == 'Linux' ]]; then
@@ -36,17 +39,17 @@ if [[ $PERF8 == "yes" ]]
 then
     if [[ $PLATFORM == "darwin" ]]
     then
-      $ROOT_DIR/bin/perf8 --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+      $PERF8 --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
     else
-      $ROOT_DIR/bin/perf8 --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --pyspy --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+      $PERF8 --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --pyspy --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
     fi
 else
-    $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+    $ELASTIC_INGEST --one-sync --sync-now --debug
 fi
 
 make remove-data
 
-$ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
-$ROOT_DIR/bin/python $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size 3000
+$ELASTIC_INGEST --one-sync --sync-now --debug
+$PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size 3000
 
 make stop-stack

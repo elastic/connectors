@@ -40,8 +40,11 @@ sleep 120
 make load-data
 
 cd $ROOT
-$PIP install -r requirements/$ARCH.txt
-$PYHON setup.py develop
+sudo $PIP install -r requirements/tests.txt
+sudo $PIP install -r requirements/x86_64.txt
+export PERF8=perf8
+
+sudo $PYHON setup.py develop
 
 
 make ftest NAME=mysql
