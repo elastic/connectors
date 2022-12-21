@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -exuo pipefail
 
 sudo apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get install ca-certificates curl gnupg lsb-release -y
@@ -19,7 +19,7 @@ echo "Installing Python 3.10"
 sudo apt-get remove python3-pip python3-setuptools -y
 sudo DEBIAN_FRONTEND=noninteractive apt install software-properties-common -y
 sudo add-apt-repository ppa:deadsnakes/ppa -y
-sudo TZ=UTC DEBIAN_FRONTEND=noninteractive apt install --no-install-recommends python3.10 python3.10-dev -y
+sudo TZ=UTC DEBIAN_FRONTEND=noninteractive apt install --no-install-recommends python3.10 python3.10-dev python3.10-venv -y
 
 
 curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python3.10
@@ -29,22 +29,24 @@ echo "Starting test task"
 BASEDIR=$(realpath $(dirname $0))
 ROOT=$(realpath $BASEDIR/../)
 
-cd $ROOT/connectors/sources/tests/fixtures/mysql
+cd $ROOT
 
+$VENV .
+export PERF8=$ROOT/bin/perf8
+export PYTHON=$ROOT/bin/python
+export PIP=$ROOT/bin/pip
 export DATA_SIZE=small
-export PYTHON=/usr/bin/python3.10
-export PIP="/usr/bin/python3.10 -m pip"
+
+$PIP install -r requirements/tests.txt
+$PIP install -r requirements/x86_64.txt
+cd $ROOT/connectors/sources/tests/fixtures/mysql
 make run-stack
 sleep 120
 
 make load-data
 
 cd $ROOT
-sudo $PIP install -r requirements/tests.txt
-sudo $PIP install -r requirements/x86_64.txt
-export PERF8=perf8
-
-sudo $PYHON setup.py develop
+$PYHON setup.py develop
 
 
 make ftest NAME=mysql
