@@ -49,5 +49,4 @@ $PYTHON fixture.py --name $NAME --action remove
 
 $ELASTIC_INGEST --one-sync --sync-now --debug
 $PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size 3000
-
 $PYTHON fixture.py --name $NAME --action stop_stack
