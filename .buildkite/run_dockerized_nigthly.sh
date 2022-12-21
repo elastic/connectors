@@ -40,9 +40,8 @@ sleep 120
 make load-data
 
 cd $ROOT
-$PYTHON -m venv .
-bin/pip install -r requirements/$ARCH.txt
-bin/python setup.py develop
+$PIP install -r requirements/$ARCH.txt
+$PYHON setup.py develop
 
 
 make ftest NAME=mysql
