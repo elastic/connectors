@@ -5,4 +5,4 @@ agents:
 
 steps:
   - command:
-    - ".buildkite/run_dockerized_nightly.sh"
+    - /bin/bash -c ".buildkite/run_dockerized_nightly.sh"
