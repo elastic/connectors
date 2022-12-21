@@ -13,7 +13,7 @@ from connectors.logger import logger
 
 
 class BasicRule:
-    DEFAULT_RULE_ID = 'DEFAULT'
+    DEFAULT_RULE_ID = "DEFAULT"
 
     class Policy(Enum):
         INCLUDE = 1
@@ -38,12 +38,14 @@ class BasicRule:
 
     @staticmethod
     def default_rule():
-        return BasicRule(id_=BasicRule.DEFAULT_RULE_ID,
-                         order=0,
-                         policy=BasicRule.Policy.INCLUDE,
-                         field='_',
-                         rule=BasicRule.Rule.EQUALS,
-                         value='.*')
+        return BasicRule(
+            id_=BasicRule.DEFAULT_RULE_ID,
+            order=0,
+            policy=BasicRule.Policy.INCLUDE,
+            field="_",
+            rule=BasicRule.Rule.EQUALS,
+            value=".*",
+        )
 
     def matches_document(self, document):
         if self.is_default_rule:
@@ -53,7 +55,9 @@ class BasicRule:
             return False
 
         document_value = document[self.field]
-        coerced_rule_value = self.coerce_rule_value_based_on_document_value(document_value)
+        coerced_rule_value = self.coerce_rule_value_based_on_document_value(
+            document_value
+        )
 
         match self.rule:
             case BasicRule.Rule.STARTS_WITH:
@@ -120,7 +124,8 @@ class BasicRule:
                     return str(self.value)
         except ValueError as e:
             logger.debug(
-                f"Failed to coerce value '{self.value}' ({type(self.value)}) based on document value '{doc_value}' ({type(doc_value)}) due to error: {type(e)}: {e}")
+                f"Failed to coerce value '{self.value}' ({type(self.value)}) based on document value '{doc_value}' ({type(doc_value)}) due to error: {type(e)}: {e}"
+            )
             return str(self.value)
 
     @staticmethod
@@ -151,7 +156,9 @@ class BasicRule:
                 return parsed_date_or_datetime
             elif isinstance(parsed_date_or_datetime, datetime.date):
                 # adds 00:00 to the date and returns datetime
-                return datetime.datetime.combine(parsed_date_or_datetime, datetime.time.min)
+                return datetime.datetime.combine(
+                    parsed_date_or_datetime, datetime.time.min
+                )
             else:
                 return value
 
@@ -160,10 +167,10 @@ class BasicRule:
 
     @staticmethod
     def __to_bool(value):
-        if len(value) == 0 or re.match('^(false|f|no|n|off)$', value):
+        if len(value) == 0 or re.match("^(false|f|no|n|off)$", value):
             return False
 
-        if re.match('^(true|t|yes|y|on)$', value):
+        if re.match("^(true|t|yes|y|on)$", value):
             return True
 
         return value
