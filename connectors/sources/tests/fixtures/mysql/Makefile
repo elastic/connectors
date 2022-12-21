@@ -1,14 +1,14 @@
 .PHONY: run-stack stop-stack load-data
 
-PYTHON=python3
+PYTHON ?= python3.10
 
 export VERSION=8.6.0-SNAPSHOT
 
 run-stack:
-	docker-compose up -d
+	docker compose up -d
 
 stop-stack:
-	docker-compose down --volumes
+	docker compose down --volumes
 
 bin/python:
 	$(PYTHON) -m venv .

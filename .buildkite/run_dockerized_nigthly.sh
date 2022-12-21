@@ -6,6 +6,8 @@ ROOT=$(realpath $BASEDIR/../)
 
 cd $ROOT/connectors/sources/tests/fixtures/mysql
 
+export DATA_SIZE=small
+
 make run-stack
 sleep 120
 
