@@ -39,7 +39,7 @@ sleep 120
 make load-data
 
 cd $ROOT
-python3.10 -m venv .
+/usr/bin/python3.10 -m venv .
 bin/pip install -r requirements/$ARCH.txt
 bin/python setup.py develop
 
