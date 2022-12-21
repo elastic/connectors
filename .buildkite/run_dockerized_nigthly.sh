@@ -16,11 +16,12 @@ sudo systemctl start docker
 
 # installs Python 3.10
 echo "Installing Python 3.10"
-sudo apt upgrade -y --no-install-recommends
 sudo apt-get remove python3-pip python3-setuptools -y
 sudo DEBIAN_FRONTEND=noninteractive apt install software-properties-common -y
 sudo add-apt-repository ppa:deadsnakes/ppa
 sudo TZ=UTC DEBIAN_FRONTEND=noninteractive apt install --no-install-recommends python3.10 python3.10-dev -y
+
+
 curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python3.10
 
 
