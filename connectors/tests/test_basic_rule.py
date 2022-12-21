@@ -581,3 +581,19 @@ def test_do_not_coerce_and_return_original_string():
 
     assert isinstance(coerced_value, str)
     assert coerced_value == value
+
+
+def test_is_include_for_include_policy():
+    basic_rule = BasicRule(id_=1, order=1, policy=BasicRule.Policy.INCLUDE,
+                           field=DESCRIPTION_KEY, rule=BasicRule.Rule.LESS_THAN,
+                           value='something')
+
+    assert basic_rule.is_include
+
+
+def test_is_not_include_for_exclude_policy():
+    basic_rule = BasicRule(id_=1, order=1, policy=BasicRule.Policy.EXCLUDE,
+                           field=DESCRIPTION_KEY, rule=BasicRule.Rule.LESS_THAN,
+                           value='something')
+
+    assert not basic_rule.is_include

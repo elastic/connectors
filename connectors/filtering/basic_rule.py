@@ -16,7 +16,7 @@ class BasicRule:
 
     class Policy(Enum):
         INCLUDE = 1
-        EXCLUDE = 1
+        EXCLUDE = 2
 
     class Rule(Enum):
         EQUALS = 1
@@ -99,6 +99,10 @@ class BasicRule:
     @property
     def is_default_rule(self):
         return self.id_ == BasicRule.DEFAULT_RULE_ID
+
+    @property
+    def is_include(self):
+        return self.policy == BasicRule.Policy.INCLUDE
 
     def coerce_rule_value_based_on_document_value(self, doc_value):
         try:
