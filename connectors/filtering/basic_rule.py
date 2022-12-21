@@ -7,7 +7,7 @@ import datetime
 import re
 from enum import Enum
 
-from dateutil.parser import *
+from dateutil.parser import ParserError, parser
 
 from connectors.logger import logger
 
@@ -150,7 +150,7 @@ class BasicRule:
     @staticmethod
     def __to_datetime(value):
         try:
-            parsed_date_or_datetime = parse(timestr=value)
+            parsed_date_or_datetime = parser.parse(timestr=value)
 
             if isinstance(parsed_date_or_datetime, datetime.datetime):
                 return parsed_date_or_datetime
