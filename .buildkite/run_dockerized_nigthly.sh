@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
+sudo apt install docker-compose
+
 BASEDIR=$(realpath $(dirname $0))
 ROOT=$(realpath $BASEDIR/../)
 
