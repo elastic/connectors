@@ -31,7 +31,7 @@ ROOT=$(realpath $BASEDIR/../)
 
 cd $ROOT
 
-$VENV .
+/usr/bin/python3.10 -m venv .
 export PERF8=$ROOT/bin/perf8
 export PYTHON=$ROOT/bin/python
 export PIP=$ROOT/bin/pip
