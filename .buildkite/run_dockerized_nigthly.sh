@@ -24,6 +24,7 @@ sudo TZ=UTC apt install --no-install-recommends python3.10 python3.10-dev -y
 curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python3.10
 
 
+echo "Starting test task"
 BASEDIR=$(realpath $(dirname $0))
 ROOT=$(realpath $BASEDIR/../)
 
@@ -37,10 +38,13 @@ sleep 120
 make load-data
 
 cd $ROOT
-docker run --rm -v $ROOT:/ci -w=/ci \
-    -it \
-    python:3.10 \
-    /bin/bash -c  "/ci/.buildkite/nightly.sh"
+python3.10 -m venv .
+bin/pip install -r requirements/$ARCH.txt
+bin/python setup.py develop
+
+export PYTHON=bin/python
+
+make ftest NAME=mysql
 
 cd $ROOT/connectors/sources/tests/fixtures/mysql
 make stop-stack
