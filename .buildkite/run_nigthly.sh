@@ -46,3 +46,4 @@ $PIP install py-spy
 # running the e2e tests
 connectors/tests/ftest.sh mysql yes
 connectors/tests/ftest.sh network_drive yes
+connectors/tests/ftest.sh s3 yes

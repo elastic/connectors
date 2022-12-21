@@ -1,3 +1,4 @@
+import os
 import random
 import string
 import sys
@@ -10,6 +11,8 @@ FOLDER_COUNT = 4000
 SMALL_TEXT_COUNT = 5000
 BIG_TEXT_COUNT = 1000
 ENDPOINT_URL = "http://127.0.0.1"
+OBJECT_COUNT = 15
+PORT = int(os.environ.get("PORT", "5001"))
 
 
 def random_text(k=0):
@@ -19,13 +22,9 @@ def random_text(k=0):
 BIG_TEXT = random_text(k=1024 * 20)
 
 
-def main():
+def load():
     """Method for generating 10k document for aws s3 emulator"""
     try:
-        try:
-            PORT = sys.argv[1]
-        except IndexError:
-            PORT = 5000
         s3_client = boto3.client(
             "s3", endpoint_url=f"{ENDPOINT_URL}:{PORT}", region_name=REGION_NAME
         )
@@ -63,5 +62,16 @@ def main():
         raise
 
 
-if __name__ == "__main__":
-    main()
+def remove():
+    """Method for removing 15 random document from aws s3 emulator"""
+    try:
+        s3_client = boto3.client(
+            "s3", endpoint_url=f"{ENDPOINT_URL}:{PORT}", region_name=REGION_NAME
+        )
+        print("Removing data from aws-moto server.")
+        for object_id in range(0, OBJECT_COUNT):
+            s3_client.delete_object(
+                Bucket=BUCKET_NAME, Key=f"{BUCKET_NAME}/{object_id}/"
+            )
+    except Exception:
+        raise
