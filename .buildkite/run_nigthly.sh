@@ -44,4 +44,19 @@ $PYTHON setup.py develop
 $PIP install py-spy
 
 # running the e2e test
-connectors/tests/ftest.sh $1 yes
+case "$1" in
+1)
+  connectors/tests/ftest.sh mysql yes
+  ;;
+
+2)
+  connectors/tests/ftest.sh network_drive yes
+  ;;
+
+3)
+  connectors/tests/ftest.sh s3 yes
+  ;;
+*)
+  echo "Unknown"
+  ;;
+esac
