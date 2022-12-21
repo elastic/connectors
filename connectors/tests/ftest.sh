@@ -8,8 +8,12 @@ PERF8=$2
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR="$SCRIPT_DIR/../.."
 PLATFORM='unknown'
+
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
+export RUNNING_FTEST=True
+export VERSION='8.7.0-SNAPSHOT'
+
 PERF8_BIN=${PERF8_BIN:-$ROOT_DIR/bin/perf8}
 PYTHON=${PYTHON:-$ROOT_DIR/bin/python}
 ELASTIC_INGEST=${ELASTIC_INGEST:-$ROOT_DIR/bin/elastic-ingest}
@@ -25,17 +29,8 @@ fi
 cd $ROOT_DIR/connectors/sources/tests/fixtures
 
 $PYTHON -m pip install -r $NAME/requirements.txt
-
-
-export RUNNING_FTEST=True
-
-docker compose up -d
-
-# XXX make run-stack should be blocking until everythign is up and running by checking hbs
-sleep 30
-
+$PYTHON fixture.py --name $NAME --action start_stack
 $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug
-
 $PYTHON fixture.py --name $NAME --action load
 
 if [[ $PERF8 == "yes" ]]
@@ -52,8 +47,7 @@ fi
 
 $PYTHON fixture.py --name $NAME --action remove
 
-
 $ELASTIC_INGEST --one-sync --sync-now --debug
 $PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size 3000
 
-docker compose down --volumes
+$PYTHON fixture.py --name $NAME --action stop_stack
