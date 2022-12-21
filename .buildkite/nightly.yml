@@ -8,4 +8,4 @@ steps:
     command:
       - ".buildkite/run_nigthly.sh"
     artifact_paths:
-      - "perf8-ftest-report/**/*"
+      - "perf8-report-*/**/*"

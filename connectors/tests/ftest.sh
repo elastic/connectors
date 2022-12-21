@@ -37,9 +37,9 @@ if [[ $PERF8 == "yes" ]]
 then
     if [[ $PLATFORM == "darwin" ]]
     then
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
     else
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
     fi
 else
     $ELASTIC_INGEST --one-sync --sync-now --debug
