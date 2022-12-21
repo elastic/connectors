@@ -150,7 +150,8 @@ class BasicRule:
     @staticmethod
     def __to_datetime(value):
         try:
-            parsed_date_or_datetime = parser.parse(timestr=value)
+            date_parser = parser()
+            parsed_date_or_datetime = date_parser.parse(timestr=value)
 
             if isinstance(parsed_date_or_datetime, datetime.datetime):
                 return parsed_date_or_datetime
