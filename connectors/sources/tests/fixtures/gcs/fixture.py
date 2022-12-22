@@ -5,7 +5,10 @@
 #
 """Google Cloud Storage module responsible to generate blob(s) on the fake gcs server.
 """
+import os
 import random
+import shutil
+import ssl
 import string
 
 from google.auth.credentials import AnonymousCredentials
@@ -14,6 +17,29 @@ from google.cloud import storage
 NUMBER_OF_SMALL_FILES = 9500
 NUMBER_OF_LARGE_FILES = 500
 client_connection = None
+NUMBER_OF_BLOBS_TO_BE_DELETED = 10
+HERE = os.path.dirname(__file__)
+
+
+class PrerequisiteException(Exception):
+    """This class is used to generate the custom error exception when prerequisites are not satisfied."""
+
+    def __init__(self, errors):
+        super().__init__(
+            f"Error while running e2e test for the GCS connector. \nReason: {errors}"
+        )
+        self.errors = errors
+
+
+def verify():
+    "Method to verify if prerequisites are satisfied for e2e or not"
+    storage_emulator_host = os.getenv(key="STORAGE_EMULATOR_HOST", default=None)
+    if storage_emulator_host != "http://localhost:4443":
+        raise PrerequisiteException(
+            "Environment variable STORAGE_EMULATOR_HOST is not set properly.\n"
+            "Solution: Please set the environment variable STORAGE_EMULATOR_HOST value with the below command on your terminal:\n"
+            "export STORAGE_EMULATOR_HOST=http://localhost:4443 \n"
+        )
 
 
 def create_connection():
@@ -92,7 +118,7 @@ def generate_large_files(start_number_of_large_files, end_number_of_large_files)
         raise
 
 
-if __name__ == "__main__":
+def load():
     create_connection()
     create_buckets()
     if NUMBER_OF_LARGE_FILES:
@@ -102,3 +128,61 @@ if __name__ == "__main__":
     print(
         f"Loaded 2 buckets with {NUMBER_OF_LARGE_FILES} large files and {NUMBER_OF_SMALL_FILES} small files on the fake gcs server."
     )
+
+
+def remove_blobs():
+    """Method for removing random blobs from the fake gcs server"""
+    create_connection()
+    try:
+        print("Started removing random blobs from the fake gcs server....")
+
+        bucket = client_connection.bucket("sample-small-files-bucket")
+        for number in range(0, NUMBER_OF_BLOBS_TO_BE_DELETED):
+            blob = bucket.blob(f"sample_small_file{number}.random")
+            blob.delete()
+
+        print(
+            f"Removed total {NUMBER_OF_BLOBS_TO_BE_DELETED} random blobs from the fake gcs server...."
+        )
+    except Exception as error:
+        print(
+            f"Error occurred while removing blobs from the fake gcs server. Error: {error}"
+        )
+        raise
+
+
+def target_ssl_file():
+    ssl_paths = ssl.get_default_verify_paths()
+    return ssl_path.cafile is not None and ssl_path.cafile or ssl_path.openssl_cafile
+
+
+def setup():
+    verify()
+
+    with open("/etc/hosts") as f:
+        hosts = f.read()
+
+    if "127.0.0.1   storage.googleapis.com" not in hosts:
+        saved_hosts = os.path.join(HERE, "hosts")
+        shutil.copy("/etc/hosts", saved_hosts)
+
+        with open("/etc/hosts", "a") as f:
+            f.write("\n127.0.0.1   storage.googleapis.com\n")
+
+    with open(os.path.join(HERE, "gcs_dummy_cert.pem")) as f:
+        dummy_cert = f.read()
+
+    ssl_file = target_ssl_file()
+    saved_ssl = os.path.join(HERE, "ssl")
+    shutil.copy(ssl_file, saved_ssl)
+    with open(ssl_file, "a") as f:
+        f.write(f"/n{dummy_cert}/n")
+
+
+def teardown():
+    saved_hosts = os.path.join(HERE, "hosts")
+    if os.path.exists(saved_hosts):
+        shutil.copy(saved_hosts, "/etc/hosts")
+    saved_ssl = os.path.join(HERE, "ssl")
+    if os.path.exists(saved_ssl):
+        shutil.copy(saved_ssl, target_ssl_file())

@@ -1,0 +1,26 @@
+agents:
+  provider: "gcp"
+  machineType: "n1-standard-8"
+  useVault: false
+
+steps:
+  - label: "🔨 MySQL"
+    command:
+      - ".buildkite/run_nigthly.sh mysql"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Network Drive"
+    command:
+      - ".buildkite/run_nigthly.sh network_drive"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Amazon S3"
+    command:
+      - ".buildkite/run_nigthly.sh s3"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Google Cloud Storage"
+    command:
+      - ".buildkite/run_nigthly.sh gcs"
+    artifact_paths:
+      - "perf8-report-*/**/*"

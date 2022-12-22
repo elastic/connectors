@@ -8,8 +8,15 @@ PERF8=$2
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR="$SCRIPT_DIR/../.."
 PLATFORM='unknown'
+
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
+export RUNNING_FTEST=True
+export VERSION='8.7.0-SNAPSHOT'
+
+PERF8_BIN=${PERF8_BIN:-$ROOT_DIR/bin/perf8}
+PYTHON=${PYTHON:-$ROOT_DIR/bin/python}
+ELASTIC_INGEST=${ELASTIC_INGEST:-$ROOT_DIR/bin/elastic-ingest}
 
 unamestr=$(uname)
 if [[ "$unamestr" == 'Linux' ]]; then
@@ -19,34 +26,27 @@ elif [[ "$unamestr" == 'Darwin' ]]; then
 fi
 
 
-cd $ROOT_DIR/connectors/sources/tests/fixtures/$NAME
+cd $ROOT_DIR/connectors/sources/tests/fixtures
 
-export RUNNING_FTEST=True
-
-make run-stack
-
-# XXX make run-stack should be blocking until everythign is up and running by checking hbs
-sleep 30
-
+$PYTHON -m pip install -r $NAME/requirements.txt
+$PYTHON fixture.py --name $NAME --action start_stack
 $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug
-
-make load-data
+$PYTHON fixture.py --name $NAME --action load
 
 if [[ $PERF8 == "yes" ]]
 then
     if [[ $PLATFORM == "darwin" ]]
     then
-      $ROOT_DIR/bin/perf8 --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
     else
-      $ROOT_DIR/bin/perf8 --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-ftest-report --asyncstats --memray --pyspy --psutil -c $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
     fi
 else
-    $ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
+    $ELASTIC_INGEST --one-sync --sync-now --debug
 fi
 
-make remove-data
+$PYTHON fixture.py --name $NAME --action remove
 
-$ROOT_DIR/bin/elastic-ingest --one-sync --sync-now --debug
-$ROOT_DIR/bin/python $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size 3000
-
-make stop-stack
+$ELASTIC_INGEST --one-sync --sync-now --debug
+$PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size 3000
+$PYTHON fixture.py --name $NAME --action stop_stack
