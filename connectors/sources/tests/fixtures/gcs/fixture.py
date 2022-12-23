@@ -154,7 +154,7 @@ def remove_blobs():
 
 def target_ssl_file():
     ssl_paths = ssl.get_default_verify_paths()
-    return ssl_path.cafile is not None and ssl_path.cafile or ssl_path.openssl_cafile
+    return ssl_paths.cafile is not None and ssl_paths.cafile or ssl_paths.openssl_cafile
 
 
 def setup():
