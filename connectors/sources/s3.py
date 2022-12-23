@@ -26,9 +26,11 @@ MAX_CHUNK_SIZE = 1048576
 DEFAULT_MAX_FILE_SIZE = 10485760
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_CONTENT_EXTRACTION = True
-ENDPOINT_URL = os.getenv(
-    key="ENDPOINT_URL", default=None
-)  # For end to end tests set this environment variable with target host.
+
+if "AWS_ENDPOINT_URL" in os.environ:
+    AWS_ENDPOINT = f"{os.environ['AWS_ENDPOINT_URL']}:{os.environ['AWS_PORT']}"
+else:
+    AWS_ENDPOINT = None
 
 
 class S3DataSource(BaseDataSource):
@@ -57,8 +59,11 @@ class S3DataSource(BaseDataSource):
     @asynccontextmanager
     async def client(self, **kwargs):
         """This method creates client object."""
+        if AWS_ENDPOINT is not None:
+            logger.debug(f"Creating a session against {AWS_ENDPOINT}")
+
         async with self.session.client(
-            service_name="s3", config=self.config, endpoint_url=ENDPOINT_URL, **kwargs
+            service_name="s3", config=self.config, endpoint_url=AWS_ENDPOINT, **kwargs
         ) as s3:
             yield s3
 
@@ -171,7 +176,7 @@ class S3DataSource(BaseDataSource):
             async with self.session.resource(
                 service_name="s3",
                 config=self.config,
-                endpoint_url=ENDPOINT_URL,
+                endpoint_url=AWS_ENDPOINT,
                 region_name=region_name,
             ) as s3:
                 try:
