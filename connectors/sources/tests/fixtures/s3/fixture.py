@@ -21,6 +21,20 @@ def random_text(k=0):
 
 BIG_TEXT = random_text(k=1024 * 20)
 
+creds = """\
+[default]
+aws_access_key_id = YOUR_ACCESS_KEY
+aws_secret_access_key = YOUR_SECRET_KEY
+"""
+
+
+def setup():
+    creds = os.path.expand(os.path.join("~", ".aws", "credentials"))
+    if not os.path.exists(creds):
+        os.makedirs(os.path.join("~", ".aws"), exist_ok=True)
+        with open(creds, "w") as f:
+            f.write(creds)
+
 
 def load():
     """Method for generating 10k document for aws s3 emulator"""
