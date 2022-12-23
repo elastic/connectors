@@ -175,10 +175,12 @@ def setup():
         dummy_cert = f.read()
 
     ssl_file = target_ssl_file()
-    saved_ssl = os.path.join(HERE, "ssl")
-    shutil.copy(ssl_file, saved_ssl)
-    with open(ssl_file, "a") as f:
-        f.write(f"/n{dummy_cert}/n")
+    if os.path.exists(ssl_file) and os.access(ssl_file, os.W_OK):
+        saved_ssl = os.path.join(HERE, "ssl")
+        shutil.copy(ssl_file, saved_ssl)
+
+        with open(ssl_file, "a+") as f:
+            f.write(f"/n{dummy_cert}/n")
 
 
 def teardown():
