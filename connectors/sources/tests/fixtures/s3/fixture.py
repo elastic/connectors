@@ -35,6 +35,8 @@ def setup():
         with open(creds, "w") as f:
             f.write(AWS_CONFIG)
 
+    os.environ['ENDPOINT_URL'] = ENDPOINT_URL
+
 
 def load():
     """Method for generating 10k document for aws s3 emulator"""
