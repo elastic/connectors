@@ -3,8 +3,6 @@ import random
 import string
 import sys
 
-import boto3
-
 BUCKET_NAME = "ent-search-ingest-dev"
 REGION_NAME = "us-west-2"
 FOLDER_COUNT = 4000
@@ -29,7 +27,7 @@ aws_secret_access_key = YOUR_SECRET_KEY
 
 
 def setup():
-    aws_config =  os.path.expanduser(os.path.join("~", ".aws"))
+    aws_config = os.path.expanduser(os.path.join("~", ".aws"))
     creds = os.path.join(aws_config, "credentials")
 
     if not os.path.exists(creds):
@@ -40,6 +38,8 @@ def setup():
 
 def load():
     """Method for generating 10k document for aws s3 emulator"""
+    import boto3
+
     try:
         s3_client = boto3.client(
             "s3", endpoint_url=f"{ENDPOINT_URL}:{PORT}", region_name=REGION_NAME
@@ -80,6 +80,8 @@ def load():
 
 def remove():
     """Method for removing 15 random document from aws s3 emulator"""
+    import boto3
+
     try:
         s3_client = boto3.client(
             "s3", endpoint_url=f"{ENDPOINT_URL}:{PORT}", region_name=REGION_NAME
