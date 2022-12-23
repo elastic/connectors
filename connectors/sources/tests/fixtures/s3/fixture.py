@@ -21,7 +21,7 @@ def random_text(k=0):
 
 BIG_TEXT = random_text(k=1024 * 20)
 
-creds = """\
+AWS_CONFIG = """\
 [default]
 aws_access_key_id = YOUR_ACCESS_KEY
 aws_secret_access_key = YOUR_SECRET_KEY
@@ -35,7 +35,7 @@ def setup():
     if not os.path.exists(creds):
         os.makedirs(aws_config, exist_ok=True)
         with open(creds, "w") as f:
-            f.write(creds)
+            f.write(AWS_CONFIG)
 
 
 def load():
