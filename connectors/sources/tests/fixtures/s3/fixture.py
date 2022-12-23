@@ -29,9 +29,11 @@ aws_secret_access_key = YOUR_SECRET_KEY
 
 
 def setup():
-    creds = os.path.expand(os.path.join("~", ".aws", "credentials"))
+    aws_config =  os.path.expanduser(os.path.join("~", ".aws"))
+    creds = os.path.join(aws_config, "credentials")
+
     if not os.path.exists(creds):
-        os.makedirs(os.path.join("~", ".aws"), exist_ok=True)
+        os.makedirs(aws_config, exist_ok=True)
         with open(creds, "w") as f:
             f.write(creds)
 
