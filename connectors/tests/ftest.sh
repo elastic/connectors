@@ -28,6 +28,12 @@ fi
 
 cd $ROOT_DIR/connectors/sources/tests/fixtures
 
+if [ -f "$NAME/.env" ]; then
+  echo "Loading env for $NAME"
+  export $(grep -v '^#' $NAME/.env | xargs)
+fi
+
+
 $PYTHON -m pip install -r $NAME/requirements.txt
 $PYTHON fixture.py --name $NAME --action setup
 $PYTHON fixture.py --name $NAME --action start_stack
