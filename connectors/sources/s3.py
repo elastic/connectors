@@ -57,6 +57,9 @@ class S3DataSource(BaseDataSource):
     @asynccontextmanager
     async def client(self, **kwargs):
         """This method creates client object."""
+        if ENDPOINT_URL is not None:
+            logger.debug(f"Creating a session against {ENDPOINT_URL}")
+
         async with self.session.client(
             service_name="s3", config=self.config, endpoint_url=ENDPOINT_URL, **kwargs
         ) as s3:
