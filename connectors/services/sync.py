@@ -125,7 +125,6 @@ class SyncService(BaseService):
 
         one_sync = self.args.one_sync
         sync_now = self.args.sync_now
-        es_host = self.config["elasticsearch"]["host"]
         native_service_types = self.config.get("native_service_types", [])
         logger.debug(f"Native support for {', '.join(native_service_types)}")
 
@@ -138,8 +137,6 @@ class SyncService(BaseService):
             connectors_ids = []
 
         await self._pre_flight_check()
-
-        logger.info(f"Service started, listening to events from {es_host}")
 
         es = ElasticServer(self.config["elasticsearch"])
         try:
@@ -168,6 +165,8 @@ class SyncService(BaseService):
         return 0
 
     async def _pre_flight_check(self):
+        es_host = self.config["elasticsearch"]["host"]
+
         if not (await self.connectors.wait()):
             logger.critical(f"{es_host} seem down. Bye!")
             return -1
@@ -190,3 +189,5 @@ class SyncService(BaseService):
                     logger.warn(str(e))
                     attempts += 1
                     await asyncio.sleep(self.preflight_idle)
+
+        logger.info(f"Service started, listening to events from {es_host}")
