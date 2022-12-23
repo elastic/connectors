@@ -19,6 +19,7 @@ from envyaml import EnvYAML
 
 from connectors import __version__
 from connectors.logger import logger, set_logger
+from connectors.services.consume import JobService
 from connectors.services.sync import SyncService
 from connectors.source import get_data_sources
 from connectors.utils import get_event_loop
@@ -100,14 +101,22 @@ def run(args):
         return 0
 
     service = SyncService(args)
-    coro = service.run()
+    jobs_service = JobService(args)
+    producer_coro = service.run()
+    consumer_coro = jobs_service.run()
+
     loop = get_event_loop(args.uvloop)
 
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
+        # XXX make it better
+        def shutdown_services(sig):
+            service.shutdown(sig)
+            jobs_service.shutdown(sig)
+
+        loop.add_signal_handler(sig, functools.partial(shutdown_services, sig))
 
     try:
-        return loop.run_until_complete(coro)
+        return loop.run_until_complete(asyncio.gather(producer_coro, consumer_coro))
     except asyncio.CancelledError:
         return 0
     finally:

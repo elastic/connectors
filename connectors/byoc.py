@@ -158,14 +158,61 @@ class BYOIndex(ESIndex):
         )
 
 
+class SyncJobIndex(ESIndex):
+    def __init__(self, elastic_config):
+        super().__init__(index_name=JOBS_INDEX, elastic_config=elastic_config)
+
+    def build_docs_query(self, connector_ids):
+        query = {"bool": {"must": [{"terms": {"status": [ e2str(JobStatus.PENDING) ]}}]}}
+
+        if connector_ids:
+            query["bool"]["must"].append({"terms": {"connector.id": connector_ids}})
+
+        return query
+
+    def _create_object(self, doc_source):
+        return SyncJob(self, doc_source["_id"], doc_source["_source"])
+
+    async def create(self, connector_id, trigger_method=JobTriggerMethod.SCHEDULED):
+        job_def = {
+            "connector": {
+                "id": connector_id,
+            },
+            "trigger_method": e2str(trigger_method),
+            "status": e2str(JobStatus.PENDING),
+            "error": None,
+            "deleted_document_count": 0,
+            "indexed_document_count": 0,
+            "created_at": iso_utc(datetime.now(timezone.utc)),
+            "completed_at": None,
+        }
+
+        resp = await self.client.index(index=JOBS_INDEX, document=job_def)
+        self.job_id = resp["_id"]
+        return self.job_id
+
+
+
 class SyncJob:
-    def __init__(self, connector_id, elastic_client):
-        self.connector_id = connector_id
-        self.client = elastic_client
-        self.created_at = datetime.now(timezone.utc)
-        self.completed_at = None
-        self.job_id = None
-        self.status = None
+    def __init__(
+            self,
+            elastic_index,
+            id,
+            doc_source
+    ):
+
+        print("doc source:")
+
+        print(doc_source)
+        self.job_id = id
+        self.doc_source = doc_source
+        self.connector_id = doc_source["connector"]["id"]
+        self.completed_at = datetime.fromisoformat(doc_source["completed_at"]) if doc_source["completed_at"] else None
+        self.created_at = datetime.fromisoformat(doc_source["created_at"]) if doc_source["created_at"] else None
+
+    @property
+    def id(self):
+        self.job_id
 
     @property
     def duration(self):
@@ -174,23 +221,10 @@ class SyncJob:
         msec = (self.completed_at - self.created_at).microseconds
         return round(msec / 9, 2)
 
-    async def start(self, trigger_method=JobTriggerMethod.SCHEDULED):
+    async def start(self):
         self.status = JobStatus.IN_PROGRESS
-        job_def = {
-            "connector": {
-                "id": self.connector_id,
-            },
-            "trigger_method": e2str(trigger_method),
-            "status": e2str(self.status),
-            "error": None,
-            "deleted_document_count": 0,
-            "indexed_document_count": 0,
-            "created_at": iso_utc(self.created_at),
-            "completed_at": None,
-        }
-        resp = await self.client.index(index=JOBS_INDEX, document=job_def)
-        self.job_id = resp["_id"]
-        return self.job_id
+
+        await self.sync_doc()
 
     async def done(self, indexed_count=0, deleted_count=0, exception=None):
         self.completed_at = datetime.now(timezone.utc)
@@ -210,7 +244,12 @@ class SyncJob:
 
         job_def["status"] = e2str(self.status)
 
-        return await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
+        return await self.sync_doc()
+
+    async def sync_doc(self, force=True):
+        self.doc_source["last_seen"] = iso_utc()
+        await self.index.save(self)
+        self._dirty = False
 
 
 class PipelineSettings:
@@ -335,20 +374,10 @@ class BYOConnector:
         await self.index.save(self)
         self._dirty = False
 
-    def start_heartbeat(self, delay):
-        if self._heartbeat_started:
-            return
-        self._heartbeat_started = True
-
-        async def _heartbeat():
-            while not self._closed:
-                logger.info(f"*** Connector {self.id} HEARTBEAT")
-                if not self._syncing:
-                    self.doc_source["last_seen"] = iso_utc()
-                    await self.sync_doc()
-                await asyncio.sleep(delay)
-
-        self._hb = asyncio.create_task(_heartbeat())
+    async def heartbeat(self):
+        logger.info(f"*** Connector {self.id} HEARTBEAT")
+        self.doc_source["last_seen"] = iso_utc()
+        await self.sync_doc()
 
     def next_sync(self):
         """Returns in seconds when the next sync should happen.
