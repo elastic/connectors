@@ -5,12 +5,25 @@ import sys
 
 BUCKET_NAME = "ent-search-ingest-dev"
 REGION_NAME = "us-west-2"
-FOLDER_COUNT = 4000
-SMALL_TEXT_COUNT = 5000
-BIG_TEXT_COUNT = 1000
 AWS_ENDPOINT_URL = "http://127.0.0.1"
-OBJECT_COUNT = 15
 AWS_PORT = int(os.environ.get("AWS_PORT", "5001"))
+DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
+
+if DATA_SIZE == "small":
+    FOLDER_COUNT = 400
+    SMALL_TEXT_COUNT = 500
+    BIG_TEXT_COUNT = 100
+    OBJECT_COUNT = 5
+elif DATA_SIZE == "medium":
+    FOLDER_COUNT = 2000
+    SMALL_TEXT_COUNT = 2500
+    BIG_TEXT_COUNT = 500
+    OBJECT_COUNT = 10
+else:
+    FOLDER_COUNT = 4000
+    SMALL_TEXT_COUNT = 5000
+    BIG_TEXT_COUNT = 1000
+    OBJECT_COUNT = 15
 
 
 def random_text(k=0):
