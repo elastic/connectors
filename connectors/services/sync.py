@@ -119,6 +119,8 @@ class SyncService(BaseService):
 
     async def _run(self):
         """Main event loop."""
+
+        self.connectors = BYOIndex(self.config["elasticsearch"])
         self.running = True
 
         one_sync = self.args.one_sync
@@ -126,8 +128,6 @@ class SyncService(BaseService):
         es_host = self.config["elasticsearch"]["host"]
         native_service_types = self.config.get("native_service_types", [])
         logger.debug(f"Native support for {', '.join(native_service_types)}")
-
-        self.connectors = BYOIndex(self.config["elasticsearch"])
 
         # XXX we can support multiple connectors but Ruby can't so let's use a
         # single id
