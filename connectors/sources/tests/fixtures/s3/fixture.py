@@ -8,9 +8,9 @@ REGION_NAME = "us-west-2"
 FOLDER_COUNT = 4000
 SMALL_TEXT_COUNT = 5000
 BIG_TEXT_COUNT = 1000
-ENDPOINT_URL = "http://127.0.0.1"
+AWS_ENDPOINT_URL = "http://127.0.0.1"
 OBJECT_COUNT = 15
-PORT = int(os.environ.get("PORT", "5001"))
+AWS_PORT = int(os.environ.get("AWS_PORT", "5001"))
 
 
 def random_text(k=0):
@@ -35,7 +35,8 @@ def setup():
         with open(creds, "w") as f:
             f.write(AWS_CONFIG)
 
-    os.environ['ENDPOINT_URL'] = ENDPOINT_URL
+    os.environ["AWS_ENDPOINT_URL"] = AWS_ENDPOINT_URL
+    os.environ["AWS_PORT"] = AWS_PORT
 
 
 def load():
@@ -44,7 +45,7 @@ def load():
 
     try:
         s3_client = boto3.client(
-            "s3", endpoint_url=f"{ENDPOINT_URL}:{PORT}", region_name=REGION_NAME
+            "s3", endpoint_url=f"{AWS_ENDPOINT_URL}:{AWS_PORT}", region_name=REGION_NAME
         )
         s3_client.create_bucket(
             Bucket=BUCKET_NAME,
@@ -86,7 +87,7 @@ def remove():
 
     try:
         s3_client = boto3.client(
-            "s3", endpoint_url=f"{ENDPOINT_URL}:{PORT}", region_name=REGION_NAME
+            "s3", endpoint_url=f"{AWS_ENDPOINT_URL}:{AWS_PORT}", region_name=REGION_NAME
         )
         print("Removing data from aws-moto server.")
         for object_id in range(0, OBJECT_COUNT):
