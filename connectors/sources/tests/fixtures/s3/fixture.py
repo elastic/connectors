@@ -36,7 +36,7 @@ def setup():
             f.write(AWS_CONFIG)
 
     os.environ["AWS_ENDPOINT_URL"] = AWS_ENDPOINT_URL
-    os.environ["AWS_PORT"] = AWS_PORT
+    os.environ["AWS_PORT"] = str(AWS_PORT)
 
 
 def load():
