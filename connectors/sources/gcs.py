@@ -44,9 +44,7 @@ DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
 DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_FILE_SIZE_LIMIT = 10485760
-STORAGE_EMULATOR_HOST = os.getenv(
-    key="STORAGE_EMULATOR_HOST", default=None
-)  # For end to end tests set this environment variable with target host.
+STORAGE_EMULATOR_HOST = os.environ.get("STORAGE_EMULATOR_HOST")
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
@@ -166,6 +164,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                         api_name=API_NAME, api_version=API_VERSION
                     )
                     if RUNNING_FTEST and not sub_method and STORAGE_EMULATOR_HOST:
+                        logger.debug(
+                            f"Using the storage emulator at {STORAGE_EMULATOR_HOST}"
+                        )
                         # Redirecting calls to fake-gcs-server for e2e test.
                         storage_client.discovery_document["rootUrl"] = (
                             STORAGE_EMULATOR_HOST + "/"
@@ -204,6 +205,8 @@ class GoogleCloudStorageDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Google Cloud Storage"""
+        if RUNNING_FTEST:
+            return
         try:
             await anext(
                 self._api_call(
