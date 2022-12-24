@@ -19,6 +19,7 @@ NUMBER_OF_LARGE_FILES = 500
 client_connection = None
 NUMBER_OF_BLOBS_TO_BE_DELETED = 10
 HERE = os.path.dirname(__file__)
+HOSTS = "/etc/hosts"
 
 
 class PrerequisiteException(Exception):
@@ -153,36 +154,40 @@ def remove_blobs():
 
 def target_ssl_file():
     ssl_paths = ssl.get_default_verify_paths()
-    return ssl_path.cafile is not None and ssl_path.cafile or ssl_path.openssl_cafile
+    return ssl_paths.cafile is not None and ssl_paths.cafile or ssl_paths.openssl_cafile
 
 
 def setup():
     verify()
 
-    with open("/etc/hosts") as f:
-        hosts = f.read()
+    if os.access(HOSTS, os.W_OK):
+        with open(HOSTS) as f:
+            hosts = f.read()
 
-    if "127.0.0.1   storage.googleapis.com" not in hosts:
-        saved_hosts = os.path.join(HERE, "hosts")
-        shutil.copy("/etc/hosts", saved_hosts)
+        if "127.0.0.1   storage.googleapis.com" not in hosts:
+            saved_hosts = os.path.join(HERE, "hosts")
+            shutil.copy(HOSTS, saved_hosts)
 
-        with open("/etc/hosts", "a") as f:
-            f.write("\n127.0.0.1   storage.googleapis.com\n")
+            with open(HOSTS, "a") as f:
+                f.write("\n127.0.0.1   storage.googleapis.com\n")
 
     with open(os.path.join(HERE, "gcs_dummy_cert.pem")) as f:
         dummy_cert = f.read()
 
     ssl_file = target_ssl_file()
-    saved_ssl = os.path.join(HERE, "ssl")
-    shutil.copy(ssl_file, saved_ssl)
-    with open(ssl_file, "a") as f:
-        f.write(f"/n{dummy_cert}/n")
+    if os.path.exists(ssl_file) and os.access(ssl_file, os.W_OK):
+        saved_ssl = os.path.join(HERE, "ssl")
+        shutil.copy(ssl_file, saved_ssl)
+
+        with open(ssl_file, "a+") as f:
+            f.write(f"/n{dummy_cert}/n")
 
 
 def teardown():
-    saved_hosts = os.path.join(HERE, "hosts")
-    if os.path.exists(saved_hosts):
-        shutil.copy(saved_hosts, "/etc/hosts")
+    if os.access(HOSTS, os.W_OK):
+        saved_hosts = os.path.join(HERE, "hosts")
+        if os.path.exists(saved_hosts):
+            shutil.copy(saved_hosts, HOSTS)
     saved_ssl = os.path.join(HERE, "ssl")
     if os.path.exists(saved_ssl):
         shutil.copy(saved_ssl, target_ssl_file())
