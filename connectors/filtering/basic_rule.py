@@ -32,8 +32,8 @@ def to_datetime(value):
         elif isinstance(parsed_date_or_datetime, datetime.date):
             # adds 00:00 to the date and returns datetime
             return datetime.datetime.combine(parsed_date_or_datetime, datetime.time.min)
-        else:
-            return value
+
+        return value
 
     except ParserError:
         return value
