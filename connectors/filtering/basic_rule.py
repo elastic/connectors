@@ -22,8 +22,8 @@ def parse(basic_rules_json):
     *basic_rules_json*, an array of dicts or an empty array
 
     The parser works in the following way:
-      - Map every raw basic rule in the json to the corresponding BasicRule object
-      - Filter out every basic rule, which matches the default rule
+      - Map every raw basic rule in the json array to the corresponding BasicRule object
+      - Filter out every basic rule, which returns true for is_default_rule()
       - Sort the result in descending order according to their basic rule order (rules are executed in descending order)
     """
     if not basic_rules_json:
