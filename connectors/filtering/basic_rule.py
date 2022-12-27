@@ -102,23 +102,23 @@ class BasicRule:
         if self.is_default_rule():
             return True
 
-        if self.field() not in document:
+        if self._field not in document:
             return False
 
-        document_value = document[self.field()]
+        document_value = document[self._field]
         coerced_rule_value = self.coerce_rule_value_based_on_document_value(
             document_value
         )
 
-        match self.rule():
+        match self._rule:
             case Rule.STARTS_WITH:
-                return str(document_value).startswith(self.value())
+                return str(document_value).startswith(self._value)
             case Rule.ENDS_WITH:
-                return str(document_value).endswith(self.value())
+                return str(document_value).endswith(self._value)
             case Rule.CONTAINS:
-                return self.value() in str(document_value)
+                return self._value in str(document_value)
             case Rule.REGEX:
-                return re.match(self.value(), str(document_value)) is not None
+                return re.match(self._value, str(document_value)) is not None
             case Rule.LESS_THAN:
                 return document_value < coerced_rule_value
             case Rule.GREATER_THAN:
@@ -145,26 +145,26 @@ class BasicRule:
         return self._value
 
     def is_default_rule(self):
-        return self.id_() == BasicRule.DEFAULT_RULE_ID
+        return self._id == BasicRule.DEFAULT_RULE_ID
 
     def is_include(self):
-        return self.policy() == Policy.INCLUDE
+        return self._policy == Policy.INCLUDE
 
     def coerce_rule_value_based_on_document_value(self, doc_value):
         try:
             match doc_value:
                 case str():
-                    return str(self.value())
+                    return str(self._value)
                 case bool():
-                    return str(to_bool(self.value()))
+                    return str(to_bool(self._value))
                 case float() | int():
-                    return float(self.value())
+                    return float(self._value)
                 case datetime.date() | datetime.datetime:
-                    return to_datetime(self.value())
+                    return to_datetime(self._value)
                 case _:
-                    return str(self.value())
+                    return str(self._value)
         except ValueError as e:
             logger.debug(
-                f"Failed to coerce value '{self.value()}' ({type(self.value())}) based on document value '{doc_value}' ({type(doc_value)}) due to error: {type(e)}: {e}"
+                f"Failed to coerce value '{self._value}' ({type(self._value)}) based on document value '{doc_value}' ({type(doc_value)}) due to error: {type(e)}: {e}"
             )
-            return str(self.value())
+            return str(self._value)
