@@ -126,45 +126,45 @@ def contains_default_rule(basic_rules):
 
 def is_rule_one(basic_rule):
     return (
-            basic_rule.id_ == BASIC_RULE_ONE_ID
-            and basic_rule.order == BASIC_RULE_ONE_ORDER
-            and basic_rule.policy == Policy.from_string(BASIC_RULE_ONE_POLICY)
-            and basic_rule.field == BASIC_RULE_ONE_FIELD
-            and basic_rule.rule == Rule.from_string(BASIC_RULE_ONE_RULE)
-            and basic_rule.value == BASIC_RULE_ONE_VALUE
+        basic_rule.id_ == BASIC_RULE_ONE_ID
+        and basic_rule.order == BASIC_RULE_ONE_ORDER
+        and basic_rule.policy == Policy.from_string(BASIC_RULE_ONE_POLICY)
+        and basic_rule.field == BASIC_RULE_ONE_FIELD
+        and basic_rule.rule == Rule.from_string(BASIC_RULE_ONE_RULE)
+        and basic_rule.value == BASIC_RULE_ONE_VALUE
     )
 
 
 def is_rule_two(basic_rule):
     return (
-            basic_rule.id_ == BASIC_RULE_TWO_ID
-            and basic_rule.order == BASIC_RULE_TWO_ORDER
-            and basic_rule.policy == Policy.from_string(BASIC_RULE_TWO_POLICY)
-            and basic_rule.field == BASIC_RULE_TWO_FIELD
-            and basic_rule.rule == Rule.from_string(BASIC_RULE_TWO_RULE)
-            and basic_rule.value == BASIC_RULE_TWO_VALUE
+        basic_rule.id_ == BASIC_RULE_TWO_ID
+        and basic_rule.order == BASIC_RULE_TWO_ORDER
+        and basic_rule.policy == Policy.from_string(BASIC_RULE_TWO_POLICY)
+        and basic_rule.field == BASIC_RULE_TWO_FIELD
+        and basic_rule.rule == Rule.from_string(BASIC_RULE_TWO_RULE)
+        and basic_rule.value == BASIC_RULE_TWO_VALUE
     )
 
 
 def is_rule_three(basic_rule):
     return (
-            basic_rule.id_ == BASIC_RULE_THREE_ID
-            and basic_rule.order == BASIC_RULE_THREE_ORDER
-            and basic_rule.policy == Policy.from_string(BASIC_RULE_THREE_POLICY)
-            and basic_rule.field == BASIC_RULE_THREE_FIELD
-            and basic_rule.rule == Rule.from_string(BASIC_RULE_THREE_RULE)
-            and basic_rule.value == BASIC_RULE_THREE_VALUE
+        basic_rule.id_ == BASIC_RULE_THREE_ID
+        and basic_rule.order == BASIC_RULE_THREE_ORDER
+        and basic_rule.policy == Policy.from_string(BASIC_RULE_THREE_POLICY)
+        and basic_rule.field == BASIC_RULE_THREE_FIELD
+        and basic_rule.rule == Rule.from_string(BASIC_RULE_THREE_RULE)
+        and basic_rule.value == BASIC_RULE_THREE_VALUE
     )
 
 
 def is_default_rule(basic_rule):
     return (
-            basic_rule.id_ == BASIC_RULE_DEFAULT_ID
-            and basic_rule.order == BASIC_RULE_DEFAULT_ORDER
-            and basic_rule.policy == Policy.from_string(BASIC_RULE_DEFAULT_POLICY)
-            and basic_rule.field == BASIC_RULE_DEFAULT_FIELD
-            and basic_rule.rule == Rule.from_string(BASIC_RULE_DEFAULT_RULE)
-            and basic_rule.value == BASIC_RULE_DEFAULT_VALUE
+        basic_rule.id_ == BASIC_RULE_DEFAULT_ID
+        and basic_rule.order == BASIC_RULE_DEFAULT_ORDER
+        and basic_rule.policy == Policy.from_string(BASIC_RULE_DEFAULT_POLICY)
+        and basic_rule.field == BASIC_RULE_DEFAULT_FIELD
+        and basic_rule.rule == Rule.from_string(BASIC_RULE_DEFAULT_RULE)
+        and basic_rule.value == BASIC_RULE_DEFAULT_VALUE
     )
 
 
