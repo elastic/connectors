@@ -143,7 +143,7 @@ class Policy(Enum):
                 return Policy.EXCLUDE
             case _:
                 raise ValueError(
-                    f"'{string}' is an unknown value for a Policy. Allowed policies: {Policy.POLICIES}"
+                    f"'{string}' is an unknown value for the enum Policy. Allowed policies: {Policy.POLICIES}"
                 )
 
 
