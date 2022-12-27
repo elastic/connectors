@@ -6,7 +6,73 @@
 
 import datetime
 
-from connectors.filtering.basic_rule import BasicRule, Policy, Rule, try_coerce
+import pytest
+
+from connectors.filtering.basic_rule import BasicRule, Policy, Rule, parse, try_coerce
+
+BASIC_RULE_ONE_ID = "1"
+BASIC_RULE_ONE_ORDER = 1
+BASIC_RULE_ONE_POLICY = "include"
+BASIC_RULE_ONE_FIELD = "field one"
+BASIC_RULE_ONE_RULE = "equals"
+BASIC_RULE_ONE_VALUE = "value one"
+
+BASIC_RULE_ONE_JSON = {
+    "id": BASIC_RULE_ONE_ID,
+    "order": BASIC_RULE_ONE_ORDER,
+    "policy": BASIC_RULE_ONE_POLICY,
+    "field": BASIC_RULE_ONE_FIELD,
+    "rule": BASIC_RULE_ONE_RULE,
+    "value": BASIC_RULE_ONE_VALUE,
+}
+
+BASIC_RULE_TWO_ID = "2"
+BASIC_RULE_TWO_ORDER = 2
+BASIC_RULE_TWO_POLICY = "exclude"
+BASIC_RULE_TWO_FIELD = "field two"
+BASIC_RULE_TWO_RULE = "contains"
+BASIC_RULE_TWO_VALUE = "value two"
+
+BASIC_RULE_TWO_JSON = {
+    "id": BASIC_RULE_TWO_ID,
+    "order": BASIC_RULE_TWO_ORDER,
+    "policy": BASIC_RULE_TWO_POLICY,
+    "field": BASIC_RULE_TWO_FIELD,
+    "rule": BASIC_RULE_TWO_RULE,
+    "value": BASIC_RULE_TWO_VALUE,
+}
+
+BASIC_RULE_THREE_ID = "3"
+BASIC_RULE_THREE_ORDER = 3
+BASIC_RULE_THREE_POLICY = "include"
+BASIC_RULE_THREE_FIELD = "field three"
+BASIC_RULE_THREE_RULE = "contains"
+BASIC_RULE_THREE_VALUE = "value three"
+
+BASIC_RULE_THREE_JSON = {
+    "id": BASIC_RULE_THREE_ID,
+    "order": BASIC_RULE_THREE_ORDER,
+    "policy": BASIC_RULE_THREE_POLICY,
+    "field": BASIC_RULE_THREE_FIELD,
+    "rule": BASIC_RULE_THREE_RULE,
+    "value": BASIC_RULE_THREE_VALUE,
+}
+
+BASIC_RULE_DEFAULT_ID = "DEFAULT"
+BASIC_RULE_DEFAULT_ORDER = 0
+BASIC_RULE_DEFAULT_POLICY = "include"
+BASIC_RULE_DEFAULT_FIELD = "_"
+BASIC_RULE_DEFAULT_RULE = "equals"
+BASIC_RULE_DEFAULT_VALUE = ".*"
+
+BASIC_RULE_DEFAULT_JSON = {
+    "id": BASIC_RULE_DEFAULT_ID,
+    "order": BASIC_RULE_DEFAULT_ORDER,
+    "policy": BASIC_RULE_DEFAULT_POLICY,
+    "field": BASIC_RULE_DEFAULT_FIELD,
+    "rule": BASIC_RULE_DEFAULT_RULE,
+    "value": BASIC_RULE_DEFAULT_VALUE,
+}
 
 DESCRIPTION_KEY = "description"
 DESCRIPTION_VALUE = "abc"
@@ -31,6 +97,219 @@ DOCUMENT = {
     CREATED_AT_DATE_KEY: CREATED_AT_DATE_VALUE,
     CREATED_AT_DATETIME_KEY: CREATED_AT_DATETIME_VALUE,
 }
+
+
+def basic_rule_one_policy_and_rule_uppercase():
+    basic_rule_uppercase = BASIC_RULE_ONE_JSON
+
+    basic_rule_uppercase["rule"] = basic_rule_uppercase["rule"].upper()
+    basic_rule_uppercase["policy"] = basic_rule_uppercase["policy"].upper()
+
+    return basic_rule_uppercase
+
+
+def contains_rule_one(basic_rules):
+    return any(is_rule_one(basic_rule) for basic_rule in basic_rules)
+
+
+def contains_rule_two(basic_rules):
+    return any(is_rule_two(basic_rule) for basic_rule in basic_rules)
+
+
+def contains_rule_three(basic_rules):
+    return any(is_rule_three(basic_rule) for basic_rule in basic_rules)
+
+
+def contains_default_rule(basic_rules):
+    return any(is_default_rule(basic_rule) for basic_rule in basic_rules)
+
+
+def is_rule_one(basic_rule):
+    return (
+            basic_rule.id_ == BASIC_RULE_ONE_ID
+            and basic_rule.order == BASIC_RULE_ONE_ORDER
+            and basic_rule.policy == Policy.from_string(BASIC_RULE_ONE_POLICY)
+            and basic_rule.field == BASIC_RULE_ONE_FIELD
+            and basic_rule.rule == Rule.from_string(BASIC_RULE_ONE_RULE)
+            and basic_rule.value == BASIC_RULE_ONE_VALUE
+    )
+
+
+def is_rule_two(basic_rule):
+    return (
+            basic_rule.id_ == BASIC_RULE_TWO_ID
+            and basic_rule.order == BASIC_RULE_TWO_ORDER
+            and basic_rule.policy == Policy.from_string(BASIC_RULE_TWO_POLICY)
+            and basic_rule.field == BASIC_RULE_TWO_FIELD
+            and basic_rule.rule == Rule.from_string(BASIC_RULE_TWO_RULE)
+            and basic_rule.value == BASIC_RULE_TWO_VALUE
+    )
+
+
+def is_rule_three(basic_rule):
+    return (
+            basic_rule.id_ == BASIC_RULE_THREE_ID
+            and basic_rule.order == BASIC_RULE_THREE_ORDER
+            and basic_rule.policy == Policy.from_string(BASIC_RULE_THREE_POLICY)
+            and basic_rule.field == BASIC_RULE_THREE_FIELD
+            and basic_rule.rule == Rule.from_string(BASIC_RULE_THREE_RULE)
+            and basic_rule.value == BASIC_RULE_THREE_VALUE
+    )
+
+
+def is_default_rule(basic_rule):
+    return (
+            basic_rule.id_ == BASIC_RULE_DEFAULT_ID
+            and basic_rule.order == BASIC_RULE_DEFAULT_ORDER
+            and basic_rule.policy == Policy.from_string(BASIC_RULE_DEFAULT_POLICY)
+            and basic_rule.field == BASIC_RULE_DEFAULT_FIELD
+            and basic_rule.rule == Rule.from_string(BASIC_RULE_DEFAULT_RULE)
+            and basic_rule.value == BASIC_RULE_DEFAULT_VALUE
+    )
+
+
+def test_include_lowercase_should_return_policy_include():
+    assert Policy.from_string("include") == Policy.INCLUDE
+
+
+def test_include_uppercase_should_return_policy_include():
+    assert Policy.from_string("INCLUDE") == Policy.INCLUDE
+
+
+def test_exclude_lowercase_should_return_policy_exclude():
+    assert Policy.from_string("exclude") == Policy.EXCLUDE
+
+
+def test_exclude_uppercase_should_return_policy_exclude():
+    assert Policy.from_string("EXCLUDE") == Policy.EXCLUDE
+
+
+def test_equals_lowercase_should_return_rule_equals():
+    assert Rule.from_string("equals") == Rule.EQUALS
+
+
+def test_equals_uppercase_should_return_rule_equals():
+    assert Rule.from_string("EQUALS") == Rule.EQUALS
+
+
+def test_contains_lowercase_should_return_rule_contains():
+    assert Rule.from_string("contains") == Rule.CONTAINS
+
+
+def test_contains_uppercase_should_return_rule_contains():
+    assert Rule.from_string("CONTAINS") == Rule.CONTAINS
+
+
+def test_ends_with_lowercase_should_return_rule_ends_with():
+    assert Rule.from_string("ends_with") == Rule.ENDS_WITH
+
+
+def test_ends_with_uppercase_should_return_rule_ends_with():
+    assert Rule.from_string("ENDS_WITH") == Rule.ENDS_WITH
+
+
+def test_greater_than_sign_should_return_rule_greater_than():
+    assert Rule.from_string(">") == Rule.GREATER_THAN
+
+
+def test_less_than_sign_should_return_rule_less_than():
+    assert Rule.from_string("<") == Rule.LESS_THAN
+
+
+def test_regex_lowercase_should_return_rule_regex():
+    assert Rule.from_string("regex") == Rule.REGEX
+
+
+def test_regex_uppercase_should_return_rule_regex():
+    assert Rule.from_string("REGEX") == Rule.REGEX
+
+
+def test_starts_with_lowercase_should_return_rule_starts_with():
+    assert Rule.from_string("starts_with") == Rule.STARTS_WITH
+
+
+def test_starts_with_uppercase_should_return_rule_starts_with():
+    assert Rule.from_string("STARTS_WITH") == Rule.STARTS_WITH
+
+
+def test_raise_value_error_if_argument_cannot_be_parsed_to_policy():
+    with pytest.raises(ValueError):
+        Policy.from_string("unknown")
+
+
+def test_raise_value_error_if_argument_cannot_be_parsed_to_rule():
+    with pytest.raises(ValueError):
+        Rule.from_string("unknown")
+
+
+def test_from_json():
+    basic_rule = BasicRule.from_json(BASIC_RULE_ONE_JSON)
+
+    assert is_rule_one(basic_rule)
+
+
+def test_parse_none_to_empty_array():
+    raw_basic_rules = None
+
+    assert len(parse(raw_basic_rules)) == 0
+
+
+def test_parse_empty_basic_rules_to_empty_array():
+    raw_basic_rules = []
+
+    assert len(parse(raw_basic_rules)) == 0
+
+
+def test_parse_one_raw_basic_rule_with_policy_and_rule_lowercase():
+    raw_basic_rules = [BASIC_RULE_ONE_JSON]
+
+    parsed_basic_rules = parse(raw_basic_rules)
+
+    assert len(parsed_basic_rules) == 1
+    assert contains_rule_one(parsed_basic_rules)
+
+
+def test_parse_one_raw_basic_rule_with_policy_and_rule_uppercase():
+    raw_basic_rules = [basic_rule_one_policy_and_rule_uppercase()]
+
+    parsed_basic_rules = parse(raw_basic_rules)
+
+    assert len(parsed_basic_rules) == 1
+    assert contains_rule_one(parsed_basic_rules)
+
+
+def test_parses_multiple_rules_correctly():
+    raw_basic_rules = [BASIC_RULE_ONE_JSON, BASIC_RULE_TWO_JSON]
+
+    parsed_basic_rules = parse(raw_basic_rules)
+
+    assert len(parsed_basic_rules) == 2
+    assert contains_rule_one(parsed_basic_rules)
+    assert contains_rule_two(parsed_basic_rules)
+
+
+def test_parser_rejects_default_rule():
+    raw_basic_rules = [BASIC_RULE_DEFAULT_JSON, BASIC_RULE_ONE_JSON]
+
+    parsed_basic_rules = parse(raw_basic_rules)
+
+    assert len(parsed_basic_rules) == 1
+    assert contains_rule_one(parsed_basic_rules)
+    assert not contains_default_rule(parsed_basic_rules)
+
+
+def test_rules_are_ordered_descending_with_respect_to_the_order_property():
+    raw_basic_rules = [BASIC_RULE_ONE_JSON, BASIC_RULE_THREE_JSON, BASIC_RULE_TWO_JSON]
+
+    parsed_basic_rules = parse(raw_basic_rules)
+    first_rule = parsed_basic_rules[0]
+    second_rule = parsed_basic_rules[1]
+    third_rule = parsed_basic_rules[2]
+
+    assert len(parsed_basic_rules) == 3
+    assert is_rule_three(first_rule)
+    assert is_rule_two(second_rule)
+    assert is_rule_one(third_rule)
 
 
 def test_matches_default_rule():
