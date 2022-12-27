@@ -168,68 +168,45 @@ def is_default_rule(basic_rule):
     )
 
 
-def test_include_lowercase_should_return_policy_include():
-    assert Policy.from_string("include") == Policy.INCLUDE
+@pytest.mark.parametrize(
+    "policy_string, expected_parsed_policy",
+    [
+        ("include", Policy.INCLUDE),
+        ("INCLUDE", Policy.INCLUDE),
+        ("iNcLuDe", Policy.INCLUDE),
+        ("exclude", Policy.EXCLUDE),
+        ("EXCLUDE", Policy.EXCLUDE),
+        ("eXcLuDe", Policy.EXCLUDE),
+    ],
+)
+def test_from_string_policy_factory_method(policy_string, expected_parsed_policy):
+    assert Policy.from_string(policy_string) == expected_parsed_policy
 
 
-def test_include_uppercase_should_return_policy_include():
-    assert Policy.from_string("INCLUDE") == Policy.INCLUDE
-
-
-def test_exclude_lowercase_should_return_policy_exclude():
-    assert Policy.from_string("exclude") == Policy.EXCLUDE
-
-
-def test_exclude_uppercase_should_return_policy_exclude():
-    assert Policy.from_string("EXCLUDE") == Policy.EXCLUDE
-
-
-def test_equals_lowercase_should_return_rule_equals():
-    assert Rule.from_string("equals") == Rule.EQUALS
-
-
-def test_equals_uppercase_should_return_rule_equals():
-    assert Rule.from_string("EQUALS") == Rule.EQUALS
-
-
-def test_contains_lowercase_should_return_rule_contains():
-    assert Rule.from_string("contains") == Rule.CONTAINS
-
-
-def test_contains_uppercase_should_return_rule_contains():
-    assert Rule.from_string("CONTAINS") == Rule.CONTAINS
-
-
-def test_ends_with_lowercase_should_return_rule_ends_with():
-    assert Rule.from_string("ends_with") == Rule.ENDS_WITH
-
-
-def test_ends_with_uppercase_should_return_rule_ends_with():
-    assert Rule.from_string("ENDS_WITH") == Rule.ENDS_WITH
-
-
-def test_greater_than_sign_should_return_rule_greater_than():
-    assert Rule.from_string(">") == Rule.GREATER_THAN
-
-
-def test_less_than_sign_should_return_rule_less_than():
-    assert Rule.from_string("<") == Rule.LESS_THAN
-
-
-def test_regex_lowercase_should_return_rule_regex():
-    assert Rule.from_string("regex") == Rule.REGEX
-
-
-def test_regex_uppercase_should_return_rule_regex():
-    assert Rule.from_string("REGEX") == Rule.REGEX
-
-
-def test_starts_with_lowercase_should_return_rule_starts_with():
-    assert Rule.from_string("starts_with") == Rule.STARTS_WITH
-
-
-def test_starts_with_uppercase_should_return_rule_starts_with():
-    assert Rule.from_string("STARTS_WITH") == Rule.STARTS_WITH
+@pytest.mark.parametrize(
+    "rule_string, expected_parsed_rule",
+    [
+        ("equals", Rule.EQUALS),
+        ("EQUALS", Rule.EQUALS),
+        ("eQuAlS", Rule.EQUALS),
+        ("contains", Rule.CONTAINS),
+        ("CONTAINS", Rule.CONTAINS),
+        ("cOnTaInS", Rule.CONTAINS),
+        ("ends_with", Rule.ENDS_WITH),
+        ("ENDS_WITH", Rule.ENDS_WITH),
+        ("eNdS_wItH", Rule.ENDS_WITH),
+        (">", Rule.GREATER_THAN),
+        ("<", Rule.LESS_THAN),
+        ("regex", Rule.REGEX),
+        ("REGEX", Rule.REGEX),
+        ("rEgEx", Rule.REGEX),
+        ("starts_with", Rule.STARTS_WITH),
+        ("STARTS_WITH", Rule.STARTS_WITH),
+        ("sTaRtS_wItH", Rule.STARTS_WITH),
+    ],
+)
+def test_from_string_rule_factory_method(rule_string, expected_parsed_rule):
+    assert Rule.from_string(rule_string) == expected_parsed_rule
 
 
 def test_raise_value_error_if_argument_cannot_be_parsed_to_policy():
