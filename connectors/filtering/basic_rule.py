@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+
 import datetime
 import re
 from enum import Enum
@@ -13,6 +14,38 @@ from connectors.logger import logger
 
 IS_BOOL_FALSE = re.compile("^(false|f|no|n|off)$", re.I)
 IS_BOOL_TRUE = re.compile("^(true|t|yes|y|on)$", re.I)
+
+
+def parse(basic_rules_json):
+    """
+
+    *basic_rules_json*, an array of dicts or an empty array
+
+    The parser works in the following way:
+      - Map every raw basic rule in the json array to the corresponding BasicRule object
+      - Filter out every basic rule, which returns true for is_default_rule()
+      - Sort the result in descending order according to their basic rule order (rules are executed in descending order)
+    """
+    if not basic_rules_json:
+        return []
+
+    map_to_basic_rules_list = list(
+        map(
+            lambda basic_rule_json: BasicRule.from_json(basic_rule_json),
+            basic_rules_json,
+        )
+    )
+
+    return sorted(
+        list(
+            filter(
+                lambda basic_rule: not basic_rule.is_default_rule(),
+                map_to_basic_rules_list,
+            )
+        ),
+        key=lambda basic_rule: basic_rule.order,
+        reverse=True,
+    )
 
 
 def to_float(value):
@@ -70,22 +103,71 @@ class Rule(Enum):
     GREATER_THAN = 6
     LESS_THAN = 7
 
+    RULES = [EQUALS, STARTS_WITH, ENDS_WITH, CONTAINS, REGEX, GREATER_THAN, LESS_THAN]
+
+    @classmethod
+    def from_string(cls, string):
+        match string.casefold():
+            case "equals":
+                return Rule.EQUALS
+            case "contains":
+                return Rule.CONTAINS
+            case "ends_with":
+                return Rule.ENDS_WITH
+            case ">":
+                return Rule.GREATER_THAN
+            case "<":
+                return Rule.LESS_THAN
+            case "regex":
+                return Rule.REGEX
+            case "starts_with":
+                return Rule.STARTS_WITH
+            case _:
+                raise ValueError(
+                    f"'{string}' is an unknown value for the enum Rule. Allowed rules: {Rule.RULES}."
+                )
+
 
 class Policy(Enum):
     INCLUDE = 1
     EXCLUDE = 2
+
+    POLICIES = [INCLUDE, EXCLUDE]
+
+    @classmethod
+    def from_string(cls, string):
+        match string.casefold():
+            case "include":
+                return Policy.INCLUDE
+            case "exclude":
+                return Policy.EXCLUDE
+            case _:
+                raise ValueError(
+                    f"'{string}' is an unknown value for the enum Policy. Allowed policies: {Policy.POLICIES}"
+                )
 
 
 class BasicRule:
     DEFAULT_RULE_ID = "DEFAULT"
 
     def __init__(self, id_, order, policy, field, rule, value):
-        self._id = id_
-        self._order = order
-        self._policy = policy
-        self._field = field
-        self._rule = rule
-        self._value = value
+        self.id_ = id_
+        self.order = order
+        self.policy = policy
+        self.field = field
+        self.rule = rule
+        self.value = value
+
+    @classmethod
+    def from_json(cls, basic_rule_json):
+        return cls(
+            id_=basic_rule_json["id"],
+            order=basic_rule_json["order"],
+            policy=Policy.from_string(basic_rule_json["policy"]),
+            field=basic_rule_json["field"],
+            rule=Rule.from_string(basic_rule_json["rule"]),
+            value=basic_rule_json["value"],
+        )
 
     @classmethod
     def default_rule(cls):
@@ -102,23 +184,23 @@ class BasicRule:
         if self.is_default_rule():
             return True
 
-        if self._field not in document:
+        if self.field not in document:
             return False
 
-        document_value = document[self._field]
+        document_value = document[self.field]
         coerced_rule_value = self.coerce_rule_value_based_on_document_value(
             document_value
         )
 
-        match self._rule:
+        match self.rule:
             case Rule.STARTS_WITH:
-                return str(document_value).startswith(self._value)
+                return str(document_value).startswith(self.value)
             case Rule.ENDS_WITH:
-                return str(document_value).endswith(self._value)
+                return str(document_value).endswith(self.value)
             case Rule.CONTAINS:
-                return self._value in str(document_value)
+                return self.value in str(document_value)
             case Rule.REGEX:
-                return re.match(self._value, str(document_value)) is not None
+                return re.match(self.value, str(document_value)) is not None
             case Rule.LESS_THAN:
                 return document_value < coerced_rule_value
             case Rule.GREATER_THAN:
@@ -127,26 +209,26 @@ class BasicRule:
                 return document_value == coerced_rule_value
 
     def is_default_rule(self):
-        return self._id == BasicRule.DEFAULT_RULE_ID
+        return self.id_ == BasicRule.DEFAULT_RULE_ID
 
     def is_include(self):
-        return self._policy == Policy.INCLUDE
+        return self.policy == Policy.INCLUDE
 
     def coerce_rule_value_based_on_document_value(self, doc_value):
         try:
             match doc_value:
                 case str():
-                    return str(self._value)
+                    return str(self.value)
                 case bool():
-                    return str(to_bool(self._value))
+                    return str(to_bool(self.value))
                 case float() | int():
-                    return float(self._value)
+                    return float(self.value)
                 case datetime.date() | datetime.datetime:
-                    return to_datetime(self._value)
+                    return to_datetime(self.value)
                 case _:
-                    return str(self._value)
+                    return str(self.value)
         except ValueError as e:
             logger.debug(
-                f"Failed to coerce value '{self._value}' ({type(self._value)}) based on document value '{doc_value}' ({type(doc_value)}) due to error: {type(e)}: {e}"
+                f"Failed to coerce value '{self.value}' ({type(self.value)}) based on document value '{doc_value}' ({type(doc_value)}) due to error: {type(e)}: {e}"
             )
-            return str(self._value)
+            return str(self.value)
