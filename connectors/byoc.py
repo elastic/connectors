@@ -20,7 +20,6 @@ CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 PIPELINE = "ent-search-generic-ingestion"
 SYNC_DISABLED = -1
-DEFAULT_ANALYSIS_ICU = False
 
 
 def e2str(entry):
@@ -50,19 +49,6 @@ class JobTriggerMethod(Enum):
     SCHEDULED = 2
 
 
-CUSTOM_READ_ONLY_FIELDS = (
-    "is_native",
-    "api_key_id",
-    "pipeline",
-    "scheduling",
-)
-
-NATIVE_READ_ONLY_FIELDS = CUSTOM_READ_ONLY_FIELDS + (
-    "service_type",
-    "configuration",
-)
-
-
 class ServiceTypeNotSupportedError(Exception):
     pass
 
@@ -80,6 +66,18 @@ class DataSourceError(Exception):
 
 
 class BYOIndex(ESIndex):
+    CUSTOM_READ_ONLY_FIELDS = (
+        "is_native",
+        "api_key_id",
+        "pipeline",
+        "scheduling",
+    )
+
+    NATIVE_READ_ONLY_FIELDS = CUSTOM_READ_ONLY_FIELDS + (
+        "service_type",
+        "configuration",
+    )
+
     def __init__(self, elastic_config):
         logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
         # initilize ESIndex instance
@@ -87,7 +85,6 @@ class BYOIndex(ESIndex):
         # grab all bulk options
         self.bulk_options = elastic_config.get("bulk", {})
         self.language_code = elastic_config.get("language_code", DEFAULT_LANGUAGE)
-        self.analysis_icu = elastic_config.get("analysis_icu", DEFAULT_ANALYSIS_ICU)
 
     async def save(self, connector):
         # we never update the configuration
@@ -95,7 +92,7 @@ class BYOIndex(ESIndex):
 
         # read only we never update
         for key in (
-            NATIVE_READ_ONLY_FIELDS if connector.native else CUSTOM_READ_ONLY_FIELDS
+            self.NATIVE_READ_ONLY_FIELDS if connector.native else self.CUSTOM_READ_ONLY_FIELDS
         ):
             if key in document:
                 del document[key]
@@ -154,16 +151,21 @@ class BYOIndex(ESIndex):
             doc_source["_source"],
             bulk_options=self.bulk_options,
             language_code=self.language_code,
-            analysis_icu=self.analysis_icu,
         )
 
 
 class SyncJobIndex(ESIndex):
+    READ_ONLY_FIELDS = (
+        "connector",
+        "trigger_method",
+        "created_at"
+    )
+
     def __init__(self, elastic_config):
         super().__init__(index_name=JOBS_INDEX, elastic_config=elastic_config)
 
     def build_docs_query(self, connector_ids):
-        query = {"bool": {"must": [{"terms": {"status": [ e2str(JobStatus.PENDING) ]}}]}}
+        query = {"bool": {"must": [{"terms": {"status": [e2str(JobStatus.PENDING)]}}]}}
 
         if connector_ids:
             query["bool"]["must"].append({"terms": {"connector.id": connector_ids}})
@@ -173,10 +175,15 @@ class SyncJobIndex(ESIndex):
     def _create_object(self, doc_source):
         return SyncJob(self, doc_source["_id"], doc_source["_source"])
 
-    async def create(self, connector_id, trigger_method=JobTriggerMethod.SCHEDULED):
+    async def create(self, connector, trigger_method=JobTriggerMethod.SCHEDULED):
         job_def = {
             "connector": {
-                "id": connector_id,
+                "connector_id": connector.id,
+                "configuration": connector.configuration,
+                "index_name": connector.index_name,
+                "service_type": connector.service_type,
+                "language": connector.language_code,
+                "pipeline": connector.pipeline,
             },
             "trigger_method": e2str(trigger_method),
             "status": e2str(JobStatus.PENDING),
@@ -191,28 +198,50 @@ class SyncJobIndex(ESIndex):
         self.job_id = resp["_id"]
         return self.job_id
 
+    async def save(self, job):
+        # we never update the configuration
+        document = dict(job.doc_source)
+
+        # read only we never update
+        for key in self.READ_ONLY_FIELDS:
+            if key in document:
+                del document[key]
+
+        return await self.client.update(
+            index=JOBS_INDEX,
+            id=job.id,
+            doc=document,
+        )
 
 
 class SyncJob:
-    def __init__(
-            self,
-            elastic_index,
-            id,
-            doc_source
-    ):
+    def __init__(self, elastic_index, id, doc_source):
 
-        print("doc source:")
-
+        print(f"[{id}]doc source:")
         print(doc_source)
         self.job_id = id
         self.doc_source = doc_source
-        self.connector_id = doc_source["connector"]["id"]
-        self.completed_at = datetime.fromisoformat(doc_source["completed_at"]) if doc_source["completed_at"] else None
-        self.created_at = datetime.fromisoformat(doc_source["created_at"]) if doc_source["created_at"] else None
+        self.connector = doc_source["connector"]
+        self.connector_id = doc_source["connector"]["connector_id"]
+        self.completed_at = (
+            datetime.fromisoformat(doc_source["completed_at"])
+            if doc_source["completed_at"]
+            else None
+        )
+        self.created_at = (
+            datetime.fromisoformat(doc_source["created_at"])
+            if doc_source["created_at"]
+            else None
+        )
+        self.index = elastic_index
 
     @property
     def id(self):
-        self.job_id
+        return self.job_id
+
+    @property
+    def connector_config(self):
+        return self.connector
 
     @property
     def duration(self):
@@ -249,7 +278,6 @@ class SyncJob:
     async def sync_doc(self, force=True):
         self.doc_source["last_seen"] = iso_utc()
         await self.index.save(self)
-        self._dirty = False
 
 
 class PipelineSettings:
@@ -286,7 +314,6 @@ class BYOConnector:
         doc_source,
         bulk_options,
         language_code=DEFAULT_LANGUAGE,
-        analysis_icu=DEFAULT_ANALYSIS_ICU,
     ):
 
         self.doc_source = doc_source
@@ -302,7 +329,6 @@ class BYOConnector:
         self._hb = None
         self.bulk_options = bulk_options
         self.language_code = language_code
-        self.analysis_icu = analysis_icu
         self.source_klass = None
         self.data_provider = None
 
@@ -311,10 +337,10 @@ class BYOConnector:
         self.sync_now = doc_source.get("sync_now", False)
         self.native = doc_source.get("is_native", False)
         self._service_type = doc_source["service_type"]
-        self.index_name = doc_source["index_name"]
-        self._configuration = DataSourceConfiguration(doc_source["configuration"])
+        self._index_name = doc_source["index_name"]
+        self._configuration = doc_source["configuration"]
         self.scheduling = doc_source["scheduling"]
-        self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
+        self.pipeline = doc_source["pipeline"]
         self._dirty = True
 
     @property
@@ -330,6 +356,10 @@ class BYOConnector:
 
         self._status = value
         self.doc_source["status"] = e2str(self._status)
+
+    @property
+    def index_name(self):
+        return self._index_name
 
     @property
     def service_type(self):
@@ -412,41 +442,6 @@ class BYOConnector:
         self.doc_source["error"] = str(error)
         await self.sync_doc()
 
-    async def _sync_done(self, job, result, exception=None):
-        doc_updated = result.get("doc_updated", 0)
-        doc_created = result.get("doc_created", 0)
-        doc_deleted = result.get("doc_deleted", 0)
-        exception = result.get("fetch_error", exception)
-
-        indexed_count = doc_updated + doc_created
-
-        await job.done(indexed_count, doc_deleted, exception)
-
-        self.doc_source["last_sync_status"] = e2str(job.status)
-        if exception is None:
-            self.doc_source["last_sync_error"] = None
-            self.doc_source["error"] = None
-        else:
-            self.doc_source["last_sync_error"] = str(exception)
-            self.doc_source["error"] = str(exception)
-            self.status = Status.ERROR
-
-        self.doc_source["last_synced"] = iso_utc()
-        await self.sync_doc()
-        logger.info(
-            f"Sync done: {indexed_count} indexed, {doc_deleted} "
-            f" deleted. ({int(time.time() - self._start_time)} seconds)"
-        )
-
-    async def prepare_docs(self, data_provider):
-        logger.debug(f"Using pipeline {self.pipeline}")
-
-        async for doc, lazy_download in data_provider.get_docs():
-            # adapt doc for pipeline settings
-            doc["_extract_binary_content"] = self.pipeline.extract_binary_content
-            doc["_reduce_whitespace"] = self.pipeline.reduce_whitespace
-            doc["_run_ml_inference"] = self.pipeline.run_ml_inference
-            yield doc, lazy_download
 
     async def prepare(self, config):
         """Prepares the connector, given a configuration
@@ -492,84 +487,3 @@ class BYOConnector:
             raise DataSourceError(f"Could not instantiate {fqn} for {service_type}")
 
         self.source_klass = source_klass
-
-    async def sync(self, elastic_server, idling, sync_now=False):
-        # If anything bad happens before we create a sync job
-        # (like bad scheduling config, etc)
-        #
-        # we will raise the error in the logs here and let Kibana knows
-        # by toggling the status and setting the error and status field
-        if self.source_klass is None:
-            raise Exception("Can't call `sync()` before `prepare()`")
-
-        try:
-            service_type = self.service_type
-            if not sync_now:
-                next_sync = self.next_sync()
-                if next_sync == SYNC_DISABLED or next_sync - idling > 0:
-                    if next_sync == SYNC_DISABLED:
-                        logger.debug(f"Scheduling is disabled for {service_type}")
-                    else:
-                        logger.debug(
-                            f"Next sync for {service_type} due in {int(next_sync)} seconds"
-                        )
-                    # if we don't sync, we still want to make sure we tell kibana we are connected
-                    # if the status is different from comnected
-                    if self.status != Status.CONNECTED:
-                        self.status = Status.CONNECTED
-                        await self.sync_doc()
-                    return
-            else:
-                self.sync_now = True
-                logger.info("Sync forced")
-
-            try:
-                self.data_provider = self.source_klass(self)
-            except Exception as e:
-                logger.critical(e, exc_info=True)
-                raise DataSourceError(
-                    f"Could not instantiate {self.source_klass} for {service_type}"
-                )
-
-            if not await self.data_provider.changed():
-                logger.debug(f"No change in {service_type} data provider, skipping...")
-                return
-        except Exception as exc:
-            self.doc_source["error"] = str(exc)
-            self.status = Status.ERROR
-            await self.sync_doc()
-            raise
-
-        logger.debug(f"Syncing '{service_type}'")
-        self._syncing = True
-        job = await self._sync_starts()
-        try:
-            logger.debug(f"Pinging the {self.data_provider} backend")
-            await self.data_provider.ping()
-            await asyncio.sleep(0)
-
-            mappings, settings = defaults_for(
-                is_connectors_index=True,
-                language_code=self.language_code,
-                analysis_icu=self.analysis_icu,
-            )
-            logger.debug("Preparing the index")
-            await elastic_server.prepare_index(
-                self.index_name, mappings=mappings, settings=settings
-            )
-            await asyncio.sleep(0)
-
-            result = await elastic_server.async_bulk(
-                self.index_name,
-                self.prepare_docs(self.data_provider),
-                self.data_provider.connector.pipeline,
-                options=self.bulk_options,
-            )
-            await self._sync_done(job, result)
-
-        except Exception as e:
-            await self._sync_done(job, {}, exception=e)
-            raise
-        finally:
-            self._syncing = False
-            self._start_time = None

@@ -36,6 +36,8 @@ class DataSourceConfiguration:
         return self._config[key].value
 
     def get(self, key, default=None):
+        print(f"Getting value for field {key}")
+        print(f"Config is {self._config}")
         if key not in self._config:
             return default
         return self._config[key].value
@@ -59,9 +61,8 @@ class DataSourceConfiguration:
 class BaseDataSource:
     """Base class, defines a lose contract."""
 
-    def __init__(self, connector):
-        self.connector = connector
-        self.configuration = connector.configuration
+    def __init__(self, configuration):
+        self.configuration = configuration
 
     def __str__(self):
         return f"Datasource `{self.__class__.__doc__}`"

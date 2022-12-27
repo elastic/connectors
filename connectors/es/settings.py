@@ -161,9 +161,6 @@ class Settings:
                 self._language_data = yaml.safe_load(f)
         return self._language_data
 
-    def icu_settings(self, analysis_settings):
-        return ICU_ANALYSIS_SETTINGS if analysis_settings else NON_ICU_ANALYSIS_SETTINGS
-
     @property
     def stemmer_name(self):
         return self.language_data[self.language_code].get("stemmer", None)
@@ -275,7 +272,7 @@ class Settings:
 
         return definitions
 
-    def __init__(self, *, language_code=None, analysis_icu=False):
+    def __init__(self, *, language_code=None):
         self._language_data = None
         self.language_code = language_code or DEFAULT_LANGUAGE
 
@@ -284,8 +281,7 @@ class Settings:
                 f"Language '{language_code}' is not supported"
             )
 
-        self.analysis_icu = analysis_icu
-        self.analysis_settings = self.icu_settings(analysis_icu)
+        self.analysis_settings = NON_ICU_ANALYSIS_SETTINGS # hardcoded, later will be part of UI
 
     def to_hash(self):
         return {
@@ -301,12 +297,11 @@ def defaults_for(
     *,
     is_connectors_index=False,
     is_crawler_index=False,
-    language_code=None,
-    analysis_icu=False,
+    language_code=None
 ):
     """Wrapper to return both mappings and settings for an index"""
     mappings = Mappings.default_text_fields_mappings(
         is_connectors_index=is_connectors_index, is_crawler_index=is_crawler_index
     )
-    settings = Settings(language_code=language_code, analysis_icu=analysis_icu)
+    settings = Settings(language_code=language_code)
     return mappings, settings.to_hash()

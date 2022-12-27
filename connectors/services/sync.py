@@ -23,11 +23,10 @@ from connectors.byoc import (
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
     Status,
-    SyncJobIndex,
     SyncJob,
+    SyncJobIndex,
     e2str,
 )
-from connectors.byoei import ElasticServer
 from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.utils import CancellableSleeps, trace_mem
@@ -201,7 +200,7 @@ class SyncService(BaseService):
 
         print(f"Trigger method is {trigger_method}")
 
-        job_id = await self.jobs.create(connector.id, trigger_method)
+        job_id = await self.jobs.create(connector, trigger_method)
 
         connector.sync_now = connector.doc_source["sync_now"] = False
 
