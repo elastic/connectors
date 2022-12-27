@@ -1,5 +1,187 @@
 # Connectors Developer's Guide
 
+## Network Drives Connector
+
+Elastic Network Drives connector is provided in Elastic Connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+
+## Availability and prerequisites
+
+⚠️ _Currently, this connector is available in **technical preview**_.
+Features in technical preview are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
+
+Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services. Your Enterprise Search service should have 4+ GB RAM per zone to avoid out of memory errors.
+
+
+### Setup and basic usage
+
+Complete the following steps to deploy the connector:
+
+1. [Gather Network Drives details](#gather-network-drives-details)
+2. [Configure Network Drives connector](#configure-network-drives-connector)
+
+#### Gather Network Drives details
+
+Collect the information that is required to connect to your network drives:
+
+- The network drives path the connector will crawl to fetch files. This is the name of the folder shared via SMB.
+- The username the connector will use to log in to network drives.
+- The password the connector will use to log in to network drives.
+- The server IP address where the network drive is hosted.
+- The port where the network drives service is hosted.
+
+#### Configure Network Drives connector
+
+Following configuration fields need to be provided for setting up the connector:
+
+##### `username`
+
+The username of the account for network drives. Default value is `admin`.
+
+ℹ️ The user must have atleast **read** permissions for the folder path provided.
+
+##### `password`
+
+The password of the account to be used for crawling the network drives.
+
+##### `server_ip`
+
+The server ip where network drives is hosted. Default value is `127.0.0.1`. Examples:
+
+- `192.158.1.38`
+- `127.0.0.1`
+
+##### `server_port`
+
+The server port where network drives service is available. Default value is `445`. Examples:
+
+- `9454`
+- `8429`
+
+##### `drive_path`
+
+The network drives path the connector will crawl to fetch files. Examples:
+
+- `Users/perftest`
+- `admin/bin`
+
+ℹ️ The drive path should have forward slashes as path separators.
+
+##### `enable_content_extraction`
+
+Whether the connector should extract file content from network drives. Default value is `True` i.e. the connector will try to extract file contents.
+
+#### Content extraction
+
+The connector uses Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/9cf07a96288dcd542b641c51533ee2d427ef56ae/connectors/utils.py#L27).
+
+### Connector Limitations
+
+- Files with size greater than 10 MB won't be extracted.
+- Permission are not synced. All the documents indexed to an Elastic deployment will be visible to all the users having access to that Elastic Deployment.
+- Filtering rules are not available in the present version. Currently, the filtering is controlled via ingest pipelines.
+
+### E2E Tests
+
+The framework allows users to test the connector end to end. To perform e2e test for Network Drives connector, run the following make command:
+```shell
+$ make ftest NAME=network_drive
+```
+
+ℹ️ The e2e test uses default values defined in [configure Network Drives connector](#configure-network-drives-connector)
+
+
+## Amazon S3 Connector
+
+Elastic Amazon S3 connector is used to sync files and file content for supported file types from [Amazon S3](https://s3.console.aws.amazon.com/s3/home) data sources. It is provided in Elastic Connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+
+## Availability and prerequisites
+
+⚠️ _Currently, this connector is available in **technical preview**_.
+Features in technical preview are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
+
+Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services. Your Enterprise Search service should have 4+ GB RAM per zone to avoid out of memory errors.
+
+### Setup and basic usage
+
+Complete the following steps to deploy the connector:
+
+1. [Gather Amazon S3 details](#gather-amazon-s3-details)
+2. [Configure Amazon S3 connector](#configure-amazon-s3-connector)
+
+#### Gather Amazon S3 details
+
+Collect the information that is required to connect to your amazon s3:
+
+- Setup aws configuration by installing [awscli](https://pypi.org/project/awscli/).
+- Add aws_access_key, aws_secret_key and region to run the connector.
+
+
+#### Configure Amazon S3 connector
+
+Following configuration fields need to be provided for setting up the connector:
+
+##### `buckets`
+
+List buckets for amazon s3. For empty list connector will fetch data for all the buckets. Examples:
+
+  - `[testbucket, prodbucket]`
+  - `[]`
+
+##### `read_timeout`
+
+The read_timeout for amazon s3. Default value is `90`. Examples:
+
+  - `60`
+  - `120`
+
+##### `connect_timeout`
+
+The connect_timeout for crawling the amazon s3. Default value is `90`. Examples:
+
+  - `60`
+  - `120`
+
+##### `max_attempts`
+
+The max_attempts for retry the amazon s3. Default value is `5`. Examples:
+
+  - `1`
+  - `3`
+
+##### `page_size`
+
+The page_size for iterating bucket objects in amazon s3. Default value is `100`. Examples:
+
+  - `50`
+  - `150`
+
+##### `enable_content_extraction`
+
+Whether the connector should extract file content from amazon s3. Default value is `True` i.e. the connector will try to extract file contents.
+
+#### Content extraction
+
+The connector uses Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/9cf07a96288dcd542b641c51533ee2d427ef56ae/connectors/utils.py#L27).
+
+### Connector Limitations
+
+- Files with size greater than 10 MB won't be extracted.
+- Permission are not synced. All the documents indexed to an Elastic deployment will be visible to all the users having access to that Elastic Deployment.
+- Filtering rules are not available in the present version. Currently, the filtering is controlled via ingest pipelines.
+- User needs to set a profile with aws configure command.
+- For running e2e tests user needs to export AWS_ENDPOINT_URL(example: export AWS_ENDPOINT_URL=`http://127.0.0.1:5000`).
+
+### E2E Tests
+
+The framework allows users to test the connector end to end. To perform e2e test for Amazon S3 connector, run the following make command:
+```shell
+$ make ftest NAME=s3
+```
+
+ℹ️ The e2e test uses default values defined in [configure Amazon S3 connector](#configure-amazon-s3-connector)
+
+## Installation
+
 Provides a CLI to ingest documents into Elasticsearch, following the [connector protocol](https://github.com/elastic/connectors-ruby/blob/main/docs/CONNECTOR_PROTOCOL.md).
 
 To install the CLI, run:
@@ -34,7 +216,7 @@ A source class can be any Python class, and is declared into the [configuration]
 ```yaml
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
-  s3: connectors.sources.aws:S3DataSource
+  s3: connectors.sources.s3:S3DataSource
 ```
 
 The source class is declared with its [Fully Qualified Name(FQN)](https://en.wikipedia.org/wiki/Fully_qualified_name) so the framework knows where the class is located, so it can import it and instantiate it.
@@ -89,3 +271,8 @@ To sync both sides, the CLI uses these steps:
 - `bulk` calls are emitted every 500 operations (this is configurable for slow networks).
 
 To implement a new source, check [CONTRIBUTE.rst](./CONTRIBUTING.md)
+
+## Runtime dependencies
+
+- MacOS or Linux server. The connector has been tested with CentOS 7, MacOS Monterey v12.0.1.
+- Python version 3.10 or later.
