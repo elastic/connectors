@@ -11,6 +11,9 @@ from dateutil.parser import ParserError, parser
 
 from connectors.logger import logger
 
+IS_BOOL_FALSE = re.compile("^(false|f|no|n|off)$", re.I)
+IS_BOOL_TRUE = re.compile("^(true|t|yes|y|on)$", re.I)
+
 
 def to_float(value):
     try:
@@ -37,10 +40,10 @@ def to_datetime(value):
 
 
 def to_bool(value):
-    if len(value) == 0 or re.match("^(false|f|no|n|off)$", value):
+    if len(value) == 0 or IS_BOOL_FALSE.match(value):
         return False
 
-    if re.match("^(true|t|yes|y|on)$", value):
+    if IS_BOOL_TRUE.match(value):
         return True
 
     return value
