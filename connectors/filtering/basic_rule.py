@@ -126,24 +126,6 @@ class BasicRule:
             case Rule.EQUALS:
                 return document_value == coerced_rule_value
 
-    def id_(self):
-        return self._id
-
-    def order(self):
-        return self._order
-
-    def policy(self):
-        return self._policy
-
-    def field(self):
-        return self._field
-
-    def rule(self):
-        return self._rule
-
-    def value(self):
-        return self._value
-
     def is_default_rule(self):
         return self._id == BasicRule.DEFAULT_RULE_ID
 
