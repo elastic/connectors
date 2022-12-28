@@ -94,6 +94,52 @@ def try_coerce(value):
     return coerced_value
 
 
+class RuleMatchStats:
+    def __init__(self, policy, matched_docs_count):
+        self.policy = policy
+        self.matched_docs_count = matched_docs_count
+
+    def increment_matched_doc_count(self, by=1):
+        self.matched_docs_count += by
+
+    def __eq__(self, other):
+        return (
+            self.policy == other.policy
+            and self.matched_docs_count == other.matched_docs_count
+        )
+
+
+class BasicRuleEngine:
+    def __init__(self, rules):
+        self.rules = rules
+        self.rules_match_stats = {
+            BasicRule.DEFAULT_RULE_ID: RuleMatchStats(Policy.INCLUDE, 0)
+        }
+
+    def should_ingest(self, document):
+        if not self.rules:
+            self.rules_match_stats[
+                BasicRule.DEFAULT_RULE_ID
+            ].increment_matched_doc_count()
+            return True
+
+        for rule in self.rules:
+            if not rule:
+                continue
+
+            if rule.matches(document):
+                rule_match_stats = self.rules_match_stats.setdefault(
+                    rule.id_, RuleMatchStats(rule.policy, 0)
+                )
+                rule_match_stats.increment_matched_doc_count()
+
+                return rule.is_include()
+
+        # default behavior: ingest document, if no rule matches ("default rule")
+        self.rules_match_stats[BasicRule.DEFAULT_RULE_ID].increment_matched_doc_count()
+        return True
+
+
 class Rule(Enum):
     EQUALS = 1
     STARTS_WITH = 2

@@ -8,7 +8,15 @@ import datetime
 
 import pytest
 
-from connectors.filtering.basic_rule import BasicRule, Policy, Rule, parse, try_coerce
+from connectors.filtering.basic_rule import (
+    BasicRule,
+    BasicRuleEngine,
+    Policy,
+    Rule,
+    RuleMatchStats,
+    parse,
+    try_coerce,
+)
 
 BASIC_RULE_ONE_ID = "1"
 BASIC_RULE_ONE_ORDER = 1
@@ -90,13 +98,218 @@ CREATED_AT_DATETIME_VALUE = datetime.datetime(
     year=2022, month=1, day=1, hour=5, minute=10, microsecond=5
 )
 
-DOCUMENT = {
+DOCUMENT_ONE = {
     DESCRIPTION_KEY: DESCRIPTION_VALUE,
     AMOUNT_FLOAT_KEY: AMOUNT_FLOAT_VALUE,
     AMOUNT_INT_KEY: AMOUNT_INT_VALUE,
     CREATED_AT_DATE_KEY: CREATED_AT_DATE_VALUE,
     CREATED_AT_DATETIME_KEY: CREATED_AT_DATETIME_VALUE,
 }
+
+DOCUMENT_TWO = {
+    DESCRIPTION_KEY: DESCRIPTION_VALUE[1:],
+    AMOUNT_FLOAT_KEY: AMOUNT_FLOAT_VALUE,
+    AMOUNT_INT_KEY: AMOUNT_INT_VALUE,
+    CREATED_AT_DATE_KEY: CREATED_AT_DATE_VALUE,
+    CREATED_AT_DATETIME_KEY: CREATED_AT_DATETIME_VALUE,
+}
+
+DOCUMENT_THREE = {
+    DESCRIPTION_KEY: DESCRIPTION_VALUE[2:],
+    AMOUNT_FLOAT_KEY: AMOUNT_FLOAT_VALUE,
+    AMOUNT_INT_KEY: AMOUNT_INT_VALUE,
+    CREATED_AT_DATE_KEY: CREATED_AT_DATE_VALUE,
+    CREATED_AT_DATETIME_KEY: CREATED_AT_DATETIME_VALUE,
+}
+
+MATCHING_DOCUMENT_ONE_INCLUDE_RULE_ID = "1"
+
+MATCHING_DOCUMENT_ONE_INCLUDE_RULE = BasicRule(
+    id_=MATCHING_DOCUMENT_ONE_INCLUDE_RULE_ID,
+    order=1,
+    policy=Policy.INCLUDE,
+    field=DESCRIPTION_KEY,
+    rule=Rule.EQUALS,
+    value=DESCRIPTION_VALUE,
+)
+
+MATCHING_DOCUMENT_ONE_AND_TWO_EXCLUDE_RULE_ID = "2"
+
+MATCHING_DOCUMENT_ONE_AND_TWO_EXCLUDE_RULE = BasicRule(
+    id_=MATCHING_DOCUMENT_ONE_AND_TWO_EXCLUDE_RULE_ID,
+    order=2,
+    policy=Policy.EXCLUDE,
+    field=DESCRIPTION_KEY,
+    rule=Rule.ENDS_WITH,
+    value=DESCRIPTION_VALUE[1:],
+)
+
+NON_MATCHING_INCLUDE_RULE = BasicRule(
+    id_="3",
+    order=3,
+    policy=Policy.INCLUDE,
+    field=DESCRIPTION_KEY,
+    rule=Rule.EQUALS,
+    value=DESCRIPTION_VALUE[1:],
+)
+
+NON_MATCHING_EXCLUDE_RULE = BasicRule(
+    id_="4",
+    order=4,
+    policy=Policy.EXCLUDE,
+    field=DESCRIPTION_KEY,
+    rule=Rule.EQUALS,
+    value=DESCRIPTION_VALUE[1:],
+)
+
+
+@pytest.mark.parametrize(
+    "increments, expected_count",
+    [([1, 2, 3], 6), ([None, None, None], 3), ([2, None], 3)],
+)
+def test_rule_match_stats_increment(increments, expected_count):
+    rule_match_stats = RuleMatchStats(Policy.INCLUDE, 0)
+
+    for increment in increments:
+        if increment:
+            rule_match_stats.increment_matched_doc_count(by=increment)
+        else:
+            rule_match_stats.increment_matched_doc_count()
+
+    assert rule_match_stats.matched_docs_count == expected_count
+
+
+@pytest.mark.parametrize(
+    "rule_match_stats, should_equal",
+    [
+        ([RuleMatchStats(Policy.INCLUDE, 1), RuleMatchStats(Policy.INCLUDE, 1)], True),
+        ([RuleMatchStats(Policy.EXCLUDE, 1), RuleMatchStats(Policy.INCLUDE, 1)], False),
+        ([RuleMatchStats(Policy.INCLUDE, 1), RuleMatchStats(Policy.INCLUDE, 2)], False),
+        ([RuleMatchStats(Policy.INCLUDE, 1), RuleMatchStats(Policy.EXCLUDE, 2)], False),
+    ],
+)
+def test_rule_match_stats_eq(rule_match_stats, should_equal):
+    if should_equal:
+        assert all(stats == rule_match_stats[0] for stats in rule_match_stats[1:])
+    else:
+        assert all(stats != rule_match_stats[0] for stats in rule_match_stats[1:])
+
+
+@pytest.mark.parametrize(
+    "documents_should_ingest_tuples, rules, expected_rules_match_stats",
+    [
+        (
+            [(DOCUMENT_ONE, True)],
+            None,
+            {BasicRule.DEFAULT_RULE_ID: RuleMatchStats(Policy.INCLUDE, 1)},
+        ),
+        (
+            [(DOCUMENT_ONE, True)],
+            [None],
+            {BasicRule.DEFAULT_RULE_ID: RuleMatchStats(Policy.INCLUDE, 1)},
+        ),
+        (
+            [(DOCUMENT_ONE, True)],
+            [],
+            {BasicRule.DEFAULT_RULE_ID: RuleMatchStats(Policy.INCLUDE, 1)},
+        ),
+        (
+            [(DOCUMENT_ONE, True)],
+            [NON_MATCHING_INCLUDE_RULE],
+            {BasicRule.DEFAULT_RULE_ID: RuleMatchStats(Policy.INCLUDE, 1)},
+        ),
+        (
+            [(DOCUMENT_ONE, True)],
+            [NON_MATCHING_EXCLUDE_RULE],
+            {BasicRule.DEFAULT_RULE_ID: RuleMatchStats(Policy.INCLUDE, 1)},
+        ),
+        (
+            [(DOCUMENT_ONE, True)],
+            [MATCHING_DOCUMENT_ONE_INCLUDE_RULE],
+            {
+                BasicRule.DEFAULT_RULE_ID: RuleMatchStats(Policy.INCLUDE, 0),
+                MATCHING_DOCUMENT_ONE_INCLUDE_RULE_ID: RuleMatchStats(
+                    Policy.INCLUDE, 1
+                ),
+            },
+        ),
+        (
+            [(DOCUMENT_ONE, False)],
+            [MATCHING_DOCUMENT_ONE_AND_TWO_EXCLUDE_RULE],
+            {
+                BasicRule.DEFAULT_RULE_ID: RuleMatchStats(Policy.INCLUDE, 0),
+                MATCHING_DOCUMENT_ONE_AND_TWO_EXCLUDE_RULE_ID: RuleMatchStats(
+                    Policy.EXCLUDE, 1
+                ),
+            },
+        ),
+        (
+            [(DOCUMENT_ONE, True)],
+            [
+                # should ingest -> INCLUDE matches before EXCLUDE
+                MATCHING_DOCUMENT_ONE_INCLUDE_RULE,
+                MATCHING_DOCUMENT_ONE_AND_TWO_EXCLUDE_RULE,
+            ],
+            {
+                BasicRule.DEFAULT_RULE_ID: RuleMatchStats(Policy.INCLUDE, 0),
+                MATCHING_DOCUMENT_ONE_INCLUDE_RULE_ID: RuleMatchStats(
+                    Policy.INCLUDE, 1
+                ),
+            },
+        ),
+        (
+            [(DOCUMENT_ONE, False)],
+            [
+                # should NOT ingest -> EXCLUDE matches before INCLUDE
+                MATCHING_DOCUMENT_ONE_AND_TWO_EXCLUDE_RULE,
+                MATCHING_DOCUMENT_ONE_INCLUDE_RULE,
+            ],
+            {
+                BasicRule.DEFAULT_RULE_ID: RuleMatchStats(Policy.INCLUDE, 0),
+                MATCHING_DOCUMENT_ONE_AND_TWO_EXCLUDE_RULE_ID: RuleMatchStats(
+                    Policy.EXCLUDE, 1
+                ),
+            },
+        ),
+        (
+            [
+                (DOCUMENT_ONE, True),
+                (DOCUMENT_ONE, True),
+                (DOCUMENT_TWO, False),
+                (DOCUMENT_TWO, False),
+                (DOCUMENT_TWO, False),
+                (DOCUMENT_THREE, True),
+            ],
+            [
+                MATCHING_DOCUMENT_ONE_INCLUDE_RULE,
+                MATCHING_DOCUMENT_ONE_AND_TWO_EXCLUDE_RULE,
+            ],
+            {
+                BasicRule.DEFAULT_RULE_ID: RuleMatchStats(Policy.INCLUDE, 1),
+                MATCHING_DOCUMENT_ONE_INCLUDE_RULE_ID: RuleMatchStats(
+                    Policy.INCLUDE, 2
+                ),
+                MATCHING_DOCUMENT_ONE_AND_TWO_EXCLUDE_RULE_ID: RuleMatchStats(
+                    Policy.EXCLUDE, 3
+                ),
+            },
+        ),
+    ],
+)
+def test_engine_should_ingest(
+    documents_should_ingest_tuples, rules, expected_rules_match_stats
+):
+    engine = BasicRuleEngine(rules)
+
+    for document_should_ingest_tuple in documents_should_ingest_tuples:
+        document, should_ingest = document_should_ingest_tuple
+
+        if should_ingest:
+            assert engine.should_ingest(document)
+        else:
+            assert not engine.should_ingest(document)
+
+    assert engine.rules_match_stats == expected_rules_match_stats
 
 
 def basic_rule_one_policy_and_rule_uppercase():
@@ -290,7 +503,7 @@ def test_rules_are_ordered_descending_with_respect_to_the_order_property():
 
 
 def test_matches_default_rule():
-    assert BasicRule.default_rule().matches(DOCUMENT)
+    assert BasicRule.default_rule().matches(DOCUMENT_ONE)
 
 
 def test_no_field_leads_to_no_match():
@@ -303,7 +516,7 @@ def test_no_field_leads_to_no_match():
         value="",
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_starts_with_string_matches():
@@ -316,7 +529,7 @@ def test_starts_with_string_matches():
         value=DESCRIPTION_VALUE[:1],
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_starts_with_string_no_match():
@@ -329,7 +542,7 @@ def test_starts_with_string_no_match():
         value="d",
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_ends_with_string_matches():
@@ -342,7 +555,7 @@ def test_ends_with_string_matches():
         value=DESCRIPTION_VALUE[1:],
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_ends_with_string_no_match():
@@ -355,7 +568,7 @@ def test_ends_with_string_no_match():
         value="d",
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_contains_with_string_matches():
@@ -368,7 +581,7 @@ def test_contains_with_string_matches():
         value=DESCRIPTION_VALUE[1:2],
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_contains_with_string_no_match():
@@ -381,7 +594,7 @@ def test_contains_with_string_no_match():
         value="d",
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_regex_matches():
@@ -394,7 +607,7 @@ def test_regex_matches():
         value="^a",
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_regex_no_match():
@@ -407,7 +620,7 @@ def test_regex_no_match():
         value="^d",
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_less_than_string_match():
@@ -420,7 +633,7 @@ def test_less_than_string_match():
         value="bcd",
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_less_than_string_no_match_string_is_smaller_lexicographically():
@@ -433,7 +646,7 @@ def test_less_than_string_no_match_string_is_smaller_lexicographically():
         value="a",
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_less_than_string_no_match_string_is_the_same():
@@ -446,7 +659,7 @@ def test_less_than_string_no_match_string_is_the_same():
         value="abc",
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_less_than_integer_match():
@@ -459,7 +672,7 @@ def test_less_than_integer_match():
         value=AMOUNT_INT_VALUE + 5,
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_less_than_integer_no_match_numbers_are_the_same():
@@ -472,7 +685,7 @@ def test_less_than_integer_no_match_numbers_are_the_same():
         value=AMOUNT_INT_VALUE,
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_less_than_integer_no_match_document_value_is_greater():
@@ -485,7 +698,7 @@ def test_less_than_integer_no_match_document_value_is_greater():
         value=AMOUNT_INT_VALUE - 5,
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_less_than_float_match():
@@ -498,7 +711,7 @@ def test_less_than_float_match():
         value=AMOUNT_FLOAT_VALUE + 5.0,
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_less_than_float_no_match_numbers_are_the_same():
@@ -511,7 +724,7 @@ def test_less_than_float_no_match_numbers_are_the_same():
         value=AMOUNT_FLOAT_VALUE,
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_less_than_float_no_match_document_value_is_greater():
@@ -524,7 +737,7 @@ def test_less_than_float_no_match_document_value_is_greater():
         value=AMOUNT_FLOAT_VALUE - 5.0,
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_less_than_datetime_match():
@@ -537,7 +750,7 @@ def test_less_than_datetime_match():
         value=str(CREATED_AT_DATETIME_VALUE + datetime.timedelta(days=10)),
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_less_than_datetime_no_match_same_time():
@@ -550,7 +763,7 @@ def test_less_than_datetime_no_match_same_time():
         value=str(CREATED_AT_DATETIME_VALUE),
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_less_than_datetime_no_match_later_time():
@@ -563,7 +776,7 @@ def test_less_than_datetime_no_match_later_time():
         value=str(CREATED_AT_DATETIME_VALUE - datetime.timedelta(days=10)),
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_less_than_date_match():
@@ -576,7 +789,7 @@ def test_less_than_date_match():
         value=str(CREATED_AT_DATE_VALUE + datetime.timedelta(days=5)),
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_less_than_date_no_match_same_time():
@@ -589,7 +802,7 @@ def test_less_than_date_no_match_same_time():
         value=str(CREATED_AT_DATE_VALUE),
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_less_than_date_no_match_later_time():
@@ -602,7 +815,7 @@ def test_less_than_date_no_match_later_time():
         value=str(CREATED_AT_DATE_VALUE - datetime.timedelta(days=5)),
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_greater_than_string_match():
@@ -615,7 +828,7 @@ def test_greater_than_string_match():
         value="a",
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_greater_than_string_no_match_string_is_greater_lexicographically():
@@ -628,7 +841,7 @@ def test_greater_than_string_no_match_string_is_greater_lexicographically():
         value="bcd",
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_greater_than_string_no_match_string_is_the_same():
@@ -641,7 +854,7 @@ def test_greater_than_string_no_match_string_is_the_same():
         value="abc",
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_greater_than_integer_match():
@@ -654,7 +867,7 @@ def test_greater_than_integer_match():
         value=AMOUNT_INT_VALUE - 5,
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_greater_than_integer_no_match_numbers_are_the_same():
@@ -667,7 +880,7 @@ def test_greater_than_integer_no_match_numbers_are_the_same():
         value=AMOUNT_INT_VALUE,
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_greater_than_integer_no_match_document_value_is_less():
@@ -680,7 +893,7 @@ def test_greater_than_integer_no_match_document_value_is_less():
         value=AMOUNT_INT_VALUE + 5,
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_greater_than_float_match():
@@ -693,7 +906,7 @@ def test_greater_than_float_match():
         value=AMOUNT_FLOAT_VALUE - 10.0,
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_greater_than_float_no_match_numbers_are_the_same():
@@ -706,7 +919,7 @@ def test_greater_than_float_no_match_numbers_are_the_same():
         value=AMOUNT_FLOAT_VALUE,
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_greater_than_float_no_match_document_value_is_greater():
@@ -719,7 +932,7 @@ def test_greater_than_float_no_match_document_value_is_greater():
         value=AMOUNT_FLOAT_VALUE + 10.0,
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_greater_than_datetime_match():
@@ -732,7 +945,7 @@ def test_greater_than_datetime_match():
         value=str(CREATED_AT_DATETIME_VALUE - datetime.timedelta(days=10)),
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_greater_than_datetime_no_match_same_time():
@@ -745,7 +958,7 @@ def test_greater_than_datetime_no_match_same_time():
         value=str(CREATED_AT_DATETIME_VALUE),
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_greater_than_datetime_no_match_earlier_time():
@@ -758,7 +971,7 @@ def test_greater_than_datetime_no_match_earlier_time():
         value=str(CREATED_AT_DATETIME_VALUE + datetime.timedelta(days=10)),
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_greater_than_date_match():
@@ -771,7 +984,7 @@ def test_greater_than_date_match():
         value=str(CREATED_AT_DATE_VALUE - datetime.timedelta(days=5)),
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_greater_than_date_no_match_same_time():
@@ -784,7 +997,7 @@ def test_greater_than_date_no_match_same_time():
         value=str(CREATED_AT_DATE_VALUE),
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_greater_than_date_no_match_earlier_time():
@@ -797,7 +1010,7 @@ def test_greater_than_date_no_match_earlier_time():
         value=str(CREATED_AT_DATE_VALUE + datetime.timedelta(days=5)),
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_equals_integer_match():
@@ -810,7 +1023,7 @@ def test_equals_integer_match():
         value=AMOUNT_INT_VALUE,
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_equals_integer_no_match():
@@ -823,7 +1036,7 @@ def test_equals_integer_no_match():
         value=AMOUNT_INT_VALUE + 5,
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_equals_float_match():
@@ -836,7 +1049,7 @@ def test_equals_float_match():
         value=AMOUNT_FLOAT_VALUE,
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_equals_float_no_match():
@@ -849,7 +1062,7 @@ def test_equals_float_no_match():
         value=AMOUNT_FLOAT_VALUE + 5.0,
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_equals_string_match():
@@ -862,7 +1075,7 @@ def test_equals_string_match():
         value=DESCRIPTION_VALUE,
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_equals_string_no_match():
@@ -875,7 +1088,7 @@ def test_equals_string_no_match():
         value=DESCRIPTION_VALUE[1:],
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_equals_datetime_match():
@@ -888,7 +1101,7 @@ def test_equals_datetime_match():
         value=str(CREATED_AT_DATETIME_VALUE),
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_equals_datetime_no_match():
@@ -901,7 +1114,7 @@ def test_equals_datetime_no_match():
         value=str(CREATED_AT_DATETIME_VALUE - datetime.timedelta(days=10)),
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_equals_date_match():
@@ -914,7 +1127,7 @@ def test_equals_date_match():
         value=str(CREATED_AT_DATE_VALUE),
     )
 
-    assert basic_rule.matches(DOCUMENT)
+    assert basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_equals_date_no_match():
@@ -927,7 +1140,7 @@ def test_equals_date_no_match():
         value=str(CREATED_AT_DATE_VALUE - datetime.timedelta(days=15)),
     )
 
-    assert not basic_rule.matches(DOCUMENT)
+    assert not basic_rule.matches(DOCUMENT_ONE)
 
 
 def test_coerce_rule_value_to_str():
