@@ -150,7 +150,7 @@ NON_MATCHING_INCLUDE_RULE = BasicRule(
     policy=Policy.INCLUDE,
     field=DESCRIPTION_KEY,
     rule=Rule.EQUALS,
-    value=DESCRIPTION_VALUE[1:],
+    value=DESCRIPTION_VALUE[::-1],
 )
 
 NON_MATCHING_EXCLUDE_RULE = BasicRule(
@@ -159,7 +159,7 @@ NON_MATCHING_EXCLUDE_RULE = BasicRule(
     policy=Policy.EXCLUDE,
     field=DESCRIPTION_KEY,
     rule=Rule.EQUALS,
-    value=DESCRIPTION_VALUE[1:],
+    value=DESCRIPTION_VALUE[::-1],
 )
 
 
