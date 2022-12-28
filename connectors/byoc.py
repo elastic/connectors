@@ -92,7 +92,9 @@ class BYOIndex(ESIndex):
 
         # read only we never update
         for key in (
-            self.NATIVE_READ_ONLY_FIELDS if connector.native else self.CUSTOM_READ_ONLY_FIELDS
+            self.NATIVE_READ_ONLY_FIELDS
+            if connector.native
+            else self.CUSTOM_READ_ONLY_FIELDS
         ):
             if key in document:
                 del document[key]
@@ -155,11 +157,7 @@ class BYOIndex(ESIndex):
 
 
 class SyncJobIndex(ESIndex):
-    READ_ONLY_FIELDS = (
-        "connector",
-        "trigger_method",
-        "created_at"
-    )
+    READ_ONLY_FIELDS = ("connector", "trigger_method", "created_at")
 
     def __init__(self, elastic_config):
         super().__init__(index_name=JOBS_INDEX, elastic_config=elastic_config)
@@ -190,7 +188,7 @@ class SyncJobIndex(ESIndex):
             "status": e2str(JobStatus.PENDING),
             "error": None,
             "created_at": now,
-            "last_seen": now
+            "last_seen": now,
         }
 
         resp = await self.client.index(index=JOBS_INDEX, document=job_def)
@@ -448,17 +446,17 @@ class BYOConnector:
     async def job_done(self, job):
         self._dirty = True
         self.doc_source["last_sync_status"] = e2str(job.status)
-        self.doc_source["last_synced"] = iso_utc(datetime.now(timezone.utc)) 
+        self.doc_source["last_synced"] = iso_utc(datetime.now(timezone.utc))
         self.doc_source["last_sync_error"] = job.error
-        self.status = Status.ERROR if job.status == JobStatus.ERROR else Status.CONNECTED
+        self.status = (
+            Status.ERROR if job.status == JobStatus.ERROR else Status.CONNECTED
+        )
         self.error = job.error
 
         self.doc_source["last_indexed_document_count"] = job.indexed_document_count
         self.doc_source["last_deleted_document_count"] = job.deleted_document_count
 
         await self.sync_doc()
-
-
 
     async def prepare(self, config):
         """Prepares the connector, given a configuration

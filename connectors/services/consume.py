@@ -14,9 +14,9 @@ import asyncio
 import os
 import time
 
-from connectors.es import defaults_for, DEFAULT_LANGUAGE
-from connectors.byoc import DataSourceError, SyncJobIndex, PipelineSettings, BYOIndex
+from connectors.byoc import BYOIndex, DataSourceError, PipelineSettings, SyncJobIndex
 from connectors.byoei import ElasticServer
+from connectors.es import DEFAULT_LANGUAGE, defaults_for
 from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.source import DataSourceConfiguration, get_source_klass
@@ -36,7 +36,9 @@ class JobService(BaseService):
         self.jobs = SyncJobIndex(elastic_config)
         self.connectors = BYOIndex(elastic_config)
 
-        self.language_code = self.config.get("language_code", DEFAULT_LANGUAGE) # XXX: get language code from the connector instead
+        self.language_code = self.config.get(
+            "language_code", DEFAULT_LANGUAGE
+        )  # XXX: get language code from the connector instead
         self.bulk_options = elastic_config.get("bulk", {})
 
     async def run(self):
@@ -60,7 +62,6 @@ class JobService(BaseService):
                 if one_sync and synced_anything:
                     logger.info("Ran a round of syncs and exiting.")
                     break
-
 
                 await self._sleeps.sleep(10)
         finally:
@@ -96,8 +97,7 @@ class JobService(BaseService):
             await asyncio.sleep(0)
 
             mappings, settings = defaults_for(
-                is_connectors_index=True,
-                language_code=self.language_code
+                is_connectors_index=True, language_code=self.language_code
             )
             logger.debug("Preparing the index")
             await self.elastic_server.prepare_index(

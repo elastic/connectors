@@ -42,19 +42,15 @@ class ESIndex(ESClient):
 
     async def fetch_by_id(self, id):
         await self.client.indices.refresh(index=self.index_name)
-        
+
         try:
-            resp = await self.client.get(
-                index=self.index_name,
-                id=id
-            )
+            resp = await self.client.get(index=self.index_name, id=id)
         except ApiError as e:
             logger.critical(f"The server returned {e.status_code}")
             logger.critical(e.body, exc_info=True)
             return
 
         return self._create_object(resp)
-
 
     async def get_all_docs(self, query=None, page_size=DEFAULT_PAGE_SIZE):
         """

@@ -123,7 +123,7 @@ def run(args):
         if len(non_zero_codes) == 0:
             return 0
         return non_zero_codes[0]
-        
+
     except asyncio.CancelledError:
         return 0
     finally:

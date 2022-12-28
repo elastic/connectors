@@ -281,7 +281,9 @@ class Settings:
                 f"Language '{language_code}' is not supported"
             )
 
-        self.analysis_settings = NON_ICU_ANALYSIS_SETTINGS # hardcoded, later will be part of UI
+        self.analysis_settings = (
+            NON_ICU_ANALYSIS_SETTINGS  # hardcoded, later will be part of UI
+        )
 
     def to_hash(self):
         return {
@@ -294,10 +296,7 @@ class Settings:
 
 
 def defaults_for(
-    *,
-    is_connectors_index=False,
-    is_crawler_index=False,
-    language_code=None
+    *, is_connectors_index=False, is_crawler_index=False, language_code=None
 ):
     """Wrapper to return both mappings and settings for an index"""
     mappings = Mappings.default_text_fields_mappings(
