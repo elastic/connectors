@@ -176,9 +176,10 @@ class SyncJobIndex(ESIndex):
         return SyncJob(self, doc_source["_id"], doc_source["_source"])
 
     async def create(self, connector, trigger_method=JobTriggerMethod.SCHEDULED):
+        now = iso_utc(datetime.now(timezone.utc))
         job_def = {
             "connector": {
-                "connector_id": connector.id,
+                "id": connector.id,
                 "configuration": connector.configuration,
                 "index_name": connector.index_name,
                 "service_type": connector.service_type,
@@ -188,10 +189,8 @@ class SyncJobIndex(ESIndex):
             "trigger_method": e2str(trigger_method),
             "status": e2str(JobStatus.PENDING),
             "error": None,
-            "deleted_document_count": 0,
-            "indexed_document_count": 0,
-            "created_at": iso_utc(datetime.now(timezone.utc)),
-            "completed_at": None,
+            "created_at": now,
+            "last_seen": now
         }
 
         resp = await self.client.index(index=JOBS_INDEX, document=job_def)
@@ -216,23 +215,22 @@ class SyncJobIndex(ESIndex):
 
 class SyncJob:
     def __init__(self, elastic_index, id, doc_source):
-
-        print(f"[{id}]doc source:")
-        print(doc_source)
         self.job_id = id
         self.doc_source = doc_source
         self.connector = doc_source["connector"]
-        self.connector_id = doc_source["connector"]["connector_id"]
+        self.connector_id = doc_source["connector"]["id"]
+        self.status = doc_source["status"]
         self.completed_at = (
             datetime.fromisoformat(doc_source["completed_at"])
-            if doc_source["completed_at"]
+            if "completed_at" in doc_source
             else None
         )
         self.created_at = (
             datetime.fromisoformat(doc_source["created_at"])
-            if doc_source["created_at"]
+            if "created_at" in doc_source
             else None
         )
+        self.error = None
         self.index = elastic_index
 
     @property
@@ -244,6 +242,14 @@ class SyncJob:
         return self.connector
 
     @property
+    def deleted_document_count(self):
+        return self.doc_source["deleted_document_count"]
+
+    @property
+    def indexed_document_count(self):
+        return self.doc_source["indexed_document_count"]
+
+    @property
     def duration(self):
         if self.completed_at is None:
             return -1
@@ -252,26 +258,26 @@ class SyncJob:
 
     async def start(self):
         self.status = JobStatus.IN_PROGRESS
+        self.doc_source["status"] = e2str(self.status)
 
         await self.sync_doc()
 
     async def done(self, indexed_count=0, deleted_count=0, exception=None):
         self.completed_at = datetime.now(timezone.utc)
 
-        job_def = {
-            "deleted_document_count": deleted_count,
-            "indexed_document_count": indexed_count,
-            "completed_at": iso_utc(self.completed_at),
-        }
+        self.doc_source["completed_at"] = iso_utc(self.completed_at)
+        self.doc_source["deleted_document_count"] = deleted_count
+        self.doc_source["indexed_document_count"] = indexed_count
 
         if exception is None:
             self.status = JobStatus.COMPLETED
-            job_def["error"] = None
+            self.doc_source["error"] = None
         else:
             self.status = JobStatus.ERROR
-            job_def["error"] = str(exception)
+            self.doc_source["error"] = str(exception)
+            self.error = str(exception)
 
-        job_def["status"] = e2str(self.status)
+        self.doc_source["status"] = e2str(self.status)
 
         return await self.sync_doc()
 
@@ -333,6 +339,7 @@ class BYOConnector:
         self.data_provider = None
 
     def _update_config(self, doc_source):
+        print(f"Doc source is\n {doc_source}")
         self.status = doc_source["status"]
         self.sync_now = doc_source.get("sync_now", False)
         self.native = doc_source.get("is_native", False)
@@ -438,9 +445,19 @@ class BYOConnector:
         logger.info(f"Sync starts, Job id: {job_id}")
         return job
 
-    async def error(self, error):
-        self.doc_source["error"] = str(error)
+    async def job_done(self, job):
+        self._dirty = True
+        self.doc_source["last_sync_status"] = e2str(job.status)
+        self.doc_source["last_synced"] = iso_utc(datetime.now(timezone.utc)) 
+        self.doc_source["last_sync_error"] = job.error
+        self.status = Status.ERROR if job.status == JobStatus.ERROR else Status.CONNECTED
+        self.error = job.error
+
+        self.doc_source["last_indexed_document_count"] = job.indexed_document_count
+        self.doc_source["last_deleted_document_count"] = job.deleted_document_count
+
         await self.sync_doc()
+
 
 
     async def prepare(self, config):

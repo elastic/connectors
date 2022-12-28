@@ -116,7 +116,14 @@ def run(args):
         loop.add_signal_handler(sig, functools.partial(shutdown_services, sig))
 
     try:
-        return loop.run_until_complete(asyncio.gather(producer_coro, consumer_coro))
+        codes = loop.run_until_complete(asyncio.gather(producer_coro, consumer_coro))
+
+        non_zero_codes = [e for i, e in enumerate(codes) if e != 0]
+
+        if len(non_zero_codes) == 0:
+            return 0
+        return non_zero_codes[0]
+        
     except asyncio.CancelledError:
         return 0
     finally:

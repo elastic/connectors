@@ -111,6 +111,12 @@ async def prepare(service_type, index_name, config):
             # A flag to run sync immediately
             "sync_now": True,
             "is_native": True,
+            "pipeline": {
+                "extract_binary_content": True,
+                "name": "ent-search-generic-ingestion",
+                "reduce_whitespace": True,
+                "run_ml_inference": True
+            } 
         }
 
         logger.info(f"Prepare {CONNECTORS_INDEX}")

@@ -198,11 +198,11 @@ class SyncService(BaseService):
             else JobTriggerMethod.SCHEDULED
         )
 
-        print(f"Trigger method is {trigger_method}")
-
         job_id = await self.jobs.create(connector, trigger_method)
 
         connector.sync_now = connector.doc_source["sync_now"] = False
+
+        await connector.sync_doc()
 
         logger.info(
             f"Created a job for connector {connector.service_type}, Job id: {job_id}"

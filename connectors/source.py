@@ -36,8 +36,6 @@ class DataSourceConfiguration:
         return self._config[key].value
 
     def get(self, key, default=None):
-        print(f"Getting value for field {key}")
-        print(f"Config is {self._config}")
         if key not in self._config:
             return default
         return self._config[key].value

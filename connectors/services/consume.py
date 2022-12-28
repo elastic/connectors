@@ -15,7 +15,7 @@ import os
 import time
 
 from connectors.es import defaults_for, DEFAULT_LANGUAGE
-from connectors.byoc import DataSourceError, SyncJobIndex, PipelineSettings
+from connectors.byoc import DataSourceError, SyncJobIndex, PipelineSettings, BYOIndex
 from connectors.byoei import ElasticServer
 from connectors.logger import logger
 from connectors.services.base import BaseService
@@ -27,19 +27,21 @@ class JobService(BaseService):
     def __init__(self, args):
         super().__init__(args)
         self.running = False
+
         self._sleeps = CancellableSleeps()
 
         elastic_config = self.config["elasticsearch"]
 
         self.elastic_server = ElasticServer(elastic_config)
         self.jobs = SyncJobIndex(elastic_config)
+        self.connectors = BYOIndex(elastic_config)
 
         self.language_code = self.config.get("language_code", DEFAULT_LANGUAGE) # XXX: get language code from the connector instead
         self.bulk_options = elastic_config.get("bulk", {})
 
     async def run(self):
+        one_sync = self.args.one_sync
         self.running = True
-        self._start_time = time.time()
 
         try:
             while self.running:
@@ -49,8 +51,16 @@ class JobService(BaseService):
                     connectors_ids = []
 
                 query = self.jobs.build_docs_query(connectors_ids)
+
+                synced_anything = False
                 async for job in self.jobs.get_all_docs(query=query):
                     await self.execute(job)
+                    synced_anything = True
+
+                if one_sync and synced_anything:
+                    logger.info("Ran a round of syncs and exiting.")
+                    break
+
 
                 await self._sleeps.sleep(10)
         finally:
@@ -58,9 +68,12 @@ class JobService(BaseService):
         return 0
 
     async def execute(self, job):
+        start_time = time.time()
         index_name = job.connector["index_name"]
         service_type = job.connector["service_type"]
         pipeline = PipelineSettings(job.connector.get("pipeline", {}))
+
+        connector = await self.connectors.fetch_by_id(job.connector_id)
 
         fqn = self.config["sources"][service_type]
         configuration = DataSourceConfiguration(job.connector["configuration"])
@@ -77,7 +90,6 @@ class JobService(BaseService):
             return
 
         logger.debug(f"Syncing '{service_type}'")
-        self._syncing = True
         try:
             logger.debug(f"Pinging the {source_klass} backend")
             await data_provider.ping()
@@ -99,13 +111,12 @@ class JobService(BaseService):
                 pipeline,
                 options=self.bulk_options,
             )
-            await self._sync_done(job, result)
+            await self._sync_done(job, connector, result, start_time)
 
         except Exception as e:
-            await self._sync_done(job, {}, exception=e)
+            await self._sync_done(job, connector, {}, start_time, exception=e)
             raise
         finally:
-            self._syncing = False
             self._start_time = None
 
     async def prepare_docs(self, pipeline, data_provider):
@@ -118,7 +129,7 @@ class JobService(BaseService):
             doc["_run_ml_inference"] = pipeline.run_ml_inference
             yield doc, lazy_download
 
-    async def _sync_done(self, job, result, exception=None):
+    async def _sync_done(self, job, connector, result, start_time, exception=None):
         doc_updated = result.get("doc_updated", 0)
         doc_created = result.get("doc_created", 0)
         doc_deleted = result.get("doc_deleted", 0)
@@ -128,20 +139,11 @@ class JobService(BaseService):
 
         await job.done(indexed_count, doc_deleted, exception)
 
-        #         self.doc_source["last_sync_status"] = e2str(job.status)
-        #         if exception is None:
-        #             self.doc_source["last_sync_error"] = None
-        #             self.doc_source["error"] = None
-        #         else:
-        #             self.doc_source["last_sync_error"] = str(exception)
-        #             self.doc_source["error"] = str(exception)
-        #             self.status = Status.ERROR
-        #
-        #         self.doc_source["last_synced"] = iso_utc()
-        #         await self.sync_doc()
+        await connector.job_done(job)
+
         logger.info(
             f"Sync done: {indexed_count} indexed, {doc_deleted} "
-            f" deleted. ({int(time.time() - self._start_time)} seconds)"
+            f" deleted. ({int(time.time() - start_time)} seconds)"
         )
 
     def stop(self):
