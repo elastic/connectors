@@ -1230,7 +1230,6 @@ def basic_rule_json(merge_with=None, delete_keys=None):
         (basic_rule_json(merge_with={"id": BasicRule.DEFAULT_RULE_ID}), True),
         # valid regexps
         (basic_rule_json(merge_with={"rule": "regex", "value": "abc"}), True),
-        (basic_rule_json(merge_with={"rule": "regex", "value": "\*"}), True),
         # for other rule types it should be possible to use values which look like match all regexps
         (basic_rule_json(merge_with={"rule": "contains", "value": ".*"}), True),
         (basic_rule_json(merge_with={"rule": "contains", "value": "(.*)"}), True),
