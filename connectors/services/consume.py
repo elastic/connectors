@@ -14,7 +14,7 @@ import asyncio
 import os
 import time
 
-from connectors.byoc import BYOIndex, DataSourceError, PipelineSettings, SyncJobIndex
+from connectors.byoc import ConnectorsIndex, DataSourceError, PipelineSettings, SyncJobIndex
 from connectors.byoei import ElasticServer
 from connectors.es import DEFAULT_LANGUAGE, defaults_for
 from connectors.logger import logger
@@ -34,7 +34,7 @@ class JobService(BaseService):
 
         self.elastic_server = ElasticServer(elastic_config)
         self.jobs = SyncJobIndex(elastic_config)
-        self.connectors = BYOIndex(elastic_config)
+        self.connectors = ConnectorsIndex(elastic_config)
 
         self.language_code = self.config.get(
             "language_code", DEFAULT_LANGUAGE

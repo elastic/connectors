@@ -65,7 +65,7 @@ class DataSourceError(Exception):
     pass
 
 
-class BYOIndex(ESIndex):
+class ConnectorsIndex(ESIndex):
     CUSTOM_READ_ONLY_FIELDS = (
         "is_native",
         "api_key_id",
@@ -79,7 +79,7 @@ class BYOIndex(ESIndex):
     )
 
     def __init__(self, elastic_config):
-        logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
+        logger.debug(f"ConnectorsIndex connecting to {elastic_config['host']}")
         # initilize ESIndex instance
         super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
         # grab all bulk options

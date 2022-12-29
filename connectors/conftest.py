@@ -74,17 +74,17 @@ def set_env():
 
 @pytest.fixture
 def patch_ping():
-    from connectors.byoc import BYOIndex
+    from connectors.byoc import ConnectorsIndex
 
     async def _ping(*args):
         return True
 
-    old = BYOIndex.ping
-    BYOIndex.ping = _ping
+    old = ConnectorsIndex.ping
+    ConnectorsIndex.ping = _ping
     try:
         yield
     finally:
-        BYOIndex.ping = old
+        ConnectorsIndex.ping = old
 
 
 @pytest.fixture

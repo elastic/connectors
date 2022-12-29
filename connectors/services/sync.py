@@ -16,7 +16,7 @@ import time
 
 from connectors.byoc import (
     SYNC_DISABLED,
-    BYOIndex,
+    ConnectorsIndex,
     ConnectorUpdateError,
     DataSourceError,
     JobTriggerMethod,
@@ -44,7 +44,7 @@ class SyncService(BaseService):
         self.preflight_idle = int(self.service_config.get("preflight_idle", 30))
         self.trace_mem = self.service_config.get("trace_mem", False)
 
-        self.connectors = BYOIndex(self.config["elasticsearch"])
+        self.connectors = ConnectorsIndex(self.config["elasticsearch"])
         self.jobs = SyncJobIndex(self.config["elasticsearch"])
 
         self.running = False
@@ -86,7 +86,7 @@ class SyncService(BaseService):
     async def _run(self):
         """Main event loop."""
 
-        self.connectors = BYOIndex(self.config["elasticsearch"])
+        self.connectors = ConnectorsIndex(self.config["elasticsearch"])
         self.running = True
 
         one_sync = self.args.one_sync
