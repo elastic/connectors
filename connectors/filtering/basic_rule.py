@@ -95,7 +95,7 @@ def try_coerce(value):
 
 
 class RuleMatchStats:
-    def __init__(self, policy, matched_docs_count):
+    def __init__(self, policy, matched_docs_count=0):
         self.policy = policy
         self.matched_docs_count = matched_docs_count
 
