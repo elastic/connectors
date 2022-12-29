@@ -77,7 +77,7 @@ async def test_sync_job(mock_responses):
     )
 
     assert job.duration == -1
-    await job.start()
+    await job.claim()
     assert job.status == JobStatus.IN_PROGRESS
     assert job.job_id is not None
     await asyncio.sleep(0.2)

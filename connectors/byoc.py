@@ -283,7 +283,7 @@ class SyncJob:
         msec = (self.completed_at - self.created_at).microseconds
         return round(msec / 9, 2)
 
-    async def start(self):
+    async def claim(self):
         self.status = JobStatus.IN_PROGRESS
         self.doc_source["status"] = e2str(self.status)
 
@@ -460,7 +460,7 @@ class BYOConnector:
         trigger_method = (
             JobTriggerMethod.ON_DEMAND if self.sync_now else JobTriggerMethod.SCHEDULED
         )
-        job_id = await job.start(trigger_method)
+        job_id = await job.claim(trigger_method)
 
         self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
