@@ -47,12 +47,13 @@ class JobService(BaseService):
 
         try:
             while self.running:
+                native_service_types = self.config.get("native_service_types", [])
                 if "connector_id" in self.config:
                     connectors_ids = [self.config.get("connector_id")]
                 else:
                     connectors_ids = []
 
-                query = self.jobs.build_docs_query(connectors_ids)
+                query = self.jobs.build_docs_query(native_service_types, connectors_ids)
 
                 synced_anything = False
                 async for job in self.jobs.get_all_docs(query=query):

@@ -162,11 +162,40 @@ class SyncJobIndex(ESIndex):
     def __init__(self, elastic_config):
         super().__init__(index_name=JOBS_INDEX, elastic_config=elastic_config)
 
-    def build_docs_query(self, connector_ids):
-        query = {"bool": {"must": [{"terms": {"status": [e2str(JobStatus.PENDING)]}}]}}
+    def build_docs_query(self, native_service_types=None, connector_ids=None):
+        if native_service_types is None:
+            native_service_types = []
+        if connector_ids is None:
+            connector_ids = []
 
-        if connector_ids:
-            query["bool"]["must"].append({"terms": {"connector.id": connector_ids}})
+        if len(native_service_types) == 0 and len(connector_ids) == 0:
+            logger.info("Attempting to fetch jobs without specifying supported types or connector ids is not possible")
+            return
+        subqueries = []
+
+        subqueries.append({"bool": {"must": [{"terms": {"status": [e2str(JobStatus.PENDING), e2str(JobStatus.SUSPENDED)]}}]}})
+
+        if len(native_service_types) > 0:
+            subqueries.append({
+                "bool": {
+                    "filter": [
+                        {"terms": {"service_type": native_service_types}},
+                    ]
+                }
+            })
+
+        if len(connector_ids) > 0:
+            subqueries.append({
+                "bool": {
+                    "filter": [
+                        {"terms": {"connector.id": connector_ids}},
+                    ]
+                }
+            })
+
+        query = {
+            "bool": {"should": subqueries}
+        }
 
         return query
 
