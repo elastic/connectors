@@ -178,9 +178,16 @@ class BasicRuleValidationResult:
         self.is_valid = is_valid
         self.validation_message = validation_message
 
+    @classmethod
+    def valid_result(cls, rule_id):
+        return BasicRuleValidationResult(
+            rule_id=rule_id, is_valid=True, validation_message="Valid rule"
+        )
+
 
 class BasicRuleValidator:
-    def validate(self, rule):
+    @classmethod
+    def validate(cls, rule):
         raise NotImplementedError
 
 
@@ -212,9 +219,7 @@ class BasicRuleAgainstSchemaValidator(BasicRuleValidator):
         try:
             BasicRuleAgainstSchemaValidator.SCHEMA(rule)
 
-            return BasicRuleValidationResult(
-                rule_id=rule["id"], is_valid=True, validation_message="valid"
-            )
+            return BasicRuleValidationResult.valid_result(rule["id"])
         except fastjsonschema.JsonSchemaValueException as e:
             # id field could be missing
             rule_id = rule["id"] if "id" in rule else None
