@@ -337,7 +337,6 @@ class BYOConnector:
         self.data_provider = None
 
     def _update_config(self, doc_source):
-        print(f"Doc source is\n {doc_source}")
         self.status = doc_source["status"]
         self.sync_now = doc_source.get("sync_now", False)
         self.native = doc_source.get("is_native", False)
