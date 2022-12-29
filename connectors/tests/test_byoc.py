@@ -105,6 +105,12 @@ mongo = {
             "label": "MongoDB Collection",
         },
     },
+    "pipeline": {
+        "extract_binary_content": True,
+        "name": "ent-search-generic-ingestion",
+        "reduce_whitespace": True,
+        "run_ml_inference": True,
+    },
     "index_name": "search-airbnb",
     "service_type": "mongodb",
     "status": "configured",

@@ -12,7 +12,7 @@ from unittest import mock
 import pytest
 from aioresponses import CallbackResult
 
-from connectors.byoc import DataSourceError
+from connectors.byoc import DataSourceError, SyncJobIndex
 from connectors.conftest import assert_re
 from connectors.services.sync import SyncService
 from connectors.tests.fake_sources import FakeSourceTS
@@ -37,6 +37,7 @@ FAKE_CONFIG = {
     },
     "pipeline": {
         "extract_binary_content": True,
+        "name": "ent-search-generic-ingestion",
         "reduce_whitespace": True,
         "run_ml_inference": True,
     },
@@ -83,6 +84,12 @@ FAKE_CONFIG_NOT_NATIVE = {
             "label": "MongoDB Collection",
         },
     },
+    "pipeline": {
+        "extract_binary_content": True,
+        "name": "ent-search-generic-ingestion",
+        "reduce_whitespace": True,
+        "run_ml_inference": True,
+    },
     "index_name": "search-airbnb",
     "service_type": "fake",
     "status": "configured",
@@ -106,6 +113,12 @@ FAIL_ONCE_CONFIG["service_type"] = "fail_once"
 FAKE_CONFIG_FAIL_SERVICE = {
     "api_key_id": "",
     "configuration": {"fail": {"value": True, "label": ""}},
+    "pipeline": {
+        "extract_binary_content": True,
+        "name": "ent-search-generic-ingestion",
+        "reduce_whitespace": True,
+        "run_ml_inference": True,
+    },
     "index_name": "search-airbnb",
     "service_type": "fake",
     "status": "configured",
@@ -123,6 +136,12 @@ FAKE_CONFIG_FAIL_SERVICE = {
 FAKE_CONFIG_BUGGY_SERVICE = {
     "api_key_id": "",
     "configuration": {"raise": {"value": True, "label": ""}},
+    "pipeline": {
+        "extract_binary_content": True,
+        "name": "ent-search-generic-ingestion",
+        "reduce_whitespace": True,
+        "run_ml_inference": True,
+    },
     "index_name": "search-airbnb",
     "service_type": "fake",
     "status": "configured",
@@ -140,6 +159,12 @@ FAKE_CONFIG_BUGGY_SERVICE = {
 FAKE_CONFIG_UNKNOWN_SERVICE = {
     "api_key_id": "",
     "configuration": {},
+    "pipeline": {
+        "extract_binary_content": True,
+        "name": "ent-search-generic-ingestion",
+        "reduce_whitespace": True,
+        "run_ml_inference": True,
+    },
     "index_name": "search-airbnb",
     "service_type": "UNKNOWN",
     "status": "configured",
@@ -320,18 +345,21 @@ async def set_server_responses(
         repeat=True,
     )
 
-
 @pytest.mark.asyncio
 async def test_connector_service_poll(
     mock_responses, patch_logger, patch_ping, set_env
 ):
+    # Testing that a job is created when expected
     await set_server_responses(mock_responses)
     service = create_service(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
-    await service.run()
-    patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
-    # we want to make sure we DON'T get memory usage report
-    patch_logger.assert_not_present("===> Largest memory usage:")
+
+    with mock.patch.object(
+        SyncJobIndex, "create", return_value="job_id"
+    ) as mock_job_create_method:
+        await service.run()
+
+    mock_job_create_method.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -344,11 +372,13 @@ async def test_connector_service_poll_unconfigured(
     await set_server_responses(mock_responses, FAKE_CONFIG_NEEDS_CONFIG)
     service = create_service(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
-    await service.run()
 
-    patch_logger.assert_present("*** Connector 1 HEARTBEAT")
-    patch_logger.assert_present("Can't sync with status `needs_configuration`")
-    patch_logger.assert_not_present("Sync done")
+    with mock.patch.object(
+        SyncJobIndex, "create", return_value="job_id"
+    ) as mock_job_create_method:
+        await service.run()
+
+    mock_job_create_method.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -425,7 +455,7 @@ async def test_connector_service_poll_https(
     service = create_service(CONFIG_HTTPS)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
-    patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
+    patch_logger.assert_present("Created a job for connector fake")
 
 
 @pytest.mark.asyncio
@@ -518,26 +548,6 @@ async def test_connector_service_poll_sync_now(
 
 
 @pytest.mark.asyncio
-async def test_connector_service_poll_sync_ts(
-    mock_responses, patch_logger, patch_ping, set_env
-):
-    indexed = []
-
-    def bulk_call(url, **kw):
-        queries = [json.loads(call.strip()) for call in kw["data"].split(b"\n") if call]
-        indexed.append(queries[1])
-        return CallbackResult(status=200, payload={"items": []})
-
-    await set_server_responses(mock_responses, FAKE_CONFIG_TS, bulk_call=bulk_call)
-    service = create_service(CONFIG, sync_now=True, one_sync=True)
-    await service.run()
-    patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
-
-    # make sure we kept the original ts
-    assert indexed[0]["_timestamp"] == FakeSourceTS.ts
-
-
-@pytest.mark.asyncio
 async def test_connector_service_poll_sync_fails(
     mock_responses, patch_logger, patch_ping, set_env
 ):
@@ -600,121 +610,3 @@ async def test_ping_fails(mock_responses, patch_logger, set_env):
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
     patch_logger.assert_present("http://nowhere.com:9200 seem down. Bye!")
-
-
-@pytest.mark.asyncio
-async def test_spurious(mock_responses, patch_logger, patch_ping, set_env):
-    await set_server_responses(mock_responses)
-
-    from connectors.byoc import BYOConnector
-
-    async def _sync(*args):
-        raise Exception("me")
-
-    old_sync = BYOConnector.sync
-    BYOConnector.sync = _sync
-
-    try:
-        service = create_service(CONFIG)
-        service.idling = 0
-        service.service_config["max_errors"] = 0
-        await service.run()
-    except Exception:
-        await asyncio.sleep(0.1)
-    finally:
-        BYOConnector.sync = old_sync
-
-    patch_logger.assert_check(
-        lambda log: isinstance(log, Exception) and log.args[0] == "me"
-    )
-
-
-@pytest.mark.asyncio
-async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_env):
-    await set_server_responses(mock_responses)
-
-    from connectors.byoc import BYOConnector
-
-    async def _sync(*args):
-        raise Exception("me")
-
-    old_sync = BYOConnector.sync
-    BYOConnector.sync = _sync
-
-    await set_server_responses(mock_responses)
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={
-            "hits": {
-                "hits": [{"_id": "1", "_source": FAKE_CONFIG}],
-                "total": {"value": 1},
-            }
-        },
-        headers=headers,
-    )
-
-    try:
-        service = create_service(CONFIG)
-        asyncio.get_event_loop().call_soon(service.stop)
-        await service.run()
-    except Exception:
-        await asyncio.sleep(0.1)
-    finally:
-        BYOConnector.sync = old_sync
-
-    patch_logger.assert_instance(Exception)
-
-
-@pytest.mark.asyncio
-async def test_connector_settings_change(
-    mock_responses, patch_logger, patch_ping, set_env
-):
-    service = create_service(CONFIG, one_sync=True)
-
-    configs = [FAKE_CONFIG, FAKE_CONFIG_PIPELINE_CHANGED]
-    current = [-1]
-
-    # we want to simulate a settings change between two calls
-    # to make sure the pipeline settings get updated
-    def connectors_read(url, **kw):
-        current[0] += 1
-        source = configs[current[0]]
-        return CallbackResult(
-            status=200,
-            payload={
-                "hits": {
-                    "hits": [{"_id": "1", "_source": source}],
-                    "total": {"value": 1},
-                }
-            },
-        )
-
-    indexed = []
-
-    def bulk_call(url, **kw):
-        queries = [json.loads(call.strip()) for call in kw["data"].split(b"\n") if call]
-        indexed.append(queries[1])
-        return CallbackResult(status=200, payload={"items": []})
-
-    await set_server_responses(
-        mock_responses,
-        FAKE_CONFIG,
-        connectors_read=connectors_read,
-        bulk_call=bulk_call,
-    )
-
-    # two polls, the second one gets a different pipeline
-    await service.run()
-    await service.run()
-
-    service.stop()
-
-    # the first doc and second doc don't get the same pipeline
-    assert indexed[0]["_extract_binary_content"]
-    assert indexed[0]["_reduce_whitespace"]
-    assert indexed[0]["_run_ml_inference"]
-    assert not indexed[1]["_extract_binary_content"]
-    assert not indexed[1]["_reduce_whitespace"]
-    assert not indexed[1]["_run_ml_inference"]
