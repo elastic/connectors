@@ -11,6 +11,7 @@ import pytest
 from connectors.filtering.basic_rule import (
     BasicRule,
     BasicRuleAgainstSchemaValidator,
+    BasicRulesSetSemanticValidator,
     Policy,
     Rule,
     parse,
@@ -1330,3 +1331,63 @@ def test_basic_rule_against_schema_validation(basic_rule, should_be_valid):
         assert BasicRuleAgainstSchemaValidator.validate(basic_rule).is_valid
     else:
         assert not BasicRuleAgainstSchemaValidator.validate(basic_rule).is_valid
+
+
+@pytest.mark.parametrize(
+    "basic_rules_set, should_be_valid",
+    [
+        (
+            [
+                # not valid -> equal rules with different ids
+                basic_rule_json(merge_with={"id": "1"}),
+                basic_rule_json(merge_with={"id": "2"}),
+            ],
+            False,
+        ),
+        (
+            [
+                # not valid -> semantically equal rules with contradicting policies
+                basic_rule_json(merge_with={"id": "1", "policy": "include"}),
+                basic_rule_json(merge_with={"id": "2", "policy": "exclude"}),
+            ],
+            False,
+        ),
+        (
+            [
+                # valid -> different fields
+                basic_rule_json(merge_with={"id": "1", "field": "field one"}),
+                basic_rule_json(merge_with={"id": "2", "field": "field two"}),
+            ],
+            True,
+        ),
+        (
+            [
+                # valid -> different values
+                basic_rule_json(merge_with={"id": "1", "value": "value one"}),
+                basic_rule_json(merge_with={"id": "2", "value": "value two"}),
+            ],
+            True,
+        ),
+        (
+            [
+                # valid -> different rules
+                basic_rule_json(merge_with={"id": "1", "rule": "contains"}),
+                basic_rule_json(merge_with={"id": "2", "rule": "ends_with"}),
+            ],
+            True,
+        ),
+    ],
+)
+def test_basic_rules_set_no_conflicting_policies_validation(
+    basic_rules_set, should_be_valid
+):
+    if should_be_valid:
+        assert all(
+            result.is_valid
+            for result in BasicRulesSetSemanticValidator.validate(basic_rules_set)
+        )
+    else:
+        assert all(
+            not result.is_valid
+            for result in BasicRulesSetSemanticValidator.validate(basic_rules_set)
+        )
