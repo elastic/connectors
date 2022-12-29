@@ -8,7 +8,14 @@ import datetime
 
 import pytest
 
-from connectors.filtering.basic_rule import BasicRule, Policy, Rule, parse, try_coerce
+from connectors.filtering.basic_rule import (
+    BasicRule,
+    BasicRuleNoMatchAllRegexValidator,
+    Policy,
+    Rule,
+    parse,
+    try_coerce,
+)
 
 BASIC_RULE_ONE_ID = "1"
 BASIC_RULE_ONE_ORDER = 1
@@ -1187,3 +1194,53 @@ def test_is_not_include_for_exclude_policy():
     )
 
     assert not basic_rule.is_include()
+
+
+def basic_rule_json(merge_with=None, delete_keys=None):
+    # Default arguments are mutable
+    if delete_keys is None:
+        delete_keys = []
+
+    if merge_with is None:
+        merge_with = {}
+
+    basic_rule = {
+        "id": "1",
+        "policy": "include",
+        "field": "field",
+        "rule": ">",
+        "value": "100",
+        "order": 10,
+    }
+
+    # merge dicts
+    basic_rule = basic_rule | merge_with
+
+    for key in delete_keys:
+        del basic_rule[key]
+
+    return basic_rule
+
+
+@pytest.mark.parametrize(
+    "basic_rule, should_be_valid",
+    [
+        (basic_rule_json(), True),
+        # default rule should be skipped for match all regex validation
+        (basic_rule_json(merge_with={"id": BasicRule.DEFAULT_RULE_ID}), True),
+        # valid regexps
+        (basic_rule_json(merge_with={"rule": "regex", "value": "abc"}), True),
+        (basic_rule_json(merge_with={"rule": "regex", "value": "\*"}), True),
+        # for other rule types it should be possible to use values which look like match all regexps
+        (basic_rule_json(merge_with={"rule": "contains", "value": ".*"}), True),
+        (basic_rule_json(merge_with={"rule": "contains", "value": "(.*)"}), True),
+        # invalid rules
+        (basic_rule_json(merge_with={"rule": "regex", "value": ".*"}), False),
+        (basic_rule_json(merge_with={"rule": "regex", "value": "(.*)"}), False),
+    ],
+)
+def test_basic_rule_validate_no_match_all_regex(basic_rule, should_be_valid):
+    if should_be_valid:
+        assert BasicRuleNoMatchAllRegexValidator.validate(basic_rule).is_valid
+    else:
+        assert not BasicRuleNoMatchAllRegexValidator.validate(basic_rule).is_valid
