@@ -284,8 +284,11 @@ class SyncJob:
         return round(msec / 9, 2)
 
     async def claim(self):
+        now = iso_utc(datetime.now(timezone.utc))
+
         self.status = JobStatus.IN_PROGRESS
         self.doc_source["status"] = e2str(self.status)
+        self.doc_source["started_at"] = now
 
         await self.sync_doc()
 
