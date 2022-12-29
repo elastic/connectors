@@ -21,10 +21,11 @@ DEFAULT_CONTENT_EXTRACTION = True
 class DirectoryDataSource:
     """Directory"""
 
-    def __init__(self, connector):
-        self.directory = connector.configuration["directory"]
-        self.pattern = connector.configuration["pattern"]
-        self.enable_content_extraction = connector.configuration.get(
+    def __init__(self, configuration):
+        super().__init__(configuration=configuration)
+        self.directory = configuration["directory"]
+        self.pattern = configuration["pattern"]
+        self.enable_content_extraction = configuration.get(
             "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION
         )
 

@@ -60,13 +60,13 @@ DEFAULT_PEM_FILE = os.path.join(
 class GoogleCloudStorageDataSource(BaseDataSource):
     """Class to fetch documents from Google Cloud Storage."""
 
-    def __init__(self, connector):
+    def __init__(self, configuration):
         """Setup connection to the Google Cloud Storage Client.
 
         Args:
-            connector (BYOConnector): Object of the BYOConnector class.
+            configuration (DataSourceConfiguration): Object of the DataSourceConfiguration class.
         """
-        super().__init__(connector=connector)
+        super().__init__(configuration=configuration)
         if not self.configuration["service_account_credentials"]:
             raise Exception("service_account_credentials can't be empty.")
 

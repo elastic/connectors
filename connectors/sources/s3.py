@@ -40,9 +40,9 @@ class S3DataSource(BaseDataSource):
         """Setup connection to the Amazon S3.
 
         Args:
-            connector (BYOConnector): Object of the BYOConnector class.
+            configuration (DataSourceConfiguration): Object of the DataSourceConfiguration class
         """
-        super().__init__(connector)
+        super().__init__(configuration=configuration)
         self.session = aioboto3.Session()
         set_extra_logger(aws_logger, log_level=logging.DEBUG, prefix="S3")
         set_extra_logger("aioboto3.resources", log_level=logging.INFO, prefix="S3")

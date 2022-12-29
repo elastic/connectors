@@ -14,7 +14,7 @@ from elasticsearch import AsyncElasticsearch
 from envyaml import EnvYAML
 
 from connectors.byoc import (
-    BYOConnector,
+    Connector,
     BYOIndex,
     JobStatus,
     Status,
@@ -328,7 +328,7 @@ async def test_properties(mock_responses):
         "status": "created",
     }
 
-    connector = BYOConnector(StubIndex(), "test", connector_src, {})
+    connector = Connector(StubIndex(), "test", connector_src, {})
 
     assert connector.status == Status.CREATED
     assert connector.service_type == "test"
@@ -355,7 +355,7 @@ async def test_properties(mock_responses):
 
 @pytest.mark.asyncio
 async def test_connectors_properties(mock_responses, set_env):
-    """Verifies that the BYOConnector class has access to analysis_icu and language_code form config.
+    """Verifies that the Connector class has access to analysis_icu and language_code form config.
 
     Args:
         mock_responses (aioresponses.core.aioresponses): Fixture to mock the requests made.
@@ -414,7 +414,7 @@ async def test_prepare(mock_responses):
         "configuration": {},
         "scheduling": {"enabled": False},
     }
-    connector = BYOConnector(Index(), "1", doc, {})
+    connector = Connector(Index(), "1", doc, {})
 
     config = {
         "connector_id": "1",
