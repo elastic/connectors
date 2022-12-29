@@ -70,6 +70,8 @@ class JobService(BaseService):
         return 0
 
     async def execute(self, job):
+        await job.claim()
+
         start_time = time.time()
         index_name = job.connector["index_name"]
         service_type = job.connector["service_type"]
