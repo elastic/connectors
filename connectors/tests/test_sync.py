@@ -345,6 +345,7 @@ async def set_server_responses(
         repeat=True,
     )
 
+
 @pytest.mark.asyncio
 async def test_connector_service_poll(
     mock_responses, patch_logger, patch_ping, set_env

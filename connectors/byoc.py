@@ -169,33 +169,52 @@ class SyncJobIndex(ESIndex):
             connector_ids = []
 
         if len(native_service_types) == 0 and len(connector_ids) == 0:
-            logger.info("Attempting to fetch jobs without specifying supported types or connector ids is not possible")
+            logger.info(
+                "Attempting to fetch jobs without specifying supported types or connector ids is not possible"
+            )
             return
         subqueries = []
 
-        subqueries.append({"bool": {"must": [{"terms": {"status": [e2str(JobStatus.PENDING), e2str(JobStatus.SUSPENDED)]}}]}})
+        subqueries.append(
+            {
+                "bool": {
+                    "must": [
+                        {
+                            "terms": {
+                                "status": [
+                                    e2str(JobStatus.PENDING),
+                                    e2str(JobStatus.SUSPENDED),
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        )
 
         if len(native_service_types) > 0:
-            subqueries.append({
-                "bool": {
-                    "filter": [
-                        {"terms": {"service_type": native_service_types}},
-                    ]
+            subqueries.append(
+                {
+                    "bool": {
+                        "filter": [
+                            {"terms": {"service_type": native_service_types}},
+                        ]
+                    }
                 }
-            })
+            )
 
         if len(connector_ids) > 0:
-            subqueries.append({
-                "bool": {
-                    "filter": [
-                        {"terms": {"connector.id": connector_ids}},
-                    ]
+            subqueries.append(
+                {
+                    "bool": {
+                        "filter": [
+                            {"terms": {"connector.id": connector_ids}},
+                        ]
+                    }
                 }
-            })
+            )
 
-        query = {
-            "bool": {"should": subqueries}
-        }
+        query = {"bool": {"should": subqueries}}
 
         return query
 
