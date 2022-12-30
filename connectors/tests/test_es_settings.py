@@ -102,9 +102,7 @@ def test_mappings_crawler_index():
 def test_settings_unsupported_language():
     """When the language_code is not supported"""
     with pytest.raises(UnsupportedLanguageCode):
-        _ = Settings(
-            language_code="unsupported_language_code"
-        ).to_hash()
+        _ = Settings(language_code="unsupported_language_code").to_hash()
 
 
 def test_settings_supported_language():
