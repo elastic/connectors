@@ -99,58 +99,18 @@ def test_mappings_crawler_index():
         assert isinstance(actual["properties"][prop], dict)
 
 
-def test_settings_analysis_icu_false():
-    """When analysis_icu is false"""
-    actual = Settings(language_code=DEFAULT_LANGUAGE, analysis_icu=False).to_hash()
-    assert isinstance(actual, dict)
-    assert "analysis" in actual
-    assert "analyzer" in actual["analysis"]
-
-    analyzer = actual["analysis"]["analyzer"]
-    assert EXPECTED_ANALYZER_KEYS.issubset(analyzer.keys())
-
-    non_icu_filters = NON_ICU_ANALYSIS_SETTINGS["folding_filters"]
-    icu_filters = ICU_ANALYSIS_SETTINGS["folding_filters"]
-
-    filters = {f for item in analyzer.values() for f in item["filter"]}
-    # should contain non-icu filters
-    assert set(non_icu_filters).issubset(filters)
-    # should not contain icu filters
-    assert not any(f in filters for f in icu_filters)
-
-
-def test_settings_analysis_icu_true():
-    """When analysis_icu is true"""
-    actual = Settings(language_code=DEFAULT_LANGUAGE, analysis_icu=True).to_hash()
-    assert isinstance(actual, dict)
-    assert "analysis" in actual
-    assert "analyzer" in actual["analysis"]
-
-    analyzer = actual["analysis"]["analyzer"]
-    assert EXPECTED_ANALYZER_KEYS.issubset(analyzer.keys())
-
-    non_icu_filters = NON_ICU_ANALYSIS_SETTINGS["folding_filters"]
-    icu_filters = ICU_ANALYSIS_SETTINGS["folding_filters"]
-
-    filters = {f for item in analyzer.values() for f in item["filter"]}
-    # should contain icu filters
-    assert set(icu_filters).issubset(filters)
-    # should not contain non-icu filters
-    assert not any(f in filters for f in non_icu_filters)
-
-
 def test_settings_unsupported_language():
     """When the language_code is not supported"""
     with pytest.raises(UnsupportedLanguageCode):
         _ = Settings(
-            language_code="unsupported_language_code", analysis_icu=False
+            language_code="unsupported_language_code"
         ).to_hash()
 
 
 def test_settings_supported_language():
     """When the language_code is supported"""
     language_code = "fr"
-    actual = Settings(language_code=language_code, analysis_icu=False).to_hash()
+    actual = Settings(language_code=language_code).to_hash()
     assert isinstance(actual, dict)
     assert "analysis" in actual
     assert "filter" in actual["analysis"]
@@ -172,6 +132,6 @@ def test_defaults_for_is_serializable():
 
 def test_settings_none_language():
     """When the language_code is None"""
-    actual = Settings(language_code=None, analysis_icu=False).to_hash()
-    english = Settings(language_code="en", analysis_icu=False).to_hash()
+    actual = Settings(language_code=None).to_hash()
+    english = Settings(language_code="en").to_hash()
     assert actual == english

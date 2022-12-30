@@ -73,21 +73,6 @@ def set_env():
 
 
 @pytest.fixture
-def patch_ping():
-    from connectors.byoc import ConnectorIndex
-
-    async def _ping(*args):
-        return True
-
-    old = ConnectorIndex.ping
-    ConnectorIndex.ping = _ping
-    try:
-        yield
-    finally:
-        ConnectorIndex.ping = old
-
-
-@pytest.fixture
 def catch_stdout():
     old = sys.stdout
     new = sys.stdout = io.StringIO()
