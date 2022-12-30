@@ -8,7 +8,14 @@ import datetime
 
 import pytest
 
-from connectors.filtering.basic_rule import BasicRule, Policy, Rule, parse, try_coerce
+from connectors.filtering.basic_rule import (
+    BasicRule,
+    BasicRuleAgainstSchemaValidator,
+    Policy,
+    Rule,
+    parse,
+    try_coerce,
+)
 
 BASIC_RULE_ONE_ID = "1"
 BASIC_RULE_ONE_ORDER = 1
@@ -184,6 +191,27 @@ def test_from_string_policy_factory_method(policy_string, expected_parsed_policy
 
 
 @pytest.mark.parametrize(
+    "policy_string, is_policy",
+    [
+        ("include", True),
+        ("INCLUDE", True),
+        ("iNcLuDe", True),
+        ("exclude", True),
+        ("EXCLUDE", True),
+        ("eXcLuDe", True),
+        ("unknown", False),
+        ("inclusion", False),
+        ("exclusion", False),
+    ],
+)
+def test_string_is_policy(policy_string, is_policy):
+    if is_policy:
+        assert Policy.is_string_policy(policy_string)
+    else:
+        assert not Policy.is_string_policy(policy_string)
+
+
+@pytest.mark.parametrize(
     "rule_string, expected_parsed_rule",
     [
         ("equals", Rule.EQUALS),
@@ -207,6 +235,38 @@ def test_from_string_policy_factory_method(policy_string, expected_parsed_policy
 )
 def test_from_string_rule_factory_method(rule_string, expected_parsed_rule):
     assert Rule.from_string(rule_string) == expected_parsed_rule
+
+
+@pytest.mark.parametrize(
+    "rule_string, is_rule",
+    [
+        ("equals", True),
+        ("EQUALS", True),
+        ("eQuAlS", True),
+        ("contains", True),
+        ("CONTAINS", True),
+        ("cOnTaInS", True),
+        ("ends_with", True),
+        ("ENDS_WITH", True),
+        ("eNdS_wItH", True),
+        (">", True),
+        ("<", True),
+        ("regex", True),
+        ("REGEX", True),
+        ("rEgEx", True),
+        ("starts_with", True),
+        ("STARTS_WITH", True),
+        ("sTaRtS_wItH", True),
+        ("unknown", False),
+        ("starts with", False),
+        ("ends with", False),
+    ],
+)
+def test_is_string_rule(rule_string, is_rule):
+    if is_rule:
+        assert Rule.is_string_rule(rule_string)
+    else:
+        assert not Rule.is_string_rule(rule_string)
 
 
 def test_raise_value_error_if_argument_cannot_be_parsed_to_policy():
@@ -1187,3 +1247,86 @@ def test_is_not_include_for_exclude_policy():
     )
 
     assert not basic_rule.is_include()
+
+
+def basic_rule_json(merge_with=None, delete_keys=None):
+    # Default arguments are mutable
+    if delete_keys is None:
+        delete_keys = []
+
+    if merge_with is None:
+        merge_with = {}
+
+    basic_rule = {
+        "id": "1",
+        "policy": "include",
+        "field": "field",
+        "rule": ">",
+        "value": "100",
+        "order": 10,
+    }
+
+    # merge dicts
+    basic_rule = basic_rule | merge_with
+
+    for key in delete_keys:
+        del basic_rule[key]
+
+    return basic_rule
+
+
+@pytest.mark.parametrize(
+    "basic_rule, should_be_valid",
+    [
+        (basic_rule_json(merge_with={"policy": "include"}), True),
+        (basic_rule_json(merge_with={"policy": "exclude"}), True),
+        (basic_rule_json(merge_with={"rule": "equals"}), True),
+        (basic_rule_json(merge_with={"rule": "contains"}), True),
+        (basic_rule_json(merge_with={"rule": "starts_with"}), True),
+        (basic_rule_json(merge_with={"rule": "ends_with"}), True),
+        (basic_rule_json(merge_with={"rule": ">"}), True),
+        (basic_rule_json(merge_with={"rule": "<"}), True),
+        (basic_rule_json(merge_with={"rule": "regex"}), True),
+        (basic_rule_json(delete_keys=["id"]), False),
+        (basic_rule_json(delete_keys=["policy"]), False),
+        (basic_rule_json(delete_keys=["field"]), False),
+        (basic_rule_json(delete_keys=["rule"]), False),
+        (basic_rule_json(delete_keys=["value"]), False),
+        (basic_rule_json(delete_keys=["order"]), False),
+        (
+            # id empty
+            basic_rule_json(merge_with={"id": ""}),
+            False,
+        ),
+        (
+            # field empty
+            basic_rule_json(merge_with={"field": ""}),
+            False,
+        ),
+        (
+            # value empty
+            basic_rule_json(merge_with={"value": ""}),
+            False,
+        ),
+        (
+            # order empty
+            basic_rule_json(merge_with={"order": None}),
+            False,
+        ),
+        (
+            # invalid policy
+            basic_rule_json(merge_with={"policy": "unknown"}),
+            False,
+        ),
+        (
+            # invalid rule
+            basic_rule_json(merge_with={"rule": "unknown"}),
+            False,
+        ),
+    ],
+)
+def test_basic_rule_against_schema_validation(basic_rule, should_be_valid):
+    if should_be_valid:
+        assert BasicRuleAgainstSchemaValidator.validate(basic_rule).is_valid
+    else:
+        assert not BasicRuleAgainstSchemaValidator.validate(basic_rule).is_valid
