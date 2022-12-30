@@ -8,9 +8,6 @@ import json
 import pytest
 
 from connectors.es.settings import (
-    DEFAULT_LANGUAGE,
-    ICU_ANALYSIS_SETTINGS,
-    NON_ICU_ANALYSIS_SETTINGS,
     Mappings,
     Settings,
     UnsupportedLanguageCode,

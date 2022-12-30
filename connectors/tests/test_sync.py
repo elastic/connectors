@@ -15,7 +15,6 @@ from aioresponses import CallbackResult
 from connectors.byoc import DataSourceError, SyncJobIndex
 from connectors.conftest import assert_re
 from connectors.services.scheduling import SchedulingService
-from connectors.tests.fake_sources import FakeSourceTS
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 ES_CONFIG = os.path.join(os.path.dirname(__file__), "entsearch.yml")

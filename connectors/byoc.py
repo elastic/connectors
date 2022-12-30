@@ -6,14 +6,13 @@
 """
 Implementation of BYOC protocol.
 """
-import asyncio
 import time
 from datetime import datetime, timezone
 from enum import Enum
 
-from connectors.es import DEFAULT_LANGUAGE, ESIndex, defaults_for
+from connectors.es import DEFAULT_LANGUAGE, ESIndex
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, get_source_klass
+from connectors.source import get_source_klass
 from connectors.utils import iso_utc, next_run
 
 CONNECTORS_INDEX = ".elastic-connectors"

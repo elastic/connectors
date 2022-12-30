@@ -5,7 +5,6 @@
 #
 """Tests the Google Cloud Storage source class methods.
 """
-import argparse
 import asyncio
 import json
 from unittest import mock

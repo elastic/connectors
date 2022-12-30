@@ -11,25 +11,19 @@ Event loop
 - mirrors an Elasticsearch index with a collection of documents
 """
 import asyncio
-import os
 import time
 
 from connectors.byoc import (
     SYNC_DISABLED,
     ConnectorIndex,
-    ConnectorUpdateError,
-    DataSourceError,
     JobTriggerMethod,
-    ServiceTypeNotConfiguredError,
-    ServiceTypeNotSupportedError,
     Status,
-    SyncJob,
     SyncJobIndex,
     e2str,
 )
 from connectors.logger import logger
 from connectors.services.base import BaseService
-from connectors.utils import CancellableSleeps, trace_mem
+from connectors.utils import CancellableSleeps
 
 
 class SchedulingService(BaseService):
@@ -97,7 +91,7 @@ class SchedulingService(BaseService):
         logger.info(f"Scheduling service started, listening to events from {es_host}")
         try:
             if one_sync:
-                logger.debug(f"Running a single sync")
+                logger.debug("Running a single sync")
                 await self._tick()
             else:
                 while self.running:

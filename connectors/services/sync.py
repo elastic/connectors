@@ -21,7 +21,7 @@ from connectors.byoc import (
     SyncJobIndex,
 )
 from connectors.byoei import ElasticServer
-from connectors.es import DEFAULT_LANGUAGE, defaults_for
+from connectors.es import defaults_for
 from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.source import DataSourceConfiguration, get_source_klass
@@ -161,10 +161,8 @@ class SyncJobService(BaseService):
         self.jobs = SyncJobIndex(elastic_config)
         self.connectors = ConnectorIndex(elastic_config)
 
-        self.language_code = self.config.get(
-            "language_code", DEFAULT_LANGUAGE
-        )  # XXX: get language code from the connector instead
         self.bulk_options = elastic_config.get("bulk", {})
+        self.trace_mem = self.service_config.get("trace_mem", False)
 
     async def run(self):
         if "PERF8" in os.environ:
@@ -206,7 +204,8 @@ class SyncJobService(BaseService):
                         heartbeat_delay=self.config["service.heartbeat"],
                     )
 
-                    await sync.execute()
+                    with trace_mem(self.trace_mem):
+                        await sync.execute()
                     synced_anything = True
 
                 if one_sync and synced_anything:
