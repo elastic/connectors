@@ -390,6 +390,7 @@ class MySqlDataSource(BaseDataSource):
         # Query to get all databases
         response = await anext(self._connect(query_name="ALL_DATABASE"))
         accessible_databases = [database[0] for database in response]
+        print(f"DATABASES ARE {accessible_databases}")
         return list(set(databases) - set(accessible_databases))
 
     async def get_docs(self):

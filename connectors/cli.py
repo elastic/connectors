@@ -19,8 +19,8 @@ from envyaml import EnvYAML
 
 from connectors import __version__
 from connectors.logger import logger, set_logger
-from connectors.services.consume import JobService
-from connectors.services.sync import SyncService
+from connectors.services.sync import SyncJobService
+from connectors.services.scheduling import SchedulingService
 from connectors.source import get_data_sources
 from connectors.utils import get_event_loop
 
@@ -100,8 +100,8 @@ def run(args):
         logger.info("Bye")
         return 0
 
-    service = SyncService(args)
-    jobs_service = JobService(args)
+    service = SchedulingService(args)
+    jobs_service = SyncJobService(args)
     producer_coro = service.run()
     consumer_coro = jobs_service.run()
 

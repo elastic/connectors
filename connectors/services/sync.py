@@ -15,187 +15,209 @@ import os
 import time
 
 from connectors.byoc import (
-    SYNC_DISABLED,
     ConnectorIndex,
-    ConnectorUpdateError,
     DataSourceError,
-    JobTriggerMethod,
-    ServiceTypeNotConfiguredError,
-    ServiceTypeNotSupportedError,
-    Status,
-    SyncJob,
+    PipelineSettings,
     SyncJobIndex,
-    e2str,
 )
+from connectors.byoei import ElasticServer
+from connectors.es import DEFAULT_LANGUAGE, defaults_for
 from connectors.logger import logger
 from connectors.services.base import BaseService
+from connectors.source import DataSourceConfiguration, get_source_klass
 from connectors.utils import CancellableSleeps, trace_mem
 
 
-class SyncService(BaseService):
-    def __init__(self, args):
-        super().__init__(args)
-        self.service_config = self.config["service"]
-        self.trace_mem = self.service_config.get("trace_mem", False)
-        self.idling = self.service_config["idling"]
-        self.preflight_max_attempts = int(
-            self.service_config.get("preflight_max_attempts", 10)
-        )
-        self.preflight_idle = int(self.service_config.get("preflight_idle", 30))
-        self.trace_mem = self.service_config.get("trace_mem", False)
+class Sync:
+    def __init__(
+        self, sources, job, elastic_server, connectors, bulk_options, heartbeat_delay
+    ):
+        self.heartbeat_delay = heartbeat_delay
+        self.sources = sources
+        self.job = job
+        self.elastic_server = elastic_server
+        self.bulk_options = bulk_options
+        self.connectors = connectors
 
-        self.connectors = ConnectorIndex(self.config["elasticsearch"])
-        self.jobs = SyncJobIndex(self.config["elasticsearch"])
+        self._hb = None
+        self._hb_running = False
 
-        self.running = False
-        self.errors = [0, time.time()]
-        self._sleeps = CancellableSleeps()
+    async def execute(self):
+        job = self.job
 
-    def raise_if_spurious(self, exception):
-        errors, first = self.errors
-        errors += 1
+        await job.claim()
 
-        # if we piled up too many errors we raise and quit
-        if errors > self.service_config["max_errors"]:
-            raise exception
+        start_time = time.time()
+        index_name = job.connector["index_name"]
+        service_type = job.connector["service_type"]
+        language_code = job.connector["language"]
+        pipeline = PipelineSettings(job.connector.get("pipeline", {}))
 
-        # we re-init every ten minutes
-        if time.time() - first > self.service_config["max_errors_span"]:
-            first = time.time()
-            errors = 0
-
-        self.errors[0] = errors
-        self.errors[1] = first
-
-    def stop(self):
-        logger.debug("Shutting down producers")
-        self.running = False
-        self._sleeps.cancel()
-        if self.connectors is not None:
-            self.connectors.stop_waiting()
-
-    async def run(self):
-        return await self._run()
-
-    async def _run(self):
-        """Main event loop."""
-
-        self.connectors = ConnectorIndex(self.config["elasticsearch"])
-        self.running = True
-
-        one_sync = self.args.one_sync
-
-        es_host = self.config["elasticsearch"]["host"]
-        self.running = True
-
-        if not await self.connectors.wait():
-            logger.critical(f"{es_host} seem down. Bye!")
-            return -1
-
-        await self._pre_flight_check()
-
-        logger.info(f"Scheduling service started, listening to events from {es_host}")
+        fqn = self.sources[service_type]
+        configuration = DataSourceConfiguration(job.connector["configuration"])
         try:
-            if one_sync:
-                logger.debug(f"Running a single sync")
-                await self._tick()
-            else:
-                while self.running:
-                    try:
-                        logger.debug(f"Polling every {self.idling} seconds")
-                        await self._tick()
-                        await self._sleeps.sleep(self.idling)
-                    except Exception as e:
-                        logger.critical(e, exc_info=True)
-                        self.raise_if_spurious(e)
+            source_klass = get_source_klass(fqn)
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+            raise DataSourceError(f"Could not instantiate {fqn} for {service_type}")
+
+        data_provider = source_klass(configuration)
+
+        if not await data_provider.changed():
+            logger.debug(f"No change in {service_type} data provider, skipping...")
+            return
+
+        self._start_heartbeat()
+
+        logger.debug(f"Syncing '{service_type}'")
+        try:
+            logger.debug(f"Pinging the {source_klass} backend")
+            await data_provider.ping()
+            await asyncio.sleep(0)
+
+            mappings, settings = defaults_for(
+                is_connectors_index=True, language_code=language_code
+            )
+            logger.debug("Preparing the index")
+            await self.elastic_server.prepare_index(
+                index_name, mappings=mappings, settings=settings
+            )
+            await asyncio.sleep(0)
+
+            result = await self.elastic_server.async_bulk(
+                index_name,
+                self.prepare_docs(pipeline, data_provider),
+                pipeline,
+                options=self.bulk_options,
+            )
+            for i in range(50):
+                await asyncio.sleep(0.1)
+            await self._sync_done(job, result, start_time)
+
+        except Exception as e:
+            await self._sync_done(job, {}, start_time, exception=e)
+            raise
         finally:
-            self.stop()
-            await self.connectors.close()
-        return 0
+            self._stop_heartbeat()
+            self._start_time = None
 
-    async def _pre_flight_check(self):
-        es_host = self.config["elasticsearch"]["host"]
+    def _start_heartbeat(self):
+        self._hb = asyncio.create_task(self._heartbeat())
+        self._hb_running = True
 
-        if not (await self.connectors.wait()):
-            logger.critical(f"{es_host} seem down. Bye!")
-            return -1
+    def _stop_heartbeat(self):
+        self._hb.cancel()
+        self._hb_running = False
 
-        # pre-flight check
-        attempts = 0
-        while self.running:
-            logger.info("Preflight checks...")
-            try:
-                # Checking the indices/pipeline in the loop to be less strict about the boot ordering
-                await self.connectors.preflight()
-                break
-            except Exception as e:
-                if attempts > self.preflight_max_attempts:
-                    raise
-                else:
-                    logger.warn(
-                        f"Attempt {attempts+1}/{self.preflight_max_attempts} failed. Retrying..."
-                    )
-                    logger.warn(str(e))
-                    attempts += 1
-                    await asyncio.sleep(self.preflight_idle)
-
-    async def _tick(self):
-        native_service_types = self.config.get("native_service_types", [])
-        if "connector_id" in self.config:
-            connectors_ids = [self.config.get("connector_id")]
-        else:
-            connectors_ids = []
-
-        logger.debug(f"Native support for {', '.join(native_service_types)}")
-
-        query = self.connectors.build_docs_query(native_service_types, connectors_ids)
-
-        async for connector in self.connectors.get_all_docs(query=query):
+    async def _heartbeat(self):
+        while self._hb_running:
+            logger.info(f"*** Connector {self.job.connector_id} HEARTBEAT")
+            # loading connector so that there's less likely a version conflict
+            connector = await self.connectors.fetch_by_id(self.job.connector_id)
             await connector.heartbeat()
+            await asyncio.sleep(self.heartbeat_delay)
 
-            if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
-                # we can't sync in that state
-                logger.info(f"Can't sync with status `{e2str(connector.status)}`")
-                continue
+    async def prepare_docs(self, pipeline, data_provider):
+        logger.debug(f"Using pipeline {pipeline}")
 
-            if not connector.sync_now:
-                next_sync = connector.next_sync()
-                if next_sync == SYNC_DISABLED or next_sync - self.idling > 0:
-                    if next_sync == SYNC_DISABLED:
-                        logger.debug(
-                            f"Scheduling is disabled for {connector.service_type}"
-                        )
-                        continue
-                    else:
-                        logger.debug(
-                            f"Next sync for {connector.service_type} due in {int(next_sync)} seconds"
-                        )
-                        continue
-                    # if we don't sync, we still want to make
-                    # sure we tell kibana we are connected
-                    # if the status is different from connected
-                    if connector.status != Status.CONNECTED:
-                        connector.status = Status.CONNECTED
-                        await connector.sync_doc()
+        async for doc, lazy_download in data_provider.get_docs():
+            # adapt doc for pipeline settings
+            doc["_extract_binary_content"] = pipeline.extract_binary_content
+            doc["_reduce_whitespace"] = pipeline.reduce_whitespace
+            doc["_run_ml_inference"] = pipeline.run_ml_inference
+            yield doc, lazy_download
 
-            else:
-                logger.info("Sync forced")
+    async def _sync_done(self, job, result, start_time, exception=None):
+        doc_updated = result.get("doc_updated", 0)
+        doc_created = result.get("doc_created", 0)
+        doc_deleted = result.get("doc_deleted", 0)
+        exception = result.get("fetch_error", exception)
 
-            await self._create_job(connector)
+        indexed_count = doc_updated + doc_created
 
-    async def _create_job(self, connector):
-        trigger_method = (
-            JobTriggerMethod.ON_DEMAND
-            if connector.sync_now
-            else JobTriggerMethod.SCHEDULED
-        )
+        await job.done(indexed_count, doc_deleted, exception)
 
-        job_id = await self.jobs.create(connector, trigger_method)
-
-        connector.sync_now = connector.doc_source["sync_now"] = False
-
-        await connector.sync_doc()
+        # Loading connector as late as possible so that there's less likely
+        # a version conflict.
+        connector = await self.connectors.fetch_by_id(job.connector_id)
+        await connector.job_done(job)
 
         logger.info(
-            f"Created a job for connector {connector.service_type}, Job id: {job_id}"
+            f"Sync done: {indexed_count} indexed, {doc_deleted} "
+            f" deleted. ({int(time.time() - start_time)} seconds)"
         )
+
+
+class SyncJobService(BaseService):
+    def __init__(self, args):
+        super().__init__(args)
+        self.running = False
+
+        self._sleeps = CancellableSleeps()
+
+        elastic_config = self.config["elasticsearch"]
+
+        self.elastic_server = ElasticServer(elastic_config)
+        self.jobs = SyncJobIndex(elastic_config)
+        self.connectors = ConnectorIndex(elastic_config)
+
+        self.language_code = self.config.get(
+            "language_code", DEFAULT_LANGUAGE
+        )  # XXX: get language code from the connector instead
+        self.bulk_options = elastic_config.get("bulk", {})
+
+    async def run(self):
+        if "PERF8" in os.environ:
+            import perf8
+
+            async with perf8.measure():
+                return await self._run()
+        else:
+            return await self._run()
+
+    async def _run(self):
+        one_sync = self.args.one_sync
+        self.running = True
+
+        es_host = self.config["elasticsearch"]["host"]
+        logger.info(f"Job execution service started, listening to events from {es_host}")
+
+        try:
+            while self.running:
+                native_service_types = self.config.get("native_service_types", [])
+                if "connector_id" in self.config:
+                    connectors_ids = [self.config.get("connector_id")]
+                else:
+                    connectors_ids = []
+
+                query = self.jobs.build_docs_query(native_service_types, connectors_ids)
+
+                synced_anything = False  # just to make the one syncs in CI work for now
+                async for job in self.jobs.get_all_docs(query=query):
+
+                    sync = Sync(
+                        sources=self.config["sources"],
+                        job=job,
+                        elastic_server=self.elastic_server,
+                        connectors=self.connectors,
+                        bulk_options=self.bulk_options,
+                        heartbeat_delay=self.config["service.heartbeat"],
+                    )
+
+                    await sync.execute()
+                    synced_anything = True
+
+                if one_sync and synced_anything:
+                    logger.info("Ran a round of syncs and exiting.")
+                    break
+
+                await self._sleeps.sleep(10)
+        finally:
+            self.stop()
+        return 0
+
+
+    def stop(self):
+        logger.debug("Shutting down consumers")
+        self.running = False
+        self._sleeps.cancel()
