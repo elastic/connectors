@@ -30,9 +30,7 @@ def test_main_and_kill(patch_logger, mock_responses):
     mock_responses.post(
         f"{host}/.elastic-connectors-sync-jobs/_search?expand_wildcards=hidden",
         headers=headers,
-        payload={
-            "hits": {"hits": [], "total": {"value": 0}}
-        },
+        payload={"hits": {"hits": [], "total": {"value": 0}}},
     )
     mock_responses.post(
         f"{host}/.elastic-connectors-sync-jobs/_refresh", headers=headers
