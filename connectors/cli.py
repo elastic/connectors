@@ -19,8 +19,8 @@ from envyaml import EnvYAML
 
 from connectors import __version__
 from connectors.logger import logger, set_logger
-from connectors.services.sync import SyncJobService
 from connectors.services.scheduling import SchedulingService
+from connectors.services.sync import SyncJobService
 from connectors.source import get_data_sources
 from connectors.utils import get_event_loop
 

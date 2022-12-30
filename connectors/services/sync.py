@@ -180,7 +180,9 @@ class SyncJobService(BaseService):
         self.running = True
 
         es_host = self.config["elasticsearch"]["host"]
-        logger.info(f"Job execution service started, listening to events from {es_host}")
+        logger.info(
+            f"Job execution service started, listening to events from {es_host}"
+        )
 
         try:
             while self.running:
@@ -215,7 +217,6 @@ class SyncJobService(BaseService):
         finally:
             self.stop()
         return 0
-
 
     def stop(self):
         logger.debug("Shutting down consumers")
