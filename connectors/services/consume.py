@@ -15,7 +15,7 @@ import os
 import time
 
 from connectors.byoc import (
-    ConnectorsIndex,
+    ConnectorIndex,
     DataSourceError,
     PipelineSettings,
     SyncJobIndex,
@@ -40,11 +40,12 @@ class Sync:
         self.connectors = connectors
 
         self._hb = None
+        self._hb_running = False
 
     async def execute(self):
         job = self.job
 
-        job.claim()
+        await job.claim()
 
         start_time = time.time()
         index_name = job.connector["index_name"]
@@ -66,7 +67,7 @@ class Sync:
             logger.debug(f"No change in {service_type} data provider, skipping...")
             return
 
-        await self._start_heartbeat()
+        self._start_heartbeat()
 
         logger.debug(f"Syncing '{service_type}'")
         try:
@@ -89,27 +90,32 @@ class Sync:
                 pipeline,
                 options=self.bulk_options,
             )
+            for i in range(50):
+                await asyncio.sleep(0.1)
             await self._sync_done(job, result, start_time)
 
         except Exception as e:
             await self._sync_done(job, {}, start_time, exception=e)
             raise
         finally:
+            self._stop_heartbeat()
             self._start_time = None
-            await self._stop_heartbeat()
 
-    async def _start_heartbeat(self):
+    def _start_heartbeat(self):
         self._hb = asyncio.create_task(self._heartbeat())
+        self._hb_running = True
 
-    async def _stop_heartbeat(self):
+    def _stop_heartbeat(self):
         self._hb.cancel()
+        self._hb_running = False
 
     async def _heartbeat(self):
-        while True:
-            logger.info(f"*** Connector {self.id} HEARTBEAT")
+        while self._hb_running:
+            logger.info(f"*** Connector {self.job.connector_id} HEARTBEAT")
+            # loading connector so that there's less likely a version conflict
             connector = await self.connectors.fetch_by_id(self.job.connector_id)
             await connector.heartbeat()
-            await asyncio.sleep(delay)
+            await asyncio.sleep(self.heartbeat_delay)
 
     async def prepare_docs(self, pipeline, data_provider):
         logger.debug(f"Using pipeline {pipeline}")
@@ -153,7 +159,7 @@ class JobService(BaseService):
 
         self.elastic_server = ElasticServer(elastic_config)
         self.jobs = SyncJobIndex(elastic_config)
-        self.connectors = ConnectorsIndex(elastic_config)
+        self.connectors = ConnectorIndex(elastic_config)
 
         self.language_code = self.config.get(
             "language_code", DEFAULT_LANGUAGE

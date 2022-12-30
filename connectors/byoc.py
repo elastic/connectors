@@ -65,7 +65,7 @@ class DataSourceError(Exception):
     pass
 
 
-class ConnectorsIndex(ESIndex):
+class ConnectorIndex(ESIndex):
     CUSTOM_READ_ONLY_FIELDS = (
         "is_native",
         "api_key_id",
