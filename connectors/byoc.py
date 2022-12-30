@@ -170,6 +170,58 @@ class ConnectorIndex(ESIndex):
             bulk_options=self.bulk_options,
         )
 
+    async def orphaned_jobs(self, native_service_types=[], connectors_ids=[]):
+        connector_ids = [connector.id async for connector in self.get_all_docs(query=self.build_docs_query(native_service_types, connectors_ids))]
+        query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
+        async for job in self._query_with_pagination((JOBS_INDEX, query)):
+            # TODO: yield an instance of SyncJob, which doesn't accept source as instantiation params for now
+            yield job["_source"]
+
+    async def stuck_jobs(self, native_service_types=[], connectors_ids=[]):
+        connector_ids = [connector.id async for connector in self.get_all_docs(query=self.build_docs_query(native_service_types, connectors_ids))]
+        query = {
+            "bool": {
+                "filter": [
+                    {"terms": {"connector.id": connector_ids}},
+                    {"terms": {"status": [e2str(JobStatus.IN_PROGRESS), e2str(JobStatus.CANCELING)]}},
+                    {range: {"last_seen": {"lte": f"now-{STUCK_THRESHOLD}s"}}}
+                ]
+            }
+        }
+        async for job in self._query_with_pagination((JOBS_INDEX, query)):
+            # TODO: yield an instance of SyncJob, which doesn't accept source as instantiation params for now
+            yield job["_source"]
+
+    async def delete_indices(self, indices):
+        pass
+
+    async def _query_with_pagination(self, index, query, page_size=DEFAULT_PAGE_SIZE):
+        count = 0
+        offset = 0
+
+        while True:
+            try:
+                resp = await self.client.search(
+                    index=index,
+                    query=query,
+                    from_=offset,
+                    size=page_size,
+                    expand_wildcards="hidden",
+                )
+            except ApiError as e:
+                logger.critical(f"The server returned {e.status_code}")
+                logger.critical(e.body, exc_info=True)
+                return
+
+            hits = resp["hits"]["hits"]
+            total = resp["hits"]["total"]["value"]
+            count += len(hits)
+            for hit in hits:
+                yield hit
+            if count >= total:
+                break
+            offset += len(hits)
+
 
 class SyncJob:
     def __init__(self, elastic_index, connector_id, doc_source=None):

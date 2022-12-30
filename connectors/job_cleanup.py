@@ -52,7 +52,20 @@ class JobCleanUp:
             await asyncio.sleep(self.interval)
 
     async def _process_orphaned_jobs(self):
-        pass
+        logger.debug('Start cleaning up orphaned jobs...')
+        orphaned_jobs = [job async for job in self.connectors.orphaned_jobs(self.native_service_types, self.connector_ids)]
+        if len(orphaned_jobs) == 0:
+            logger.debug('No orphaned jobs found. Skipping...')
+            return
+
+        # delete content indices in case they are re-created by sync job
+        content_indices = list(map(lambda x: x.index_name, orphaned_jobs))
+        if len(content_indices) > 0:
+            self.connectors.indices.delete(content_indices)
+        result = ConnectorJob.delete_jobs(orphaned_jobs)
+        if len(result["failures"]) > 0:
+            logger.error(f"Error found when deleting jobs: {result['failures']}")
+        logger.info(f"Successfully deleted {result['deleted']} out of {result['total']} orphaned jobs.")
 
     async def _process_stuck_jobs(self):
         pass
