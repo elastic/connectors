@@ -36,7 +36,7 @@ else:
 class S3DataSource(BaseDataSource):
     """Amazon S3"""
 
-    def __init__(self, connector):
+    def __init__(self, configuration):
         """Setup connection to the Amazon S3.
 
         Args:

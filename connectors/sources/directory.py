@@ -12,13 +12,14 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
 HERE = os.path.dirname(__file__)
 DEFAULT_CONTENT_EXTRACTION = True
 
 
-class DirectoryDataSource:
+class DirectoryDataSource(BaseDataSource):
     """Directory"""
 
     def __init__(self, configuration):

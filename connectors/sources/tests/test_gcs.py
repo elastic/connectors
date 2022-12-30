@@ -29,9 +29,7 @@ def get_mocked_source_object():
     Returns:
         GoogleCloudStorageDataSource: Mocked object of the data source class.
     """
-    configuration = {
-        "service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS
-    }
+    configuration = {"service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS}
     mocked_gcs_object = GoogleCloudStorageDataSource(configuration=configuration)
     return mocked_gcs_object
 
