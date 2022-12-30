@@ -167,8 +167,20 @@ class JobService(BaseService):
         self.bulk_options = elastic_config.get("bulk", {})
 
     async def run(self):
+        if "PERF8" in os.environ:
+            import perf8
+
+            async with perf8.measure():
+                return await self._run()
+        else:
+            return await self._run()
+
+    async def _run(self):
         one_sync = self.args.one_sync
         self.running = True
+
+        es_host = self.config["elasticsearch"]["host"]
+        logger.info(f"Job execution service started, listening to events from {es_host}")
 
         try:
             while self.running:
@@ -203,6 +215,7 @@ class JobService(BaseService):
         finally:
             self.stop()
         return 0
+
 
     def stop(self):
         logger.debug("Shutting down consumers")

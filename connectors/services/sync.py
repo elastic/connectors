@@ -75,13 +75,7 @@ class SyncService(BaseService):
             self.connectors.stop_waiting()
 
     async def run(self):
-        if "PERF8" in os.environ:
-            import perf8
-
-            async with perf8.measure():
-                return await self._run()
-        else:
-            return await self._run()
+        return await self._run()
 
     async def _run(self):
         """Main event loop."""
@@ -100,7 +94,7 @@ class SyncService(BaseService):
 
         await self._pre_flight_check()
 
-        logger.info(f"Service started, listening to events from {es_host}")
+        logger.info(f"Scheduling service started, listening to events from {es_host}")
         try:
             if one_sync:
                 logger.debug(f"Running a single sync")
@@ -144,8 +138,6 @@ class SyncService(BaseService):
                     logger.warn(str(e))
                     attempts += 1
                     await asyncio.sleep(self.preflight_idle)
-
-        logger.info(f"Service started, listening to events from {es_host}")
 
     async def _tick(self):
         native_service_types = self.config.get("native_service_types", [])
