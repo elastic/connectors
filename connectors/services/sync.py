@@ -162,7 +162,7 @@ class SyncJobService(BaseService):
         self.connectors = ConnectorIndex(elastic_config)
 
         self.bulk_options = elastic_config.get("bulk", {})
-        self.trace_mem = self.service_config.get("trace_mem", False)
+        self.trace_mem = self.config["service"].get("trace_mem", False)
 
     async def run(self):
         if "PERF8" in os.environ:
