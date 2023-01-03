@@ -11,6 +11,10 @@ from connectors.logger import logger
 DEFAULT_PAGE_SIZE = 100
 
 
+class NotFoundError(Exception):
+    pass
+
+
 class ESIndex(ESClient):
     """
     Encapsulates the work with Elasticsearch index.
@@ -48,7 +52,7 @@ class ESIndex(ESClient):
         except ApiError as e:
             logger.critical(f"The server returned {e.status_code}")
             logger.critical(e.body, exc_info=True)
-            return
+            raise NotFoundError(id)
 
         return self._create_object(resp)
 
