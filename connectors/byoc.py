@@ -329,7 +329,7 @@ class Connector:
     The pattern to use it is:
 
         await connector.prepare(config)
-        await connector.start_heartbeat(delay)
+        await connector.heartbeat()
         try:
             await connector.sync(es)
         finally:
@@ -352,10 +352,9 @@ class Connector:
         self._dirty = False
         self.client = elastic_index.client
         self.doc_source["last_seen"] = iso_utc()
-        self._heartbeat_started = self._syncing = False
+        self._syncing = False
         self._closed = False
         self._start_time = None
-        self._hb = None
         self.bulk_options = bulk_options
         self.language_code = language_code
         self.source_klass = None
@@ -419,9 +418,6 @@ class Connector:
 
     async def close(self):
         self._closed = True
-        if self._heartbeat_started:
-            self._hb.cancel()
-            self._heartbeat_started = False
         if self.data_provider is not None:
             await self.data_provider.close()
             self.data_provider = None

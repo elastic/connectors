@@ -4,11 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """
-Event loop
-
-- polls for work by calling Elasticsearch on a regular basis
-- instanciates connector plugins
-- mirrors an Elasticsearch index with a collection of documents
+Scheduling service
 """
 import asyncio
 import time
@@ -92,12 +88,12 @@ class SchedulingService(BaseService):
         try:
             if one_sync:
                 logger.debug("Running a single sync")
-                await self._tick()
+                await self._poll_and_execute()
             else:
                 while self.running:
                     try:
                         logger.debug(f"Polling every {self.idling} seconds")
-                        await self._tick()
+                        await self._poll_and_execute()
                         await self._sleeps.sleep(self.idling)
                     except Exception as e:
                         logger.critical(e, exc_info=True)
@@ -133,7 +129,8 @@ class SchedulingService(BaseService):
                     attempts += 1
                     await asyncio.sleep(self.preflight_idle)
 
-    async def _tick(self):
+    async def _poll_and_execute(self):
+        """Query all connectors documents and sync if needed."""
         native_service_types = self.config.get("native_service_types", [])
         if "connector_id" in self.config:
             connectors_ids = [self.config.get("connector_id")]
