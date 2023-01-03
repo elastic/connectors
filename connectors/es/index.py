@@ -62,10 +62,10 @@ class ESIndex(ESClient):
         Returns:
             Iterator
         """
-        await self.client.indices.refresh(index=self.index_name)
-
         if query is None:
-            query = {"match_all": {}}
+            return
+        
+        await self.client.indices.refresh(index=self.index_name)
 
         count = 0
         offset = 0

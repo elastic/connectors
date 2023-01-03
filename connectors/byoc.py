@@ -115,7 +115,7 @@ class ConnectorIndex(ESIndex):
             connectors_ids = []
 
         if len(native_service_types) == 0 and len(connectors_ids) == 0:
-            return
+            return None
 
         native_connectors_query = {
             "bool": {
@@ -171,49 +171,49 @@ class SyncJobIndex(ESIndex):
             logger.info(
                 "Attempting to fetch jobs without specifying supported types or connector ids is not possible"
             )
-            return
-        subqueries = []
+            return None
 
-        subqueries.append(
-            {
+        status_query = {
+            "terms": {
+                "status": [
+                    e2str(JobStatus.PENDING),
+                    e2str(JobStatus.SUSPENDED)
+                ]
+            }
+        }
+        service_type_query = {
+            "terms": {
+                "connector.service_type": native_service_types
+            }
+        }
+        connector_ids_query = {
+            "terms": {
+                "connector.id": connector_ids
+            }
+        }
+
+        if len(native_service_types) > 0 and len(connector_ids) > 0:
+            connector_query = {
                 "bool": {
-                    "must": [
-                        {
-                            "terms": {
-                                "status": [
-                                    e2str(JobStatus.PENDING),
-                                    e2str(JobStatus.SUSPENDED),
-                                ]
-                            }
-                        }
+                    "should": [
+                        service_type_query,
+                        connector_ids_query
                     ]
                 }
             }
-        )
+        elif len(native_service_types) > 0:
+            connector_query = service_type_query
+        else:
+            connector_query = connector_ids_query
 
-        if len(native_service_types) > 0:
-            subqueries.append(
-                {
-                    "bool": {
-                        "filter": [
-                            {"terms": {"service_type": native_service_types}},
-                        ]
-                    }
-                }
-            )
-
-        if len(connector_ids) > 0:
-            subqueries.append(
-                {
-                    "bool": {
-                        "filter": [
-                            {"terms": {"connector.id": connector_ids}},
-                        ]
-                    }
-                }
-            )
-
-        query = {"bool": {"should": subqueries}}
+        query = {
+            "bool": {
+                "must": [
+                    status_query,
+                    connector_query
+                ]
+            }
+        }
 
         return query
 
