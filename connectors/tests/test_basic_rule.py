@@ -1387,7 +1387,7 @@ def test_basic_rules_set_no_conflicting_policies_validation(
             for result in BasicRulesSetSemanticValidator.validate(basic_rules_set)
         )
     else:
-        assert all(
-            not result.is_valid
+        assert not any(
+            result.is_valid
             for result in BasicRulesSetSemanticValidator.validate(basic_rules_set)
         )

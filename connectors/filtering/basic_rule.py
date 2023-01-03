@@ -217,6 +217,8 @@ class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
                     basic_rule, semantic_duplicate
                 )
 
+            rules_dict[field_rule_value_hash] = basic_rule
+
         return [
             BasicRuleValidationResult.valid_result(rule_id=rule.id_)
             for rule in rules_dict.values()
@@ -235,14 +237,14 @@ class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
                 rule_id=basic_rule.id_,
                 is_valid=False,
                 validation_message=semantic_duplicate_conflicting_policy_msg(
-                    basic_rule.id_, semantic_duplicate.id_
+                    basic_rule, semantic_duplicate
                 ),
             ),
             BasicRuleValidationResult(
                 rule_id=semantic_duplicate.id_,
                 is_valid=False,
                 validation_message=semantic_duplicate_conflicting_policy_msg(
-                    semantic_duplicate.id_, basic_rule.id_
+                    semantic_duplicate, basic_rule
                 ),
             ),
         ]
@@ -250,7 +252,7 @@ class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
     @classmethod
     def semantic_duplicates_validation_results(cls, basic_rule, semantic_duplicate):
         def semantic_duplicate_msg(rule_one, rule_two):
-            return f"Rule with id '{rule_one.id_}' is semantically equal to rule with id '{rule_two.id_}'"
+            return f"Rule with id '{rule_one}' is semantically equal to rule with id '{rule_two}'"
 
         return [
             # We need two error messages to highlight both rules in the UI
