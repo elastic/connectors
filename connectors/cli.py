@@ -103,7 +103,7 @@ def run(args):
 
     loop = get_event_loop(args.uvloop)
     try:
-        for code in loop.run_until_complete(services.run()):
+        for code in loop.run_until_complete(services.run(loop)):
             if code != 0:
                 return code
         return 0
