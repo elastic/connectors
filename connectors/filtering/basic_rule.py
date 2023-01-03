@@ -208,12 +208,7 @@ class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
             if field_rule_value_hash in rules_dict:
                 semantic_duplicate = rules_dict[field_rule_value_hash]
 
-                if semantic_duplicate.policy == basic_rule.policy:
-                    return cls.semantic_duplicates_validation_results(
-                        basic_rule, semantic_duplicate
-                    )
-
-                return cls.semantic_duplicates_conflicting_policies_validation_result(
+                return cls.semantic_duplicates_validation_results(
                     basic_rule, semantic_duplicate
                 )
 
@@ -222,31 +217,6 @@ class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
         return [
             BasicRuleValidationResult.valid_result(rule_id=rule.id_)
             for rule in rules_dict.values()
-        ]
-
-    @classmethod
-    def semantic_duplicates_conflicting_policies_validation_result(
-        cls, basic_rule, semantic_duplicate
-    ):
-        def semantic_duplicate_conflicting_policy_msg(rule_one, rule_two):
-            return f"Rule with id '{rule_one.id_}' is semantically equal to rule with id '{rule_two.id_}' and the rules have conflicting policies."
-
-        return [
-            # We need two error messages to highlight both rules in the UI
-            BasicRuleValidationResult(
-                rule_id=basic_rule.id_,
-                is_valid=False,
-                validation_message=semantic_duplicate_conflicting_policy_msg(
-                    basic_rule, semantic_duplicate
-                ),
-            ),
-            BasicRuleValidationResult(
-                rule_id=semantic_duplicate.id_,
-                is_valid=False,
-                validation_message=semantic_duplicate_conflicting_policy_msg(
-                    semantic_duplicate, basic_rule
-                ),
-            ),
         ]
 
     @classmethod
