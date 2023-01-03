@@ -29,7 +29,7 @@ def get_mocked_source_object():
     Returns:
         GoogleCloudStorageDataSource: Mocked object of the data source class.
     """
-    connector = argparse.Namespace()
+    connector = argparse.Namespace(bulk_options={})
     connector.configuration = {
         "service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS
     }
@@ -107,6 +107,7 @@ async def test_ping_for_failed_connection(catch_stdout, patch_logger):
         await mocked_gcs_object.ping()
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "previous_documents_list, updated_documents_list",
     [
@@ -147,7 +148,7 @@ async def test_ping_for_failed_connection(catch_stdout, patch_logger):
         )
     ],
 )
-def test_get_blob_document(previous_documents_list, updated_documents_list):
+async def test_get_blob_document(previous_documents_list, updated_documents_list):
     """Tests the function which modifies the fetched blobs and maps the values to keys.
 
     Args:
@@ -157,11 +158,13 @@ def test_get_blob_document(previous_documents_list, updated_documents_list):
 
     # Setup
     mocked_gcs_object = get_mocked_source_object()
-
+    mocked_gcs_object.set_content = mock.AsyncMock()
     # Execute and Assert
-    assert updated_documents_list == list(
-        mocked_gcs_object.get_blob_document(blobs=previous_documents_list[0])
-    )
+    assert updated_documents_list == [
+        await mocked_gcs_object.prepare_blob_document(
+            blob=previous_documents_list[0]["items"][0]
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -370,9 +373,22 @@ async def test_get_content():
         "bucket_name": "bucket_1",
     }
     expected_blob_document = {
-        "_id": "bucket_1/blob_1/123123123",
-        "_timestamp": "2011-10-12T00:01:00Z",
         "_attachment": "",
+        "id": "bucket_1/blob_1/123123123",
+        "component_count": None,
+        "content_encoding": None,
+        "content_language": None,
+        "created_at": None,
+        "last_updated": "2011-10-12T00:01:00Z",
+        "metadata": None,
+        "name": "blob_1.txt",
+        "size": "15",
+        "storage_class": None,
+        "_timestamp": "2011-10-12T00:01:00Z",
+        "type": None,
+        "url": "https://console.cloud.google.com/storage/browser/_details/bucket_1/blob_1;tab=live_object?project=dummy123",
+        "version": None,
+        "bucket_name": "bucket_1",
     }
     blob_content_response = ""
 
@@ -387,11 +403,10 @@ async def test_get_content():
             api_name=API_NAME, api_version=API_VERSION
         )
         storage_client.objects = mock.MagicMock()
-        content = await mocked_gcs_object.get_content(
+        await mocked_gcs_object.set_content(
             blob=blob_document,
-            doit=True,
         )
-        assert content == expected_blob_document
+        assert blob_document == expected_blob_document
 
 
 @pytest.mark.asyncio
@@ -426,16 +441,11 @@ async def test_get_content_when_type_not_supported():
         api_name=API_NAME, api_version=API_VERSION
     )
     storage_client.objects = mock.MagicMock()
-    content = await mocked_gcs_object.get_content(
-        blob=blob_document,
-        doit=True,
-    )
-    assert content is None
 
-    content = await mocked_gcs_object.get_content(
+    await mocked_gcs_object.set_content(
         blob=blob_document,
     )
-    assert content is None
+    assert not bool(blob_document.get("_attachment"))
 
 
 @pytest.mark.asyncio
@@ -470,16 +480,10 @@ async def test_get_content_when_file_size_is_large(catch_stdout, patch_logger):
         api_name=API_NAME, api_version=API_VERSION
     )
     storage_client.objects = mock.MagicMock()
-    content = await mocked_gcs_object.get_content(
-        blob=blob_document,
-        doit=True,
-    )
-    assert content is None
-
-    content = await mocked_gcs_object.get_content(
+    await mocked_gcs_object.set_content(
         blob=blob_document,
     )
-    assert content is None
+    assert not bool(blob_document.get("_attachment"))
 
 
 @pytest.mark.asyncio

@@ -17,7 +17,15 @@ from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
+from connectors.utils import (
+    DEFAULT_MAX_CONCURRENCY,
+    DEFAULT_QUEUE_MEM_SIZE,
+    DEFAULT_QUEUE_SIZE,
+    TIKA_SUPPORTED_FILETYPES,
+    ConcurrentTasks,
+    MemQueue,
+    get_base64_value,
+)
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
 CLOUD_STORAGE_BASE_URL = "https://console.cloud.google.com/storage/browser/_details/"
@@ -91,6 +99,17 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         self.enable_content_extraction = self.configuration.get(
             "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION
         )
+        queue_size = connector.bulk_options.get("queue_max_size", DEFAULT_QUEUE_SIZE)
+        queue_mem_size = connector.bulk_options.get(
+            "queue_max_mem_size", DEFAULT_QUEUE_MEM_SIZE
+        )
+        max_concurrency = connector.bulk_options.get(
+            "max_concurrency", DEFAULT_MAX_CONCURRENCY
+        )
+        self.queue = MemQueue(
+            maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024
+        )
+        self.fetchers = ConcurrentTasks(max_concurrency=max_concurrency)
 
     @classmethod
     def get_default_configuration(cls):
@@ -255,49 +274,35 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             ):
                 yield blob
 
-    def prepare_blob_document(self, blob):
-        """Apply key mappings to the blob document.
+    async def prepare_blob_document(self, blob):
+        """Apply key mappings and blob content to the blob document.
 
         Args:
             blob (dictionary): Blob's metadata returned from the Google Cloud Storage.
 
         Returns:
-            dictionary: Blobs metadata mapped with the keys of `BLOB_ADAPTER`.
+            dictionary: Blobs metadata and content mapped with the keys of `BLOB_ADAPTER`.
         """
-        blob_document = {}
-        for elasticsearch_field, google_cloud_storage_field in BLOB_ADAPTER.items():
-            blob_document[elasticsearch_field] = blob.get(google_cloud_storage_field)
+        blob_document = {
+            elasticsearch_field: blob.get(google_cloud_storage_field)
+            for elasticsearch_field, google_cloud_storage_field in BLOB_ADAPTER.items()
+        }
         blob_name = urllib.parse.quote(blob_document["name"], safe="'")
         blob_document[
             "url"
         ] = f"{CLOUD_STORAGE_BASE_URL}{blob_document['bucket_name']}/{blob_name};tab=live_object?project={self.user_project_id}"
+        await self.set_content(blob_document)
         return blob_document
 
-    def get_blob_document(self, blobs):
-        """Generate blob document.
-
-        Args:
-            blobs (dictionary): Dictionary contains blobs list.
-
-        Yields:
-            dictionary: Blobs metadata mapped with the keys of `BLOB_ADAPTER`.
-        """
-        for blob in blobs.get("items", []):
-            yield self.prepare_blob_document(blob=blob)
-
-    async def get_content(self, blob, timestamp=None, doit=None):
-        """Extracts the content for allowed file types.
+    async def set_content(self, blob):
+        """Extracts and appends the content for allowed file types to blob document.
 
         Args:
             blob (dictionary): Formatted blob document.
-            timestamp (timestamp, optional): Timestamp of blob last modified. Defaults to None.
-            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to None.
 
-        Returns:
-            dictionary: Content document with id, timestamp & text
         """
         blob_size = int(blob["size"])
-        if not (self.enable_content_extraction and doit and blob_size):
+        if not (self.enable_content_extraction and blob_size):
             return
 
         blob_name = blob["name"]
@@ -327,11 +332,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             await async_buffer.seek(0)
             content = await async_buffer.read()
         logger.debug(f"Downloaded {blob_name} for {blob_size} bytes ")
-        return {
-            "_id": blob["id"],
-            "_timestamp": blob["_timestamp"],
-            "_attachment": get_base64_value(content=content),
-        }
+        blob["_attachment"] = get_base64_value(content=content)
 
     async def get_docs(self):
         """Get buckets & blob documents from Google Cloud Storage.
@@ -339,11 +340,37 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Documents from Google Cloud Storage.
         """
-        async for buckets in self.fetch_buckets():
-            if not buckets.get("items"):
-                continue
-            async for blobs in self.fetch_blobs(
-                buckets=buckets,
-            ):
-                for blob_document in self.get_blob_document(blobs=blobs):
-                    yield blob_document, partial(self.get_content, blob_document)
+
+        async def grab_content(blob):
+            """Prepare the blob document by mapping the keys and fetching content from Google cloud storage and puts the generated document in the queue.
+
+            Args:
+                blob (dictionary): blob document fetched from Google cloud storage.
+            """
+            blob_document = await self.prepare_blob_document(blob)
+            await self.queue.put((blob_document, None))
+
+        async def producer():
+            """Method responsible to initiate calls for the blob document producers."""
+            async for buckets in self.fetch_buckets():
+                if not buckets.get("items"):
+                    continue
+                async for blobs in self.fetch_blobs(
+                    buckets=buckets,
+                ):
+                    [
+                        await self.fetchers.put(partial(grab_content, blob))
+                        for blob in blobs.get("items", [])
+                    ]
+            await self.queue.put("FINISHED")
+
+        producer_task = asyncio.create_task(producer())
+
+        while True:
+            _, document = await self.queue.get()
+            if document == "FINISHED":
+                break
+            yield document
+
+        await self.fetchers.join()
+        await producer_task
