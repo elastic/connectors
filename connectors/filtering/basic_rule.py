@@ -174,7 +174,7 @@ class Policy(Enum):
 
 class BasicRuleValidationResult:
     def __init__(self, rule_id, is_valid, validation_message):
-        self.rule_id = (rule_id,)
+        self.rule_id = rule_id
         self.is_valid = is_valid
         self.validation_message = validation_message
 

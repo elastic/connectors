@@ -1334,7 +1334,7 @@ def test_basic_rule_against_schema_validation(basic_rule, should_be_valid):
 
 
 @pytest.mark.parametrize(
-    "basic_rules_set, should_be_valid",
+    "basic_rules, should_be_valid",
     [
         (
             [
@@ -1379,15 +1379,19 @@ def test_basic_rule_against_schema_validation(basic_rule, should_be_valid):
     ],
 )
 def test_basic_rules_set_no_conflicting_policies_validation(
-    basic_rules_set, should_be_valid
+    basic_rules, should_be_valid
 ):
+    validation_results = BasicRulesSetSemanticValidator.validate(basic_rules)
+
     if should_be_valid:
-        assert all(
-            result.is_valid
-            for result in BasicRulesSetSemanticValidator.validate(basic_rules_set)
-        )
+        assert all(result.is_valid for result in validation_results)
     else:
-        assert not any(
-            result.is_valid
-            for result in BasicRulesSetSemanticValidator.validate(basic_rules_set)
-        )
+
+        assert not any(result.is_valid for result in validation_results)
+
+    validation_results_rule_ids = set(
+        map(lambda result: result.rule_id, validation_results)
+    )
+    basic_rule_ids = set(map(lambda rule: rule["id"], basic_rules))
+
+    assert validation_results_rule_ids == basic_rule_ids
