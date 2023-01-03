@@ -64,7 +64,7 @@ class ESIndex(ESClient):
         """
         if query is None:
             return
-        
+
         await self.client.indices.refresh(index=self.index_name)
 
         count = 0

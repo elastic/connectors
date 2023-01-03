@@ -174,46 +174,21 @@ class SyncJobIndex(ESIndex):
             return None
 
         status_query = {
-            "terms": {
-                "status": [
-                    e2str(JobStatus.PENDING),
-                    e2str(JobStatus.SUSPENDED)
-                ]
-            }
+            "terms": {"status": [e2str(JobStatus.PENDING), e2str(JobStatus.SUSPENDED)]}
         }
-        service_type_query = {
-            "terms": {
-                "connector.service_type": native_service_types
-            }
-        }
-        connector_ids_query = {
-            "terms": {
-                "connector.id": connector_ids
-            }
-        }
+        service_type_query = {"terms": {"connector.service_type": native_service_types}}
+        connector_ids_query = {"terms": {"connector.id": connector_ids}}
 
         if len(native_service_types) > 0 and len(connector_ids) > 0:
             connector_query = {
-                "bool": {
-                    "should": [
-                        service_type_query,
-                        connector_ids_query
-                    ]
-                }
+                "bool": {"should": [service_type_query, connector_ids_query]}
             }
         elif len(native_service_types) > 0:
             connector_query = service_type_query
         else:
             connector_query = connector_ids_query
 
-        query = {
-            "bool": {
-                "must": [
-                    status_query,
-                    connector_query
-                ]
-            }
-        }
+        query = {"bool": {"must": [status_query, connector_query]}}
 
         return query
 
