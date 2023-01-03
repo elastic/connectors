@@ -30,5 +30,5 @@ async def test_es_index_create_object_error(mock_responses, patch_logger):
     )
     query = {"match_all": {}}
     with pytest.raises(NotImplementedError) as _:
-        async for doc_ in index.get_all_docs(query=query):
+        async for doc_ in index.get_all_docs(query):
             pass

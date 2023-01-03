@@ -11,7 +11,11 @@ from connectors.logger import logger
 DEFAULT_PAGE_SIZE = 100
 
 
-class NotFoundError(Exception):
+class ESError(Exception):
+    pass
+
+
+class NotFoundError(ESError):
     pass
 
 
@@ -56,7 +60,7 @@ class ESIndex(ESClient):
 
         return self._create_object(resp)
 
-    async def get_all_docs(self, query=None, page_size=DEFAULT_PAGE_SIZE):
+    async def get_all_docs(self, query, page_size=DEFAULT_PAGE_SIZE):
         """
         Lookup for elasticsearch documents using {query}
 
@@ -66,9 +70,6 @@ class ESIndex(ESClient):
         Returns:
             Iterator
         """
-        if query is None:
-            return
-
         await self.client.indices.refresh(index=self.index_name)
 
         count = 0
@@ -86,7 +87,7 @@ class ESIndex(ESClient):
             except ApiError as e:
                 logger.critical(f"The server returned {e.status_code}")
                 logger.critical(e.body, exc_info=True)
-                return
+                raise ESError("Could not get the result")
 
             hits = resp["hits"]["hits"]
             total = resp["hits"]["total"]["value"]

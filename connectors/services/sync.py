@@ -193,7 +193,7 @@ class SyncJobService(BaseService):
                 query = self.jobs.build_docs_query(native_service_types, connectors_ids)
 
                 synced_anything = False  # just to make the one syncs in CI work for now
-                async for job in self.jobs.get_all_docs(query=query):
+                async for job in self.jobs.get_all_docs(query):
 
                     sync = Sync(
                         sources=self.config["sources"],

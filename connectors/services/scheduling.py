@@ -144,7 +144,7 @@ class SchedulingService(BaseService):
 
         query = self.connectors.build_docs_query(native_service_types, connectors_ids)
 
-        async for connector in self.connectors.get_all_docs(query=query):
+        async for connector in self.connectors.get_all_docs(query):
             await connector.heartbeat()
 
             if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
