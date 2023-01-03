@@ -19,6 +19,7 @@ from envyaml import EnvYAML
 
 from connectors import __version__
 from connectors.logger import logger, set_logger
+from connectors.services.base import Services
 from connectors.services.scheduling import SchedulingService
 from connectors.services.sync import SyncJobService
 from connectors.source import get_data_sources
@@ -100,29 +101,14 @@ def run(args):
         logger.info("Bye")
         return 0
 
-    service = SchedulingService(args)
-    jobs_service = SyncJobService(args)
-    producer_coro = service.run()
-    consumer_coro = jobs_service.run()
+    services = Services(args, SchedulingService, SyncJobService)
 
     loop = get_event_loop(args.uvloop)
-
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        # XXX make it better
-        def shutdown_services(sig):
-            service.shutdown(sig)
-            jobs_service.shutdown(sig)
-
-        loop.add_signal_handler(sig, functools.partial(shutdown_services, sig))
-
     try:
-        codes = loop.run_until_complete(asyncio.gather(producer_coro, consumer_coro))
-
-        non_zero_codes = [e for i, e in enumerate(codes) if e != 0]
-
-        if len(non_zero_codes) == 0:
-            return 0
-        return non_zero_codes[0]
+        for code in loop.run_until_complete(services.run()):
+            if code != 0:
+                return code
+        return 0
 
     except asyncio.CancelledError:
         return 0

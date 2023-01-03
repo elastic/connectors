@@ -3,11 +3,39 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import asyncio
 import os
 
 from envyaml import EnvYAML
 
 from connectors.logger import logger
+
+
+class Services:
+    """Service composition"""
+
+    def __init__(self, args, *services):
+        self.services = services
+
+    def _shutdown_services(self, sig):
+        failed_shutdowns = 0
+        for service in self.services:
+            try:
+                service.shutdown(sig)
+            except Exception as e:
+                # Will display the exception
+                logger.exception("Failed to shutdown")
+                failed_shutdowns += 1
+
+        if len(failed_shutdowns) > 0:
+            raise Exception("Failed shutdowns")
+
+    async def run(self, loop):
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(
+                sig, functools.partial(self._shutdown_services, sig)
+            )
+        return asyncio.gather(*[service.run() for service in self.services])
 
 
 class BaseService:
