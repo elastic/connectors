@@ -9,10 +9,8 @@ Command Line Interface.
 Parses arguments and call run() with them.
 """
 import asyncio
-import functools
 import logging
 import os
-import signal
 from argparse import ArgumentParser
 
 from envyaml import EnvYAML

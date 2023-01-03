@@ -4,7 +4,9 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+import functools
 import os
+import signal
 
 from envyaml import EnvYAML
 
