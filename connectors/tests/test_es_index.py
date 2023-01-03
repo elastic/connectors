@@ -28,6 +28,7 @@ async def test_es_index_create_object_error(mock_responses, patch_logger):
         status=200,
         payload={"hits": {"total": {"value": 1}, "hits": [{"id": 1}]}},
     )
+    query = {"match_all": {}}
     with pytest.raises(NotImplementedError) as _:
-        async for doc_ in index.get_all_docs():
+        async for doc_ in index.get_all_docs(query=query):
             pass
