@@ -10,11 +10,11 @@ import pytest
 
 from connectors.filtering.basic_rule import (
     BasicRule,
+    BasicRuleAgainstSchemaValidator,
     BasicRuleEngine,
     Policy,
     Rule,
     RuleMatchStats,
-    BasicRuleAgainstSchemaValidator,
     parse,
     try_coerce,
 )

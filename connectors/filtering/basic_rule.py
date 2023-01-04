@@ -143,6 +143,7 @@ class BasicRuleEngine:
         self.rules_match_stats[BasicRule.DEFAULT_RULE_ID] += 1
         return True
 
+
 class InvalidRuleError(ValueError):
     pass
 
