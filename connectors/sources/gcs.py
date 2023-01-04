@@ -334,21 +334,21 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         logger.debug(f"Downloaded {blob_name} for {blob_size} bytes ")
         blob["_attachment"] = get_base64_value(content=content)
 
+    async def grab_content(self, blob):
+        """Prepare the blob document by mapping the keys and fetching content from Google cloud storage and puts the generated document in the queue.
+
+        Args:
+            blob (dictionary): blob document fetched from Google cloud storage.
+        """
+        blob_document = await self.prepare_blob_document(blob)
+        await self.queue.put(blob_document)
+
     async def get_docs(self):
         """Get buckets & blob documents from Google Cloud Storage.
 
         Yields:
             dictionary: Documents from Google Cloud Storage.
         """
-
-        async def grab_content(blob):
-            """Prepare the blob document by mapping the keys and fetching content from Google cloud storage and puts the generated document in the queue.
-
-            Args:
-                blob (dictionary): blob document fetched from Google cloud storage.
-            """
-            blob_document = await self.prepare_blob_document(blob)
-            await self.queue.put((blob_document, None))
 
         async def producer():
             """Method responsible to initiate calls for the blob document producers."""
@@ -359,7 +359,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                     buckets=buckets,
                 ):
                     [
-                        await self.fetchers.put(partial(grab_content, blob))
+                        await self.fetchers.put(partial(self.grab_content, blob))
                         for blob in blobs.get("items", [])
                     ]
             await self.queue.put("FINISHED")
@@ -370,7 +370,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             _, document = await self.queue.get()
             if document == "FINISHED":
                 break
-            yield document
+            yield document, None
 
         await self.fetchers.join()
         await producer_task

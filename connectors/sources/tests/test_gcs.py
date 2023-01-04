@@ -445,7 +445,7 @@ async def test_get_content_when_type_not_supported():
     await mocked_gcs_object.set_content(
         blob=blob_document,
     )
-    assert not bool(blob_document.get("_attachment"))
+    assert "_attachment" not in blob_document
 
 
 @pytest.mark.asyncio
@@ -483,7 +483,7 @@ async def test_get_content_when_file_size_is_large(catch_stdout, patch_logger):
     await mocked_gcs_object.set_content(
         blob=blob_document,
     )
-    assert not bool(blob_document.get("_attachment"))
+    assert "_attachment" not in blob_document
 
 
 @pytest.mark.asyncio
