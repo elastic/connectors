@@ -6,9 +6,11 @@
 """
 Logger -- sets the logging and provides a `logger` global object.
 """
-from datetime import datetime
 import logging
+from datetime import datetime
+
 import ecs_logging
+
 from connectors import __version__
 
 logger = None

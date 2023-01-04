@@ -3,11 +3,11 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import io
-import sys
-import os
 import asyncio
+import io
+import os
 import re
+import sys
 import traceback
 
 import pytest
@@ -103,7 +103,7 @@ def patch_logger(silent=True):
 
     from connectors.logger import logger
 
-    methods = ("exception", "error", "critical", "info", "debug")
+    methods = ("exception", "error", "critical", "info", "debug", "warning")
     for method in methods:
         setattr(logger, f"_old_{method}", getattr(logger, method))
         setattr(logger, method, new_logger.info)

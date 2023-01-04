@@ -6,28 +6,31 @@
 import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
 from functools import partial
 from hashlib import md5
+from io import BytesIO
 
 import aioboto3
-from aiobotocore.response import AioReadTimeoutError
-from aiohttp.client_exceptions import ServerTimeoutError
 from aiobotocore.config import AioConfig
+from aiobotocore.response import AioReadTimeoutError
 from aiobotocore.utils import logger as aws_logger
+from aiohttp.client_exceptions import ServerTimeoutError
 from botocore.exceptions import ClientError
-from contextlib import asynccontextmanager
+
 from connectors.logger import logger, set_extra_logger
 from connectors.source import BaseDataSource
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
-SUPPORTED_CONTENT_TYPE = [
-    "text/plain",
-]
-SUPPORTED_FILETYPE = [".py", ".rst", ".rb", ".sh", ".md", ".txt"]
-ONE_MEGA = 1048576
+MAX_CHUNK_SIZE = 1048576
+DEFAULT_MAX_FILE_SIZE = 10485760
 DEFAULT_PAGE_SIZE = 100
-ENDPOINT_URL = os.getenv(
-    key="ENDPOINT_URL", default=None
-)  # For end to end tests set this environment variable with target host.
+DEFAULT_CONTENT_EXTRACTION = True
+
+if "AWS_ENDPOINT_URL" in os.environ:
+    AWS_ENDPOINT = f"{os.environ['AWS_ENDPOINT_URL']}:{os.environ['AWS_PORT']}"
+else:
+    AWS_ENDPOINT = None
 
 
 class S3DataSource(BaseDataSource):
@@ -41,7 +44,6 @@ class S3DataSource(BaseDataSource):
         """
         super().__init__(connector)
         self.session = aioboto3.Session()
-        self.loop = asyncio.get_event_loop()
         set_extra_logger(aws_logger, log_level=logging.DEBUG, prefix="S3")
         set_extra_logger("aioboto3.resources", log_level=logging.INFO, prefix="S3")
         self.bucket_list = []
@@ -50,12 +52,18 @@ class S3DataSource(BaseDataSource):
             connect_timeout=self.configuration["connect_timeout"],
             retries={"max_attempts": self.configuration["max_attempts"]},
         )
+        self.enable_content_extraction = self.configuration.get(
+            "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION
+        )
 
     @asynccontextmanager
     async def client(self, **kwargs):
         """This method creates client object."""
+        if AWS_ENDPOINT is not None:
+            logger.debug(f"Creating a session against {AWS_ENDPOINT}")
+
         async with self.session.client(
-            service_name="s3", config=self.config, endpoint_url=ENDPOINT_URL, **kwargs
+            service_name="s3", config=self.config, endpoint_url=AWS_ENDPOINT, **kwargs
         ) as s3:
             yield s3
 
@@ -82,33 +90,42 @@ class S3DataSource(BaseDataSource):
             dictionary: Document of file content
         """
         # Reuse the same for all files
-        if not doit:
+        if not (doit and self.enable_content_extraction):
             return
         filename = doc["filename"]
         bucket = doc["bucket"]
-        if os.path.splitext(filename)[-1] not in SUPPORTED_FILETYPE:
+        if os.path.splitext(filename)[-1] not in TIKA_SUPPORTED_FILETYPES:
             logger.debug(f"{filename} can't be extracted")
+            return
+        if doc["size"] > DEFAULT_MAX_FILE_SIZE:
+            logger.warning(
+                f"File size for {filename} is larger than {DEFAULT_MAX_FILE_SIZE} bytes. Discarding the file content"
+            )
             return
         logger.debug(f"Downloading {filename}")
         async with self.client(region_name=region) as s3:
             try:
                 resp = await s3.get_object(Bucket=bucket, Key=filename)
                 await asyncio.sleep(0)
-                data = ""
-                while True:
-                    chunk = await resp["Body"].read(ONE_MEGA)
-                    await asyncio.sleep(0)
-                    if not chunk:
-                        break
-                    data += chunk.decode("utf8", errors="ignore")
-                logger.debug(f"Downloaded {len(data)} for {filename}")
-                return {"_timestamp": timestamp, "text": data, "_id": doc["id"]}
+                file_content, chunk = BytesIO(), True
+                while chunk:
+                    chunk = await resp["Body"].read(MAX_CHUNK_SIZE) or b""
+                    file_content.write(chunk)
+                file_content.seek(0)
+                data = file_content.read()
+                file_content.close()
+                logger.debug(f"Downloaded {filename} for {doc['size']} bytes ")
+                return {
+                    "_timestamp": timestamp,
+                    "_attachment": get_base64_value(content=data),
+                    "_id": doc["id"],
+                }
             except (ClientError, ServerTimeoutError, AioReadTimeoutError) as exception:
                 if (
                     exception.response.get("Error", {}).get("Code")
                     == "InvalidObjectState"
                 ):
-                    logger.warn(
+                    logger.warning(
                         f"{filename} of {bucket} is archived and inaccessible until restored. Error: {exception}"
                     )
                 else:
@@ -131,7 +148,7 @@ class S3DataSource(BaseDataSource):
                 )
                 region = response.get("LocationConstraint")
         except ClientError:
-            logger.warn("Unable to fetch the region")
+            logger.warning("Unable to fetch the region")
 
         return region
 
@@ -159,7 +176,7 @@ class S3DataSource(BaseDataSource):
             async with self.session.resource(
                 service_name="s3",
                 config=self.config,
-                endpoint_url=ENDPOINT_URL,
+                endpoint_url=AWS_ENDPOINT,
                 region_name=region_name,
             ) as s3:
                 try:
@@ -185,7 +202,7 @@ class S3DataSource(BaseDataSource):
                             self._get_content, doc=doc, region=region_name
                         )
                 except Exception as exception:
-                    logger.warn(
+                    logger.warning(
                         f"Something went wrong while fetching documents from {bucket}. Error: {exception}"
                     )
 
@@ -226,5 +243,10 @@ class S3DataSource(BaseDataSource):
                 "value": "AWS Connector",
                 "label": "Friendly name for the connector",
                 "type": "str",
+            },
+            "enable_content_extraction": {
+                "value": DEFAULT_CONTENT_EXTRACTION,
+                "label": "Content extraction will be enabled or not",
+                "type": "bool",
             },
         }

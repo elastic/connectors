@@ -3,13 +3,14 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from datetime import datetime
 import asyncio
+from datetime import datetime
+
 from bson import Decimal128
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from connectors.source import BaseDataSource
 from connectors.logger import logger
+from connectors.source import BaseDataSource
 
 
 class MongoDataSource(BaseDataSource):

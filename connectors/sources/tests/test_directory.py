@@ -4,8 +4,9 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import pytest
-from connectors.sources.directory import DirectoryDataSource, HERE
-from connectors.sources.tests.support import create_source, assert_basics
+
+from connectors.sources.directory import HERE, DirectoryDataSource
+from connectors.sources.tests.support import assert_basics, create_source
 
 
 @pytest.mark.asyncio
@@ -22,6 +23,6 @@ async def test_get_docs(patch_logger, catch_stdout):
         if "__init__.py" in doc["path"]:
             continue
         data = await dl(doit=True, timestamp="xx")
-        assert len(data["text"]) > 0
+        assert len(data["_attachment"]) > 0
 
     assert num > 3

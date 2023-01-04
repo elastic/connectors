@@ -10,7 +10,7 @@ import pytest
 from bson.decimal128 import Decimal128
 
 from connectors.sources.mongo import MongoDataSource
-from connectors.sources.tests.support import create_source, assert_basics
+from connectors.sources.tests.support import assert_basics, create_source
 
 
 @pytest.mark.asyncio

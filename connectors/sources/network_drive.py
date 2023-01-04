@@ -8,15 +8,18 @@
 import asyncio
 import os
 from functools import partial
+from io import BytesIO
 
 import smbclient
-from connectors.logger import logger
-from connectors.source import BaseDataSource
-from connectors.utils import iso_utc
 from smbprotocol.exceptions import SMBException, SMBOSError
 
-SUPPORTED_FILETYPE = [".py", ".rst", ".rb", ".sh", ".md", ".txt"]
+from connectors.logger import logger
+from connectors.source import BaseDataSource
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value, iso_utc
+
 MAX_CHUNK_SIZE = 65536
+DEFAULT_CONTENT_EXTRACTION = True
+DEFAULT_FILE_SIZE_LIMIT = 10485760
 
 
 class NASDataSource(BaseDataSource):
@@ -34,6 +37,9 @@ class NASDataSource(BaseDataSource):
         self.server_ip = self.configuration["server_ip"]
         self.port = self.configuration["server_port"]
         self.drive_path = self.configuration["drive_path"]
+        self.enable_content_extraction = self.configuration.get(
+            "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION
+        )
 
     @classmethod
     def get_default_configuration(cls):
@@ -72,6 +78,11 @@ class NASDataSource(BaseDataSource):
                 "value": "Network Drive Connector",
                 "label": "Friendly name for the connector",
                 "type": "str",
+            },
+            "enable_content_extraction": {
+                "value": DEFAULT_CONTENT_EXTRACTION,
+                "label": "Flag to check if content extraction is enabled or not",
+                "type": "bool",
             },
         }
 
@@ -133,12 +144,13 @@ class NASDataSource(BaseDataSource):
         """
         try:
             with smbclient.open_file(
-                path=path, encoding="utf-8", errors="ignore"
+                path=path, encoding="utf-8", errors="ignore", mode="rb"
             ) as file:
-                file_content, chunk = "", True
+                file_content, chunk = BytesIO(), True
                 while chunk:
-                    chunk = file.read(MAX_CHUNK_SIZE) or ""
-                    file_content += chunk
+                    chunk = file.read(MAX_CHUNK_SIZE) or b""
+                    file_content.write(chunk)
+                file_content.seek(0)
                 return file_content
         except SMBOSError as error:
             logger.error(
@@ -156,11 +168,18 @@ class NASDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with id, timestamp & text
         """
-        if (
-            not doit
-            or os.path.splitext(file["title"])[-1] not in SUPPORTED_FILETYPE
-            or not file["size"]
+        if not (
+            self.enable_content_extraction
+            and doit
+            and os.path.splitext(file["title"])[-1] in TIKA_SUPPORTED_FILETYPES
+            and file["size"]
         ):
+            return
+
+        if int(file["size"]) > DEFAULT_FILE_SIZE_LIMIT:
+            logger.warning(
+                f"File size {file['size']} of {file['title']} bytes is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
+            )
             return
 
         loop = asyncio.get_running_loop()
@@ -168,10 +187,12 @@ class NASDataSource(BaseDataSource):
             executor=None, func=partial(self.fetch_file_content, path=file["path"])
         )
 
+        attachment = content.read()
+        content.close()
         return {
             "_id": file["id"],
             "_timestamp": file["_timestamp"],
-            "text": content,
+            "_attachment": get_base64_value(content=attachment),
         }
 
     async def get_docs(self):

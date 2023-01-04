@@ -10,36 +10,29 @@ Event loop
 - instanciates connector plugins
 - mirrors an Elasticsearch index with a collection of documents
 """
-import os
 import asyncio
-import signal
+import os
 import time
-import functools
 
-from envyaml import EnvYAML
-
-from connectors.byoei import ElasticServer
-from connectors.byoc import BYOIndex, Status, e2str
-from connectors.logger import logger
-from connectors.source import (
-    get_data_sources,
-    get_data_source,
-    ServiceTypeNotConfiguredError,
+from connectors.byoc import (
+    BYOIndex,
     ConnectorUpdateError,
-    ServiceTypeNotSupportedError,
     DataSourceError,
+    ServiceTypeNotConfiguredError,
+    ServiceTypeNotSupportedError,
+    Status,
+    e2str,
 )
+from connectors.byoei import ElasticServer
+from connectors.logger import logger
+from connectors.services.base import BaseService
 from connectors.utils import CancellableSleeps, trace_mem
 
 
-class ConnectorService:
-    def __init__(self, config_file):
-        self.config_file = config_file
+class SyncService(BaseService):
+    def __init__(self, args):
+        super().__init__(args)
         self.errors = [0, time.time()]
-        if not os.path.exists(config_file):
-            raise IOError(f"{config_file} does not exist")
-        self.config = EnvYAML(config_file)
-        self.ent_search_config()
         self.service_config = self.config["service"]
         self.trace_mem = self.service_config.get("trace_mem", False)
         self.idling = self.service_config["idling"]
@@ -53,22 +46,6 @@ class ConnectorService:
         self._sleeps = CancellableSleeps()
         self.connectors = None
         self.trace_mem = self.service_config.get("trace_mem", False)
-
-    def ent_search_config(self):
-        if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
-            return
-        logger.info("Found ENT_SEARCH_CONFIG_PATH, loading ent-search config")
-        ent_search_config = EnvYAML(os.environ["ENT_SEARCH_CONFIG_PATH"])
-        for field in (
-            "elasticsearch.host",
-            "elasticsearch.username",
-            "elasticsearch.password",
-        ):
-            sub = field.split(".")[-1]
-            if field not in ent_search_config:
-                continue
-            logger.debug(f"Overriding {field}")
-            self.config["elasticsearch"][sub] = ent_search_config[field]
 
     def raise_if_spurious(self, exception):
         errors, first = self.errors
@@ -98,7 +75,7 @@ class ConnectorService:
                 logger.debug(f"Connector {connector.id} natively supported")
 
             try:
-                data_source = await get_data_source(connector, self.config)
+                await connector.prepare(self.config)
             except ServiceTypeNotConfiguredError:
                 logger.error(
                     f"Service type is not configured for connector {self.config['connector_id']}"
@@ -116,30 +93,38 @@ class ConnectorService:
                 self.raise_if_spurious(e)
                 return
 
-            if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
-                # we can't sync in that state
-                logger.info(f"Can't sync with status `{e2str(connector.status)}`")
-                data_source = None
-
             try:
                 # the heartbeat is always triggered
                 connector.start_heartbeat(self.hb)
 
                 # we trigger a sync
-                if data_source is not None:
-                    await connector.sync(data_source, es, self.idling, sync_now)
+                if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
+                    # we can't sync in that state
+                    logger.info(f"Can't sync with status `{e2str(connector.status)}`")
+                else:
+                    await connector.sync(es, self.idling, sync_now)
 
                 await asyncio.sleep(0)
             finally:
                 await connector.close()
-                if data_source is not None:
-                    await data_source.close()
 
-    async def poll(self, one_sync=False, sync_now=True):
+    async def run(self):
+        if "PERF8" in os.environ:
+            import perf8
+
+            async with perf8.measure():
+                return await self._run()
+        else:
+            return await self._run()
+
+    async def _run(self):
         """Main event loop."""
+
         self.connectors = BYOIndex(self.config["elasticsearch"])
-        es_host = self.config["elasticsearch"]["host"]
         self.running = True
+
+        one_sync = self.args.one_sync
+        sync_now = self.args.sync_now
         native_service_types = self.config.get("native_service_types", [])
         logger.debug(f"Native support for {', '.join(native_service_types)}")
 
@@ -151,11 +136,40 @@ class ConnectorService:
         else:
             connectors_ids = []
 
+        await self._pre_flight_check()
+
+        es = ElasticServer(self.config["elasticsearch"])
+        try:
+            while self.running:
+                try:
+                    logger.debug(f"Polling every {self.idling} seconds")
+                    query = self.connectors.build_docs_query(
+                        native_service_types, connectors_ids
+                    )
+
+                    async for connector in self.connectors.get_all_docs(query=query):
+                        await self._one_sync(connector, es, sync_now)
+                    if one_sync:
+                        break
+                except Exception as e:
+                    logger.critical(e, exc_info=True)
+                    self.raise_if_spurious(e)
+                finally:
+                    if one_sync:
+                        break
+                await self._sleeps.sleep(self.idling)
+        finally:
+            self.stop()
+            await self.connectors.close()
+            await es.close()
+        return 0
+
+    async def _pre_flight_check(self):
+        es_host = self.config["elasticsearch"]["host"]
+
         if not (await self.connectors.wait()):
             logger.critical(f"{es_host} seem down. Bye!")
             return -1
-
-        es = ElasticServer(self.config["elasticsearch"])
 
         # pre-flight check
         attempts = 0
@@ -177,73 +191,3 @@ class ConnectorService:
                     await asyncio.sleep(self.preflight_idle)
 
         logger.info(f"Service started, listening to events from {es_host}")
-        try:
-            while self.running:
-                try:
-                    logger.debug(f"Polling every {self.idling} seconds")
-                    async for connector in self.connectors.get_list():
-                        if (
-                            connector.service_type not in native_service_types
-                            and connector.id not in connectors_ids
-                        ):
-                            logger.debug(
-                                f"Connector {connector.id} of type {connector.service_type} not supported, ignoring"
-                            )
-                            continue
-
-                        await self._one_sync(connector, es, sync_now)
-                        if one_sync:
-                            self.stop()
-                            break
-                except Exception as e:
-                    logger.critical(e, exc_info=True)
-                    self.raise_if_spurious(e)
-
-                if not one_sync:
-                    await self._sleeps.sleep(self.idling)
-                else:
-                    self.stop()
-        finally:
-            await self.connectors.close()
-            await es.close()
-
-        return 0
-
-    async def get_list(self):
-        logger.info("Registered connectors:")
-        for source in get_data_sources(self.config):
-            logger.info(f"- {source.__doc__.strip()}")
-        return 0
-
-    def shutdown(self, sig):
-        logger.info(f"Caught {sig.name}. Graceful shutdown.")
-        self.stop()
-
-
-def run(args):
-    """Runner"""
-    service = ConnectorService(args.config_file)
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.get_event_loop_policy().get_event_loop()
-        if loop is None:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-    if args.action == "list":
-        coro = service.get_list()
-    else:
-        coro = service.poll(args.one_sync, args.sync_now)
-
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
-
-    try:
-        return loop.run_until_complete(coro)
-    except asyncio.CancelledError:
-        return 0
-    finally:
-        logger.info("Bye")
-
-    return -1

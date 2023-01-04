@@ -3,9 +3,10 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import os
 import asyncio
+import os
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
+
 import yaml
 from elasticsearch import AsyncElasticsearch
 
@@ -39,6 +40,9 @@ async def verify(service_type, index_name, size, config):
 
         if "_extract_binary_content" in first_doc:
             raise Exception("The pipeline did not run")
+
+        if "_attachment" in first_doc:
+            raise Exception("Content extraction was not successful")
 
         print("🤗")
     finally:

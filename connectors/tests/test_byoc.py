@@ -6,24 +6,24 @@
 import asyncio
 import json
 import os
-from envyaml import EnvYAML
 from datetime import datetime
 
+import pytest
 from aioresponses import CallbackResult
 from elasticsearch import AsyncElasticsearch
-import pytest
+from envyaml import EnvYAML
 
-from connectors.byoei import ElasticServer
 from connectors.byoc import (
-    e2str,
-    Status,
-    iso_utc,
-    SyncJob,
-    JobStatus,
-    BYOIndex,
     BYOConnector,
+    BYOIndex,
+    JobStatus,
+    Status,
+    SyncJob,
+    e2str,
+    iso_utc,
 )
-
+from connectors.byoei import ElasticServer
+from connectors.source import BaseDataSource
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
@@ -129,7 +129,9 @@ async def test_heartbeat(mock_responses, patch_logger):
 
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
+        payload={
+            "hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}
+        },
         headers=headers,
     )
 
@@ -143,7 +145,8 @@ async def test_heartbeat(mock_responses, patch_logger):
     connectors = BYOIndex(config)
     conns = []
 
-    async for connector in connectors.get_list():
+    query = connectors.build_docs_query([["mongodb"]])
+    async for connector in connectors.get_all_docs(query=query):
         connector.start_heartbeat(0.2)
         connector.start_heartbeat(1.0)  # NO-OP
         conns.append(connector)
@@ -163,14 +166,16 @@ async def test_connectors_get_list(mock_responses):
 
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
+        payload={
+            "hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}
+        },
         headers=headers,
     )
 
     connectors = BYOIndex(config)
     conns = []
-
-    async for connector in connectors.get_list():
+    query = connectors.build_docs_query([["mongodb"]])
+    async for connector in connectors.get_all_docs(query=query):
         conns.append(connector)
 
     assert len(conns) == 1
@@ -185,6 +190,27 @@ class StubIndex:
         pass
 
 
+doc = {"_id": 1}
+
+
+class Data:
+    def __init__(self, connector):
+        self.connector = connector
+
+    async def ping(self):
+        pass
+
+    async def changed(self):
+        return True
+
+    async def get_docs(self, *args, **kw):
+        for d in [doc, doc]:
+            yield {"_id": 1}, None
+
+    async def close(self):
+        pass
+
+
 @pytest.mark.asyncio
 async def test_sync_mongo(mock_responses, patch_logger):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
@@ -195,7 +221,9 @@ async def test_sync_mongo(mock_responses, patch_logger):
 
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
+        payload={
+            "hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}
+        },
         headers=headers,
     )
     mock_responses.put(
@@ -268,38 +296,15 @@ async def test_sync_mongo(mock_responses, patch_logger):
         headers=headers,
     )
 
-    doc = {"_id": 1}
-
-    class Data:
-        def __init__(self):
-            self.connector = self.make_connector()
-
-        async def ping(self):
-            pass
-
-        async def changed(self):
-            return True
-
-        async def get_docs(self, *args, **kw):
-            for d in [doc, doc]:
-                yield {"_id": 1}, None
-
-        def make_connector(self):
-            index_name = "search-some-index"
-            connector_src = {
-                "service_type": "test",
-                "index_name": index_name,
-                "configuration": {},
-                "scheduling": {},
-                "status": "created",
-            }
-            return BYOConnector(StubIndex(), "test", connector_src, {})
-
     es = ElasticServer(config)
     connectors = BYOIndex(config)
+    service_config = {"sources": {"mongodb": "connectors.tests.test_byoc:Data"}}
+
     try:
-        async for connector in connectors.get_list():
-            await connector.sync(Data(), es, 0)
+        query = connectors.build_docs_query([["mongodb"]])
+        async for connector in connectors.get_all_docs(query=query):
+            await connector.prepare(service_config)
+            await connector.sync(es, 0)
             await connector.close()
     finally:
         await connectors.close()
@@ -358,14 +363,59 @@ async def test_connectors_properties(mock_responses, set_env):
 
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
+        payload={
+            "hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}
+        },
         headers=headers,
     )
 
     connectors = BYOIndex(config["elasticsearch"])
 
-    async for connector in connectors.get_list():
+    query = connectors.build_docs_query([["mongodb"]])
+    async for connector in connectors.get_all_docs(query=query):
         assert connector.analysis_icu == config["elasticsearch"]["analysis_icu"]
         assert connector.language_code == config["elasticsearch"]["language_code"]
 
     await connectors.close()
+
+
+class Banana(BaseDataSource):
+    """Banana"""
+
+    @classmethod
+    def get_default_configuration(cls):
+        return {"one": {"value": None}}
+
+
+@pytest.mark.asyncio
+async def test_prepare(mock_responses):
+    class Client:
+        pass
+
+    class Index:
+        client = Client()
+
+        async def save(self, conn):
+            pass
+
+    # generic empty doc created by the user through the Kibana UI
+    # when it's created that way, the service type is None,
+    # so it's up to the connector to set it back to its value
+    doc = {
+        "status": "created",
+        "service_type": None,
+        "index_name": "test",
+        "configuration": {},
+        "scheduling": {"enabled": False},
+    }
+    connector = BYOConnector(Index(), "1", doc, {})
+
+    config = {
+        "connector_id": "1",
+        "service_type": "mongodb",
+        "sources": {"mongodb": "connectors.tests.test_byoc:Banana"},
+    }
+
+    await connector.prepare(config)
+    assert connector.source_klass.__doc__ == "Banana"
+    assert connector.status == Status.NEEDS_CONFIGURATION

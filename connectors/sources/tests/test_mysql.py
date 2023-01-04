@@ -8,6 +8,7 @@ import asyncio
 import datetime
 import decimal
 import random
+import ssl
 from decimal import Decimal
 from unittest import mock
 
@@ -54,7 +55,9 @@ class Cursor:
 
     def fetchall(self):
         """This method returns object of Return class"""
-        return Result()
+        futures_object = asyncio.Future()
+        futures_object.set_result([["table1"], ["table2"]])
+        return futures_object
 
     async def fetchmany(self, size=1):
         """This method returns response of fetchmany"""
@@ -94,16 +97,24 @@ class Connection:
         """This method returns object of Result class"""
         return Cursor
 
-    async def close():
-        """This method close the connection"""
-        pass
-
-    async def wait_closed():
-        """This method waits before closing the connection"""
-        pass
-
     async def __aexit__(self, exception_type, exception_value, exception_traceback):
         """Make sure the dummy database connection gets closed"""
+        pass
+
+
+class ConnectionPool:
+    def close(self):
+        pass
+
+    async def wait_closed(self):
+        pass
+
+
+class mock_ssl:
+    """This class contains methods which returns dummy ssl context"""
+
+    def load_verify_locations(self, cadata):
+        """This method verify locations"""
         pass
 
 
@@ -136,15 +147,15 @@ async def test_close_with_connection_pool():
     """Test close method of MySql with connection pool"""
     # Setup
     source = create_source(MySqlDataSource)
-
-    source.connection_pool = Connection
+    source.connection_pool = ConnectionPool()
+    source.connection_pool.acquire = Connection
 
     # Execute
     await source.close()
 
 
 @pytest.mark.asyncio
-async def test_ping():
+async def test_ping(patch_logger):
     """Test ping method of MySQL"""
     # Setup
     source = create_source(MySqlDataSource)
@@ -161,7 +172,7 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-async def test_ping_negative(catch_stdout):
+async def test_ping_negative(patch_logger):
     """Test ping method of MySqlDataSource class with negative case"""
     # Setup
     source = create_source(MySqlDataSource)
@@ -178,46 +189,8 @@ async def test_ping_negative(catch_stdout):
 
 
 @pytest.mark.asyncio
-async def test__execute_query():
-    """Test _execute_query method of MySQL"""
-    # Setup
-    source = create_source(MySqlDataSource)
-
-    source.connection_pool = await mock_mysql_response()
-    source.connection_pool.acquire = Connection
-    source.connection_pool.acquire.cursor = Cursor
-
-    # Execute
-    with mock.patch.object(
-        aiomysql, "create_pool", return_value=(await mock_mysql_response())
-    ):
-        response = await source._execute_query(query="select * from table")
-
-        # Assert
-        assert response == (["Database"], [["table1"], ["table2"]])
-
-
-@pytest.mark.asyncio
-async def test__execute_query_negative():
-    """Test _execute_query method of MySQL"""
-    # Setup
-    source = create_source(MySqlDataSource)
-
-    source.connection_pool = await mock_mysql_response()
-    source.connection_pool.acquire = Connection
-    source.connection_pool.acquire.cursor = Cursor
-
-    # Execute
-    with mock.patch.object(
-        aiomysql, "create_pool", return_value=(await mock_mysql_response())
-    ):
-        with pytest.raises(Exception):
-            await source._execute_query()
-
-
-@pytest.mark.asyncio
-async def test__stream_rows():
-    """Test _stream_rows method of MySQL with retry"""
+async def test_connect_with_retry(patch_logger):
+    """Test _connect method of MySQL with retry"""
     # Setup
     source = create_source(MySqlDataSource)
 
@@ -230,8 +203,8 @@ async def test__stream_rows():
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
         # Execute
-        streamer = source._stream_rows(
-            database="database", table="table", query="select * from database.table"
+        streamer = source._connect(
+            query_name="select * from database.table", fetch_many=True
         )
 
         with pytest.raises(Exception):
@@ -281,19 +254,17 @@ async def test_fetch_documents():
     source.connection_pool.acquire.cursor = Cursor
     source.connection_pool.acquire.cursor.is_connection_lost = False
 
-    query = "select * from table"
+    query_name = "select * from table"
 
     # Execute
     with mock.patch.object(
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
-        response = await source._execute_query(query)
+        response = source._connect(query_name)
 
-        mock.patch("source._execute_query", return_value=response)
+        mock.patch("source._connect", return_value=response)
 
-    response = source.fetch_documents(
-        database="database_name", table="table_name", query=query
-    )
+    response = source.fetch_documents(database="database_name", table="table_name")
 
     # Assert
     async for document in response:
@@ -322,39 +293,13 @@ async def test_fetch_rows():
     with mock.patch.object(
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
-        response = await source._execute_query(query)
+        response = source._connect(query)
 
-        mock.patch("source._execute_query", return_value=response)
+        mock.patch("source._connect", return_value=response)
 
     # Assert
     async for row in source.fetch_rows(database="database_name"):
         assert "_id" in row
-
-
-@pytest.mark.asyncio
-async def test_fetch_all_databases():
-    """This function test fetch_all_databases method of MySQL"""
-    # Setup
-    source = create_source(MySqlDataSource)
-
-    source.connection_pool = await mock_mysql_response()
-    source.connection_pool.acquire = Connection
-    source.connection_pool.acquire.cursor = Cursor
-
-    query = "SHOW DATABASES"
-
-    with mock.patch.object(
-        aiomysql, "create_pool", return_value=(await mock_mysql_response())
-    ):
-        response = await source._execute_query(query)
-
-        mock.patch("source._execute_query", return_value=response)
-
-    # Execute
-    response = await source._fetch_all_databases()
-
-    # Assert
-    assert response == ["table1", "table2"]
 
 
 class AsyncIter:
@@ -386,9 +331,10 @@ async def test_get_docs_with_list():
     ):
         source.fetch_rows = mock.MagicMock(return_value=AsyncIter([{"a": 1, "b": 2}]))
 
-    # Execute
-    async for doc, _ in source.get_docs():
-        assert doc == {"a": 1, "b": 2}
+    with mock.patch.object(MySqlDataSource, "_validate_databases", return_value=([])):
+        # Execute
+        async for doc, _ in source.get_docs():
+            assert doc == {"a": 1, "b": 2}
 
 
 @pytest.mark.asyncio
@@ -407,30 +353,27 @@ async def test_get_docs_with_str():
     ):
         source.fetch_rows = mock.MagicMock(return_value=AsyncIter([{"a": 1, "b": 2}]))
 
-    # Execute
-    async for doc, _ in source.get_docs():
-        assert doc == {"a": 1, "b": 2}
+    with mock.patch.object(MySqlDataSource, "_validate_databases", return_value=([])):
+        # Execute
+        async for doc, _ in source.get_docs():
+            assert doc == {"a": 1, "b": 2}
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_none():
-    """Test get docs method of MySql with input as none for database field"""
+async def test_get_docs_with_empty():
+    """Test get docs method of MySql with input as empty for database field"""
     # Setup
     source = create_source(MySqlDataSource)
-    source.configuration.set_field(name="database", value=None)
+    source.configuration.set_field(name="database", value="")
 
     source.connection_pool = await mock_mysql_response()
     source.connection_pool.acquire = Connection
     source.connection_pool.acquire.cursor = Cursor
 
-    with mock.patch.object(
-        aiomysql, "create_pool", return_value=(await mock_mysql_response())
-    ):
-        source.fetch_rows = mock.MagicMock(return_value=AsyncIter([{"a": 1, "b": 2}]))
-
     # Execute
-    async for doc, _ in source.get_docs():
-        assert doc == {"a": 1, "b": 2}
+    with pytest.raises(Exception):
+        async for doc, _ in source.get_docs():
+            doc
 
 
 @pytest.mark.asyncio
@@ -448,6 +391,66 @@ async def test_get_docs():
     ):
         source.fetch_rows = mock.MagicMock(return_value=AsyncIter([{"a": 1, "b": 2}]))
 
+    with mock.patch.object(MySqlDataSource, "_validate_databases", return_value=([])):
+        # Execute
+        async for doc, _ in source.get_docs():
+            assert doc == {"a": 1, "b": 2}
+
+
+@pytest.mark.asyncio
+async def test_validate_databases():
+    """This function test _validate_databases method of MySQL"""
+    # Setup
+    source = create_source(MySqlDataSource)
+
+    source.connection_pool = await mock_mysql_response()
+    source.connection_pool.acquire = Connection
+    source.connection_pool.acquire.cursor = Cursor
+
+    query = "SHOW DATABASES"
+
+    with mock.patch.object(
+        aiomysql, "create_pool", return_value=(await mock_mysql_response())
+    ):
+        response = source._connect(query)
+
+        mock.patch("source._connect", return_value=response)
+
     # Execute
-    async for doc, _ in source.get_docs():
-        assert doc == {"a": 1, "b": 2}
+    response = await source._validate_databases([])
+
+    # Assert
+    assert response == []
+
+
+def test_validate_configuration():
+    """This function test _validate_configuration method of MySQL"""
+    # Setup
+    source = create_source(MySqlDataSource)
+    source.configuration.set_field(name="host", value="")
+
+    # Execute
+    with pytest.raises(Exception):
+        source._validate_configuration()
+
+
+def test_validate_configuration_with_port():
+    """This function test _validate_configuration method with port str input of MySQL"""
+    # Setup
+    source = create_source(MySqlDataSource)
+    source.configuration.set_field(name="port", value="port")
+
+    # Execute
+    with pytest.raises(Exception):
+        source._validate_configuration()
+
+
+def test_ssl_context():
+    """This function test _ssl_context with dummy certificate"""
+    # Setup
+    certificate = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
+    source = create_source(MySqlDataSource)
+
+    # Execute
+    with mock.patch.object(ssl, "create_default_context", return_value=mock_ssl()):
+        source._ssl_context(certificate=certificate)

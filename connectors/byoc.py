@@ -7,20 +7,14 @@
 Implementation of BYOC protocol.
 """
 import asyncio
-from enum import Enum
 import time
 from datetime import datetime, timezone
+from enum import Enum
 
-from connectors.utils import (
-    iso_utc,
-    next_run,
-    ESClient,
-)
+from connectors.es import DEFAULT_LANGUAGE, ESIndex, defaults_for
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration
-from elasticsearch.exceptions import ApiError
-from connectors.index import defaults_for, DEFAULT_LANGUAGE
-
+from connectors.source import DataSourceConfiguration, get_source_klass
+from connectors.utils import iso_utc, next_run
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
@@ -51,6 +45,11 @@ class JobStatus(Enum):
     ERROR = 7
 
 
+class JobTriggerMethod(Enum):
+    ON_DEMAND = 1
+    SCHEDULED = 2
+
+
 CUSTOM_READ_ONLY_FIELDS = (
     "is_native",
     "api_key_id",
@@ -64,10 +63,27 @@ NATIVE_READ_ONLY_FIELDS = CUSTOM_READ_ONLY_FIELDS + (
 )
 
 
-class BYOIndex(ESClient):
+class ServiceTypeNotSupportedError(Exception):
+    pass
+
+
+class ServiceTypeNotConfiguredError(Exception):
+    pass
+
+
+class ConnectorUpdateError(Exception):
+    pass
+
+
+class DataSourceError(Exception):
+    pass
+
+
+class BYOIndex(ESIndex):
     def __init__(self, elastic_config):
-        super().__init__(elastic_config)
         logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
+        # initilize ESIndex instance
+        super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
         # grab all bulk options
         self.bulk_options = elastic_config.get("bulk", {})
         self.language_code = elastic_config.get("language_code", DEFAULT_LANGUAGE)
@@ -90,36 +106,56 @@ class BYOIndex(ESClient):
             doc=document,
         )
 
+    # @TODO move to ESIndex?
     async def preflight(self):
-        await self.check_exists(
-            indices=[CONNECTORS_INDEX, JOBS_INDEX], pipelines=[PIPELINE]
-        )
+        await self.check_exists(indices=[CONNECTORS_INDEX, JOBS_INDEX])
 
-    async def get_list(self):
-        await self.client.indices.refresh(index=CONNECTORS_INDEX)
+    def build_docs_query(self, native_service_types=None, connectors_ids=None):
+        if native_service_types is None:
+            native_service_types = []
+        if connectors_ids is None:
+            connectors_ids = []
 
-        try:
-            resp = await self.client.search(
-                index=CONNECTORS_INDEX,
-                query={"match_all": {}},
-                size=20,
-                expand_wildcards="hidden",
-            )
-        except ApiError as e:
-            logger.critical(f"The server returned {e.status_code}")
-            logger.critical(e.body, exc_info=True)
+        if len(native_service_types) == 0 and len(connectors_ids) == 0:
             return
 
-        logger.debug(f"Found {len(resp['hits']['hits'])} connectors")
-        for hit in resp["hits"]["hits"]:
-            yield BYOConnector(
-                self,
-                hit["_id"],
-                hit["_source"],
-                bulk_options=self.bulk_options,
-                language_code=self.language_code,
-                analysis_icu=self.analysis_icu,
-            )
+        native_connectors_query = {
+            "bool": {
+                "filter": [
+                    {"term": {"is_native": True}},
+                    {"terms": {"service_type": native_service_types}},
+                ]
+            }
+        }
+
+        custom_connectors_query = {
+            "bool": {
+                "filter": [
+                    {"term": {"is_native": False}},
+                    {"terms": {"_id": connectors_ids}},
+                ]
+            }
+        }
+        if len(native_service_types) > 0 and len(connectors_ids) > 0:
+            query = {
+                "bool": {"should": [native_connectors_query, custom_connectors_query]}
+            }
+        elif len(native_service_types) > 0:
+            query = native_connectors_query
+        else:
+            query = custom_connectors_query
+
+        return query
+
+    def _create_object(self, doc_source):
+        return BYOConnector(
+            self,
+            doc_source["_id"],
+            doc_source["_source"],
+            bulk_options=self.bulk_options,
+            language_code=self.language_code,
+            analysis_icu=self.analysis_icu,
+        )
 
 
 class SyncJob:
@@ -138,12 +174,13 @@ class SyncJob:
         msec = (self.completed_at - self.created_at).microseconds
         return round(msec / 9, 2)
 
-    async def start(self):
+    async def start(self, trigger_method=JobTriggerMethod.SCHEDULED):
         self.status = JobStatus.IN_PROGRESS
         job_def = {
             "connector": {
                 "id": self.connector_id,
             },
+            "trigger_method": e2str(trigger_method),
             "status": e2str(self.status),
             "error": None,
             "deleted_document_count": 0,
@@ -191,21 +228,34 @@ class PipelineSettings:
 
 
 class BYOConnector:
+    """Represents one doc in `.elastic-connectors` and triggers sync.
+
+    The pattern to use it is:
+
+        await connector.prepare(config)
+        await connector.start_heartbeat(delay)
+        try:
+            await connector.sync(es)
+        finally:
+            await connector.close()
+    """
+
     def __init__(
         self,
-        index,
+        elastic_index,
         connector_id,
         doc_source,
         bulk_options,
         language_code=DEFAULT_LANGUAGE,
         analysis_icu=DEFAULT_ANALYSIS_ICU,
     ):
+
         self.doc_source = doc_source
         self.id = connector_id
-        self.index = index
+        self.index = elastic_index
         self._update_config(doc_source)
         self._dirty = False
-        self.client = index.client
+        self.client = elastic_index.client
         self.doc_source["last_seen"] = iso_utc()
         self._heartbeat_started = self._syncing = False
         self._closed = False
@@ -214,6 +264,8 @@ class BYOConnector:
         self.bulk_options = bulk_options
         self.language_code = language_code
         self.analysis_icu = analysis_icu
+        self.source_klass = None
+        self.data_provider = None
 
     def _update_config(self, doc_source):
         self.status = doc_source["status"]
@@ -272,6 +324,9 @@ class BYOConnector:
         if self._heartbeat_started:
             self._hb.cancel()
             self._heartbeat_started = False
+        if self.data_provider is not None:
+            await self.data_provider.close()
+            self.data_provider = None
 
     async def sync_doc(self, force=True):
         if not self._dirty and not force:
@@ -310,7 +365,10 @@ class BYOConnector:
 
     async def _sync_starts(self):
         job = SyncJob(self.id, self.client)
-        job_id = await job.start()
+        trigger_method = (
+            JobTriggerMethod.ON_DEMAND if self.sync_now else JobTriggerMethod.SCHEDULED
+        )
+        job_id = await job.start(trigger_method)
 
         self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
@@ -361,12 +419,60 @@ class BYOConnector:
             doc["_run_ml_inference"] = self.pipeline.run_ml_inference
             yield doc, lazy_download
 
-    async def sync(self, data_provider, elastic_server, idling, sync_now=False):
+    async def prepare(self, config):
+        """Prepares the connector, given a configuration
+
+        If the connector id and the service is in the config, we want to
+        populate the service type and then sets the default configuration.
+
+        Returns the source class.
+        """
+        configured_connector_id = config.get("connector_id", "")
+        configured_service_type = config.get("service_type", "")
+
+        if self.id == configured_connector_id and self.service_type is None:
+            if not configured_service_type:
+                logger.error(
+                    f"Service type is not configured for connector {configured_connector_id}"
+                )
+                raise ServiceTypeNotConfiguredError("Service type is not configured.")
+            self.service_type = configured_service_type
+            logger.debug(f"Populated service type for connector {self.id}")
+
+        service_type = self.service_type
+        if service_type not in config["sources"]:
+            raise ServiceTypeNotSupportedError(service_type)
+
+        fqn = config["sources"][service_type]
+        try:
+            source_klass = get_source_klass(fqn)
+            if self.configuration.is_empty():
+                self.configuration = source_klass.get_default_configuration()
+                logger.debug(f"Populated configuration for connector {self.id}")
+
+            # sync state if needed (when service type or configuration is updated)
+            try:
+                await self.sync_doc(force=False)
+            except Exception as e:
+                logger.critical(e, exc_info=True)
+                raise ConnectorUpdateError(
+                    f"Could not update configuration for connector {self.id}"
+                )
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+            raise DataSourceError(f"Could not instantiate {fqn} for {service_type}")
+
+        self.source_klass = source_klass
+
+    async def sync(self, elastic_server, idling, sync_now=False):
         # If anything bad happens before we create a sync job
         # (like bad scheduling config, etc)
         #
         # we will raise the error in the logs here and let Kibana knows
         # by toggling the status and setting the error and status field
+        if self.source_klass is None:
+            raise Exception("Can't call `sync()` before `prepare()`")
+
         try:
             service_type = self.service_type
             if not sync_now:
@@ -385,9 +491,18 @@ class BYOConnector:
                         await self.sync_doc()
                     return
             else:
+                self.sync_now = True
                 logger.info("Sync forced")
 
-            if not await data_provider.changed():
+            try:
+                self.data_provider = self.source_klass(self)
+            except Exception as e:
+                logger.critical(e, exc_info=True)
+                raise DataSourceError(
+                    f"Could not instantiate {self.source_klass} for {service_type}"
+                )
+
+            if not await self.data_provider.changed():
                 logger.debug(f"No change in {service_type} data provider, skipping...")
                 return
         except Exception as exc:
@@ -400,8 +515,8 @@ class BYOConnector:
         self._syncing = True
         job = await self._sync_starts()
         try:
-            logger.debug(f"Pinging the {data_provider} backend")
-            await data_provider.ping()
+            logger.debug(f"Pinging the {self.data_provider} backend")
+            await self.data_provider.ping()
             await asyncio.sleep(0)
 
             mappings, settings = defaults_for(
@@ -417,8 +532,8 @@ class BYOConnector:
 
             result = await elastic_server.async_bulk(
                 self.index_name,
-                self.prepare_docs(data_provider),
-                data_provider.connector.pipeline,
+                self.prepare_docs(self.data_provider),
+                self.data_provider.connector.pipeline,
                 options=self.bulk_options,
             )
             await self._sync_done(job, result)
