@@ -5,15 +5,19 @@
 #
 import asyncio
 import functools
+import os
+import tempfile
 import time
 
 import pytest
 from pympler import asizeof
 
 from connectors.utils import (
+    _BASE64,
     ConcurrentTasks,
     InvalidIndexNameError,
     MemQueue,
+    convert_to_b64,
     get_base64_value,
     next_run,
     validate_index_name,
@@ -156,3 +160,37 @@ async def test_concurrent_runner_high_concurrency(patch_logger):
     await runner.join()
     assert results == list(range(1000))
     assert second_results == [3]
+
+
+def test_convert_to_b64_inplace():
+    assert _BASE64 is not None
+
+    with tempfile.NamedTemporaryFile() as fp:
+        source = fp.name
+        fp.write(b"somedata\n")
+        fp.flush()
+
+        # convert in-place
+        result = convert_to_b64(source)
+
+        assert result == source
+        with open(result) as f:
+            assert f.read().strip() == "c29tZWRhdGEK"
+
+
+def test_convert_to_b64_target():
+    assert _BASE64 is not None
+
+    with tempfile.NamedTemporaryFile() as fp:
+        source = fp.name
+        fp.write(b"somedata\n")
+        fp.flush()
+        # convert to a specific file
+        try:
+            target = f"{source}.here"
+            result = convert_to_b64(source, target=target)
+            with open(result) as f:
+                assert f.read().strip() == "c29tZWRhdGEK"
+        finally:
+            if os.path.exists(target):
+                os.remove(target)

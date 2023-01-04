@@ -8,6 +8,9 @@ import base64
 import contextlib
 import functools
 import gc
+import os
+import shutil
+import subprocess
 import time
 import tracemalloc
 from datetime import datetime, timezone
@@ -176,6 +179,51 @@ def get_base64_value(content):
            content (byte): Object content in bytes
     """
     return base64.b64encode(content).decode("utf-8")
+
+
+_BASE64 = shutil.which("base64")
+
+
+def convert_to_b64(source, target=None, overwite=False):
+    """Converts a `source` file to base64 using the system's `base64`
+
+    When `target` is not provided, done in-place.
+
+    If `overwrite` is `True` and `target` exists, overwrites it.
+    If `False` and it exists, raises an `IOError`
+
+    If the `base64` utility could not be found, falls back to pure Python.
+    WARNING: the pure Python version loads the whole file in memory.
+
+    This function blocks -- if you want to avoid blocking the event
+    loop, call it through `loop.run_in_executor`
+
+    Returns the target file.
+    """
+    inplace = target is None
+    temp_target = f"{source}.b64"
+    if not inplace and not overwite and os.path.exists(target):
+        raise IOError(f"{target} already exists.")
+
+    if _BASE64 is not None:
+        cmd = f"{_BASE64} {source} > {temp_target}"
+        subprocess.check_call(cmd, shell=True)
+    else:
+        with open(source, "rb") as f:
+            data = f.read()
+        with open(temp_target, "wb") as f:
+            f.write(base64.b64encode(data))
+
+    # success, let's move the file to the right place
+    if inplace:
+        os.remove(source)
+        os.rename(temp_target, source)
+    else:
+        if os.path.exists(target):
+            os.remove(target)
+        os.rename(temp_target, target)
+
+    return not inplace and target or source
 
 
 class MemQueue(asyncio.Queue):
