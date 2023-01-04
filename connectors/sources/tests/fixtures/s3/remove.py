@@ -1,5 +1,6 @@
-import boto3
 import sys
+
+import boto3
 
 BUCKET_NAME = "ent-search-ingest-dev"
 REGION_NAME = "us-west-2"
