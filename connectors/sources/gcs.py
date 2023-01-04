@@ -19,8 +19,6 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import (
     DEFAULT_MAX_CONCURRENCY,
-    DEFAULT_QUEUE_MEM_SIZE,
-    DEFAULT_QUEUE_SIZE,
     TIKA_SUPPORTED_FILETYPES,
     ConcurrentTasks,
     MemQueue,
@@ -63,6 +61,8 @@ DEFAULT_PEM_FILE = os.path.join(
     "gcs",
     "service_account_dummy_cert.pem",
 )
+DEFAULT_QUEUE_MEM_SIZE = 1024
+DEFAULT_QUEUE_SIZE = 25
 
 
 class GoogleCloudStorageDataSource(BaseDataSource):
