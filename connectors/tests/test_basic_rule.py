@@ -165,18 +165,15 @@ NON_MATCHING_EXCLUDE_RULE = BasicRule(
 
 @pytest.mark.parametrize(
     "increments, expected_count",
-    [([1, 2, 3], 6), ([None, None, None], 3), ([2, None], 3)],
+    [([1, 2, 3], 6), ([None, None, None], 0), ([2, None], 2)],
 )
 def test_rule_match_stats_increment(increments, expected_count):
     rule_match_stats = RuleMatchStats(Policy.INCLUDE, 0)
 
     for increment in increments:
-        if increment:
-            rule_match_stats.increment_matched_doc_count(by=increment)
-        else:
-            rule_match_stats.increment_matched_doc_count()
+        rule_match_stats += increment
 
-    assert rule_match_stats.matched_docs_count == expected_count
+    assert rule_match_stats.matches_count == expected_count
 
 
 @pytest.mark.parametrize(
@@ -196,7 +193,7 @@ def test_rule_match_stats_eq(rule_match_stats, should_equal):
 
 
 @pytest.mark.parametrize(
-    "documents_should_ingest_tuples, rules, expected_rules_match_stats",
+    "documents_should_ingest_tuples, rules, expected_stats",
     [
         (
             [(DOCUMENT_ONE, True)],
@@ -296,9 +293,7 @@ def test_rule_match_stats_eq(rule_match_stats, should_equal):
         ),
     ],
 )
-def test_engine_should_ingest(
-    documents_should_ingest_tuples, rules, expected_rules_match_stats
-):
+def test_engine_should_ingest(documents_should_ingest_tuples, rules, expected_stats):
     engine = BasicRuleEngine(rules)
 
     for document_should_ingest_tuple in documents_should_ingest_tuples:
@@ -309,7 +304,9 @@ def test_engine_should_ingest(
         else:
             assert not engine.should_ingest(document)
 
-    assert engine.rules_match_stats == expected_rules_match_stats
+    assert all(
+        expected_stats[key] == engine.rules_match_stats[key] for key in expected_stats
+    )
 
 
 def basic_rule_one_policy_and_rule_uppercase():
