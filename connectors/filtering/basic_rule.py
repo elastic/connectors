@@ -8,6 +8,7 @@ import datetime
 import re
 from enum import Enum
 
+import fastjsonschema
 from dateutil.parser import ParserError, parser
 
 from connectors.logger import logger
@@ -94,6 +95,59 @@ def try_coerce(value):
     return coerced_value
 
 
+class RuleMatchStats:
+    def __init__(self, policy, matches_count):
+        self.policy = policy
+        self.matches_count = matches_count
+
+    def __add__(self, other):
+        if other is None:
+            return self
+
+        if isinstance(other, int):
+            return RuleMatchStats(
+                policy=self.policy, matches_count=self.matches_count + other
+            )
+        else:
+            raise NotImplementedError(f"__add__ is not implemented for '{type(other)}'")
+
+    def __eq__(self, other):
+        return self.policy == other.policy and self.matches_count == other.matches_count
+
+
+class BasicRuleEngine:
+    def __init__(self, rules):
+        self.rules = rules
+        self.rules_match_stats = {
+            BasicRule.DEFAULT_RULE_ID: RuleMatchStats(Policy.INCLUDE, 0)
+        }
+
+    def should_ingest(self, document):
+        if not self.rules:
+            self.rules_match_stats[BasicRule.DEFAULT_RULE_ID] += 1
+            return True
+
+        for rule in self.rules:
+            if not rule:
+                continue
+
+            if rule.matches(document):
+                self.rules_match_stats.setdefault(
+                    rule.id_, RuleMatchStats(rule.policy, 0)
+                )
+                self.rules_match_stats[rule.id_] += 1
+
+                return rule.is_include()
+
+        # default behavior: ingest document, if no rule matches ("default rule")
+        self.rules_match_stats[BasicRule.DEFAULT_RULE_ID] += 1
+        return True
+
+
+class InvalidRuleError(ValueError):
+    pass
+
+
 class Rule(Enum):
     EQUALS = 1
     STARTS_WITH = 2
@@ -104,6 +158,14 @@ class Rule(Enum):
     LESS_THAN = 7
 
     RULES = [EQUALS, STARTS_WITH, ENDS_WITH, CONTAINS, REGEX, GREATER_THAN, LESS_THAN]
+
+    @classmethod
+    def is_string_rule(cls, string):
+        try:
+            cls.from_string(string)
+            return True
+        except InvalidRuleError:
+            return False
 
     @classmethod
     def from_string(cls, string):
@@ -123,9 +185,13 @@ class Rule(Enum):
             case "starts_with":
                 return Rule.STARTS_WITH
             case _:
-                raise ValueError(
+                raise InvalidRuleError(
                     f"'{string}' is an unknown value for the enum Rule. Allowed rules: {Rule.RULES}."
                 )
+
+
+class InvalidPolicyError(ValueError):
+    pass
 
 
 class Policy(Enum):
@@ -135,6 +201,14 @@ class Policy(Enum):
     POLICIES = [INCLUDE, EXCLUDE]
 
     @classmethod
+    def is_string_policy(cls, string):
+        try:
+            cls.from_string(string)
+            return True
+        except InvalidPolicyError:
+            return False
+
+    @classmethod
     def from_string(cls, string):
         match string.casefold():
             case "include":
@@ -142,7 +216,7 @@ class Policy(Enum):
             case "exclude":
                 return Policy.EXCLUDE
             case _:
-                raise ValueError(
+                raise InvalidPolicyError(
                     f"'{string}' is an unknown value for the enum Policy. Allowed policies: {Policy.POLICIES}"
                 )
 
@@ -189,6 +263,44 @@ class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
             )
 
         return BasicRuleValidationResult.valid_result(rule_id=basic_rule.id_)
+
+
+class BasicRuleAgainstSchemaValidator(BasicRuleValidator):
+    SCHEMA_DEFINITION = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "policy": {"format": "policy"},
+            "field": {"type": "string", "minLength": 1},
+            "rule": {"format": "rule"},
+            "value": {"type": "string", "minLength": 1},
+            "order": {"type": "number", "minLength": 1},
+        },
+        "required": ["id", "policy", "field", "rule", "value", "order"],
+    }
+
+    CUSTOM_FORMATS = {
+        "policy": lambda policy_string: Policy.is_string_policy(policy_string),
+        "rule": lambda rule_string: Rule.is_string_rule(rule_string),
+    }
+
+    SCHEMA = fastjsonschema.compile(
+        definition=SCHEMA_DEFINITION, formats=CUSTOM_FORMATS
+    )
+
+    @classmethod
+    def validate(cls, rule):
+        try:
+            BasicRuleAgainstSchemaValidator.SCHEMA(rule)
+
+            return BasicRuleValidationResult.valid_result(rule["id"])
+        except fastjsonschema.JsonSchemaValueException as e:
+            # id field could be missing
+            rule_id = rule["id"] if "id" in rule else None
+
+            return BasicRuleValidationResult(
+                rule_id=rule_id, is_valid=False, validation_message=e.message
+            )
 
 
 class BasicRule:
