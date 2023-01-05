@@ -176,7 +176,6 @@ def temp_file(converter):
     try:
         content = binascii.hexlify(os.urandom(32))
         with tempfile.NamedTemporaryFile() as fp:
-            source = fp.name
             fp.write(content)
             fp.flush()
             yield fp.name, content
