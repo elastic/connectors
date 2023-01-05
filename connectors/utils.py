@@ -9,6 +9,7 @@ import contextlib
 import functools
 import gc
 import os
+import platform
 import shutil
 import subprocess
 import time
@@ -206,7 +207,11 @@ def convert_to_b64(source, target=None, overwrite=False):
         raise IOError(f"{target} already exists.")
 
     if _BASE64 is not None:
-        cmd = f"{_BASE64} {source} > {temp_target}"
+        if platform.system() == "Darwin":
+            cmd = f"{_BASE64} {source} > {temp_target}"
+        else:
+            # In Linuces, avoid line wrapping
+            cmd = f"{_BASE64} -w 0 {source} > {temp_target}"
         subprocess.check_call(cmd, shell=True)
     else:
         with open(source, "rb") as f:
