@@ -207,3 +207,25 @@ def test_convert_to_b64_target(converter):
         finally:
             if os.path.exists(target):
                 os.remove(target)
+
+
+@pytest.mark.parametrize("converter", ["system", "py"])
+def test_convert_to_b64_no_overwrite(converter):
+    with temp_file(converter) as (source, content):
+        # check overwrite
+        try:
+            target = f"{source}.here"
+            with open(target, "w") as f:
+                f.write("some")
+
+            # if the file exists we should raise an error..
+            with pytest.raises(IOError):
+                convert_to_b64(source, target=target)
+
+            # ..unless we use `overwrite`
+            result = convert_to_b64(source, target=target, overwrite=True)
+            with open(result, "rb") as f:
+                assert f.read().strip() == base64.b64encode(content)
+        finally:
+            if os.path.exists(target):
+                os.remove(target)

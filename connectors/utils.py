@@ -184,7 +184,7 @@ def get_base64_value(content):
 _BASE64 = shutil.which("base64")
 
 
-def convert_to_b64(source, target=None, overwite=False):
+def convert_to_b64(source, target=None, overwrite=False):
     """Converts a `source` file to base64 using the system's `base64`
 
     When `target` is not provided, done in-place.
@@ -202,7 +202,7 @@ def convert_to_b64(source, target=None, overwite=False):
     """
     inplace = target is None
     temp_target = f"{source}.b64"
-    if not inplace and not overwite and os.path.exists(target):
+    if not inplace and not overwrite and os.path.exists(target):
         raise IOError(f"{target} already exists.")
 
     if _BASE64 is not None:
