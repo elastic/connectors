@@ -18,6 +18,7 @@ Configuration lives in [config.yml](../config.yml).
        prepared reaches that size, the query is emitted even if `chunk_size` is not yet reached. Defaults to 5.
     - `chunk_size`: The max size of the bulk operation to Elasticsearch. Defaults to 500.
     - `max_concurrency`: Maximum number of concurrent bulk requests. Defaults to 5.
+    - `concurrent_downloads`: Maximum number of concurrent downloads in the backend. Default to 10.
   - `retry_on_timeout`: Whether to retry on request timeout. Defaults to `true`.
   - `request_timeout`: The request timeout to be passed to transport in options. Defaults to 120.
   - `max_wait_duration`: The maximum wait duration (in seconds) for the Elasticsearch connection. Defaults to 60.
