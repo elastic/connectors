@@ -16,8 +16,10 @@ from connectors.sources.tests.support import assert_basics, create_source
 
 @pytest.fixture(scope="session", autouse=True)
 def execute_before_all_tests():
-    os.environ["AWS_ACCESS_KEY_ID"] = "access_key"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "secret_key"
+    """This method execute at the start, once"""
+    if not "AWS_ACCESS_KEY_ID" in os.environ:
+        os.environ["AWS_ACCESS_KEY_ID"] = "access_key"
+        os.environ["AWS_SECRET_ACCESS_KEY"] = "secret_key"
 
 
 @pytest.mark.asyncio
