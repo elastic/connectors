@@ -11,9 +11,9 @@ import pytest
 from connectors.filtering.basic_rule import (
     BasicRule,
     BasicRuleAgainstSchemaValidator,
-    BasicRulesSetSemanticValidator,
     BasicRuleEngine,
     BasicRuleNoMatchAllRegexValidator,
+    BasicRulesSetSemanticValidator,
     Policy,
     Rule,
     RuleMatchStats,
