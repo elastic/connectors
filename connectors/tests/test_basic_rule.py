@@ -10,9 +10,9 @@ import pytest
 
 from connectors.filtering.basic_rule import (
     BasicRule,
-    BasicRuleNoMatchAllRegexValidator,
     BasicRuleAgainstSchemaValidator,
     BasicRuleEngine,
+    BasicRuleNoMatchAllRegexValidator,
     Policy,
     Rule,
     RuleMatchStats,
@@ -1501,6 +1501,7 @@ def test_basic_rule_validate_no_match_all_regex(basic_rule, should_be_valid):
         assert BasicRuleNoMatchAllRegexValidator.validate(basic_rule).is_valid
     else:
         assert not BasicRuleNoMatchAllRegexValidator.validate(basic_rule).is_valid
+
 
 @pytest.mark.parametrize(
     "basic_rule, should_be_valid",
