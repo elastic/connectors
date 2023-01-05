@@ -95,6 +95,55 @@ def try_coerce(value):
     return coerced_value
 
 
+class RuleMatchStats:
+    def __init__(self, policy, matches_count):
+        self.policy = policy
+        self.matches_count = matches_count
+
+    def __add__(self, other):
+        if other is None:
+            return self
+
+        if isinstance(other, int):
+            return RuleMatchStats(
+                policy=self.policy, matches_count=self.matches_count + other
+            )
+        else:
+            raise NotImplementedError(f"__add__ is not implemented for '{type(other)}'")
+
+    def __eq__(self, other):
+        return self.policy == other.policy and self.matches_count == other.matches_count
+
+
+class BasicRuleEngine:
+    def __init__(self, rules):
+        self.rules = rules
+        self.rules_match_stats = {
+            BasicRule.DEFAULT_RULE_ID: RuleMatchStats(Policy.INCLUDE, 0)
+        }
+
+    def should_ingest(self, document):
+        if not self.rules:
+            self.rules_match_stats[BasicRule.DEFAULT_RULE_ID] += 1
+            return True
+
+        for rule in self.rules:
+            if not rule:
+                continue
+
+            if rule.matches(document):
+                self.rules_match_stats.setdefault(
+                    rule.id_, RuleMatchStats(rule.policy, 0)
+                )
+                self.rules_match_stats[rule.id_] += 1
+
+                return rule.is_include()
+
+        # default behavior: ingest document, if no rule matches ("default rule")
+        self.rules_match_stats[BasicRule.DEFAULT_RULE_ID] += 1
+        return True
+
+
 class InvalidRuleError(ValueError):
     pass
 
