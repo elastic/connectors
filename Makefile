@@ -9,7 +9,6 @@ bin/python:
 	bin/pip install --upgrade pip
 
 install: bin/python bin/elastic-ingest
-	bin/pip install -r requirements/$(ARCH).txt
 
 dev: install
 	bin/pip install -r requirements/tests.txt
