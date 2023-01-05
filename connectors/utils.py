@@ -16,6 +16,7 @@ import time
 import tracemalloc
 from datetime import datetime, timezone
 
+from base64io import Base64IO
 from cstriggers.core.trigger import QuartzCron
 from guppy import hpy
 from pympler import asizeof
@@ -193,8 +194,8 @@ def convert_to_b64(source, target=None, overwrite=False):
     If `overwrite` is `True` and `target` exists, overwrites it.
     If `False` and it exists, raises an `IOError`
 
-    If the `base64` utility could not be found, falls back to pure Python.
-    WARNING: the pure Python version loads the whole file in memory.
+    If the `base64` utility could not be found, falls back to pure Python
+    using base64io.
 
     This function blocks -- if you want to avoid blocking the event
     loop, call it through `loop.run_in_executor`
@@ -214,10 +215,11 @@ def convert_to_b64(source, target=None, overwrite=False):
             cmd = f"{_BASE64} -w 0 {source} > {temp_target}"
         subprocess.check_call(cmd, shell=True)
     else:
-        with open(source, "rb") as f:
-            data = f.read()
-        with open(temp_target, "wb") as f:
-            f.write(base64.b64encode(data))
+        # Pure Python version
+        with open(source, "rb") as sf, open(temp_target, "wb") as tf:
+            with Base64IO(tf) as encoded_target:
+                for line in sf:
+                    encoded_target.write(line)
 
     # success, let's move the file to the right place
     if inplace:
