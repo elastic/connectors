@@ -4,6 +4,9 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+import base64
+import binascii
+import contextlib
 import functools
 import os
 import tempfile
@@ -12,8 +15,8 @@ import time
 import pytest
 from pympler import asizeof
 
+from connectors import utils
 from connectors.utils import (
-    _BASE64,
     ConcurrentTasks,
     InvalidIndexNameError,
     MemQueue,
@@ -162,35 +165,46 @@ async def test_concurrent_runner_high_concurrency(patch_logger):
     assert second_results == [3]
 
 
-def test_convert_to_b64_inplace():
-    assert _BASE64 is not None
+@contextlib.contextmanager
+def temp_file(converter):
+    if converter == "system":
+        assert utils._BASE64 is not None
+        _SAVED = None
+    else:
+        _SAVED = utils._BASE64
+        utils._BASE64 = None
+    try:
+        content = binascii.hexlify(os.urandom(32))
+        with tempfile.NamedTemporaryFile() as fp:
+            source = fp.name
+            fp.write(content)
+            fp.flush()
+            yield fp.name, content
+    finally:
+        if _SAVED is not None:
+            utils._BASE64 = _SAVED
 
-    with tempfile.NamedTemporaryFile() as fp:
-        source = fp.name
-        fp.write(b"somedata\n")
-        fp.flush()
 
+@pytest.mark.parametrize("converter", ["system", "py"])
+def test_convert_to_b64_inplace(converter):
+    with temp_file(converter) as (source, content):
         # convert in-place
         result = convert_to_b64(source)
 
         assert result == source
-        with open(result) as f:
-            assert f.read().strip() == "c29tZWRhdGEK"
+        with open(result, "rb") as f:
+            assert f.read().strip() == base64.b64encode(content)
 
 
-def test_convert_to_b64_target():
-    assert _BASE64 is not None
-
-    with tempfile.NamedTemporaryFile() as fp:
-        source = fp.name
-        fp.write(b"somedata\n")
-        fp.flush()
+@pytest.mark.parametrize("converter", ["system", "py"])
+def test_convert_to_b64_target(converter):
+    with temp_file(converter) as (source, content):
         # convert to a specific file
         try:
             target = f"{source}.here"
             result = convert_to_b64(source, target=target)
-            with open(result) as f:
-                assert f.read().strip() == "c29tZWRhdGEK"
+            with open(result, "rb") as f:
+                assert f.read().strip() == base64.b64encode(content)
         finally:
             if os.path.exists(target):
                 os.remove(target)
