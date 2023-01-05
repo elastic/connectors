@@ -223,7 +223,7 @@ class Policy(Enum):
 
 class BasicRuleValidationResult:
     def __init__(self, rule_id, is_valid, validation_message):
-        self.rule_id = (rule_id,)
+        self.rule_id = rule_id
         self.is_valid = is_valid
         self.validation_message = validation_message
 
@@ -238,6 +238,31 @@ class BasicRuleValidator:
     @classmethod
     def validate(cls, rule):
         raise NotImplementedError
+
+
+class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
+    MATCH_ALL_REGEXPS = [".*", "(.*)"]
+
+    @classmethod
+    def validate(cls, basic_rule_json):
+        basic_rule = BasicRule.from_json(basic_rule_json)
+
+        # default rule uses match all regex, which is intended
+        if basic_rule.is_default_rule():
+            return BasicRuleValidationResult.valid_result(rule_id=basic_rule.id_)
+
+        if basic_rule.rule == Rule.REGEX and any(
+            match_all_regex == basic_rule.value
+            for match_all_regex in BasicRuleNoMatchAllRegexValidator.MATCH_ALL_REGEXPS
+        ):
+            return BasicRuleValidationResult(
+                rule_id=basic_rule.id_,
+                is_valid=False,
+                validation_message=f"Match all regexps: '{BasicRuleNoMatchAllRegexValidator.MATCH_ALL_REGEXPS}' are "
+                f"not allowed.",
+            )
+
+        return BasicRuleValidationResult.valid_result(rule_id=basic_rule.id_)
 
 
 class BasicRuleAgainstSchemaValidator(BasicRuleValidator):

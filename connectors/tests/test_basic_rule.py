@@ -12,6 +12,7 @@ from connectors.filtering.basic_rule import (
     BasicRule,
     BasicRuleAgainstSchemaValidator,
     BasicRuleEngine,
+    BasicRuleNoMatchAllRegexValidator,
     Policy,
     Rule,
     RuleMatchStats,
@@ -1477,6 +1478,29 @@ def basic_rule_json(merge_with=None, delete_keys=None):
         del basic_rule[key]
 
     return basic_rule
+
+
+@pytest.mark.parametrize(
+    "basic_rule, should_be_valid",
+    [
+        (basic_rule_json(), True),
+        # default rule should be skipped for match all regex validation
+        (basic_rule_json(merge_with={"id": BasicRule.DEFAULT_RULE_ID}), True),
+        # valid regexps
+        (basic_rule_json(merge_with={"rule": "regex", "value": "abc"}), True),
+        # for other rule types it should be possible to use values which look like match all regexps
+        (basic_rule_json(merge_with={"rule": "contains", "value": ".*"}), True),
+        (basic_rule_json(merge_with={"rule": "contains", "value": "(.*)"}), True),
+        # invalid rules
+        (basic_rule_json(merge_with={"rule": "regex", "value": ".*"}), False),
+        (basic_rule_json(merge_with={"rule": "regex", "value": "(.*)"}), False),
+    ],
+)
+def test_basic_rule_validate_no_match_all_regex(basic_rule, should_be_valid):
+    if should_be_valid:
+        assert BasicRuleNoMatchAllRegexValidator.validate(basic_rule).is_valid
+    else:
+        assert not BasicRuleNoMatchAllRegexValidator.validate(basic_rule).is_valid
 
 
 @pytest.mark.parametrize(
