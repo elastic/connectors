@@ -230,7 +230,7 @@ def convert_to_b64(source, target=None, overwrite=False):
             os.remove(target)
         os.rename(temp_target, target)
 
-    return not inplace and target or source
+    return source if inplace else target
 
 
 class MemQueue(asyncio.Queue):
