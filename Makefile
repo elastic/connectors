@@ -8,7 +8,7 @@ bin/python:
 	$(PYTHON) -m venv .
 	bin/pip install --upgrade pip
 
-install: bin/python
+install: bin/python bin/elastic-ingest
 	bin/pip install -r requirements/$(ARCH).txt
 
 dev: install
