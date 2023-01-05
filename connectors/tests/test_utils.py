@@ -174,7 +174,7 @@ def temp_file(converter):
         _SAVED = utils._BASE64
         utils._BASE64 = None
     try:
-        content = binascii.hexlify(os.urandom(32))
+        content = binascii.hexlify(os.urandom(32)).strip()
         with tempfile.NamedTemporaryFile() as fp:
             fp.write(content)
             fp.flush()
@@ -192,7 +192,7 @@ def test_convert_to_b64_inplace(converter):
 
         assert result == source
         with open(result, "rb") as f:
-            assert f.read().strip() == base64.b64encode(content)
+            assert f.read().strip() == base64.b64encode(content).strip()
 
 
 @pytest.mark.parametrize("converter", ["system", "py"])
@@ -203,7 +203,7 @@ def test_convert_to_b64_target(converter):
             target = f"{source}.here"
             result = convert_to_b64(source, target=target)
             with open(result, "rb") as f:
-                assert f.read().strip() == base64.b64encode(content)
+                assert f.read().strip() == base64.b64encode(content).strip()
         finally:
             if os.path.exists(target):
                 os.remove(target)
