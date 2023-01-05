@@ -193,6 +193,7 @@ class Fetcher:
         self.total_docs_deleted = 0
         self.fetch_error = None
         self.display_every = display_every
+        self.concurrent_downloads = concurrent_downloads
 
     def __str__(self):
         return (
@@ -263,7 +264,9 @@ class Fetcher:
                 # if we need to call lazy_download we push it in lazy_downloads
                 if lazy_download is not None:
                     await lazy_downloads.put(
-                        self._deferred_index(lazy_download, doc_id, doc, operation)
+                        functools.partial(
+                            self._deferred_index, lazy_download, doc_id, doc, operation
+                        )
                     )
 
                 else:
@@ -283,9 +286,9 @@ class Fetcher:
             await self.queue.put("FETCH_ERROR")
             self.fetch_error = e
             return
-
-        # wait for all downloads to be finished
-        await lazy_downloads.wait()
+        finally:
+            # wait for all downloads to be finished
+            await lazy_downloads.join()
 
         # We delete any document that existed in Elasticsearch that was not
         # returned by the backend.
