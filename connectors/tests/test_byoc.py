@@ -228,7 +228,7 @@ class Data:
         pass
 
     def tweak_bulk_options(self, options):
-        options["concurrent_downloads"] = 10
+        options["concurrent_downloads"] = 3
 
 
 @pytest.mark.asyncio
@@ -330,7 +330,9 @@ async def test_sync_mongo(mock_responses, patch_logger):
         await connectors.close()
         await es.close()
 
-    patch_logger.assert_present("max_concurrency 10")
+    # verify that the Data source was able to override the option
+    patch_logger.assert_not_present("max_concurrency 10")
+    patch_logger.assert_present("max_concurrency 3")
 
 
 @pytest.mark.asyncio
