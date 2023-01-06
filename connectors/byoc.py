@@ -529,9 +529,10 @@ class BYOConnector:
                 self.index_name, mappings=mappings, settings=settings
             )
             await asyncio.sleep(0)
-            bulk_options = self.data_provider.tweak_bulk_options(
-                dict(self.bulk_options)
-            )
+
+            # allows the data provider to change the bulk options
+            bulk_options = self.bulk_options.copy()
+            self.data_provider.tweak_bulk_options(self.bulk_options)
 
             result = await elastic_server.async_bulk(
                 self.index_name,

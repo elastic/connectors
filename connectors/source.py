@@ -125,8 +125,11 @@ class BaseDataSource:
     def tweak_bulk_options(self, options):
         """Receives the bulk options every time a sycn happens, so they can be
         tweaked if needed.
+
+
+        Returns None. The changes are done in-place
         """
-        return options
+        pass
 
 
 def get_source_klass(fqn):
