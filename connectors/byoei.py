@@ -208,6 +208,7 @@ class Fetcher:
 
     async def _deferred_index(self, lazy_download, doc_id, doc, operation):
         data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
+
         if data is not None:
             self.total_downloads += 1
             data.pop("_id", None)
