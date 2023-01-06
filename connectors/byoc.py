@@ -529,12 +529,15 @@ class BYOConnector:
                 self.index_name, mappings=mappings, settings=settings
             )
             await asyncio.sleep(0)
+            bulk_options = self.data_provider.tweak_bulk_options(
+                dict(self.bulk_options)
+            )
 
             result = await elastic_server.async_bulk(
                 self.index_name,
                 self.prepare_docs(self.data_provider),
                 self.data_provider.connector.pipeline,
-                options=self.bulk_options,
+                options=bulk_options,
             )
             await self._sync_done(job, result)
 

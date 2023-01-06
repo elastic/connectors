@@ -122,6 +122,12 @@ class BaseDataSource:
         """
         raise NotImplementedError
 
+    def tweak_bulk_options(self, options):
+        """Receives the bulk options every time a sycn happens, so they can be
+        tweaked if needed.
+        """
+        return options
+
 
 def get_source_klass(fqn):
     """Converts a Fully Qualified Name into a class instance."""

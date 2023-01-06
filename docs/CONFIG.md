@@ -9,7 +9,8 @@ Configuration lives in [config.yml](../config.yml).
   - `api_key`: The API key for Elasticsearch connection. You can't set `api_key` when basic auth is used.
   - `ssl`: Whether SSL is used for the Elasticsearch connection.
   - `ca_certs`: Path to a CA bundle.
-  - `bulk`: Options for the Bulk API calls behavior
+  - `bulk`: Options for the Bulk API calls behavior - all options can be
+    overriden by each source class
     - `display_every`: The number of docs between each counters display. Defaults to 100.
     - `queue_max_size`: The max size of the bulk queue. Defaults to 1024.
     - `queue_max_mem_size`: The max size in MB of the bulk queue. When it's reached, the next put
