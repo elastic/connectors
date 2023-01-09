@@ -8,6 +8,7 @@ Implementation of BYOC protocol.
 """
 import asyncio
 import time
+from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 
@@ -159,10 +160,11 @@ class BYOIndex(ESIndex):
 
 
 class SyncJob:
-    def __init__(self, connector_id, elastic_client):
+    def __init__(self, connector_id, elastic_client, filtering):
         self.connector_id = connector_id
         self.client = elastic_client
         self.created_at = datetime.now(timezone.utc)
+        self.filtering = SyncJob.transform_filtering(filtering)
         self.completed_at = None
         self.job_id = None
         self.status = None
@@ -177,9 +179,7 @@ class SyncJob:
     async def start(self, trigger_method=JobTriggerMethod.SCHEDULED):
         self.status = JobStatus.IN_PROGRESS
         job_def = {
-            "connector": {
-                "id": self.connector_id,
-            },
+            "connector": {"id": self.connector_id, "filtering": self.filtering},
             "trigger_method": e2str(trigger_method),
             "status": e2str(self.status),
             "error": None,
@@ -211,6 +211,38 @@ class SyncJob:
         job_def["status"] = e2str(self.status)
 
         return await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
+
+    @classmethod
+    def transform_filtering(cls, filtering):
+        # deepcopy to not change the reference resulting in changing .elastic-connectors filtering
+        filtering = (
+            {"advanced_snippet": {}, "rules": []}
+            if (filtering is None or len(filtering) == 0)
+            else deepcopy(filtering)
+        )
+
+        # extract value for sync job
+        filtering["advanced_snippet"] = filtering.get("advanced_snippet", {}).get(
+            "value", {}
+        )
+        return filtering
+
+
+class Filtering:
+    DEFAULT_DOMAIN = "DEFAULT"
+
+    def __init__(self, filtering):
+        self.filtering = filtering if filtering else []
+
+    def get_active_filter(self, domain):
+        return next(
+            (
+                filter_["active"]
+                for filter_ in self.filtering
+                if filter_["domain"] == domain
+            ),
+            {},
+        )
 
 
 class PipelineSettings:
@@ -277,6 +309,7 @@ class BYOConnector:
         self.scheduling = doc_source["scheduling"]
         self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
         self._dirty = True
+        self._filtering = Filtering(doc_source.get("filtering", []))
 
     @property
     def status(self):
@@ -304,6 +337,10 @@ class BYOConnector:
     @property
     def configuration(self):
         return self._configuration
+
+    @property
+    def filtering(self):
+        return self._filtering
 
     @configuration.setter
     def configuration(self, value):
@@ -364,7 +401,12 @@ class BYOConnector:
         return next_run(self.scheduling["interval"])
 
     async def _sync_starts(self):
-        job = SyncJob(self.id, self.client)
+        job = SyncJob(
+            self.id,
+            self.client,
+            # Always use 'DEFAULT' domain for now
+            self.filtering.get_active_filter(Filtering.DEFAULT_DOMAIN),
+        )
         trigger_method = (
             JobTriggerMethod.ON_DEMAND if self.sync_now else JobTriggerMethod.SCHEDULED
         )
