@@ -291,7 +291,7 @@ class MemQueue(asyncio.Queue):
                 result = await putter
                 if isinstance(result, asyncio.QueueFull):
                     raise result
-            except:
+            except:  # NOQA
                 putter.cancel()  # Just in case putter is not done yet.
                 try:
                     # Clean self._putters from canceled putters.
