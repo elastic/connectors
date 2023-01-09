@@ -244,6 +244,9 @@ class MemQueue(asyncio.Queue):
         self._current_memsize = 0
         self.refresh_timeout = refresh_timeout
 
+    def qmemsize(self):
+        return self._current_memsize
+
     def _get(self):
         item_size, item = self._queue.popleft()
         self._current_memsize -= item_size
@@ -253,29 +256,49 @@ class MemQueue(asyncio.Queue):
         self._current_memsize += item[0]
         self._queue.append(item)
 
-    def mem_full(self):
-        if self.maxmemsize == 0:
-            return False
-        return self.qmemsize() >= self.maxmemsize
+    def full(self, next_item_size=0):
+        full_by_numbers = super().full()
+        if full_by_numbers:
+            return True
+        return self._current_memsize + next_item_size >= self.maxmemsize
 
-    def qmemsize(self):
-        return self._current_memsize
-
-    async def _wait_for_room(self, item):
-        item_size = get_size(item)
-        if self._current_memsize + item_size <= self.maxmemsize:
-            return item_size
+    async def _putter_timeout(self, putter):
         start = time.time()
-        while self._current_memsize + item_size >= self.maxmemsize:
+        while not putter.done():
             if time.time() - start >= self.refresh_timeout:
-                raise asyncio.QueueFull()
+                putter.set_result(asyncio.QueueFull())
+                return
             logger.debug("Queue Full")
             await asyncio.sleep(self.refresh_interval)
-        return item_size
 
     async def put(self, item):
-        item_size = await self._wait_for_room(item)
-        return await super().put((item_size, item))
+        item_size = get_size(item)
+        while self.full(item_size):
+            putter = self._get_loop().create_future()
+            putter_timeout = self._get_loop().create_task(self._putter_timeout(putter))
+            self._putters.append(putter)
+            try:
+                result = await putter
+                if isinstance(result, asyncio.QueueFull):
+                    raise result
+            except:
+                putter.cancel()  # Just in case putter is not done yet.
+                try:
+                    # Clean self._putters from canceled putters.
+                    self._putters.remove(putter)
+                except ValueError:
+                    # The putter could be removed from self._putters by a
+                    # previous get_nowait call.
+                    pass
+                if not self.full() and not putter.cancelled():
+                    # We were woken up by get_nowait(), but can't take
+                    # the call.  Wake up the next in line.
+                    self._wakeup_next(self._putters)
+                raise
+
+            await putter_timeout
+
+        return self.put_nowait((item_size, item))
 
 
 class ConcurrentTasks:

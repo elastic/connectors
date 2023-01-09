@@ -57,7 +57,7 @@ async def test_mem_queue(patch_logger):
     queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=2)
     await queue.put("small stuff")
 
-    assert not queue.mem_full()
+    assert not queue.full()
     assert queue.qmemsize() == asizeof.asizeof("small stuff")
 
     # let's pile up until it can't accept anymore stuff
@@ -82,7 +82,7 @@ async def test_mem_queue(patch_logger):
         assert (size, item) == (64, "small stuff")
         await asyncio.sleep(0)
         await queue.get()  # removes the 2kb
-        assert not queue.mem_full()
+        assert not queue.full()
 
     await asyncio.gather(remove_data(), add_data())
     assert when[1] - when[0] > 0.1
