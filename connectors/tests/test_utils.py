@@ -88,6 +88,27 @@ async def test_mem_queue(patch_logger):
     assert when[1] - when[0] > 0.1
 
 
+@pytest.mark.asyncio
+async def test_mem_queue_speed(patch_logger):
+    # with memqueue
+    queue = MemQueue(maxmemsize=1024*1024, refresh_interval=0.1, refresh_timeout=2)
+    start = time.time()
+    for i in range(1000):
+        await queue.put("x" * 100)
+    mem_queue_duration = time.time() - start
+
+    # vanilla queue
+    queue = asyncio.Queue()
+    start = time.time()
+    for i in range(1000):
+        await queue.put("x" * 100)
+    queue_duration = time.time() - start
+
+    # mem queue should be 30 times slower at the most
+    quotient, _ = divmod(mem_queue_duration, queue_duration)
+    assert quotient < 30
+
+
 def test_get_base64_value():
     """This test verify get_base64_value method and convert encoded data into base64"""
     expected_result = get_base64_value("dummy".encode("utf-8"))
