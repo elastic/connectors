@@ -308,20 +308,13 @@ class MemQueue(asyncio.Queue):
 
             await putter_timeout
 
-        self._put((item_size, item))
-        self._unfinished_tasks += 1
-        self._finished.clear()
-        self._wakeup_next(self._getters)
+        super().put_nowait(item_size, item))
 
     def put_nowait(self, item):
         item_size = get_size(item)
         if self.full(item_size):
             raise asyncio.QueueFull
-
-        self._put((item_size, item))
-        self._unfinished_tasks += 1
-        self._finished.clear()
-        self._wakeup_next(self._getters)
+        super().put_nowait(item_size, item))
 
 
 class ConcurrentTasks:
