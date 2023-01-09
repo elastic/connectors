@@ -263,8 +263,7 @@ class MemQueue(asyncio.Queue):
         return self._current_memsize + next_item_size >= self.maxmemsize
 
     async def _putter_timeout(self, putter):
-        """This coroutine will set the result of the putter to QueueFull when a certain timeout it reached.
-        """
+        """This coroutine will set the result of the putter to QueueFull when a certain timeout it reached."""
         start = time.time()
         while not putter.done():
             if time.time() - start >= self.refresh_timeout:
@@ -309,7 +308,20 @@ class MemQueue(asyncio.Queue):
 
             await putter_timeout
 
-        return self.put_nowait((item_size, item))
+        self._put((item_size, item))
+        self._unfinished_tasks += 1
+        self._finished.clear()
+        self._wakeup_next(self._getters)
+
+    def put_nowait(self, item):
+        item_size = get_size(item)
+        if self.full(item_size):
+            raise asyncio.QueueFull
+
+        self._put((item_size, item))
+        self._unfinished_tasks += 1
+        self._finished.clear()
+        self._wakeup_next(self._getters)
 
 
 class ConcurrentTasks:

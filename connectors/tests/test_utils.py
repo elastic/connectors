@@ -91,7 +91,7 @@ async def test_mem_queue(patch_logger):
 @pytest.mark.asyncio
 async def test_mem_queue_speed(patch_logger):
     # with memqueue
-    queue = MemQueue(maxmemsize=1024*1024, refresh_interval=0.1, refresh_timeout=2)
+    queue = MemQueue(maxmemsize=1024 * 1024, refresh_interval=0.1, refresh_timeout=2)
     start = time.time()
     for i in range(1000):
         await queue.put("x" * 100)
