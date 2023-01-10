@@ -284,6 +284,15 @@ class MemQueue(asyncio.Queue):
         # 2/ when the putter is done, we check if the result is QueueFull.
         #    if it's the case, we re-raise it here
         while self.full(item_size):
+            #
+            # self._putter is a deque used as a FIFO queue by asyncio.Queue.
+            #
+            # Everytime a item is to be added in a full queue, a future (putter)
+            # is added at the end of that deque. A `get` call on the queue will remove the
+            # fist element in that deque and set the future result, and this
+            # will unlock the corresponding put() call here.
+            #
+            # This mechanism ensures that we serialize put() calls when the queue is full.
             putter = self._get_loop().create_future()
             putter_timeout = self._get_loop().create_task(self._putter_timeout(putter))
             self._putters.append(putter)
