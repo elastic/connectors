@@ -52,13 +52,6 @@ def _parser():
     )
 
     parser.add_argument(
-        "--sync-now",
-        action="store_true",
-        default=False,
-        help="Force a sync on first run for each connector.",
-    )
-
-    parser.add_argument(
         "--filebeat",
         action="store_true",
         default=False,
@@ -70,13 +63,6 @@ def _parser():
         action="store_true",
         default=False,
         help="Display the version and exit.",
-    )
-
-    parser.add_argument(
-        "--one-sync",
-        action="store_true",
-        default=False,
-        help="Runs a single sync and exits.",
     )
 
     parser.add_argument(

@@ -203,8 +203,7 @@ def patch_validate_filtering_in_byoc():
 
 class Args:
     def __init__(self, **options):
-        self.one_sync = options.get("one_sync", False)
-        self.sync_now = options.get("sync_now", False)
+        pass
 
 
 def create_service(config_file, **options):
@@ -424,7 +423,7 @@ async def test_connector_service_poll_no_sync_but_status_updated(
     await set_server_responses(
         mock_responses, [FAKE_CONFIG_NO_SYNC], connectors_update=upd
     )
-    await create_and_run_service(CONFIG_FILE, 0.2, sync_now=False)
+    await create_and_run_service(CONFIG_FILE, 0.2)
 
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Scheduling is disabled")
@@ -448,7 +447,7 @@ async def test_connector_service_poll_cron_broken(
     await set_server_responses(
         mock_responses, [FAKE_CONFIG_CRON_BROKEN], connectors_update=upd
     )
-    await create_and_run_service(CONFIG_FILE, 0, sync_now=False)
+    await create_and_run_service(CONFIG_FILE, 0)
     patch_logger.assert_not_present("Sync done")
     assert (
         calls[0]["status"] == "connected"
@@ -483,7 +482,7 @@ async def test_connector_service_poll_just_created(
     mock_responses, patch_logger, set_env
 ):
     # we should not sync a connector that is not configured
-    # but still send out an heartbeat
+    # but still send out a heartbeat
     await set_server_responses(mock_responses, [FAKE_CONFIG_CREATED])
     await create_and_run_service(CONFIG_FILE, 0.2)
 
@@ -526,13 +525,6 @@ async def test_connector_service_poll_suspended_suspends_job(
 
 
 @pytest.mark.asyncio
-async def test_connector_service_poll_sync_now(mock_responses, patch_logger, set_env):
-    await set_server_responses(mock_responses, [FAKE_CONFIG_NO_SYNC])
-    await create_and_run_service(CONFIG_FILE, 0.1, sync_now=True, one_sync=True)
-    patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
-
-
-@pytest.mark.asyncio
 async def test_connector_service_poll_sync_ts(mock_responses, patch_logger, set_env):
     indexed = []
 
@@ -542,7 +534,7 @@ async def test_connector_service_poll_sync_ts(mock_responses, patch_logger, set_
         return CallbackResult(status=200, payload={"items": []})
 
     await set_server_responses(mock_responses, [FAKE_CONFIG_TS], bulk_call=bulk_call)
-    await create_and_run_service(CONFIG_FILE, 0.1, sync_now=True, one_sync=True)
+    await create_and_run_service(CONFIG_FILE, 0.1)
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
 
     # make sure we kept the original ts
