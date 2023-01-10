@@ -123,7 +123,7 @@ class BaseDataSource:
         raise NotImplementedError
 
     def tweak_bulk_options(self, options):
-        """Receives the bulk options every time a sycn happens, so they can be
+        """Receives the bulk options every time a sync happens, so they can be
         tweaked if needed.
 
 
