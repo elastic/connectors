@@ -318,7 +318,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             "_timestamp": blob["_timestamp"],
         }
         source_file_name = ""
-        async with NamedTemporaryFile(mode="wb+", delete=False) as async_buffer:
+        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
             await anext(
                 self._api_call(
                     resource="objects",
@@ -330,8 +330,8 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                     pipe_to=async_buffer,
                 )
             )
-            await async_buffer.seek(0)
             source_file_name = async_buffer.name
+        logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
         await asyncio.to_thread(
             convert_to_b64,
             source=source_file_name,
