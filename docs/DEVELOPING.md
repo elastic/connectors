@@ -169,6 +169,7 @@ The connector uses Elastic ingest attachment processor plugin for extracting fil
 - Permission are not synced. All the documents indexed to an Elastic deployment will be visible to all the users having access to that Elastic Deployment.
 - Filtering rules are not available in the present version. Currently, the filtering is controlled via ingest pipelines.
 - User needs to set a profile with aws configure command.
+- Current version of the connector does not support S3 compatible vendors.
 
 ### E2E Tests
 
