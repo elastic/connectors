@@ -8,8 +8,7 @@ bin/python:
 	$(PYTHON) -m venv .
 	bin/pip install --upgrade pip
 
-install: bin/python
-	bin/pip install -r requirements/$(ARCH).txt
+install: bin/python bin/elastic-ingest
 
 dev: install
 	bin/pip install -r requirements/tests.txt
@@ -46,7 +45,7 @@ autoformat: bin/python bin/black bin/elastic-ingest
 	bin/black scripts
 
 test:	bin/pytest bin/elastic-ingest
-	bin/pytest --cov-report term-missing --cov-report html --cov=connectors -sv connectors/tests connectors/sources/tests
+	bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors -sv connectors/tests connectors/sources/tests
 
 release: install
 	bin/python setup.py sdist

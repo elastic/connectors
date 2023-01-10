@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import os
 from datetime import datetime
 from unittest import mock
 
@@ -11,6 +12,14 @@ import pytest
 
 from connectors.sources.s3 import S3DataSource
 from connectors.sources.tests.support import assert_basics, create_source
+
+
+@pytest.fixture(scope="session", autouse=True)
+def execute_before_all_tests():
+    """This method execute at the start, once"""
+    if "AWS_ACCESS_KEY_ID" not in os.environ:
+        os.environ["AWS_ACCESS_KEY_ID"] = "access_key"
+        os.environ["AWS_SECRET_ACCESS_KEY"] = "secret_key"
 
 
 @pytest.mark.asyncio
