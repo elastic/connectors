@@ -1,10 +1,10 @@
 # Connectors Developer's Guide
 
-## Network Drives Connector
+## Network Drive Connector
 
-Elastic Network Drives connector is provided in Elastic Connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+[Elastic Network Drive connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/network_drive.py) is provided in Elastic Connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
-## Availability and prerequisites
+### Availability and prerequisites
 
 ⚠️ _Currently, this connector is available in **technical preview**_.
 Features in technical preview are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
@@ -16,50 +16,50 @@ Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your d
 
 Complete the following steps to deploy the connector:
 
-1. [Gather Network Drives details](#gather-network-drives-details)
-2. [Configure Network Drives connector](#configure-network-drives-connector)
+1. [Gather Network Drive details](#gather-network-drive-details)
+2. [Configure Network Drive connector](#configure-network-drive-connector)
 
-#### Gather Network Drives details
+#### Gather Network Drive details
 
-Collect the information that is required to connect to your network drives:
+Collect the information that is required to connect to your network drive:
 
-- The network drives path the connector will crawl to fetch files. This is the name of the folder shared via SMB.
-- The username the connector will use to log in to network drives.
-- The password the connector will use to log in to network drives.
+- The network drive path the connector will crawl to fetch files. This is the name of the folder shared via SMB.
+- The username the connector will use to log in to network drive.
+- The password the connector will use to log in to network drive.
 - The server IP address where the network drive is hosted.
-- The port where the network drives service is hosted.
+- The port where the network drive service is hosted.
 
-#### Configure Network Drives connector
+#### Configure Network Drive connector
 
 Following configuration fields need to be provided for setting up the connector:
 
 ##### `username`
 
-The username of the account for network drives. Default value is `admin`.
+The username of the account for network drive. Default value is `admin`.
 
 ℹ️ The user must have atleast **read** permissions for the folder path provided.
 
 ##### `password`
 
-The password of the account to be used for crawling the network drives.
+The password of the account to be used for crawling the network drive.
 
 ##### `server_ip`
 
-The server ip where network drives is hosted. Default value is `127.0.0.1`. Examples:
+The server ip where network drive is hosted. Default value is `127.0.0.1`. Examples:
 
 - `192.158.1.38`
 - `127.0.0.1`
 
 ##### `server_port`
 
-The server port where network drives service is available. Default value is `445`. Examples:
+The server port where network drive service is available. Default value is `445`. Examples:
 
 - `9454`
 - `8429`
 
 ##### `drive_path`
 
-The network drives path the connector will crawl to fetch files. Examples:
+The network drive path the connector will crawl to fetch files. Examples:
 
 - `Users/perftest`
 - `admin/bin`
@@ -68,7 +68,7 @@ The network drives path the connector will crawl to fetch files. Examples:
 
 ##### `enable_content_extraction`
 
-Whether the connector should extract file content from network drives. Default value is `True` i.e. the connector will try to extract file contents.
+Whether the connector should extract file content from network drive. Default value is `True` i.e. the connector will try to extract file contents.
 
 #### Content extraction
 
@@ -82,19 +82,19 @@ The connector uses Elastic ingest attachment processor plugin for extracting fil
 
 ### E2E Tests
 
-The framework allows users to test the connector end to end. To perform e2e test for Network Drives connector, run the following make command:
+The framework allows users to test the connector end to end. To perform e2e test for Network Drive connector, run the following make command:
 ```shell
 $ make ftest NAME=network_drive
 ```
 
-ℹ️ The e2e test uses default values defined in [configure Network Drives connector](#configure-network-drives-connector)
+ℹ️ The e2e test uses default values defined in [configure Network Drive connector](#configure-network-drive-connector)
 
 
 ## Amazon S3 Connector
 
-Elastic Amazon S3 connector is used to sync files and file content for supported file types from [Amazon S3](https://s3.console.aws.amazon.com/s3/home) data sources. It is provided in Elastic Connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+[Elastic Amazon S3 connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/s3.py) is used to sync files and file content for supported file types from [Amazon S3](https://s3.console.aws.amazon.com/s3/home) data sources. It is provided in Elastic Connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
-## Availability and prerequisites
+### Availability and prerequisites
 
 ⚠️ _Currently, this connector is available in **technical preview**_.
 Features in technical preview are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
