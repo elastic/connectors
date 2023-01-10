@@ -4,15 +4,18 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Azure Blob Storage source module responsible to fetch documents from Azure Blob Storage"""
-
+import asyncio
 import os
 from functools import partial
 
+import aiofiles
+from aiofiles.os import remove
+from aiofiles.tempfile import NamedTemporaryFile
 from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClient
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
 
 BLOB_SCHEMA = {
     "title": "name",
@@ -35,7 +38,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             connector (BYOConnector): Object of the BYOConnector class
         """
         super().__init__(connector=connector)
-        self.connection_string = self.configuration["connection_string"]
+        self.connection_string = None
         self.enable_content_extraction = self.configuration.get(
             "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION
         )
@@ -51,9 +54,19 @@ class AzureBlobStorageDataSource(BaseDataSource):
             dictionary: Default configuration
         """
         return {
-            "connection_string": {
-                "value": "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;",
-                "label": "Azure Blob Storage Connection String",
+            "account_name": {
+                "value": "devstoreaccount1",
+                "label": "Azure Blob Storage account name",
+                "type": "str",
+            },
+            "account_key": {
+                "value": "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==",
+                "label": "Azure Blob Storage account key",
+                "type": "str",
+            },
+            "blob_endpoint": {
+                "value": "http://127.0.0.1:10000/devstoreaccount1",
+                "label": "Azure Blob Storage blob endpoint",
                 "type": "str",
             },
             "connector_name": {
@@ -73,32 +86,31 @@ class AzureBlobStorageDataSource(BaseDataSource):
             },
         }
 
-    def _validate_connection_string(self):
-        """Validates user input connection string for empty and multiple input
+    def _configure_connection_string(self):
+        """Validates whether user input is empty or not for configuration fields and generate connection string
 
         Raises:
-            Exception: Empty or Multiple connection string
+            Exception: Configured keys can't be empty
+
+        Returns:
+            str: Connection string with user input configuration fields
         """
-        if not self.connection_string:
-            raise Exception("No connection string provided.")
+        keys = ["account_name", "account_key", "blob_endpoint"]
+        empty_configuration_fields = list(
+            filter(lambda field: self.configuration[field] == "", keys)
+        )
 
-        connection_fields, multiple_connection_fields = [
-            "AccountName",
-            "AccountKey",
-        ], []
-        for field in connection_fields:
-            if self.connection_string.count(f"{field}=") > 1:
-                multiple_connection_fields.append(field)
-
-        if multiple_connection_fields:
+        if empty_configuration_fields:
             raise Exception(
-                f"Configured connection string can't include: {multiple_connection_fields} multiple values."
+                f"Configured keys: {empty_configuration_fields} can't be empty."
             )
+
+        return f'AccountName={self.configuration["account_name"]};AccountKey={self.configuration["account_key"]};BlobEndpoint={self.configuration["blob_endpoint"]}'
 
     async def ping(self):
         """Verify the connection with Azure Blob Storage"""
-        logger.info("Validating ABS connection string...")
-        self._validate_connection_string()
+        logger.info("Validating configurations & Generating connection string...")
+        self.connection_string = self._configure_connection_string()
         try:
             async with BlobServiceClient.from_connection_string(
                 conn_str=self.connection_string, retry_total=self.retry_count
@@ -144,7 +156,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             dictionary: Content document with id, timestamp & text
         """
         blob_size = int(blob["size"])
-        if not (self.enable_content_extraction and doit and blob_size):
+        if not (self.enable_content_extraction and doit and blob_size > 0):
             return
 
         blob_name = blob["title"]
@@ -158,6 +170,8 @@ class AzureBlobStorageDataSource(BaseDataSource):
             )
             return
 
+        document = {"_id": blob["id"], "_timestamp": blob["_timestamp"]}
+
         async with BlobClient.from_connection_string(
             conn_str=self.connection_string,
             container_name=blob["container"],
@@ -165,12 +179,17 @@ class AzureBlobStorageDataSource(BaseDataSource):
             retry_total=self.retry_count,
         ) as blob_client:
             data = await blob_client.download_blob()
-            content = await data.readall()
-            return {
-                "_id": blob["id"],
-                "_timestamp": blob["_timestamp"],
-                "_attachment": get_base64_value(content=content),
-            }
+            temp_filename = ""
+            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+                temp_filename = async_buffer.name
+                async for content in data.chunks():
+                    await async_buffer.write(content)
+            logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
+            await asyncio.to_thread(convert_to_b64, source=temp_filename)
+            async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
+                document["_attachment"] = await async_buffer.read()
+            await remove(temp_filename)
+        return document
 
     async def get_container(self):
         """Get containers from Azure Blob Storage via azure base client

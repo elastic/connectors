@@ -40,10 +40,7 @@ def test_get_configuration():
     config = DataSourceConfiguration(klass.get_default_configuration())
 
     # Assert
-    assert (
-        config["connection_string"]
-        == "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;"
-    )
+    assert config["account_name"] == "devstoreaccount1"
 
 
 @pytest.mark.asyncio
@@ -142,6 +139,7 @@ async def test_get_container():
 
     # Setup
     source = create_source(AzureBlobStorageDataSource)
+    source.connection_string = source._configure_connection_string()
     mock_repsonse = AsyncIter(
         [
             {
@@ -173,6 +171,7 @@ async def test_get_blob():
 
     # Setup
     source = create_source(AzureBlobStorageDataSource)
+    source.connection_string = source._configure_connection_string()
     mock_response = AsyncIter(
         [
             {
@@ -289,13 +288,14 @@ async def test_get_content():
 
     # Setup
     source = create_source(AzureBlobStorageDataSource)
+    source.connection_string = source._configure_connection_string()
 
     class DownloadBlobMock:
         """This class is used Mock object of download_blob"""
 
-        async def readall(self):
+        async def chunks(self):
             """This Method is used to read content"""
-            return b"Mock...."
+            yield b"Mock...."
 
     mock_response = {
         "type": "blob",
@@ -437,13 +437,13 @@ async def test_get_content_when_type_not_supported():
     assert actual_response is None
 
 
-def test_validate_connection_string():
-    """Test validate connection string method of AzureBlobStorageDataSource class with multiple connection fields"""
+def test_configure_connection_string():
+    """Test configure connection string method of AzureBlobStorageDataSource class"""
 
     # Setup
     source = create_source(AzureBlobStorageDataSource)
-    source.connection_string = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;"
+    source.configuration.set_field(name="account_name", value="")
 
     with pytest.raises(Exception):
         # Execute
-        source._validate_connection_string()
+        source._configure_connection_string()
