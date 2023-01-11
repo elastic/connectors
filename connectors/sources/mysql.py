@@ -40,12 +40,10 @@ class MySqlDataSource(BaseDataSource):
             connector (BYOConnector): Object of the BYOConnector class
         """
         super().__init__(connector=connector)
-        self.retry_count = int(
-            self.configuration.get("retry_count", DEFAULT_RETRY_COUNT)
-        )
+        self.retry_count = self.configuration["retry_count"]
         self.connection_pool = None
-        self.ssl_disabled = self.configuration.get("ssl_disabled", DEFAULT_SSL_DISABLED)
-        self.certificate = self.configuration.get("ssl_ca", DEFAULT_SSL_CA)
+        self.ssl_disabled = self.configuration["ssl_disabled"]
+        self.certificate = self.configuration["ssl_ca"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -76,7 +74,7 @@ class MySqlDataSource(BaseDataSource):
                 "type": "str",
             },
             "database": {
-                "value": ["customerinfo"],
+                "value": "customerinfo",
                 "label": "Databases",
                 "type": "list",
             },
