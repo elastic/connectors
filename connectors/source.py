@@ -14,8 +14,17 @@ class Field:
             label = name
         self.name = name
         self.label = label
-        self.type = type
+        self._type = type
         self.value = self._convert(value, type)
+
+    @property
+    def type(self):
+        return self._type
+
+    @type.setter
+    def type(self, value):
+        self._type = value
+        self.value = self._convert(self.value, self._type)
 
     def _convert(self, value, type_):
         if not isinstance(value, str):
@@ -52,9 +61,10 @@ class DataSourceConfiguration:
                     self.set_field(key, label=key.capitalize(), value=str(value))
 
     def set_defaults(self, default_config):
-        self._defaults = {
-            name: item["value"] for (name, item) in default_config.items()
-        }
+        for (name, item) in default_config.items():
+            self._defaults[name] = item["value"]
+            if name in self._config:
+                self._config[name].type = item["type"]
 
     def __getitem__(self, key):
         if key not in self._config and key in self._defaults:
@@ -87,10 +97,7 @@ class BaseDataSource:
 
     def __init__(self, connector):
         self.connector = connector
-        if isinstance(self.connector.configuration, dict):
-            self.connector.configuration = DataSourceConfiguration(
-                self.connector.configuration
-            )
+        assert isinstance(self.connector.configuration, DataSourceConfiguration)
         self.configuration = self.connector.configuration
         self.configuration.set_defaults(self.get_default_configuration())
 
@@ -104,9 +111,12 @@ class BaseDataSource:
         for name, item in cls.get_default_configuration().items():
             entry = {"label": item.get("label", name.upper())}
             if item["value"] is None:
-                entry["value"] = None
+                entry["value"] = ""
             else:
-                entry["value"] = str(item["value"])
+                if isinstance(item["value"], bool):
+                    entry["value"] = item["value"] and "true" or "false"
+                else:
+                    entry["value"] = str(item["value"])
 
             res[name] = entry
         return res

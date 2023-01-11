@@ -85,7 +85,7 @@ def test_get_data_sources():
 @pytest.mark.asyncio
 async def test_base_class():
     class Connector:
-        configuration = {}
+        configuration = DataSourceConfiguration({})
 
     with pytest.raises(NotImplementedError):
         BaseDataSource(Connector())
