@@ -29,7 +29,7 @@ class NASDataSource(BaseDataSource):
         """Setup the connection to the Network Drive
 
         Args:
-            connector (BYOConnector): Object of the BYOConnector class
+            connector (Connector): Object of the Connector class
         """
         super().__init__(connector)
         self.username = self.configuration["username"]
