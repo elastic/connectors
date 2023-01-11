@@ -4,8 +4,9 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-from envyaml import EnvYAML
 import copy
+
+from envyaml import EnvYAML
 
 
 class ConfigNotLoadedError(Exception):
@@ -22,6 +23,8 @@ class Config:
     @classmethod
     def get(cls):
         if cls._yaml is None:
-            raise ConfigNotLoadedError('Config is not loaded yet, make sure to call Config.load(config_file) first.')
+            raise ConfigNotLoadedError(
+                "Config is not loaded yet, make sure to call Config.load(config_file) first."
+            )
 
         return copy.deepcopy(cls._yaml)

@@ -5,11 +5,12 @@
 #
 
 import os
-import pytest
-
-from connectors.config import (Config, ConfigNotLoadedError)
 from contextlib import contextmanager
+
+import pytest
 from envyaml import EnvYAML
+
+from connectors.config import Config, ConfigNotLoadedError
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
