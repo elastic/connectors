@@ -21,10 +21,12 @@ class Config:
         cls._yaml = EnvYAML(config_file)
 
     @classmethod
-    def get(cls):
+    def get(cls, key=None, default=None):
         if cls._yaml is None:
             raise ConfigNotLoadedError(
                 "Config is not loaded yet, make sure to call Config.load(config_file) first."
             )
-
-        return copy.deepcopy(cls._yaml)
+        yaml = copy.deepcopy(cls._yaml)
+        if key is None:
+            return yaml
+        return yaml.get(key, default)

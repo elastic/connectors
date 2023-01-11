@@ -36,7 +36,13 @@ def test_get_without_loading():
             Config.get()
 
 
-def test_config():
+def test_get():
     with unset_config():
         Config.load(CONFIG)
         assert isinstance(Config.get(), EnvYAML)
+
+
+def test_get_with_key():
+    with unset_config():
+        Config.load(CONFIG)
+        assert Config.get('elasticsearch') is not None
