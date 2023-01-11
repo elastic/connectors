@@ -37,9 +37,7 @@ class NASDataSource(BaseDataSource):
         self.server_ip = self.configuration["server_ip"]
         self.port = self.configuration["server_port"]
         self.drive_path = self.configuration["drive_path"]
-        self.enable_content_extraction = self.configuration.get(
-            "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION
-        )
+        self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
     @classmethod
     def get_default_configuration(cls):

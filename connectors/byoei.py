@@ -33,6 +33,7 @@ from connectors.logger import logger
 from connectors.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
+    DEFAULT_CONCURRENT_DOWNLOADS,
     DEFAULT_DISPLAY_EVERY,
     DEFAULT_MAX_CONCURRENCY,
     DEFAULT_QUEUE_MEM_SIZE,
@@ -176,6 +177,7 @@ class Fetcher:
         existing_ids,
         queue_size=DEFAULT_QUEUE_SIZE,
         display_every=DEFAULT_DISPLAY_EVERY,
+        concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
     ):
         self.client = client
         self.queue = queue
@@ -191,6 +193,7 @@ class Fetcher:
         self.total_docs_deleted = 0
         self.fetch_error = None
         self.display_every = display_every
+        self.concurrent_downloads = concurrent_downloads
 
     def __str__(self):
         return (
@@ -203,10 +206,29 @@ class Fetcher:
     async def run(self, generator):
         await self.get_docs(generator)
 
+    async def _deferred_index(self, lazy_download, doc_id, doc, operation):
+        data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
+
+        if data is not None:
+            self.total_downloads += 1
+            data.pop("_id", None)
+            data.pop(TIMESTAMP_FIELD, None)
+            doc.update(data)
+
+        await self.queue.put(
+            {
+                "_op_type": operation,
+                "_index": self.index,
+                "_id": doc_id,
+                "doc": doc,
+            }
+        )
+
     async def get_docs(self, generator):
         logger.info("Starting doc lookups")
         self.sync_runs = True
         count = 0
+        lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
         try:
             async for doc in generator:
                 doc, lazy_download = doc
@@ -240,30 +262,34 @@ class Fetcher:
                     if TIMESTAMP_FIELD not in doc:
                         doc[TIMESTAMP_FIELD] = iso_utc()
 
+                # if we need to call lazy_download we push it in lazy_downloads
                 if lazy_download is not None:
-                    data = await lazy_download(
-                        doit=True, timestamp=doc[TIMESTAMP_FIELD]
+                    await lazy_downloads.put(
+                        functools.partial(
+                            self._deferred_index, lazy_download, doc_id, doc, operation
+                        )
                     )
-                    if data is not None:
-                        self.total_downloads += 1
-                        data.pop("_id", None)
-                        data.pop(TIMESTAMP_FIELD, None)
-                        doc.update(data)
 
-                await self.queue.put(
-                    {
-                        "_op_type": operation,
-                        "_index": self.index,
-                        "_id": doc_id,
-                        "doc": doc,
-                    }
-                )
+                else:
+                    # we can push into the queue right away
+                    await self.queue.put(
+                        {
+                            "_op_type": operation,
+                            "_index": self.index,
+                            "_id": doc_id,
+                            "doc": doc,
+                        }
+                    )
+
                 await asyncio.sleep(0)
         except Exception as e:
             logger.critical("The document fetcher failed", exc_info=True)
             await self.queue.put("FETCH_ERROR")
             self.fetch_error = e
             return
+        finally:
+            # wait for all downloads to be finished
+            await lazy_downloads.join()
 
         # We delete any document that existed in Elasticsearch that was not
         # returned by the backend.
@@ -398,6 +424,9 @@ class ElasticServer(ESClient):
         chunk_mem_size = options.get("chunk_max_mem_size", DEFAULT_CHUNK_MEM_SIZE)
         max_concurrency = options.get("max_concurrency", DEFAULT_MAX_CONCURRENCY)
         chunk_size = options.get("chunk_size", DEFAULT_CHUNK_SIZE)
+        concurrent_downloads = options.get(
+            "concurrent_downloads", DEFAULT_CONCURRENT_DOWNLOADS
+        )
 
         start = time.time()
         stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
@@ -416,6 +445,7 @@ class ElasticServer(ESClient):
             existing_ids,
             queue_size=queue_size,
             display_every=display_every,
+            concurrent_downloads=concurrent_downloads,
         )
         fetcher_task = asyncio.create_task(fetcher.run(generator))
 

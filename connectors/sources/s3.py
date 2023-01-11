@@ -52,9 +52,7 @@ class S3DataSource(BaseDataSource):
             connect_timeout=self.configuration["connect_timeout"],
             retries={"max_attempts": self.configuration["max_attempts"]},
         )
-        self.enable_content_extraction = self.configuration.get(
-            "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION
-        )
+        self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
     @asynccontextmanager
     async def client(self, **kwargs):
