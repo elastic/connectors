@@ -2,14 +2,14 @@
 
 ## Network Drive Connector
 
-[Elastic Network Drive connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/network_drive.py) is provided in Elastic Connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic Network Drive connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/network_drive.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ### Availability and prerequisites
 
 ⚠️ _Currently, this connector is available in **technical preview**_.
 Features in technical preview are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
 
-Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services. Your Enterprise Search service should have 4+ GB RAM per zone to avoid out of memory errors.
+Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
 
 
 ### Setup and basic usage
@@ -31,7 +31,7 @@ Collect the information that is required to connect to your network drive:
 
 #### Configure Network Drive connector
 
-Following configuration fields need to be provided for setting up the connector:
+The following configuration fields need to be provided for setting up the connector:
 
 ##### `username`
 
@@ -72,12 +72,12 @@ Whether the connector should extract file content from network drive. Default va
 
 #### Content extraction
 
-The connector uses Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/9cf07a96288dcd542b641c51533ee2d427ef56ae/connectors/utils.py#L27).
+The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/9cf07a96288dcd542b641c51533ee2d427ef56ae/connectors/utils.py#L27).
 
 ### Connector Limitations
 
 - Files with size greater than 10 MB won't be extracted.
-- Permission are not synced. All the documents indexed to an Elastic deployment will be visible to all the users having access to that Elastic Deployment.
+- Permission are not synced. **All documents** indexed to an Elastic deployment will be visible to all the users having access to that Elastic Deployment.
 - Filtering rules are not available in the present version. Currently, the filtering is controlled via ingest pipelines.
 
 ### E2E Tests
@@ -92,14 +92,14 @@ $ make ftest NAME=network_drive
 
 ## Amazon S3 Connector
 
-[Elastic Amazon S3 connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/s3.py) is used to sync files and file content for supported file types from [Amazon S3](https://s3.console.aws.amazon.com/s3/home) data sources. It is provided in Elastic Connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic Amazon S3 connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/s3.py) is used to sync files and file content for supported file types from [Amazon S3](https://s3.console.aws.amazon.com/s3/home) data sources. It is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ### Availability and prerequisites
 
 ⚠️ _Currently, this connector is available in **technical preview**_.
 Features in technical preview are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
 
-Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services. Your Enterprise Search service should have 4+ GB RAM per zone to avoid out of memory errors.
+Elastic versions 8.6.0+ are compatible with Elastic connector frameworks.
 
 ### Setup and basic usage
 
@@ -110,65 +110,65 @@ Complete the following steps to deploy the connector:
 
 #### Gather Amazon S3 details
 
-Collect the information that is required to connect to your amazon s3:
+Collect the information that is required to connect to your Amazon S3:
 
-- Setup aws configuration by installing [awscli](https://pypi.org/project/awscli/).
+- Setup AWS configuration by installing [awscli](https://pypi.org/project/awscli/).
 - Add aws_access_key, aws_secret_key and region to run the connector.
 
 
 #### Configure Amazon S3 connector
 
-Following configuration fields need to be provided for setting up the connector:
+The following configuration fields need to be provided for setting up the connector:
 
 ##### `buckets`
 
-List buckets for amazon s3. For empty list connector will fetch data for all the buckets. Examples:
+List buckets for Amazon S3. For empty list connector will fetch data for all the buckets. Examples:
 
   - `[testbucket, prodbucket]`
   - `[]`
 
 ##### `read_timeout`
 
-The read_timeout for amazon s3. Default value is `90`. Examples:
+The read_timeout for Amazon S3. Default value is `90`. Examples:
 
   - `60`
   - `120`
 
 ##### `connect_timeout`
 
-The connect_timeout for crawling the amazon s3. Default value is `90`. Examples:
+The connect_timeout for crawling the Amazon S3. Default value is `90`. Examples:
 
   - `60`
   - `120`
 
 ##### `max_attempts`
 
-The max_attempts for retry the amazon s3. Default value is `5`. Examples:
+The max_attempts for retry the Amazon S3. Default value is `5`. Examples:
 
   - `1`
   - `3`
 
 ##### `page_size`
 
-The page_size for iterating bucket objects in amazon s3. Default value is `100`. Examples:
+The page_size for iterating bucket objects in Amazon S3. Default value is `100`. Examples:
 
   - `50`
   - `150`
 
 ##### `enable_content_extraction`
 
-Whether the connector should extract file content from amazon s3. Default value is `True` i.e. the connector will try to extract file contents.
+Whether the connector should extract file content from Amazon S3. Default value is `True` i.e. the connector will try to extract file contents.
 
 #### Content extraction
 
-The connector uses Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/9cf07a96288dcd542b641c51533ee2d427ef56ae/connectors/utils.py#L27).
+The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/9cf07a96288dcd542b641c51533ee2d427ef56ae/connectors/utils.py#L27).
 
 ### Connector Limitations
 
 - Files with size greater than 10 MB won't be extracted.
-- Permission are not synced. All the documents indexed to an Elastic deployment will be visible to all the users having access to that Elastic Deployment.
+- Permission are not synced. **All documents** indexed to an Elastic deployment will be visible to all the users having access to that Elastic Deployment.
 - Filtering rules are not available in the present version. Currently, the filtering is controlled via ingest pipelines.
-- User needs to set a profile with aws configure command.
+- The user needs to set a profile with the AWS configure command.
 - Current version of the connector does not support S3 compatible vendors.
 
 ### E2E Tests
