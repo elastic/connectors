@@ -211,7 +211,10 @@ class MySqlDataSource(BaseDataSource):
                         if fetch_many:
                             # sending back column names only once
                             if yield_once:
-                                yield [column[0] for column in cursor.description]
+                                yield [
+                                    f"{query_kwargs['database']}_{query_kwargs['table']}_{column[0]}"
+                                    for column in cursor.description
+                                ]
                                 yield_once = False
 
                             # setting cursor position where it was failed
@@ -338,7 +341,7 @@ class MySqlDataSource(BaseDataSource):
 
         keys = []
         for column_name in response:
-            keys.append(column_name[0])
+            keys.append(f"{database}_{table}_{column_name[0]}")
 
         if keys:
 
