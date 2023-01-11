@@ -11,13 +11,15 @@ import os
 import urllib.parse
 from functools import partial
 
-from aiofiles.tempfile import TemporaryFile
+import aiofiles
+from aiofiles.os import remove
+from aiofiles.tempfile import NamedTemporaryFile
 from aiogoogle import Aiogoogle
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
 CLOUD_STORAGE_BASE_URL = "https://console.cloud.google.com/storage/browser/_details/"
@@ -311,8 +313,12 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             )
             return
         logger.debug(f"Downloading {blob_name}")
-        content = b""
-        async with TemporaryFile("wb+") as async_buffer:
+        document = {
+            "_id": blob["id"],
+            "_timestamp": blob["_timestamp"],
+        }
+        source_file_name = ""
+        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
             await anext(
                 self._api_call(
                     resource="objects",
@@ -324,14 +330,17 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                     pipe_to=async_buffer,
                 )
             )
-            await async_buffer.seek(0)
-            content = await async_buffer.read()
+            source_file_name = async_buffer.name
+        logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
+        await asyncio.to_thread(
+            convert_to_b64,
+            source=source_file_name,
+        )
+        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
+            document["_attachment"] = await target_file.read()
+        await remove(source_file_name)
         logger.debug(f"Downloaded {blob_name} for {blob_size} bytes ")
-        return {
-            "_id": blob["id"],
-            "_timestamp": blob["_timestamp"],
-            "_attachment": get_base64_value(content=content),
-        }
+        return document
 
     async def get_docs(self):
         """Get buckets & blob documents from Google Cloud Storage.
