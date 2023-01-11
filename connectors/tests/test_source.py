@@ -122,10 +122,6 @@ async def test_base_class():
     ds = DataSource(Connector())
     ds.get_default_configuration()["port"]["value"] == 3306
 
-    options = {"a": "1"}
-    ds.tweak_bulk_options(options)
-    assert options == {"a": "1"}
-
     # data we send back to kibana
     # we want to make sure we only send back label+value
     expected = {
