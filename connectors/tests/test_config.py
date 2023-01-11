@@ -45,4 +45,4 @@ def test_get():
 def test_get_with_key():
     with unset_config():
         Config.load(CONFIG)
-        assert Config.get('elasticsearch') is not None
+        assert Config.get("elasticsearch") is not None
