@@ -24,3 +24,18 @@ steps:
       - ".buildkite/run_nigthly.sh gcs"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Postgresql"
+    command:
+      - ".buildkite/run_nigthly.sh postgresql"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Microsoft SQL"
+    command:
+      - ".buildkite/run_nigthly.sh mssql"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Oracle Database"
+    command:
+      - ".buildkite/run_nigthly.sh oracle"
+    artifact_paths:
+      - "perf8-report-*/**/*"

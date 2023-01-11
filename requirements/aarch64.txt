@@ -5,3 +5,7 @@ aiomysql>=0.0.22
 aioboto3>=9.0.0
 motor>=2.5.1
 smbprotocol>=1.9.0
+SQLAlchemy==1.4.44
+pymssql==2.2.7
+cx-Oracle==7.3.0
+asyncpg==0.27.0

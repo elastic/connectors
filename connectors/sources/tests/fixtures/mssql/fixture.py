@@ -1,0 +1,80 @@
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
+import os
+import random
+import string
+
+import pymssql
+
+DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
+DATABASE_NAME = "xe"
+_SIZES = {"small": 5, "medium": 10, "large": 30}
+NUM_TABLES = _SIZES[DATA_SIZE]
+
+
+def random_text(k=1024 * 20):
+    """Function to generate random text
+
+    Args:
+        k (int, optional): size of data in bytes. Defaults to 1024*20.
+
+    Returns:
+        string: random text
+    """
+    return "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
+
+
+BIG_TEXT = random_text()
+
+
+def load():
+    """N tables of 10001 rows each. each row is ~ 1024*20 bytes"""
+    database_sa = pymssql.connect(
+        host="127.0.0.1", user="sa", password="Password_123", port="9090"
+    )
+    database_sa.autocommit(True)
+    cursor = database_sa.cursor()
+    cursor.execute("CREATE LOGIN admin WITH PASSWORD = 'Password_123'")
+    cursor.execute("ALTER SERVER ROLE [sysadmin] ADD MEMBER [admin]")
+    database_sa.autocommit(False)
+    database_sa.commit()
+    cursor.close()
+    database_sa.close()
+    database = pymssql.connect(
+        host="127.0.0.1", user="admin", password="Password_123", port="9090"
+    )
+    database.autocommit(True)
+    cursor = database.cursor()
+    cursor.execute(f"DROP DATABASE IF EXISTS {DATABASE_NAME}")
+    cursor.execute(f"CREATE DATABASE {DATABASE_NAME}")
+    cursor.execute(f"USE {DATABASE_NAME}")
+    database.autocommit(False)
+
+    for table in range(NUM_TABLES):
+        print(f"Adding data in {table}...")
+        sql_query = f"CREATE TABLE customers_{table} (name VARCHAR(255), age int, description TEXT, PRIMARY KEY (name))"
+        cursor.execute(sql_query)
+        rows = [(f"user_{row_id}", row_id, BIG_TEXT) for row_id in range(10000)]
+        sql_query = (
+            f"INSERT INTO customers_{table}"
+            + "(name, age, description) VALUES (%s, %s, %s)"
+        )
+        cursor.executemany(sql_query, rows)
+    database.commit()
+
+
+def remove():
+    """Removes 10 random items per table"""
+    database = pymssql.connect(
+        host="127.0.0.1", user="admin", password="Password_123", port="9090"
+    )
+    cursor = database.cursor()
+    cursor.execute(f"USE {DATABASE_NAME}")
+    for table in range(NUM_TABLES):
+        rows = [(f"user_{row_id}",) for row_id in random.sample(range(1, 1000), 10)]
+        sql_query = f"DELETE from customers_{table} where name=%s"
+        cursor.executemany(sql_query, rows)
+    database.commit()
