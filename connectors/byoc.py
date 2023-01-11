@@ -447,7 +447,7 @@ class BYOConnector:
         try:
             source_klass = get_source_klass(fqn)
             if self.configuration.is_empty():
-                self.configuration = source_klass.get_default_configuration()
+                self.configuration = source_klass.get_simple_configuration()
                 logger.debug(f"Populated configuration for connector {self.id}")
 
             # sync state if needed (when service type or configuration is updated)

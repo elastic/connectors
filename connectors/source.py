@@ -61,7 +61,34 @@ class BaseDataSource:
 
     def __init__(self, connector):
         self.connector = connector
-        self.configuration = connector.configuration
+        # convert all fields to the expected types
+        self.connector.configuration = self.configuration = self._convert_configuration(
+            connector.configuration
+        )
+
+    def _convert(self, value, type_):
+        if type_ == "int":
+            return int(value)
+        elif type_ == "float":
+            return float(value)
+        elif type_ == "bool":
+            return value.lower() in "y", "yes", "true", "1"
+        elif type_ == "list":
+            return [item.strip() for item in value.split(",")]
+        return value
+
+    def _convert_configuration(self, configuration):
+        return {
+            name: self._convert(configuration.get(name, item["value"]), item["type"])
+            for (name, item) in self.get_default_configuration().items()
+        }
+
+    def get_simple_configuration(self):
+        """Used to return the default config to Kibana"""
+        return {
+            name: {"label": item["label"], "value": str(item["value"])}
+            for (name, item) in self.get_default_configuration().items()
+        }
 
     def __str__(self):
         return f"Datasource `{self.__class__.__doc__}`"
