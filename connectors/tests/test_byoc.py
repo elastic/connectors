@@ -23,6 +23,7 @@ from connectors.byoc import (
     iso_utc,
 )
 from connectors.byoei import ElasticServer
+from connectors.logger import logger
 from connectors.source import BaseDataSource
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
@@ -191,11 +192,13 @@ class StubIndex:
 
 
 doc = {"_id": 1}
+max_concurrency = 0
 
 
 class Data:
     def __init__(self, connector):
         self.connector = connector
+        self.concurrency = 0
 
     async def ping(self):
         pass
@@ -203,12 +206,29 @@ class Data:
     async def changed(self):
         return True
 
+    async def lazy(self, doit=True, timestamp=None):
+        if not doit:
+            return
+        self.concurrency += 1
+        global max_concurrency
+        if self.concurrency > max_concurrency:
+            max_concurrency = self.concurrency
+            logger.info(f"max_concurrency {max_concurrency}")
+        try:
+            await asyncio.sleep(0.01)
+            return {"extra_data": 100}
+        finally:
+            self.concurrency -= 1
+
     async def get_docs(self, *args, **kw):
-        for d in [doc, doc]:
-            yield {"_id": 1}, None
+        for d in [doc] * 100:
+            yield {"_id": 1}, self.lazy
 
     async def close(self):
         pass
+
+    def tweak_bulk_options(self, options):
+        options["concurrent_downloads"] = 3
 
 
 @pytest.mark.asyncio
@@ -309,6 +329,10 @@ async def test_sync_mongo(mock_responses, patch_logger):
     finally:
         await connectors.close()
         await es.close()
+
+    # verify that the Data source was able to override the option
+    patch_logger.assert_not_present("max_concurrency 10")
+    patch_logger.assert_present("max_concurrency 3")
 
 
 @pytest.mark.asyncio
