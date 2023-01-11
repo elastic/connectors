@@ -124,6 +124,8 @@ class ConnectorService:
                 # the heartbeat is always triggered
                 connector.start_heartbeat(self.hb)
 
+                logger.debug(f"Connector status is {connector.status}")
+
                 # we trigger a sync
                 if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
                     # we can't sync in that state

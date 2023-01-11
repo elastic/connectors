@@ -12,14 +12,16 @@ import hashlib
 import functools
 from datetime import datetime, timezone
 
+from connectors.source import BaseDataSource
 
 HERE = os.path.dirname(__file__)
 
 
-class DirectoryDataSource:
+class DirectoryDataSource(BaseDataSource):
     """Directory"""
 
     def __init__(self, connector):
+        super().__init__(connector)
         self.directory = connector.configuration["directory"]
         self.pattern = connector.configuration["pattern"]
 
