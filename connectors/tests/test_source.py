@@ -36,7 +36,7 @@ def test_field():
     # stupid holder
     f = Field("name")
     assert f.label == "name"
-    assert f.type == 'str'
+    assert f.type == "str"
 
 
 def test_field_convert():
@@ -111,7 +111,6 @@ async def test_base_class():
                     "label": "Direct connect",
                     "type": "bool",
                 },
-
                 "user": {
                     "value": "root",
                     "label": "Username",
