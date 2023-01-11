@@ -446,6 +446,7 @@ class BYOConnector:
         fqn = config["sources"][service_type]
         try:
             source_klass = get_source_klass(fqn)
+
             if self.configuration.is_empty():
                 self.configuration = source_klass.get_simple_configuration()
                 logger.debug(f"Populated configuration for connector {self.id}")

@@ -14,8 +14,23 @@ class Field:
             label = name
         self.name = name
         self.label = label
-        self.value = value
         self.type = type
+        self.value = self._convert(value, type)
+
+    def _convert(self, value, type_):
+        if not isinstance(value, str):
+            # we won't convert the value if it's not a str
+            return value
+
+        if type_ == "int":
+            return int(value)
+        elif type_ == "float":
+            return float(value)
+        elif type_ == "bool":
+            return value.lower() in "y", "yes", "true", "1"
+        elif type_ == "list":
+            return [item.strip() for item in value.split(",")]
+        return value
 
 
 class DataSourceConfiguration:
@@ -23,21 +38,32 @@ class DataSourceConfiguration:
 
     def __init__(self, config):
         self._config = {}
+        self._defaults = {}
         if config is not None:
             for key, value in config.items():
-                self.set_field(
-                    key,
-                    value.get("label"),
-                    value.get("value", ""),
-                    value.get("type", "str"),
-                )
+                if isinstance(value, dict):
+                    self.set_field(
+                        key,
+                        value.get("label"),
+                        value.get("value", ""),
+                        value.get("type", "str"),
+                    )
+                else:
+                    self.set_field(key, label=key.capitalize(), value=str(value))
+
+    def set_defaults(self, default_config):
+        self._defaults = {
+            name: item["value"] for (name, item) in default_config.items()
+        }
 
     def __getitem__(self, key):
+        if key not in self._config and key in self._defaults:
+            return self._defaults[key]
         return self._config[key].value
 
     def get(self, key, default=None):
         if key not in self._config:
-            return default
+            return self._defaults.get(key, default)
         return self._config[key].value
 
     def has_field(self, name):
@@ -61,37 +87,29 @@ class BaseDataSource:
 
     def __init__(self, connector):
         self.connector = connector
-        # convert all fields to the expected types
-        self.connector.configuration = self.configuration = self._convert_configuration(
-            connector.configuration
-        )
-
-    def _convert(self, value, type_):
-        if type_ == "int":
-            return int(value)
-        elif type_ == "float":
-            return float(value)
-        elif type_ == "bool":
-            return value.lower() in "y", "yes", "true", "1"
-        elif type_ == "list":
-            return [item.strip() for item in value.split(",")]
-        return value
-
-    def _convert_configuration(self, configuration):
-        return {
-            name: self._convert(configuration.get(name, item["value"]), item["type"])
-            for (name, item) in self.get_default_configuration().items()
-        }
-
-    def get_simple_configuration(self):
-        """Used to return the default config to Kibana"""
-        return {
-            name: {"label": item["label"], "value": str(item["value"])}
-            for (name, item) in self.get_default_configuration().items()
-        }
+        if isinstance(self.connector.configuration, dict):
+            self.connector.configuration = DataSourceConfiguration(
+                self.connector.configuration
+            )
+        self.configuration = self.connector.configuration
+        self.configuration.set_defaults(self.get_default_configuration())
 
     def __str__(self):
         return f"Datasource `{self.__class__.__doc__}`"
+
+    @classmethod
+    def get_simple_configuration(cls):
+        """Used to return the default config to Kibana"""
+        res = {}
+        for name, item in cls.get_default_configuration().items():
+            entry = {"label": item.get("label", name.upper())}
+            if item["value"] is None:
+                entry["value"] = None
+            else:
+                entry["value"] = str(item["value"])
+
+            res[name] = entry
+        return res
 
     @classmethod
     def get_default_configuration(cls):

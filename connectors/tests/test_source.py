@@ -80,16 +80,38 @@ async def test_base_class():
     class Connector:
         configuration = {}
 
-    base = BaseDataSource(Connector())
+    with pytest.raises(NotImplementedError):
+        BaseDataSource(Connector())
 
     # ABCs
-    with pytest.raises(NotImplementedError):
-        BaseDataSource.get_default_configuration()
+    class DataSource(BaseDataSource):
+        @classmethod
+        def get_default_configuration(cls):
+            return {
+                "host": {
+                    "value": "127.0.0.1",
+                    "label": "Host",
+                    "type": "str",
+                },
+                "port": {
+                    "value": 3306,
+                    "label": "Port",
+                    "type": "int",
+                },
+                "user": {
+                    "value": "root",
+                    "label": "Username",
+                    "type": "str",
+                },
+            }
+
+    ds = DataSource(Connector())
+    ds.get_default_configuration()["port"]["value"] == 3306
 
     with pytest.raises(NotImplementedError):
-        await base.ping()
+        await ds.ping()
 
-    await base.close()
+    await ds.close()
 
     with pytest.raises(NotImplementedError):
-        await base.get_docs()
+        await ds.get_docs()
