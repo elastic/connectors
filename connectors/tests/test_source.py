@@ -36,6 +36,7 @@ def test_field():
     # stupid holder
     f = Field("name")
     assert f.label == "name"
+    assert f.type == 'str'
 
 
 def test_field_convert():
@@ -105,6 +106,12 @@ async def test_base_class():
                     "label": "Port",
                     "type": "int",
                 },
+                "direct": {
+                    "value": True,
+                    "label": "Direct connect",
+                    "type": "bool",
+                },
+
                 "user": {
                     "value": "root",
                     "label": "Username",
@@ -124,6 +131,7 @@ async def test_base_class():
     expected = {
         "host": {"label": "Host", "value": "127.0.0.1"},
         "port": {"label": "Port", "value": "3306"},
+        "direct": {"label": "Direct connect", "value": "true"},
         "user": {"label": "Username", "value": "root"},
     }
     assert ds.get_simple_configuration() == expected
