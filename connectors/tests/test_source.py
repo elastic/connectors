@@ -38,6 +38,13 @@ def test_field():
     assert f.label == "name"
 
 
+def test_field_convert():
+    assert Field("name", value="1", type="int").value == 1
+    assert Field("name", value="1.2", type="float").value == 1.2
+    assert Field("name", value="YeS", type="bool").value
+    assert Field("name", value="1,2,3", type="list").value == ["1", "2", "3"]
+
+
 def test_data_source_configuration():
 
     c = DataSourceConfiguration(CONFIG)
@@ -107,6 +114,19 @@ async def test_base_class():
 
     ds = DataSource(Connector())
     ds.get_default_configuration()["port"]["value"] == 3306
+
+    options = {"a": "1"}
+    ds.tweak_bulk_options(options)
+    assert options == {"a": "1"}
+
+    # data we send back to kibana
+    # we want to make sure we only send back label+value
+    expected = {
+        "host": {"label": "Host", "value": "127.0.0.1"},
+        "port": {"label": "Port", "value": "3306"},
+        "user": {"label": "Username", "value": "root"},
+    }
+    assert ds.get_simple_configuration() == expected
 
     with pytest.raises(NotImplementedError):
         await ds.ping()
