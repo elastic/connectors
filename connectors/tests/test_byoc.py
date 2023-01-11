@@ -14,8 +14,8 @@ from elasticsearch import AsyncElasticsearch
 from envyaml import EnvYAML
 
 from connectors.byoc import (
-    Connector,
     BYOIndex,
+    Connector,
     JobStatus,
     Status,
     SyncJob,
