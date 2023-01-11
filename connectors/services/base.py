@@ -7,17 +7,13 @@ import os
 
 from envyaml import EnvYAML
 
+from connectors.config import Config
 from connectors.logger import logger
 
 
 class BaseService:
-    def __init__(self, args):
-        self.args = args
-        config_file = args.config_file
-        self.config_file = config_file
-        if not os.path.exists(config_file):
-            raise IOError(f"{config_file} does not exist")
-        self.config = EnvYAML(config_file)
+    def __init__(self):
+        self.config = Config.get()
         self.ent_search_config()
 
     def ent_search_config(self):

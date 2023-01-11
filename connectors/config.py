@@ -1,0 +1,27 @@
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
+
+from envyaml import EnvYAML
+import copy
+
+
+class ConfigNotLoadedError(Exception):
+    pass
+
+
+class Config:
+    _yaml = None
+
+    @classmethod
+    def load(cls, config_file):
+        cls._yaml = EnvYAML(config_file)
+
+    @classmethod
+    def get(cls):
+        if cls._yaml is None:
+            raise ConfigNotLoadedError('Config is not loaded yet, make sure to call Config.load(config_file) first.')
+
+        return copy.deepcopy(cls._yaml)
