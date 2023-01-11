@@ -13,3 +13,4 @@ aiogoogle>=4.2.0
 uvloop==0.17.0; sys_platform != 'win32'
 fastjsonschema==2.16.2
 base64io==1.0.3
+azure-storage-blob>=12.13.0
