@@ -7,13 +7,13 @@ import os
 
 from envyaml import EnvYAML
 
-from connectors.config import Config
+import connectors.config
 from connectors.logger import logger
 
 
 class BaseService:
     def __init__(self):
-        self.config = Config.get()
+        self.config = connectors.config.config
         self.ent_search_config()
 
     def ent_search_config(self):

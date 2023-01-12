@@ -15,8 +15,9 @@ import os
 import signal
 from argparse import ArgumentParser
 
+import connectors.config
 from connectors import __version__
-from connectors.config import Config
+from connectors.config import load_config
 from connectors.logger import logger, set_logger
 from connectors.services.sync import SyncService
 from connectors.source import get_data_sources
@@ -91,12 +92,12 @@ def run(args):
     """Runner"""
 
     # load config
-    Config.load(args.config_file)
+    load_config(args.config_file)
 
     # just display the list of connectors
     if args.action == "list":
         logger.info("Registered connectors:")
-        for source in get_data_sources(Config.get()):
+        for source in get_data_sources(connectors.config.config):
             logger.info(f"- {source.__doc__.strip()}")
         logger.info("Bye")
         return 0

@@ -10,14 +10,15 @@ from contextlib import contextmanager
 import pytest
 from envyaml import EnvYAML
 
-from connectors.config import Config, ConfigNotLoadedError
+import connectors.config
+from connectors.config import load_config
 
-CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
+CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yml")
 
 
 @contextmanager
 def unset_config():
-    Config._yaml = None
+    connectors.config.config = None
     try:
         yield
     finally:
@@ -27,22 +28,10 @@ def unset_config():
 def test_bad_config_file():
     with unset_config():
         with pytest.raises(FileNotFoundError):
-            Config.load("BEEUUUAH")
+            load_config("BEEUUUAH")
 
 
-def test_get_without_loading():
+def test_config():
     with unset_config():
-        with pytest.raises(ConfigNotLoadedError):
-            Config.get()
-
-
-def test_get():
-    with unset_config():
-        Config.load(CONFIG)
-        assert isinstance(Config.get(), EnvYAML)
-
-
-def test_get_with_key():
-    with unset_config():
-        Config.load(CONFIG)
-        assert Config.get("elasticsearch") is not None
+        load_config(CONFIG_FILE)
+        assert isinstance(connectors.config.config, EnvYAML)

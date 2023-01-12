@@ -13,7 +13,7 @@ import pytest
 from aioresponses import CallbackResult
 
 from connectors.byoc import DataSourceError
-from connectors.config import Config
+from connectors.config import load_config
 from connectors.conftest import assert_re
 from connectors.services.sync import SyncService
 from connectors.tests.fake_sources import FakeSourceTS
@@ -159,10 +159,6 @@ class Args:
     def __init__(self, **options):
         self.one_sync = options.get("one_sync", False)
         self.sync_now = options.get("sync_now", False)
-
-
-def load_config(config_file):
-    Config.load(config_file)
 
 
 def create_service(**options):
@@ -339,7 +335,7 @@ async def test_connector_service_poll_unconfigured(
     mock_responses, patch_logger, patch_ping, set_env
 ):
     # we should not sync a connector that is not configured
-    # but still send out an heartbeat
+    # but still send out a heartbeat
 
     await set_server_responses(mock_responses, FAKE_CONFIG_NEEDS_CONFIG)
     load_config(CONFIG_FILE)

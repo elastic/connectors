@@ -4,29 +4,17 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-import copy
-
 from envyaml import EnvYAML
 
+from connectors.logger import logger
 
-class ConfigNotLoadedError(Exception):
-    pass
+config = None
 
 
-class Config:
-    _yaml = None
-
-    @classmethod
-    def load(cls, config_file):
-        cls._yaml = EnvYAML(config_file)
-
-    @classmethod
-    def get(cls, key=None, default=None):
-        if cls._yaml is None:
-            raise ConfigNotLoadedError(
-                "Config is not loaded yet, make sure to call Config.load(config_file) first."
-            )
-        yaml = copy.deepcopy(cls._yaml)
-        if key is None:
-            return yaml
-        return yaml.get(key, default)
+def load_config(config_file):
+    global config
+    logger.info(
+        f"{'Loading' if config is None else 'Reloading'} config from {config_file}"
+    )
+    config = EnvYAML(config_file)
+    return config
