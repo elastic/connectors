@@ -66,7 +66,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         """Setup connection to the Google Cloud Storage Client.
 
         Args:
-            connector (BYOConnector): Object of the BYOConnector class.
+            connector (Connector): Object of the Connector class.
         """
         super().__init__(connector=connector)
         if not self.configuration["service_account_credentials"]:
