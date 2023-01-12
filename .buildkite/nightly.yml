@@ -24,6 +24,11 @@ steps:
       - ".buildkite/run_nigthly.sh gcs"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Azure Blob Storage"
+    command:
+      - ".buildkite/run_nigthly.sh abs"
+    artifact_paths:
+      - "perf8-report-*/**/*"
   - label: "🔨 Postgresql"
     command:
       - ".buildkite/run_nigthly.sh postgresql"
@@ -37,5 +42,3 @@ steps:
   - label: "🔨 Oracle Database"
     command:
       - ".buildkite/run_nigthly.sh oracle"
-    artifact_paths:
-      - "perf8-report-*/**/*"

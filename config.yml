@@ -30,6 +30,7 @@ native_service_types:
   - network_drive
   - s3
   - gcs
+  - abs
   - postgresql
   - oracle
   - mssql
@@ -44,6 +45,7 @@ sources:
   mysql: connectors.sources.mysql:MySqlDataSource
   network_drive: connectors.sources.network_drive:NASDataSource
   gcs: connectors.sources.gcs:GoogleCloudStorageDataSource
+  abs: connectors.sources.abs:AzureBlobStorageDataSource
   postgresql: connectors.sources.postgresql:PostgreSQLDataSource
   oracle: connectors.sources.oracle:OracleDataSource
   mssql: connectors.sources.mssql:MSSQLDataSource
