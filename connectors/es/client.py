@@ -40,7 +40,7 @@ class ESClient:
             auth = config["username"], config["password"]
             options["basic_auth"] = auth
             logger.debug(
-                f"Connecting using Basic Auth (user: {config['username']}, password: {config['password'][:3]}...)"
+                f"Connecting using Basic Auth (user: {config['username']})"
             )
         elif "api_key" in config:
             logger.debug(f"Connecting with an Api Key ({config['api_key'][:5]}...)")
