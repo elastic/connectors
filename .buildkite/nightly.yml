@@ -42,3 +42,5 @@ steps:
   - label: "🔨 Oracle Database"
     command:
       - ".buildkite/run_nigthly.sh oracle"
+    artifact_paths:
+      - "perf8-report-*/**/*"
