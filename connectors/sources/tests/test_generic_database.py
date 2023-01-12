@@ -158,7 +158,7 @@ class cursor_sync:
         return [("ORCLCDB",)]
 
 
-def test_get_configuration():
+def test_get_configuration(patch_logger):
     """Test get_configuration method of GenericBaseDataSource class"""
 
     # Setup
@@ -171,7 +171,7 @@ def test_get_configuration():
     assert config["host"] == "127.0.0.1"
 
 
-def test_validate_configuration_missing_fields():
+def test_validate_configuration_missing_fields(patch_logger):
     """Test _validate_configuration method check missing fields"""
     # Setup
     source = create_source(GenericBaseDataSource)
@@ -182,7 +182,7 @@ def test_validate_configuration_missing_fields():
         source._validate_configuration()
 
 
-def test_validate_configuration_port():
+def test_validate_configuration_port(patch_logger):
     """Test _validate_configuration method check port"""
     # Setup
     source = create_source(GenericBaseDataSource)
@@ -193,8 +193,20 @@ def test_validate_configuration_port():
         source._validate_configuration()
 
 
+def test_validate_configuration_ssl(patch_logger):
+    """Test _validate_configuration method check port"""
+    # Setup
+    source = create_source(GenericBaseDataSource)
+    source.configuration.set_field(name="ssl_disabled", value=False)
+
+    with pytest.raises(Exception):
+
+        # Execute
+        source._validate_configuration()
+
+
 @pytest.mark.asyncio
-async def test_serialize():
+async def test_serialize(patch_logger):
     """This function test serialize method of GDC"""
     # Setup
     source = create_source(GenericBaseDataSource)
@@ -225,7 +237,7 @@ async def test_serialize():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_postgresql():
+async def test_get_docs_postgresql(patch_logger):
     """Test get_docs method"""
     # Setup
     source = create_source(PostgreSQLDataSource)
@@ -265,7 +277,7 @@ async def test_get_docs_postgresql():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_oracle():
+async def test_get_docs_oracle(patch_logger):
     """Test get_docs method"""
     # Setup
     source = create_source(OracleDataSource)
@@ -301,7 +313,7 @@ async def test_get_docs_oracle():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_mssql():
+async def test_get_docs_mssql(patch_logger):
     """Test get_docs method"""
     # Setup
     source = create_source(MSSQLDataSource)

@@ -14,6 +14,8 @@ from connectors.utils import iso_utc
 DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
+DEFAULT_SSL_DISABLED = True
+DEFAULT_SSL_CA = None
 
 
 class GenericBaseDataSource(BaseDataSource):
@@ -40,6 +42,8 @@ class GenericBaseDataSource(BaseDataSource):
         self.database = self.configuration["database"]
         self.connection = None
         self.queries = None
+        self.ssl_disabled = self.configuration["ssl_disabled"]
+        self.ssl_ca = self.configuration["ssl_ca"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -89,6 +93,16 @@ class GenericBaseDataSource(BaseDataSource):
                 "label": "How many retry count for fetching rows on each call",
                 "type": "int",
             },
+            "ssl_disabled": {
+                "value": DEFAULT_SSL_DISABLED,
+                "label": "SSL verification will be enabled or not",
+                "type": "bool",
+            },
+            "ssl_ca": {
+                "value": DEFAULT_SSL_CA,
+                "label": "SSL certificate",
+                "type": "str",
+            },
         }
 
     def _validate_configuration(self):
@@ -117,6 +131,9 @@ class GenericBaseDataSource(BaseDataSource):
             and not self.configuration["port"].isnumeric()
         ):
             raise Exception("Configured port has to be an integer.")
+
+        if not (self.configuration["ssl_disabled"] or self.configuration["ssl_ca"]):
+            raise Exception("SSL certificate must be configured.")
 
     async def execute_query(
         self, query_name, engine, fetch_many=False, is_async=True, **query_kwargs

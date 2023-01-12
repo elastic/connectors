@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """SQLAlchemy source module is responsible to fetch documents from PostgreSQL."""
+import ssl
 from urllib.parse import quote
 
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -42,11 +43,28 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         logger.info("Validating the Connector Configuration...")
         try:
             self._validate_configuration()
-            self.engine = create_async_engine(self.connection_string)
+            self.engine = create_async_engine(
+                self.connection_string,
+                connect_args=self.get_connect_args() if not self.ssl_disabled else {},
+            )
             await anext(self.execute_query(query_name="PING", engine=self.engine))
             logger.info("Successfully connected to PostgreSQL.")
         except Exception:
             raise Exception(f"Can't connect to Postgresql Server on {self.host}")
+
+    def get_connect_args(self):
+        """Convert string to pem format and create a SSL context
+
+        Returns:
+            dictionary: Connection arguments
+        """
+        self.ssl_ca = self.ssl_ca.replace(" ", "\n")
+        pem_format = " ".join(self.ssl_ca.split("\n", 1))
+        pem_format = " ".join(pem_format.rsplit("\n", 1))
+        ctx = ssl.create_default_context()
+        ctx.load_verify_locations(cadata=pem_format)
+        connect_args = {"ssl": ctx}
+        return connect_args
 
     async def get_docs(self):
         """Executes the logic to fetch databases, tables and rows in async manner.

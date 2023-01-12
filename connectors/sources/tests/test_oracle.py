@@ -30,7 +30,7 @@ class AsyncIter:
 
 
 @pytest.mark.asyncio
-async def test_ping():
+async def test_ping(patch_logger):
     """Test ping method of OracleDataSource class"""
     # Setup
     source = create_source(OracleDataSource)
@@ -41,7 +41,7 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-async def test_ping_negative():
+async def test_ping_negative(patch_logger):
     """Test ping method of OracleDataSource class with negative case"""
     # Setup
     source = create_source(OracleDataSource)

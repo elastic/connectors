@@ -4,7 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the PostgreSQL database source class methods"""
-from unittest.mock import Mock
+import ssl
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -29,8 +30,16 @@ class AsyncIter:
         return self.items[0]
 
 
+class mock_ssl:
+    """This class contains methods which returns dummy ssl context"""
+
+    def load_verify_locations(self, cadata):
+        """This method verify locations"""
+        pass
+
+
 @pytest.mark.asyncio
-async def test_ping():
+async def test_ping(patch_logger):
     """Test ping method of PostgreSQLDataSource class"""
     # Setup
     source = create_source(PostgreSQLDataSource)
@@ -41,7 +50,7 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-async def test_ping_negative():
+async def test_ping_negative(patch_logger):
     """Test ping method of PostgreSQLDataSource class with negative case"""
     # Setup
     source = create_source(PostgreSQLDataSource)
@@ -49,3 +58,14 @@ async def test_ping_negative():
     # Execute
     with pytest.raises(Exception):
         await source.ping()
+
+
+def test_get_connect_argss(patch_logger):
+    """This function test get_connect_args with dummy certificate"""
+    # Setup
+    source = create_source(PostgreSQLDataSource)
+    source.ssl_ca = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
+
+    # Execute
+    with patch.object(ssl, "create_default_context", return_value=mock_ssl()):
+        source.get_connect_args()
