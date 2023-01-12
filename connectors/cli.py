@@ -18,6 +18,7 @@ from argparse import ArgumentParser
 from connectors import __version__
 from connectors.config import load_config
 from connectors.logger import logger, set_logger
+from connectors.preflight_check import pre_flight_check
 from connectors.services.sync import SyncService
 from connectors.source import get_data_sources
 from connectors.utils import get_event_loop
@@ -96,14 +97,20 @@ def run(args):
     # just display the list of connectors
     if args.action == "list":
         logger.info("Registered connectors:")
+        config = EnvYAML(args.config_file)
         for source in get_data_sources(config):
             logger.info(f"- {source.__doc__.strip()}")
         logger.info("Bye")
         return 0
 
+    loop = get_event_loop(args.uvloop)
+    try:
+        loop.run_until_complete(pre_flight_check(config))
+    except asyncio.CancelledError:
+        return 0
+
     service = SyncService(config, args)
     coro = service.run()
-    loop = get_event_loop(args.uvloop)
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
