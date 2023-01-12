@@ -36,9 +36,7 @@ class MySqlDataSource(BaseDataSource):
             connector (BYOConnector): Object of the BYOConnector class
         """
         super().__init__(connector=connector)
-        self.retry_count = int(
-            self.configuration.get("retry_count", DEFAULT_RETRY_COUNT)
-        )
+        self.retry_count = self.configuration["retry_count"]
         self.connection_pool = None
 
     @classmethod
@@ -70,7 +68,7 @@ class MySqlDataSource(BaseDataSource):
                 "type": "str",
             },
             "database": {
-                "value": ["customerinfo"],
+                "value": "customerinfo",
                 "label": "Databases",
                 "type": "list",
             },
