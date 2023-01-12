@@ -28,13 +28,14 @@ service:
 native_service_types:
   - mysql
   - network_drive
+  - s3
 
 # some id
 #connector_id: '1'
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
-  s3: connectors.sources.aws:S3DataSource
+  s3: connectors.sources.s3:S3DataSource
   dir: connectors.sources.directory:DirectoryDataSource
   mysql: connectors.sources.mysql:MySqlDataSource
   network_drive: connectors.sources.network_drive:NASDataSource
