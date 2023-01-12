@@ -87,12 +87,8 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             ),
         )
         self.user_project_id = self.service_account_credentials.project_id
-        self.retry_count = int(
-            self.configuration.get("retry_count", DEFAULT_RETRY_COUNT)
-        )
-        self.enable_content_extraction = self.configuration.get(
-            "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION
-        )
+        self.retry_count = self.configuration["retry_count"]
+        self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
     @classmethod
     def get_default_configuration(cls):

@@ -30,9 +30,9 @@ def get_mocked_source_object():
         GoogleCloudStorageDataSource: Mocked object of the data source class.
     """
     connector = argparse.Namespace()
-    connector.configuration = {
-        "service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS
-    }
+    connector.configuration = DataSourceConfiguration(
+        {"service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS}
+    )
     mocked_gcs_object = GoogleCloudStorageDataSource(connector=connector)
     return mocked_gcs_object
 
@@ -64,7 +64,9 @@ async def test_empty_configuration():
 
     # Setup
     connector = argparse.Namespace()
-    connector.configuration = {"service_account_credentials": ""}
+    connector.configuration = DataSourceConfiguration(
+        {"service_account_credentials": ""}
+    )
 
     # Execute
     with pytest.raises(Exception, match="service_account_credentials can't be empty."):

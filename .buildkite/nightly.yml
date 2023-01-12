@@ -24,3 +24,8 @@ steps:
       - ".buildkite/run_nigthly.sh gcs"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Azure Blob Storage"
+    command:
+      - ".buildkite/run_nigthly.sh abs"
+    artifact_paths:
+      - "perf8-report-*/**/*"

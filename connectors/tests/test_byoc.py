@@ -195,10 +195,14 @@ doc = {"_id": 1}
 max_concurrency = 0
 
 
-class Data:
+class Data(BaseDataSource):
     def __init__(self, connector):
-        self.connector = connector
+        super().__init__(connector)
         self.concurrency = 0
+
+    @classmethod
+    def get_default_configuration(cls):
+        return {}
 
     async def ping(self):
         pass
@@ -433,7 +437,6 @@ async def test_prepare(mock_responses):
         "scheduling": {"enabled": False},
     }
     connector = BYOConnector(Index(), "1", doc, {})
-
     config = {
         "connector_id": "1",
         "service_type": "mongodb",
