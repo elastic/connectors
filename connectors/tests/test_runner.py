@@ -568,6 +568,7 @@ async def test_connector_service_poll_with_entsearch(
     mock_responses, patch_logger, patch_ping, set_env, catch_stdout
 ):
     with mock.patch.dict(os.environ, {"ENT_SEARCH_CONFIG_PATH": ES_CONFIG}):
+
         def connectors_read(url, **kw):
             assert kw["headers"]["x-elastic-auth"] == "SomeYeahValue"
 
