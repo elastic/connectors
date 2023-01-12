@@ -16,6 +16,9 @@ items that may help during the review.-->
 #### Pre-Review Checklist
 - [ ] Covered the changes with automated tests
 - [ ] Tested the changes locally
+- [ ] Added a label for each target release version (example: `v7.13.2`, `v7.14.0`, `v8.0.0`)
+- [ ] Considered corresponding documentation changes
+- [ ] Contributed any configuration settings changes to the configuration reference
 
 #### Changes Requiring Extra Attention
 
