@@ -40,6 +40,9 @@ async def verify(service_type, index_name, size, config):
         if "_extract_binary_content" in first_doc:
             raise Exception("The pipeline did not run")
 
+        if "_attachment" in first_doc:
+            raise Exception("Content extraction was not successful")
+
         print("🤗")
     finally:
         await client.close()
