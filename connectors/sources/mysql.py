@@ -37,7 +37,7 @@ class MySqlDataSource(BaseDataSource):
         """Setup connection to the MySQL server.
 
         Args:
-            connector (BYOConnector): Object of the BYOConnector class
+            connector (Connector): Object of the Connector class
         """
         super().__init__(connector=connector)
         self.retry_count = self.configuration["retry_count"]

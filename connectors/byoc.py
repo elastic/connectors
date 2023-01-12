@@ -148,7 +148,7 @@ class BYOIndex(ESIndex):
         return query
 
     def _create_object(self, doc_source):
-        return BYOConnector(
+        return Connector(
             self,
             doc_source["_id"],
             doc_source["_source"],
@@ -227,7 +227,7 @@ class PipelineSettings:
         )
 
 
-class BYOConnector:
+class Connector:
     """Represents one doc in `.elastic-connectors` and triggers sync.
 
     The pattern to use it is:

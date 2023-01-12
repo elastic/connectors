@@ -606,13 +606,13 @@ async def test_ping_fails(mock_responses, patch_logger, set_env):
 async def test_spurious(mock_responses, patch_logger, patch_ping, set_env):
     await set_server_responses(mock_responses)
 
-    from connectors.byoc import BYOConnector
+    from connectors.byoc import Connector
 
     async def _sync(*args):
         raise Exception("me")
 
-    old_sync = BYOConnector.sync
-    BYOConnector.sync = _sync
+    old_sync = Connector.sync
+    Connector.sync = _sync
 
     try:
         service = create_service(CONFIG)
@@ -622,7 +622,7 @@ async def test_spurious(mock_responses, patch_logger, patch_ping, set_env):
     except Exception:
         await asyncio.sleep(0.1)
     finally:
-        BYOConnector.sync = old_sync
+        Connector.sync = old_sync
 
     patch_logger.assert_check(
         lambda log: isinstance(log, Exception) and log.args[0] == "me"
@@ -633,13 +633,13 @@ async def test_spurious(mock_responses, patch_logger, patch_ping, set_env):
 async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_env):
     await set_server_responses(mock_responses)
 
-    from connectors.byoc import BYOConnector
+    from connectors.byoc import Connector
 
     async def _sync(*args):
         raise Exception("me")
 
-    old_sync = BYOConnector.sync
-    BYOConnector.sync = _sync
+    old_sync = Connector.sync
+    Connector.sync = _sync
 
     await set_server_responses(mock_responses)
     headers = {"X-Elastic-Product": "Elasticsearch"}
@@ -662,7 +662,7 @@ async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_e
     except Exception:
         await asyncio.sleep(0.1)
     finally:
-        BYOConnector.sync = old_sync
+        Connector.sync = old_sync
 
     patch_logger.assert_instance(Exception)
 
