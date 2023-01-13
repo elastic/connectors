@@ -102,7 +102,7 @@ async def test_sync_job(mock_responses):
         "rules": [{"id": ACTIVE_RULE_ONE_ID}, {"id": ACTIVE_RULE_TWO_ID}],
     }
 
-    job = SyncJob("connector-id", client, ACTIVE_FILTERING_DEFAULT_DOMAIN)
+    job = SyncJob("connector-id", client)
 
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
@@ -135,7 +135,7 @@ async def test_sync_job(mock_responses):
     )
 
     assert job.duration == -1
-    await job.start()
+    await job.start(filtering=ACTIVE_FILTERING_DEFAULT_DOMAIN)
     assert job.status == JobStatus.IN_PROGRESS
     assert job.job_id is not None
     await asyncio.sleep(0.2)

@@ -160,11 +160,10 @@ class BYOIndex(ESIndex):
 
 
 class SyncJob:
-    def __init__(self, connector_id, elastic_client, filtering):
+    def __init__(self, connector_id, elastic_client):
         self.connector_id = connector_id
         self.client = elastic_client
         self.created_at = datetime.now(timezone.utc)
-        self.filtering = SyncJob.transform_filtering(filtering)
         self.completed_at = None
         self.job_id = None
         self.status = None
@@ -176,10 +175,16 @@ class SyncJob:
         msec = (self.completed_at - self.created_at).microseconds
         return round(msec / 9, 2)
 
-    async def start(self, trigger_method=JobTriggerMethod.SCHEDULED):
+    async def start(self, trigger_method=JobTriggerMethod.SCHEDULED, filtering=None):
+        if filtering is None:
+            filtering = {}
+
         self.status = JobStatus.IN_PROGRESS
         job_def = {
-            "connector": {"id": self.connector_id, "filtering": self.filtering},
+            "connector": {
+                "id": self.connector_id,
+                "filtering": SyncJob.transform_filtering(filtering),
+            },
             "trigger_method": e2str(trigger_method),
             "status": e2str(self.status),
             "error": None,
@@ -401,16 +406,13 @@ class BYOConnector:
         return next_run(self.scheduling["interval"])
 
     async def _sync_starts(self):
-        job = SyncJob(
-            self.id,
-            self.client,
-            # Always use 'DEFAULT' domain for now
-            self.filtering.get_active_filter(Filtering.DEFAULT_DOMAIN),
-        )
+        job = SyncJob(self.id, self.client)
         trigger_method = (
             JobTriggerMethod.ON_DEMAND if self.sync_now else JobTriggerMethod.SCHEDULED
         )
-        job_id = await job.start(trigger_method)
+        job_id = await job.start(
+            trigger_method, self.filtering.get_active_filter(Filtering.DEFAULT_DOMAIN)
+        )
 
         self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
