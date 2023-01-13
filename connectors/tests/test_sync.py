@@ -159,8 +159,9 @@ class Args:
         self.sync_now = options.get("sync_now", False)
 
 
-def create_service(**options):
-    return SyncService(Args(**options))
+def create_service(config_file, **options):
+    config = load_config(config_file)
+    return SyncService(config, Args(**options))
 
 
 async def set_server_responses(
@@ -319,8 +320,7 @@ async def test_connector_service_poll(
     mock_responses, patch_logger, patch_ping, set_env
 ):
     await set_server_responses(mock_responses)
-    load_config(CONFIG_FILE)
-    service = create_service()
+    service = create_service(CONFIG_FILE)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
@@ -336,8 +336,7 @@ async def test_connector_service_poll_unconfigured(
     # but still send out a heartbeat
 
     await set_server_responses(mock_responses, FAKE_CONFIG_NEEDS_CONFIG)
-    load_config(CONFIG_FILE)
-    service = create_service()
+    service = create_service(CONFIG_FILE)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
 
@@ -362,8 +361,7 @@ async def test_connector_service_poll_no_sync_but_status_updated(
     await set_server_responses(
         mock_responses, FAKE_CONFIG_NO_SYNC, connectors_update=upd
     )
-    load_config(CONFIG_FILE)
-    service = create_service(sync_now=False)
+    service = create_service(CONFIG_FILE, sync_now=False)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
 
@@ -390,8 +388,7 @@ async def test_connector_service_poll_cron_broken(
     await set_server_responses(
         mock_responses, FAKE_CONFIG_CRON_BROKEN, connectors_update=upd
     )
-    load_config(CONFIG_FILE)
-    service = create_service(sync_now=False)
+    service = create_service(CONFIG_FILE, sync_now=False)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
     patch_logger.assert_not_present("Sync done")
@@ -405,8 +402,7 @@ async def test_connector_service_poll_just_created(
     # we should not sync a connector that is not configured
     # but still send out an heartbeat
     await set_server_responses(mock_responses, FAKE_CONFIG_CREATED)
-    load_config(CONFIG_FILE)
-    service = create_service()
+    service = create_service(CONFIG_FILE)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
 
@@ -420,8 +416,7 @@ async def test_connector_service_poll_https(
     mock_responses, patch_logger, patch_ping, set_env
 ):
     await set_server_responses(mock_responses, host="https://safenowhere.com:443")
-    load_config(CONFIG_HTTPS_FILE)
-    service = create_service()
+    service = create_service(CONFIG_HTTPS_FILE)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
@@ -432,8 +427,7 @@ async def test_connector_service_poll_large(
     mock_responses, patch_logger, patch_ping, set_env
 ):
     await set_server_responses(mock_responses, LARGE_FAKE_CONFIG)
-    load_config(MEM_CONFIG_FILE)
-    service = create_service()
+    service = create_service(MEM_CONFIG_FILE)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
 
@@ -447,8 +441,7 @@ async def test_connector_service_poll_large(
 async def test_connector_service_poll_clear_error(
     mock_responses, patch_logger, patch_ping, set_env
 ):
-    load_config(CONFIG_FILE)
-    service = create_service(one_sync=True)
+    service = create_service(CONFIG_FILE, one_sync=True)
     calls = []
 
     def upd(url, **kw):
@@ -480,8 +473,7 @@ async def test_connector_service_poll_trace_mem(
     mock_responses, patch_logger, patch_ping, set_env
 ):
     await set_server_responses(mock_responses, FAKE_CONFIG)
-    load_config(CONFIG_MEM_FILE)
-    service = create_service()
+    service = create_service(CONFIG_MEM_FILE)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
     # we want to make sure we get memory usage report
@@ -493,8 +485,7 @@ async def test_connector_service_poll_sync_now(
     mock_responses, patch_logger, patch_ping, set_env
 ):
     await set_server_responses(mock_responses, FAKE_CONFIG_NO_SYNC)
-    load_config(CONFIG_FILE)
-    service = create_service(sync_now=True, one_sync=True)
+    service = create_service(CONFIG_FILE, sync_now=True, one_sync=True)
     # one_sync means it won't loop forever
     await service.run()
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
@@ -512,8 +503,7 @@ async def test_connector_service_poll_sync_ts(
         return CallbackResult(status=200, payload={"items": []})
 
     await set_server_responses(mock_responses, FAKE_CONFIG_TS, bulk_call=bulk_call)
-    load_config(CONFIG_FILE)
-    service = create_service(sync_now=True, one_sync=True)
+    service = create_service(CONFIG_FILE, sync_now=True, one_sync=True)
     await service.run()
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
 
@@ -527,8 +517,7 @@ async def test_connector_service_poll_sync_fails(
 ):
 
     await set_server_responses(mock_responses, FAKE_CONFIG_FAIL_SERVICE)
-    load_config(CONFIG_FILE)
-    service = create_service()
+    service = create_service(CONFIG_FILE)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
     patch_logger.assert_present("The document fetcher failed")
@@ -540,8 +529,7 @@ async def test_connector_service_poll_unknown_service(
 ):
 
     await set_server_responses(mock_responses, FAKE_CONFIG_UNKNOWN_SERVICE)
-    load_config(CONFIG_FILE)
-    service = create_service()
+    service = create_service(CONFIG_FILE)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
     patch_logger.assert_present("Can't handle source of type UNKNOWN")
@@ -562,8 +550,7 @@ async def test_connector_service_poll_buggy_service(
     await set_server_responses(
         mock_responses, FAKE_CONFIG_BUGGY_SERVICE, connectors_update=connectors_update
     )
-    load_config(CONFIG_FILE)
-    service = create_service()
+    service = create_service(CONFIG_FILE)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
 
@@ -583,8 +570,7 @@ async def test_ping_fails(mock_responses, patch_logger, set_env):
 
     BYOIndex.ping = _ping
 
-    load_config(CONFIG_FILE)
-    service = create_service()
+    service = create_service(CONFIG_FILE)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
     patch_logger.assert_present("http://nowhere.com:9200 seem down. Bye!")
@@ -603,8 +589,7 @@ async def test_spurious(mock_responses, patch_logger, patch_ping, set_env):
     Connector.sync = _sync
 
     try:
-        load_config(CONFIG_FILE)
-        service = create_service()
+        service = create_service(CONFIG_FILE)
         service.idling = 0
         service.service_config["max_errors"] = 0
         await service.run()
@@ -645,8 +630,7 @@ async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_e
     )
 
     try:
-        load_config(CONFIG_FILE)
-        service = create_service()
+        service = create_service(CONFIG_FILE)
         asyncio.get_event_loop().call_soon(service.stop)
         await service.run()
     except Exception:
@@ -661,8 +645,7 @@ async def test_spurious_continue(mock_responses, patch_logger, patch_ping, set_e
 async def test_connector_settings_change(
     mock_responses, patch_logger, patch_ping, set_env
 ):
-    load_config(CONFIG_FILE)
-    service = create_service(one_sync=True)
+    service = create_service(CONFIG_FILE, one_sync=True)
 
     configs = [FAKE_CONFIG, FAKE_CONFIG_PIPELINE_CHANGED]
     current = [-1]

@@ -3,17 +3,12 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import os
-
-from envyaml import EnvYAML
-
-import connectors.config
 from connectors.logger import logger
 
 
 class BaseService:
-    def __init__(self):
-        self.config = connectors.config.config
+    def __init__(self, config):
+        self.config = config
 
     def stop(self):
         raise NotImplementedError()
