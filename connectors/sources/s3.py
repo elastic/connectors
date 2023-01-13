@@ -40,7 +40,7 @@ class S3DataSource(BaseDataSource):
         """Setup connection to the Amazon S3.
 
         Args:
-            connector (BYOConnector): Object of the BYOConnector class.
+            connector (Connector): Object of the Connector class.
         """
         super().__init__(connector)
         self.session = aioboto3.Session()

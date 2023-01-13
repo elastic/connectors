@@ -39,9 +39,7 @@ class ESClient:
                 raise KeyError("You can't use basic auth and Api Key at the same time")
             auth = config["username"], config["password"]
             options["basic_auth"] = auth
-            logger.debug(
-                f"Connecting using Basic Auth (user: {config['username']}, password: {config['password'][:3]}...)"
-            )
+            logger.debug(f"Connecting using Basic Auth (user: {config['username']})")
         elif "api_key" in config:
             logger.debug(f"Connecting with an Api Key ({config['api_key'][:5]}...)")
             options["api_key"] = config["api_key"]
