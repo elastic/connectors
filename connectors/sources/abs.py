@@ -31,13 +31,13 @@ DEFAULT_RETRY_COUNT = 3
 class AzureBlobStorageDataSource(BaseDataSource):
     """Class to fetch documents from Azure Blob Storage"""
 
-    def __init__(self, connector):
+    def __init__(self, configuration):
         """Setup the connection to the azure base client
 
         Args:
             connector (BYOConnector): Object of the BYOConnector class
         """
-        super().__init__(connector=connector)
+        super().__init__(configuration=configuration)
         self.connection_string = None
         self.enable_content_extraction = self.configuration.get(
             "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION

@@ -22,8 +22,8 @@ DEFAULT_CONTENT_EXTRACTION = True
 class DirectoryDataSource(BaseDataSource):
     """Directory"""
 
-    def __init__(self, connector):
-        super().__init__(connector)
+    def __init__(self, configuration):
+        super().__init__(configuration=configuration)
         self.directory = self.configuration["directory"]
         self.pattern = self.configuration["pattern"]
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
