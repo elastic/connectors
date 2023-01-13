@@ -15,8 +15,8 @@ from envyaml import EnvYAML
 
 from connectors.byoc import (
     BYOIndex,
-    Filtering,
     Connector,
+    Filtering,
     JobStatus,
     Status,
     SyncJob,
