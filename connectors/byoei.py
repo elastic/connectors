@@ -326,7 +326,7 @@ class ElasticServer(ESClient):
         self.loop = asyncio.get_event_loop()
 
     async def prepare_index(
-        self, index, *, docs=None, settings=None, mappings=None, delete_first=False
+        self, index, *, docs=None, mappings=None, delete_first=False
     ):
         """Creates the index, given a mapping if it does not exists."""
         if index.startswith("."):
@@ -373,7 +373,7 @@ class ElasticServer(ESClient):
 
         logger.debug(f"Creating index {index}")
         await self.client.indices.create(
-            index=index, settings=settings, mappings=mappings
+            index=index, mappings=mappings
         )
         if docs is None:
             return
