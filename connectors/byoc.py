@@ -410,9 +410,7 @@ class BYOConnector:
         trigger_method = (
             JobTriggerMethod.ON_DEMAND if self.sync_now else JobTriggerMethod.SCHEDULED
         )
-        job_id = await job.start(
-            trigger_method, self.filtering.get_active_filter(Filtering.DEFAULT_DOMAIN)
-        )
+        job_id = await job.start(trigger_method, self.filtering.get_active_filter())
 
         self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
