@@ -372,9 +372,7 @@ class ElasticServer(ESClient):
             return
 
         logger.debug(f"Creating index {index}")
-        await self.client.indices.create(
-            index=index, mappings=mappings
-        )
+        await self.client.indices.create(index=index, mappings=mappings)
         if docs is None:
             return
         # XXX bulk
