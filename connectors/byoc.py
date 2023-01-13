@@ -149,7 +149,7 @@ class BYOIndex(ESIndex):
         return query
 
     def _create_object(self, doc_source):
-        return BYOConnector(
+        return Connector(
             self,
             doc_source["_id"],
             doc_source["_source"],
@@ -264,7 +264,7 @@ class PipelineSettings:
         )
 
 
-class BYOConnector:
+class Connector:
     """Represents one doc in `.elastic-connectors` and triggers sync.
 
     The pattern to use it is:
@@ -488,8 +488,14 @@ class BYOConnector:
         fqn = config["sources"][service_type]
         try:
             source_klass = get_source_klass(fqn)
+
             if self.configuration.is_empty():
-                self.configuration = source_klass.get_default_configuration()
+                # sets the defaults and the flag to NEEDS_CONFIGURATION
+                self.doc_source[
+                    "configuration"
+                ] = source_klass.get_simple_configuration()
+                self.doc_source["status"] = e2str(Status.NEEDS_CONFIGURATION)
+                self._update_config(self.doc_source)
                 logger.debug(f"Populated configuration for connector {self.id}")
 
             # sync state if needed (when service type or configuration is updated)
@@ -572,11 +578,15 @@ class BYOConnector:
             )
             await asyncio.sleep(0)
 
+            # allows the data provider to change the bulk options
+            bulk_options = self.bulk_options.copy()
+            self.data_provider.tweak_bulk_options(bulk_options)
+
             result = await elastic_server.async_bulk(
                 self.index_name,
                 self.prepare_docs(self.data_provider),
                 self.data_provider.connector.pipeline,
-                options=self.bulk_options,
+                options=bulk_options,
             )
             await self._sync_done(job, result)
 

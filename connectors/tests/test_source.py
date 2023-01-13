@@ -36,6 +36,14 @@ def test_field():
     # stupid holder
     f = Field("name")
     assert f.label == "name"
+    assert f.type == "str"
+
+
+def test_field_convert():
+    assert Field("name", value="1", type="int").value == 1
+    assert Field("name", value="1.2", type="float").value == 1.2
+    assert Field("name", value="YeS", type="bool").value
+    assert Field("name", value="1,2,3", type="list").value == ["1", "2", "3"]
 
 
 def test_data_source_configuration():
@@ -78,18 +86,59 @@ def test_get_data_sources():
 @pytest.mark.asyncio
 async def test_base_class():
     class Connector:
-        configuration = {}
+        configuration = DataSourceConfiguration({})
 
-    base = BaseDataSource(Connector())
+    with pytest.raises(NotImplementedError):
+        BaseDataSource(Connector())
 
     # ABCs
-    with pytest.raises(NotImplementedError):
-        BaseDataSource.get_default_configuration()
+    class DataSource(BaseDataSource):
+        @classmethod
+        def get_default_configuration(cls):
+            return {
+                "host": {
+                    "value": "127.0.0.1",
+                    "label": "Host",
+                    "type": "str",
+                },
+                "port": {
+                    "value": 3306,
+                    "label": "Port",
+                    "type": "int",
+                },
+                "direct": {
+                    "value": True,
+                    "label": "Direct connect",
+                    "type": "bool",
+                },
+                "user": {
+                    "value": "root",
+                    "label": "Username",
+                    "type": "str",
+                },
+            }
+
+    ds = DataSource(Connector())
+    ds.get_default_configuration()["port"]["value"] == 3306
+
+    options = {"a": "1"}
+    ds.tweak_bulk_options(options)
+    assert options == {"a": "1"}
+
+    # data we send back to kibana
+    # we want to make sure we only send back label+value
+    expected = {
+        "host": {"label": "Host", "value": "127.0.0.1"},
+        "port": {"label": "Port", "value": "3306"},
+        "direct": {"label": "Direct connect", "value": "true"},
+        "user": {"label": "Username", "value": "root"},
+    }
+    assert ds.get_simple_configuration() == expected
 
     with pytest.raises(NotImplementedError):
-        await base.ping()
+        await ds.ping()
 
-    await base.close()
+    await ds.close()
 
     with pytest.raises(NotImplementedError):
-        await base.get_docs()
+        await ds.get_docs()

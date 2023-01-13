@@ -43,6 +43,9 @@ class FakeSource:
     def get_default_configuration(cls):
         return []
 
+    def tweak_bulk_options(self, options):
+        pass
+
 
 class FakeSourceTS(FakeSource):
     """Fake source with stable TS"""

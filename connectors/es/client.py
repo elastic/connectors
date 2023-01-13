@@ -39,9 +39,7 @@ class ESClient:
                 raise KeyError("You can't use basic auth and Api Key at the same time")
             auth = config["username"], config["password"]
             options["basic_auth"] = auth
-            logger.debug(
-                f"Connecting using Basic Auth (user: {config['username']}, password: {config['password'][:3]}...)"
-            )
+            logger.debug(f"Connecting using Basic Auth (user: {config['username']})")
         elif "api_key" in config:
             logger.debug(f"Connecting with an Api Key ({config['api_key'][:5]}...)")
             options["api_key"] = config["api_key"]
@@ -117,11 +115,11 @@ class ESClient:
         for index in indices:
             logger.debug(f"Checking for index {index} presence")
             if not await self.client.indices.exists(index=index):
-                raise PreflightCheckError(f"Cloud not find index {index}")
+                raise PreflightCheckError(f"Could not find index {index}")
 
         for pipeline in pipelines:
             logger.debug(f"Checking for pipeline {pipeline} presence")
             try:
                 await self.client.ingest.get_pipeline(id=pipeline)
             except NotFoundError:
-                raise PreflightCheckError(f"Cloud not find pipeline {pipeline}")
+                raise PreflightCheckError(f"Could not find pipeline {pipeline}")

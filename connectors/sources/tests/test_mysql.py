@@ -267,13 +267,17 @@ async def test_fetch_documents():
     response = source.fetch_documents(database="database_name", table="table_name")
 
     # Assert
+    document_list = []
     async for document in response:
-        assert document == {
-            "Database": "database_name",
-            "Table": "table_name",
-            "_id": "database_name_table_name_",
-            "_timestamp": "table1",
-        }
+        document_list.append(document)
+
+    assert {
+        "Database": "database_name",
+        "Table": "table_name",
+        "_id": "database_name_table_name_",
+        "_timestamp": "table1",
+        "database_name_table_name_Database": "table1",
+    } in document_list
 
 
 @pytest.mark.asyncio

@@ -12,21 +12,21 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
 HERE = os.path.dirname(__file__)
 DEFAULT_CONTENT_EXTRACTION = True
 
 
-class DirectoryDataSource:
+class DirectoryDataSource(BaseDataSource):
     """Directory"""
 
     def __init__(self, connector):
-        self.directory = connector.configuration["directory"]
-        self.pattern = connector.configuration["pattern"]
-        self.enable_content_extraction = connector.configuration.get(
-            "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION
-        )
+        super().__init__(connector)
+        self.directory = self.configuration["directory"]
+        self.pattern = self.configuration["pattern"]
+        self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
     @classmethod
     def get_default_configuration(cls):

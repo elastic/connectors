@@ -37,15 +37,13 @@ class MySqlDataSource(BaseDataSource):
         """Setup connection to the MySQL server.
 
         Args:
-            connector (BYOConnector): Object of the BYOConnector class
+            connector (Connector): Object of the Connector class
         """
         super().__init__(connector=connector)
-        self.retry_count = int(
-            self.configuration.get("retry_count", DEFAULT_RETRY_COUNT)
-        )
+        self.retry_count = self.configuration["retry_count"]
         self.connection_pool = None
-        self.ssl_disabled = self.configuration.get("ssl_disabled", DEFAULT_SSL_DISABLED)
-        self.certificate = self.configuration.get("ssl_ca", DEFAULT_SSL_CA)
+        self.ssl_disabled = self.configuration["ssl_disabled"]
+        self.certificate = self.configuration["ssl_ca"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -76,7 +74,7 @@ class MySqlDataSource(BaseDataSource):
                 "type": "str",
             },
             "database": {
-                "value": ["customerinfo"],
+                "value": "customerinfo",
                 "label": "Databases",
                 "type": "list",
             },
@@ -213,7 +211,10 @@ class MySqlDataSource(BaseDataSource):
                         if fetch_many:
                             # sending back column names only once
                             if yield_once:
-                                yield [column[0] for column in cursor.description]
+                                yield [
+                                    f"{query_kwargs['database']}_{query_kwargs['table']}_{column[0]}"
+                                    for column in cursor.description
+                                ]
                                 yield_once = False
 
                             # setting cursor position where it was failed
@@ -340,7 +341,7 @@ class MySqlDataSource(BaseDataSource):
 
         keys = []
         for column_name in response:
-            keys.append(column_name[0])
+            keys.append(f"{database}_{table}_{column_name[0]}")
 
         if keys:
 
