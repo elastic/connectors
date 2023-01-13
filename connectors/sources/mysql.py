@@ -95,7 +95,7 @@ class MySqlDataSource(BaseDataSource):
             },
             "ssl_disabled": {
                 "value": DEFAULT_SSL_DISABLED,
-                "label": "SSL verification will be enabled or not",
+                "label": "Disable SSL verification",
                 "type": "bool",
             },
             "ssl_ca": {
