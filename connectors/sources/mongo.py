@@ -16,8 +16,8 @@ from connectors.source import BaseDataSource
 class MongoDataSource(BaseDataSource):
     """MongoDB"""
 
-    def __init__(self, connector):
-        super().__init__(connector)
+    def __init__(self, configuration):
+        super().__init__(configuration=configuration)
         self.client = AsyncIOMotorClient(
             self.configuration["host"],
             directConnection=True,

@@ -543,7 +543,7 @@ class Connector:
                 logger.info("Sync forced")
 
             try:
-                self.data_provider = self.source_klass(self)
+                self.data_provider = self.source_klass(self.configuration)
             except Exception as e:
                 logger.critical(e, exc_info=True)
                 raise DataSourceError(
@@ -585,7 +585,7 @@ class Connector:
             result = await elastic_server.async_bulk(
                 self.index_name,
                 self.prepare_docs(self.data_provider),
-                self.data_provider.connector.pipeline,
+                self.pipeline,
                 options=bulk_options,
             )
             await self._sync_done(job, result)
