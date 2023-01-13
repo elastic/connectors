@@ -14,24 +14,6 @@ from connectors.logger import logger
 class BaseService:
     def __init__(self):
         self.config = connectors.config.config
-        self.ent_search_config()
-
-    def ent_search_config(self):
-        if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
-            return
-        logger.info("Found ENT_SEARCH_CONFIG_PATH, loading ent-search config")
-        ent_search_config = EnvYAML(os.environ["ENT_SEARCH_CONFIG_PATH"])
-        for field in (
-            "elasticsearch.host",
-            "elasticsearch.username",
-            "elasticsearch.password",
-            "elasticsearch.headers",
-        ):
-            sub = field.split(".")[-1]
-            if field not in ent_search_config:
-                continue
-            logger.debug(f"Overriding {field}")
-            self.config["elasticsearch"][sub] = ent_search_config[field]
 
     def stop(self):
         raise NotImplementedError()

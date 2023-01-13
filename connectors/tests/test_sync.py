@@ -7,7 +7,6 @@ import asyncio
 import copy
 import json
 import os
-from unittest import mock
 
 import pytest
 from aioresponses import CallbackResult
@@ -19,7 +18,6 @@ from connectors.services.sync import SyncService
 from connectors.tests.fake_sources import FakeSourceTS
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yml")
-ES_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "entsearch.yml")
 CONFIG_FILE_2 = os.path.join(os.path.dirname(__file__), "config_2.yml")
 CONFIG_HTTPS_FILE = os.path.join(os.path.dirname(__file__), "config_https.yml")
 CONFIG_MEM_FILE = os.path.join(os.path.dirname(__file__), "config_mem.yml")
@@ -488,27 +486,6 @@ async def test_connector_service_poll_trace_mem(
     await service.run()
     # we want to make sure we get memory usage report
     patch_logger.assert_present("===> Largest memory usage:")
-
-
-@pytest.mark.asyncio
-async def test_connector_service_poll_with_entsearch(
-    mock_responses, patch_logger, patch_ping, set_env, catch_stdout
-):
-    with mock.patch.dict(os.environ, {"ENT_SEARCH_CONFIG_PATH": ES_CONFIG_FILE}):
-
-        def connectors_read(url, **kw):
-            assert kw["headers"]["x-elastic-auth"] == "SomeYeahValue"
-
-            return CallbackResult(status=200, payload={})
-
-        await set_server_responses(mock_responses, connectors_update=connectors_read)
-        load_config(CONFIG_FILE)
-        service = create_service()
-        asyncio.get_event_loop().call_soon(service.stop)
-        await service.run()
-        for log in patch_logger.logs:
-            print(log)
-        patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
 
 
 @pytest.mark.asyncio
