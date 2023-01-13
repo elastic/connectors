@@ -327,13 +327,14 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 )
             )
             source_file_name = async_buffer.name
+
         logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
         await asyncio.to_thread(
             convert_to_b64,
             source=source_file_name,
         )
         async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            document["_attachment"] = await target_file.read()
+            document["_attachment"] = (await target_file.read()).strip()
         await remove(source_file_name)
         logger.debug(f"Downloaded {blob_name} for {blob_size} bytes ")
         return document

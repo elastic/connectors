@@ -214,6 +214,7 @@ def convert_to_b64(source, target=None, overwrite=False):
         else:
             # In Linuces, avoid line wrapping
             cmd = f"{_BASE64} -w 0 {source} > {temp_target}"
+        logger.debug(f"Calling {cmd}")
         subprocess.check_call(cmd, shell=True)
     else:
         # Pure Python version

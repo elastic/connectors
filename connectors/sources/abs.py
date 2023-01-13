@@ -187,7 +187,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
             await asyncio.to_thread(convert_to_b64, source=temp_filename)
             async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
-                document["_attachment"] = await async_buffer.read()
+                document["_attachment"] = (await async_buffer.read()).strip()
             await remove(temp_filename)
         return document
 
