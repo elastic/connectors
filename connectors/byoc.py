@@ -239,7 +239,7 @@ class Filtering:
     def __init__(self, filtering):
         self.filtering = filtering if filtering else []
 
-    def get_active_filter(self, domain):
+    def get_active_filter(self, domain=DEFAULT_DOMAIN):
         return next(
             (
                 filter_["active"]
