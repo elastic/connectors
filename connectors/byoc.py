@@ -158,7 +158,6 @@ class BYOIndex(ESIndex):
             analysis_icu=self.analysis_icu,
         )
 
-
 class SyncJob:
     def __init__(self, connector_id, elastic_client):
         self.connector_id = connector_id
@@ -596,3 +595,14 @@ class Connector:
         finally:
             self._syncing = False
             self._start_time = None
+
+
+class SyncJobIndex(ESIndex):
+    def __init__(self, index_name, elastic_config):
+        super().__init__(index_name, elastic_config)
+
+    def _create_object(self, doc):
+        return super()._create_object(doc)
+
+    def build_docs_query(self):
+        return dict()
