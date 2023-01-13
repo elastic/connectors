@@ -10,23 +10,17 @@ from envyaml import EnvYAML
 
 from connectors.logger import logger
 
-config = None
-
 
 def load_config(config_file):
-    global config
-    logger.info(
-        f"{'Loading' if config is None else 'Reloading'} config from {config_file}"
-    )
-    config = EnvYAML(config_file)
-    _ent_search_config()
-    return config
+    logger.info(f"Loading config from {config_file}")
+    configuration = EnvYAML(config_file)
+    _ent_search_config(configuration)
+    return configuration
 
 
-def _ent_search_config():
+def _ent_search_config(configuration):
     if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
         return
-    global config
     logger.info("Found ENT_SEARCH_CONFIG_PATH, loading ent-search config")
     ent_search_config = EnvYAML(os.environ["ENT_SEARCH_CONFIG_PATH"])
     for field in (
@@ -39,4 +33,4 @@ def _ent_search_config():
         if field not in ent_search_config:
             continue
         logger.debug(f"Overriding {field}")
-        config["elasticsearch"][sub] = ent_search_config[field]
+        configuration["elasticsearch"][sub] = ent_search_config[field]
