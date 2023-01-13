@@ -4,46 +4,69 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-import asyncio
-
 from connectors.byoc import CONNECTORS_INDEX, JOBS_INDEX
 from connectors.es import ESClient
 from connectors.logger import logger
+from connectors.utils import CancellableSleeps
 
 
-async def pre_flight_check(config):
-    elastic_config = config["elasticsearch"]
-    es_host = elastic_config["host"]
+class PreflightCheck:
+    def __init__(self, config):
+        self.elastic_config = config["elasticsearch"]
+        self.service_config = config["service"]
+        self.es_client = ESClient(self.elastic_config)
+        self.preflight_max_attempts = int(
+            self.service_config.get("preflight_max_attempts", 10)
+        )
+        self.preflight_idle = int(self.service_config.get("preflight_idle", 30))
+        self._sleeps = CancellableSleeps()
+        self.running = False
 
-    es_client = ESClient(elastic_config)
+    def stop(self):
+        self.running = False
+        self._sleeps.cancel()
+        if self.es_client is not None:
+            self.es_client.stop_waiting()
 
-    if not (await es_client.wait()):
-        logger.critical(f"{es_host} seem down. Bye!")
-        return -1
+    def shutdown(self, sig):
+        logger.info(f"Caught {sig.name}. Graceful shutdown.")
+        self.stop()
 
-    service_config = config["service"]
-    preflight_max_attempts = int(service_config.get("preflight_max_attempts", 10))
-    preflight_idle = int(service_config.get("preflight_idle", 30))
-
-    try:
-        attempts = 0
-        while True:
+    async def run(self):
+        try:
             logger.info("Preflight checks...")
+            self.running = True
+            if not (await self.es_client.wait()):
+                logger.critical(f"{self.elastic_config['host']} seem down. Bye!")
+                return False
+
+            return await self._check_system_indices_with_retries()
+        finally:
+            self.stop()
+            if self.es_client is not None:
+                await self.es_client.close()
+
+    async def _check_system_indices_with_retries(self):
+        attempts = 0
+        while self.running:
             try:
                 # Checking the indices/pipeline in the loop to be less strict about the boot ordering
-                await es_client.check_exists(indices=[CONNECTORS_INDEX, JOBS_INDEX])
-                break
+                await self.es_client.check_exists(
+                    indices=[CONNECTORS_INDEX, JOBS_INDEX]
+                )
+                return True
             except Exception as e:
-                if attempts > preflight_max_attempts:
-                    raise
+                if attempts >= self.preflight_max_attempts:
+                    logger.critical(
+                        f"Could not perform preflight check after {self.preflight_max_attempts} retries."
+                    )
+                    return False
                 else:
                     logger.warn(
-                        f"Attempt {attempts + 1}/{preflight_max_attempts} failed. Retrying..."
+                        f"Attempt {attempts + 1}/{self.preflight_max_attempts} failed. Retrying..."
                     )
                     logger.warn(str(e))
                     attempts += 1
-                    await asyncio.sleep(preflight_idle)
-    finally:
-        if es_client is not None:
-            es_client.stop_waiting()
-            await es_client.close()
+                    await self._sleeps.sleep(self.preflight_idle)
+        logger.warn("Preflight check is interrupted.")
+        return False

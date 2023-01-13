@@ -18,7 +18,7 @@ from argparse import ArgumentParser
 from connectors import __version__
 from connectors.config import load_config
 from connectors.logger import logger, set_logger
-from connectors.preflight_check import pre_flight_check
+from connectors.preflight_check import PreflightCheck
 from connectors.services.sync import SyncService
 from connectors.source import get_data_sources
 from connectors.utils import get_event_loop
@@ -104,8 +104,15 @@ def run(args):
         return 0
 
     loop = get_event_loop(args.uvloop)
+    preflight_check = PreflightCheck(config)
+    preflight_check_coro = preflight_check.run()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, functools.partial(preflight_check.shutdown, sig))
+
     try:
-        loop.run_until_complete(pre_flight_check(config))
+        if not loop.run_until_complete(preflight_check_coro):
+            return -1
     except asyncio.CancelledError:
         return 0
 
