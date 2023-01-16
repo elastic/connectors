@@ -114,6 +114,39 @@ ICU_ANALYSIS_SETTINGS = {
 }
 
 
+class Mappings:
+    """
+    Create default mappings to enable relevance tuning
+    """
+
+    @classmethod
+    def default_text_fields_mappings(
+        cls, *, is_connectors_index=False, is_crawler_index=False
+    ):
+        result = {
+            "dynamic": "true",
+            "dynamic_templates": [
+                {
+                    "data": {
+                        "match_mapping_type": "string",
+                        "mapping": TEXT_FIELD_MAPPING,
+                    }
+                }
+            ],
+            "properties": {},
+        }
+        id_prop = {"id": KEYWORD_FIELD_MAPPING}
+        if is_crawler_index:
+            result["properties"].update(id_prop)
+            result["properties"].update(CRAWLER_FIELD_MAPPINGS)
+        if is_connectors_index:
+            result["properties"].update(id_prop)
+            result["properties"].update(
+                WORKPLACE_SEARCH_SUBEXTRACTION_STAMP_FIELD_MAPPINGS
+            )
+        return result
+
+
 class UnsupportedLanguageCode(Exception):
     pass
 
@@ -262,36 +295,3 @@ class Settings:
             },
             "index": {"similarity": {"default": {"type": "BM25"}}},
         }
-
-
-class Mappings:
-    """
-    Create default mappings to enable relevance tuning
-    """
-
-    @classmethod
-    def default_text_fields_mappings(
-        cls, *, is_connectors_index=False, is_crawler_index=False
-    ):
-        result = {
-            "dynamic": "true",
-            "dynamic_templates": [
-                {
-                    "data": {
-                        "match_mapping_type": "string",
-                        "mapping": TEXT_FIELD_MAPPING,
-                    }
-                }
-            ],
-            "properties": {},
-        }
-        id_prop = {"id": KEYWORD_FIELD_MAPPING}
-        if is_crawler_index:
-            result["properties"].update(id_prop)
-            result["properties"].update(CRAWLER_FIELD_MAPPINGS)
-        if is_connectors_index:
-            result["properties"].update(id_prop)
-            result["properties"].update(
-                WORKPLACE_SEARCH_SUBEXTRACTION_STAMP_FIELD_MAPPINGS
-            )
-        return result
