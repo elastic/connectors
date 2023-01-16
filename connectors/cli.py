@@ -15,9 +15,8 @@ import os
 import signal
 from argparse import ArgumentParser
 
-from envyaml import EnvYAML
-
 from connectors import __version__
+from connectors.config import load_config
 from connectors.logger import logger, set_logger
 from connectors.services.sync import SyncService
 from connectors.source import get_data_sources
@@ -90,16 +89,19 @@ def _parser():
 
 def run(args):
     """Runner"""
+
+    # load config
+    config = load_config(args.config_file)
+
     # just display the list of connectors
     if args.action == "list":
         logger.info("Registered connectors:")
-        config = EnvYAML(args.config_file)
         for source in get_data_sources(config):
             logger.info(f"- {source.__doc__.strip()}")
         logger.info("Bye")
         return 0
 
-    service = SyncService(args)
+    service = SyncService(config, args)
     coro = service.run()
     loop = get_event_loop(args.uvloop)
 

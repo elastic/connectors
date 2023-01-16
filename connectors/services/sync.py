@@ -30,8 +30,9 @@ from connectors.utils import CancellableSleeps, trace_mem
 
 
 class SyncService(BaseService):
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, config, args):
+        super().__init__(config)
+        self.args = args
         self.errors = [0, time.time()]
         self.service_config = self.config["service"]
         self.trace_mem = self.service_config.get("trace_mem", False)
