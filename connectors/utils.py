@@ -120,22 +120,6 @@ class CancellableSleeps:
             task.cancel()
 
 
-def _snapshot():
-    if not tracemalloc.is_tracing():
-        tracemalloc.start()
-    logger.info("Taking a memory snapshot")
-    gc.collect()
-    trace = tracemalloc.take_snapshot()
-    return trace.filter_traces(
-        (
-            tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
-            tracemalloc.Filter(False, "<frozen importlib._bootstrap_external>"),
-            tracemalloc.Filter(False, "<unknown>"),
-            tracemalloc.Filter(False, tracemalloc.__file__),
-        )
-    )
-
-
 def get_size(ob):
     """Returns size in Bytes"""
     return asizeof.asizeof(ob)
