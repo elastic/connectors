@@ -28,6 +28,12 @@ def test_config():
 
 
 def test_config_with_ent_search():
-    with mock.patch.dict(os.environ, {"ENT_SEARCH_CONFIG_PATH": ES_CONFIG_FILE, "elasticsearch.password": "changeme"}):
+    with mock.patch.dict(
+        os.environ,
+        {
+            "ENT_SEARCH_CONFIG_PATH": ES_CONFIG_FILE,
+            "elasticsearch.password": "changeme",
+        },
+    ):
         config = load_config(CONFIG_FILE)
         assert config["elasticsearch"]["headers"]["X-Elastic-Auth"] == "SomeYeahValue"
