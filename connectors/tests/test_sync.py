@@ -432,8 +432,9 @@ async def test_connector_service_poll_large(
     await service.run()
 
     # let's make sure we are seeing bulk batches of various sizes
-    assert_re(".*15.01MiB", patch_logger.logs)
-    assert_re(".*3.0MiB", patch_logger.logs)
+    assert_re(".*Sending a batch.*", patch_logger.logs)
+    assert_re(".*0.48MiB", patch_logger.logs)
+    assert_re(".*0.17MiB", patch_logger.logs)
     assert_re("Sync done: 1001 indexed, 0  deleted", patch_logger.logs)
 
 

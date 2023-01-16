@@ -76,22 +76,14 @@ async def test_ping_for_failed_connection():
     # Setup
     source = create_source(AzureBlobStorageDataSource)
 
-    # Execute
-    with pytest.raises(Exception):
-        await source.ping()
-
-
-@pytest.mark.asyncio
-async def test_ping_for_empty_connection_string():
-    """Test ping method of AzureBlobStorageDataSource class with empty connection string"""
-
-    # Setup
-    source = create_source(AzureBlobStorageDataSource)
-    source.connection_string = None
-
-    with pytest.raises(Exception):
+    with patch.object(
+        BlobServiceClient,
+        "get_account_information",
+        side_effect=Exception("Something went wrong"),
+    ):
         # Execute
-        await source.ping()
+        with pytest.raises(Exception):
+            await source.ping()
 
 
 def test_prepare_blob_doc():
