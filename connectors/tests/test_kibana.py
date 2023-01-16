@@ -15,6 +15,8 @@ def mock_index_creation(index, mock_responses, hidden=True):
     url = f"http://nowhere.com:9200/{index}"
     if hidden:
         url += "?expand_wildcards=hidden"
+    else:
+        url += "?expand_wildcards=open"
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.head(
         url,
