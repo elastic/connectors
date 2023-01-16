@@ -18,7 +18,8 @@ from argparse import ArgumentParser
 from connectors import __version__
 from connectors.config import load_config
 from connectors.logger import logger, set_logger
-from connectors.services.sync import SyncService
+from connectors.services.job_executor import JobExecutorService
+from connectors.services.job_scheduler import JobSchedulerService
 from connectors.source import get_data_sources
 from connectors.utils import get_event_loop
 
@@ -101,15 +102,17 @@ def run(args):
         logger.info("Bye")
         return 0
 
-    service = SyncService(config, args)
-    coro = service.run()
+    services = [JobSchedulerService(config), JobExecutorService(config)]
     loop = get_event_loop(args.uvloop)
 
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
+        for service in services:
+            loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
 
     try:
-        return loop.run_until_complete(coro)
+        return loop.run_until_complete(
+            asyncio.gather(*[service.run() for service in services])
+        )
     except asyncio.CancelledError:
         return 0
     finally:

@@ -159,6 +159,11 @@ class BYOIndex(ESIndex):
         )
 
 
+class SyncJobIndex(ESIndex):
+    def _create_object(self, doc):
+        pass
+
+
 class SyncJob:
     def __init__(self, connector_id, elastic_client):
         self.connector_id = connector_id

@@ -15,7 +15,7 @@ from connectors.byoc import DataSourceError
 from connectors.config import load_config
 from connectors.conftest import assert_re
 from connectors.filtering.validation import InvalidFilteringError
-from connectors.services.sync import SyncService
+from connectors.services.job_scheduler import JobSchedulerService
 from connectors.tests.fake_sources import FakeSourceTS
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yml")
@@ -172,7 +172,7 @@ class Args:
 
 def create_service(config_file, **options):
     config = load_config(config_file)
-    return SyncService(config, Args(**options))
+    return JobSchedulerService(config, Args(**options))
 
 
 async def set_server_responses(
