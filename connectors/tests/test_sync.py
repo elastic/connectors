@@ -543,7 +543,7 @@ async def test_connector_service_poll_unknown_service(
 
 async def service_with_max_errors(mock_responses, config, max_errors):
     await set_server_responses(mock_responses, config)
-    service = create_service(CONFIG)
+    service = create_service(CONFIG_FILE)
     service.service_config["max_errors"] = max_errors
     asyncio.get_event_loop().call_soon(service.stop)
 
