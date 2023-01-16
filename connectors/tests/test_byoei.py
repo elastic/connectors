@@ -8,11 +8,11 @@ import datetime
 import pytest
 
 from connectors.byoc import PipelineSettings
-from connectors.byoei import ElasticServer
+from connectors.byoei import ElasticServer, IndexMissing
 
 
 @pytest.mark.asyncio
-async def test_prepare_index(mock_responses):
+async def test__override_index(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
@@ -31,7 +31,7 @@ async def test_prepare_index(mock_responses):
 
     es = ElasticServer(config)
 
-    await es.prepare_index("search-new-index", delete_first=True)
+    await es._override_index("search-new-index")
 
     mock_responses.head(
         "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
@@ -57,10 +57,37 @@ async def test_prepare_index(mock_responses):
         headers=headers,
     )
 
-    await es.prepare_index(
-        "search-new-index", delete_first=True, docs=[{"_id": "2"}, {"_id": "3"}]
+    await es._override_index("search-new-index", docs=[{"_id": "2"}, {"_id": "3"}])
+
+
+@pytest.mark.asyncio
+async def test_prepare_index_raise_error_when_index_does_not_exist(mock_responses):
+    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    headers = {"X-Elastic-Product": "Elasticsearch"}
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
+    )
+    mock_responses.head(
+        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
+        headers=headers,
+        status=404,
+    )
+    mock_responses.put(
+        "http://nowhere.com:9200/search-new-index",
+        payload={"_id": "1"},
+        headers=headers,
     )
 
+    es = ElasticServer(config)
+
+    with pytest.raises(IndexMissing):
+        await es.prepare_index("search-new-index")
+
+
+@pytest.mark.asyncio
+async def test_prepare_index(mock_responses):
+    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    headers = {"X-Elastic-Product": "Elasticsearch"}
     # prepare-index, with mappings
     mappings = {"properties": {"name": {"type": "keyword"}}}
     mock_responses.head(
@@ -76,6 +103,9 @@ async def test_prepare_index(mock_responses):
         "http://nowhere.com:9200/search-new-index/_mapping?expand_wildcards=open",
         headers=headers,
     )
+
+    es = ElasticServer(config)
+
     await es.prepare_index("search-new-index", mappings=mappings)
 
     await es.close()
