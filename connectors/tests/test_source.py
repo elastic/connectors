@@ -99,11 +99,10 @@ async def test_validate_filter(validator_mock):
 
 @pytest.mark.asyncio
 async def test_base_class():
-    class Connector:
-        configuration = DataSourceConfiguration({})
+    configuration = DataSourceConfiguration({})
 
     with pytest.raises(NotImplementedError):
-        BaseDataSource(Connector())
+        BaseDataSource(configuration=configuration)
 
     # default rule validators for every data source (order matters)
     assert BaseDataSource.basic_rules_validators() == [
@@ -142,7 +141,7 @@ async def test_base_class():
                 },
             }
 
-    ds = DataSource(Connector())
+    ds = DataSource(configuration=configuration)
     ds.get_default_configuration()["port"]["value"] == 3306
 
     options = {"a": "1"}

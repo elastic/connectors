@@ -108,6 +108,12 @@ async def prepare(service_type, index_name, config):
             "updated_at": "",
             # Scheduling intervals
             "scheduling": {"enabled": True, "interval": "1 * * * * *"},  # quartz syntax
+            "pipeline": {
+                "extract_binary_content": True,
+                "name": "ent-search-generic-ingestion",
+                "reduce_whitespace": True,
+                "run_ml_inference": True,
+            },
             # A flag to run sync immediately
             "sync_now": True,
             "is_native": True,

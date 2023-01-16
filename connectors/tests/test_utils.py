@@ -9,6 +9,7 @@ import binascii
 import contextlib
 import functools
 import os
+import random
 import tempfile
 import time
 
@@ -22,6 +23,7 @@ from connectors.utils import (
     MemQueue,
     convert_to_b64,
     get_base64_value,
+    get_size,
     next_run,
     validate_index_name,
 )
@@ -52,12 +54,64 @@ def test_invalid_names():
 
 
 @pytest.mark.asyncio
+async def test_mem_queue_speed(patch_logger):
+    # with memqueue
+    queue = MemQueue(maxmemsize=1024 * 1024, refresh_interval=0.1, refresh_timeout=2)
+    start = time.time()
+    for i in range(1000):
+        await queue.put("x" * 100)
+    mem_queue_duration = time.time() - start
+
+    # vanilla queue
+    queue = asyncio.Queue()
+    start = time.time()
+    for i in range(1000):
+        await queue.put("x" * 100)
+    queue_duration = time.time() - start
+
+    # mem queue should be 30 times slower at the most
+    quotient, _ = divmod(mem_queue_duration, queue_duration)
+    assert quotient < 30
+
+
+@pytest.mark.asyncio
+async def test_mem_queue_race(patch_logger):
+    item = "small stuff"
+    queue = MemQueue(
+        maxmemsize=get_size(item) * 2 + 1, refresh_interval=0.1, refresh_timeout=30
+    )
+    max_size = 0
+
+    async def put_one():
+        nonlocal max_size
+        await queue.put(item)
+        qsize = queue.qmemsize()
+        await asyncio.sleep(0)
+        if max_size < qsize:
+            max_size = qsize
+
+    async def remove_one():
+        await queue.get()
+
+    tasks = []
+    for i in range(1000):
+        tasks.append(put_one())
+        tasks.append(remove_one())
+
+    random.shuffle(tasks)
+    tasks = [asyncio.create_task(t) for t in tasks]
+
+    await asyncio.gather(*tasks)
+    assert max_size <= get_size(item) * 2
+
+
+@pytest.mark.asyncio
 async def test_mem_queue(patch_logger):
 
     queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=2)
     await queue.put("small stuff")
 
-    assert not queue.mem_full()
+    assert not queue.full()
     assert queue.qmemsize() == asizeof.asizeof("small stuff")
 
     # let's pile up until it can't accept anymore stuff
@@ -68,7 +122,6 @@ async def test_mem_queue(patch_logger):
             break
 
     when = []
-    # then next put will block until we release some memory
 
     async def add_data():
         when.append(time.time())
@@ -82,7 +135,7 @@ async def test_mem_queue(patch_logger):
         assert (size, item) == (64, "small stuff")
         await asyncio.sleep(0)
         await queue.get()  # removes the 2kb
-        assert not queue.mem_full()
+        assert not queue.full()
 
     await asyncio.gather(remove_data(), add_data())
     assert when[1] - when[0] > 0.1
