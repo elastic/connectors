@@ -85,11 +85,10 @@ def test_get_data_sources():
 
 @pytest.mark.asyncio
 async def test_base_class():
-    class Connector:
-        configuration = DataSourceConfiguration({})
+    configuration = DataSourceConfiguration({})
 
     with pytest.raises(NotImplementedError):
-        BaseDataSource(Connector())
+        BaseDataSource(configuration=configuration)
 
     # ABCs
     class DataSource(BaseDataSource):
@@ -118,7 +117,7 @@ async def test_base_class():
                 },
             }
 
-    ds = DataSource(Connector())
+    ds = DataSource(configuration=configuration)
     ds.get_default_configuration()["port"]["value"] == 3306
 
     options = {"a": "1"}

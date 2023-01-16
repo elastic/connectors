@@ -14,11 +14,11 @@ class FakeSource:
 
     service_type = "fake"
 
-    def __init__(self, connector):
-        self.connector = connector
-        if connector.configuration.has_field("raise"):
+    def __init__(self, configuration):
+        self.configuration = configuration
+        if configuration.has_field("raise"):
             raise Exception("I break on init")
-        self.fail = connector.configuration.has_field("fail")
+        self.fail = configuration.has_field("fail")
 
     async def changed(self):
         return True

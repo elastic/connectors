@@ -95,10 +95,9 @@ class DataSourceConfiguration:
 class BaseDataSource:
     """Base class, defines a lose contract."""
 
-    def __init__(self, connector):
-        self.connector = connector
-        assert isinstance(self.connector.configuration, DataSourceConfiguration)
-        self.configuration = self.connector.configuration
+    def __init__(self, configuration):
+        self.configuration = configuration
+        assert isinstance(self.configuration, DataSourceConfiguration)
         self.configuration.set_defaults(self.get_default_configuration())
 
     def __str__(self):
