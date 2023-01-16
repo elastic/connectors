@@ -88,6 +88,18 @@ def _parser():
     return parser
 
 
+async def _start_service(config, args, loop):
+    preflight = PreflightCheck(config)
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, functools.partial(preflight.shutdown, sig))
+    if not await preflight.run():
+        return -1
+    service = SyncService(config, args)
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
+    await service.run()
+
+
 def run(args):
     """Runner"""
 
@@ -97,30 +109,13 @@ def run(args):
     # just display the list of connectors
     if args.action == "list":
         logger.info("Registered connectors:")
-        config = EnvYAML(args.config_file)
         for source in get_data_sources(config):
             logger.info(f"- {source.__doc__.strip()}")
         logger.info("Bye")
         return 0
 
     loop = get_event_loop(args.uvloop)
-    preflight_check = PreflightCheck(config)
-    preflight_check_coro = preflight_check.run()
-
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, functools.partial(preflight_check.shutdown, sig))
-
-    try:
-        if not loop.run_until_complete(preflight_check_coro):
-            return -1
-    except asyncio.CancelledError:
-        return 0
-
-    service = SyncService(config, args)
-    coro = service.run()
-
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
+    coro = _start_service(config, args, loop)
 
     try:
         return loop.run_until_complete(coro)

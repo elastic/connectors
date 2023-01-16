@@ -18,7 +18,7 @@ class PreflightCheck:
         self.preflight_max_attempts = int(
             self.service_config.get("preflight_max_attempts", 10)
         )
-        self.preflight_idle = int(self.service_config.get("preflight_idle", 30))
+        self.preflight_idle = int(self.service_config.get("preflight_idle", 2))
         self._sleeps = CancellableSleeps()
         self.running = False
 
@@ -68,5 +68,4 @@ class PreflightCheck:
                     logger.warn(str(e))
                     attempts += 1
                     await self._sleeps.sleep(self.preflight_idle)
-        logger.warn("Preflight check is interrupted.")
         return False
