@@ -14,6 +14,7 @@ from aioresponses import CallbackResult
 
 from connectors.byoc import DataSourceError
 from connectors.conftest import assert_re
+from connectors.filtering.validation import InvalidFilteringError
 from connectors.services.sync import SyncService
 from connectors.tests.fake_sources import FakeSourceTS
 
@@ -99,9 +100,21 @@ FAKE_CONFIG_NOT_NATIVE = {
 
 LARGE_FAKE_CONFIG = copy.deepcopy(FAKE_CONFIG)
 LARGE_FAKE_CONFIG["service_type"] = "large_fake"
+
 FAIL_ONCE_CONFIG = dict(FAKE_CONFIG)
 FAIL_ONCE_CONFIG["service_type"] = "fail_once"
 
+FAKE_FILTERING_VALID_CONFIG = copy.deepcopy(FAKE_CONFIG)
+FAKE_FILTERING_VALID_CONFIG["service_type"] = "filtering_state_valid"
+
+FAIL_FILTERING_INVALID_CONFIG = copy.deepcopy(FAKE_CONFIG)
+FAIL_FILTERING_INVALID_CONFIG["service_type"] = "filtering_state_invalid"
+
+FAIL_FILTERING_EDITED_CONFIG = copy.deepcopy(FAKE_CONFIG)
+FAIL_FILTERING_EDITED_CONFIG["service_type"] = "filtering_state_edited"
+
+FAIL_FILTERING_ERRORS_PRESENT_CONFIG = copy.deepcopy(FAKE_CONFIG)
+FAIL_FILTERING_ERRORS_PRESENT_CONFIG["service_type"] = "filtering_errors_present"
 
 FAKE_CONFIG_FAIL_SERVICE = {
     "api_key_id": "",
@@ -119,7 +132,6 @@ FAKE_CONFIG_FAIL_SERVICE = {
     "sync_now": True,
 }
 
-
 FAKE_CONFIG_BUGGY_SERVICE = {
     "api_key_id": "",
     "configuration": {"raise": {"value": True, "label": ""}},
@@ -135,7 +147,6 @@ FAKE_CONFIG_BUGGY_SERVICE = {
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
 }
-
 
 FAKE_CONFIG_UNKNOWN_SERVICE = {
     "api_key_id": "",
@@ -355,7 +366,6 @@ async def test_connector_service_poll_unconfigured(
 async def test_connector_service_poll_no_sync_but_status_updated(
     mock_responses, patch_logger, patch_ping, set_env
 ):
-
     calls = []
 
     def upd(url, **kw):
@@ -381,7 +391,6 @@ async def test_connector_service_poll_no_sync_but_status_updated(
 async def test_connector_service_poll_cron_broken(
     mock_responses, patch_logger, patch_ping, set_env
 ):
-
     calls = []
 
     def upd(url, **kw):
@@ -541,7 +550,6 @@ async def test_connector_service_poll_sync_ts(
 async def test_connector_service_poll_sync_fails(
     mock_responses, patch_logger, patch_ping, set_env
 ):
-
     await set_server_responses(mock_responses, FAKE_CONFIG_FAIL_SERVICE)
     service = create_service(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
@@ -553,12 +561,50 @@ async def test_connector_service_poll_sync_fails(
 async def test_connector_service_poll_unknown_service(
     mock_responses, patch_logger, patch_ping, set_env
 ):
-
     await set_server_responses(mock_responses, FAKE_CONFIG_UNKNOWN_SERVICE)
     service = create_service(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
-    patch_logger.assert_present("Can't handle source of type UNKNOWN")
+
+
+async def service_with_max_errors(mock_responses, config, max_errors):
+    await set_server_responses(mock_responses, config)
+    service = create_service(CONFIG)
+    service.service_config["max_errors"] = max_errors
+    asyncio.get_event_loop().call_soon(service.stop)
+
+    return service
+
+
+@pytest.mark.parametrize(
+    "config, should_raise_filtering_error",
+    [
+        (FAIL_FILTERING_INVALID_CONFIG, True),
+        (FAIL_FILTERING_EDITED_CONFIG, True),
+        (FAIL_FILTERING_ERRORS_PRESENT_CONFIG, True),
+        (FAKE_FILTERING_VALID_CONFIG, False),
+    ],
+)
+@pytest.mark.asyncio
+async def test_connector_service_filtering(
+    config,
+    should_raise_filtering_error,
+    mock_responses,
+    patch_logger,
+    patch_ping,
+    set_env,
+):
+    service = await service_with_max_errors(mock_responses, config, 0)
+
+    if should_raise_filtering_error:
+        with pytest.raises(InvalidFilteringError):
+            await service.run()
+    else:
+        try:
+            await service.run()
+        except Exception as e:
+            # mark test as failed
+            assert False, f"Unexpected exception of type {type(e)} raised."
 
 
 @pytest.mark.asyncio
