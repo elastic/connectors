@@ -128,7 +128,7 @@ class BaseDataSource:
     async def changed(self):
         """When called, returns True if something has changed in the backend.
 
-        Otherwise returns False and the next sync is skipped.
+        Otherwise, returns False and the next sync is skipped.
 
         Some backends don't provide that information.
         In that case, this always return True.
@@ -160,10 +160,10 @@ class BaseDataSource:
         and optionally a `timestamp` field in ISO 8601 UTC
 
         The coroutine is called if the document needs to be synced
-        and has attachements. It need to return a mapping to index.
+        and has attachments. It needs to return a mapping to index.
 
         It has two arguments: doit and timestamp
-        If doit is False, it should return None immediatly.
+        If doit is False, it should return None immediately.
         If timestamp is provided, it should be used in the mapping.
 
         Example:
