@@ -44,6 +44,7 @@ def test_field_convert():
     assert Field("name", value="1.2", type="float").value == 1.2
     assert Field("name", value="YeS", type="bool").value
     assert Field("name", value="1,2,3", type="list").value == ["1", "2", "3"]
+    assert not Field("name", value="false", type="bool").value
 
 
 def test_data_source_configuration():

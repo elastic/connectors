@@ -36,7 +36,7 @@ class Field:
         elif type_ == "float":
             return float(value)
         elif type_ == "bool":
-            return value.lower() in "y", "yes", "true", "1"
+            return value.lower() in ("y", "yes", "true", "1")
         elif type_ == "list":
             return [item.strip() for item in value.split(",")]
         return value
