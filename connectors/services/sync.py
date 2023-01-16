@@ -7,7 +7,7 @@
 Event loop
 
 - polls for work by calling Elasticsearch on a regular basis
-- instanciates connector plugins
+- instantiates connector plugins
 - mirrors an Elasticsearch index with a collection of documents
 """
 import asyncio
