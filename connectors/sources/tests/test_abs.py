@@ -77,7 +77,9 @@ async def test_ping_for_failed_connection():
     source = create_source(AzureBlobStorageDataSource)
 
     with patch.object(
-        BlobServiceClient, "get_account_information", side_effect=Exception("Something went wrong")
+        BlobServiceClient,
+        "get_account_information",
+        side_effect=Exception("Something went wrong"),
     ):
         # Execute
         with pytest.raises(Exception):
