@@ -18,7 +18,7 @@ class PreflightCheck:
         self.preflight_max_attempts = int(
             self.service_config.get("preflight_max_attempts", 10)
         )
-        self.preflight_idle = int(self.service_config.get("preflight_idle", 2))
+        self.preflight_idle = int(self.service_config.get("preflight_idle", 30))
         self._sleeps = CancellableSleeps()
         self.running = False
 
