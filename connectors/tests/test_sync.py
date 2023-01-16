@@ -201,14 +201,9 @@ def patch_validate_filtering_in_byoc():
         yield
 
 
-class Args:
-    def __init__(self, **options):
-        pass
-
-
-def create_service(config_file, **options):
+def create_service(config_file):
     config = load_config(config_file)
-    service = SyncService(config, Args(**options))
+    service = SyncService(config)
     service.idling = 0
 
     return service
@@ -222,8 +217,8 @@ async def run_service_with_stop_after(service, stop_after):
     await asyncio.gather(service.run(), _terminate())
 
 
-async def create_and_run_service(config_file, stop_after, **options):
-    service = create_service(config_file, **options)
+async def create_and_run_service(config_file, stop_after):
+    service = create_service(config_file)
     await run_service_with_stop_after(service, stop_after)
 
 

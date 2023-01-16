@@ -36,9 +36,8 @@ DEFAULT_MAX_CONCURRENT_SYNCS = 1
 
 
 class SyncService(BaseService):
-    def __init__(self, config, args):
+    def __init__(self, config):
         super().__init__(config)
-        self.args = args
         self.idling = self.service_config["idling"]
         self.hb = self.service_config["heartbeat"]
         self.concurrent_syncs = self.service_config.get(
