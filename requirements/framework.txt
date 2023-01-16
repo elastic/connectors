@@ -5,7 +5,6 @@ pyyaml==6.0
 envyaml==1.10.211231
 ecs-logging==2.0.0
 pympler==1.0.1
-guppy3==3.1.2
 cron-schedule-triggers==0.0.11
 pytz==2019.3
 python-dateutil==2.8.2

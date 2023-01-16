@@ -5,7 +5,6 @@
 #
 import asyncio
 import base64
-import contextlib
 import functools
 import gc
 import os
@@ -18,7 +17,6 @@ from datetime import datetime, timezone
 
 from base64io import Base64IO
 from cstriggers.core.trigger import QuartzCron
-from guppy import hpy
 from pympler import asizeof
 
 from connectors.logger import logger
@@ -136,38 +134,6 @@ def _snapshot():
             tracemalloc.Filter(False, tracemalloc.__file__),
         )
     )
-
-
-@contextlib.contextmanager
-def trace_mem(activated=False):
-    if not activated:
-        yield
-    else:
-        hp = hpy()
-        heap_before = hp.heap()
-        before = _snapshot()
-        try:
-            yield
-        finally:
-            after = _snapshot()
-            heap_after = hp.heap()
-            leftover = heap_after - heap_before
-            logger.info(leftover)
-            largest = after.statistics("traceback")[0]
-            logger.info("===> Largest memory usage:")
-            for line in largest.traceback.format():
-                logger.info(line)
-            logger.info("<===")
-            stats = after.statistics("filename")
-            logger.info("===> Top 5 stats grouped by filename")
-            for s in stats[:5]:
-                logger.info(s)
-            logger.info("<===")
-            top_stats = after.compare_to(before, "lineno")
-            logger.info("===> Memory snapshot diff top 5")
-            for stat in top_stats[:5]:
-                logger.info(stat)
-            logger.info("<===")
 
 
 def get_size(ob):
