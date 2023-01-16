@@ -6,13 +6,11 @@
 import asyncio
 import base64
 import functools
-import gc
 import os
 import platform
 import shutil
 import subprocess
 import time
-import tracemalloc
 from datetime import datetime, timezone
 
 from base64io import Base64IO
