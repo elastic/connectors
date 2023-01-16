@@ -7,6 +7,12 @@
 Collection of fake source classes for tests
 """
 from functools import partial
+from unittest.mock import Mock
+
+from connectors.filtering.validation import (
+    FilteringValidationResult,
+    FilteringValidationState,
+)
 
 
 class FakeSource:
@@ -43,8 +49,58 @@ class FakeSource:
     def get_default_configuration(cls):
         return []
 
+    @classmethod
+    async def validate_filtering(cls, filtering):
+        # being explicit about that this result should always be valid
+        return FilteringValidationResult(
+            state=FilteringValidationState.VALID, errors=[]
+        )
+
     def tweak_bulk_options(self, options):
         pass
+
+
+class FakeSourceFilteringValid(FakeSource):
+    """Source with valid filtering."""
+
+    service_type = "filtering_state_valid"
+
+    @classmethod
+    async def validate_filtering(cls, filtering):
+        # use separate fake source to not rely on the behaviour in FakeSource which is used in many tests
+        return FilteringValidationResult(
+            state=FilteringValidationState.VALID, errors=[]
+        )
+
+
+class FakeSourceFilteringStateInvalid(FakeSource):
+    """Source with filtering in state invalid."""
+
+    service_type = "filtering_state_invalid"
+
+    @classmethod
+    async def validate_filtering(cls, filtering):
+        return FilteringValidationResult(state=FilteringValidationState.INVALID)
+
+
+class FakeSourceFilteringStateEdited(FakeSource):
+    """Source with filtering in state edited."""
+
+    service_type = "filtering_state_edited"
+
+    @classmethod
+    async def validate_filtering(cls, filtering):
+        return FilteringValidationResult(state=FilteringValidationState.EDITED)
+
+
+class FakeSourceFilteringErrorsPresent(FakeSource):
+    """Source with filtering errors."""
+
+    service_type = "filtering_errors_present"
+
+    @classmethod
+    async def validate_filtering(cls, filtering):
+        return FilteringValidationResult(errors=[Mock()])
 
 
 class FakeSourceTS(FakeSource):
