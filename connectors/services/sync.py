@@ -26,7 +26,7 @@ from connectors.byoc import (
 from connectors.byoei import ElasticServer
 from connectors.logger import logger
 from connectors.services.base import BaseService
-from connectors.utils import CancellableSleeps, trace_mem
+from connectors.utils import CancellableSleeps
 
 
 class SyncService(BaseService):
@@ -35,7 +35,6 @@ class SyncService(BaseService):
         self.args = args
         self.errors = [0, time.time()]
         self.service_config = self.config["service"]
-        self.trace_mem = self.service_config.get("trace_mem", False)
         self.idling = self.service_config["idling"]
         self.hb = self.service_config["heartbeat"]
         self.preflight_max_attempts = int(
@@ -46,7 +45,6 @@ class SyncService(BaseService):
         self._sleeper = None
         self._sleeps = CancellableSleeps()
         self.connectors = None
-        self.trace_mem = self.service_config.get("trace_mem", False)
 
     def raise_if_spurious(self, exception):
         errors, first = self.errors
@@ -71,45 +69,44 @@ class SyncService(BaseService):
             self.connectors.stop_waiting()
 
     async def _one_sync(self, connector, es, sync_now):
-        with trace_mem(self.trace_mem):
-            if connector.native:
-                logger.debug(f"Connector {connector.id} natively supported")
+        if connector.native:
+            logger.debug(f"Connector {connector.id} natively supported")
 
-            try:
-                await connector.prepare(self.config)
-            except ServiceTypeNotConfiguredError:
-                logger.error(
-                    f"Service type is not configured for connector {self.config['connector_id']}"
-                )
-                return
-            except ConnectorUpdateError as e:
-                logger.error(e)
-                return
-            except ServiceTypeNotSupportedError:
-                logger.debug(f"Can't handle source of type {connector.service_type}")
-                return
-            except DataSourceError as e:
-                await connector.error(e)
-                logger.critical(e, exc_info=True)
-                self.raise_if_spurious(e)
-                return
+        try:
+            await connector.prepare(self.config)
+        except ServiceTypeNotConfiguredError:
+            logger.error(
+                f"Service type is not configured for connector {self.config['connector_id']}"
+            )
+            return
+        except ConnectorUpdateError as e:
+            logger.error(e)
+            return
+        except ServiceTypeNotSupportedError:
+            logger.debug(f"Can't handle source of type {connector.service_type}")
+            return
+        except DataSourceError as e:
+            await connector.error(e)
+            logger.critical(e, exc_info=True)
+            self.raise_if_spurious(e)
+            return
 
-            try:
-                # the heartbeat is always triggered
-                connector.start_heartbeat(self.hb)
+        try:
+            # the heartbeat is always triggered
+            connector.start_heartbeat(self.hb)
 
-                logger.debug(f"Connector status is {connector.status}")
+            logger.debug(f"Connector status is {connector.status}")
 
-                # we trigger a sync
-                if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
-                    # we can't sync in that state
-                    logger.info(f"Can't sync with status `{e2str(connector.status)}`")
-                else:
-                    await connector.sync(es, self.idling, sync_now)
+            # we trigger a sync
+            if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
+                # we can't sync in that state
+                logger.info(f"Can't sync with status `{e2str(connector.status)}`")
+            else:
+                await connector.sync(es, self.idling, sync_now)
 
-                await asyncio.sleep(0)
-            finally:
-                await connector.close()
+            await asyncio.sleep(0)
+        finally:
+            await connector.close()
 
     async def run(self):
         if "PERF8" in os.environ:

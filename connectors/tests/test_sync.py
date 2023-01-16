@@ -470,18 +470,6 @@ async def test_connector_service_poll_clear_error(
 
 
 @pytest.mark.asyncio
-async def test_connector_service_poll_trace_mem(
-    mock_responses, patch_logger, patch_ping, set_env
-):
-    await set_server_responses(mock_responses, FAKE_CONFIG)
-    service = create_service(CONFIG_MEM_FILE)
-    asyncio.get_event_loop().call_soon(service.stop)
-    await service.run()
-    # we want to make sure we get memory usage report
-    patch_logger.assert_present("===> Largest memory usage:")
-
-
-@pytest.mark.asyncio
 async def test_connector_service_poll_sync_now(
     mock_responses, patch_logger, patch_ping, set_env
 ):
