@@ -9,7 +9,7 @@ Implementation of BYOEI protocol (+some ids collecting)
 `ElasticServer` is orchestrating a sync by:
 
 - creating a queue
-- launching a `Fetcher`, a wrapper on the top of the documents generator
+- launching a `Fetcher`, a wrapper on the top of the documents' generator
 - launching a `Bulker`, a class that aggregates documents and run the bulk API
 
 
