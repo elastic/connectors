@@ -17,7 +17,7 @@ class InvalidFilteringError(Exception):
 
 
 class SyncRuleValidationResult:
-    """Represent the validation result for a basic or an advanced rule"""
+    """Represent the validation result for a basic or an advanced rule."""
 
     def __init__(self, rule_id, is_valid, validation_message):
         self.rule_id = rule_id
