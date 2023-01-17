@@ -549,7 +549,7 @@ class Connector:
             except Exception as e:
                 logger.critical(e, exc_info=True)
                 raise DataSourceError(
-                    f"Could not instantiate {self.source_klass} for {service_type}"
+                    f"Could not instantiate {self.source_klass} for {service_type}. Exception encountered: {e}"
                 )
 
             if not await self.data_provider.changed():

@@ -578,7 +578,7 @@ async def test_connector_service_poll_buggy_service(
         doc = json.loads(kw["data"])["doc"]
         assert (
             doc["error"]
-            == "Could not instantiate <class 'fake_sources.FakeSource'> for fake"
+            == "Could not instantiate <class 'fake_sources.FakeSource'> for fake. Exception encountered: I break on init"
         )
         return CallbackResult(status=200)
 
