@@ -31,9 +31,9 @@ from connectors.byoc import (
 
 from connectors.byoei import ElasticServer
 from connectors.filtering.validation import ValidationTarget
+from connectors.config import load_config
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.config import load_config
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
