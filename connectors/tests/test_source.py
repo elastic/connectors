@@ -3,8 +3,15 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from unittest import mock
+
 import pytest
 
+from connectors.filtering.validation import (
+    BasicRuleAgainstSchemaValidator,
+    BasicRuleNoMatchAllRegexValidator,
+    BasicRulesSetSemanticValidator,
+)
 from connectors.source import (
     BaseDataSource,
     DataSourceConfiguration,
@@ -48,7 +55,6 @@ def test_field_convert():
 
 
 def test_data_source_configuration():
-
     c = DataSourceConfiguration(CONFIG)
     assert c["database"] == "sample_airbnb"
     assert c.get_field("database").label == "MongoDB Database"
@@ -85,11 +91,29 @@ def test_get_data_sources():
 
 
 @pytest.mark.asyncio
+@mock.patch("connectors.filtering.validation.FilteringValidator.validate")
+async def test_validate_filter(validator_mock):
+    validator_mock.return_value = "valid"
+
+    assert await BaseDataSource.validate_filtering({}) == "valid"
+
+
+@pytest.mark.asyncio
 async def test_base_class():
     configuration = DataSourceConfiguration({})
 
     with pytest.raises(NotImplementedError):
         BaseDataSource(configuration=configuration)
+
+    # default rule validators for every data source (order matters)
+    assert BaseDataSource.basic_rules_validators() == [
+        BasicRuleAgainstSchemaValidator,
+        BasicRuleNoMatchAllRegexValidator,
+        BasicRulesSetSemanticValidator,
+    ]
+
+    # should be empty as advanced rules are specific to a data source
+    assert not len(BaseDataSource.advanced_rules_validators())
 
     # ABCs
     class DataSource(BaseDataSource):

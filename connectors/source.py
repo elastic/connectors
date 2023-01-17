@@ -3,9 +3,17 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import importlib
+
+from connectors.filtering.validation import (
+    BasicRuleAgainstSchemaValidator,
+    BasicRuleNoMatchAllRegexValidator,
+    BasicRulesSetSemanticValidator,
+    FilteringValidator,
+)
+
 """ Helpers to build sources + FQN-based Registry
 """
-import importlib
 
 
 class Field:
@@ -124,6 +132,36 @@ class BaseDataSource:
     def get_default_configuration(cls):
         """Returns a dict with a default configuration"""
         raise NotImplementedError
+
+    @classmethod
+    def basic_rules_validators(cls):
+        """Return default basic rule validators.
+
+        Basic rule validators are executed in the order they appear in the list.
+        Default behavior can be overridden completely or additional custom validators can be plugged in.
+        """
+        return [
+            BasicRuleAgainstSchemaValidator,
+            BasicRuleNoMatchAllRegexValidator,
+            BasicRulesSetSemanticValidator,
+        ]
+
+    @classmethod
+    async def validate_filtering(cls, filtering):
+        """Execute all basic rule and advanced rule validators."""
+
+        return FilteringValidator(
+            cls.basic_rules_validators(), cls.advanced_rules_validators()
+        ).validate(filtering)
+
+    @classmethod
+    def advanced_rules_validators(cls):
+        """Return advanced rule validators.
+
+        Advanced rules validators are data source specific so there are no default validators.
+        This method can be overridden to plug in custom advanced rule validators into the filtering validation.
+        """
+        return []
 
     async def changed(self):
         """When called, returns True if something has changed in the backend.
