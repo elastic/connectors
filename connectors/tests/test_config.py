@@ -21,19 +21,12 @@ def test_bad_config_file():
         load_config("BEEUUUAH")
 
 
-def test_config():
-    with mock.patch.dict(os.environ, {"elasticsearch.password": "changeme"}):
-        config = load_config(CONFIG_FILE)
-        assert isinstance(config, EnvYAML)
+def test_config(set_env):
+    config = load_config(CONFIG_FILE)
+    assert isinstance(config, EnvYAML)
 
 
-def test_config_with_ent_search():
-    with mock.patch.dict(
-        os.environ,
-        {
-            "ENT_SEARCH_CONFIG_PATH": ES_CONFIG_FILE,
-            "elasticsearch.password": "changeme",
-        },
-    ):
+def test_config_with_ent_search(set_env):
+    with mock.patch.dict(os.environ, {"ENT_SEARCH_CONFIG_PATH": ES_CONFIG_FILE}):
         config = load_config(CONFIG_FILE)
         assert config["elasticsearch"]["headers"]["X-Elastic-Auth"] == "SomeYeahValue"
