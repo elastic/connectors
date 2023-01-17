@@ -12,7 +12,6 @@ from unittest.mock import ANY, AsyncMock, Mock, call
 
 import pytest
 from aioresponses import CallbackResult
-from elasticsearch import AsyncElasticsearch
 
 from connectors.byoc import (
     CONNECTORS_INDEX,
