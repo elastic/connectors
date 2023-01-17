@@ -75,7 +75,7 @@ def _parser():
     return parser
 
 
-async def _start_service(config, args, loop):
+async def _start_service(config, loop):
     preflight = PreflightCheck(config)
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(preflight.shutdown, sig))
@@ -86,7 +86,7 @@ async def _start_service(config, args, loop):
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.remove_signal_handler(sig)
 
-    services = [SyncService(config, args), JobCleanUpService(config)]
+    services = [SyncService(config), JobCleanUpService(config)]
     for sig in (signal.SIGINT, signal.SIGTERM):
 
         async def _shutdown(sig_name):
@@ -125,7 +125,7 @@ def run(args):
         return 0
 
     loop = get_event_loop(args.uvloop)
-    coro = _start_service(config, args, loop)
+    coro = _start_service(config, loop)
 
     try:
         return loop.run_until_complete(coro)
