@@ -186,8 +186,8 @@ def test_utc():
 @pytest.mark.asyncio
 async def test_sync_job(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    connectors_index = BYOIndex(config)
-    client = connectors_index.client
+    jobs_index = SyncJobIndex(index_name=JOBS_INDEX, elastic_config=config)
+    client = jobs_index.client
 
     expected_filtering = {
         "advanced_snippet": {
@@ -198,7 +198,7 @@ async def test_sync_job(mock_responses):
         "validation": FILTERING_VALIDATION_VALID,
     }
 
-    job = SyncJob(connector_id="connector-id", elastic_index=connectors_index)
+    job = SyncJob(connector_id="connector-id", elastic_index=jobs_index)
 
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
