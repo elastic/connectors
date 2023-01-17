@@ -10,9 +10,8 @@ from datetime import datetime
 
 import pytest
 from aioresponses import CallbackResult
-from elasticsearch import AsyncElasticsearch
 
-from connectors.byoc import (
+from connectors.byoc import (  # noqa:F401 (STUCK_JOBS_THRESHOLD is used! )
     JOBS_INDEX,
     STUCK_JOBS_THRESHOLD,
     BYOIndex,
