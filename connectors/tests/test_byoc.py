@@ -26,6 +26,7 @@ from connectors.byoc import (
     iso_utc,
     SyncJobIndex,
     STUCK_JOBS_THRESHOLD,
+    JOBS_INDEX
 )
 from connectors.byoei import ElasticServer
 from connectors.filtering.validation import ValidationTarget
@@ -183,7 +184,9 @@ def test_utc():
 
 @pytest.mark.asyncio
 async def test_sync_job(mock_responses):
-    client = AsyncElasticsearch(hosts=["http://nowhere.com:9200"])
+    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    connectors_index = BYOIndex(config)
+    client = connectors_index.client
 
     expected_filtering = {
         "advanced_snippet": {
@@ -194,7 +197,7 @@ async def test_sync_job(mock_responses):
         "validation": FILTERING_VALIDATION_VALID,
     }
 
-    job = SyncJob("connector-id", client)
+    job = SyncJob(connector_id="connector-id", elastic_index=connectors_index)
 
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
@@ -704,31 +707,31 @@ async def test_update_filtering_validation(
 def test_pending_job_query_without_connectors_ids(mock_responses, set_env):
     config = EnvYAML(CONFIG)
 
-    sync_jobs_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    sync_jobs_index = SyncJobIndex(index_name=JOBS_INDEX, elastic_config=config["elasticsearch"])
     pending_jobs_query = sync_jobs_index.pending_job_query()
 
     # validate the query
     assert "bool" in pending_jobs_query
-    assert pending_jobs_query["bool"] == { "must": [ { "terms": { "status":  'pending' } }] }
+    assert pending_jobs_query["bool"] == { "must": [ { "terms": { "status":  ['pending'] } }] }
 
 
 def test_pending_job_query_with_connectors_ids_and_page_size(mock_responses, set_env):
     config = EnvYAML(CONFIG)
 
     connectors_ids = [1,2]
-    sync_jobs_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    sync_jobs_index = SyncJobIndex(index_name=JOBS_INDEX, elastic_config=config["elasticsearch"])
     pending_jobs_query = sync_jobs_index.pending_job_query(connectors_ids=connectors_ids)
 
     # validate the query
     assert "bool" in pending_jobs_query
-    assert pending_jobs_query["bool"] == { "must": [ { "terms": { "status":  'pending' } }, {'terms': {'connector.id': connectors_ids}}] }
+    assert pending_jobs_query["bool"] == { "must": [ { "terms": { "status":  ['pending'] } }, {'terms': {'connector.id': connectors_ids}}] }
 
 
 def test_orphaned_jobs_query(mock_responses, set_env):
     config = EnvYAML(CONFIG)
 
     connectors_ids = [1,2]
-    sync_jobs_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    sync_jobs_index = SyncJobIndex(index_name=JOBS_INDEX, elastic_config=config["elasticsearch"])
     orphaned_jobs_query = sync_jobs_index.orphaned_jobs_query(connectors_ids=connectors_ids)
 
     assert orphaned_jobs_query == {"bool": {"must_not": { "terms": {"connector.id": connectors_ids}} } }
@@ -738,7 +741,7 @@ def test_stuck_jobs_query(mock_responses, set_env):
     config = EnvYAML(CONFIG)
 
     connectors_ids = [1,2]
-    sync_jobs_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    sync_jobs_index = SyncJobIndex(index_name=JOBS_INDEX, elastic_config=config["elasticsearch"])
     stuck_jobs_query = sync_jobs_index.stuck_jobs_query(connectors_ids=connectors_ids)
 
     assert "bool" in stuck_jobs_query

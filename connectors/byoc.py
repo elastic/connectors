@@ -171,7 +171,7 @@ class ConnectorIndex(ESIndex):
         )
 
 class SyncJob:
-    def __init__(self, elastic_index, connector_id, doc_source):
+    def __init__(self, elastic_index, connector_id, doc_source=None):
         self.connector_id = connector_id
         self.elastic_index = elastic_index
         self.created_at = datetime.now(timezone.utc)
@@ -179,6 +179,7 @@ class SyncJob:
         self.job_id = None
         self.status = None
         self.doc_source = doc_source
+        self.client = elastic_index.client
 
     @property
     def duration(self):
@@ -424,7 +425,7 @@ class Connector:
         return next_run(self.scheduling["interval"])
 
     async def _sync_starts(self):
-        job = SyncJob(self.id, self.client)
+        job = SyncJob(connector_id=self.id, elastic_index=self.index)
         trigger_method = (
             JobTriggerMethod.ON_DEMAND if self.sync_now else JobTriggerMethod.SCHEDULED
         )
