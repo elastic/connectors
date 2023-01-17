@@ -22,6 +22,8 @@ from connectors.byoc import (
     SyncJob,
     e2str,
     iso_utc,
+    SyncJobIndex,
+    STUCK_JOBS_THRESHOLD,
 )
 from connectors.byoei import ElasticServer
 from connectors.logger import logger
@@ -546,3 +548,49 @@ def test_get_active_filter(filtering_json, domain, expected_filter):
 )
 def test_transform_filtering(filtering, expected_transformed_filtering):
     assert SyncJob.transform_filtering(filtering) == expected_transformed_filtering
+
+
+def test_pending_job_query_without_connectors_ids(mock_responses, set_env):
+    config = EnvYAML(CONFIG)
+
+    sync_jobs_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    pending_jobs_query = sync_jobs_index.pending_job_query()
+
+    # validate the query
+    assert "bool" in pending_jobs_query
+    assert pending_jobs_query["bool"] == { "must": [ { "terms": { "status":  'pending' } }] }
+
+
+def test_pending_job_query_with_connectors_ids_and_page_size(mock_responses, set_env):
+    config = EnvYAML(CONFIG)
+
+    connectors_ids = [1,2]
+    sync_jobs_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    pending_jobs_query = sync_jobs_index.pending_job_query(connectors_ids=connectors_ids)
+
+    # validate the query
+    assert "bool" in pending_jobs_query
+    assert pending_jobs_query["bool"] == { "must": [ { "terms": { "status":  'pending' } }, {'terms': {'connector.id': connectors_ids}}] }
+
+
+def test_orphaned_jobs_query(mock_responses, set_env):
+    config = EnvYAML(CONFIG)
+
+    connectors_ids = [1,2]
+    sync_jobs_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    orphaned_jobs_query = sync_jobs_index.orphaned_jobs_query(connectors_ids=connectors_ids)
+
+    assert orphaned_jobs_query == {"bool": {"must_not": { "terms": {"connector.id": connectors_ids}} } }
+
+def test_stuck_jobs_query(mock_responses, set_env):
+    config = EnvYAML(CONFIG)
+
+    connectors_ids = [1,2]
+    sync_jobs_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    stuck_jobs_query = sync_jobs_index.stuck_jobs_query(connectors_ids=connectors_ids)
+
+    assert "bool" in stuck_jobs_query
+    assert len(stuck_jobs_query["bool"]["filter"]) == 3
+    assert { "terms": { "connector.id": connectors_ids } } in stuck_jobs_query["bool"]["filter"]
+    assert { "terms": { "status": [JobStatus.IN_PROGRESS, JobStatus.CANCELING] } } in stuck_jobs_query["bool"]["filter"]
+    assert { "range": { "last_seen": { "lte": "now-#{STUCK_JOBS_THRESHOLD}s" } } } in stuck_jobs_query["bool"]["filter"]
