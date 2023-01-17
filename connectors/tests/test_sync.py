@@ -186,11 +186,6 @@ async def set_server_responses(
 ):
     headers = {"X-Elastic-Product": "Elasticsearch"}
 
-    mock_responses.head(f"{host}/.elastic-connectors", headers=headers, repeat=True)
-    mock_responses.head(
-        f"{host}/.elastic-connectors-sync-jobs", headers=headers, repeat=True
-    )
-
     mock_responses.get(
         f"{host}/_ingest/pipeline/ent-search-generic-ingestion",
         headers=headers,
@@ -594,21 +589,6 @@ async def test_connector_service_poll_buggy_service(
             return
 
     raise AssertionError
-
-
-@pytest.mark.asyncio
-async def test_ping_fails(mock_responses, patch_logger, set_env):
-    from connectors.byoc import BYOIndex
-
-    async def _ping(*args):
-        return False
-
-    BYOIndex.ping = _ping
-
-    service = create_service(CONFIG_FILE)
-    asyncio.get_event_loop().call_soon(service.stop)
-    await service.run()
-    patch_logger.assert_present("http://nowhere.com:9200 seem down. Bye!")
 
 
 @pytest.mark.asyncio

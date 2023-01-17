@@ -92,8 +92,13 @@ async def _start_service(config, args, loop):
     preflight = PreflightCheck(config)
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(preflight.shutdown, sig))
-    if not await preflight.run():
-        return -1
+    try:
+        if not await preflight.run():
+            return -1
+    finally:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.remove_signal_handler(sig)
+
     service = SyncService(config, args)
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
