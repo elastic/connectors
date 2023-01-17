@@ -33,6 +33,7 @@ from connectors.byoei import ElasticServer
 from connectors.filtering.validation import ValidationTarget
 from connectors.logger import logger
 from connectors.source import BaseDataSource
+from connectors.config import load_config
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
@@ -706,7 +707,7 @@ async def test_update_filtering_validation(
 
 
 def test_pending_job_query_with_connectors_ids(mock_responses, set_env):
-    config = EnvYAML(CONFIG)
+    config = load_config(CONFIG)
 
     connectors_ids = [1, 2]
     sync_jobs_index = SyncJobIndex(
@@ -727,7 +728,7 @@ def test_pending_job_query_with_connectors_ids(mock_responses, set_env):
 
 
 def test_orphaned_jobs_query(mock_responses, set_env):
-    config = EnvYAML(CONFIG)
+    config = load_config(CONFIG)
 
     connectors_ids = [1, 2]
     sync_jobs_index = SyncJobIndex(
@@ -744,7 +745,7 @@ def test_orphaned_jobs_query(mock_responses, set_env):
 
 
 def test_stuck_jobs_query(mock_responses, set_env):
-    config = EnvYAML(CONFIG)
+    config = load_config(CONFIG)
 
     connectors_ids = [1, 2]
     sync_jobs_index = SyncJobIndex(
