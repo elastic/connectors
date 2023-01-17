@@ -158,6 +158,7 @@ class BYOIndex(ESIndex):
             analysis_icu=self.analysis_icu,
         )
 
+
 class SyncJob:
     def __init__(self, elastic_index, connector_id, doc_source=None):
         self.connector_id = connector_id
@@ -598,7 +599,9 @@ class Connector:
             self._syncing = False
             self._start_time = None
 
-STUCK_JOBS_THRESHOLD = 60 # 60 seconds
+
+STUCK_JOBS_THRESHOLD = 60  # 60 seconds
+
 
 class SyncJobIndex(ESIndex):
     """
@@ -608,6 +611,7 @@ class SyncJobIndex(ESIndex):
         index_name (str): Name of an Elasticsearch index
         elastic_config (dict): Elasticsearch configuration and credentials
     """
+
     def __init__(self, index_name, elastic_config):
         super().__init__(index_name=index_name, elastic_config=elastic_config)
 
@@ -620,25 +624,27 @@ class SyncJobIndex(ESIndex):
         """
         return SyncJob(
             self,
-            connector_id=doc_source['_source']["connector"]["id"],
-            doc_source=doc_source['_source'],
+            connector_id=doc_source["_source"]["connector"]["id"],
+            doc_source=doc_source["_source"],
         )
 
-    def pending_job_query(self, connectors_ids=[]):
+    def pending_job_query(self, connectors_ids):
         """
         Args:
             connectors_ids (list of int): A list of connectors IDs
         Returns:
             dict
         """
-        status_term = { "status":  [e2str(JobStatus.PENDING)] }
+        status_term = {"status": [e2str(JobStatus.PENDING)]}
 
-        query = { "bool": { "must": [{ "terms": status_term }] } }
-
-        if len(connectors_ids) == 0:
-            return query
-        else:
-            query["bool"]["must"].append( { "terms": { "connector.id": connectors_ids } } )
+        query = {
+            "bool": {
+                "must": [
+                    {"terms": status_term},
+                    {"terms": {"connector.id": connectors_ids}},
+                ]
+            }
+        }
 
         return query
 
@@ -649,7 +655,7 @@ class SyncJobIndex(ESIndex):
         Returns:
             dict
         """
-        query = { "bool": { "must_not": { "terms": { "connector.id": connectors_ids } } } }
+        query = {"bool": {"must_not": {"terms": {"connector.id": connectors_ids}}}}
 
         return query
 
@@ -663,9 +669,9 @@ class SyncJobIndex(ESIndex):
         query = {
             "bool": {
                 "filter": [
-                    { "terms": { "connector.id": connectors_ids } },
-                    { "terms": { "status": [JobStatus.IN_PROGRESS, JobStatus.CANCELING] } },
-                    { "range": { "last_seen": { "lte": "now-#{STUCK_JOBS_THRESHOLD}s" } } }
+                    {"terms": {"connector.id": connectors_ids}},
+                    {"terms": {"status": [JobStatus.IN_PROGRESS, JobStatus.CANCELING]}},
+                    {"range": {"last_seen": {"lte": "now-#{STUCK_JOBS_THRESHOLD}s"}}},
                 ]
             }
         }
