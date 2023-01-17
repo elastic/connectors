@@ -8,7 +8,8 @@ import datetime
 import pytest
 
 from connectors.byoc import PipelineSettings
-from connectors.byoei import ElasticServer, IndexMissing, ContentIndexNameInvalid
+from connectors.byoei import ContentIndexNameInvalid, ElasticServer, IndexMissing
+
 
 @pytest.mark.asyncio
 async def test_prepare_content_index_raise_error_when_index_name_invalid():
@@ -17,6 +18,7 @@ async def test_prepare_content_index_raise_error_when_index_name_invalid():
 
     with pytest.raises(ContentIndexNameInvalid):
         await es.prepare_content_index("lalalalalalalala woohooo")
+
 
 @pytest.mark.asyncio
 async def test_prepare_content_index_raise_error_when_index_does_not_exist(
