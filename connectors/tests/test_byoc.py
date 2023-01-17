@@ -11,7 +11,6 @@ from datetime import datetime
 import pytest
 from aioresponses import CallbackResult
 from elasticsearch import AsyncElasticsearch
-from envyaml import EnvYAML
 
 from connectors.byoc import (
     JOBS_INDEX,
@@ -29,6 +28,7 @@ from connectors.byoc import (
 from connectors.byoei import ElasticServer
 from connectors.logger import logger
 from connectors.source import BaseDataSource
+from connectors.config import load_config
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
@@ -446,7 +446,7 @@ async def test_connectors_properties(mock_responses, set_env):
         mock_responses (aioresponses.core.aioresponses): Fixture to mock the requests made.
         set_env (None): Fixture to environment variable for config yml.
     """
-    config = EnvYAML(CONFIG)
+    config = load_config(CONFIG)
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
@@ -554,7 +554,7 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
 
 
 def test_pending_job_query_with_connectors_ids(mock_responses, set_env):
-    config = EnvYAML(CONFIG)
+    config = load_config(CONFIG)
 
     connectors_ids = [1, 2]
     sync_jobs_index = SyncJobIndex(
@@ -575,7 +575,7 @@ def test_pending_job_query_with_connectors_ids(mock_responses, set_env):
 
 
 def test_orphaned_jobs_query(mock_responses, set_env):
-    config = EnvYAML(CONFIG)
+    config = load_config(CONFIG)
 
     connectors_ids = [1, 2]
     sync_jobs_index = SyncJobIndex(
@@ -591,7 +591,7 @@ def test_orphaned_jobs_query(mock_responses, set_env):
 
 
 def test_stuck_jobs_query(mock_responses, set_env):
-    config = EnvYAML(CONFIG)
+    config = load_config(CONFIG)
 
     connectors_ids = [1, 2]
     sync_jobs_index = SyncJobIndex(
