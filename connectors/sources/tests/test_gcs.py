@@ -29,7 +29,7 @@ def get_mocked_source_object():
         GoogleCloudStorageDataSource: Mocked object of the data source class.
     """
     configuration = DataSourceConfiguration(
-        {"service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS}
+        {"service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS, "retry_count": 0}
     )
     mocked_gcs_object = GoogleCloudStorageDataSource(configuration=configuration)
     return mocked_gcs_object
@@ -99,9 +99,11 @@ async def test_ping_for_failed_connection(catch_stdout, patch_logger):
     mocked_gcs_object = get_mocked_source_object()
 
     # Execute
-
-    with pytest.raises(Exception, match="None could not be converted to *"):
-        await mocked_gcs_object.ping()
+    with mock.patch.object(
+        Aiogoogle, "discover", side_effect=Exception("Something went wrong")
+    ):
+        with pytest.raises(Exception):
+            await mocked_gcs_object.ping()
 
 
 @pytest.mark.parametrize(

@@ -5,7 +5,7 @@ elasticsearch:
   bulk:
     queue_max_size: 1024
     chunk_size: 500
-    chunk_max_mem_size: 15
+    chunk_max_mem_size: 0.5
     queue_max_mem_size: 25
   max_wait_duration: 1
   initial_backoff_duration: 0
