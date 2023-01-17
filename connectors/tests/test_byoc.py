@@ -16,18 +16,19 @@ from elasticsearch import AsyncElasticsearch
 
 from connectors.byoc import (
     CONNECTORS_INDEX,
+    JOBS_INDEX,
+    STUCK_JOBS_THRESHOLD,
     Connector,
     ConnectorIndex,
     Filtering,
     JobStatus,
     Status,
     SyncJob,
+    SyncJobIndex,
     e2str,
     iso_utc,
-    SyncJobIndex,
-    STUCK_JOBS_THRESHOLD,
-    JOBS_INDEX
 )
+
 from connectors.byoei import ElasticServer
 from connectors.filtering.validation import ValidationTarget
 from connectors.logger import logger
