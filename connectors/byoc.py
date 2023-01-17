@@ -508,7 +508,9 @@ class Connector:
                 )
         except Exception as e:
             logger.critical(e, exc_info=True)
-            raise DataSourceError(f"Could not instantiate {fqn} for {service_type}")
+            raise DataSourceError(
+                f"Could not instantiate {fqn} for {service_type}. Exception encountered: {e}"
+            )
 
         self.source_klass = source_klass
 
