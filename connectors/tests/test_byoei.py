@@ -8,60 +8,20 @@ import datetime
 import pytest
 
 from connectors.byoc import PipelineSettings
-from connectors.byoei import ElasticServer, IndexMissing
-
+from connectors.byoei import ElasticServer, IndexMissing, ContentIndexNameInvalid
 
 @pytest.mark.asyncio
-async def test__override_index(mock_responses):
+async def test_prepare_content_index_raise_error_when_index_name_invalid():
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
-    )
-    mock_responses.head(
-        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
-        headers=headers,
-        status=404,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/search-new-index",
-        payload={"_id": "1"},
-        headers=headers,
-    )
-
     es = ElasticServer(config)
 
-    await es._override_index("search-new-index")
-
-    mock_responses.head(
-        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
-        headers=headers,
-    )
-    mock_responses.delete(
-        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
-        headers=headers,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/search-new-index",
-        payload={"_id": "1"},
-        headers=headers,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/search-new-index/_doc/1",
-        payload={"_id": "1"},
-        headers=headers,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/search-new-index/_doc/2",
-        payload={"_id": "2"},
-        headers=headers,
-    )
-
-    await es._override_index("search-new-index", docs=[{"_id": "2"}, {"_id": "3"}])
-
+    with pytest.raises(ContentIndexNameInvalid):
+        await es.prepare_content_index("lalalalalalalala woohooo")
 
 @pytest.mark.asyncio
-async def test_prepare_index_raise_error_when_index_does_not_exist(mock_responses):
+async def test_prepare_content_index_raise_error_when_index_does_not_exist(
+    mock_responses,
+):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
@@ -81,11 +41,11 @@ async def test_prepare_index_raise_error_when_index_does_not_exist(mock_response
     es = ElasticServer(config)
 
     with pytest.raises(IndexMissing):
-        await es.prepare_index("search-new-index")
+        await es.prepare_content_index("search-new-index")
 
 
 @pytest.mark.asyncio
-async def test_prepare_index(mock_responses):
+async def test_prepare_content_index(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     # prepare-index, with mappings
@@ -106,7 +66,7 @@ async def test_prepare_index(mock_responses):
 
     es = ElasticServer(config)
 
-    await es.prepare_index("search-new-index", mappings=mappings)
+    await es.prepare_content_index("search-new-index", mappings=mappings)
 
     await es.close()
 

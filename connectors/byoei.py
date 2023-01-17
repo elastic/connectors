@@ -313,6 +313,10 @@ class IndexMissing(Exception):
     pass
 
 
+class ContentIndexNameInvalid(Exception):
+    pass
+
+
 class ElasticServer(ESClient):
     """This class is the sync orchestrator.
 
@@ -329,11 +333,16 @@ class ElasticServer(ESClient):
         super().__init__(elastic_config)
         self.loop = asyncio.get_event_loop()
 
-    async def prepare_index(self, index, *, mappings=None):
+    async def prepare_content_index(self, index, *, mappings=None):
         """Creates the index, given a mapping if it does not exists."""
-        expand_wildcards = ElasticServer._get_expand_wildcards(index)
+        if not index.startswith("search-"):
+            raise ContentIndexNameInvalid(
+                'Index name {index} is invalid. Index name must start with "search-"'
+            )
 
         logger.debug(f"Checking index {index}")
+
+        expand_wildcards = "open"
         exists = await self.client.indices.exists(
             index=index, expand_wildcards=expand_wildcards
         )
@@ -358,45 +367,6 @@ class ElasticServer(ESClient):
             return
         else:
             raise IndexMissing(f"Index {index} does not exist!")
-
-    async def _override_index(self, index, docs=None, mappings=None, settings=None):
-        """Override the index with new mappings and settings.
-
-        If the index with such name exists, it's deleted and then created again
-        with provided mappings and settings. Otherwise index is just created.
-
-        After that, provided docs are inserted into the index.
-
-        This method is supposed to be used only for testing - framework is not
-        supposed to create/delete indices at all, Kibana is responsible for
-        this logic.
-        """
-
-        expand_wildcards = ElasticServer._get_expand_wildcards(index)
-
-        exists = await self.client.indices.exists(
-            index=index, expand_wildcards=expand_wildcards
-        )
-
-        if exists:
-            logger.debug(f"{index} exists, deleting...")
-            logger.debug("Deleting it first")
-            await self.client.indices.delete(
-                index=index, expand_wildcards=expand_wildcards
-            )
-
-        logger.debug(f"Creating index {index}")
-        await self.client.indices.create(
-            index=index, mappings=mappings, settings=settings
-        )
-
-        if docs is None:
-            return
-        # XXX bulk
-        doc_id = 1
-        for doc in docs:
-            await self.client.index(index=index, id=doc_id, document=doc)
-            doc_id += 1
 
     async def get_existing_ids(self, index):
         """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
@@ -486,9 +456,3 @@ class ElasticServer(ESClient):
             "doc_deleted": fetcher.total_docs_deleted,
             "fetch_error": fetcher.fetch_error,
         }
-
-    def _get_expand_wildcards(index_name):
-        if index_name.startswith("."):
-            return "hidden"
-        else:
-            return "open"

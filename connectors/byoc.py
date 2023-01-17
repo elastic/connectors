@@ -560,8 +560,10 @@ class Connector:
                 is_connectors_index=True,
             )
 
-            logger.debug("Preparing the index")
-            await elastic_server.prepare_index(self.index_name, mappings=mappings)
+            logger.debug("Preparing the content index")
+            await elastic_server.prepare_content_index(
+                self.index_name, mappings=mappings
+            )
             await asyncio.sleep(0)
 
             # allows the data provider to change the bulk options

@@ -122,10 +122,10 @@ async def prepare(service_type, index_name, config):
         }
 
         logger.info(f"Prepare {CONNECTORS_INDEX}")
-        await es._override_index(CONNECTORS_INDEX, docs=[doc])
+        await upsert_index(es, CONNECTORS_INDEX, docs=[doc])
 
         logger.info(f"Prepare {JOBS_INDEX}")
-        await es._override_index(JOBS_INDEX, docs=[])
+        await upsert_index(es, JOBS_INDEX, docs=[])
 
         logger.info(f"Prepare {index_name}")
         mappings = Mappings.default_text_fields_mappings(
@@ -134,10 +134,49 @@ async def prepare(service_type, index_name, config):
         settings = Settings(
             language_code=DEFAULT_LANGUAGE, analysis_icu=False
         ).to_hash()
-        await es._override_index(index_name, mappings=mappings, settings=settings)
+        await upsert_index(es, index_name, mappings=mappings, settings=settings)
         logger.info("Done")
     finally:
         await es.close()
+
+
+async def upsert_index(es, index, docs=None, mappings=None, settings=None):
+    """Override the index with new mappings and settings.
+
+    If the index with such name exists, it's deleted and then created again
+    with provided mappings and settings. Otherwise index is just created.
+
+    After that, provided docs are inserted into the index.
+
+    This method is supposed to be used only for testing - framework is not
+    supposed to create/delete indices at all, Kibana is responsible for
+    this logic.
+    """
+
+    if index.startswith("."):
+        expand_wildcards = "hidden"
+    else:
+        expand_wildcards = "open"
+
+    exists = await es.client.indices.exists(
+        index=index, expand_wildcards=expand_wildcards
+    )
+
+    if exists:
+        logger.debug(f"{index} exists, deleting...")
+        logger.debug("Deleting it first")
+        await es.client.indices.delete(index=index, expand_wildcards=expand_wildcards)
+
+    logger.debug(f"Creating index {index}")
+    await es.client.indices.create(index=index, mappings=mappings, settings=settings)
+
+    if docs is None:
+        return
+    # XXX bulk
+    doc_id = 1
+    for doc in docs:
+        await es.client.index(index=index, id=doc_id, document=doc)
+        doc_id += 1
 
 
 def _parser():
