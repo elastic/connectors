@@ -6,13 +6,11 @@
 import asyncio
 import base64
 import functools
-import gc
 import os
 import platform
 import shutil
 import subprocess
 import time
-import tracemalloc
 from datetime import datetime, timezone
 
 from base64io import Base64IO
@@ -118,22 +116,6 @@ class CancellableSleeps:
     def cancel(self):
         for task in self._sleeps:
             task.cancel()
-
-
-def _snapshot():
-    if not tracemalloc.is_tracing():
-        tracemalloc.start()
-    logger.info("Taking a memory snapshot")
-    gc.collect()
-    trace = tracemalloc.take_snapshot()
-    return trace.filter_traces(
-        (
-            tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
-            tracemalloc.Filter(False, "<frozen importlib._bootstrap_external>"),
-            tracemalloc.Filter(False, "<unknown>"),
-            tracemalloc.Filter(False, tracemalloc.__file__),
-        )
-    )
 
 
 def get_size(ob):
