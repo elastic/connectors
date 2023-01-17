@@ -14,17 +14,17 @@ from elasticsearch import AsyncElasticsearch
 from envyaml import EnvYAML
 
 from connectors.byoc import (
+    JOBS_INDEX,
+    STUCK_JOBS_THRESHOLD,
     BYOIndex,
     Connector,
     Filtering,
     JobStatus,
     Status,
     SyncJob,
+    SyncJobIndex,
     e2str,
     iso_utc,
-    SyncJobIndex,
-    STUCK_JOBS_THRESHOLD,
-    JOBS_INDEX
 )
 from connectors.byoei import ElasticServer
 from connectors.logger import logger
