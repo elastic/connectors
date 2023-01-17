@@ -61,7 +61,7 @@ async def test_job_index_missing(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_both_missing(mock_responses):
+async def test_both_indices_missing(mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX, exist=False)
     mock_index_exists(mock_responses, JOBS_INDEX, exist=False)
