@@ -26,6 +26,7 @@ BLOB_SCHEMA = {
 DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_FILE_SIZE_LIMIT = 10485760
 DEFAULT_RETRY_COUNT = 3
+MAX_CONCURRENT_DOWNLOADS = 100  # Max concurrent download supported by abs
 
 
 class AzureBlobStorageDataSource(BaseDataSource):
@@ -35,16 +36,28 @@ class AzureBlobStorageDataSource(BaseDataSource):
         """Setup the connection to the azure base client
 
         Args:
-            connector (BYOConnector): Object of the BYOConnector class
+            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
         self.connection_string = None
-        self.enable_content_extraction = self.configuration.get(
-            "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION
-        )
-        self.retry_count = int(
-            self.configuration.get("retry_count", DEFAULT_RETRY_COUNT)
-        )
+        self.enable_content_extraction = self.configuration["enable_content_extraction"]
+        self.retry_count = self.configuration["retry_count"]
+        self.concurrent_downloads = self.configuration["concurrent_downloads"]
+
+    def tweak_bulk_options(self, options):
+        """Tweak bulk options as per concurrent downloads support by azure blob storage
+
+        Args:
+            options (dictionary): Config bulker options
+
+        Raises:
+            Exception: Invalid configured concurrent_downloads
+        """
+        if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
+            raise Exception(
+                f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
+            )
+        options["concurrent_downloads"] = self.concurrent_downloads
 
     @classmethod
     def get_default_configuration(cls):
@@ -82,6 +95,11 @@ class AzureBlobStorageDataSource(BaseDataSource):
             "retry_count": {
                 "value": DEFAULT_RETRY_COUNT,
                 "label": "How many retry count for fetching rows on each call",
+                "type": "int",
+            },
+            "concurrent_downloads": {
+                "value": MAX_CONCURRENT_DOWNLOADS,
+                "label": "How many concurrent downloads for fetching blob content",
                 "type": "int",
             },
         }
@@ -162,6 +180,10 @@ class AzureBlobStorageDataSource(BaseDataSource):
         blob_name = blob["title"]
         if os.path.splitext(blob_name)[-1] not in TIKA_SUPPORTED_FILETYPES:
             logger.warning(f"{blob_name} can't be extracted")
+            return
+
+        if blob["tier"] == "Archive":
+            logger.warning(f"{blob_name} can't be downloaded as blob tier is archive")
             return
 
         if blob_size > DEFAULT_FILE_SIZE_LIMIT:
