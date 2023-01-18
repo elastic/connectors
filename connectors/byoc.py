@@ -628,12 +628,11 @@ class SyncJobIndex(ESIndex):
     Represents Elasticsearch index for sync jobs
 
     Args:
-        index_name (str): Name of an Elasticsearch index
         elastic_config (dict): Elasticsearch configuration and credentials
     """
 
-    def __init__(self, index_name, elastic_config):
-        super().__init__(index_name=index_name, elastic_config=elastic_config)
+    def __init__(self, elastic_config):
+        super().__init__(index_name=JOBS_INDEX, elastic_config=elastic_config)
 
     def _create_object(self, doc_source):
         """
