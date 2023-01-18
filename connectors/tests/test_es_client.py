@@ -81,7 +81,9 @@ async def test_es_client_auth_error(mock_responses, patch_logger):
 @pytest.mark.asyncio
 async def test_es_client_no_server(mock_responses, patch_logger):
     host = "http://nowhere.com:9200"
-    mock_responses.get(host, status=503, headers={"X-Elastic-Product": "Elasticsearch"}, repeat=True)
+    mock_responses.get(
+        host, status=503, headers={"X-Elastic-Product": "Elasticsearch"}, repeat=True
+    )
     # if we can't reach the server, we need to catch it cleanly
     config = {
         "username": "elastic",
