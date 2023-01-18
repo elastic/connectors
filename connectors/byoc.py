@@ -12,7 +12,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 
-from connectors.es import DEFAULT_LANGUAGE, ESIndex, defaults_for
+from connectors.es import DEFAULT_LANGUAGE, ESIndex, Mappings
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
 from connectors.utils import iso_utc, next_run
@@ -21,7 +21,6 @@ CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 PIPELINE = "ent-search-generic-ingestion"
 SYNC_DISABLED = -1
-DEFAULT_ANALYSIS_ICU = False
 
 
 def e2str(entry):
@@ -88,7 +87,6 @@ class BYOIndex(ESIndex):
         # grab all bulk options
         self.bulk_options = elastic_config.get("bulk", {})
         self.language_code = elastic_config.get("language_code", DEFAULT_LANGUAGE)
-        self.analysis_icu = elastic_config.get("analysis_icu", DEFAULT_ANALYSIS_ICU)
 
     async def save(self, connector):
         # we never update the configuration
@@ -106,10 +104,6 @@ class BYOIndex(ESIndex):
             id=connector.id,
             doc=document,
         )
-
-    # @TODO move to ESIndex?
-    async def preflight(self):
-        await self.check_exists(indices=[CONNECTORS_INDEX, JOBS_INDEX])
 
     def build_docs_query(self, native_service_types=None, connectors_ids=None):
         if native_service_types is None:
@@ -154,8 +148,6 @@ class BYOIndex(ESIndex):
             doc_source["_id"],
             doc_source["_source"],
             bulk_options=self.bulk_options,
-            language_code=self.language_code,
-            analysis_icu=self.analysis_icu,
         )
 
 
@@ -286,8 +278,6 @@ class Connector:
         connector_id,
         doc_source,
         bulk_options,
-        language_code=DEFAULT_LANGUAGE,
-        analysis_icu=DEFAULT_ANALYSIS_ICU,
     ):
 
         self.doc_source = doc_source
@@ -302,8 +292,6 @@ class Connector:
         self._start_time = None
         self._hb = None
         self.bulk_options = bulk_options
-        self.language_code = language_code
-        self.analysis_icu = analysis_icu
         self.source_klass = None
         self.data_provider = None
 
@@ -318,6 +306,7 @@ class Connector:
         self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
         self._dirty = True
         self._filtering = Filtering(doc_source.get("filtering", []))
+        self.language_code = doc_source["language"]
 
     @property
     def status(self):
@@ -570,14 +559,13 @@ class Connector:
             await self.data_provider.ping()
             await asyncio.sleep(0)
 
-            mappings, settings = defaults_for(
+            mappings = Mappings.default_text_fields_mappings(
                 is_connectors_index=True,
-                language_code=self.language_code,
-                analysis_icu=self.analysis_icu,
             )
-            logger.debug("Preparing the index")
-            await elastic_server.prepare_index(
-                self.index_name, mappings=mappings, settings=settings
+
+            logger.debug("Preparing the content index")
+            await elastic_server.prepare_content_index(
+                self.index_name, mappings=mappings
             )
             await asyncio.sleep(0)
 
