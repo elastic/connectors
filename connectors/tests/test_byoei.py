@@ -12,9 +12,12 @@ from unittest.mock import Mock, call
 import pytest
 
 from connectors.byoc import PipelineSettings
-from connectors.byoei import ContentIndexNameInvalid, Fetcher, ElasticServer, IndexMissing
-
-
+from connectors.byoei import (
+    ContentIndexNameInvalid,
+    ElasticServer,
+    Fetcher,
+    IndexMissing,
+)
 
 INDEX = "some-index"
 TIMESTAMP = datetime.datetime(year=2023, month=1, day=1)
@@ -29,6 +32,7 @@ DOC_ONE_DIFFERENT_TIMESTAMP = {
 }
 
 DOC_TWO = {"_id": 2, "_timestamp": TIMESTAMP}
+
 
 @pytest.mark.asyncio
 async def test_prepare_content_index_raise_error_when_index_name_invalid():
