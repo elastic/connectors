@@ -177,13 +177,11 @@ class Fetcher:
         queue,
         index,
         existing_ids,
-        filtering=None,
+        filtering=Filtering(),
         queue_size=DEFAULT_QUEUE_SIZE,
         display_every=DEFAULT_DISPLAY_EVERY,
         concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
     ):
-        if filtering is None:
-            filtering = Filtering()
         self.client = client
         self.queue = queue
         self.bulk_time = 0
@@ -411,11 +409,9 @@ class ElasticServer(ESClient):
         index,
         generator,
         pipeline,
-        filtering=None,
+        filtering=Filtering(),
         options=None,
     ):
-        if filtering is None:
-            filtering = Filtering()
         if options is None:
             options = {}
         queue_size = options.get("queue_max_size", DEFAULT_QUEUE_SIZE)
