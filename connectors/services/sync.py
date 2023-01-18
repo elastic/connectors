@@ -15,7 +15,7 @@ import os
 import time
 
 from connectors.byoc import (
-    BYOIndex,
+    ConnectorIndex,
     ConnectorUpdateError,
     DataSourceError,
     ServiceTypeNotConfiguredError,
@@ -143,7 +143,7 @@ class SyncService(BaseService):
     async def _run(self):
         """Main event loop."""
 
-        self.connectors = BYOIndex(self.config["elasticsearch"])
+        self.connectors = ConnectorIndex(self.config["elasticsearch"])
         self.running = True
 
         one_sync = self.args.one_sync

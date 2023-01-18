@@ -13,8 +13,8 @@ from aioresponses import CallbackResult
 from elasticsearch import AsyncElasticsearch
 
 from connectors.byoc import (
-    BYOIndex,
     Connector,
+    ConnectorIndex,
     Filtering,
     JobStatus,
     Status,
@@ -202,7 +202,7 @@ async def test_heartbeat(mock_responses, patch_logger):
             headers=headers,
         )
 
-    connectors = BYOIndex(config)
+    connectors = ConnectorIndex(config)
     conns = []
 
     query = connectors.build_docs_query([["mongodb"]])
@@ -232,7 +232,7 @@ async def test_connectors_get_list(mock_responses):
         headers=headers,
     )
 
-    connectors = BYOIndex(config)
+    connectors = ConnectorIndex(config)
     conns = []
     query = connectors.build_docs_query([["mongodb"]])
     async for connector in connectors.get_all_docs(query=query):
@@ -380,7 +380,7 @@ async def test_sync_mongo(mock_responses, patch_logger):
     )
 
     es = ElasticServer(config)
-    connectors = BYOIndex(config)
+    connectors = ConnectorIndex(config)
     service_config = {"sources": {"mongodb": "connectors.tests.test_byoc:Data"}}
 
     try:
