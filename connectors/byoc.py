@@ -79,9 +79,9 @@ class DataSourceError(Exception):
     pass
 
 
-class BYOIndex(ESIndex):
+class ConnectorIndex(ESIndex):
     def __init__(self, elastic_config):
-        logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
+        logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
         # initilize ESIndex instance
         super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
         # grab all bulk options
@@ -228,8 +228,11 @@ class SyncJob:
 class Filtering:
     DEFAULT_DOMAIN = "DEFAULT"
 
-    def __init__(self, filtering):
-        self.filtering = filtering if filtering else []
+    def __init__(self, filtering=None):
+        if filtering is None:
+            filtering = []
+
+        self.filtering = filtering
 
     def get_active_filter(self, domain=DEFAULT_DOMAIN):
         return next(
@@ -574,6 +577,7 @@ class Connector:
                 self.index_name,
                 self.prepare_docs(self.data_provider),
                 self.pipeline,
+                filtering=self.filtering,
                 options=bulk_options,
             )
             await self._sync_done(job, result)
