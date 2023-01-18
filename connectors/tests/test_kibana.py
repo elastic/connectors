@@ -6,7 +6,10 @@
 import os
 from unittest import mock
 
-from connectors.kibana import main
+import pytest
+
+from connectors.byoei import ElasticServer
+from connectors.kibana import main, upsert_index
 
 HERE = os.path.dirname(__file__)
 
@@ -15,6 +18,8 @@ def mock_index_creation(index, mock_responses, hidden=True):
     url = f"http://nowhere.com:9200/{index}"
     if hidden:
         url += "?expand_wildcards=hidden"
+    else:
+        url += "?expand_wildcards=open"
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.head(
         url,
@@ -61,3 +66,52 @@ def test_main(patch_logger, mock_responses):
         == 0
     )
     patch_logger.assert_present("Done")
+
+
+@pytest.mark.asyncio
+async def test_upsert_index(mock_responses):
+    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    headers = {"X-Elastic-Product": "Elasticsearch"}
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
+    )
+    mock_responses.head(
+        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
+        headers=headers,
+        status=404,
+    )
+    mock_responses.put(
+        "http://nowhere.com:9200/search-new-index",
+        payload={"_id": "1"},
+        headers=headers,
+    )
+
+    es = ElasticServer(config)
+
+    await upsert_index(es, "search-new-index")
+
+    mock_responses.head(
+        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
+        headers=headers,
+    )
+    mock_responses.delete(
+        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
+        headers=headers,
+    )
+    mock_responses.put(
+        "http://nowhere.com:9200/search-new-index",
+        payload={"_id": "1"},
+        headers=headers,
+    )
+    mock_responses.put(
+        "http://nowhere.com:9200/search-new-index/_doc/1",
+        payload={"_id": "1"},
+        headers=headers,
+    )
+    mock_responses.put(
+        "http://nowhere.com:9200/search-new-index/_doc/2",
+        payload={"_id": "2"},
+        headers=headers,
+    )
+
+    await upsert_index(es, "search-new-index", docs=[{"_id": "2"}, {"_id": "3"}])
