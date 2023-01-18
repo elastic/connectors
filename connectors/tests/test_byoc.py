@@ -27,7 +27,6 @@ from connectors.byoc import (
     e2str,
     iso_utc,
 )
-
 from connectors.byoei import ElasticServer
 from connectors.filtering.validation import ValidationTarget
 from connectors.config import load_config
