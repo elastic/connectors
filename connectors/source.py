@@ -3,9 +3,17 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import importlib
+
+from connectors.filtering.validation import (
+    BasicRuleAgainstSchemaValidator,
+    BasicRuleNoMatchAllRegexValidator,
+    BasicRulesSetSemanticValidator,
+    FilteringValidator,
+)
+
 """ Helpers to build sources + FQN-based Registry
 """
-import importlib
 
 
 class Field:
@@ -36,7 +44,7 @@ class Field:
         elif type_ == "float":
             return float(value)
         elif type_ == "bool":
-            return value.lower() in "y", "yes", "true", "1"
+            return value.lower() in ("y", "yes", "true", "1")
         elif type_ == "list":
             return [item.strip() for item in value.split(",")]
         return value
@@ -125,10 +133,40 @@ class BaseDataSource:
         """Returns a dict with a default configuration"""
         raise NotImplementedError
 
+    @classmethod
+    def basic_rules_validators(cls):
+        """Return default basic rule validators.
+
+        Basic rule validators are executed in the order they appear in the list.
+        Default behavior can be overridden completely or additional custom validators can be plugged in.
+        """
+        return [
+            BasicRuleAgainstSchemaValidator,
+            BasicRuleNoMatchAllRegexValidator,
+            BasicRulesSetSemanticValidator,
+        ]
+
+    @classmethod
+    async def validate_filtering(cls, filtering):
+        """Execute all basic rule and advanced rule validators."""
+
+        return FilteringValidator(
+            cls.basic_rules_validators(), cls.advanced_rules_validators()
+        ).validate(filtering)
+
+    @classmethod
+    def advanced_rules_validators(cls):
+        """Return advanced rule validators.
+
+        Advanced rules validators are data source specific so there are no default validators.
+        This method can be overridden to plug in custom advanced rule validators into the filtering validation.
+        """
+        return []
+
     async def changed(self):
         """When called, returns True if something has changed in the backend.
 
-        Otherwise returns False and the next sync is skipped.
+        Otherwise, returns False and the next sync is skipped.
 
         Some backends don't provide that information.
         In that case, this always return True.
@@ -160,10 +198,10 @@ class BaseDataSource:
         and optionally a `timestamp` field in ISO 8601 UTC
 
         The coroutine is called if the document needs to be synced
-        and has attachements. It need to return a mapping to index.
+        and has attachments. It needs to return a mapping to index.
 
         It has two arguments: doit and timestamp
-        If doit is False, it should return None immediatly.
+        If doit is False, it should return None immediately.
         If timestamp is provided, it should be used in the mapping.
 
         Example:

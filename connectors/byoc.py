@@ -107,10 +107,6 @@ class BYOIndex(ESIndex):
             doc=document,
         )
 
-    # @TODO move to ESIndex?
-    async def preflight(self):
-        await self.check_exists(indices=[CONNECTORS_INDEX, JOBS_INDEX])
-
     def build_docs_query(self, native_service_types=None, connectors_ids=None):
         if native_service_types is None:
             native_service_types = []
