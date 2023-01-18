@@ -89,7 +89,7 @@ class cursor_async:
         Returns:
             list: List of rows
         """
-        return [("testdb",)]
+        return [(10,)]
 
     async def __aexit__(self, exception_type, exception_value, exception_traceback):
         """Make sure the dummy database connection gets closed"""
@@ -155,7 +155,7 @@ class cursor_sync:
 
     def fetchall(self):
         """This method returns object of Return class"""
-        return [("ORCLCDB",)]
+        return [(10,)]
 
 
 def test_get_configuration(patch_logger):
@@ -248,22 +248,22 @@ async def test_get_docs_postgresql(patch_logger):
         actual_response = []
         expected_response = [
             {
-                "testdb_testdb_ids": 1,
-                "testdb_testdb_names": "abcd",
-                "_id": "xe_testdb_testdb_",
+                "10_10_ids": 1,
+                "10_10_names": "abcd",
+                "_id": "xe_10_10_",
                 "_timestamp": "",
                 "Database": "xe",
-                "Table": "testdb",
-                "schema": "testdb",
+                "Table": 10,
+                "schema": 10,
             },
             {
-                "testdb_testdb_ids": 2,
-                "testdb_testdb_names": "xyz",
-                "_id": "xe_testdb_testdb_",
+                "10_10_ids": 2,
+                "10_10_names": "xyz",
+                "_id": "xe_10_10_",
                 "_timestamp": "",
                 "Database": "xe",
-                "Table": "testdb",
-                "schema": "testdb",
+                "Table": 10,
+                "schema": 10,
             },
         ]
 
@@ -286,20 +286,20 @@ async def test_get_docs_oracle(patch_logger):
         actual_response = []
         expected_response = [
             {
-                "orclcdb_ids": 1,
-                "orclcdb_names": "abcd",
-                "_id": "xe_ORCLCDB_",
+                "10_ids": 1,
+                "10_names": "abcd",
+                "_id": "xe_10_",
                 "_timestamp": "",
                 "Database": "xe",
-                "Table": "ORCLCDB",
+                "Table": 10,
             },
             {
-                "orclcdb_ids": 2,
-                "orclcdb_names": "xyz",
-                "_id": "xe_ORCLCDB_",
+                "10_ids": 2,
+                "10_names": "xyz",
+                "_id": "xe_10_",
                 "_timestamp": "",
                 "Database": "xe",
-                "Table": "ORCLCDB",
+                "Table": 10,
             },
         ]
 
@@ -324,22 +324,22 @@ async def test_get_docs_mssql(patch_logger):
         actual_response = []
         expected_response = [
             {
-                "orclcdb_orclcdb_ids": 1,
-                "orclcdb_orclcdb_names": "abcd",
-                "_id": "xe_ORCLCDB_ORCLCDB_",
+                "10_10_ids": 1,
+                "10_10_names": "abcd",
+                "_id": "xe_10_10_",
                 "_timestamp": "",
                 "Database": "xe",
-                "Table": "ORCLCDB",
-                "schema": "ORCLCDB",
+                "Table": 10,
+                "schema": 10,
             },
             {
-                "orclcdb_orclcdb_ids": 2,
-                "orclcdb_orclcdb_names": "xyz",
-                "_id": "xe_ORCLCDB_ORCLCDB_",
+                "10_10_ids": 2,
+                "10_10_names": "xyz",
+                "_id": "xe_10_10_",
                 "_timestamp": "",
                 "Database": "xe",
-                "Table": "ORCLCDB",
-                "schema": "ORCLCDB",
+                "Table": 10,
+                "schema": 10,
             },
         ]
 

@@ -29,6 +29,23 @@ BIG_TEXT = random_text()
 DSN = "127.0.0.1:9090/xe"
 
 
+def inject_lines(table, cursor, start, lines):
+    """Ingest rows in table
+
+    Args:
+        table (str): Name of table
+        cursor (cursor): Cursor to execute query
+        start (int): Starting row
+        lines (int): Number of rows
+    """
+    raws = []
+    for raw_id in range(lines):
+        raw_id += start
+        raws.append((raw_id + 1, f"user_{raw_id}", raw_id, BIG_TEXT))
+    sql_query = f"INSERT into customers_{table} VALUES (:1, :2, :3, :4)"
+    cursor.executemany(sql_query, raws)
+
+
 def load():
     """N tables of 10001 rows each. each row is ~ 1024*20 bytes"""
     connection = cx_Oracle.connect(
@@ -50,11 +67,8 @@ def load():
         print(f"Adding data in {table}...")
         sql_query = f"CREATE TABLE customers_{table} (id int, name VARCHAR(255), age int, description long, PRIMARY KEY (id))"
         cursor.execute(sql_query)
-        rows = [
-            (row_id + 1, f"user_{row_id}", row_id, BIG_TEXT) for row_id in range(10000)
-        ]
-        sql_query = f"INSERT into customers_{table} VALUES (:1, :2, :3, :4)"
-        cursor.executemany(sql_query, rows)
+        for i in range(10):
+            inject_lines(table, cursor, i * 1000, 1000)
     connection.commit()
 
 

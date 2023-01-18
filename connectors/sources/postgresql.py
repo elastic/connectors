@@ -15,28 +15,30 @@ from connectors.sources.generic_database import GenericBaseDataSource
 # Below schemas are system schemas and the tables of the systems schema's will not get indexed
 SYSTEM_SCHEMA = ["pg_toast", "pg_catalog", "information_schema"]
 
+QUERIES = {
+    "PING": "SELECT 1+1",
+    "ALL_TABLE": "SELECT table_name FROM information_schema.tables WHERE table_catalog = '{database}' and table_schema = '{schema}'",
+    "TABLE_PRIMARY_KEY": "SELECT c.column_name FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type = 'PRIMARY KEY' and tc.table_name = '{table}' and tc.constraint_schema = '{schema}'",
+    "TABLE_DATA": 'SELECT * FROM {schema}."{table}"',
+    "TABLE_LAST_UPDATE_TIME": 'SELECT MAX(pg_xact_commit_timestamp(xmin)) FROM {schema}."{table}"',
+    "TABLE_DATA_COUNT": 'SELECT COUNT(*) FROM {schema}."{table}"',
+    "ALL_SCHEMAS": "SELECT schema_name FROM information_schema.schemata",
+}
+
 
 class PostgreSQLDataSource(GenericBaseDataSource):
     """Class to fetch documents from Postgresql Server"""
 
-    def __init__(self, connector):
+    def __init__(self, configuration):
         """Setup connection to the PostgreSQL database-server configured by user
 
         Args:
-            connector (BYOConnector): Object of the BYOConnector class
+            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
-        super().__init__(connector=connector)
+        super().__init__(configuration=configuration)
         self.connection_string = f"postgresql+asyncpg://{self.user}:{quote(self.password)}@{self.host}:{self.port}/{self.database}"
-        self.queries = {
-            "PING": "SELECT 1+1",
-            "ALL_TABLE": "SELECT table_name FROM information_schema.tables WHERE table_catalog = '{database}' and table_schema = '{schema}'",
-            "TABLE_PRIMARY_KEY": "SELECT c.column_name FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type = 'PRIMARY KEY' and tc.table_name = '{table}' and tc.constraint_schema = '{schema}'",
-            "TABLE_DATA": 'SELECT * FROM {schema}."{table}"',
-            "TABLE_LAST_UPDATE_TIME": 'SELECT MAX(pg_xact_commit_timestamp(xmin)) FROM {schema}."{table}"',
-            "TABLE_DATA_COUNT": 'SELECT COUNT(*) FROM {schema}."{table}"',
-            "ALL_SCHEMAS": "SELECT schema_name FROM information_schema.schemata",
-        }
         self.engine = None
+        self.queries = QUERIES
 
     async def ping(self):
         """Verify the connection with the PostgreSQL database-server configured by user"""

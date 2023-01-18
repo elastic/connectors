@@ -30,6 +30,26 @@ def random_text(k=1024 * 20):
 BIG_TEXT = random_text()
 
 
+def inject_lines(table, cursor, start, lines):
+    """Ingest rows in table
+
+    Args:
+        table (str): Name of table
+        cursor (cursor): Cursor to execute query
+        start (int): Starting row
+        lines (int): Number of rows
+    """
+    raws = []
+    for raw_id in range(lines):
+        raw_id += start
+        raws.append((f"user_{raw_id}", raw_id, BIG_TEXT))
+    sql_query = (
+        f"INSERT INTO customers_{table}"
+        + "(name, age, description) VALUES (%s, %s, %s)"
+    )
+    cursor.executemany(sql_query, raws)
+
+
 def load():
     """N tables of 10001 rows each. each row is ~ 1024*20 bytes"""
     database_sa = pymssql.connect(
@@ -57,12 +77,8 @@ def load():
         print(f"Adding data in {table}...")
         sql_query = f"CREATE TABLE customers_{table} (name VARCHAR(255), age int, description TEXT, PRIMARY KEY (name))"
         cursor.execute(sql_query)
-        rows = [(f"user_{row_id}", row_id, BIG_TEXT) for row_id in range(10000)]
-        sql_query = (
-            f"INSERT INTO customers_{table}"
-            + "(name, age, description) VALUES (%s, %s, %s)"
-        )
-        cursor.executemany(sql_query, rows)
+        for i in range(10):
+            inject_lines(table, cursor, i * 1000, 1000)
     database.commit()
 
 

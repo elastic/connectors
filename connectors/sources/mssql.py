@@ -26,28 +26,30 @@ SYSTEM_SCHEMA = [
     "sys",
 ]
 
+QUERIES = {
+    "PING": "SELECT 1+1",
+    "ALL_TABLE": "SELECT table_name FROM information_schema.tables WHERE TABLE_SCHEMA = '{schema}'",
+    "TABLE_PRIMARY_KEY": "SELECT C.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS T JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE C ON C.CONSTRAINT_NAME=T.CONSTRAINT_NAME WHERE C.TABLE_NAME='{table}' and C.TABLE_SCHEMA='{schema}' and T.CONSTRAINT_TYPE='PRIMARY KEY' ",
+    "TABLE_DATA": 'SELECT * FROM {schema}."{table}"',
+    "TABLE_LAST_UPDATE_TIME": "SELECT last_user_update FROM sys.dm_db_index_usage_stats WHERE object_id=object_id('{schema}.{table}')",
+    "TABLE_DATA_COUNT": 'SELECT COUNT(*) FROM {schema}."{table}"',
+    "ALL_SCHEMAS": "SELECT s.name from sys.schemas s inner join sys.sysusers u on u.uid = s.principal_id",
+}
+
 
 class MSSQLDataSource(GenericBaseDataSource):
     """Class to fetch documents from Microsoft SQL Server"""
 
-    def __init__(self, connector):
+    def __init__(self, configuration):
         """Setup connection to the Microsoft SQL database-server configured by user
 
         Args:
-            connector (BYOConnector): Object of the BYOConnector class
+            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
-        super().__init__(connector=connector)
+        super().__init__(configuration=configuration)
         self.connection_string = f"mssql+pymssql://{self.user}:{quote(self.password)}@{self.host}:{self.port}/{self.database}"
-        self.queries = {
-            "PING": "SELECT 1+1",
-            "ALL_TABLE": "SELECT table_name FROM information_schema.tables WHERE TABLE_SCHEMA = '{schema}'",
-            "TABLE_PRIMARY_KEY": "SELECT C.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS T JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE C ON C.CONSTRAINT_NAME=T.CONSTRAINT_NAME WHERE C.TABLE_NAME='{table}' and C.TABLE_SCHEMA='{schema}' and T.CONSTRAINT_TYPE='PRIMARY KEY' ",
-            "TABLE_DATA": 'SELECT * FROM {schema}."{table}"',
-            "TABLE_LAST_UPDATE_TIME": "SELECT last_user_update FROM sys.dm_db_index_usage_stats WHERE object_id=object_id('{schema}.{table}')",
-            "TABLE_DATA_COUNT": 'SELECT COUNT(*) FROM {schema}."{table}"',
-            "ALL_SCHEMAS": "SELECT s.name from sys.schemas s inner join sys.sysusers u on u.uid = s.principal_id",
-        }
         self.engine = None
+        self.queries = QUERIES
 
     async def ping(self):
         """Verify the connection with the Microsoft SQL database-server configured by user"""

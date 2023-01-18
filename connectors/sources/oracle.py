@@ -11,27 +11,29 @@ from sqlalchemy import create_engine
 from connectors.logger import logger
 from connectors.sources.generic_database import GenericBaseDataSource
 
+QUERIES = {
+    "PING": "SELECT 1+1 FROM DUAL",
+    "ALL_TABLE": "SELECT TABLE_NAME FROM all_tables where OWNER = '{user}'",
+    "TABLE_PRIMARY_KEY": "SELECT cols.column_name FROM all_constraints cons, all_cons_columns cols WHERE cols.table_name = '{table}' AND cons.constraint_type = 'P' AND cons.constraint_name = cols.constraint_name AND cons.owner = cols.owner ORDER BY cols.table_name, cols.position",
+    "TABLE_DATA": "SELECT * FROM {table}",
+    "TABLE_LAST_UPDATE_TIME": "SELECT SCN_TO_TIMESTAMP(MAX(ora_rowscn)) from {table}",
+    "TABLE_DATA_COUNT": "SELECT COUNT(*) FROM {table}",
+}
+
 
 class OracleDataSource(GenericBaseDataSource):
     """Class to fetch documents from Oracle Server"""
 
-    def __init__(self, connector):
+    def __init__(self, configuration):
         """Setup connection to the Oracle database-server configured by user
 
         Args:
-            connector (BYOConnector): Object of the BYOConnector class
+            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
-        super().__init__(connector=connector)
+        super().__init__(configuration=configuration)
         self.connection_string = f"oracle://{self.user}:{quote(self.password)}@{self.host}:{self.port}/{self.database}"
-        self.queries = {
-            "PING": "SELECT 1+1 FROM DUAL",
-            "ALL_TABLE": "SELECT TABLE_NAME FROM all_tables where OWNER = '{user}'",
-            "TABLE_PRIMARY_KEY": "SELECT cols.column_name FROM all_constraints cons, all_cons_columns cols WHERE cols.table_name = '{table}' AND cons.constraint_type = 'P' AND cons.constraint_name = cols.constraint_name AND cons.owner = cols.owner ORDER BY cols.table_name, cols.position",
-            "TABLE_DATA": "SELECT * FROM {table}",
-            "TABLE_LAST_UPDATE_TIME": "SELECT SCN_TO_TIMESTAMP(MAX(ora_rowscn)) from {table}",
-            "TABLE_DATA_COUNT": "SELECT COUNT(*) FROM {table}",
-        }
         self.engine = None
+        self.queries = QUERIES
 
     async def ping(self):
         """Verify the connection with the Oracle database-server configured by user"""

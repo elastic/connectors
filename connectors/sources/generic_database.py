@@ -1,10 +1,7 @@
 import asyncio
-from datetime import date, datetime
-from decimal import Decimal
 from functools import partial
 
 from asyncpg.exceptions._base import InternalClientError
-from bson import Decimal128
 from sqlalchemy import text
 
 from connectors.logger import logger
@@ -21,18 +18,16 @@ DEFAULT_SSL_CA = None
 class GenericBaseDataSource(BaseDataSource):
     """Class contains common functionalities for Generic Database connector"""
 
-    def __init__(self, connector):
+    def __init__(self, configuration):
         """Setup connection to the database-server configured by user
 
         Args:
-            connector (BYOConnector): Object of the BYOConnector class
+            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
-        super().__init__(connector=connector)
+        super().__init__(configuration=configuration)
 
         # Connector configurations
-        self.retry_count = int(
-            self.configuration.get("retry_count", DEFAULT_RETRY_COUNT)
-        )
+        self.retry_count = self.configuration["retry_count"]
 
         # Connection related configurations
         self.user = self.configuration["user"]
@@ -153,7 +148,7 @@ class GenericBaseDataSource(BaseDataSource):
             list: Column names and query response
         """
         query = self.queries[query_name].format(**query_kwargs)
-        size = int(self.configuration.get("fetch_size", DEFAULT_FETCH_SIZE))
+        size = self.configuration["fetch_size"]
 
         # retry: Current retry counter
         # yield_once: Yield(fields) once flag
@@ -260,45 +255,6 @@ class GenericBaseDataSource(BaseDataSource):
             )
             raise
 
-    def serialize(self, doc):
-        """Reads each element from the document and serialize it as per it's datatype.
-
-        Args:
-            doc (Dict): Dictionary to be serialize
-
-        Returns:
-            doc (Dict): Serialized version of dictionary
-        """
-
-        def _serialize(value):
-            """Serialize input value as per it's datatype.
-            Args:
-                value (Any Datatype): Value to be serialize
-
-            Returns:
-                value (Any Datatype): Serialized version of input value.
-            """
-
-            if isinstance(value, (list, tuple)):
-                value = [_serialize(item) for item in value]
-            elif isinstance(value, dict):
-                for key, svalue in value.items():
-                    value[key] = _serialize(svalue)
-            elif isinstance(value, (datetime, date)):
-                value = value.isoformat()
-            elif isinstance(value, Decimal128):
-                value = value.to_decimal()
-            elif isinstance(value, (bytes, bytearray)):
-                value = value.decode(errors="ignore")
-            elif isinstance(value, Decimal):
-                value = float(value)
-            return value
-
-        for key, value in doc.items():
-            doc[key] = _serialize(value)
-
-        return doc
-
     async def fetch_documents(self, table, engine, is_async=True, schema=None):
         """Fetches all the table entries and format them in Elasticsearch documents
 
@@ -321,7 +277,7 @@ class GenericBaseDataSource(BaseDataSource):
                     table=table,
                 )
             )
-            if row_count:
+            if row_count > 0:
                 # Query to get the table's primary key
                 columns = await anext(
                     self.execute_query(
@@ -425,7 +381,7 @@ class GenericBaseDataSource(BaseDataSource):
                 schema=schema,
             )
         )
-        if list_of_tables:
+        if len(list_of_tables) > 0:
             for [table_name] in list_of_tables:
                 logger.debug(f"Found table: {table_name} in database: {self.database}.")
                 async for row in self.fetch_documents(
