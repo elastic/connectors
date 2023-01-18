@@ -172,7 +172,7 @@ class ConnectorIndex(ESIndex):
 
 
 class SyncJob:
-    def __init__(self, elastic_index, connector_id, doc_source=None):
+    def __init__(self, elastic_index, connector_id, doc_source=dict()):
         self.connector_id = connector_id
         self.elastic_index = elastic_index
         self.created_at = datetime.now(timezone.utc)
