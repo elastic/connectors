@@ -309,6 +309,14 @@ class Fetcher:
         await self.queue.put("END_DOCS")
 
 
+class IndexMissing(Exception):
+    pass
+
+
+class ContentIndexNameInvalid(Exception):
+    pass
+
+
 class ElasticServer(ESClient):
     """This class is the sync orchestrator.
 
@@ -325,34 +333,21 @@ class ElasticServer(ESClient):
         super().__init__(elastic_config)
         self.loop = asyncio.get_event_loop()
 
-    async def prepare_index(
-        self, index, *, docs=None, settings=None, mappings=None, delete_first=False
-    ):
+    async def prepare_content_index(self, index, *, mappings=None):
         """Creates the index, given a mapping if it does not exists."""
-        if index.startswith("."):
-            expand_wildcards = "hidden"
-        else:
-            expand_wildcards = "open"
+        if not index.startswith("search-"):
+            raise ContentIndexNameInvalid(
+                'Index name {index} is invalid. Index name must start with "search-"'
+            )
 
         logger.debug(f"Checking index {index}")
+
+        expand_wildcards = "open"
         exists = await self.client.indices.exists(
             index=index, expand_wildcards=expand_wildcards
         )
-        if exists and delete_first:
-            logger.debug(f"{index} exists, deleting...")
-            logger.debug("Deleting it first")
-            await self.client.indices.delete(
-                index=index, expand_wildcards=expand_wildcards
-            )
-            exists = False
         if exists:
             logger.debug(f"{index} exists")
-            if delete_first:
-                logger.debug("Deleting it first")
-                await self.client.indices.delete(
-                    index=index, expand_wildcards=expand_wildcards
-                )
-                return
             response = await self.client.indices.get_mapping(
                 index=index, expand_wildcards=expand_wildcards
             )
@@ -370,18 +365,8 @@ class ElasticServer(ESClient):
             else:
                 logger.debug("Index %s already has mappings. Skipping...", index)
             return
-
-        logger.debug(f"Creating index {index}")
-        await self.client.indices.create(
-            index=index, settings=settings, mappings=mappings
-        )
-        if docs is None:
-            return
-        # XXX bulk
-        doc_id = 1
-        for doc in docs:
-            await self.client.index(index=index, id=doc_id, document=doc)
-            doc_id += 1
+        else:
+            raise IndexMissing(f"Index {index} does not exist!")
 
     async def get_existing_ids(self, index):
         """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
