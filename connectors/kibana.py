@@ -159,7 +159,10 @@ async def prepare(service_type, index_name, config, filtering=None):
             "updated_at": "",
             "filtering": filtering,
             # Scheduling intervals
-            "scheduling": {"enabled": False, "interval": "1 * * * * *"},  # quartz syntax
+            "scheduling": {
+                "enabled": False,
+                "interval": "1 * * * * *",
+            },  # quartz syntax
             "pipeline": {
                 "extract_binary_content": True,
                 "name": "ent-search-generic-ingestion",

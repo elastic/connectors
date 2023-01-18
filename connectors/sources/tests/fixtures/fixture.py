@@ -6,14 +6,15 @@
 import importlib
 import importlib.util
 import os
+import signal
 import sys
 import time
 from argparse import ArgumentParser
-import signal
-from elasticsearch import Elasticsearch
 from datetime import datetime
 
-CONNECTORS_INDEX = '.elastic-connectors'
+from elasticsearch import Elasticsearch
+
+CONNECTORS_INDEX = ".elastic-connectors"
 
 
 def _parser():
@@ -23,7 +24,16 @@ def _parser():
         "--action",
         type=str,
         default="load",
-        choices=["load", "remove", "start_stack", "stop_stack", "setup", "teardown", "sync", "monitor"],
+        choices=[
+            "load",
+            "remove",
+            "start_stack",
+            "stop_stack",
+            "setup",
+            "teardown",
+            "sync",
+            "monitor",
+        ],
     )
 
     parser.add_argument("--name", type=str, help="fixture to run", default="mysql")
@@ -36,7 +46,7 @@ def _parser():
 def _es_client():
     options = {
         "hosts": ["http://127.0.0.1:9200"],
-        "basic_auth": ("elastic", "changeme")
+        "basic_auth": ("elastic", "changeme"),
     }
     return Elasticsearch(**options)
 
@@ -99,7 +109,7 @@ def main(args=None):
         _set_sync_now_flag()
         return
 
-    if args.action == 'monitor':
+    if args.action == "monitor":
         if args.pid == 0:
             print(f"Invalid pid specified, killing the current process...")
             os.kill(os.getpid(), signal.SIGTERM)
