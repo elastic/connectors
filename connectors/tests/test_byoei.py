@@ -269,10 +269,11 @@ async def test_async_bulk_same_ts(mock_responses, patch_logger):
 
 
 def index_operation(doc):
-    copy = deepcopy(doc)
-    doc_id = copy["id"] = copy.pop("_id")
+    # deepcopy as get_docs mutates docs
+    doc_copy = deepcopy(doc)
+    doc_id = doc_copy["id"] = doc_copy.pop("_id")
 
-    return {"_op_type": "index", "_index": INDEX, "_id": doc_id, "doc": copy}
+    return {"_op_type": "index", "_index": INDEX, "_id": doc_id, "doc": doc_copy}
 
 
 def delete_operation(doc):
