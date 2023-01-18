@@ -158,7 +158,7 @@ def convert_to_b64(source, target=None, overwrite=False):
 
     if _BASE64 is not None:
         if platform.system() == "Darwin":
-            version = int(platform.mac_ver()[0].split('.')[0])
+            version = int(platform.mac_ver()[0].split(".")[0])
             # MacOS 13 has changed base64 util
             if version >= 13:
                 cmd = f"{_BASE64} -i {source} -o {temp_target}"
