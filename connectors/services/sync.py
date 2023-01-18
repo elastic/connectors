@@ -107,13 +107,9 @@ class SyncService(BaseService):
         finally:
             await connector.close()
 
-    async def run(self):
+    async def _run(self):
         """Main event loop."""
-
-        await super().run()
-
         self.connectors = ConnectorIndex(self.es_config)
-        self.running = True
 
         one_sync = self.args.one_sync
         sync_now = self.args.sync_now

@@ -24,11 +24,16 @@ class BaseService:
     def stop(self):
         raise NotImplementedError()
 
+    async def _run(self):
+        raise NotImplementedError()
+
     async def run(self):
         if self.running:
             raise ServiceAlreadyRunningError(
                 f"{self.__class__.__name__} is already running."
             )
+
+        await self._run()
 
     def raise_if_spurious(self, exception):
         errors, first = self.errors
