@@ -9,21 +9,76 @@ import os
 import sys
 import time
 from argparse import ArgumentParser
+import signal
+from elasticsearch import Elasticsearch
+from datetime import datetime
+
+CONNECTORS_INDEX = '.elastic-connectors'
 
 
 def _parser():
-    parser = ArgumentParser(prog="elastic-ingest")
+    parser = ArgumentParser(prog="fixture")
 
     parser.add_argument(
         "--action",
         type=str,
         default="load",
-        choices=["load", "remove", "start_stack", "stop_stack", "setup", "teardown"],
+        choices=["load", "remove", "start_stack", "stop_stack", "setup", "teardown", "sync", "monitor"],
     )
 
     parser.add_argument("--name", type=str, help="fixture to run", default="mysql")
 
+    parser.add_argument("--pid", type=int, help="process id to kill", default=0)
+
     return parser
+
+
+def _es_client():
+    options = {
+        "hosts": ["http://127.0.0.1:9200"],
+        "basic_auth": ("elastic", "changeme")
+    }
+    return Elasticsearch(**options)
+
+
+def _set_sync_now_flag():
+    es_client = _es_client()
+    try:
+        response = es_client.search(index=CONNECTORS_INDEX, size=1)
+        connector_id = response["hits"]["hits"][0]["_id"]
+        doc = {"sync_now": True}
+        es_client.update(index=CONNECTORS_INDEX, id=connector_id, doc=doc)
+    except Exception as e:
+        print(f"Something bad happened: {e}")
+    finally:
+        es_client.close()
+
+
+def _monitor_service(pid):
+    es_client = _es_client()
+    timeout = 20 * 60  # 20 minutes timeout
+    try:
+        # we should have something like connectorIndex.search()[0].last_synced
+        # once we have ConnectorIndex and Connector class ready
+        start = datetime.utcnow()
+        response = es_client.search(index=CONNECTORS_INDEX, size=1)
+        connector = response["hits"]["hits"][0]
+        connector_id = connector["_id"]
+        last_synced = connector["_source"]["last_synced"]
+        while True:
+            response = es_client.get(index=CONNECTORS_INDEX, id=connector_id)
+            new_last_synced = response["_source"]["last_synced"]
+            lapsed = (datetime.utcnow() - start).seconds
+            if last_synced != new_last_synced or lapsed > timeout:
+                if lapsed > timeout:
+                    print("Took too long to complete the sync job, give up!")
+                os.kill(pid, signal.SIGTERM)
+                break
+            time.sleep(10)
+    except Exception as e:
+        print(f"Something bad happened: {e}")
+    finally:
+        es_client.close()
 
 
 def main(args=None):
@@ -38,6 +93,18 @@ def main(args=None):
             time.sleep(30)
         else:
             os.system("docker compose down --volumes")
+        return
+
+    if args.action == "sync":
+        _set_sync_now_flag()
+        return
+
+    if args.action == 'monitor':
+        if args.pid == 0:
+            print(f"Invalid pid specified, killing the current process...")
+            os.kill(os.getpid(), signal.SIGTERM)
+            return
+        _monitor_service(args.pid)
         return
 
     fixture_file = os.path.join(os.path.dirname(__file__), args.name, "fixture.py")
