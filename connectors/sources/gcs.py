@@ -66,7 +66,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         """Setup connection to the Google Cloud Storage Client.
 
         Args:
-            connector (Connector): Object of the Connector class.
+            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
         if not self.configuration["service_account_credentials"]:
