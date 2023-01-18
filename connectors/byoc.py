@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from connectors.es import DEFAULT_LANGUAGE, ESIndex, Mappings
+from connectors.filtering.validation import validate_filtering
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
 from connectors.utils import iso_utc, next_run
@@ -572,6 +573,8 @@ class Connector:
             # allows the data provider to change the bulk options
             bulk_options = self.bulk_options.copy()
             self.data_provider.tweak_bulk_options(bulk_options)
+
+            await validate_filtering(self)
 
             result = await elastic_server.async_bulk(
                 self.index_name,

@@ -12,6 +12,20 @@ from connectors.filtering.basic_rule import BasicRule, Policy, Rule
 from connectors.logger import logger
 
 
+async def validate_filtering(connector):
+    validation_result = await connector.source_klass.validate_filtering(
+        connector.filtering.get_active_filter()
+    )
+    if validation_result.state != FilteringValidationState.VALID:
+        raise InvalidFilteringError(
+            f"Filtering in state {validation_result.state}. Expected: {FilteringValidationState.VALID}."
+        )
+    if len(validation_result.errors):
+        raise InvalidFilteringError(
+            f"Filtering validation errors present: {validation_result.errors}."
+        )
+
+
 class InvalidFilteringError(Exception):
     pass
 

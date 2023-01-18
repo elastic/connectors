@@ -24,27 +24,10 @@ from connectors.byoc import (
     e2str,
 )
 from connectors.byoei import ElasticServer
-from connectors.filtering.validation import (
-    FilteringValidationState,
-    InvalidFilteringError,
-)
+from connectors.filtering.validation import InvalidFilteringError, validate_filtering
 from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.utils import CancellableSleeps
-
-
-async def _validate_filtering(connector):
-    validation_result = await connector.source_klass.validate_filtering(
-        connector.filtering.get_active_filter()
-    )
-    if validation_result.state != FilteringValidationState.VALID:
-        raise InvalidFilteringError(
-            f"Filtering in state {validation_result.state}. Expected: {FilteringValidationState.VALID}."
-        )
-    if len(validation_result.errors):
-        raise InvalidFilteringError(
-            f"Filtering validation errors present: {validation_result.errors}."
-        )
 
 
 class SyncService(BaseService):
@@ -120,7 +103,7 @@ class SyncService(BaseService):
                 # we can't sync in that state
                 logger.info(f"Can't sync with status `{e2str(connector.status)}`")
             else:
-                await _validate_filtering(connector)
+                await validate_filtering(connector)
                 await connector.sync(es, self.idling, sync_now)
 
             await asyncio.sleep(0)
