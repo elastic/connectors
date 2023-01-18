@@ -28,7 +28,9 @@ from collections import defaultdict
 from elasticsearch import NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan
 
+from connectors.byoc import Filtering
 from connectors.es import ESClient
+from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger
 from connectors.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
@@ -175,6 +177,7 @@ class Fetcher:
         queue,
         index,
         existing_ids,
+        filtering=Filtering(),
         queue_size=DEFAULT_QUEUE_SIZE,
         display_every=DEFAULT_DISPLAY_EVERY,
         concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
@@ -192,6 +195,10 @@ class Fetcher:
         self.total_docs_created = 0
         self.total_docs_deleted = 0
         self.fetch_error = None
+        self.filtering = filtering
+        self.basic_rule_engine = BasicRuleEngine(
+            parse(filtering.get_active_filter().get("rules", []))
+        )
         self.display_every = display_every
         self.concurrent_downloads = concurrent_downloads
 
@@ -237,6 +244,9 @@ class Fetcher:
                     logger.info(str(self))
 
                 doc_id = doc["id"] = doc.pop("_id")
+
+                if not self.basic_rule_engine.should_ingest(doc):
+                    continue
 
                 if doc_id in self.existing_ids:
                     # pop out of self.existing_ids
@@ -399,6 +409,7 @@ class ElasticServer(ESClient):
         index,
         generator,
         pipeline,
+        filtering=Filtering(),
         options=None,
     ):
         if options is None:
@@ -428,6 +439,7 @@ class ElasticServer(ESClient):
             stream,
             index,
             existing_ids,
+            filtering=filtering,
             queue_size=queue_size,
             display_every=display_every,
             concurrent_downloads=concurrent_downloads,
