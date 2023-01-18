@@ -109,7 +109,6 @@ class SyncService(BaseService):
             await asyncio.sleep(0)
         except InvalidFilteringError as e:
             logger.error(e)
-            self.raise_if_spurious(e)
             return
         finally:
             await connector.close()

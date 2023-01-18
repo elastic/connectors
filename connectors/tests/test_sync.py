@@ -547,8 +547,10 @@ async def test_connector_service_filtering(
     service = await service_with_max_errors(mock_responses, config, 0)
 
     if should_raise_filtering_error:
-        with pytest.raises(InvalidFilteringError):
-            await service.run()
+        await service.run()
+        patch_logger.assert_check(
+            lambda log: isinstance(log, InvalidFilteringError)
+        )
     else:
         try:
             await service.run()
