@@ -548,9 +548,7 @@ async def test_connector_service_filtering(
 
     if should_raise_filtering_error:
         await service.run()
-        patch_logger.assert_check(
-            lambda log: isinstance(log, InvalidFilteringError)
-        )
+        patch_logger.assert_check(lambda log: isinstance(log, InvalidFilteringError))
     else:
         try:
             await service.run()
