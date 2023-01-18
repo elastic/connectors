@@ -690,8 +690,15 @@ class SyncJobIndex(ESIndex):
             "bool": {
                 "filter": [
                     {"terms": {"connector.id": connectors_ids}},
-                    {"terms": {"status": [JobStatus.IN_PROGRESS, JobStatus.CANCELING]}},
-                    {"range": {"last_seen": {"lte": "now-#{STUCK_JOBS_THRESHOLD}s"}}},
+                    {
+                        "terms": {
+                            "status": [
+                                e2str(JobStatus.IN_PROGRESS),
+                                e2str(JobStatus.CANCELING),
+                            ]
+                        }
+                    },
+                    {"range": {"last_seen": {"lte": f"now-{STUCK_JOBS_THRESHOLD}s"}}},
                 ]
             }
         }
