@@ -159,7 +159,9 @@ class SyncService(BaseService):
         else:
             connectors_ids = []
 
-        await self._pre_flight_check()
+        logger.info(
+            f"Service started, listening to events from {self.config['elasticsearch']['host']}"
+        )
 
         es = ElasticServer(self.config["elasticsearch"])
         try:
@@ -186,31 +188,3 @@ class SyncService(BaseService):
             await self.connectors.close()
             await es.close()
         return 0
-
-    async def _pre_flight_check(self):
-        es_host = self.config["elasticsearch"]["host"]
-
-        if not (await self.connectors.wait()):
-            logger.critical(f"{es_host} seem down. Bye!")
-            return -1
-
-        # pre-flight check
-        attempts = 0
-        while self.running:
-            logger.info("Preflight checks...")
-            try:
-                # Checking the indices/pipeline in the loop to be less strict about the boot ordering
-                await self.connectors.preflight()
-                break
-            except Exception as e:
-                if attempts > self.preflight_max_attempts:
-                    raise
-                else:
-                    logger.warn(
-                        f"Attempt {attempts+1}/{self.preflight_max_attempts} failed. Retrying..."
-                    )
-                    logger.warn(str(e))
-                    attempts += 1
-                    await asyncio.sleep(self.preflight_idle)
-
-        logger.info(f"Service started, listening to events from {es_host}")
