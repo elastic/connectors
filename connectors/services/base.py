@@ -33,6 +33,7 @@ class BaseService:
                 f"{self.__class__.__name__} is already running."
             )
 
+        self.running = True
         await self._run()
 
     def raise_if_spurious(self, exception):
