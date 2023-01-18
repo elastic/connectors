@@ -17,7 +17,7 @@ config = {
         "username": "elastic",
         "password": "changeme",
         "max_wait_duration": 0.1,
-        "initial_backoff_duration": 0.1
+        "initial_backoff_duration": 0.1,
     },
     "service": {"preflight_max_attempts": 4, "preflight_idle": 0.1},
 }
