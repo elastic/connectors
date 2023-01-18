@@ -10,7 +10,6 @@ import signal
 import sys
 import time
 from argparse import ArgumentParser
-from datetime import datetime
 
 from elasticsearch import Elasticsearch
 
@@ -70,7 +69,7 @@ def _monitor_service(pid):
     try:
         # we should have something like connectorIndex.search()[0].last_synced
         # once we have ConnectorIndex and Connector class ready
-        start = datetime.utcnow()
+        start = time.time()
         response = es_client.search(index=CONNECTORS_INDEX, size=1)
         connector = response["hits"]["hits"][0]
         connector_id = connector["_id"]
@@ -78,7 +77,7 @@ def _monitor_service(pid):
         while True:
             response = es_client.get(index=CONNECTORS_INDEX, id=connector_id)
             new_last_synced = response["_source"]["last_synced"]
-            lapsed = (datetime.utcnow() - start).seconds
+            lapsed = time.time() - start
             if last_synced != new_last_synced or lapsed > timeout:
                 if lapsed > timeout:
                     print("Took too long to complete the sync job, give up!")
