@@ -13,8 +13,8 @@ from aioresponses import CallbackResult
 from elasticsearch import AsyncElasticsearch
 
 from connectors.byoc import (
-    ConnectorIndex,
     Connector,
+    ConnectorIndex,
     Filtering,
     JobStatus,
     Status,
