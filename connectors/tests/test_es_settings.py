@@ -3,7 +3,6 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import json
 
 import pytest
 
@@ -14,7 +13,6 @@ from connectors.es.settings import (
     Mappings,
     Settings,
     UnsupportedLanguageCode,
-    defaults_for,
 )
 
 EXPECTED_CONNECTORS_PROPS = ["id", "_subextracted_as_of", "_subextracted_version"]
@@ -162,12 +160,6 @@ def test_settings_supported_language():
         f"{language_code}-elision",
     ):
         assert k in filter
-
-
-def test_defaults_for_is_serializable():
-    mappings, settings = defaults_for()
-    settings = json.dumps(settings)
-    assert "analysis" in settings
 
 
 def test_settings_none_language():

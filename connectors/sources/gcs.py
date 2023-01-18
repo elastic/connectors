@@ -62,13 +62,13 @@ DEFAULT_PEM_FILE = os.path.join(
 class GoogleCloudStorageDataSource(BaseDataSource):
     """Class to fetch documents from Google Cloud Storage."""
 
-    def __init__(self, connector):
+    def __init__(self, configuration):
         """Setup connection to the Google Cloud Storage Client.
 
         Args:
             connector (Connector): Object of the Connector class.
         """
-        super().__init__(connector=connector)
+        super().__init__(configuration=configuration)
         if not self.configuration["service_account_credentials"]:
             raise Exception("service_account_credentials can't be empty.")
 
@@ -327,13 +327,15 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 )
             )
             source_file_name = async_buffer.name
+
         logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
         await asyncio.to_thread(
             convert_to_b64,
             source=source_file_name,
         )
         async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            document["_attachment"] = await target_file.read()
+            # base64 on macOS will add a EOL, so we strip() here
+            document["_attachment"] = (await target_file.read()).strip()
         await remove(source_file_name)
         logger.debug(f"Downloaded {blob_name} for {blob_size} bytes ")
         return document

@@ -5,9 +5,4 @@
 #
 from connectors.es.client import ESClient  # NOQA
 from connectors.es.index import ESIndex  # NOQA
-from connectors.es.settings import (  # NOQA
-    DEFAULT_LANGUAGE,
-    Mappings,
-    Settings,
-    defaults_for,
-)
+from connectors.es.settings import DEFAULT_LANGUAGE, Mappings  # NOQA

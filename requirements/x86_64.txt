@@ -2,9 +2,9 @@
 -r framework.txt
 
 aiomysql==0.1.1
-motor>=3.0.0
-aioboto3>=10.1.0
-smbprotocol>=1.9.0
+motor==3.0.0
+aioboto3==10.1.0
+smbprotocol==1.9.0
 SQLAlchemy==1.4.44
 pymssql==2.2.7
 cx-Oracle==7.3.0

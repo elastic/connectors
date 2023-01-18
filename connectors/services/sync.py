@@ -7,7 +7,7 @@
 Event loop
 
 - polls for work by calling Elasticsearch on a regular basis
-- instanciates connector plugins
+- instantiates connector plugins
 - mirrors an Elasticsearch index with a collection of documents
 """
 import asyncio
@@ -24,17 +24,35 @@ from connectors.byoc import (
     e2str,
 )
 from connectors.byoei import ElasticServer
+from connectors.filtering.validation import (
+    FilteringValidationState,
+    InvalidFilteringError,
+)
 from connectors.logger import logger
 from connectors.services.base import BaseService
-from connectors.utils import CancellableSleeps, trace_mem
+from connectors.utils import CancellableSleeps
+
+
+async def _validate_filtering(connector):
+    validation_result = await connector.source_klass.validate_filtering(
+        connector.filtering.get_active_filter()
+    )
+    if validation_result.state != FilteringValidationState.VALID:
+        raise InvalidFilteringError(
+            f"Filtering in state {validation_result.state}. Expected: {FilteringValidationState.VALID}."
+        )
+    if len(validation_result.errors):
+        raise InvalidFilteringError(
+            f"Filtering validation errors present: {validation_result.errors}."
+        )
 
 
 class SyncService(BaseService):
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, config, args):
+        super().__init__(config)
+        self.args = args
         self.errors = [0, time.time()]
         self.service_config = self.config["service"]
-        self.trace_mem = self.service_config.get("trace_mem", False)
         self.idling = self.service_config["idling"]
         self.hb = self.service_config["heartbeat"]
         self.preflight_max_attempts = int(
@@ -45,7 +63,6 @@ class SyncService(BaseService):
         self._sleeper = None
         self._sleeps = CancellableSleeps()
         self.connectors = None
-        self.trace_mem = self.service_config.get("trace_mem", False)
 
     def raise_if_spurious(self, exception):
         errors, first = self.errors
@@ -70,45 +87,49 @@ class SyncService(BaseService):
             self.connectors.stop_waiting()
 
     async def _one_sync(self, connector, es, sync_now):
-        with trace_mem(self.trace_mem):
-            if connector.native:
-                logger.debug(f"Connector {connector.id} natively supported")
+        if connector.native:
+            logger.debug(f"Connector {connector.id} natively supported")
 
-            try:
-                await connector.prepare(self.config)
-            except ServiceTypeNotConfiguredError:
-                logger.error(
-                    f"Service type is not configured for connector {self.config['connector_id']}"
-                )
-                return
-            except ConnectorUpdateError as e:
-                logger.error(e)
-                return
-            except ServiceTypeNotSupportedError:
-                logger.debug(f"Can't handle source of type {connector.service_type}")
-                return
-            except DataSourceError as e:
-                await connector.error(e)
-                logger.critical(e, exc_info=True)
-                self.raise_if_spurious(e)
-                return
+        try:
+            await connector.prepare(self.config)
+        except ServiceTypeNotConfiguredError:
+            logger.error(
+                f"Service type is not configured for connector {self.config['connector_id']}"
+            )
+            return
+        except ConnectorUpdateError as e:
+            logger.error(e)
+            return
+        except ServiceTypeNotSupportedError:
+            logger.debug(f"Can't handle source of type {connector.service_type}")
+            return
+        except DataSourceError as e:
+            await connector.error(e)
+            logger.critical(e, exc_info=True)
+            self.raise_if_spurious(e)
+            return
 
-            try:
-                # the heartbeat is always triggered
-                connector.start_heartbeat(self.hb)
+        try:
+            # the heartbeat is always triggered
+            connector.start_heartbeat(self.hb)
 
-                logger.debug(f"Connector status is {connector.status}")
+            logger.debug(f"Connector status is {connector.status}")
 
-                # we trigger a sync
-                if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
-                    # we can't sync in that state
-                    logger.info(f"Can't sync with status `{e2str(connector.status)}`")
-                else:
-                    await connector.sync(es, self.idling, sync_now)
+            # we trigger a sync
+            if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
+                # we can't sync in that state
+                logger.info(f"Can't sync with status `{e2str(connector.status)}`")
+            else:
+                await _validate_filtering(connector)
+                await connector.sync(es, self.idling, sync_now)
 
-                await asyncio.sleep(0)
-            finally:
-                await connector.close()
+            await asyncio.sleep(0)
+        except InvalidFilteringError as e:
+            logger.error(e)
+            self.raise_if_spurious(e)
+            return
+        finally:
+            await connector.close()
 
     async def run(self):
         if "PERF8" in os.environ:
@@ -138,7 +159,9 @@ class SyncService(BaseService):
         else:
             connectors_ids = []
 
-        await self._pre_flight_check()
+        logger.info(
+            f"Service started, listening to events from {self.config['elasticsearch']['host']}"
+        )
 
         es = ElasticServer(self.config["elasticsearch"])
         try:
@@ -165,31 +188,3 @@ class SyncService(BaseService):
             await self.connectors.close()
             await es.close()
         return 0
-
-    async def _pre_flight_check(self):
-        es_host = self.config["elasticsearch"]["host"]
-
-        if not (await self.connectors.wait()):
-            logger.critical(f"{es_host} seem down. Bye!")
-            return -1
-
-        # pre-flight check
-        attempts = 0
-        while self.running:
-            logger.info("Preflight checks...")
-            try:
-                # Checking the indices/pipeline in the loop to be less strict about the boot ordering
-                await self.connectors.preflight()
-                break
-            except Exception as e:
-                if attempts > self.preflight_max_attempts:
-                    raise
-                else:
-                    logger.warn(
-                        f"Attempt {attempts+1}/{self.preflight_max_attempts} failed. Retrying..."
-                    )
-                    logger.warn(str(e))
-                    attempts += 1
-                    await asyncio.sleep(self.preflight_idle)
-
-        logger.info(f"Service started, listening to events from {es_host}")

@@ -15,10 +15,10 @@ import os
 import signal
 from argparse import ArgumentParser
 
-from envyaml import EnvYAML
-
 from connectors import __version__
+from connectors.config import load_config
 from connectors.logger import logger, set_logger
+from connectors.preflight_check import PreflightCheck
 from connectors.services.sync import SyncService
 from connectors.source import get_data_sources
 from connectors.utils import get_event_loop
@@ -88,23 +88,39 @@ def _parser():
     return parser
 
 
+async def _start_service(config, args, loop):
+    preflight = PreflightCheck(config)
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, functools.partial(preflight.shutdown, sig))
+    try:
+        if not await preflight.run():
+            return -1
+    finally:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.remove_signal_handler(sig)
+
+    service = SyncService(config, args)
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
+    await service.run()
+
+
 def run(args):
     """Runner"""
+
+    # load config
+    config = load_config(args.config_file)
+
     # just display the list of connectors
     if args.action == "list":
         logger.info("Registered connectors:")
-        config = EnvYAML(args.config_file)
         for source in get_data_sources(config):
             logger.info(f"- {source.__doc__.strip()}")
         logger.info("Bye")
         return 0
 
-    service = SyncService(args)
-    coro = service.run()
     loop = get_event_loop(args.uvloop)
-
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
+    coro = _start_service(config, args, loop)
 
     try:
         return loop.run_until_complete(coro)

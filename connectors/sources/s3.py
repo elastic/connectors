@@ -36,13 +36,13 @@ else:
 class S3DataSource(BaseDataSource):
     """Amazon S3"""
 
-    def __init__(self, connector):
+    def __init__(self, configuration):
         """Setup connection to the Amazon S3.
 
         Args:
             connector (Connector): Object of the Connector class.
         """
-        super().__init__(connector)
+        super().__init__(configuration=configuration)
         self.session = aioboto3.Session()
         set_extra_logger(aws_logger, log_level=logging.DEBUG, prefix="S3")
         set_extra_logger("aioboto3.resources", log_level=logging.INFO, prefix="S3")

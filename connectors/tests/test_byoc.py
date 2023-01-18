@@ -11,11 +11,11 @@ from datetime import datetime
 import pytest
 from aioresponses import CallbackResult
 from elasticsearch import AsyncElasticsearch
-from envyaml import EnvYAML
 
 from connectors.byoc import (
     BYOIndex,
     Connector,
+    Filtering,
     JobStatus,
     Status,
     SyncJob,
@@ -27,6 +27,55 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
+
+DRAFT_ADVANCED_SNIPPET = {"value": {"query": {"options": {}}}}
+
+DRAFT_RULE_ONE_ID = 1
+DRAFT_RULE_TWO_ID = 2
+
+ACTIVE_ADVANCED_SNIPPET = {"value": {"find": {"settings": {}}}}
+
+ACTIVE_RULE_ONE_ID = 3
+ACTIVE_RULE_TWO_ID = 4
+
+DRAFT_FILTERING_DEFAULT_DOMAIN = {
+    "advanced_snippet": DRAFT_ADVANCED_SNIPPET,
+    "rules": [{"id": DRAFT_RULE_ONE_ID}, {"id": DRAFT_RULE_TWO_ID}],
+}
+
+ACTIVE_FILTERING_DEFAULT_DOMAIN = {
+    "advanced_snippet": ACTIVE_ADVANCED_SNIPPET,
+    "rules": [{"id": ACTIVE_RULE_ONE_ID}, {"id": ACTIVE_RULE_TWO_ID}],
+}
+
+FILTERING_VALIDATION_VALID = {"state": "valid", "errors": []}
+
+OTHER_DOMAIN_ONE = "other-domain-1"
+OTHER_DOMAIN_TWO = "other-domain-2"
+NON_EXISTING_DOMAIN = "non-existing-domain"
+
+EMPTY_FILTER = {}
+
+FILTERING = [
+    {
+        "domain": Filtering.DEFAULT_DOMAIN,
+        "draft": DRAFT_FILTERING_DEFAULT_DOMAIN,
+        "active": ACTIVE_FILTERING_DEFAULT_DOMAIN,
+        "validation": FILTERING_VALIDATION_VALID,
+    },
+    {
+        "domain": OTHER_DOMAIN_ONE,
+        "draft": {},
+        "active": {},
+        "validation": FILTERING_VALIDATION_VALID,
+    },
+    {
+        "domain": OTHER_DOMAIN_TWO,
+        "draft": {},
+        "active": {},
+        "validation": FILTERING_VALIDATION_VALID,
+    },
+]
 
 
 def test_e2str():
@@ -44,6 +93,14 @@ def test_utc():
 @pytest.mark.asyncio
 async def test_sync_job(mock_responses):
     client = AsyncElasticsearch(hosts=["http://nowhere.com:9200"])
+
+    expected_filtering = {
+        "advanced_snippet": {
+            # "value" should be omitted by extracting content inside "value" and moving it one level up
+            "find": {"settings": {}}
+        },
+        "rules": [{"id": ACTIVE_RULE_ONE_ID}, {"id": ACTIVE_RULE_TWO_ID}],
+    }
 
     job = SyncJob("connector-id", client)
 
@@ -78,7 +135,7 @@ async def test_sync_job(mock_responses):
     )
 
     assert job.duration == -1
-    await job.start()
+    await job.start(filtering=ACTIVE_FILTERING_DEFAULT_DOMAIN)
     assert job.status == JobStatus.IN_PROGRESS
     assert job.job_id is not None
     await asyncio.sleep(0.2)
@@ -91,6 +148,7 @@ async def test_sync_job(mock_responses):
     assert len(sent_docs) == 2
     doc, update = sent_docs
     assert doc["status"] == "in_progress"
+    assert doc["connector"]["filtering"] == expected_filtering
     assert update["doc"]["status"] == "completed"
     assert update["doc"]["indexed_document_count"] == 12
     assert update["doc"]["deleted_document_count"] == 34
@@ -109,6 +167,7 @@ mongo = {
     "index_name": "search-airbnb",
     "service_type": "mongodb",
     "status": "configured",
+    "language": "en",
     "last_sync_status": "null",
     "last_sync_error": "",
     "last_synced": "",
@@ -341,11 +400,11 @@ async def test_sync_mongo(mock_responses, patch_logger):
 
 @pytest.mark.asyncio
 async def test_properties(mock_responses):
-
     connector_src = {
         "service_type": "test",
         "index_name": "search-some-index",
         "configuration": {},
+        "language": "en",
         "scheduling": {},
         "status": "created",
     }
@@ -375,38 +434,6 @@ async def test_properties(mock_responses):
         connector.status = 1234
 
 
-@pytest.mark.asyncio
-async def test_connectors_properties(mock_responses, set_env):
-    """Verifies that the Connector class has access to analysis_icu and language_code form config.
-
-    Args:
-        mock_responses (aioresponses.core.aioresponses): Fixture to mock the requests made.
-        set_env (None): Fixture to environment variable for config yml.
-    """
-    config = EnvYAML(CONFIG)
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
-    )
-
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={
-            "hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}
-        },
-        headers=headers,
-    )
-
-    connectors = BYOIndex(config["elasticsearch"])
-
-    query = connectors.build_docs_query([["mongodb"]])
-    async for connector in connectors.get_all_docs(query=query):
-        assert connector.analysis_icu == config["elasticsearch"]["analysis_icu"]
-        assert connector.language_code == config["elasticsearch"]["language_code"]
-
-    await connectors.close()
-
-
 class Banana(BaseDataSource):
     """Banana"""
 
@@ -434,6 +461,7 @@ async def test_prepare(mock_responses):
         "service_type": None,
         "index_name": "test",
         "configuration": {},
+        "language": "en",
         "scheduling": {"enabled": False},
     }
     connector = Connector(Index(), "1", doc, {})
@@ -447,3 +475,44 @@ async def test_prepare(mock_responses):
     await connector.prepare(config)
     assert connector.source_klass.__doc__ == "Banana"
     assert connector.status == Status.NEEDS_CONFIGURATION
+
+
+@pytest.mark.parametrize(
+    "filtering_json, domain, expected_filter",
+    [
+        (FILTERING, Filtering.DEFAULT_DOMAIN, ACTIVE_FILTERING_DEFAULT_DOMAIN),
+        (FILTERING, OTHER_DOMAIN_ONE, EMPTY_FILTER),
+        (FILTERING, OTHER_DOMAIN_TWO, EMPTY_FILTER),
+        # domains which do not exist should return an empty filter per default
+        (FILTERING, NON_EXISTING_DOMAIN, EMPTY_FILTER),
+        # if filtering is not present always return an empty filter
+        ([], Filtering.DEFAULT_DOMAIN, EMPTY_FILTER),
+        ([], NON_EXISTING_DOMAIN, EMPTY_FILTER),
+        (None, Filtering.DEFAULT_DOMAIN, EMPTY_FILTER),
+        (None, NON_EXISTING_DOMAIN, EMPTY_FILTER),
+    ],
+)
+def test_get_active_filter(filtering_json, domain, expected_filter):
+    filtering = Filtering(filtering_json)
+
+    assert filtering.get_active_filter(domain) == expected_filter
+
+
+@pytest.mark.parametrize(
+    "filtering, expected_transformed_filtering",
+    [
+        (
+            {"advanced_snippet": {"value": {"query": {}}}, "rules": []},
+            {"advanced_snippet": {"query": {}}, "rules": []},
+        ),
+        (
+            {"advanced_snippet": {"value": {}}, "rules": []},
+            {"advanced_snippet": {}, "rules": []},
+        ),
+        ({"advanced_snippet": {}, "rules": []}, {"advanced_snippet": {}, "rules": []}),
+        ({}, {"advanced_snippet": {}, "rules": []}),
+        (None, {"advanced_snippet": {}, "rules": []}),
+    ],
+)
+def test_transform_filtering(filtering, expected_transformed_filtering):
+    assert SyncJob.transform_filtering(filtering) == expected_transformed_filtering

@@ -5,7 +5,6 @@
 #
 """Tests the Google Cloud Storage source class methods.
 """
-import argparse
 import asyncio
 import json
 from unittest import mock
@@ -29,11 +28,10 @@ def get_mocked_source_object():
     Returns:
         GoogleCloudStorageDataSource: Mocked object of the data source class.
     """
-    connector = argparse.Namespace()
-    connector.configuration = DataSourceConfiguration(
-        {"service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS}
+    configuration = DataSourceConfiguration(
+        {"service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS, "retry_count": 0}
     )
-    mocked_gcs_object = GoogleCloudStorageDataSource(connector=connector)
+    mocked_gcs_object = GoogleCloudStorageDataSource(configuration=configuration)
     return mocked_gcs_object
 
 
@@ -63,14 +61,11 @@ async def test_empty_configuration():
     """Tests the validity of the configurations passed to the Google Cloud source class."""
 
     # Setup
-    connector = argparse.Namespace()
-    connector.configuration = DataSourceConfiguration(
-        {"service_account_credentials": ""}
-    )
+    configuration = DataSourceConfiguration({"service_account_credentials": ""})
 
     # Execute
     with pytest.raises(Exception, match="service_account_credentials can't be empty."):
-        _ = GoogleCloudStorageDataSource(connector=connector)
+        _ = GoogleCloudStorageDataSource(configuration=configuration)
 
 
 @pytest.mark.asyncio
@@ -104,9 +99,11 @@ async def test_ping_for_failed_connection(catch_stdout, patch_logger):
     mocked_gcs_object = get_mocked_source_object()
 
     # Execute
-
-    with pytest.raises(Exception, match="None could not be converted to *"):
-        await mocked_gcs_object.ping()
+    with mock.patch.object(
+        Aiogoogle, "discover", side_effect=Exception("Something went wrong")
+    ):
+        with pytest.raises(Exception):
+            await mocked_gcs_object.ping()
 
 
 @pytest.mark.parametrize(

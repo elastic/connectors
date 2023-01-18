@@ -8,10 +8,11 @@ Implementation of BYOC protocol.
 """
 import asyncio
 import time
+from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 
-from connectors.es import DEFAULT_LANGUAGE, ESIndex, defaults_for
+from connectors.es import DEFAULT_LANGUAGE, ESIndex, Mappings
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
 from connectors.utils import iso_utc, next_run
@@ -20,7 +21,6 @@ CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 PIPELINE = "ent-search-generic-ingestion"
 SYNC_DISABLED = -1
-DEFAULT_ANALYSIS_ICU = False
 
 
 def e2str(entry):
@@ -87,7 +87,6 @@ class BYOIndex(ESIndex):
         # grab all bulk options
         self.bulk_options = elastic_config.get("bulk", {})
         self.language_code = elastic_config.get("language_code", DEFAULT_LANGUAGE)
-        self.analysis_icu = elastic_config.get("analysis_icu", DEFAULT_ANALYSIS_ICU)
 
     async def save(self, connector):
         # we never update the configuration
@@ -105,10 +104,6 @@ class BYOIndex(ESIndex):
             id=connector.id,
             doc=document,
         )
-
-    # @TODO move to ESIndex?
-    async def preflight(self):
-        await self.check_exists(indices=[CONNECTORS_INDEX, JOBS_INDEX])
 
     def build_docs_query(self, native_service_types=None, connectors_ids=None):
         if native_service_types is None:
@@ -153,8 +148,6 @@ class BYOIndex(ESIndex):
             doc_source["_id"],
             doc_source["_source"],
             bulk_options=self.bulk_options,
-            language_code=self.language_code,
-            analysis_icu=self.analysis_icu,
         )
 
 
@@ -174,11 +167,15 @@ class SyncJob:
         msec = (self.completed_at - self.created_at).microseconds
         return round(msec / 9, 2)
 
-    async def start(self, trigger_method=JobTriggerMethod.SCHEDULED):
+    async def start(self, trigger_method=JobTriggerMethod.SCHEDULED, filtering=None):
+        if filtering is None:
+            filtering = {}
+
         self.status = JobStatus.IN_PROGRESS
         job_def = {
             "connector": {
                 "id": self.connector_id,
+                "filtering": SyncJob.transform_filtering(filtering),
             },
             "trigger_method": e2str(trigger_method),
             "status": e2str(self.status),
@@ -211,6 +208,38 @@ class SyncJob:
         job_def["status"] = e2str(self.status)
 
         return await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
+
+    @classmethod
+    def transform_filtering(cls, filtering):
+        # deepcopy to not change the reference resulting in changing .elastic-connectors filtering
+        filtering = (
+            {"advanced_snippet": {}, "rules": []}
+            if (filtering is None or len(filtering) == 0)
+            else deepcopy(filtering)
+        )
+
+        # extract value for sync job
+        filtering["advanced_snippet"] = filtering.get("advanced_snippet", {}).get(
+            "value", {}
+        )
+        return filtering
+
+
+class Filtering:
+    DEFAULT_DOMAIN = "DEFAULT"
+
+    def __init__(self, filtering):
+        self.filtering = filtering if filtering else []
+
+    def get_active_filter(self, domain=DEFAULT_DOMAIN):
+        return next(
+            (
+                filter_["active"]
+                for filter_ in self.filtering
+                if filter_["domain"] == domain
+            ),
+            {},
+        )
 
 
 class PipelineSettings:
@@ -246,8 +275,6 @@ class Connector:
         connector_id,
         doc_source,
         bulk_options,
-        language_code=DEFAULT_LANGUAGE,
-        analysis_icu=DEFAULT_ANALYSIS_ICU,
     ):
 
         self.doc_source = doc_source
@@ -262,8 +289,6 @@ class Connector:
         self._start_time = None
         self._hb = None
         self.bulk_options = bulk_options
-        self.language_code = language_code
-        self.analysis_icu = analysis_icu
         self.source_klass = None
         self.data_provider = None
 
@@ -277,6 +302,8 @@ class Connector:
         self.scheduling = doc_source["scheduling"]
         self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
         self._dirty = True
+        self._filtering = Filtering(doc_source.get("filtering", []))
+        self.language_code = doc_source["language"]
 
     @property
     def status(self):
@@ -304,6 +331,10 @@ class Connector:
     @property
     def configuration(self):
         return self._configuration
+
+    @property
+    def filtering(self):
+        return self._filtering
 
     @configuration.setter
     def configuration(self, value):
@@ -368,7 +399,7 @@ class Connector:
         trigger_method = (
             JobTriggerMethod.ON_DEMAND if self.sync_now else JobTriggerMethod.SCHEDULED
         )
-        job_id = await job.start(trigger_method)
+        job_id = await job.start(trigger_method, self.filtering.get_active_filter())
 
         self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = e2str(job.status)
@@ -501,7 +532,7 @@ class Connector:
                 logger.info("Sync forced")
 
             try:
-                self.data_provider = self.source_klass(self)
+                self.data_provider = self.source_klass(self.configuration)
             except Exception as e:
                 logger.critical(e, exc_info=True)
                 raise DataSourceError(
@@ -525,14 +556,13 @@ class Connector:
             await self.data_provider.ping()
             await asyncio.sleep(0)
 
-            mappings, settings = defaults_for(
+            mappings = Mappings.default_text_fields_mappings(
                 is_connectors_index=True,
-                language_code=self.language_code,
-                analysis_icu=self.analysis_icu,
             )
-            logger.debug("Preparing the index")
-            await elastic_server.prepare_index(
-                self.index_name, mappings=mappings, settings=settings
+
+            logger.debug("Preparing the content index")
+            await elastic_server.prepare_content_index(
+                self.index_name, mappings=mappings
             )
             await asyncio.sleep(0)
 
@@ -543,7 +573,7 @@ class Connector:
             result = await elastic_server.async_bulk(
                 self.index_name,
                 self.prepare_docs(self.data_provider),
-                self.data_provider.connector.pipeline,
+                self.pipeline,
                 options=bulk_options,
             )
             await self._sync_done(job, result)
