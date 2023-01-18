@@ -3,6 +3,8 @@ set -exu
 set -o pipefail
 
 NAME=$1
+PERF8=$2
+
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR="$SCRIPT_DIR/../.."
 PLATFORM='unknown'
