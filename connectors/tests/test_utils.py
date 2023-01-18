@@ -14,8 +14,8 @@ import tempfile
 import time
 
 import pytest
-from pympler import asizeof
 from freezegun import freeze_time
+from pympler import asizeof
 
 from connectors import utils
 from connectors.utils import (
