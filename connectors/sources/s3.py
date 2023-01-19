@@ -37,10 +37,10 @@ class S3DataSource(BaseDataSource):
     """Amazon S3"""
 
     def __init__(self, configuration):
-        """Setup connection to the Amazon S3.
+        """Set up the connection to the Amazon S3.
 
         Args:
-            connector (Connector): Object of the Connector class.
+            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
         self.session = aioboto3.Session()

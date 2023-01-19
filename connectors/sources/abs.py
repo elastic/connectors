@@ -30,10 +30,10 @@ MAX_CONCURRENT_DOWNLOADS = 100  # Max concurrent download supported by abs
 
 
 class AzureBlobStorageDataSource(BaseDataSource):
-    """Class to fetch documents from Azure Blob Storage"""
+    """Azure Blob Storage"""
 
     def __init__(self, configuration):
-        """Setup the connection to the azure base client
+        """Set up the connection to the azure base client
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.

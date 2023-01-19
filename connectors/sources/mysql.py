@@ -31,13 +31,13 @@ DEFAULT_SSL_CA = None
 
 
 class MySqlDataSource(BaseDataSource):
-    """Class to fetch and modify documents from MySQL server"""
+    """MySQL"""
 
     def __init__(self, configuration):
-        """Setup connection to the MySQL server.
+        """Set up the connection to the MySQL server.
 
         Args:
-            connector (Connector): Object of the Connector class
+            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
         self.retry_count = self.configuration["retry_count"]
