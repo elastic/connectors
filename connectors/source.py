@@ -101,7 +101,7 @@ class DataSourceConfiguration:
 
 
 class BaseDataSource:
-    """Base class, defines a lose contract."""
+    """Base class, defines a loose contract."""
 
     def __init__(self, configuration):
         self.configuration = configuration
