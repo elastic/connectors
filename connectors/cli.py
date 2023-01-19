@@ -99,10 +99,27 @@ async def _start_service(config, args, loop):
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.remove_signal_handler(sig)
 
-    service = SyncService(config, args)
+    services = [SyncService(config, args)]
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
-    await service.run()
+
+        def _shutdown(sig_name):
+            logger.info(f"Caught {sig_name}. Graceful shutdown.")
+            for service in services:
+                logger.info(f"Shutdown {service.__class__.__name__}...")
+                service.stop()
+
+        loop.add_signal_handler(sig, functools.partial(_shutdown, sig.name))
+
+    async def _run_service(service):
+        if "PERF8" in os.environ:
+            import perf8
+
+            async with perf8.measure():
+                return await service.run()
+        else:
+            return await service.run()
+
+    await asyncio.gather(*[_run_service(service) for service in services])
 
 
 def run(args):
