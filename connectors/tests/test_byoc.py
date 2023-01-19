@@ -11,11 +11,10 @@ from datetime import datetime
 import pytest
 from aioresponses import CallbackResult
 from elasticsearch import AsyncElasticsearch
-from envyaml import EnvYAML
 
 from connectors.byoc import (
-    BYOIndex,
     Connector,
+    ConnectorIndex,
     Filtering,
     JobStatus,
     Status,
@@ -168,6 +167,7 @@ mongo = {
     "index_name": "search-airbnb",
     "service_type": "mongodb",
     "status": "configured",
+    "language": "en",
     "last_sync_status": "null",
     "last_sync_error": "",
     "last_synced": "",
@@ -202,7 +202,7 @@ async def test_heartbeat(mock_responses, patch_logger):
             headers=headers,
         )
 
-    connectors = BYOIndex(config)
+    connectors = ConnectorIndex(config)
     conns = []
 
     query = connectors.build_docs_query([["mongodb"]])
@@ -232,7 +232,7 @@ async def test_connectors_get_list(mock_responses):
         headers=headers,
     )
 
-    connectors = BYOIndex(config)
+    connectors = ConnectorIndex(config)
     conns = []
     query = connectors.build_docs_query([["mongodb"]])
     async for connector in connectors.get_all_docs(query=query):
@@ -380,7 +380,7 @@ async def test_sync_mongo(mock_responses, patch_logger):
     )
 
     es = ElasticServer(config)
-    connectors = BYOIndex(config)
+    connectors = ConnectorIndex(config)
     service_config = {"sources": {"mongodb": "connectors.tests.test_byoc:Data"}}
 
     try:
@@ -404,6 +404,7 @@ async def test_properties(mock_responses):
         "service_type": "test",
         "index_name": "search-some-index",
         "configuration": {},
+        "language": "en",
         "scheduling": {},
         "status": "created",
     }
@@ -433,38 +434,6 @@ async def test_properties(mock_responses):
         connector.status = 1234
 
 
-@pytest.mark.asyncio
-async def test_connectors_properties(mock_responses, set_env):
-    """Verifies that the Connector class has access to analysis_icu and language_code form config.
-
-    Args:
-        mock_responses (aioresponses.core.aioresponses): Fixture to mock the requests made.
-        set_env (None): Fixture to environment variable for config yml.
-    """
-    config = EnvYAML(CONFIG)
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
-    )
-
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={
-            "hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}
-        },
-        headers=headers,
-    )
-
-    connectors = BYOIndex(config["elasticsearch"])
-
-    query = connectors.build_docs_query([["mongodb"]])
-    async for connector in connectors.get_all_docs(query=query):
-        assert connector.analysis_icu == config["elasticsearch"]["analysis_icu"]
-        assert connector.language_code == config["elasticsearch"]["language_code"]
-
-    await connectors.close()
-
-
 class Banana(BaseDataSource):
     """Banana"""
 
@@ -492,6 +461,7 @@ async def test_prepare(mock_responses):
         "service_type": None,
         "index_name": "test",
         "configuration": {},
+        "language": "en",
         "scheduling": {"enabled": False},
     }
     connector = Connector(Index(), "1", doc, {})

@@ -8,8 +8,6 @@ elasticsearch:
   max_wait_duration: 1
   initial_backoff_duration: 0
   backoff_multiplier: 0
-  language_code: ru
-  analysis_icu: true
 
 service:
   idling: 0.5

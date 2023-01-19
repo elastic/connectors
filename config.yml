@@ -16,8 +16,6 @@ elasticsearch:
   initial_backoff_duration: 1
   backoff_multiplier: 2
   log_level: info
-  language_code: en
-  analysis_icu: false
 
 service:
   idling: 30
