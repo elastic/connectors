@@ -11,50 +11,63 @@ from connectors.es import Mappings
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
 
+from connectors.filtering.validation import (
+    FilteringValidationState,
+    InvalidFilteringError,
+)
+
+
+class SyncJobRunningError(Exception):
+    pass
+
 
 class SyncJobRunner:
     """The class to run a sync job."""
 
     def __init__(
         self,
-        sources,
+        source_klass,
         sync_job,
         connector,
         elastic_server,
         bulk_options,
     ):
-        self.sources = sources
+        self.source_klass = source_klass
         self.sync_job = sync_job
+        self.job_id = self.sync_job.id
         self.connector = connector
+        self.connector_id = self.connector.id
         self.elastic_server = elastic_server
         self.bulk_options = bulk_options
         self._start_time = None
+        self.running = False
 
     async def execute(self):
-        await self.sync_job.claim()
+        if self.running:
+            raise SyncJobRunningError(f"Sync job #{self.job_id} is already running.")
 
-        self._start_time = time.time()
-        index_name = self.connector["index_name"]
-        service_type = self.connector["service_type"]
-        pipeline = PipelineSettings(self.connector.get("pipeline", {}))
-
-        fqn = self.sources[service_type]
-        configuration = DataSourceConfiguration(self.connector["configuration"])
-        try:
-            source_klass = get_source_klass(fqn)
-        except Exception as e:
-            logger.critical(e, exc_info=True)
-            raise DataSourceError(f"Could not instantiate {fqn} for {service_type}")
-
-        data_provider = source_klass(configuration)
-
-        if not await data_provider.changed():
-            logger.debug(f"No change in {service_type} data provider, skipping...")
+        self.running = True
+        if not await self.sync_job.claim():
+            logger.error(f"Unable to claim job #{self.job_id}")
             return
 
-        logger.debug(f"Syncing '{service_type}'")
         try:
-            logger.debug(f"Pinging the {source_klass} backend")
+            self._start_time = time.time()
+            await self._validate_filtering()
+
+            index_name = self.sync_job.connector["index_name"]
+            service_type = self.sync_job.connector["service_type"]
+            pipeline = PipelineSettings(self.sync_job.connector.get("pipeline", {}))
+
+            configuration = DataSourceConfiguration(self.sync_job.connector["configuration"])
+            data_provider = self.source_klass(configuration)
+
+            if not await data_provider.changed():
+                logger.debug(f"No change in {service_type} data provider, skipping...")
+                return
+
+            logger.debug(f"Syncing '{service_type}'")
+            logger.debug(f"Pinging the {self.source_klass} backend")
             await data_provider.ping()
             await asyncio.sleep(0)
 
@@ -107,3 +120,16 @@ class SyncJobRunner:
             f"Sync done: {indexed_count} indexed, {doc_deleted} "
             f" deleted. ({int(time.time() - self._start_time)} seconds)"
         )
+
+    async def _validate_filtering(self):
+        validation_result = await self.source_klass.validate_filtering(
+            self.sync_job.filtering.get_active_filter()
+        )
+        if validation_result.state != FilteringValidationState.VALID:
+            raise InvalidFilteringError(
+                f"Filtering in state {validation_result.state}. Expected: {FilteringValidationState.VALID}."
+            )
+        if len(validation_result.errors):
+            raise InvalidFilteringError(
+                f"Filtering validation errors present: {validation_result.errors}."
+            )
