@@ -14,6 +14,7 @@ import tempfile
 import time
 
 import pytest
+from freezegun import freeze_time
 from pympler import asizeof
 
 from connectors import utils
@@ -29,6 +30,7 @@ from connectors.utils import (
 )
 
 
+@freeze_time("2023-01-18 17:18:56.814003", tick=True)
 def test_next_run():
     # can run within two minutes
     assert next_run("1 * * * * *") < 120
