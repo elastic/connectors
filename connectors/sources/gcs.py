@@ -60,13 +60,13 @@ DEFAULT_PEM_FILE = os.path.join(
 
 
 class GoogleCloudStorageDataSource(BaseDataSource):
-    """Class to fetch documents from Google Cloud Storage."""
+    """Google Cloud Storage"""
 
     def __init__(self, configuration):
-        """Setup connection to the Google Cloud Storage Client.
+        """Set up the connection to the Google Cloud Storage Client.
 
         Args:
-            connector (Connector): Object of the Connector class.
+            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
         if not self.configuration["service_account_credentials"]:
