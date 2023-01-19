@@ -62,10 +62,10 @@ class PreflightCheck:
                     )
                     return False
                 else:
-                    logger.warn(
+                    logger.warning(
                         f"Attempt {attempts + 1}/{self.preflight_max_attempts} failed. Retrying..."
                     )
-                    logger.warn(str(e))
+                    logger.warning(str(e))
                     attempts += 1
                     await self._sleeps.sleep(self.preflight_idle)
         return False
