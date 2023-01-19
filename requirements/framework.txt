@@ -8,7 +8,7 @@ pympler==1.0.1
 cron-schedule-triggers==0.0.11
 pytz==2019.3
 python-dateutil==2.8.2
-aiogoogle==4.2.0
+aiogoogle==4.5.0
 uvloop==0.17.0; sys_platform != 'win32'
 fastjsonschema==2.16.2
 base64io==1.0.3
