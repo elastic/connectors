@@ -708,10 +708,8 @@ def test_pending_job_query_with_connectors_ids(mock_responses, set_env):
     config = load_config(CONFIG)
 
     connectors_ids = [1, 2]
-    sync_jobs_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    pending_jobs_query = sync_jobs_index.pending_job_query(
-        connectors_ids=connectors_ids
-    )
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    pending_jobs_query = sync_job_index.pending_job_query(connectors_ids=connectors_ids)
 
     # validate the query
     assert "bool" in pending_jobs_query
@@ -727,8 +725,8 @@ def test_orphaned_jobs_query(mock_responses, set_env):
     config = load_config(CONFIG)
 
     connectors_ids = [1, 2]
-    sync_jobs_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    orphaned_jobs_query = sync_jobs_index.orphaned_jobs_query(
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    orphaned_jobs_query = sync_job_index.orphaned_jobs_query(
         connectors_ids=connectors_ids
     )
 
@@ -742,8 +740,8 @@ def test_stuck_jobs_query(mock_responses, set_env):
     config = load_config(CONFIG)
 
     connectors_ids = [1, 2]
-    sync_jobs_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    stuck_jobs_query = sync_jobs_index.stuck_jobs_query(connectors_ids=connectors_ids)
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    stuck_jobs_query = sync_job_index.stuck_jobs_query(connectors_ids=connectors_ids)
 
     assert "bool" in stuck_jobs_query
     assert len(stuck_jobs_query["bool"]["filter"]) == 3
