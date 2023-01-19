@@ -50,10 +50,6 @@ class SyncService(BaseService):
         self.args = args
         self.idling = self.service_config["idling"]
         self.hb = self.service_config["heartbeat"]
-        self.preflight_max_attempts = int(
-            self.service_config.get("preflight_max_attempts", 10)
-        )
-        self.preflight_idle = int(self.service_config.get("preflight_idle", 30))
         self.connectors = None
 
     async def _one_sync(self, connector, es, sync_now):
