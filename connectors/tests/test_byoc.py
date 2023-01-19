@@ -622,7 +622,7 @@ def test_get_active_filter(domain, expected_filter):
         (None, DRAFT_FILTERING_DEFAULT_DOMAIN),
     ],
 )
-def test_get_active_filter(domain, expected_filter):
+def test_get_draft_filter(domain, expected_filter):
     filtering = Filtering(FILTERING)
 
     if domain is not None:
