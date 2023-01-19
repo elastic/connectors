@@ -11,8 +11,6 @@ Event loop
 - mirrors an Elasticsearch index with a collection of documents
 """
 import asyncio
-import os
-import time
 
 from connectors.byoc import (
     ConnectorIndex,
@@ -30,7 +28,6 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.services.base import BaseService
-from connectors.utils import CancellableSleeps
 
 
 async def _validate_filtering(connector):
@@ -51,40 +48,9 @@ class SyncService(BaseService):
     def __init__(self, config, args):
         super().__init__(config)
         self.args = args
-        self.errors = [0, time.time()]
-        self.service_config = self.config["service"]
         self.idling = self.service_config["idling"]
         self.hb = self.service_config["heartbeat"]
-        self.preflight_max_attempts = int(
-            self.service_config.get("preflight_max_attempts", 10)
-        )
-        self.preflight_idle = int(self.service_config.get("preflight_idle", 30))
-        self.running = False
-        self._sleeper = None
-        self._sleeps = CancellableSleeps()
         self.connectors = None
-
-    def raise_if_spurious(self, exception):
-        errors, first = self.errors
-        errors += 1
-
-        # if we piled up too many errors we raise and quit
-        if errors > self.service_config["max_errors"]:
-            raise exception
-
-        # we re-init every ten minutes
-        if time.time() - first > self.service_config["max_errors_span"]:
-            first = time.time()
-            errors = 0
-
-        self.errors[0] = errors
-        self.errors[1] = first
-
-    def stop(self):
-        self.running = False
-        self._sleeps.cancel()
-        if self.connectors is not None:
-            self.connectors.stop_waiting()
 
     async def _one_sync(self, connector, es, sync_now):
         if connector.native:
@@ -131,20 +97,9 @@ class SyncService(BaseService):
         finally:
             await connector.close()
 
-    async def run(self):
-        if "PERF8" in os.environ:
-            import perf8
-
-            async with perf8.measure():
-                return await self._run()
-        else:
-            return await self._run()
-
     async def _run(self):
         """Main event loop."""
-
-        self.connectors = ConnectorIndex(self.config["elasticsearch"])
-        self.running = True
+        self.connectors = ConnectorIndex(self.es_config)
 
         one_sync = self.args.one_sync
         sync_now = self.args.sync_now
@@ -160,10 +115,10 @@ class SyncService(BaseService):
             connectors_ids = []
 
         logger.info(
-            f"Service started, listening to events from {self.config['elasticsearch']['host']}"
+            f"Service started, listening to events from {self.es_config['host']}"
         )
 
-        es = ElasticServer(self.config["elasticsearch"])
+        es = ElasticServer(self.es_config)
         try:
             while self.running:
                 try:
@@ -184,7 +139,8 @@ class SyncService(BaseService):
                         break
                 await self._sleeps.sleep(self.idling)
         finally:
-            self.stop()
-            await self.connectors.close()
+            if self.connectors is not None:
+                self.connectors.stop_waiting()
+                await self.connectors.close()
             await es.close()
         return 0
