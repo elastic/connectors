@@ -22,7 +22,11 @@ from connectors.byoc import (
     e2str,
 )
 from connectors.byoei import ElasticServer
-from connectors.filtering.validation import InvalidFilteringError, validate_filtering
+from connectors.filtering.validation import (
+    InvalidFilteringError,
+    ValidationTarget,
+    validate_filtering,
+)
 from connectors.logger import logger
 from connectors.services.base import BaseService
 
@@ -69,7 +73,9 @@ class SyncService(BaseService):
                 # we can't sync in that state
                 logger.info(f"Can't sync with status `{e2str(connector.status)}`")
             else:
-                await validate_filtering(connector)
+                await validate_filtering(
+                    connector, self.connectors, ValidationTarget.DRAFT
+                )
                 await connector.sync(es, self.idling, sync_now)
 
             await asyncio.sleep(0)

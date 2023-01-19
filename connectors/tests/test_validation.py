@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, call
 
 import pytest
 
@@ -21,6 +21,7 @@ from connectors.filtering.validation import (
     FilterValidationError,
     InvalidFilteringError,
     SyncRuleValidationResult,
+    ValidationTarget,
     validate_filtering,
 )
 
@@ -959,15 +960,23 @@ def test_basic_rules_set_no_conflicting_policies_validation(
 @pytest.mark.asyncio
 async def test_validate_filtering(validation_result, should_raise):
     connector = Mock()
+    index = Mock()
+    index.update_filtering_validation = AsyncMock()
+
     connector.source_klass.validate_filtering = AsyncMock(
         return_value=validation_result
     )
 
-    if should_raise:
-        with pytest.raises(InvalidFilteringError):
-            await validate_filtering(connector)
-    else:
-        try:
-            await validate_filtering(connector)
-        except Exception as e:
-            assert False, f"Unexpected exception of type {(type(e))} raised"
+    # works for both targets
+    for _ in [ValidationTarget.DRAFT, ValidationTarget.ACTIVE]:
+        if should_raise:
+            with pytest.raises(InvalidFilteringError):
+                await validate_filtering(connector, index)
+                assert index.update_filtering_validation.call_args == [
+                    call(connector, validation_result)
+                ]
+        else:
+            try:
+                await validate_filtering(connector, index)
+            except Exception as e:
+                assert False, f"Unexpected exception of type {(type(e))} raised"

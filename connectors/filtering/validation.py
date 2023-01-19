@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import json
 from copy import deepcopy
 from enum import Enum
 
@@ -12,10 +13,28 @@ from connectors.filtering.basic_rule import BasicRule, Policy, Rule
 from connectors.logger import logger
 
 
-async def validate_filtering(connector):
-    validation_result = await connector.source_klass.validate_filtering(
+class ValidationTarget(Enum):
+    DRAFT = 1
+    ACTIVE = 2
+
+
+async def validate_filtering(
+    connector, index, validation_target=ValidationTarget.ACTIVE
+):
+    filter_to_validate = (
         connector.filtering.get_active_filter()
+        if validation_target == ValidationTarget.ACTIVE
+        else connector.filtering.get_draft_filter()
     )
+
+    validation_result = await connector.source_klass.validate_filtering(
+        filter_to_validate
+    )
+
+    await index.update_filtering_validation(
+        connector, validation_result, validation_target
+    )
+
     if validation_result.state != FilteringValidationState.VALID:
         raise InvalidFilteringError(
             f"Filtering in state {validation_result.state}. Expected: {FilteringValidationState.VALID}."
@@ -76,6 +95,16 @@ class FilteringValidationState(Enum):
     INVALID = 2
     EDITED = 3
 
+    @classmethod
+    def to_s(cls, value):
+        match value:
+            case FilteringValidationState.VALID:
+                return "valid"
+            case FilteringValidationState.INVALID:
+                return "invalid"
+            case FilteringValidationState.EDITED:
+                return "edited"
+
 
 class FilteringValidationResult:
     """Composed of multiple FilterValidationErrors.
@@ -118,6 +147,12 @@ class FilteringValidationResult:
             return False
 
         return self.state == other.state and self.errors == other.errors
+
+    def to_dict(self):
+        return {
+            "state": FilteringValidationState.to_s(self.state),
+            "errors": [vars(error) for error in self.errors],
+        }
 
 
 class FilteringValidator:
