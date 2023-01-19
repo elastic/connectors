@@ -58,7 +58,7 @@ def _set_sync_now_flag():
         doc = {"sync_now": True}
         es_client.update(index=CONNECTORS_INDEX, id=connector_id, doc=doc)
     except Exception as e:
-        print(f"Something bad happened: {e}")
+        print(f"Failed to set sync_now flag. Something bad happened: {e}")
     finally:
         es_client.close()
 
@@ -81,12 +81,13 @@ def _monitor_service(pid):
             if last_synced != new_last_synced or lapsed > timeout:
                 if lapsed > timeout:
                     print("Took too long to complete the sync job, give up!")
-                os.kill(pid, signal.SIGTERM)
                 break
             time.sleep(10)
     except Exception as e:
-        print(f"Something bad happened: {e}")
+        print(f"Failed to monitor the sync job. Something bad happened: {e}")
     finally:
+        # the process should always be killed, no matter the monitor succeeds, times out or raises errors.
+        os.kill(pid, signal.SIGTERM)
         es_client.close()
 
 
@@ -110,8 +111,7 @@ def main(args=None):
 
     if args.action == "monitor":
         if args.pid == 0:
-            print(f"Invalid pid specified, killing the current process...")
-            os.kill(os.getpid(), signal.SIGTERM)
+            print(f"Invalid pid specified, exit the monitor process.")
             return
         _monitor_service(args.pid)
         return
