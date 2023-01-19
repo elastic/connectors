@@ -56,12 +56,6 @@ class SyncService(BaseService):
         self.preflight_idle = int(self.service_config.get("preflight_idle", 30))
         self.connectors = None
 
-    def stop(self):
-        self.running = False
-        self._sleeps.cancel()
-        if self.connectors is not None:
-            self.connectors.stop_waiting()
-
     async def _one_sync(self, connector, es, sync_now):
         if connector.native:
             logger.debug(f"Connector {connector.id} natively supported")
@@ -149,7 +143,8 @@ class SyncService(BaseService):
                         break
                 await self._sleeps.sleep(self.idling)
         finally:
-            self.stop()
-            await self.connectors.close()
+            if self.connectors is not None:
+                self.connectors.stop_waiting()
+                await self.connectors.close()
             await es.close()
         return 0

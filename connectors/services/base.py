@@ -5,6 +5,7 @@
 #
 import time
 
+from connectors.logger import logger
 from connectors.utils import CancellableSleeps
 
 
@@ -22,7 +23,8 @@ class BaseService:
         self.errors = [0, time.time()]
 
     def stop(self):
-        raise NotImplementedError()
+        self.running = False
+        self._sleeps.cancel()
 
     async def _run(self):
         raise NotImplementedError()
@@ -34,7 +36,13 @@ class BaseService:
             )
 
         self.running = True
-        await self._run()
+        try:
+            await self._run()
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+            self.raise_if_spurious(e)
+        finally:
+            self.stop()
 
     def raise_if_spurious(self, exception):
         errors, first = self.errors
