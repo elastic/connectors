@@ -4,12 +4,12 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import base64
+from unittest import mock
 
 import pytest
+from elasticsearch import ConnectionError
 
 from connectors.es.client import ESClient
-from elasticsearch import ConnectionError
-from unittest import mock
 
 
 def test_esclient():
@@ -92,7 +92,11 @@ async def test_es_client_no_server(patch_logger):
     }
     es_client = ESClient(config)
 
-    with mock.patch.object(es_client.client, "info", side_effect=ConnectionError("Cannot connect - no route to host.")):
+    with mock.patch.object(
+        es_client.client,
+        "info",
+        side_effect=ConnectionError("Cannot connect - no route to host."),
+    ):
         # Execute
         assert not await es_client.ping()
         await es_client.close()
