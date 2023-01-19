@@ -9,6 +9,7 @@ import pytest
 
 from connectors.es.client import ESClient
 from elasticsearch import ConnectionError
+from unittest import mock
 
 
 def test_esclient():
@@ -91,7 +92,7 @@ async def test_es_client_no_server(patch_logger):
     }
     es_client = ESClient(config)
 
-    with mock.patch.object(es_client.client, "info", side_effect=ConnectionError()):
+    with mock.patch.object(es_client.client, "info", side_effect=ConnectionError("Cannot connect - no route to host.")):
         # Execute
         assert not await es_client.ping()
         await es_client.close()
