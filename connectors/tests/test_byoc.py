@@ -7,12 +7,15 @@ import asyncio
 import json
 import os
 from datetime import datetime
+from unittest import mock
+from unittest.mock import ANY, AsyncMock, Mock, call
 
 import pytest
 from aioresponses import CallbackResult
 from elasticsearch import AsyncElasticsearch
 
 from connectors.byoc import (
+    CONNECTORS_INDEX,
     Connector,
     ConnectorIndex,
     Filtering,
@@ -23,10 +26,13 @@ from connectors.byoc import (
     iso_utc,
 )
 from connectors.byoei import ElasticServer
+from connectors.filtering.validation import ValidationTarget
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
+
+DEFAULT_DOMAIN = "DEFAULT"
 
 DRAFT_ADVANCED_SNIPPET = {"value": {"query": {"options": {}}}}
 
@@ -38,17 +44,94 @@ ACTIVE_ADVANCED_SNIPPET = {"value": {"find": {"settings": {}}}}
 ACTIVE_RULE_ONE_ID = 3
 ACTIVE_RULE_TWO_ID = 4
 
+ACTIVE_FILTER_STATE = "active"
+DRAFT_FILTER_STATE = "draft"
+
+FILTERING_VALIDATION_VALID = {"state": "valid", "errors": []}
+
 DRAFT_FILTERING_DEFAULT_DOMAIN = {
     "advanced_snippet": DRAFT_ADVANCED_SNIPPET,
     "rules": [{"id": DRAFT_RULE_ONE_ID}, {"id": DRAFT_RULE_TWO_ID}],
+    "validation": FILTERING_VALIDATION_VALID,
 }
 
 ACTIVE_FILTERING_DEFAULT_DOMAIN = {
     "advanced_snippet": ACTIVE_ADVANCED_SNIPPET,
     "rules": [{"id": ACTIVE_RULE_ONE_ID}, {"id": ACTIVE_RULE_TWO_ID}],
+    "validation": FILTERING_VALIDATION_VALID,
 }
 
-FILTERING_VALIDATION_VALID = {"state": "valid", "errors": []}
+FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS = {
+    "state": "invalid",
+    "errors": [
+        {"ids": ["1"], "errors": ["some error"]},
+        {"ids": ["2"], "errors": ["another error"]},
+    ],
+}
+
+FILTERING_DEFAULT_DOMAIN_DRAFT_AFTER_UPDATE = {
+    "domain": DEFAULT_DOMAIN,
+    "draft": DRAFT_FILTERING_DEFAULT_DOMAIN
+    | {"validation": FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS},
+    "active": ACTIVE_FILTERING_DEFAULT_DOMAIN,
+}
+
+FILTERING_DEFAULT_DOMAIN_ACTIVE_AFTER_UPDATE = {
+    "domain": DEFAULT_DOMAIN,
+    "draft": DRAFT_FILTERING_DEFAULT_DOMAIN,
+    "active": ACTIVE_FILTERING_DEFAULT_DOMAIN
+    | {"validation": FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS},
+}
+
+FILTERING_DEFAULT_DOMAIN = {
+    "domain": DEFAULT_DOMAIN,
+    "draft": DRAFT_FILTERING_DEFAULT_DOMAIN,
+    "active": ACTIVE_FILTERING_DEFAULT_DOMAIN,
+}
+
+FILTERING_OTHER_DOMAIN = {
+    "domain": "other",
+    "draft": {},
+    "active": {},
+    "validation": {
+        "state": "invalid",
+        "errors": [{"ids": ["1"], "messages": ["some messages"]}],
+    },
+}
+
+CONNECTOR_ID = 1
+
+DOC_SOURCE_FILTERING = [FILTERING_DEFAULT_DOMAIN, FILTERING_OTHER_DOMAIN]
+
+DOC_SOURCE = {
+    "configuration": {"key": "value"},
+    "description": "description",
+    "error": "none",
+    "features": {},
+    "filtering": DOC_SOURCE_FILTERING,
+    "index_name": "search-index",
+    "name": "MySQL",
+    "pipeline": {},
+    "scheduling": {},
+    "service_type": "SERVICE",
+    "status": "connected",
+    "sync_now": False,
+}
+
+EXPECTED_FILTERING_AFTER_UPDATE_DRAFT = {
+    "filtering": [FILTERING_DEFAULT_DOMAIN_DRAFT_AFTER_UPDATE, FILTERING_OTHER_DOMAIN]
+}
+
+EXPECTED_FILTERING_AFTER_UPDATE_ACTIVE = {
+    "filtering": [FILTERING_DEFAULT_DOMAIN_ACTIVE_AFTER_UPDATE, FILTERING_OTHER_DOMAIN]
+}
+
+EXPECTED_UPDATED_DOC_SOURCE_DRAFT_FILTERING = (
+    DOC_SOURCE | EXPECTED_FILTERING_AFTER_UPDATE_DRAFT
+)
+EXPECTED_UPDATED_DOC_SOURCE_ACTIVE_FILTERING = (
+    DOC_SOURCE | EXPECTED_FILTERING_AFTER_UPDATE_ACTIVE
+)
 
 OTHER_DOMAIN_ONE = "other-domain-1"
 OTHER_DOMAIN_TWO = "other-domain-2"
@@ -78,6 +161,12 @@ FILTERING = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def patch_validate_filtering_in_byoc():
+    with mock.patch("connectors.byoc.validate_filtering", return_value=AsyncMock()):
+        yield
+
+
 def test_e2str():
     # The BYOC protocol uses lower case
     assert e2str(Status.NEEDS_CONFIGURATION) == "needs_configuration"
@@ -100,6 +189,7 @@ async def test_sync_job(mock_responses):
             "find": {"settings": {}}
         },
         "rules": [{"id": ACTIVE_RULE_ONE_ID}, {"id": ACTIVE_RULE_TWO_ID}],
+        "validation": FILTERING_VALIDATION_VALID,
     }
 
     job = SyncJob("connector-id", client)
@@ -478,24 +568,67 @@ async def test_prepare(mock_responses):
 
 
 @pytest.mark.parametrize(
-    "filtering_json, domain, expected_filter",
+    "filtering_json, filter_state, domain, expected_filter",
     [
-        (FILTERING, Filtering.DEFAULT_DOMAIN, ACTIVE_FILTERING_DEFAULT_DOMAIN),
-        (FILTERING, OTHER_DOMAIN_ONE, EMPTY_FILTER),
-        (FILTERING, OTHER_DOMAIN_TWO, EMPTY_FILTER),
+        (
+            FILTERING,
+            ACTIVE_FILTER_STATE,
+            Filtering.DEFAULT_DOMAIN,
+            ACTIVE_FILTERING_DEFAULT_DOMAIN,
+        ),
+        (
+            FILTERING,
+            DRAFT_FILTER_STATE,
+            Filtering.DEFAULT_DOMAIN,
+            DRAFT_FILTERING_DEFAULT_DOMAIN,
+        ),
+        (FILTERING, ACTIVE_FILTER_STATE, OTHER_DOMAIN_ONE, EMPTY_FILTER),
+        (FILTERING, ACTIVE_FILTER_STATE, OTHER_DOMAIN_TWO, EMPTY_FILTER),
         # domains which do not exist should return an empty filter per default
-        (FILTERING, NON_EXISTING_DOMAIN, EMPTY_FILTER),
+        (FILTERING, ACTIVE_FILTER_STATE, NON_EXISTING_DOMAIN, EMPTY_FILTER),
         # if filtering is not present always return an empty filter
-        ([], Filtering.DEFAULT_DOMAIN, EMPTY_FILTER),
-        ([], NON_EXISTING_DOMAIN, EMPTY_FILTER),
-        (None, Filtering.DEFAULT_DOMAIN, EMPTY_FILTER),
-        (None, NON_EXISTING_DOMAIN, EMPTY_FILTER),
+        ([], ACTIVE_FILTER_STATE, Filtering.DEFAULT_DOMAIN, EMPTY_FILTER),
+        ([], ACTIVE_FILTER_STATE, NON_EXISTING_DOMAIN, EMPTY_FILTER),
+        (None, ACTIVE_FILTER_STATE, Filtering.DEFAULT_DOMAIN, EMPTY_FILTER),
+        (None, ACTIVE_FILTER_STATE, NON_EXISTING_DOMAIN, EMPTY_FILTER),
     ],
 )
-def test_get_active_filter(filtering_json, domain, expected_filter):
+def test_get_filter(filtering_json, filter_state, domain, expected_filter):
     filtering = Filtering(filtering_json)
 
-    assert filtering.get_active_filter(domain) == expected_filter
+    assert filtering.get_filter(filter_state, domain) == expected_filter
+
+
+@pytest.mark.parametrize(
+    "domain, expected_filter",
+    [
+        (DEFAULT_DOMAIN, ACTIVE_FILTERING_DEFAULT_DOMAIN),
+        (None, ACTIVE_FILTERING_DEFAULT_DOMAIN),
+    ],
+)
+def test_get_active_filter(domain, expected_filter):
+    filtering = Filtering(FILTERING)
+
+    if domain is not None:
+        assert filtering.get_active_filter(domain) == expected_filter
+    else:
+        assert filtering.get_active_filter() == expected_filter
+
+
+@pytest.mark.parametrize(
+    "domain, expected_filter",
+    [
+        (DEFAULT_DOMAIN, DRAFT_FILTERING_DEFAULT_DOMAIN),
+        (None, DRAFT_FILTERING_DEFAULT_DOMAIN),
+    ],
+)
+def test_get_draft_filter(domain, expected_filter):
+    filtering = Filtering(FILTERING)
+
+    if domain is not None:
+        assert filtering.get_draft_filter(domain) == expected_filter
+    else:
+        assert filtering.get_draft_filter() == expected_filter
 
 
 @pytest.mark.parametrize(
@@ -516,3 +649,51 @@ def test_get_active_filter(filtering_json, domain, expected_filter):
 )
 def test_transform_filtering(filtering, expected_transformed_filtering):
     assert SyncJob.transform_filtering(filtering) == expected_transformed_filtering
+
+
+@pytest.mark.parametrize(
+    "validation_result, validation_target, expected_doc_source_update",
+    [
+        (
+            FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS,
+            ValidationTarget.DRAFT,
+            EXPECTED_UPDATED_DOC_SOURCE_DRAFT_FILTERING,
+        ),
+        (
+            FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS,
+            ValidationTarget.ACTIVE,
+            EXPECTED_UPDATED_DOC_SOURCE_ACTIVE_FILTERING,
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_update_filtering_validation(
+    validation_result, validation_target, expected_doc_source_update
+):
+    config = {"host": "https://nowhere.com:9200", "user": "tarek", "password": "blah"}
+
+    connector = Mock()
+    connector.doc_source = DOC_SOURCE
+    connector.id = CONNECTOR_ID
+
+    validation_result_mock = Mock()
+    validation_result_mock.to_dict = Mock(return_value=validation_result)
+
+    client = Mock()
+    client.update = AsyncMock(return_value=1)
+
+    index = ConnectorIndex(config)
+    index.client = client
+
+    await index.update_filtering_validation(
+        connector, validation_result_mock, validation_target
+    )
+
+    assert client.update.call_args_list == [
+        call(
+            index=CONNECTORS_INDEX,
+            id=CONNECTOR_ID,
+            doc=expected_doc_source_update,
+            retry_on_conflict=ANY,
+        )
+    ]

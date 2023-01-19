@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock, call
 
 import pytest
 
@@ -19,7 +19,10 @@ from connectors.filtering.validation import (
     FilteringValidationState,
     FilteringValidator,
     FilterValidationError,
+    InvalidFilteringError,
     SyncRuleValidationResult,
+    ValidationTarget,
+    validate_filtering,
 )
 
 RULE_ONE_ID = 1
@@ -934,3 +937,46 @@ def test_basic_rules_set_no_conflicting_policies_validation(
     basic_rule_ids = set(map(lambda rule: rule["id"], basic_rules))
 
     assert validation_results_rule_ids == basic_rule_ids
+
+
+@pytest.mark.parametrize(
+    "validation_result, should_raise",
+    [
+        (
+            FilteringValidationResult(),
+            False,
+        ),
+        (FilteringValidationResult(state=FilteringValidationState.EDITED), True),
+        (FilteringValidationResult(state=FilteringValidationState.INVALID), True),
+        (FilteringValidationResult(errors=["Some error"]), True),
+        (
+            FilteringValidationResult(
+                state=FilteringValidationState.INVALID, errors=["Some error"]
+            ),
+            True,
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_validate_filtering(validation_result, should_raise):
+    connector = Mock()
+    index = Mock()
+    index.update_filtering_validation = AsyncMock()
+
+    connector.source_klass.validate_filtering = AsyncMock(
+        return_value=validation_result
+    )
+
+    # works for both targets
+    for _ in [ValidationTarget.DRAFT, ValidationTarget.ACTIVE]:
+        if should_raise:
+            with pytest.raises(InvalidFilteringError):
+                await validate_filtering(connector, index)
+                assert index.update_filtering_validation.call_args == [
+                    call(connector, validation_result)
+                ]
+        else:
+            try:
+                await validate_filtering(connector, index)
+            except Exception as e:
+                assert False, f"Unexpected exception of type {(type(e))} raised"
