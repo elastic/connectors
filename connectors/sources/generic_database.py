@@ -13,6 +13,7 @@ DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
 DEFAULT_SSL_DISABLED = True
 DEFAULT_SSL_CA = None
+DEFAULT_PROTOCOL = "TCP"
 
 
 class GenericBaseDataSource(BaseDataSource):
@@ -100,6 +101,11 @@ class GenericBaseDataSource(BaseDataSource):
             "ssl_ca": {
                 "value": DEFAULT_SSL_CA,
                 "label": "SSL certificate",
+                "type": "str",
+            },
+            "oracle_protocol": {
+                "value": DEFAULT_PROTOCOL,
+                "label": "Oracle connection protocol",
                 "type": "str",
             },
         }
