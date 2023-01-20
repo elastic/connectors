@@ -7,6 +7,8 @@ import asyncio
 import copy
 import json
 import os
+from unittest import mock
+from unittest.mock import AsyncMock
 
 import pytest
 from aioresponses import CallbackResult
@@ -23,7 +25,6 @@ CONFIG_FILE_2 = os.path.join(os.path.dirname(__file__), "config_2.yml")
 CONFIG_HTTPS_FILE = os.path.join(os.path.dirname(__file__), "config_https.yml")
 CONFIG_MEM_FILE = os.path.join(os.path.dirname(__file__), "config_mem.yml")
 MEM_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "memconfig.yml")
-
 
 FAKE_CONFIG = {
     "api_key_id": "",
@@ -72,7 +73,6 @@ FAKE_CONFIG_PIPELINE_CHANGED["pipeline"] = {
 }
 FAKE_CONFIG_TS = copy.deepcopy(FAKE_CONFIG)
 FAKE_CONFIG_TS["service_type"] = "fake_ts"
-
 
 FAKE_CONFIG_NOT_NATIVE = {
     "api_key_id": "",
@@ -167,6 +167,20 @@ FAKE_CONFIG_UNKNOWN_SERVICE = {
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
 }
+
+
+@pytest.fixture(autouse=True)
+def patch_validate_filtering_in_sync():
+    with mock.patch(
+        "connectors.services.sync.validate_filtering", return_value=AsyncMock()
+    ) as validate_filtering_mock:
+        yield validate_filtering_mock
+
+
+@pytest.fixture(autouse=True)
+def patch_validate_filtering_in_byoc():
+    with mock.patch("connectors.byoc.validate_filtering", return_value=AsyncMock()):
+        yield
 
 
 class Args:
@@ -512,12 +526,16 @@ async def test_connector_service_filtering(
     mock_responses,
     patch_logger,
     set_env,
+    patch_validate_filtering_in_sync,
 ):
     service = await service_with_max_errors(mock_responses, config, 0)
+    patch_validate_filtering_in_sync.side_effect = (
+        [InvalidFilteringError] if should_raise_filtering_error else None
+    )
 
     if should_raise_filtering_error:
-        with pytest.raises(InvalidFilteringError):
-            await service.run()
+        await service.run()
+        patch_logger.assert_check(lambda log: isinstance(log, InvalidFilteringError))
     else:
         try:
             await service.run()

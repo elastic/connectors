@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from connectors.es import DEFAULT_LANGUAGE, ESIndex, Mappings
+from connectors.filtering.validation import ValidationTarget, validate_filtering
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
 from connectors.utils import iso_utc, next_run
@@ -20,6 +21,7 @@ from connectors.utils import iso_utc, next_run
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 PIPELINE = "ent-search-generic-ingestion"
+RETRY_ON_CONFLICT = 3
 SYNC_DISABLED = -1
 
 
@@ -103,6 +105,24 @@ class ConnectorIndex(ESIndex):
             index=CONNECTORS_INDEX,
             id=connector.id,
             doc=document,
+        )
+
+    async def update_filtering_validation(
+        self, connector, validation_result, validation_target=ValidationTarget.ACTIVE
+    ):
+        doc_to_update = deepcopy(connector.doc_source)
+
+        for filter_ in doc_to_update.get("filtering", []):
+            if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
+                filter_.get(e2str(validation_target), {"validation": {}})[
+                    "validation"
+                ] = validation_result.to_dict()
+
+        await self.client.update(
+            index=CONNECTORS_INDEX,
+            id=connector.id,
+            doc=doc_to_update,
+            retry_on_conflict=RETRY_ON_CONFLICT,
         )
 
     def build_docs_query(self, native_service_types=None, connectors_ids=None):
@@ -235,9 +255,15 @@ class Filtering:
         self.filtering = filtering
 
     def get_active_filter(self, domain=DEFAULT_DOMAIN):
+        return self.get_filter(filter_state="active", domain=domain)
+
+    def get_draft_filter(self, domain=DEFAULT_DOMAIN):
+        return self.get_filter(filter_state="draft", domain=domain)
+
+    def get_filter(self, filter_state="active", domain=DEFAULT_DOMAIN):
         return next(
             (
-                filter_["active"]
+                filter_[filter_state]
                 for filter_ in self.filtering
                 if filter_["domain"] == domain
             ),
@@ -572,6 +598,8 @@ class Connector:
             # allows the data provider to change the bulk options
             bulk_options = self.bulk_options.copy()
             self.data_provider.tweak_bulk_options(bulk_options)
+
+            await validate_filtering(self, self.index, ValidationTarget.ACTIVE)
 
             result = await elastic_server.async_bulk(
                 self.index_name,
