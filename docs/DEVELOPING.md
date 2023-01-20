@@ -72,7 +72,7 @@ Whether the connector should extract file content from network drive. Default va
 
 #### Content extraction
 
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/2e773285035f0c4f2ad1011a4f96ddac1a5d7a77/connectors/sources/network_drive.py#L19).
+The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/network_drive.py#L19).
 
 ### Connector Limitations
 
@@ -161,7 +161,7 @@ Whether the connector should extract file content from Amazon S3. Default value 
 
 #### Content extraction
 
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/2e773285035f0c4f2ad1011a4f96ddac1a5d7a77/connectors/sources/s3.py#L25).
+The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/s3.py#L25).
 
 ### Connector Limitations
 
