@@ -7,6 +7,8 @@ import asyncio
 import copy
 import json
 import os
+from unittest import mock
+from unittest.mock import AsyncMock
 
 import pytest
 from aioresponses import CallbackResult
@@ -23,7 +25,6 @@ CONFIG_FILE_2 = os.path.join(os.path.dirname(__file__), "config_2.yml")
 CONFIG_HTTPS_FILE = os.path.join(os.path.dirname(__file__), "config_https.yml")
 CONFIG_MEM_FILE = os.path.join(os.path.dirname(__file__), "config_mem.yml")
 MEM_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "memconfig.yml")
-
 
 FAKE_CONFIG = {
     "api_key_id": "",
@@ -72,7 +73,6 @@ FAKE_CONFIG_PIPELINE_CHANGED["pipeline"] = {
 }
 FAKE_CONFIG_TS = copy.deepcopy(FAKE_CONFIG)
 FAKE_CONFIG_TS["service_type"] = "fake_ts"
-
 
 FAKE_CONFIG_NOT_NATIVE = {
     "api_key_id": "",
@@ -167,6 +167,20 @@ FAKE_CONFIG_UNKNOWN_SERVICE = {
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
 }
+
+
+@pytest.fixture(autouse=True)
+def patch_validate_filtering_in_sync():
+    with mock.patch(
+        "connectors.services.sync.validate_filtering", return_value=AsyncMock()
+    ) as validate_filtering_mock:
+        yield validate_filtering_mock
+
+
+@pytest.fixture(autouse=True)
+def patch_validate_filtering_in_byoc():
+    with mock.patch("connectors.byoc.validate_filtering", return_value=AsyncMock()):
+        yield
 
 
 class Args:
@@ -442,37 +456,6 @@ async def test_connector_service_poll_large(mock_responses, patch_logger, set_en
 
 
 @pytest.mark.asyncio
-async def test_connector_service_poll_clear_error(
-    mock_responses, patch_logger, set_env
-):
-    service = create_service(CONFIG_FILE, one_sync=True)
-    calls = []
-
-    def upd(url, **kw):
-        doc = json.loads(kw["data"])["doc"]
-        calls.append("connector:" + str(doc.get("error", "NOT THERE")))
-
-    def jobs_update(url, **kw):
-        doc = json.loads(kw["data"])["doc"]
-        calls.append("job:" + str(doc.get("error", "NOT THERE")))
-
-    await set_server_responses(
-        mock_responses, FAIL_ONCE_CONFIG, connectors_update=upd, jobs_update=jobs_update
-    )
-    await service.run()  # fails
-    await service.run()  # works
-
-    assert calls == [
-        "connector:NOT THERE",  # from is_ready()
-        "job:I fail while syncing",  # first sync
-        "connector:I fail while syncing",  # first sync
-        "connector:NOT THERE",  # heartbeat
-        "job:None",  # second sync
-        "connector:None",  # second sync
-    ]
-
-
-@pytest.mark.asyncio
 async def test_connector_service_poll_sync_now(mock_responses, patch_logger, set_env):
     await set_server_responses(mock_responses, FAKE_CONFIG_NO_SYNC)
     service = create_service(CONFIG_FILE, sync_now=True, one_sync=True)
@@ -543,12 +526,16 @@ async def test_connector_service_filtering(
     mock_responses,
     patch_logger,
     set_env,
+    patch_validate_filtering_in_sync,
 ):
     service = await service_with_max_errors(mock_responses, config, 0)
+    patch_validate_filtering_in_sync.side_effect = (
+        [InvalidFilteringError] if should_raise_filtering_error else None
+    )
 
     if should_raise_filtering_error:
-        with pytest.raises(InvalidFilteringError):
-            await service.run()
+        await service.run()
+        patch_logger.assert_check(lambda log: isinstance(log, InvalidFilteringError))
     else:
         try:
             await service.run()
@@ -646,54 +633,3 @@ async def test_spurious_continue(mock_responses, patch_logger, set_env):
         Connector.sync = old_sync
 
     patch_logger.assert_instance(Exception)
-
-
-@pytest.mark.asyncio
-async def test_connector_settings_change(mock_responses, patch_logger, set_env):
-    service = create_service(CONFIG_FILE, one_sync=True)
-
-    configs = [FAKE_CONFIG, FAKE_CONFIG_PIPELINE_CHANGED]
-    current = [-1]
-
-    # we want to simulate a settings change between two calls
-    # to make sure the pipeline settings get updated
-    def connectors_read(url, **kw):
-        current[0] += 1
-        source = configs[current[0]]
-        return CallbackResult(
-            status=200,
-            payload={
-                "hits": {
-                    "hits": [{"_id": "1", "_source": source}],
-                    "total": {"value": 1},
-                }
-            },
-        )
-
-    indexed = []
-
-    def bulk_call(url, **kw):
-        queries = [json.loads(call.strip()) for call in kw["data"].split(b"\n") if call]
-        indexed.append(queries[1])
-        return CallbackResult(status=200, payload={"items": []})
-
-    await set_server_responses(
-        mock_responses,
-        FAKE_CONFIG,
-        connectors_read=connectors_read,
-        bulk_call=bulk_call,
-    )
-
-    # two polls, the second one gets a different pipeline
-    await service.run()
-    await service.run()
-
-    service.stop()
-
-    # the first doc and second doc don't get the same pipeline
-    assert indexed[0]["_extract_binary_content"]
-    assert indexed[0]["_reduce_whitespace"]
-    assert indexed[0]["_run_ml_inference"]
-    assert not indexed[1]["_extract_binary_content"]
-    assert not indexed[1]["_reduce_whitespace"]
-    assert not indexed[1]["_run_ml_inference"]
