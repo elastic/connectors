@@ -35,6 +35,10 @@ class GenericBaseDataSource(BaseDataSource):
         self.host = self.configuration["host"]
         self.port = self.configuration["port"]
         self.database = self.configuration["database"]
+        self.is_async = False
+        self.engine = None
+        self.dialect = ""
+        self.protocol = self.configuration["oracle_protocol"]
         self.connection = None
         self.queries = None
         self.ssl_disabled = self.configuration["ssl_disabled"]
@@ -130,16 +134,12 @@ class GenericBaseDataSource(BaseDataSource):
         if not (self.configuration["ssl_disabled"] or self.configuration["ssl_ca"]):
             raise Exception("SSL certificate must be configured.")
 
-    async def execute_query(
-        self, query_name, engine, fetch_many=False, is_async=True, **query_kwargs
-    ):
+    async def execute_query(self, query_name, fetch_many=False, **query_kwargs):
         """Executes a query and yield rows
 
         Args:
             query_name (str): Name of query.
-            engine (Engine): Database engine to be used.
             fetch_many (bool): Flag to use fetchmany method. Defaults to False.
-            is_async (bool, optional): Flag to indicates async/sync execution. Defaults to True.
 
         Raises:
             exception: Raise an exception after retrieving
@@ -159,10 +159,10 @@ class GenericBaseDataSource(BaseDataSource):
 
         while retry <= self.retry_count:
             try:
-                if is_async:
-                    cursor = await self._async_connect(query=query, engine=engine)
+                if self.is_async:
+                    cursor = await self._async_connect(query=query)
                 else:
-                    cursor = await self._sync_connect(query=query, engine=engine)
+                    cursor = await self._sync_connect(query=query)
                 if fetch_many:
                     # sending back column names only once
                     if yield_once:
@@ -204,18 +204,17 @@ class GenericBaseDataSource(BaseDataSource):
                 await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry)
                 retry += 1
 
-    async def _async_connect(self, query, engine):
+    async def _async_connect(self, query):
         """Execute the passed query on the Async supported Database server and return cursor.
 
         Args:
             query (str): Database query to be executed.
-            engine (str): Database engine to be used.
 
         Returns:
             cursor: Asynchronous cursor
         """
         try:
-            async with engine.connect() as connection:
+            async with self.engine.connect() as connection:
                 cursor = await connection.execute(text(query))
                 return cursor
         except Exception as exception:
@@ -230,12 +229,11 @@ class GenericBaseDataSource(BaseDataSource):
             return
         self.connection.close()
 
-    async def _sync_connect(self, query, engine):
+    async def _sync_connect(self, query):
         """Executes the passed query on the Non-Async supported Database server and return cursor.
 
         Args:
             query (str): Database query to be executed.
-            engine (Engine): Engine to connect with the Database server
 
         Returns:
             cursor: Synchronous cursor
@@ -243,7 +241,7 @@ class GenericBaseDataSource(BaseDataSource):
         try:
             loop = asyncio.get_running_loop()
             self.connection = await loop.run_in_executor(
-                executor=None, func=engine.connect
+                executor=None, func=self.engine.connect
             )
             cursor = await loop.run_in_executor(
                 executor=None, func=partial(self.connection.execute, statement=query)
@@ -255,13 +253,30 @@ class GenericBaseDataSource(BaseDataSource):
             )
             raise
 
-    async def fetch_documents(self, table, engine, is_async=True, schema=None):
+    def _create_engine(self):
+        """Create engine based on dialects"""
+        raise NotImplementedError
+
+    async def ping(self):
+        """Verify the connection with the database-server configured by user"""
+        logger.info("Validating the Connector Configuration...")
+        try:
+            self._validate_configuration()
+            self._create_engine()
+            await anext(
+                self.execute_query(
+                    query_name="PING",
+                )
+            )
+            logger.info(f"Successfully connected to {self.dialect}.")
+        except Exception:
+            raise Exception(f"Can't connect to {self.dialect} on {self.host}")
+
+    async def fetch_documents(self, table, schema=None):
         """Fetches all the table entries and format them in Elasticsearch documents
 
         Args:
             table (str): Name of table
-            engine (Engine): Engine to connect with the Database server
-            is_async (bool, optional): Flag to indicates async/sync execution. Defaults to True.
             schema (str): Name of schema. Defaults to None.
 
         Yields:
@@ -271,8 +286,6 @@ class GenericBaseDataSource(BaseDataSource):
             [[row_count]] = await anext(
                 self.execute_query(
                     query_name="TABLE_DATA_COUNT",
-                    engine=engine,
-                    is_async=is_async,
                     schema=schema,
                     table=table,
                 )
@@ -282,8 +295,6 @@ class GenericBaseDataSource(BaseDataSource):
                 columns = await anext(
                     self.execute_query(
                         query_name="TABLE_PRIMARY_KEY",
-                        engine=engine,
-                        is_async=is_async,
                         database=self.database,
                         schema=schema,
                         table=table,
@@ -306,8 +317,6 @@ class GenericBaseDataSource(BaseDataSource):
                         last_update_time = await anext(
                             self.execute_query(
                                 query_name="TABLE_LAST_UPDATE_TIME",
-                                engine=engine,
-                                is_async=is_async,
                                 database=self.database,
                                 schema=schema,
                                 table=table,
@@ -319,9 +328,7 @@ class GenericBaseDataSource(BaseDataSource):
                         last_update_time = None
                     streamer = self.execute_query(
                         query_name="TABLE_DATA",
-                        engine=engine,
                         fetch_many=True,
-                        is_async=is_async,
                         schema=schema,
                         table=table,
                     )
@@ -359,12 +366,10 @@ class GenericBaseDataSource(BaseDataSource):
                 f"Something went wrong while fetching document for table {table}. Error: {exception}"
             )
 
-    async def fetch_rows(self, engine, is_async=True, schema=None):
+    async def fetch_rows(self, schema=None):
         """Fetches all the rows from all the tables of the database.
 
         Args:
-            engine (Engine): Engine to connect with the Database server
-            is_async (bool, optional): Flag to indicates async/sync execution. Defaults to True.
             schema (str): Name of schema. Defaults to None.
 
         Yields:
@@ -374,8 +379,6 @@ class GenericBaseDataSource(BaseDataSource):
         list_of_tables = await anext(
             self.execute_query(
                 query_name="ALL_TABLE",
-                engine=engine,
-                is_async=is_async,
                 user=self.user.upper(),
                 database=self.database,
                 schema=schema,
@@ -386,8 +389,6 @@ class GenericBaseDataSource(BaseDataSource):
                 logger.debug(f"Found table: {table_name} in database: {self.database}.")
                 async for row in self.fetch_documents(
                     table=table_name,
-                    engine=engine,
-                    is_async=is_async,
                     schema=schema,
                 ):
                     yield row

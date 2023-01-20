@@ -9,7 +9,6 @@ from urllib.parse import quote
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from connectors.logger import logger
 from connectors.sources.generic_database import GenericBaseDataSource
 
 # Below schemas are system schemas and the tables of the systems schema's will not get indexed
@@ -27,7 +26,7 @@ QUERIES = {
 
 
 class PostgreSQLDataSource(GenericBaseDataSource):
-    """Class to fetch documents from Postgresql Server"""
+    """PostgreSQL"""
 
     def __init__(self, configuration):
         """Setup connection to the PostgreSQL database-server configured by user
@@ -37,22 +36,27 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         """
         super().__init__(configuration=configuration)
         self.connection_string = f"postgresql+asyncpg://{self.user}:{quote(self.password)}@{self.host}:{self.port}/{self.database}"
-        self.engine = None
         self.queries = QUERIES
+        self.is_async = True
+        self.dialect = "Postgresql"
 
-    async def ping(self):
-        """Verify the connection with the PostgreSQL database-server configured by user"""
-        logger.info("Validating the Connector Configuration...")
-        try:
-            self._validate_configuration()
-            self.engine = create_async_engine(
-                self.connection_string,
-                connect_args=self.get_connect_args() if not self.ssl_disabled else {},
-            )
-            await anext(self.execute_query(query_name="PING", engine=self.engine))
-            logger.info("Successfully connected to PostgreSQL.")
-        except Exception:
-            raise Exception(f"Can't connect to Postgresql Server on {self.host}")
+    def _create_engine(self):
+        """Create async engine for postgresql"""
+        self.engine = create_async_engine(
+            self.connection_string,
+            connect_args=self.get_connect_args() if not self.ssl_disabled else {},
+        )
+
+    def get_pem_format(self):
+        """Convert ca data into PEM format
+
+        Returns:
+            string: PEM format
+        """
+        self.ssl_ca = self.ssl_ca.replace(" ", "\n")
+        pem_format = " ".join(self.ssl_ca.split("\n", 1))
+        pem_format = " ".join(pem_format.rsplit("\n", 1))
+        return pem_format
 
     def get_connect_args(self):
         """Convert string to pem format and create a SSL context
@@ -60,9 +64,7 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         Returns:
             dictionary: Connection arguments
         """
-        self.ssl_ca = self.ssl_ca.replace(" ", "\n")
-        pem_format = " ".join(self.ssl_ca.split("\n", 1))
-        pem_format = " ".join(pem_format.rsplit("\n", 1))
+        pem_format = self.get_pem_format()
         ctx = ssl.create_default_context()
         ctx.load_verify_locations(cadata=pem_format)
         connect_args = {"ssl": ctx}
@@ -74,10 +76,8 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        schema_list = await anext(
-            self.execute_query(query_name="ALL_SCHEMAS", engine=self.engine)
-        )
+        schema_list = await anext(self.execute_query(query_name="ALL_SCHEMAS"))
         for [schema] in schema_list:
             if schema not in SYSTEM_SCHEMA:
-                async for row in self.fetch_rows(engine=self.engine, schema=schema):
+                async for row in self.fetch_rows(schema=schema):
                     yield row, None

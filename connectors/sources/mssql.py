@@ -8,7 +8,6 @@ from urllib.parse import quote
 
 from sqlalchemy import create_engine
 
-from connectors.logger import logger
 from connectors.sources.generic_database import GenericBaseDataSource
 
 # Below schemas are system schemas and the tables of the systems schema's will not get indexed
@@ -38,7 +37,7 @@ QUERIES = {
 
 
 class MSSQLDataSource(GenericBaseDataSource):
-    """Class to fetch documents from Microsoft SQL Server"""
+    """Microsoft SQL Server"""
 
     def __init__(self, configuration):
         """Setup connection to the Microsoft SQL database-server configured by user
@@ -48,25 +47,12 @@ class MSSQLDataSource(GenericBaseDataSource):
         """
         super().__init__(configuration=configuration)
         self.connection_string = f"mssql+pymssql://{self.user}:{quote(self.password)}@{self.host}:{self.port}/{self.database}"
-        self.engine = None
         self.queries = QUERIES
+        self.dialect = "Microsoft SQL"
 
-    async def ping(self):
-        """Verify the connection with the Microsoft SQL database-server configured by user"""
-        logger.info("Validating the Connector Configuration...")
-        try:
-            self._validate_configuration()
-            self.engine = create_engine(self.connection_string)
-            await anext(
-                self.execute_query(
-                    query_name="PING",
-                    engine=self.engine,
-                    is_async=False,
-                )
-            )
-            logger.info("Successfully connected to Microsoft SQL.")
-        except Exception:
-            raise Exception(f"Can't connect to Microsoft SQL Server on {self.host}")
+    def _create_engine(self):
+        """Create sync engine for mssql"""
+        self.engine = create_engine(self.connection_string)
 
     async def get_docs(self):
         """Executes the logic to fetch databases, tables and rows in async manner.
@@ -76,12 +62,12 @@ class MSSQLDataSource(GenericBaseDataSource):
         """
         schema_list = await anext(
             self.execute_query(
-                query_name="ALL_SCHEMAS", engine=self.engine, is_async=False
+                query_name="ALL_SCHEMAS",
             )
         )
         for [schema] in schema_list:
             if schema not in SYSTEM_SCHEMA:
                 async for row in self.fetch_rows(
-                    engine=self.engine, schema=schema, is_async=False
+                    schema=schema,
                 ):
                     yield row, None

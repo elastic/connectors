@@ -8,7 +8,6 @@ from urllib.parse import quote
 
 from sqlalchemy import create_engine
 
-from connectors.logger import logger
 from connectors.sources.generic_database import GenericBaseDataSource
 
 QUERIES = {
@@ -22,7 +21,7 @@ QUERIES = {
 
 
 class OracleDataSource(GenericBaseDataSource):
-    """Class to fetch documents from Oracle Server"""
+    """Oracle Database"""
 
     def __init__(self, configuration):
         """Setup connection to the Oracle database-server configured by user
@@ -31,24 +30,17 @@ class OracleDataSource(GenericBaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self.connection_string = f"oracle://{self.user}:{quote(self.password)}@{self.host}:{self.port}/{self.database}"
-        self.engine = None
+        self.is_async = False
+        self.dsn = f"(DESCRIPTION=(ADDRESS=(PROTOCOL={self.protocol})(HOST={self.host})(PORT={self.port}))(CONNECT_DATA=(SID={self.database})))"
+        self.connection_string = (
+            f"oracle://{self.user}:{quote(self.password)}@{self.dsn}"
+        )
         self.queries = QUERIES
+        self.dialect = "Oracle"
 
-    async def ping(self):
-        """Verify the connection with the Oracle database-server configured by user"""
-        logger.info("Validating the Connector Configuration...")
-        try:
-            self._validate_configuration()
-            self.engine = create_engine(self.connection_string)
-            await anext(
-                self.execute_query(
-                    query_name="PING", engine=self.engine, is_async=False
-                )
-            )
-            logger.info("Successfully connected to Oracle.")
-        except Exception:
-            raise Exception(f"Can't connect to Oracle Server on {self.host}")
+    def _create_engine(self):
+        """Create sync engine for oracle"""
+        self.engine = create_engine(self.connection_string)
 
     async def get_docs(self):
         """Executes the logic to fetch databases, tables and rows in async manner.
@@ -56,5 +48,5 @@ class OracleDataSource(GenericBaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        async for row in self.fetch_rows(engine=self.engine, is_async=False):
+        async for row in self.fetch_rows():
             yield row, None
