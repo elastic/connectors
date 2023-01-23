@@ -15,7 +15,6 @@ from aioresponses import CallbackResult
 
 from connectors.byoc import (
     CONNECTORS_INDEX,
-    JOBS_INDEX,
     STUCK_JOBS_THRESHOLD,
     Connector,
     ConnectorIndex,
@@ -28,8 +27,8 @@ from connectors.byoc import (
     iso_utc,
 )
 from connectors.byoei import ElasticServer
-from connectors.filtering.validation import ValidationTarget
 from connectors.config import load_config
+from connectors.filtering.validation import ValidationTarget
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 
@@ -733,7 +732,6 @@ def test_orphaned_jobs_query(mock_responses, set_env):
     assert orphaned_jobs_query == {
         "bool": {"must_not": {"terms": {"connector.id": connectors_ids}}}
     }
-
 
 
 def test_stuck_jobs_query(mock_responses, set_env):
