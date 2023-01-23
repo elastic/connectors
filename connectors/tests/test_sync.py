@@ -191,7 +191,10 @@ class Args:
 
 def create_service(config_file, **options):
     config = load_config(config_file)
-    return SyncService(config, Args(**options))
+    service = SyncService(config, Args(**options))
+    service.idling = 0
+
+    return service
 
 
 async def set_server_responses(
