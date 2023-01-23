@@ -172,15 +172,18 @@ class ConnectorIndex(ESIndex):
 
 
 class SyncJob:
-    def __init__(self, elastic_index, connector_id, doc_source=dict()):
+    def __init__(self, elastic_index, connector_id, doc_source=None):
         self.connector_id = connector_id
         self.elastic_index = elastic_index
         self.created_at = datetime.now(timezone.utc)
         self.completed_at = None
         self.job_id = None
         self.status = None
-        self.doc_source = doc_source
         self.client = elastic_index.client
+        if doc_source is None:
+            doc_source = dict()
+
+        self.doc_source = doc_source
 
     @property
     def duration(self):
