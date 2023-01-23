@@ -16,7 +16,7 @@ from connectors.es import DEFAULT_LANGUAGE, ESIndex, Mappings
 from connectors.filtering.validation import ValidationTarget, validate_filtering
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
-from connectors.utils import iso_utc, next_run
+from connectors.utils import iso_utc, nested_get, next_run
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
@@ -285,6 +285,49 @@ class PipelineSettings:
         )
 
 
+class Features:
+
+    BASIC_RULES_NEW = "basic_rules_new"
+    ADVANCED_RULES_NEW = "advanced_rules_new"
+
+    # keep backwards compatibility
+    BASIC_RULES_OLD = "basic_rules_old"
+    ADVANCED_RULES_OLD = "advanced_rules_old"
+
+    def __init__(self, features=None):
+        if features is None:
+            features = {}
+
+        self.features = features
+
+    def sync_rules_enabled(self):
+        return any(
+            [
+                self.feature_enabled(Features.BASIC_RULES_NEW),
+                self.feature_enabled(Features.BASIC_RULES_OLD),
+                self.feature_enabled(Features.ADVANCED_RULES_NEW),
+                self.feature_enabled(Features.ADVANCED_RULES_OLD),
+            ]
+        )
+
+    def feature_enabled(self, feature):
+        match feature:
+            case Features.BASIC_RULES_NEW:
+                return nested_get(
+                    self.features, ["sync_rules", "basic", "enabled"], default=False
+                )
+            case Features.ADVANCED_RULES_NEW:
+                return nested_get(
+                    self.features, ["sync_rules", "advanced", "enabled"], default=False
+                )
+            case Features.BASIC_RULES_OLD:
+                return self.features.get("filtering_rules", False)
+            case Features.ADVANCED_RULES_OLD:
+                return self.features.get("filtering_advanced_config", False)
+            case _:
+                return False
+
+
 class Connector:
     """Represents one doc in `.elastic-connectors` and triggers sync.
 
@@ -333,6 +376,7 @@ class Connector:
         self._dirty = True
         self._filtering = Filtering(doc_source.get("filtering", []))
         self.language_code = doc_source["language"]
+        self.features = Features(doc_source.get("features", {}))
 
     @property
     def status(self):
@@ -599,7 +643,8 @@ class Connector:
             bulk_options = self.bulk_options.copy()
             self.data_provider.tweak_bulk_options(bulk_options)
 
-            await validate_filtering(self, self.index, ValidationTarget.ACTIVE)
+            if self.features.sync_rules_enabled():
+                await validate_filtering(self, self.index, ValidationTarget.ACTIVE)
 
             result = await elastic_server.async_bulk(
                 self.index_name,
