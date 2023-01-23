@@ -39,15 +39,15 @@ def inject_lines(table, cursor, start, lines):
         start (int): Starting row
         lines (int): Number of rows
     """
-    raws = []
-    for raw_id in range(lines):
-        raw_id += start
-        raws.append((f"user_{raw_id}", raw_id, BIG_TEXT))
+    rows = []
+    for row_id in range(lines):
+        row_id += start
+        rows.append((f"user_{row_id}", row_id, BIG_TEXT))
     sql_query = (
         f"INSERT INTO customers_{table}"
         + "(name, age, description) VALUES (%s, %s, %s)"
     )
-    cursor.executemany(sql_query, raws)
+    cursor.executemany(sql_query, rows)
 
 
 def load():
