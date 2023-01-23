@@ -643,7 +643,9 @@ class Connector:
             bulk_options = self.bulk_options.copy()
             self.data_provider.tweak_bulk_options(bulk_options)
 
-            if self.features.sync_rules_enabled():
+            sync_rules_enabled = self.features.sync_rules_enabled()
+
+            if sync_rules_enabled:
                 await validate_filtering(self, self.index, ValidationTarget.ACTIVE)
 
             result = await elastic_server.async_bulk(
@@ -651,6 +653,7 @@ class Connector:
                 self.prepare_docs(self.data_provider),
                 self.pipeline,
                 filtering=self.filtering,
+                sync_rules_enabled=sync_rules_enabled,
                 options=bulk_options,
             )
             await self._sync_done(job, result)
