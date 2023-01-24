@@ -65,7 +65,7 @@ class Bulker:
 
     The bulk requests are controlled in several ways:
     - `chunk_size` -- a maximum number of operations to send per request
-    - `chunk_mem_size` -- a maximum size in MiB for the each bulk request
+    - `chunk_mem_size` -- a maximum size in MiB for each bulk request
     - `max_concurrency` -- a maximum number of concurrent bulk requests
 
     Extra options:
@@ -255,15 +255,15 @@ class Fetcher:
                     # If the doc has a timestamp, we can use it to see if it has
                     # been modified. This reduces the bulk size a *lot*
                     #
-                    # Some backends do not know how to do this so it's optional.
-                    # For them we update the docs in any case.
+                    # Some backends do not know how to do this, so it's optional.
+                    # For these, we update the docs in any case.
                     if TIMESTAMP_FIELD in doc and ts == doc[TIMESTAMP_FIELD]:
                         # cancel the download
                         if lazy_download is not None:
                             await lazy_download(doit=False)
                         continue
 
-                    # the doc exists but we are still overwiting it with `index`
+                    # the doc exists, but we are still overwriting it with `index`
                     operation = OP_INDEX
                     self.total_docs_updated += 1
                 else:

@@ -537,7 +537,7 @@ class Connector:
 
     async def sync(self, elastic_server, idling, sync_now=False):
         # If anything bad happens before we create a sync job
-        # (like bad scheduling config, etc)
+        # (like bad scheduling config, etc.)
         #
         # we will raise the error in the logs here and let Kibana knows
         # by toggling the status and setting the error and status field
