@@ -172,13 +172,18 @@ class ConnectorIndex(ESIndex):
 
 
 class SyncJob:
-    def __init__(self, connector_id, elastic_client):
+    def __init__(self, elastic_index, connector_id, doc_source=None):
         self.connector_id = connector_id
-        self.client = elastic_client
+        self.elastic_index = elastic_index
         self.created_at = datetime.now(timezone.utc)
         self.completed_at = None
         self.job_id = None
         self.status = None
+        self.client = elastic_index.client
+        if doc_source is None:
+            doc_source = dict()
+
+        self.doc_source = doc_source
 
     @property
     def duration(self):
@@ -424,7 +429,7 @@ class Connector:
         return next_run(self.scheduling["interval"])
 
     async def _sync_starts(self):
-        job = SyncJob(self.id, self.client)
+        job = SyncJob(connector_id=self.id, elastic_index=self.index)
         trigger_method = (
             JobTriggerMethod.ON_DEMAND if self.sync_now else JobTriggerMethod.SCHEDULED
         )
@@ -616,3 +621,88 @@ class Connector:
         finally:
             self._syncing = False
             self._start_time = None
+
+
+STUCK_JOBS_THRESHOLD = 60  # 60 seconds
+
+
+class SyncJobIndex(ESIndex):
+    """
+    Represents Elasticsearch index for sync jobs
+
+    Args:
+        elastic_config (dict): Elasticsearch configuration and credentials
+    """
+
+    def __init__(self, elastic_config):
+        super().__init__(index_name=JOBS_INDEX, elastic_config=elastic_config)
+
+    def _create_object(self, doc_source):
+        """
+        Args:
+            doc_source (dict): A raw Elasticsearch document
+        Returns:
+            SyncJob
+        """
+        return SyncJob(
+            self,
+            connector_id=doc_source["_source"]["connector"]["id"],
+            doc_source=doc_source["_source"],
+        )
+
+    def pending_job_query(self, connectors_ids):
+        """
+        Args:
+            connectors_ids (list of int): A list of connectors IDs
+        Returns:
+            dict
+        """
+        status_term = {"status": [e2str(JobStatus.PENDING)]}
+
+        query = {
+            "bool": {
+                "must": [
+                    {"terms": status_term},
+                    {"terms": {"connector.id": connectors_ids}},
+                ]
+            }
+        }
+
+        return query
+
+    def orphaned_jobs_query(self, connectors_ids):
+        """
+        Args:
+            connectors_ids (list of int): A list of connectors IDs
+        Returns:
+            dict
+        """
+        query = {"bool": {"must_not": {"terms": {"connector.id": connectors_ids}}}}
+
+        return query
+
+    def stuck_jobs_query(self, connectors_ids):
+        """
+        Args:
+            connectors_ids (list of int): A list of connectors IDs
+        Returns:
+            dict
+        """
+        query = {
+            "bool": {
+                "filter": [
+                    {"terms": {"connector.id": connectors_ids}},
+                    {
+                        "terms": {
+                            "status": [
+                                e2str(JobStatus.IN_PROGRESS),
+                                e2str(JobStatus.CANCELING),
+                            ]
+                        }
+                    },
+                    {"range": {"last_seen": {"lte": f"now-{STUCK_JOBS_THRESHOLD}s"}}},
+                ]
+            }
+        }
+
+        return query
