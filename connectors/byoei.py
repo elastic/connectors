@@ -65,7 +65,7 @@ class Bulker:
 
     The bulk requests are controlled in several ways:
     - `chunk_size` -- a maximum number of operations to send per request
-    - `chunk_mem_size` -- a maximum size in MiB for the each bulk request
+    - `chunk_mem_size` -- a maximum size in MiB for each bulk request
     - `max_concurrency` -- a maximum number of concurrent bulk requests
 
     Extra options:
@@ -178,6 +178,7 @@ class Fetcher:
         index,
         existing_ids,
         filtering=Filtering(),
+        sync_rules_enabled=False,
         queue_size=DEFAULT_QUEUE_SIZE,
         display_every=DEFAULT_DISPLAY_EVERY,
         concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
@@ -196,8 +197,10 @@ class Fetcher:
         self.total_docs_deleted = 0
         self.fetch_error = None
         self.filtering = filtering
-        self.basic_rule_engine = BasicRuleEngine(
-            parse(filtering.get_active_filter().get("rules", []))
+        self.basic_rule_engine = (
+            BasicRuleEngine(parse(filtering.get_active_filter().get("rules", [])))
+            if sync_rules_enabled
+            else None
         )
         self.display_every = display_every
         self.concurrent_downloads = concurrent_downloads
@@ -245,7 +248,9 @@ class Fetcher:
 
                 doc_id = doc["id"] = doc.pop("_id")
 
-                if not self.basic_rule_engine.should_ingest(doc):
+                if self.basic_rule_engine and not self.basic_rule_engine.should_ingest(
+                    doc
+                ):
                     continue
 
                 if doc_id in self.existing_ids:
@@ -255,15 +260,15 @@ class Fetcher:
                     # If the doc has a timestamp, we can use it to see if it has
                     # been modified. This reduces the bulk size a *lot*
                     #
-                    # Some backends do not know how to do this so it's optional.
-                    # For them we update the docs in any case.
+                    # Some backends do not know how to do this, so it's optional.
+                    # For these, we update the docs in any case.
                     if TIMESTAMP_FIELD in doc and ts == doc[TIMESTAMP_FIELD]:
                         # cancel the download
                         if lazy_download is not None:
                             await lazy_download(doit=False)
                         continue
 
-                    # the doc exists but we are still overwiting it with `index`
+                    # the doc exists, but we are still overwriting it with `index`
                     operation = OP_INDEX
                     self.total_docs_updated += 1
                 else:
@@ -410,6 +415,7 @@ class ElasticServer(ESClient):
         generator,
         pipeline,
         filtering=Filtering(),
+        sync_rules_enabled=False,
         options=None,
     ):
         if options is None:
@@ -440,6 +446,7 @@ class ElasticServer(ESClient):
             index,
             existing_ids,
             filtering=filtering,
+            sync_rules_enabled=sync_rules_enabled,
             queue_size=queue_size,
             display_every=display_every,
             concurrent_downloads=concurrent_downloads,
