@@ -41,6 +41,9 @@ FAKE_CONFIG = {
         "reduce_whitespace": True,
         "run_ml_inference": True,
     },
+    "features": {
+        "sync_rules": {"advanced": {"enabled": True}, "basic": {"enabled": True}}
+    },
     "index_name": "search-airbnb",
     "service_type": "fake",
     "status": "configured",
@@ -116,6 +119,14 @@ FAIL_FILTERING_EDITED_CONFIG["service_type"] = "filtering_state_edited"
 
 FAIL_FILTERING_ERRORS_PRESENT_CONFIG = copy.deepcopy(FAKE_CONFIG)
 FAIL_FILTERING_ERRORS_PRESENT_CONFIG["service_type"] = "filtering_errors_present"
+
+ALL_SYNC_RULES_FEATURES_DISABLED = {
+    "sync_rules": {"advanced": {"enabled": False}, "basic": {"enabled": False}},
+    "filtering_advanced_config": False,
+    "filtering_rules": False,
+}
+
+NO_FEATURES_PRESENT = {}
 
 FAKE_CONFIG_FAIL_SERVICE = {
     "api_key_id": "",
@@ -520,6 +531,17 @@ async def service_with_max_errors(mock_responses, config, max_errors):
         (FAIL_FILTERING_EDITED_CONFIG, True),
         (FAIL_FILTERING_ERRORS_PRESENT_CONFIG, True),
         (FAKE_FILTERING_VALID_CONFIG, False),
+        (FAIL_FILTERING_INVALID_CONFIG | ALL_SYNC_RULES_FEATURES_DISABLED, False),
+        (FAIL_FILTERING_EDITED_CONFIG | ALL_SYNC_RULES_FEATURES_DISABLED, False),
+        (
+            FAIL_FILTERING_ERRORS_PRESENT_CONFIG | ALL_SYNC_RULES_FEATURES_DISABLED,
+            False,
+        ),
+        (FAKE_FILTERING_VALID_CONFIG | ALL_SYNC_RULES_FEATURES_DISABLED, False),
+        (FAIL_FILTERING_INVALID_CONFIG | NO_FEATURES_PRESENT, False),
+        (FAIL_FILTERING_EDITED_CONFIG | NO_FEATURES_PRESENT, False),
+        (FAIL_FILTERING_ERRORS_PRESENT_CONFIG | NO_FEATURES_PRESENT, False),
+        (FAKE_FILTERING_VALID_CONFIG | NO_FEATURES_PRESENT, False),
     ],
 )
 @pytest.mark.asyncio

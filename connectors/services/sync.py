@@ -73,9 +73,11 @@ class SyncService(BaseService):
                 # we can't sync in that state
                 logger.info(f"Can't sync with status `{e2str(connector.status)}`")
             else:
-                await validate_filtering(
-                    connector, self.connectors, ValidationTarget.DRAFT
-                )
+                if connector.features.sync_rules_enabled():
+                    await validate_filtering(
+                        connector, self.connectors, ValidationTarget.DRAFT
+                    )
+
                 await connector.sync(es, self.idling, sync_now)
 
             await asyncio.sleep(0)

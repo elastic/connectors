@@ -178,6 +178,7 @@ class Fetcher:
         index,
         existing_ids,
         filtering=Filtering(),
+        sync_rules_enabled=False,
         queue_size=DEFAULT_QUEUE_SIZE,
         display_every=DEFAULT_DISPLAY_EVERY,
         concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
@@ -196,8 +197,10 @@ class Fetcher:
         self.total_docs_deleted = 0
         self.fetch_error = None
         self.filtering = filtering
-        self.basic_rule_engine = BasicRuleEngine(
-            parse(filtering.get_active_filter().get("rules", []))
+        self.basic_rule_engine = (
+            BasicRuleEngine(parse(filtering.get_active_filter().get("rules", [])))
+            if sync_rules_enabled
+            else None
         )
         self.display_every = display_every
         self.concurrent_downloads = concurrent_downloads
@@ -245,7 +248,9 @@ class Fetcher:
 
                 doc_id = doc["id"] = doc.pop("_id")
 
-                if not self.basic_rule_engine.should_ingest(doc):
+                if self.basic_rule_engine and not self.basic_rule_engine.should_ingest(
+                    doc
+                ):
                     continue
 
                 if doc_id in self.existing_ids:
@@ -410,6 +415,7 @@ class ElasticServer(ESClient):
         generator,
         pipeline,
         filtering=Filtering(),
+        sync_rules_enabled=False,
         options=None,
     ):
         if options is None:
@@ -440,6 +446,7 @@ class ElasticServer(ESClient):
             index,
             existing_ids,
             filtering=filtering,
+            sync_rules_enabled=sync_rules_enabled,
             queue_size=queue_size,
             display_every=display_every,
             concurrent_downloads=concurrent_downloads,

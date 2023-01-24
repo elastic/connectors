@@ -18,6 +18,7 @@ from connectors.byoc import (
     STUCK_JOBS_THRESHOLD,
     Connector,
     ConnectorIndex,
+    Features,
     Filtering,
     JobStatus,
     Status,
@@ -165,8 +166,10 @@ FILTERING = [
 
 @pytest.fixture(autouse=True)
 def patch_validate_filtering_in_byoc():
-    with mock.patch("connectors.byoc.validate_filtering", return_value=AsyncMock()):
-        yield
+    with mock.patch(
+        "connectors.byoc.validate_filtering", return_value=AsyncMock()
+    ) as validate_filtering_mock:
+        yield validate_filtering_mock
 
 
 def test_e2str():
@@ -368,6 +371,8 @@ class Data(BaseDataSource):
             return
         self.concurrency += 1
         global max_concurrency
+        max_concurrency = 0
+
         if self.concurrency > max_concurrency:
             max_concurrency = self.concurrency
             logger.info(f"max_concurrency {max_concurrency}")
@@ -388,8 +393,11 @@ class Data(BaseDataSource):
         options["concurrent_downloads"] = 3
 
 
+@pytest.mark.parametrize("with_filtering", [True, False])
 @pytest.mark.asyncio
-async def test_sync_mongo(mock_responses, patch_logger):
+async def test_sync_mongo(
+    with_filtering, mock_responses, patch_logger, patch_validate_filtering_in_byoc
+):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
@@ -480,12 +488,19 @@ async def test_sync_mongo(mock_responses, patch_logger):
     try:
         query = connectors.build_docs_query([["mongodb"]])
         async for connector in connectors.get_all_docs(query=query):
+            connector.features.sync_rules_enabled = Mock(return_value=with_filtering)
+
             await connector.prepare(service_config)
             await connector.sync(es, 0)
             await connector.close()
     finally:
         await connectors.close()
         await es.close()
+
+    if with_filtering:
+        assert patch_validate_filtering_in_byoc.call_count
+    else:
+        assert not patch_validate_filtering_in_byoc.call_count
 
     # verify that the Data source was able to override the option
     patch_logger.assert_not_present("max_concurrency 10")
@@ -701,6 +716,221 @@ async def test_update_filtering_validation(
             retry_on_conflict=ANY,
         )
     ]
+
+
+@pytest.mark.parametrize(
+    "features_json, feature_enabled",
+    [
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": True},
+                    "advanced": {"enabled": True},
+                }
+            },
+            {
+                Features.BASIC_RULES_NEW: True,
+                Features.ADVANCED_RULES_NEW: True,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": True},
+                    "advanced": {"enabled": False},
+                }
+            },
+            {
+                Features.BASIC_RULES_NEW: True,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": False},
+                    "advanced": {"enabled": False},
+                }
+            },
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
+        ),
+        (
+            {"filtering_advanced_config": True, "filtering_rules": True},
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: True,
+                Features.ADVANCED_RULES_OLD: True,
+            },
+        ),
+        (
+            {"filtering_advanced_config": False, "filtering_rules": False},
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
+        ),
+        (
+            {"filtering_advanced_config": True, "filtering_rules": False},
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: True,
+            },
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": True},
+                    "advanced": {"enabled": True},
+                },
+                "filtering_advanced_config": True,
+                "filtering_rules": True,
+            },
+            {
+                Features.BASIC_RULES_NEW: True,
+                Features.ADVANCED_RULES_NEW: True,
+                Features.BASIC_RULES_OLD: True,
+                Features.ADVANCED_RULES_OLD: True,
+            },
+        ),
+        (
+            None,
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
+        ),
+        (
+            {},
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
+        ),
+    ],
+)
+def test_feature_enabled(features_json, feature_enabled):
+    features = Features(features_json)
+
+    assert all(
+        features.feature_enabled(feature)
+        if enabled
+        else not features.feature_enabled(feature)
+        for feature, enabled in feature_enabled.items()
+    )
+
+
+@pytest.mark.parametrize(
+    "features_json, sync_rules_enabled",
+    [
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": True},
+                    "advanced": {"enabled": False},
+                },
+                "filtering_advanced_config": False,
+                "filtering_rules": False,
+            },
+            True,
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": False},
+                    "advanced": {"enabled": True},
+                },
+                "filtering_advanced_config": False,
+                "filtering_rules": False,
+            },
+            True,
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": False},
+                    "advanced": {"enabled": False},
+                },
+                "filtering_advanced_config": True,
+                "filtering_rules": False,
+            },
+            True,
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": False},
+                    "advanced": {"enabled": False},
+                },
+                "filtering_advanced_config": False,
+                "filtering_rules": True,
+            },
+            True,
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": False},
+                    "advanced": {"enabled": False},
+                },
+                "filtering_advanced_config": False,
+                "filtering_rules": False,
+            },
+            False,
+        ),
+        ({"other_feature": True}, False),
+        (None, False),
+        ({}, False),
+    ],
+)
+def test_sync_rules_enabled(features_json, sync_rules_enabled):
+    features = Features(features_json)
+
+    assert features.sync_rules_enabled() == sync_rules_enabled
+
+
+@pytest.mark.parametrize(
+    "nested_dict, keys, default, expected",
+    [
+        # extract True
+        ({"a": {"b": {"c": True}}}, ["a", "b", "c"], False, True),
+        (
+            {"a": {"b": {"c": True}}},
+            # "d" doesn't exist -> fall back to False
+            ["a", "b", "c", "d"],
+            False,
+            False,
+        ),
+        (
+            {"a": {"b": {"c": True}}},
+            # "wrong_key" doesn't exist -> fall back to False
+            ["wrong_key", "b", "c"],
+            False,
+            False,
+        ),
+        # fallback to True
+        (None, ["a", "b", "c"], True, True),
+    ],
+)
+def test_nested_get(nested_dict, keys, default, expected):
+    assert expected == Features(nested_dict)._nested_feature_enabled(keys, default)
 
 
 def test_pending_job_query_with_connectors_ids(mock_responses, set_env):
