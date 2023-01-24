@@ -256,7 +256,7 @@ class Fetcher:
                     # been modified. This reduces the bulk size a *lot*
                     #
                     # Some backends do not know how to do this, so it's optional.
-                    # For them, we update the docs in any case.
+                    # For these, we update the docs in any case.
                     if TIMESTAMP_FIELD in doc and ts == doc[TIMESTAMP_FIELD]:
                         # cancel the download
                         if lazy_download is not None:
