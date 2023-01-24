@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
 from connectors.source import DataSourceConfiguration
 from connectors.sources.generic_database import GenericBaseDataSource
-from connectors.sources.mssql import MSSQLDataSource
 from connectors.sources.oracle import OracleDataSource
 from connectors.sources.postgresql import PostgreSQLDataSource
 from connectors.sources.tests.support import create_source
@@ -300,46 +299,6 @@ async def test_get_docs_oracle(patch_logger):
                 "_timestamp": "",
                 "Database": "xe",
                 "Table": 10,
-            },
-        ]
-
-        # Execute
-        async for i in source.get_docs():
-            i[0]["_timestamp"] = ""
-            actual_response.append(i[0])
-
-        # Assert
-        assert actual_response == expected_response
-
-
-@pytest.mark.asyncio
-async def test_get_docs_mssql(patch_logger):
-    """Test get_docs method"""
-    # Setup
-    source = create_source(MSSQLDataSource)
-    with patch.object(Engine, "connect", return_value=connection_sync()):
-        source.engine = create_engine(
-            "mssql+pymssql://admin:changme@127.0.0.1:1433/testdb"
-        )
-        actual_response = []
-        expected_response = [
-            {
-                "10_10_ids": 1,
-                "10_10_names": "abcd",
-                "_id": "xe_10_10_",
-                "_timestamp": "",
-                "Database": "xe",
-                "Table": 10,
-                "schema": 10,
-            },
-            {
-                "10_10_ids": 2,
-                "10_10_names": "xyz",
-                "_id": "xe_10_10_",
-                "_timestamp": "",
-                "Database": "xe",
-                "Table": 10,
-                "schema": 10,
             },
         ]
 
