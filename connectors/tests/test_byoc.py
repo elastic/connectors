@@ -905,6 +905,7 @@ def test_sync_rules_enabled(features_json, sync_rules_enabled):
 
     assert features.sync_rules_enabled() == sync_rules_enabled
 
+
 def test_pending_job_query_with_connectors_ids(mock_responses, set_env):
     config = load_config(CONFIG)
 
