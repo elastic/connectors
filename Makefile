@@ -3,6 +3,7 @@
 PYTHON=python3.10
 ARCH=$(shell uname -m)
 PERF8?=no
+SLOW_TEST_THRESHOLD=1 # seconds
 
 bin/python:
 	$(PYTHON) -m venv .
@@ -45,7 +46,7 @@ autoformat: bin/python bin/black bin/elastic-ingest
 	bin/black scripts
 
 test:	bin/pytest bin/elastic-ingest
-	bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors -sv connectors/tests connectors/sources/tests
+	bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv connectors/tests connectors/sources/tests
 
 release: install
 	bin/python setup.py sdist
