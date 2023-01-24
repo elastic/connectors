@@ -80,7 +80,7 @@ async def test_mem_queue_speed(patch_logger):
 async def test_mem_queue_race(patch_logger):
     item = "small stuff"
     queue = MemQueue(
-        maxmemsize=get_size(item) * 2 + 1, refresh_interval=0.1, refresh_timeout=30
+        maxmemsize=get_size(item) * 2 + 1, refresh_interval=0.01, refresh_timeout=1
     )
     max_size = 0
 
