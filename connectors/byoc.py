@@ -16,7 +16,7 @@ from connectors.es import DEFAULT_LANGUAGE, ESIndex, Mappings
 from connectors.filtering.validation import ValidationTarget, validate_filtering
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
-from connectors.utils import iso_utc, nested_get, next_run
+from connectors.utils import iso_utc, next_run
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
@@ -291,7 +291,6 @@ class PipelineSettings:
 
 
 class Features:
-
     BASIC_RULES_NEW = "basic_rules_new"
     ADVANCED_RULES_NEW = "advanced_rules_new"
 
@@ -318,12 +317,12 @@ class Features:
     def feature_enabled(self, feature):
         match feature:
             case Features.BASIC_RULES_NEW:
-                return nested_get(
-                    self.features, ["sync_rules", "basic", "enabled"], default=False
+                return self._nested_feature_enabled(
+                    ["sync_rules", "basic", "enabled"], default=False
                 )
             case Features.ADVANCED_RULES_NEW:
-                return nested_get(
-                    self.features, ["sync_rules", "advanced", "enabled"], default=False
+                return self._nested_feature_enabled(
+                    ["sync_rules", "advanced", "enabled"], default=False
                 )
             case Features.BASIC_RULES_OLD:
                 return self.features.get("filtering_rules", False)
@@ -331,6 +330,21 @@ class Features:
                 return self.features.get("filtering_advanced_config", False)
             case _:
                 return False
+
+    def _nested_feature_enabled(self, keys, default=None):
+        def nested_get(dictionary, keys_, default_=None):
+            if dictionary is None:
+                return default_
+
+            if not keys_:
+                return dictionary
+
+            if not isinstance(dictionary, dict):
+                return default_
+
+            return nested_get(dictionary.get(keys_[0]), keys_[1:], default_)
+
+        return nested_get(self.features, keys, default)
 
 
 class Connector:

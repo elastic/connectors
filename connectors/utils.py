@@ -352,16 +352,3 @@ def get_event_loop(uvloop=False):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
     return loop
-
-
-def nested_get(dictionary, keys, default=None):
-    if dictionary is None:
-        return default
-
-    if not keys:
-        return dictionary
-
-    if not isinstance(dictionary, dict):
-        return default
-
-    return nested_get(dictionary.get(keys[0]), keys[1:], default)

@@ -25,7 +25,6 @@ from connectors.utils import (
     convert_to_b64,
     get_base64_value,
     get_size,
-    nested_get,
     next_run,
     validate_index_name,
 )
@@ -284,30 +283,3 @@ def test_convert_to_b64_no_overwrite(converter):
         finally:
             if os.path.exists(target):
                 os.remove(target)
-
-
-@pytest.mark.parametrize(
-    "nested_dict, keys, default, expected",
-    [
-        # extract True
-        ({"a": {"b": {"c": True}}}, ["a", "b", "c"], False, True),
-        (
-            {"a": {"b": {"c": True}}},
-            # "d" doesn't exist -> fall back to False
-            ["a", "b", "c", "d"],
-            False,
-            False,
-        ),
-        (
-            {"a": {"b": {"c": True}}},
-            # "wrong_key" doesn't exist -> fall back to False
-            ["wrong_key", "b", "c"],
-            False,
-            False,
-        ),
-        # fallback to True
-        (None, ["a", "b", "c"], True, True),
-    ],
-)
-def test_nested_get(nested_dict, keys, default, expected):
-    assert expected == nested_get(nested_dict, keys, default)
