@@ -14,6 +14,7 @@ import tempfile
 import time
 
 import pytest
+from freezegun import freeze_time
 from pympler import asizeof
 
 from connectors import utils
@@ -29,6 +30,7 @@ from connectors.utils import (
 )
 
 
+@freeze_time("2023-01-18 17:18:56.814003", tick=True)
 def test_next_run():
     # can run within two minutes
     assert next_run("1 * * * * *") < 120
@@ -78,7 +80,7 @@ async def test_mem_queue_speed(patch_logger):
 async def test_mem_queue_race(patch_logger):
     item = "small stuff"
     queue = MemQueue(
-        maxmemsize=get_size(item) * 2 + 1, refresh_interval=0.1, refresh_timeout=30
+        maxmemsize=get_size(item) * 2 + 1, refresh_interval=0.01, refresh_timeout=1
     )
     max_size = 0
 
@@ -107,8 +109,7 @@ async def test_mem_queue_race(patch_logger):
 
 @pytest.mark.asyncio
 async def test_mem_queue(patch_logger):
-
-    queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=2)
+    queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=0.1)
     await queue.put("small stuff")
 
     assert not queue.full()

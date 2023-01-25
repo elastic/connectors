@@ -439,3 +439,56 @@ def test_configure_connection_string():
     with pytest.raises(Exception):
         # Execute
         source._configure_connection_string()
+
+
+def test_tweak_bulk_options():
+    """Test tweak_bulk_options method of BaseDataSource class"""
+
+    # Setup
+    source = create_source(AzureBlobStorageDataSource)
+    options = {}
+    options["concurrent_downloads"] = 10
+
+    # Execute
+    source.tweak_bulk_options(options)
+
+
+def test_tweak_bulk_options_with_invalid():
+    """Test tweak_bulk_options method of BaseDataSource class with invalid concurrent downloads"""
+
+    # Setup
+    source = create_source(AzureBlobStorageDataSource)
+    options = {}
+    source.concurrent_downloads = 1000
+
+    with pytest.raises(Exception):
+        # Execute
+        source.tweak_bulk_options(options)
+
+
+@pytest.mark.asyncio
+async def test_get_content_when_blob_tier_archive():
+    """Test get_content method when the blob tier is archive"""
+
+    # Setup
+    source = create_source(AzureBlobStorageDataSource)
+    mock_response = {
+        "type": "blob",
+        "id": "container1/blob1",
+        "timestamp": "2022-04-21T12:12:30",
+        "created at": "2022-04-21T12:12:30",
+        "content type": "plain/text",
+        "container metadata": "{'key1': 'value1'}",
+        "metadata": "{'key1': 'value1', 'key2': 'value2'}",
+        "leasedata": "{'status': 'Locked', 'state': 'Leased', 'duration': 'Infinite'}",
+        "title": "blob1.pdf",
+        "tier": "Archive",
+        "size": 10,
+        "container": "container1",
+    }
+
+    # Execute
+    actual_response = await source.get_content(mock_response, doit=True)
+
+    # Assert
+    assert actual_response is None

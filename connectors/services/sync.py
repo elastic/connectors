@@ -11,11 +11,9 @@ Event loop
 - mirrors an Elasticsearch index with a collection of documents
 """
 import asyncio
-import os
-import time
 
 from connectors.byoc import (
-    BYOIndex,
+    ConnectorIndex,
     ConnectorUpdateError,
     DataSourceError,
     ServiceTypeNotConfiguredError,
@@ -25,66 +23,21 @@ from connectors.byoc import (
 )
 from connectors.byoei import ElasticServer
 from connectors.filtering.validation import (
-    FilteringValidationState,
     InvalidFilteringError,
+    ValidationTarget,
+    validate_filtering,
 )
 from connectors.logger import logger
 from connectors.services.base import BaseService
-from connectors.utils import CancellableSleeps
-
-
-async def _validate_filtering(connector):
-    validation_result = await connector.source_klass.validate_filtering(
-        connector.filtering.get_active_filter()
-    )
-    if validation_result.state != FilteringValidationState.VALID:
-        raise InvalidFilteringError(
-            f"Filtering in state {validation_result.state}. Expected: {FilteringValidationState.VALID}."
-        )
-    if len(validation_result.errors):
-        raise InvalidFilteringError(
-            f"Filtering validation errors present: {validation_result.errors}."
-        )
 
 
 class SyncService(BaseService):
     def __init__(self, config, args):
         super().__init__(config)
         self.args = args
-        self.errors = [0, time.time()]
-        self.service_config = self.config["service"]
         self.idling = self.service_config["idling"]
         self.hb = self.service_config["heartbeat"]
-        self.preflight_max_attempts = int(
-            self.service_config.get("preflight_max_attempts", 10)
-        )
-        self.preflight_idle = int(self.service_config.get("preflight_idle", 30))
-        self.running = False
-        self._sleeper = None
-        self._sleeps = CancellableSleeps()
         self.connectors = None
-
-    def raise_if_spurious(self, exception):
-        errors, first = self.errors
-        errors += 1
-
-        # if we piled up too many errors we raise and quit
-        if errors > self.service_config["max_errors"]:
-            raise exception
-
-        # we re-init every ten minutes
-        if time.time() - first > self.service_config["max_errors_span"]:
-            first = time.time()
-            errors = 0
-
-        self.errors[0] = errors
-        self.errors[1] = first
-
-    def stop(self):
-        self.running = False
-        self._sleeps.cancel()
-        if self.connectors is not None:
-            self.connectors.stop_waiting()
 
     async def _one_sync(self, connector, es, sync_now):
         if connector.native:
@@ -120,31 +73,23 @@ class SyncService(BaseService):
                 # we can't sync in that state
                 logger.info(f"Can't sync with status `{e2str(connector.status)}`")
             else:
-                await _validate_filtering(connector)
+                if connector.features.sync_rules_enabled():
+                    await validate_filtering(
+                        connector, self.connectors, ValidationTarget.DRAFT
+                    )
+
                 await connector.sync(es, self.idling, sync_now)
 
             await asyncio.sleep(0)
         except InvalidFilteringError as e:
             logger.error(e)
-            self.raise_if_spurious(e)
             return
         finally:
             await connector.close()
 
-    async def run(self):
-        if "PERF8" in os.environ:
-            import perf8
-
-            async with perf8.measure():
-                return await self._run()
-        else:
-            return await self._run()
-
     async def _run(self):
         """Main event loop."""
-
-        self.connectors = BYOIndex(self.config["elasticsearch"])
-        self.running = True
+        self.connectors = ConnectorIndex(self.es_config)
 
         one_sync = self.args.one_sync
         sync_now = self.args.sync_now
@@ -159,9 +104,11 @@ class SyncService(BaseService):
         else:
             connectors_ids = []
 
-        await self._pre_flight_check()
+        logger.info(
+            f"Service started, listening to events from {self.es_config['host']}"
+        )
 
-        es = ElasticServer(self.config["elasticsearch"])
+        es = ElasticServer(self.es_config)
         try:
             while self.running:
                 try:
@@ -182,35 +129,8 @@ class SyncService(BaseService):
                         break
                 await self._sleeps.sleep(self.idling)
         finally:
-            self.stop()
-            await self.connectors.close()
+            if self.connectors is not None:
+                self.connectors.stop_waiting()
+                await self.connectors.close()
             await es.close()
         return 0
-
-    async def _pre_flight_check(self):
-        es_host = self.config["elasticsearch"]["host"]
-
-        if not (await self.connectors.wait()):
-            logger.critical(f"{es_host} seem down. Bye!")
-            return -1
-
-        # pre-flight check
-        attempts = 0
-        while self.running:
-            logger.info("Preflight checks...")
-            try:
-                # Checking the indices/pipeline in the loop to be less strict about the boot ordering
-                await self.connectors.preflight()
-                break
-            except Exception as e:
-                if attempts > self.preflight_max_attempts:
-                    raise
-                else:
-                    logger.warn(
-                        f"Attempt {attempts+1}/{self.preflight_max_attempts} failed. Retrying..."
-                    )
-                    logger.warn(str(e))
-                    attempts += 1
-                    await asyncio.sleep(self.preflight_idle)
-
-        logger.info(f"Service started, listening to events from {es_host}")

@@ -23,13 +23,13 @@ DEFAULT_FILE_SIZE_LIMIT = 10485760
 
 
 class NASDataSource(BaseDataSource):
-    """Class to fetch documents from Network Drive"""
+    """Network Drive"""
 
     def __init__(self, configuration):
-        """Setup the connection to the Network Drive
+        """Set up the connection to the Network Drive
 
         Args:
-            connector (Connector): Object of the Connector class
+            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
         self.username = self.configuration["username"]

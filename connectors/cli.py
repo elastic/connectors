@@ -18,6 +18,7 @@ from argparse import ArgumentParser
 from connectors import __version__
 from connectors.config import load_config
 from connectors.logger import logger, set_logger
+from connectors.preflight_check import PreflightCheck
 from connectors.services.sync import SyncService
 from connectors.source import get_data_sources
 from connectors.utils import get_event_loop
@@ -87,6 +88,40 @@ def _parser():
     return parser
 
 
+async def _start_service(config, args, loop):
+    preflight = PreflightCheck(config)
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, functools.partial(preflight.shutdown, sig))
+    try:
+        if not await preflight.run():
+            return -1
+    finally:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.remove_signal_handler(sig)
+
+    services = [SyncService(config, args)]
+    for sig in (signal.SIGINT, signal.SIGTERM):
+
+        def _shutdown(sig_name):
+            logger.info(f"Caught {sig_name}. Graceful shutdown.")
+            for service in services:
+                logger.info(f"Shutdown {service.__class__.__name__}...")
+                service.stop()
+
+        loop.add_signal_handler(sig, functools.partial(_shutdown, sig.name))
+
+    async def _run_service(service):
+        if "PERF8" in os.environ:
+            import perf8
+
+            async with perf8.measure():
+                return await service.run()
+        else:
+            return await service.run()
+
+    await asyncio.gather(*[_run_service(service) for service in services])
+
+
 def run(args):
     """Runner"""
 
@@ -101,12 +136,8 @@ def run(args):
         logger.info("Bye")
         return 0
 
-    service = SyncService(config, args)
-    coro = service.run()
     loop = get_event_loop(args.uvloop)
-
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, functools.partial(service.shutdown, sig))
+    coro = _start_service(config, args, loop)
 
     try:
         return loop.run_until_complete(coro)

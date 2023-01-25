@@ -12,7 +12,8 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 
-from connectors.es import DEFAULT_LANGUAGE, ESIndex, defaults_for
+from connectors.es import DEFAULT_LANGUAGE, ESIndex, Mappings
+from connectors.filtering.validation import ValidationTarget, validate_filtering
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
 from connectors.utils import iso_utc, next_run
@@ -20,8 +21,8 @@ from connectors.utils import iso_utc, next_run
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 PIPELINE = "ent-search-generic-ingestion"
+RETRY_ON_CONFLICT = 3
 SYNC_DISABLED = -1
-DEFAULT_ANALYSIS_ICU = False
 
 
 def e2str(entry):
@@ -80,15 +81,14 @@ class DataSourceError(Exception):
     pass
 
 
-class BYOIndex(ESIndex):
+class ConnectorIndex(ESIndex):
     def __init__(self, elastic_config):
-        logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
+        logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
         # initilize ESIndex instance
         super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
         # grab all bulk options
         self.bulk_options = elastic_config.get("bulk", {})
         self.language_code = elastic_config.get("language_code", DEFAULT_LANGUAGE)
-        self.analysis_icu = elastic_config.get("analysis_icu", DEFAULT_ANALYSIS_ICU)
 
     async def save(self, connector):
         # we never update the configuration
@@ -107,9 +107,23 @@ class BYOIndex(ESIndex):
             doc=document,
         )
 
-    # @TODO move to ESIndex?
-    async def preflight(self):
-        await self.check_exists(indices=[CONNECTORS_INDEX, JOBS_INDEX])
+    async def update_filtering_validation(
+        self, connector, validation_result, validation_target=ValidationTarget.ACTIVE
+    ):
+        doc_to_update = deepcopy(connector.doc_source)
+
+        for filter_ in doc_to_update.get("filtering", []):
+            if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
+                filter_.get(e2str(validation_target), {"validation": {}})[
+                    "validation"
+                ] = validation_result.to_dict()
+
+        await self.client.update(
+            index=CONNECTORS_INDEX,
+            id=connector.id,
+            doc=doc_to_update,
+            retry_on_conflict=RETRY_ON_CONFLICT,
+        )
 
     def build_docs_query(self, native_service_types=None, connectors_ids=None):
         if native_service_types is None:
@@ -154,19 +168,22 @@ class BYOIndex(ESIndex):
             doc_source["_id"],
             doc_source["_source"],
             bulk_options=self.bulk_options,
-            language_code=self.language_code,
-            analysis_icu=self.analysis_icu,
         )
 
 
 class SyncJob:
-    def __init__(self, connector_id, elastic_client):
+    def __init__(self, elastic_index, connector_id, doc_source=None):
         self.connector_id = connector_id
-        self.client = elastic_client
+        self.elastic_index = elastic_index
         self.created_at = datetime.now(timezone.utc)
         self.completed_at = None
         self.job_id = None
         self.status = None
+        self.client = elastic_index.client
+        if doc_source is None:
+            doc_source = dict()
+
+        self.doc_source = doc_source
 
     @property
     def duration(self):
@@ -236,13 +253,22 @@ class SyncJob:
 class Filtering:
     DEFAULT_DOMAIN = "DEFAULT"
 
-    def __init__(self, filtering):
-        self.filtering = filtering if filtering else []
+    def __init__(self, filtering=None):
+        if filtering is None:
+            filtering = []
+
+        self.filtering = filtering
 
     def get_active_filter(self, domain=DEFAULT_DOMAIN):
+        return self.get_filter(filter_state="active", domain=domain)
+
+    def get_draft_filter(self, domain=DEFAULT_DOMAIN):
+        return self.get_filter(filter_state="draft", domain=domain)
+
+    def get_filter(self, filter_state="active", domain=DEFAULT_DOMAIN):
         return next(
             (
-                filter_["active"]
+                filter_[filter_state]
                 for filter_ in self.filtering
                 if filter_["domain"] == domain
             ),
@@ -264,6 +290,63 @@ class PipelineSettings:
         )
 
 
+class Features:
+    BASIC_RULES_NEW = "basic_rules_new"
+    ADVANCED_RULES_NEW = "advanced_rules_new"
+
+    # keep backwards compatibility
+    BASIC_RULES_OLD = "basic_rules_old"
+    ADVANCED_RULES_OLD = "advanced_rules_old"
+
+    def __init__(self, features=None):
+        if features is None:
+            features = {}
+
+        self.features = features
+
+    def sync_rules_enabled(self):
+        return any(
+            [
+                self.feature_enabled(Features.BASIC_RULES_NEW),
+                self.feature_enabled(Features.BASIC_RULES_OLD),
+                self.feature_enabled(Features.ADVANCED_RULES_NEW),
+                self.feature_enabled(Features.ADVANCED_RULES_OLD),
+            ]
+        )
+
+    def feature_enabled(self, feature):
+        match feature:
+            case Features.BASIC_RULES_NEW:
+                return self._nested_feature_enabled(
+                    ["sync_rules", "basic", "enabled"], default=False
+                )
+            case Features.ADVANCED_RULES_NEW:
+                return self._nested_feature_enabled(
+                    ["sync_rules", "advanced", "enabled"], default=False
+                )
+            case Features.BASIC_RULES_OLD:
+                return self.features.get("filtering_rules", False)
+            case Features.ADVANCED_RULES_OLD:
+                return self.features.get("filtering_advanced_config", False)
+            case _:
+                return False
+
+    def _nested_feature_enabled(self, keys, default=None):
+        def nested_get(dictionary, keys_, default_=None):
+            if dictionary is None:
+                return default_
+
+            if not keys_:
+                return dictionary
+
+            if not isinstance(dictionary, dict):
+                return default_
+
+            return nested_get(dictionary.get(keys_[0]), keys_[1:], default_)
+
+        return nested_get(self.features, keys, default)
+
+
 class Connector:
     """Represents one doc in `.elastic-connectors` and triggers sync.
 
@@ -283,8 +366,6 @@ class Connector:
         connector_id,
         doc_source,
         bulk_options,
-        language_code=DEFAULT_LANGUAGE,
-        analysis_icu=DEFAULT_ANALYSIS_ICU,
     ):
 
         self.doc_source = doc_source
@@ -299,8 +380,6 @@ class Connector:
         self._start_time = None
         self._hb = None
         self.bulk_options = bulk_options
-        self.language_code = language_code
-        self.analysis_icu = analysis_icu
         self.source_klass = None
         self.data_provider = None
 
@@ -315,6 +394,8 @@ class Connector:
         self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
         self._dirty = True
         self._filtering = Filtering(doc_source.get("filtering", []))
+        self.language_code = doc_source["language"]
+        self.features = Features(doc_source.get("features", {}))
 
     @property
     def status(self):
@@ -406,7 +487,7 @@ class Connector:
         return next_run(self.scheduling["interval"])
 
     async def _sync_starts(self):
-        job = SyncJob(self.id, self.client)
+        job = SyncJob(connector_id=self.id, elastic_index=self.index)
         trigger_method = (
             JobTriggerMethod.ON_DEMAND if self.sync_now else JobTriggerMethod.SCHEDULED
         )
@@ -514,7 +595,7 @@ class Connector:
 
     async def sync(self, elastic_server, idling, sync_now=False):
         # If anything bad happens before we create a sync job
-        # (like bad scheduling config, etc)
+        # (like bad scheduling config, etc.)
         #
         # we will raise the error in the logs here and let Kibana knows
         # by toggling the status and setting the error and status field
@@ -567,14 +648,13 @@ class Connector:
             await self.data_provider.ping()
             await asyncio.sleep(0)
 
-            mappings, settings = defaults_for(
+            mappings = Mappings.default_text_fields_mappings(
                 is_connectors_index=True,
-                language_code=self.language_code,
-                analysis_icu=self.analysis_icu,
             )
-            logger.debug("Preparing the index")
-            await elastic_server.prepare_index(
-                self.index_name, mappings=mappings, settings=settings
+
+            logger.debug("Preparing the content index")
+            await elastic_server.prepare_content_index(
+                self.index_name, mappings=mappings
             )
             await asyncio.sleep(0)
 
@@ -582,10 +662,17 @@ class Connector:
             bulk_options = self.bulk_options.copy()
             self.data_provider.tweak_bulk_options(bulk_options)
 
+            sync_rules_enabled = self.features.sync_rules_enabled()
+
+            if sync_rules_enabled:
+                await validate_filtering(self, self.index, ValidationTarget.ACTIVE)
+
             result = await elastic_server.async_bulk(
                 self.index_name,
                 self.prepare_docs(self.data_provider),
                 self.pipeline,
+                filtering=self.filtering,
+                sync_rules_enabled=sync_rules_enabled,
                 options=bulk_options,
             )
             await self._sync_done(job, result)
@@ -596,3 +683,88 @@ class Connector:
         finally:
             self._syncing = False
             self._start_time = None
+
+
+STUCK_JOBS_THRESHOLD = 60  # 60 seconds
+
+
+class SyncJobIndex(ESIndex):
+    """
+    Represents Elasticsearch index for sync jobs
+
+    Args:
+        elastic_config (dict): Elasticsearch configuration and credentials
+    """
+
+    def __init__(self, elastic_config):
+        super().__init__(index_name=JOBS_INDEX, elastic_config=elastic_config)
+
+    def _create_object(self, doc_source):
+        """
+        Args:
+            doc_source (dict): A raw Elasticsearch document
+        Returns:
+            SyncJob
+        """
+        return SyncJob(
+            self,
+            connector_id=doc_source["_source"]["connector"]["id"],
+            doc_source=doc_source["_source"],
+        )
+
+    def pending_job_query(self, connectors_ids):
+        """
+        Args:
+            connectors_ids (list of int): A list of connectors IDs
+        Returns:
+            dict
+        """
+        status_term = {"status": [e2str(JobStatus.PENDING)]}
+
+        query = {
+            "bool": {
+                "must": [
+                    {"terms": status_term},
+                    {"terms": {"connector.id": connectors_ids}},
+                ]
+            }
+        }
+
+        return query
+
+    def orphaned_jobs_query(self, connectors_ids):
+        """
+        Args:
+            connectors_ids (list of int): A list of connectors IDs
+        Returns:
+            dict
+        """
+        query = {"bool": {"must_not": {"terms": {"connector.id": connectors_ids}}}}
+
+        return query
+
+    def stuck_jobs_query(self, connectors_ids):
+        """
+        Args:
+            connectors_ids (list of int): A list of connectors IDs
+        Returns:
+            dict
+        """
+        query = {
+            "bool": {
+                "filter": [
+                    {"terms": {"connector.id": connectors_ids}},
+                    {
+                        "terms": {
+                            "status": [
+                                e2str(JobStatus.IN_PROGRESS),
+                                e2str(JobStatus.CANCELING),
+                            ]
+                        }
+                    },
+                    {"range": {"last_seen": {"lte": f"now-{STUCK_JOBS_THRESHOLD}s"}}},
+                ]
+            }
+        }
+
+        return query

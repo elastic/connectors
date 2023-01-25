@@ -32,6 +32,7 @@ def test_main_and_kill(patch_logger, mock_responses):
     )
 
     async def kill():
+        await asyncio.sleep(0.2)
         os.kill(os.getpid(), signal.SIGTERM)
 
     loop = asyncio.new_event_loop()

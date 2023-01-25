@@ -4,8 +4,10 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import base64
+from unittest import mock
 
 import pytest
+from elasticsearch import ConnectionError
 
 from connectors.es.client import ESClient
 
@@ -85,7 +87,16 @@ async def test_es_client_no_server(patch_logger):
         "username": "elastic",
         "password": "changeme",
         "host": "http://nowhere.com:9200",
+        "max_wait_duration": 0.1,
+        "initial_backoff_duration": 0.1,
     }
     es_client = ESClient(config)
-    assert not await es_client.ping()
-    await es_client.close()
+
+    with mock.patch.object(
+        es_client.client,
+        "info",
+        side_effect=ConnectionError("Cannot connect - no route to host."),
+    ):
+        # Execute
+        assert not await es_client.ping()
+        await es_client.close()

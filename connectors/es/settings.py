@@ -295,18 +295,3 @@ class Settings:
             },
             "index": {"similarity": {"default": {"type": "BM25"}}},
         }
-
-
-def defaults_for(
-    *,
-    is_connectors_index=False,
-    is_crawler_index=False,
-    language_code=None,
-    analysis_icu=False,
-):
-    """Wrapper to return both mappings and settings for an index"""
-    mappings = Mappings.default_text_fields_mappings(
-        is_connectors_index=is_connectors_index, is_crawler_index=is_crawler_index
-    )
-    settings = Settings(language_code=language_code, analysis_icu=analysis_icu)
-    return mappings, settings.to_hash()
