@@ -29,3 +29,13 @@ steps:
       - ".buildkite/run_nigthly.sh abs"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Postgresql"
+    command:
+      - ".buildkite/run_nigthly.sh postgresql"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Oracle Database"
+    command:
+      - ".buildkite/run_nigthly.sh oracle"
+    artifact_paths:
+      - "perf8-report-*/**/*"
