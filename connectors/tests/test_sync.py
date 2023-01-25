@@ -7,6 +7,8 @@ import asyncio
 import copy
 import json
 import os
+from unittest import mock
+from unittest.mock import AsyncMock
 
 import pytest
 from aioresponses import CallbackResult
@@ -24,7 +26,6 @@ CONFIG_HTTPS_FILE = os.path.join(os.path.dirname(__file__), "config_https.yml")
 CONFIG_MEM_FILE = os.path.join(os.path.dirname(__file__), "config_mem.yml")
 MEM_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "memconfig.yml")
 
-
 FAKE_CONFIG = {
     "api_key_id": "",
     "configuration": {
@@ -39,6 +40,9 @@ FAKE_CONFIG = {
         "extract_binary_content": True,
         "reduce_whitespace": True,
         "run_ml_inference": True,
+    },
+    "features": {
+        "sync_rules": {"advanced": {"enabled": True}, "basic": {"enabled": True}}
     },
     "index_name": "search-airbnb",
     "service_type": "fake",
@@ -72,7 +76,6 @@ FAKE_CONFIG_PIPELINE_CHANGED["pipeline"] = {
 }
 FAKE_CONFIG_TS = copy.deepcopy(FAKE_CONFIG)
 FAKE_CONFIG_TS["service_type"] = "fake_ts"
-
 
 FAKE_CONFIG_NOT_NATIVE = {
     "api_key_id": "",
@@ -116,6 +119,14 @@ FAIL_FILTERING_EDITED_CONFIG["service_type"] = "filtering_state_edited"
 
 FAIL_FILTERING_ERRORS_PRESENT_CONFIG = copy.deepcopy(FAKE_CONFIG)
 FAIL_FILTERING_ERRORS_PRESENT_CONFIG["service_type"] = "filtering_errors_present"
+
+ALL_SYNC_RULES_FEATURES_DISABLED = {
+    "sync_rules": {"advanced": {"enabled": False}, "basic": {"enabled": False}},
+    "filtering_advanced_config": False,
+    "filtering_rules": False,
+}
+
+NO_FEATURES_PRESENT = {}
 
 FAKE_CONFIG_FAIL_SERVICE = {
     "api_key_id": "",
@@ -169,6 +180,20 @@ FAKE_CONFIG_UNKNOWN_SERVICE = {
 }
 
 
+@pytest.fixture(autouse=True)
+def patch_validate_filtering_in_sync():
+    with mock.patch(
+        "connectors.services.sync.validate_filtering", return_value=AsyncMock()
+    ) as validate_filtering_mock:
+        yield validate_filtering_mock
+
+
+@pytest.fixture(autouse=True)
+def patch_validate_filtering_in_byoc():
+    with mock.patch("connectors.byoc.validate_filtering", return_value=AsyncMock()):
+        yield
+
+
 class Args:
     def __init__(self, **options):
         self.one_sync = options.get("one_sync", False)
@@ -177,7 +202,10 @@ class Args:
 
 def create_service(config_file, **options):
     config = load_config(config_file)
-    return SyncService(config, Args(**options))
+    service = SyncService(config, Args(**options))
+    service.idling = 0
+
+    return service
 
 
 async def set_server_responses(
@@ -503,6 +531,17 @@ async def service_with_max_errors(mock_responses, config, max_errors):
         (FAIL_FILTERING_EDITED_CONFIG, True),
         (FAIL_FILTERING_ERRORS_PRESENT_CONFIG, True),
         (FAKE_FILTERING_VALID_CONFIG, False),
+        (FAIL_FILTERING_INVALID_CONFIG | ALL_SYNC_RULES_FEATURES_DISABLED, False),
+        (FAIL_FILTERING_EDITED_CONFIG | ALL_SYNC_RULES_FEATURES_DISABLED, False),
+        (
+            FAIL_FILTERING_ERRORS_PRESENT_CONFIG | ALL_SYNC_RULES_FEATURES_DISABLED,
+            False,
+        ),
+        (FAKE_FILTERING_VALID_CONFIG | ALL_SYNC_RULES_FEATURES_DISABLED, False),
+        (FAIL_FILTERING_INVALID_CONFIG | NO_FEATURES_PRESENT, False),
+        (FAIL_FILTERING_EDITED_CONFIG | NO_FEATURES_PRESENT, False),
+        (FAIL_FILTERING_ERRORS_PRESENT_CONFIG | NO_FEATURES_PRESENT, False),
+        (FAKE_FILTERING_VALID_CONFIG | NO_FEATURES_PRESENT, False),
     ],
 )
 @pytest.mark.asyncio
@@ -512,12 +551,16 @@ async def test_connector_service_filtering(
     mock_responses,
     patch_logger,
     set_env,
+    patch_validate_filtering_in_sync,
 ):
     service = await service_with_max_errors(mock_responses, config, 0)
+    patch_validate_filtering_in_sync.side_effect = (
+        [InvalidFilteringError] if should_raise_filtering_error else None
+    )
 
     if should_raise_filtering_error:
-        with pytest.raises(InvalidFilteringError):
-            await service.run()
+        await service.run()
+        patch_logger.assert_check(lambda log: isinstance(log, InvalidFilteringError))
     else:
         try:
             await service.run()
