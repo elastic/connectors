@@ -55,9 +55,15 @@ async def test_ping_negative(patch_logger):
     # Setup
     source = create_source(PostgreSQLDataSource)
 
-    # Execute
-    with pytest.raises(Exception):
-        await source.ping()
+    with patch.object(
+        PostgreSQLDataSource,
+        "execute_query",
+        side_effect=Exception("Something went wrong"),
+    ):
+
+        # Execute
+        with pytest.raises(Exception):
+            await source.ping()
 
 
 def test_get_connect_argss(patch_logger):

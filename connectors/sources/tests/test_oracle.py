@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Oracle Database source class methods"""
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -46,6 +46,10 @@ async def test_ping_negative(patch_logger):
     # Setup
     source = create_source(OracleDataSource)
 
-    # Execute
-    with pytest.raises(Exception):
-        await source.ping()
+    with patch.object(
+        OracleDataSource, "execute_query", side_effect=Exception("Something went wrong")
+    ):
+
+        # Execute
+        with pytest.raises(Exception):
+            await source.ping()

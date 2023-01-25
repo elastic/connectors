@@ -11,6 +11,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
+from asyncpg.exceptions._base import InternalClientError
 from bson import Decimal128
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
@@ -309,3 +310,89 @@ async def test_get_docs_oracle(patch_logger):
 
         # Assert
         assert actual_response == expected_response
+
+
+@pytest.mark.asyncio
+async def test_close(patch_logger):
+    """Test close method"""
+    source = create_source(GenericBaseDataSource)
+    await source.close()
+
+
+@pytest.mark.asyncio
+async def test_async_connect_negative(patch_logger):
+    """Test _async_connect method with negative case"""
+    source = create_source(GenericBaseDataSource)
+    with patch.object(
+        AsyncEngine, "connect", side_effect=InternalClientError("Something went wrong")
+    ):
+        source.engine = create_async_engine(
+            "postgresql+asyncpg://admin:changme@127.0.0.1:5432/testdb"
+        )
+
+        # Execute
+        with pytest.raises(InternalClientError):
+            await source._async_connect("table1")
+
+
+@pytest.mark.asyncio
+async def test_sync_connect_negative(patch_logger):
+    """Test _sync_connect method with negative case"""
+    source = create_source(GenericBaseDataSource)
+    with patch.object(
+        Engine, "connect", side_effect=InternalClientError("Something went wrong")
+    ):
+        source.engine = create_engine("oracle://admin:changme@127.0.0.1:1521/testdb")
+
+        # Execute
+        with pytest.raises(InternalClientError):
+            await source._sync_connect("table1")
+
+
+@pytest.mark.asyncio
+async def test_execute_query_negative_for_internalclienterror(patch_logger):
+    """Test _execute_query method with negative case"""
+    source = create_source(PostgreSQLDataSource)
+    with patch.object(
+        AsyncEngine, "connect", side_effect=InternalClientError("Something went wrong")
+    ):
+        source.engine = source.engine = create_async_engine(
+            "postgresql+asyncpg://admin:changme@127.0.0.1:5432/testdb"
+        )
+        source.is_async = True
+
+        # Execute
+        with pytest.raises(InternalClientError):
+            await anext(source.execute_query("PING"))
+
+
+@pytest.mark.asyncio
+async def test_fetch_documents_negative(patch_logger):
+    """Test fetch_documents method with negative case"""
+    source = create_source(GenericBaseDataSource)
+    with patch.object(
+        GenericBaseDataSource,
+        "execute_query",
+        side_effect=InternalClientError("Something went wrong"),
+    ):
+        source.engine = create_engine("oracle://admin:changme@127.0.0.1:1521/testdb")
+
+        # Execute
+        with pytest.raises(Exception):
+            await anext(source.fetch_documents("table1"))
+
+
+@pytest.mark.asyncio
+async def test_execute_query_negative():
+    """Test execute_query method with negative case"""
+    source = create_source(OracleDataSource)
+    with patch.object(
+        OracleDataSource,
+        "_sync_connect",
+        side_effect=Exception("Something went wrong"),
+    ):
+        source.retry_count = 1
+
+        # Execute
+        with pytest.raises(Exception):
+            await anext(source.execute_query("PING"))
