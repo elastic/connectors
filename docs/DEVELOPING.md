@@ -101,6 +101,12 @@ Features in technical preview are subject to change and are not covered by the s
 
 Elastic versions 8.6.0+ are compatible with Elastic connector frameworks.
 
+Amazon S3 permissions required to run the connector:
+  - ListAllMyBuckets
+  - ListBucket
+  - GetBucketLocation
+  - GetObject
+
 ### Setup and basic usage
 
 Complete the following steps to deploy the connector:
