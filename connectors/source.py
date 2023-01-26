@@ -104,22 +104,6 @@ class DataSourceConfiguration:
         return len(self._config) == 0
 
 
-def advanced_rules_present(filtering=None):
-    """Return if advanced rules are present."""
-    if filtering is None:
-        filtering = {}
-
-    return len(filtering.get("advanced_snippet", {}))
-
-
-def extract_advanced_rules(filtering=None):
-    """Extract the advanced snippet."""
-    if filtering is None:
-        filtering = {}
-
-    return filtering.get("advanced_snippet", {})
-
-
 class BaseDataSource:
     """Base class, defines a loose contract."""
 

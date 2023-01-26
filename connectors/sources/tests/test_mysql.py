@@ -16,6 +16,7 @@ import aiomysql
 import pytest
 from bson import Decimal128
 
+from connectors.byoc import Filter
 from connectors.source import DataSourceConfiguration
 from connectors.sources.mysql import MySqlDataSource
 from connectors.sources.tests.support import create_source
@@ -504,46 +505,58 @@ def setup_available_docs(advanced_snippet):
     [
         (
             # single db, single table, multiple docs
-            {
-                ADVANCED_SNIPPET: {
-                    DB_ONE: {
-                        TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_ALL,
-                    },
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        DB_ONE: {
+                            TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_ALL,
+                        },
+                    }
                 }
-            },
+            ),
             {DOC_ONE, DOC_TWO},
         ),
         (
             # single db, single table, single doc
-            {ADVANCED_SNIPPET: {DB_ONE: {TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE}}},
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        DB_ONE: {TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE}
+                    }
+                }
+            ),
             {DOC_ONE},
         ),
         (
             # single db, multiple tables, multiple docs
-            {
-                ADVANCED_SNIPPET: {
-                    DB_ONE: {
-                        TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE,
-                        TABLE_TWO: DB_ONE_TABLE_TWO_QUERY_ALL,
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        DB_ONE: {
+                            TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE,
+                            TABLE_TWO: DB_ONE_TABLE_TWO_QUERY_ALL,
+                        }
                     }
                 }
-            },
+            ),
             {DOC_ONE, DOC_THREE, DOC_FOUR},
         ),
         (
             # multiple dbs, multiple tables, multiple docs
-            {
-                ADVANCED_SNIPPET: {
-                    DB_ONE: {
-                        TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE,
-                        TABLE_TWO: DB_ONE_TABLE_TWO_QUERY_ALL,
-                    },
-                    DB_TWO: {
-                        TABLE_ONE: DB_TWO_TABLE_ONE_QUERY_ALL,
-                        TABLE_TWO: DB_TWO_TABLE_TWO_QUERY_ALL,
-                    },
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        DB_ONE: {
+                            TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE,
+                            TABLE_TWO: DB_ONE_TABLE_TWO_QUERY_ALL,
+                        },
+                        DB_TWO: {
+                            TABLE_ONE: DB_TWO_TABLE_ONE_QUERY_ALL,
+                            TABLE_TWO: DB_TWO_TABLE_TWO_QUERY_ALL,
+                        },
+                    }
                 }
-            },
+            ),
             {DOC_ONE, DOC_THREE, DOC_FOUR, DOC_FIVE, DOC_SIX, DOC_SEVEN, DOC_EIGHT},
         ),
     ],
