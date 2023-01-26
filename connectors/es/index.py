@@ -63,7 +63,7 @@ class ESIndex(ESClient):
 
     async def document_count(self):
         await self.client.indices.refresh(index=self.index_name)
-        return await self.client.count(index=self.index_name)['count']
+        return await self.client.count(index=self.index_name)["count"]
 
     async def get_all_docs(self, query=None, page_size=DEFAULT_PAGE_SIZE):
         """

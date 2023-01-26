@@ -6,8 +6,8 @@
 """
 Implementation of BYOC protocol.
 """
-import time
 import socket
+import time
 from collections import UserDict
 from copy import deepcopy
 from enum import Enum
@@ -75,8 +75,6 @@ def supported_connectors_query(native_service_types=None, connectors_ids=None):
 
     if len(native_service_types) == 0 and len(connectors_ids) == 0:
         return
-        if len(native_service_types) == 0 and len(connector_ids) == 0:
-            return
 
     native_connectors_query = {
         "bool": {
@@ -96,9 +94,7 @@ def supported_connectors_query(native_service_types=None, connectors_ids=None):
         }
     }
     if len(native_service_types) > 0 and len(connectors_ids) > 0:
-        query = {
-            "bool": {"should": [native_connectors_query, custom_connectors_query]}
-        }
+        query = {"bool": {"should": [native_connectors_query, custom_connectors_query]}}
     elif len(native_service_types) > 0:
         query = native_connectors_query
     else:
@@ -120,7 +116,7 @@ class ConnectorIndex(ESIndex):
         await self.update(doc_id, doc)
 
     async def update_filtering_validation(
-            self, connector, validation_result, validation_target=ValidationTarget.ACTIVE
+        self, connector, validation_result, validation_target=ValidationTarget.ACTIVE
     ):
         doc_to_update = deepcopy(connector.doc_source)
 
@@ -279,15 +275,23 @@ class SyncJob(ESDocument):
         await self.index.update(doc_id=self.id, doc=doc)
 
     async def done(self, ingestion_stats={}, connector_metadata={}):
-        await self.terminate(JobStatus.COMPLETED, None, ingestion_stats, connector_metadata)
+        await self.terminate(
+            JobStatus.COMPLETED, None, ingestion_stats, connector_metadata
+        )
 
     async def error(self, message, ingestion_stats={}, connector_metadata={}):
-        await self.terminate(JobStatus.ERROR, message, ingestion_stats, connector_metadata)
+        await self.terminate(
+            JobStatus.ERROR, message, ingestion_stats, connector_metadata
+        )
 
     async def cancel(self, ingestion_stats={}, connector_metadata={}):
-        await self.terminate(JobStatus.CANCELED, None, ingestion_stats, connector_metadata)
+        await self.terminate(
+            JobStatus.CANCELED, None, ingestion_stats, connector_metadata
+        )
 
-    async def terminate(self, status, error=None, ingestion_stats={}, connector_metadata={}):
+    async def terminate(
+        self, status, error=None, ingestion_stats={}, connector_metadata={}
+    ):
         doc = {
             "last_seen": iso_utc(),
             "completed_at": iso_utc(),
@@ -533,8 +537,10 @@ class Connector(ESDocument):
         job_status = JobStatus.ERROR if job is None else job.status
         job_error = "Couldn't find the job" if job is None else job.error
         if job_error is None and job_status == JobStatus.ERROR:
-            job_error = 'unknown error'
-        connector_status = Status.ERROR if job_status == JobStatus.ERROR else Status.CONNECTED
+            job_error = "unknown error"
+        connector_status = (
+            Status.ERROR if job_status == JobStatus.ERROR else Status.CONNECTED
+        )
 
         doc = {
             "last_sync_status": job_status,
@@ -570,7 +576,9 @@ class Connector(ESDocument):
                 )
                 raise ServiceTypeNotConfiguredError("Service type is not configured.")
             doc["service_type"] = configured_service_type
-            logger.debug(f"Populated service type {configured_service_type} for connector {self.id}")
+            logger.debug(
+                f"Populated service type {configured_service_type} for connector {self.id}"
+            )
 
         if self.configuration.is_empty():
             if configured_service_type not in config["sources"]:
@@ -585,7 +593,9 @@ class Connector(ESDocument):
                 logger.debug(f"Populated configuration for connector {self.id}")
             except Exception as e:
                 logger.critical(e, exc_info=True)
-                raise DataSourceError(f"Could not instantiate {fqn} for {configured_service_type}")
+                raise DataSourceError(
+                    f"Could not instantiate {fqn} for {configured_service_type}"
+                )
 
         if len(doc) == 0:
             return

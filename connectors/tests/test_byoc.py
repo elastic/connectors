@@ -28,10 +28,10 @@ from connectors.byoc import (
     SyncJob,
     SyncJobIndex,
     iso_utc,
-    supported_connectors_query,
-    pending_job_query,
     orphaned_jobs_query,
+    pending_job_query,
     stuck_jobs_query,
+    supported_connectors_query,
 )
 from connectors.byoei import ElasticServer
 from connectors.config import load_config

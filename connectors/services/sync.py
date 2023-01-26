@@ -15,12 +15,12 @@ import functools
 
 from connectors.byoc import (
     ConnectorIndex,
-    SyncJobIndex,
     ConnectorUpdateError,
     DataSourceError,
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
     Status,
+    SyncJobIndex,
     SYNC_DISABLED,
 )
 from connectors.byoei import ElasticServer
@@ -48,7 +48,7 @@ class SyncService(BaseService):
             "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
         )
         self.bulk_options = self.es_config.get("bulk", {})
-        self.source_klass_dict = get_data_source_dict(config)
+        self.source_klass_dict = get_source_klass_dict(config)
         self.connectorIndex = None
         self.syncJobIndex = None
         self.syncs = None
@@ -108,7 +108,9 @@ class SyncService(BaseService):
                 next_sync = connector.next_sync()
                 if next_sync == SYNC_DISABLED or next_sync - self.idling > 0:
                     if next_sync == SYNC_DISABLED:
-                        logger.debug(f"Scheduling is disabled for connector {connector.id}")
+                        logger.debug(
+                            f"Scheduling is disabled for connector {connector.id}"
+                        )
                     else:
                         logger.debug(
                             f"Next sync for connector {connector.id} due in {int(next_sync)} seconds"
@@ -126,13 +128,17 @@ class SyncService(BaseService):
             if connector.sync_now:
                 await connector.reset_sync_now_flag()
             sync_job = await self.syncJobIndex.fetch_by_id(job_id)
-            sync_job_runner = SyncJobRunner(source_klass=self.source_klass_dict[connector.service_type], sync_job=sync_job, connector=connector, elastic_server=es, bulk_options=self.bulk_options)
+            sync_job_runner = SyncJobRunner(
+                source_klass=self.source_klass_dict[connector.service_type],
+                sync_job=sync_job,
+                connector=connector,
+                elastic_server=es,
+                bulk_options=self.bulk_options,
+            )
             await sync_job_runner.execute()
             await asyncio.sleep(0)
         except InvalidFilteringError as e:
             logger.error(e)
-        finally:
-            await connector.close()
 
     async def _run(self):
         """Main event loop."""
@@ -162,9 +168,10 @@ class SyncService(BaseService):
 
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
-                    async for connector in self.connectors.supported_connectors(
+
+                    async for connector in self.connectorIndex.supported_connectors(
                         native_service_types=native_service_types,
-                        connector_ids=connector_ids,
+                        connectors_ids=connectors_ids,
                     ):
                         await self.syncs.put(
                             functools.partial(self._one_sync, connector, es)

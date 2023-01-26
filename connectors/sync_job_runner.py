@@ -6,16 +6,14 @@
 import asyncio
 import time
 
-from connectors.byoc import DataSourceError, JobStatus
+from connectors.byoc import JobStatus
 from connectors.es import Mappings
-from connectors.logger import logger
-
 from connectors.filtering.validation import (
     FilteringValidationState,
     InvalidFilteringError,
-    ValidationTarget,
     validate_filtering,
 )
+from connectors.logger import logger
 
 
 class SyncJobRunningError(Exception):
@@ -60,7 +58,9 @@ class SyncJobRunner:
 
             data_provider = self.source_klass(self.sync_job.configuration)
             if not await data_provider.changed():
-                logger.debug(f"No change in {self.sync_job.service_type} data provider, skipping...")
+                logger.debug(
+                    f"No change in {self.sync_job.service_type} data provider, skipping..."
+                )
                 return
 
             logger.debug(f"Syncing '{self.sync_job.service_type}'")
@@ -116,7 +116,7 @@ class SyncJobRunner:
                 "indexed_document_count": indexed_count,
                 "indexed_document_volume": 0,
                 "deleted_document_count": 0,
-                "total_document_count": await self.connector.document_count()
+                "total_document_count": await self.connector.document_count(),
             }
             if sync_status == JobStatus.ERROR:
                 await self.sync_job.error(sync_error, ingestion_stats=ingestion_stats)
@@ -145,7 +145,9 @@ class SyncJobRunner:
 
         async for doc, lazy_download in data_provider.get_docs():
             # adapt doc for pipeline settings
-            doc["_extract_binary_content"] = self.sync_job.pipeline.extract_binary_content
+            doc[
+                "_extract_binary_content"
+            ] = self.sync_job.pipeline.extract_binary_content
             doc["_reduce_whitespace"] = self.sync_job.pipeline.reduce_whitespace
             doc["_run_ml_inference"] = self.sync_job.pipeline.run_ml_inference
             yield doc, lazy_download
