@@ -296,7 +296,7 @@ class Filter(dict):
         return self.advanced_rules
 
     def has_advanced_rules(self):
-        return len(self.advanced_rules) > 0
+        return len(self.advanced_rules)
 
 
 class PipelineSettings:
