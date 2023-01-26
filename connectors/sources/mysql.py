@@ -305,7 +305,6 @@ class MySqlDataSource(BaseDataSource):
                 f"Fetched 0 tables for the database: {database}. As database has no tables."
             )
 
-
     async def fetch_documents(self, database, table, query=QUERIES["TABLE_DATA"]):
         """Fetches all the table entries and format them in Elasticsearch documents
 
