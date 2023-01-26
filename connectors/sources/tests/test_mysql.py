@@ -246,6 +246,7 @@ async def test_ping_negative(patch_logger):
             await source.ping()
 
 
+@pytest.mark.fail_slow(10)
 @pytest.mark.asyncio
 async def test_connect_with_retry(patch_logger):
     """Test _connect method of MySQL with retry"""
