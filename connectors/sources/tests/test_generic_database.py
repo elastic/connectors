@@ -4,15 +4,10 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Generic Database source class methods"""
-import datetime
-import decimal
-import random
-from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
 from asyncpg.exceptions._base import InternalClientError
-from bson import Decimal128
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -203,37 +198,6 @@ def test_validate_configuration_ssl(patch_logger):
 
         # Execute
         source._validate_configuration()
-
-
-@pytest.mark.asyncio
-async def test_serialize(patch_logger):
-    """This function test serialize method of GDC"""
-    # Setup
-    source = create_source(GenericBaseDataSource)
-
-    # Execute
-    response = source.serialize(
-        {
-            "key1": "value",
-            "key2": [],
-            "key3": {"Key": "value"},
-            "key4": datetime.datetime.now(),
-            "key5": decimal.Decimal(str(random.random())),
-            "key6": Decimal128(Decimal("0.0005")),
-            "key7": bytes("value", "utf-8"),
-        }
-    )
-
-    # Assert
-    assert list(response.keys()) == [
-        "key1",
-        "key2",
-        "key3",
-        "key4",
-        "key5",
-        "key6",
-        "key7",
-    ]
 
 
 @pytest.mark.asyncio

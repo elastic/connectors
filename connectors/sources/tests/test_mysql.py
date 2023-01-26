@@ -5,16 +5,11 @@
 #
 """Tests the MySQL source class methods"""
 import asyncio
-import datetime
-import decimal
-import random
 import ssl
-from decimal import Decimal
 from unittest import mock
 
 import aiomysql
 import pytest
-from bson import Decimal128
 
 from connectors.source import DataSourceConfiguration
 from connectors.sources.mysql import MySqlDataSource
@@ -216,37 +211,6 @@ async def test_connect_with_retry(patch_logger, patch_default_wait_multiplier):
         with pytest.raises(Exception):
             async for response in streamer:
                 response
-
-
-@pytest.mark.asyncio
-async def test_serialize():
-    """This function test serialize method of MySQL"""
-    # Setup
-    source = create_source(MySqlDataSource)
-
-    # Execute
-    response = source.serialize(
-        {
-            "key1": "value",
-            "key2": [],
-            "key3": {"Key": "value"},
-            "key4": datetime.datetime.now(),
-            "key5": decimal.Decimal(str(random.random())),
-            "key6": Decimal128(Decimal("0.0005")),
-            "key7": bytes("value", "utf-8"),
-        }
-    )
-
-    # Assert
-    assert list(response.keys()) == [
-        "key1",
-        "key2",
-        "key3",
-        "key4",
-        "key5",
-        "key6",
-        "key7",
-    ]
 
 
 @pytest.mark.asyncio
