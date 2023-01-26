@@ -206,6 +206,7 @@ class Args:
         self.one_sync = options.get("one_sync", False)
         self.sync_now = options.get("sync_now", False)
 
+
 async def stop_service(service, pre_delay=0):
     # TODO: It's a bit of a hack, :sad:
     # How can we actually test it better?
@@ -214,6 +215,7 @@ async def stop_service(service, pre_delay=0):
     # test things separately
     await asyncio.sleep(pre_delay)
     return await service.stop()
+
 
 def create_service(config_file, **options):
     config = load_config(config_file)
@@ -398,8 +400,12 @@ async def test_connector_service_poll_unconfigured(
     # we should not sync a connector that is not configured
     # but still send out a heartbeat
 
+<<<<<<< HEAD
 
     await set_server_responses(mock_responses, [FAKE_CONFIG_NEEDS_CONFIG])
+=======
+    await set_server_responses(mock_responses, FAKE_CONFIG_NEEDS_CONFIG)
+>>>>>>> 3bd7a96 (Make autoformat)
     service = create_service(CONFIG_FILE)
     asyncio.ensure_future(stop_service(service))
     await service.run()
