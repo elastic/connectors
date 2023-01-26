@@ -400,12 +400,8 @@ async def test_connector_service_poll_unconfigured(
     # we should not sync a connector that is not configured
     # but still send out a heartbeat
 
-<<<<<<< HEAD
 
     await set_server_responses(mock_responses, [FAKE_CONFIG_NEEDS_CONFIG])
-=======
-    await set_server_responses(mock_responses, FAKE_CONFIG_NEEDS_CONFIG)
->>>>>>> 3bd7a96 (Make autoformat)
     service = create_service(CONFIG_FILE)
     asyncio.ensure_future(stop_service(service))
     await service.run()
