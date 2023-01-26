@@ -228,19 +228,19 @@ class BaseDataSource:
         pass
 
     def serialize(self, doc):
-        """Reads each element from the document and serialize it as per it's datatype.
+        """Reads each element from the document and serializes it with respect to its datatype.
 
         Args:
-            doc (Dict): Dictionary to be serialize
+            doc (Dict): Dictionary to be serialized
 
         Returns:
             doc (Dict): Serialized version of dictionary
         """
 
         def _serialize(value):
-            """Serialize input value as per it's datatype.
+            """Serialize input value with respect to its datatype.
             Args:
-                value (Any Datatype): Value to be serialize
+                value (Any Datatype): Value to be serialized
 
             Returns:
                 value (Any Datatype): Serialized version of input value.
