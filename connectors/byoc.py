@@ -260,7 +260,7 @@ class SyncJob:
         self.status = JobStatus.SUSPENDED
         job_def = {"status": e2str(self.status)}
 
-        return await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
+        await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
 
     @classmethod
     def transform_filtering(cls, filtering):
@@ -456,14 +456,6 @@ class Connector:
     def status(self):
         return self._status
 
-    @property
-    def last_sync_status(self):
-        status = self.doc_source["last_sync_status"]
-        if status is None:
-            return None
-        value = JobStatus[status.upper()]
-        return value
-
     @status.setter
     def status(self, value):
         if isinstance(value, str):
@@ -508,7 +500,7 @@ class Connector:
     async def suspend(self):
         if self._sync_task is not None:
             task = self._sync_task
-            cancelled = task.cancel()
+            task.cancel()
             await task
         await self.close()
 
@@ -682,12 +674,7 @@ class Connector:
 
         try:
             service_type = self.service_type
-            if sync_now:
-                self.sync_now = True
-                logger.info("Sync forced")
-            elif self.last_sync_status == JobStatus.SUSPENDED:
-                logger.info("Restarting sync after suspension")
-            else:
+            if not sync_now:
                 next_sync = self.next_sync()
                 if next_sync == SYNC_DISABLED or next_sync - idling > 0:
                     if next_sync == SYNC_DISABLED:
@@ -702,6 +689,9 @@ class Connector:
                         self.status = Status.CONNECTED
                         await self.sync_doc()
                     return
+            else:
+                self.sync_now = True
+                logger.info("Sync forced")
 
             try:
                 self.data_provider = self.source_klass(self.configuration)
