@@ -253,7 +253,7 @@ class MySqlDataSource(BaseDataSource):
                 if retry == self.retry_count:
                     raise exception
                 cursor_position = rows_fetched
-                await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry)
+                await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER*retry)
                 retry += 1
 
     async def fetch_rows(self, database):
