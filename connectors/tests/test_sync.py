@@ -513,7 +513,7 @@ async def test_connector_service_poll_https(mock_responses, patch_logger, set_en
 async def test_connector_service_poll_large(mock_responses, patch_logger, set_env):
     await set_server_responses(mock_responses, [LARGE_FAKE_CONFIG])
     service = create_service(MEM_CONFIG_FILE)
-    asyncio.ensure_future(stop_service(service, 0.5))
+    asyncio.ensure_future(stop_service(service, 0.7))
     await service.run()
 
     # let's make sure we are seeing bulk batches of various sizes
