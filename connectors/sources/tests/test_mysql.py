@@ -21,6 +21,12 @@ from connectors.sources.mysql import MySqlDataSource
 from connectors.sources.tests.support import create_source
 
 
+@pytest.fixture
+def patch_default_wait_multiplier():
+    with mock.patch("connectors.sources.mysql.DEFAULT_WAIT_MULTIPLIER", 0):
+        yield
+
+
 def test_get_configuration():
     """Test get_configuration method of MySQL"""
     # Setup
@@ -189,7 +195,7 @@ async def test_ping_negative(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_connect_with_retry(patch_logger):
+async def test_connect_with_retry(patch_logger, patch_default_wait_multiplier):
     """Test _connect method of MySQL with retry"""
     # Setup
     source = create_source(MySqlDataSource)
@@ -204,7 +210,7 @@ async def test_connect_with_retry(patch_logger):
     ):
         # Execute
         streamer = source._connect(
-            query_name="select * from database.table", fetch_many=True
+            query_name="TABLE_DATA", fetch_many=True, database="db", table="table"
         )
 
         with pytest.raises(Exception):
