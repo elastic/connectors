@@ -79,6 +79,12 @@ def patch_fetch_rows_for_table():
         yield mock_to_patch
 
 
+@pytest.fixture
+def patch_default_wait_multiplier():
+    with mock.patch("connectors.sources.mysql.DEFAULT_WAIT_MULTIPLIER", 0):
+        yield
+
+
 def test_get_configuration():
     """Test get_configuration method of MySQL"""
     # Setup
@@ -246,9 +252,8 @@ async def test_ping_negative(patch_logger):
             await source.ping()
 
 
-@pytest.mark.fail_slow(10)
 @pytest.mark.asyncio
-async def test_connect_with_retry(patch_logger):
+async def test_connect_with_retry(patch_logger, patch_default_wait_multiplier):
     """Test _connect method of MySQL with retry"""
     # Setup
     source = create_source(MySqlDataSource)
