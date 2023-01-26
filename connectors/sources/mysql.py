@@ -6,11 +6,8 @@
 """MySQL source module responsible to fetch documents from MySQL"""
 import asyncio
 import ssl
-from datetime import date, datetime
-from decimal import Decimal
 
 import aiomysql
-from bson import Decimal128
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
@@ -281,45 +278,6 @@ class MySqlDataSource(BaseDataSource):
             logger.warning(
                 f"Fetched 0 tables for the database: {database}. As database has no tables."
             )
-
-    def serialize(self, doc):
-        """Reads each element from the document and serialize it as per it’s datatype.
-
-        Args:
-            doc (Dict): Dictionary to be serialize
-
-        Returns:
-            doc (Dict): Serialized version of dictionary
-        """
-
-        def _serialize(value):
-            """Serialize input value as per it’s datatype.
-            Args:
-                value (Any Datatype): Value to be serialize
-
-            Returns:
-                value (Any Datatype): Serialized version of input value.
-            """
-
-            if isinstance(value, (list, tuple)):
-                value = [_serialize(item) for item in value]
-            elif isinstance(value, dict):
-                for key, svalue in value.items():
-                    value[key] = _serialize(svalue)
-            elif isinstance(value, (datetime, date)):
-                value = value.isoformat()
-            elif isinstance(value, Decimal128):
-                value = value.to_decimal()
-            elif isinstance(value, (bytes, bytearray)):
-                value = value.decode(errors="ignore")
-            elif isinstance(value, Decimal):
-                value = float(value)
-            return value
-
-        for key, value in doc.items():
-            doc[key] = _serialize(value)
-
-        return doc
 
     async def fetch_documents(self, database, table):
         """Fetches all the table entries and format them in Elasticsearch documents
