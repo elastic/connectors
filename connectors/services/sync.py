@@ -15,11 +15,13 @@ import functools
 
 from connectors.byoc import (
     ConnectorIndex,
+    SyncJobIndex,
     ConnectorUpdateError,
     DataSourceError,
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
     Status,
+    SYNC_DISABLED,
 )
 from connectors.byoei import ElasticServer
 from connectors.filtering.validation import (
@@ -30,6 +32,9 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.utils import ConcurrentTasks, e2str
+from connectors.sync_job_runner import SyncJobRunner
+from connectors.source import get_source_klass_dict
+
 
 DEFAULT_MAX_CONCURRENT_SYNCS = 1
 
@@ -38,11 +43,14 @@ class SyncService(BaseService):
     def __init__(self, config):
         super().__init__(config)
         self.idling = self.service_config["idling"]
-        self.hb = self.service_config["heartbeat"]
+        self.heartbeat_interval = self.service_config["heartbeat"]
         self.concurrent_syncs = self.service_config.get(
             "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
         )
-        self.connectors = None
+        self.bulk_options = self.es_config.get("bulk", {})
+        self.source_klass_dict = get_data_source_dict(config)
+        self.connectorIndex = None
+        self.syncJobIndex = None
         self.syncs = None
 
     def stop(self):
@@ -81,7 +89,7 @@ class SyncService(BaseService):
 
         try:
             # the heartbeat is always triggered
-            connector.start_heartbeat(self.hb)
+            await connector.heartbeat(self.heartbeat_interval)
 
             logger.debug(f"Connector status is {connector.status}")
 
@@ -89,24 +97,47 @@ class SyncService(BaseService):
             if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
                 # we can't sync in that state
                 logger.info(f"Can't sync with status `{e2str(connector.status)}`")
+                return
+
+            if connector.features.sync_rules_enabled():
+                await validate_filtering(
+                    connector, self.connectorIndex, ValidationTarget.DRAFT
+                )
+
+            if not sync_now:
+                next_sync = connector.next_sync()
+                if next_sync == SYNC_DISABLED or next_sync - self.idling > 0:
+                    if next_sync == SYNC_DISABLED:
+                        logger.debug(f"Scheduling is disabled for connector {connector.id}")
+                    else:
+                        logger.debug(
+                            f"Next sync for connector {connector.id} due in {int(next_sync)} seconds"
+                        )
+                    return
             else:
-                if connector.features.sync_rules_enabled():
-                    await validate_filtering(
-                        connector, self.connectors, ValidationTarget.DRAFT
-                    )
+                logger.info("Sync forced")
 
-                await connector.sync(es, self.idling)
+            if connector.service_type not in self.source_klass_dict:
+                raise DataSourceError(
+                    f"Could find data source class for {connector.service_type}"
+                )
 
+            job_id = await self.syncJobIndex.create(connector, sync_now)
+            if connector.sync_now:
+                await connector.reset_sync_now_flag()
+            sync_job = await self.syncJobIndex.fetch_by_id(job_id)
+            sync_job_runner = SyncJobRunner(source_klass=self.source_klass_dict[connector.service_type], sync_job=sync_job, connector=connector, elastic_server=es, bulk_options=self.bulk_options)
+            await sync_job_runner.execute()
             await asyncio.sleep(0)
         except InvalidFilteringError as e:
             logger.error(e)
-            return
         finally:
             await connector.close()
 
     async def _run(self):
         """Main event loop."""
-        self.connectors = ConnectorIndex(self.es_config)
+        self.connectorIndex = ConnectorIndex(self.es_config)
+        self.syncJobIndex = SyncJobIndex(self.es_config)
 
         native_service_types = self.config.get("native_service_types", [])
         logger.debug(f"Native support for {', '.join(native_service_types)}")
@@ -150,8 +181,11 @@ class SyncService(BaseService):
                     break
                 await self._sleeps.sleep(self.idling)
         finally:
-            if self.connectors is not None:
-                self.connectors.stop_waiting()
-                await self.connectors.close()
+            if self.connectorIndex is not None:
+                self.connectorIndex.stop_waiting()
+                await self.connectorIndex.close()
+            if self.syncJobIndex is not None:
+                self.syncJobIndex.stop_waiting()
+                await self.syncJobIndex.close()
             await es.close()
         return 0

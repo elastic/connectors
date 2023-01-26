@@ -28,6 +28,10 @@ from connectors.byoc import (
     SyncJob,
     SyncJobIndex,
     iso_utc,
+    supported_connectors_query,
+    pending_job_query,
+    orphaned_jobs_query,
+    stuck_jobs_query,
 )
 from connectors.byoei import ElasticServer
 from connectors.config import load_config
@@ -593,15 +597,18 @@ async def test_sync_mongo(
 @pytest.mark.asyncio
 async def test_properties(mock_responses):
     connector_src = {
-        "service_type": "test",
-        "index_name": "search-some-index",
-        "configuration": {},
-        "language": "en",
-        "scheduling": {},
-        "status": "created",
+        "_id": "test",
+        "_source": {
+            "service_type": "test",
+            "index_name": "search-some-index",
+            "configuration": {},
+            "language": "en",
+            "scheduling": {},
+            "status": "created",
+        },
     }
 
-    connector = Connector(StubIndex(), "test", connector_src, {})
+    connector = Connector(StubIndex(), connector_src, {})
 
     assert connector.status == Status.CREATED
     assert connector.service_type == "test"
@@ -649,14 +656,17 @@ async def test_prepare(mock_responses):
     # when it's created that way, the service type is None,
     # so it's up to the connector to set it back to its value
     doc = {
-        "status": "created",
-        "service_type": None,
-        "index_name": "test",
-        "configuration": {},
-        "language": "en",
-        "scheduling": {"enabled": False},
+        "_id": "1",
+        "_source": {
+            "status": "created",
+            "service_type": None,
+            "index_name": "test",
+            "configuration": {},
+            "language": "en",
+            "scheduling": {"enabled": False},
+        },
     }
-    connector = Connector(Index(), "1", doc, {})
+    connector = Connector(Index(), doc, {})
 
     config = {
         "connector_id": "1",

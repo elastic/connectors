@@ -61,6 +61,10 @@ class ESIndex(ESClient):
     async def update(self, doc_id, doc):
         await self.client.update(index=self.index_name, id=doc_id, doc=doc)
 
+    async def document_count(self):
+        await self.client.indices.refresh(index=self.index_name)
+        return await self.client.count(index=self.index_name)['count']
+
     async def get_all_docs(self, query=None, page_size=DEFAULT_PAGE_SIZE):
         """
         Lookup for elasticsearch documents using {query}
