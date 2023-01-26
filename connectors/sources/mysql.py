@@ -263,26 +263,26 @@ class MySqlDataSource(BaseDataSource):
     async def fetch_tables(self, database):
         return await anext(self._connect(query=QUERIES["ALL_TABLE"], database=database))
 
-    async def fetch_rows_for_table(self, database, table_name=None, query=None):
+    async def fetch_rows_for_table(self, database, table=None, query=None):
         """Fetches all the rows from all the tables of the database.
 
         Args:
-            database (str): Name of database
-            table_name (str): Name of table
-            query (str): Advanced rules query
+            database (str): Name of the database to fetch from
+            table (str): Name of the table to fetch from
+            query (str): MySQL query
 
         Yields:
             Dict: Row document to index
         """
 
-        if table_name:
+        if table:
             async for row in self.fetch_documents(
-                database=database, table=table_name, query=query
+                database=database, table=table, query=query
             ):
                 yield row
         else:
             logger.warning(
-                f"Fetched 0 rows for the table: {table_name}. As table has no rows."
+                f"Fetched 0 rows for the table: {table}. As table has no rows."
             )
 
     async def fetch_rows_from_all_tables(self, database):
@@ -303,7 +303,7 @@ class MySqlDataSource(BaseDataSource):
 
                 async for row in self.fetch_rows_for_table(
                     database=database,
-                    table_name=table_name,
+                    table=table_name,
                     query=QUERIES["TABLE_DATA"],
                 ):
                     yield row
@@ -463,7 +463,7 @@ class MySqlDataSource(BaseDataSource):
                             )
                             async for row in self.fetch_rows_for_table(
                                 database=database,
-                                table_name=table_name,
+                                table=table_name,
                                 query=query,
                             ):
                                 yield row, None
