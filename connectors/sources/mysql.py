@@ -180,11 +180,11 @@ class MySqlDataSource(BaseDataSource):
             logger.exception("Error while connecting to the MySQL Server.")
             raise
 
-    async def _connect(self, query_name, fetch_many=False, **query_kwargs):
+    async def _connect(self, query, fetch_many=False, **query_kwargs):
         """Executes the passed query on the MySQL server.
 
         Args:
-            query_name (str): MySql query name to be executed.
+            query (str): MySql query to be executed.
             query_kwargs (dict): Query kwargs to format the query.
             fetch_many (boolean): Should use fetchmany to fetch the response.
 
@@ -192,7 +192,7 @@ class MySqlDataSource(BaseDataSource):
             list: Column names and query response
         """
 
-        query = QUERIES[query_name].format(**query_kwargs)
+        formatted_query = query.format(**query_kwargs)
         size = int(self.configuration.get("fetch_size", DEFAULT_FETCH_SIZE))
 
         # retry: Current retry counter
@@ -206,7 +206,7 @@ class MySqlDataSource(BaseDataSource):
             try:
                 async with self.connection_pool.acquire() as connection:
                     async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
-                        await cursor.execute(query)
+                        await cursor.execute(formatted_query)
 
                         if fetch_many:
                             # sending back column names only once
@@ -256,7 +256,32 @@ class MySqlDataSource(BaseDataSource):
                 await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry)
                 retry += 1
 
-    async def fetch_rows(self, database):
+    async def fetch_tables(self, database):
+        return await anext(self._connect(query=QUERIES["ALL_TABLE"], database=database))
+
+    async def fetch_rows_for_table(self, database, table_name=None, query=None):
+        """Fetches all the rows from all the tables of the database.
+
+        Args:
+            database (str): Name of database
+            table_name (str): Name of table
+            query (str): Advanced rules query
+
+        Yields:
+            Dict: Row document to index
+        """
+
+        if table_name:
+            async for row in self.fetch_documents(
+                database=database, table=table_name, query=query
+            ):
+                yield row
+        else:
+            logger.warning(
+                f"Fetched 0 rows for the table: {table_name}. As table has no rows."
+            )
+
+    async def fetch_rows_from_all_tables(self, database):
         """Fetches all the rows from all the tables of the database.
 
         Args:
@@ -265,16 +290,17 @@ class MySqlDataSource(BaseDataSource):
         Yields:
             Dict: Row document to index
         """
-        # Query to get all table names from a database
-        response = await anext(self._connect(query_name="ALL_TABLE", database=database))
+        tables = await self.fetch_tables(database=database)
 
-        if response:
-            for table in response:
+        if tables:
+            for table in tables:
                 table_name = table[0]
                 logger.debug(f"Found table: {table_name} in database: {database}.")
 
-                async for row in self.fetch_documents(
-                    database=database, table=table_name
+                async for row in self.fetch_rows_for_table(
+                    database=database,
+                    table_name=table_name,
+                    query=QUERIES["TABLE_DATA"],
                 ):
                     yield row
         else:
@@ -321,21 +347,22 @@ class MySqlDataSource(BaseDataSource):
 
         return doc
 
-    async def fetch_documents(self, database, table):
+    async def fetch_documents(self, database, table, query=QUERIES["TABLE_DATA"]):
         """Fetches all the table entries and format them in Elasticsearch documents
 
         Args:
             database (str): Name of database
             table (str): Name of table
+            query (str): Query to fetch data from a table
 
         Yields:
-            Dict: Document to be index
+            Dict: Document to be indexed
         """
 
         # Query to get the table's primary key
         response = await anext(
             self._connect(
-                query_name="TABLE_PRIMARY_KEY", database=database, table=table
+                query=QUERIES["TABLE_PRIMARY_KEY"], database=database, table=table
             )
         )
 
@@ -348,14 +375,16 @@ class MySqlDataSource(BaseDataSource):
             # Query to get the table's last update time
             response = await anext(
                 self._connect(
-                    query_name="TABLE_LAST_UPDATE_TIME", database=database, table=table
+                    query=QUERIES["TABLE_LAST_UPDATE_TIME"],
+                    database=database,
+                    table=table,
                 )
             )
             last_update_time = response[0][0]
 
             # Query to get the table's data
             streamer = self._connect(
-                query_name="TABLE_DATA", fetch_many=True, database=database, table=table
+                query=query, fetch_many=True, database=database, table=table
             )
             column_names = await anext(streamer)
 
@@ -389,11 +418,11 @@ class MySqlDataSource(BaseDataSource):
         """
 
         # Query to get all databases
-        response = await anext(self._connect(query_name="ALL_DATABASE"))
+        response = await anext(self._connect(query=QUERIES["ALL_DATABASE"]))
         accessible_databases = [database[0] for database in response]
         return list(set(databases) - set(accessible_databases))
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         """Executes the logic to fetch databases, tables and rows in async manner.
 
         Yields:
@@ -412,7 +441,31 @@ class MySqlDataSource(BaseDataSource):
                 f"Configured databases: {inaccessible_databases} are inaccessible for user {self.configuration['user']}."
             )
 
-        for database in databases:
-            async for row in self.fetch_rows(database=database):
-                yield row, None
-            await asyncio.sleep(0)
+        if self.advanced_rules_present(filtering):
+            for database in databases:
+                advanced_rules = self.extract_advanced_rules(filtering)
+
+                if database in advanced_rules:
+                    database_filtering = advanced_rules.get(database, {})
+                    tables = await self.fetch_tables(database)
+
+                    for table in tables:
+                        table_name = table[0]
+
+                        if table_name in database_filtering:
+                            query = database_filtering[table_name]
+                            logger.debug(
+                                f"Fetching rows from table '{table_name}' in database '{database}' with a custom query."
+                            )
+                            async for row in self.fetch_rows_for_table(
+                                database=database,
+                                table_name=table_name,
+                                query=query,
+                            ):
+                                yield row, None
+                            await asyncio.sleep(0)
+        else:
+            for database in databases:
+                async for row in self.fetch_rows_from_all_tables(database=database):
+                    yield row, None
+                await asyncio.sleep(0)

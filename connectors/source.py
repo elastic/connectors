@@ -163,6 +163,22 @@ class BaseDataSource:
         """
         return []
 
+    @classmethod
+    def advanced_rules_present(cls, filtering=None):
+        """Return if advanced rules are present."""
+        if filtering is None:
+            filtering = {}
+
+        return len(filtering.get("advanced_snippet", {}))
+
+    @classmethod
+    def extract_advanced_rules(cls, filtering=None):
+        """Return the advanced snippet."""
+        if filtering is None:
+            filtering = {}
+
+        return filtering.get("advanced_snippet", {})
+
     async def changed(self):
         """When called, returns True if something has changed in the backend.
 
@@ -187,7 +203,7 @@ class BaseDataSource:
         """
         pass
 
-    async def get_docs(self):
+    async def get_docs(self, **kwargs):
         """Returns an iterator on all documents present in the backend
 
         Each document is a tuple with:

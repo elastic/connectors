@@ -20,6 +20,14 @@ from connectors.source import (
     get_source_klass,
 )
 
+EMPTY_FILTERING = {}
+
+ADVANCED_RULES_EMPTY = {"advanced_snippet": {}}
+
+ADVANCED_RULES = {"db": {"table": "SELECT * FROM db.table"}}
+
+ADVANCED_RULES_NON_EMPTY = {"advanced_snippet": ADVANCED_RULES}
+
 CONFIG = {
     "host": {
         "value": "mongodb://127.0.0.1:27021",
@@ -36,6 +44,17 @@ CONFIG = {
         "label": "MongoDB Collection",
         "type": "str",
     },
+}
+
+RULES = [
+    {
+        "id": 1,
+    }
+]
+BASIC_RULES_NON_EMPTY = {"rules": RULES}
+ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
+    "advanced_snippet": {"db": {"table": "SELECT * FROM db.table"}},
+    "rules": RULES,
 }
 
 
@@ -96,6 +115,41 @@ async def test_validate_filter(validator_mock):
     validator_mock.return_value = "valid"
 
     assert await BaseDataSource.validate_filtering({}) == "valid"
+
+
+@pytest.mark.parametrize(
+    "filtering, should_advanced_rules_be_present",
+    [
+        (ADVANCED_RULES_NON_EMPTY, True),
+        (ADVANCED_AND_BASIC_RULES_NON_EMPTY, True),
+        (ADVANCED_RULES_EMPTY, False),
+        (BASIC_RULES_NON_EMPTY, False),
+        (EMPTY_FILTERING, False),
+        (None, False),
+    ],
+)
+def test_advanced_rules_present(filtering, should_advanced_rules_be_present):
+    assert (
+        BaseDataSource.advanced_rules_present(filtering)
+        == should_advanced_rules_be_present
+    )
+
+
+@pytest.mark.parametrize(
+    "filtering, expected_advanced_rules",
+    (
+        [
+            (ADVANCED_RULES_NON_EMPTY, ADVANCED_RULES),
+            (ADVANCED_AND_BASIC_RULES_NON_EMPTY, ADVANCED_RULES),
+            (ADVANCED_RULES_EMPTY, {}),
+            (BASIC_RULES_NON_EMPTY, {}),
+            (EMPTY_FILTERING, {}),
+            (None, {}),
+        ]
+    ),
+)
+def test_extract_advanced_rules(filtering, expected_advanced_rules):
+    assert BaseDataSource.extract_advanced_rules(filtering) == expected_advanced_rules
 
 
 @pytest.mark.asyncio
