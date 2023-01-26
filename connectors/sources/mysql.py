@@ -6,11 +6,8 @@
 """MySQL source module responsible to fetch documents from MySQL"""
 import asyncio
 import ssl
-from datetime import date, datetime
-from decimal import Decimal
 
 import aiomysql
-from bson import Decimal128
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
