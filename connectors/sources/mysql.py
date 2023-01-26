@@ -13,7 +13,11 @@ import aiomysql
 from bson import Decimal128
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import (
+    BaseDataSource,
+    advanced_rules_present,
+    extract_advanced_rules,
+)
 
 MAX_POOL_SIZE = 10
 QUERIES = {
@@ -441,9 +445,9 @@ class MySqlDataSource(BaseDataSource):
                 f"Configured databases: {inaccessible_databases} are inaccessible for user {self.configuration['user']}."
             )
 
-        if self.advanced_rules_present(filtering):
+        if advanced_rules_present(filtering):
             for database in databases:
-                advanced_rules = self.extract_advanced_rules(filtering)
+                advanced_rules = extract_advanced_rules(filtering)
 
                 if database in advanced_rules:
                     database_filtering = advanced_rules.get(database, {})

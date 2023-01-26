@@ -16,6 +16,8 @@ from connectors.source import (
     BaseDataSource,
     DataSourceConfiguration,
     Field,
+    advanced_rules_present,
+    extract_advanced_rules,
     get_data_sources,
     get_source_klass,
 )
@@ -129,10 +131,7 @@ async def test_validate_filter(validator_mock):
     ],
 )
 def test_advanced_rules_present(filtering, should_advanced_rules_be_present):
-    assert (
-        BaseDataSource.advanced_rules_present(filtering)
-        == should_advanced_rules_be_present
-    )
+    assert advanced_rules_present(filtering) == should_advanced_rules_be_present
 
 
 @pytest.mark.parametrize(
@@ -149,7 +148,7 @@ def test_advanced_rules_present(filtering, should_advanced_rules_be_present):
     ),
 )
 def test_extract_advanced_rules(filtering, expected_advanced_rules):
-    assert BaseDataSource.extract_advanced_rules(filtering) == expected_advanced_rules
+    assert extract_advanced_rules(filtering) == expected_advanced_rules
 
 
 @pytest.mark.asyncio
