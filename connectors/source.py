@@ -177,7 +177,7 @@ class BaseDataSource:
 
     @classmethod
     def extract_advanced_rules(cls, filtering=None):
-        """Return the advanced snippet."""
+        """Extract the advanced snippet."""
         if filtering is None:
             filtering = {}
 
