@@ -32,8 +32,8 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.utils import ConcurrentTasks, e2str
-from connectors.sync_job_runner import SyncJobRunner
 from connectors.source import get_source_klass_dict
+from connectors.sync_job_runner import SyncJobRunner
 
 
 DEFAULT_MAX_CONCURRENT_SYNCS = 1
@@ -49,8 +49,8 @@ class SyncService(BaseService):
         )
         self.bulk_options = self.es_config.get("bulk", {})
         self.source_klass_dict = get_source_klass_dict(config)
-        self.connectorIndex = None
-        self.syncJobIndex = None
+        self.connector_index = None
+        self.sync_job_index = None
         self.syncs = None
 
     def stop(self):
@@ -68,23 +68,7 @@ class SyncService(BaseService):
         if connector.native:
             logger.debug(f"Connector {connector.id} natively supported")
 
-        try:
-            await connector.prepare(self.config)
-        except ServiceTypeNotConfiguredError:
-            logger.error(
-                f"Service type is not configured for connector {self.config['connector_id']}"
-            )
-            return
-        except ConnectorUpdateError as e:
-            logger.error(e)
-            return
-        except ServiceTypeNotSupportedError:
-            logger.debug(f"Can't handle source of type {connector.service_type}")
-            return
-        except DataSourceError as e:
-            await connector.error(e)
-            logger.critical(e, exc_info=True)
-            self.raise_if_spurious(e)
+        if not await self._prepare_connector(connector):
             return
 
         try:
@@ -99,35 +83,24 @@ class SyncService(BaseService):
                 logger.info(f"Can't sync with status `{e2str(connector.status)}`")
                 return
 
-            if connector.features.sync_rules_enabled():
-                await validate_filtering(
-                    connector, self.connectorIndex, ValidationTarget.DRAFT
-                )
-
-            if not sync_now:
-                next_sync = connector.next_sync()
-                if next_sync == SYNC_DISABLED or next_sync - self.idling > 0:
-                    if next_sync == SYNC_DISABLED:
-                        logger.debug(
-                            f"Scheduling is disabled for connector {connector.id}"
-                        )
-                    else:
-                        logger.debug(
-                            f"Next sync for connector {connector.id} due in {int(next_sync)} seconds"
-                        )
-                    return
-            else:
-                logger.info("Sync forced")
-
             if connector.service_type not in self.source_klass_dict:
                 raise DataSourceError(
                     f"Could find data source class for {connector.service_type}"
                 )
+            source_klass = self.source_klass_dict[connector.service_type]
 
-            job_id = await self.syncJobIndex.create(connector, sync_now)
+            if connector.features.sync_rules_enabled():
+                await validate_filtering(
+                    connector, source_klass, ValidationTarget.DRAFT
+                )
+
+            if not self._ready_to_sync(connector, sync_now):
+                return
+
+            job_id = await self.sync_job_index.create(connector, sync_now)
             if connector.sync_now:
                 await connector.reset_sync_now_flag()
-            sync_job = await self.syncJobIndex.fetch_by_id(job_id)
+            sync_job = await self.sync_job_index.fetch_by_id(job_id)
             sync_job_runner = SyncJobRunner(
                 source_klass=self.source_klass_dict[connector.service_type],
                 sync_job=sync_job,
@@ -142,8 +115,8 @@ class SyncService(BaseService):
 
     async def _run(self):
         """Main event loop."""
-        self.connectorIndex = ConnectorIndex(self.es_config)
-        self.syncJobIndex = SyncJobIndex(self.es_config)
+        self.connector_index = ConnectorIndex(self.es_config)
+        self.sync_job_index = SyncJobIndex(self.es_config)
 
         native_service_types = self.config.get("native_service_types", [])
         logger.debug(f"Native support for {', '.join(native_service_types)}")
@@ -169,9 +142,9 @@ class SyncService(BaseService):
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
 
-                    async for connector in self.connectorIndex.supported_connectors(
+                    async for connector in self.connector_index.supported_connectors(
                         native_service_types=native_service_types,
-                        connectors_ids=connectors_ids,
+                        connectors_ids=connector_ids,
                     ):
                         await self.syncs.put(
                             functools.partial(self._one_sync, connector, es)
@@ -188,11 +161,51 @@ class SyncService(BaseService):
                     break
                 await self._sleeps.sleep(self.idling)
         finally:
-            if self.connectorIndex is not None:
-                self.connectorIndex.stop_waiting()
-                await self.connectorIndex.close()
-            if self.syncJobIndex is not None:
-                self.syncJobIndex.stop_waiting()
-                await self.syncJobIndex.close()
+            if self.connector_index is not None:
+                self.connector_index.stop_waiting()
+                await self.connector_index.close()
+            if self.sync_job_index is not None:
+                self.sync_job_index.stop_waiting()
+                await self.sync_job_index.close()
             await es.close()
         return 0
+
+    async def _prepare_connector(self, connector):
+        try:
+            await connector.prepare(self.config)
+            return True
+        except ServiceTypeNotConfiguredError:
+            logger.error(
+                f"Service type is not configured for connector {self.config['connector_id']}"
+            )
+            return False
+        except ConnectorUpdateError as e:
+            logger.error(e)
+            return False
+        except ServiceTypeNotSupportedError:
+            logger.debug(f"Can't handle source of type {connector.service_type}")
+            return False
+        except DataSourceError as e:
+            await connector.error(e)
+            logger.critical(e, exc_info=True)
+            self.raise_if_spurious(e)
+            return False
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+            return False
+
+    def _ready_to_sync(self, connector, sync_now):
+        if sync_now:
+            logger.info("Sync forced")
+            return True
+
+        next_sync = connector.next_sync()
+        if next_sync == SYNC_DISABLED:
+            logger.debug(f"Scheduling is disabled for connector {connector.id}")
+            return False
+        if next_sync - self.idling > 0:
+            logger.debug(
+                f"Next sync for connector {connector.id} due in {int(next_sync)} seconds"
+            )
+            return False
+        return True

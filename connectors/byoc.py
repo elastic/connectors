@@ -10,6 +10,7 @@ import socket
 import time
 from collections import UserDict
 from copy import deepcopy
+from datetime import datetime, timezone
 from enum import Enum
 
 from connectors.es import ESIndex, Mappings
@@ -26,6 +27,9 @@ CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 RETRY_ON_CONFLICT = 3
 SYNC_DISABLED = -1
+
+JOB_NOT_FOUND_ERROR = "Couldn't find the job"
+UNKNOWN_ERROR = "unknown error"
 
 
 class Status(Enum):
@@ -110,26 +114,23 @@ class ConnectorIndex(ESIndex):
         super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
 
     async def heartbeat(self, doc_id):
-        doc = {
-            "last_seen": iso_utc(),
-        }
-        await self.update(doc_id, doc)
+        await self.update(doc_id=doc_id, doc={"last_seen": iso_utc()})
 
     async def update_filtering_validation(
         self, connector, validation_result, validation_target=ValidationTarget.ACTIVE
     ):
-        doc_to_update = deepcopy(connector.doc_source)
+        filtering = connector.filtering.to_dict()
 
-        for filter_ in doc_to_update.get("filtering", []):
+        for filter_ in filtering:
             if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
                 filter_.get(e2str(validation_target), {"validation": {}})[
                     "validation"
                 ] = validation_result.to_dict()
 
         await self.client.update(
-            index=CONNECTORS_INDEX,
+            index=self.index_name,
             id=connector.id,
-            doc=doc_to_update,
+            doc={"filtering": filtering},
             retry_on_conflict=RETRY_ON_CONFLICT,
         )
 
@@ -174,8 +175,7 @@ class ConnectorIndex(ESIndex):
     def _create_object(self, doc_source):
         return Connector(
             self,
-            doc_source["_id"],
-            doc_source["_source"],
+            doc_source,
         )
 
     async def all_connectors(self):
@@ -218,6 +218,10 @@ class SyncJob(ESDocument):
         return str2e(self.get("status"), JobStatus)
 
     @property
+    def error(self):
+        return self.get("error")
+
+    @property
     def connector_id(self):
         return self.get("connector", "id")
 
@@ -239,11 +243,11 @@ class SyncJob(ESDocument):
 
     @property
     def filtering(self):
-        return Filtering(self.get("connector", "filtering"))
+        return Filter(self.get("connector", "filtering"))
 
     @property
     def pipeline(self):
-        return PipelineSettings(self.get("connector", "pipeline"))
+        return Pipeline(self.get("connector", "pipeline"))
 
     @property
     def terminated(self):
@@ -279,9 +283,9 @@ class SyncJob(ESDocument):
             JobStatus.COMPLETED, None, ingestion_stats, connector_metadata
         )
 
-    async def error(self, message, ingestion_stats={}, connector_metadata={}):
+    async def fail(self, message, ingestion_stats={}, connector_metadata={}):
         await self.terminate(
-            JobStatus.ERROR, message, ingestion_stats, connector_metadata
+            JobStatus.ERROR, str(message), ingestion_stats, connector_metadata
         )
 
     async def cancel(self, ingestion_stats={}, connector_metadata={}):
@@ -295,7 +299,7 @@ class SyncJob(ESDocument):
         doc = {
             "last_seen": iso_utc(),
             "completed_at": iso_utc(),
-            "status": status,
+            "status": e2str(status),
             "error": error,
         }
         doc.update(ingestion_stats)
@@ -465,7 +469,8 @@ class Connector(ESDocument):
     @property
     def last_seen(self):
         last_seen = self.get("last_seen")
-        logger.info(f"last_seen = {last_seen}, type = {last_seen.__class__}")
+        if last_seen is not None:
+            last_seen = datetime.fromisoformat(last_seen)
         return last_seen
 
     @property
@@ -485,6 +490,14 @@ class Connector(ESDocument):
         return DataSourceConfiguration(self.get("configuration"))
 
     @property
+    def index_name(self):
+        return self.get("index_name")
+
+    @property
+    def language(self):
+        return self.get("language")
+
+    @property
     def filtering(self):
         return Filtering(self.get("filtering"))
 
@@ -497,8 +510,11 @@ class Connector(ESDocument):
         return Features(self.get("features"))
 
     async def heartbeat(self, interval):
-        if self.last_seen is None or time.time() - self.last_seen > interval:
-            await self.index.heartbeat()
+        if (
+            self.last_seen is None
+            or (datetime.now(timezone.utc) - self.last_seen).total_seconds() > interval
+        ):
+            await self.index.heartbeat(doc_id=self.id)
 
     def next_sync(self):
         """Returns in seconds when the next sync should happen.
@@ -514,10 +530,7 @@ class Connector(ESDocument):
         return next_run(self.scheduling.get("interval"))
 
     async def reset_sync_now_flag(self):
-        doc = {
-            "sync_now": False,
-        }
-        await self.index.update(doc_id=self.id, doc=doc)
+        await self.index.update(doc_id=self.id, doc={"sync_now": False})
 
     async def sync_starts(self):
         doc = {
@@ -535,9 +548,9 @@ class Connector(ESDocument):
 
     async def sync_done(self, job):
         job_status = JobStatus.ERROR if job is None else job.status
-        job_error = "Couldn't find the job" if job is None else job.error
+        job_error = JOB_NOT_FOUND_ERROR if job is None else job.error
         if job_error is None and job_status == JobStatus.ERROR:
-            job_error = "unknown error"
+            job_error = UNKNOWN_ERROR
         connector_status = (
             Status.ERROR if job_status == JobStatus.ERROR else Status.CONNECTED
         )
@@ -546,7 +559,7 @@ class Connector(ESDocument):
             "last_sync_status": job_status,
             "last_synced": iso_utc(),
             "last_sync_error": job_error,
-            "status": connector_status,
+            "status": e2str(connector_status),
             "error": job_error,
         }
 
@@ -602,11 +615,18 @@ class Connector(ESDocument):
 
         try:
             await self.index.update(doc_id=self.id, doc=doc)
+            connector = await self.reload()
+            self._source = connector._source
         except Exception as e:
             logger.critical(e, exc_info=True)
             raise ConnectorUpdateError(
                 f"Could not update service type/configuration for connector {self.id}"
             )
+
+    async def document_count(self):
+        await self.index.client.indices.refresh(index=self.index_name)
+        result = await self.index.client.count(index=self.index_name)
+        return result["count"]
 
 
 STUCK_JOBS_THRESHOLD = 60  # 60 seconds

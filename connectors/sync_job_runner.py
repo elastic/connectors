@@ -11,7 +11,6 @@ from connectors.es import Mappings
 from connectors.filtering.validation import (
     FilteringValidationState,
     InvalidFilteringError,
-    validate_filtering,
 )
 from connectors.logger import logger
 
@@ -54,7 +53,6 @@ class SyncJobRunner:
             self._start_time = time.time()
             sync_status = None
             sync_error = None
-            await self._validate_filtering()
 
             data_provider = self.source_klass(self.sync_job.configuration)
             if not await data_provider.changed():
@@ -85,7 +83,7 @@ class SyncJobRunner:
             sync_rules_enabled = self.connector.features.sync_rules_enabled()
 
             if sync_rules_enabled:
-                await validate_filtering(self.connector, self.connector.index)
+                await self._validate_filtering()
 
             result = await self.elastic_server.async_bulk(
                 self.sync_job.index_name,
@@ -102,15 +100,16 @@ class SyncJobRunner:
             sync_error = e
             logger.critical(e, exc_info=True)
         finally:
-            if sync_status is None:
-                sync_status = JobStatus.ERROR
-            if sync_status == JobStatus.ERROR and sync_error is None:
-                sync_error = "Sync thread didn't finish execution. Check connector logs for more details."
-
             doc_updated = result.get("doc_updated", 0)
             doc_created = result.get("doc_created", 0)
             doc_deleted = result.get("doc_deleted", 0)
+            sync_error = result.get("fetch_error", sync_error)
             indexed_count = doc_updated + doc_created
+
+            if sync_error is not None or sync_status is None:
+                sync_status = JobStatus.ERROR
+            if sync_status == JobStatus.ERROR and sync_error is None:
+                sync_error = "Sync thread didn't finish execution. Check connector logs for more details."
 
             ingestion_stats = {
                 "indexed_document_count": indexed_count,
@@ -119,11 +118,11 @@ class SyncJobRunner:
                 "total_document_count": await self.connector.document_count(),
             }
             if sync_status == JobStatus.ERROR:
-                await self.sync_job.error(sync_error, ingestion_stats=ingestion_stats)
+                await self.sync_job.fail(sync_error, ingestion_stats=ingestion_stats)
             else:
                 await self.sync_job.done(ingestion_stats=ingestion_stats)
 
-            self.sync_job = self.sync_job.reload()
+            self.sync_job = await self.sync_job.reload()
             await self.connector.sync_done(self.sync_job)
 
             logger.info(
@@ -154,7 +153,7 @@ class SyncJobRunner:
 
     async def _validate_filtering(self):
         validation_result = await self.source_klass.validate_filtering(
-            self.sync_job.filtering.get_active_filter()
+            self.sync_job.filtering
         )
         if validation_result.state != FilteringValidationState.VALID:
             raise InvalidFilteringError(

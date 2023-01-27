@@ -608,7 +608,7 @@ async def test_properties(mock_responses):
         },
     }
 
-    connector = Connector(StubIndex(), connector_src, {})
+    connector = Connector(StubIndex(), connector_src)
 
     assert connector.status == Status.CREATED
     assert connector.service_type == "test"
@@ -666,7 +666,7 @@ async def test_prepare(mock_responses):
             "scheduling": {"enabled": False},
         },
     }
-    connector = Connector(Index(), doc, {})
+    connector = Connector(Index(), doc)
 
     config = {
         "connector_id": "1",
