@@ -19,6 +19,7 @@ from connectors.byoc import (
     Connector,
     ConnectorIndex,
     Features,
+    Filter,
     Filtering,
     JobStatus,
     Status,
@@ -162,6 +163,25 @@ FILTERING = [
         "validation": FILTERING_VALIDATION_VALID,
     },
 ]
+
+EMPTY_FILTERING = {}
+
+ADVANCED_RULES_EMPTY = {"advanced_snippet": {}}
+
+ADVANCED_RULES = {"db": {"table": "SELECT * FROM db.table"}}
+
+ADVANCED_RULES_NON_EMPTY = {"advanced_snippet": ADVANCED_RULES}
+
+RULES = [
+    {
+        "id": 1,
+    }
+]
+BASIC_RULES_NON_EMPTY = {"rules": RULES}
+ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
+    "advanced_snippet": {"db": {"table": "SELECT * FROM db.table"}},
+    "rules": RULES,
+}
 
 
 @pytest.fixture(autouse=True)
@@ -983,3 +1003,35 @@ def test_stuck_jobs_query(mock_responses, set_env):
     assert {
         "range": {"last_seen": {"lte": f"now-{STUCK_JOBS_THRESHOLD}s"}}
     } in stuck_jobs_query["bool"]["filter"]
+
+
+@pytest.mark.parametrize(
+    "filtering, should_advanced_rules_be_present",
+    [
+        (ADVANCED_RULES_NON_EMPTY, True),
+        (ADVANCED_AND_BASIC_RULES_NON_EMPTY, True),
+        (ADVANCED_RULES_EMPTY, False),
+        (BASIC_RULES_NON_EMPTY, False),
+        (EMPTY_FILTERING, False),
+        (None, False),
+    ],
+)
+def test_advanced_rules_present(filtering, should_advanced_rules_be_present):
+    assert Filter(filtering).has_advanced_rules() == should_advanced_rules_be_present
+
+
+@pytest.mark.parametrize(
+    "filtering, expected_advanced_rules",
+    (
+        [
+            (ADVANCED_RULES_NON_EMPTY, ADVANCED_RULES),
+            (ADVANCED_AND_BASIC_RULES_NON_EMPTY, ADVANCED_RULES),
+            (ADVANCED_RULES_EMPTY, {}),
+            (BASIC_RULES_NON_EMPTY, {}),
+            (EMPTY_FILTERING, {}),
+            (None, {}),
+        ]
+    ),
+)
+def test_extract_advanced_rules(filtering, expected_advanced_rules):
+    assert Filter(filtering).get_advanced_rules() == expected_advanced_rules

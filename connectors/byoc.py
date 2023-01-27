@@ -179,6 +179,7 @@ class SyncJob:
         self.completed_at = None
         self.job_id = None
         self.status = None
+        self.filtering = {}
         self.client = elastic_index.client
         if doc_source is None:
             doc_source = dict()
@@ -197,10 +198,12 @@ class SyncJob:
             filtering = {}
 
         self.status = JobStatus.IN_PROGRESS
+        self.filtering = SyncJob.transform_filtering(filtering)
+
         job_def = {
             "connector": {
                 "id": self.connector_id,
-                "filtering": SyncJob.transform_filtering(filtering),
+                "filtering": self.filtering,
             },
             "trigger_method": e2str(trigger_method),
             "status": e2str(self.status),
@@ -268,12 +271,32 @@ class Filtering:
     def get_filter(self, filter_state="active", domain=DEFAULT_DOMAIN):
         return next(
             (
-                filter_[filter_state]
+                Filter(filter_[filter_state])
                 for filter_ in self.filtering
                 if filter_["domain"] == domain
             ),
             {},
         )
+
+
+class Filter(dict):
+    def __init__(self, filter_=None):
+        if filter_ is None:
+            filter_ = {}
+
+        super().__init__(filter_)
+
+        advanced_rules = filter_.get("advanced_snippet", {})
+
+        self.advanced_rules = advanced_rules.get("value", advanced_rules)
+        self.basic_rules = filter_.get("rules", [])
+        self.validation = filter_.get("validation", {})
+
+    def get_advanced_rules(self):
+        return self.advanced_rules
+
+    def has_advanced_rules(self):
+        return len(self.advanced_rules) > 0
 
 
 class PipelineSettings:
@@ -532,10 +555,13 @@ class Connector:
             f" deleted. ({int(time.time() - self._start_time)} seconds)"
         )
 
-    async def prepare_docs(self, data_provider):
+    async def prepare_docs(self, data_provider, filtering=None):
+        if filtering is None:
+            filtering = {}
+
         logger.debug(f"Using pipeline {self.pipeline}")
 
-        async for doc, lazy_download in data_provider.get_docs():
+        async for doc, lazy_download in data_provider.get_docs(filtering=filtering):
             # adapt doc for pipeline settings
             doc["_extract_binary_content"] = self.pipeline.extract_binary_content
             doc["_reduce_whitespace"] = self.pipeline.reduce_whitespace
@@ -669,7 +695,7 @@ class Connector:
 
             result = await elastic_server.async_bulk(
                 self.index_name,
-                self.prepare_docs(self.data_provider),
+                self.prepare_docs(self.data_provider, job.filtering),
                 self.pipeline,
                 filtering=self.filtering,
                 sync_rules_enabled=sync_rules_enabled,

@@ -70,7 +70,7 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         connect_args = {"ssl": ctx}
         return connect_args
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         """Executes the logic to fetch databases, tables and rows in async manner.
 
         Yields:
