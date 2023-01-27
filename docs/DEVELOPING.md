@@ -2,7 +2,7 @@
 
 ## Network Drive Connector
 
-The [Elastic Network Drive connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/network_drive.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic Network Drive connector](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/network_drive.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ### Availability and prerequisites
 
@@ -72,7 +72,7 @@ Whether the connector should extract file content from network drive. Default va
 
 #### Content extraction
 
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/9cf07a96288dcd542b641c51533ee2d427ef56ae/connectors/utils.py#L27).
+The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/network_drive.py#L19).
 
 ### Connector Limitations
 
@@ -92,7 +92,7 @@ $ make ftest NAME=network_drive
 
 ## Amazon S3 Connector
 
-The [Elastic Amazon S3 connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/s3.py) is used to sync files and file content for supported file types from [Amazon S3](https://s3.console.aws.amazon.com/s3/home) data sources. It is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic Amazon S3 connector](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/s3.py) is used to sync files and file content for supported file types from [Amazon S3](https://s3.console.aws.amazon.com/s3/home) data sources. It is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ### Availability and prerequisites
 
@@ -167,7 +167,7 @@ Whether the connector should extract file content from Amazon S3. Default value 
 
 #### Content extraction
 
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/9cf07a96288dcd542b641c51533ee2d427ef56ae/connectors/utils.py#L27).
+The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/s3.py#L25).
 
 ### Connector Limitations
 
@@ -188,7 +188,7 @@ $ make ftest NAME=s3
 
 ## Installation
 
-Provides a CLI to ingest documents into Elasticsearch, following the [connector protocol](https://github.com/elastic/connectors-ruby/blob/main/docs/CONNECTOR_PROTOCOL.md).
+Provides a CLI to ingest documents into Elasticsearch, following the [connector protocol](https://github.com/elastic/connectors-ruby/blob/8.6/docs/CONNECTOR_PROTOCOL.md).
 
 To install the CLI, run:
 ```shell
@@ -213,7 +213,7 @@ optional arguments:
 
 The CLI runs the [ConnectorService](../connectors/runner.py) which is an asynchronous event loop. It calls Elasticsearch on a regular basis to see if some syncs need to happen.
 
-That information is provided by Kibana and follows the [connector protocol](https://github.com/elastic/connectors-ruby/blob/main/docs/CONNECTOR_PROTOCOL.md). That protocol defines a few structures in a couple of dedicated Elasticsearch indices, that are used by Kibana to drive sync jobs, and by the connectors to report on that work.
+That information is provided by Kibana and follows the [connector protocol](https://github.com/elastic/connectors-ruby/blob/8.6/docs/CONNECTOR_PROTOCOL.md). That protocol defines a few structures in a couple of dedicated Elasticsearch indices, that are used by Kibana to drive sync jobs, and by the connectors to report on that work.
 
 When a user asks for a sync of a specific source, the service instantiates a class that it uses to reach out the source and collect data.
 
