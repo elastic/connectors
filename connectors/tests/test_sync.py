@@ -477,7 +477,7 @@ async def test_connector_service_poll_large(mock_responses, patch_logger, set_en
     assert_re(".*Sending a batch.*", patch_logger.logs)
     assert_re(".*0.48MiB", patch_logger.logs)
     assert_re(".*0.17MiB", patch_logger.logs)
-    assert_re("Sync done: 1001 indexed, 0  deleted", patch_logger.logs)
+    assert_re(".*Sync done: 1001 indexed, 0  deleted", patch_logger.logs)
 
 
 @pytest.mark.asyncio
