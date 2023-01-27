@@ -73,7 +73,7 @@ class DirectoryDataSource(BaseDataSource):
                 "_attachment": get_base64_value(f.read()),
             }
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         root_directory = Path(self.directory)
         for path_object in root_directory.glob(self.pattern):
             if not path_object.is_file():

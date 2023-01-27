@@ -6,6 +6,7 @@
 import asyncio
 import json
 import os
+from copy import deepcopy
 from datetime import datetime
 from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call
@@ -19,6 +20,7 @@ from connectors.byoc import (
     Connector,
     ConnectorIndex,
     Features,
+    Filter,
     Filtering,
     JobStatus,
     Status,
@@ -32,6 +34,7 @@ from connectors.config import load_config
 from connectors.filtering.validation import ValidationTarget
 from connectors.logger import logger
 from connectors.source import BaseDataSource
+from connectors.tests.commons import AsyncDocsGeneratorFake
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
@@ -118,6 +121,7 @@ DOC_SOURCE = {
     "scheduling": {},
     "service_type": "SERVICE",
     "status": "connected",
+    "language": "en",
     "sync_now": False,
 }
 
@@ -140,7 +144,7 @@ OTHER_DOMAIN_ONE = "other-domain-1"
 OTHER_DOMAIN_TWO = "other-domain-2"
 NON_EXISTING_DOMAIN = "non-existing-domain"
 
-EMPTY_FILTER = {}
+EMPTY_FILTER = Filter()
 
 FILTERING = [
     {
@@ -162,6 +166,25 @@ FILTERING = [
         "validation": FILTERING_VALIDATION_VALID,
     },
 ]
+
+EMPTY_FILTERING = Filter()
+
+ADVANCED_RULES_EMPTY = {"advanced_snippet": {}}
+
+ADVANCED_RULES = {"db": {"table": "SELECT * FROM db.table"}}
+
+ADVANCED_RULES_NON_EMPTY = {"advanced_snippet": ADVANCED_RULES}
+
+RULES = [
+    {
+        "id": 1,
+    }
+]
+BASIC_RULES_NON_EMPTY = {"rules": RULES}
+ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
+    "advanced_snippet": {"db": {"table": "SELECT * FROM db.table"}},
+    "rules": RULES,
+}
 
 
 @pytest.fixture(autouse=True)
@@ -983,3 +1006,68 @@ def test_stuck_jobs_query(mock_responses, set_env):
     assert {
         "range": {"last_seen": {"lte": f"now-{STUCK_JOBS_THRESHOLD}s"}}
     } in stuck_jobs_query["bool"]["filter"]
+
+
+@pytest.mark.parametrize(
+    "filtering, should_advanced_rules_be_present",
+    [
+        (ADVANCED_RULES_NON_EMPTY, True),
+        (ADVANCED_AND_BASIC_RULES_NON_EMPTY, True),
+        (ADVANCED_RULES_EMPTY, False),
+        (BASIC_RULES_NON_EMPTY, False),
+        (EMPTY_FILTERING, False),
+        (None, False),
+    ],
+)
+def test_advanced_rules_present(filtering, should_advanced_rules_be_present):
+    assert Filter(filtering).has_advanced_rules() == should_advanced_rules_be_present
+
+
+@pytest.mark.parametrize(
+    "filtering, expected_advanced_rules",
+    (
+        [
+            (ADVANCED_RULES_NON_EMPTY, ADVANCED_RULES),
+            (ADVANCED_AND_BASIC_RULES_NON_EMPTY, ADVANCED_RULES),
+            (ADVANCED_RULES_EMPTY, {}),
+            (BASIC_RULES_NON_EMPTY, {}),
+            (EMPTY_FILTERING, {}),
+            (None, {}),
+        ]
+    ),
+)
+def test_extract_advanced_rules(filtering, expected_advanced_rules):
+    assert Filter(filtering).get_advanced_rules() == expected_advanced_rules
+
+
+@pytest.mark.parametrize(
+    "filtering, expected_filtering_calls",
+    [
+        (None, [Filter()]),
+        (
+            Filter({"advanced_snippet": {}, "rules": []}),
+            [Filter({"advanced_snippet": {}, "rules": []})],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_prepare_docs(filtering, expected_filtering_calls):
+    doc_source_copy = deepcopy(DOC_SOURCE)
+    connector = Connector(StubIndex(), "1", doc_source_copy, {})
+
+    docs_generator_fake = AsyncDocsGeneratorFake([(doc_source_copy, None)])
+    connector.data_provider = AsyncMock()
+    connector.data_provider.get_docs = docs_generator_fake
+
+    async for yielded_doc in connector.prepare_docs(
+        connector.data_provider, filtering=filtering
+    ):
+        assert yielded_doc is not None
+
+    assert docs_generator_fake.call_kwargs == [
+        ("filtering", expected_filtering)
+        for expected_filtering in expected_filtering_calls
+    ]
+    assert all(
+        type(filter_) == Filter for _, filter_ in docs_generator_fake.call_kwargs
+    )
