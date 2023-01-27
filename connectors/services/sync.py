@@ -116,15 +116,14 @@ class SyncService(BaseService):
         )
 
         es = ElasticServer(self.es_config)
-        syncs = ConcurrentTasks(max_concurrency=self.concurrent_syncs)
         try:
             while self.running:
+                syncs = ConcurrentTasks(max_concurrency=self.concurrent_syncs)
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
                     query = self.connectors.build_docs_query(
                         native_service_types, connectors_ids
                     )
-
                     async for connector in self.connectors.get_all_docs(query=query):
                         await syncs.put(
                             functools.partial(self._one_sync, connector, es, sync_now)
@@ -135,12 +134,12 @@ class SyncService(BaseService):
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
                 finally:
+                    await syncs.join()
                     if one_sync:
                         break
 
                 await self._sleeps.sleep(self.idling)
         finally:
-            await syncs.join()
             if self.connectors is not None:
                 self.connectors.stop_waiting()
                 await self.connectors.close()
