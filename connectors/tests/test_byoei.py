@@ -18,6 +18,7 @@ from connectors.byoei import (
     Fetcher,
     IndexMissing,
 )
+from connectors.tests.commons import AsyncDocsGeneratorFake
 
 INDEX = "some-index"
 TIMESTAMP = datetime.datetime(year=2023, month=1, day=1)
@@ -320,23 +321,6 @@ def lazy_download_fake(doc):
         return deepcopy(doc)
 
     return lazy_download
-
-
-class AsyncDocsGeneratorFake:
-    def __init__(self, docs):
-        self.docs = docs
-
-    def __aiter__(self):
-        self.i = 0
-        return self
-
-    async def __anext__(self):
-        if self.i >= len(self.docs):
-            raise StopAsyncIteration
-
-        doc = self.docs[self.i]
-        self.i += 1
-        return doc
 
 
 def queue_called_with_operations(queue, operations):

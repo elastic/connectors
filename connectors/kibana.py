@@ -108,6 +108,8 @@ async def prepare(service_type, index_name, config):
             "created_at": "",
             # Date the connector was updated
             "updated_at": "",
+            # filtering: for now empty
+            "filtering": [],
             # Scheduling intervals
             "scheduling": {"enabled": True, "interval": "1 * * * * *"},  # quartz syntax
             "pipeline": {
