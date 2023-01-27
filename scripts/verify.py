@@ -77,7 +77,7 @@ def main(args=None):
     with open(config_file) as f:
         config = yaml.safe_load(f)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
     try:
         loop.run_until_complete(
             verify(args.service_type, args.index_name, args.size, config)
