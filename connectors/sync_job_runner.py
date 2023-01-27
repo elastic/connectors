@@ -54,9 +54,7 @@ class SyncJobRunner:
             sync_status = None
             sync_error = None
 
-            data_provider = self.source_klass(
-                self.sync_job.configuration, self.sync_job.filtering
-            )
+            data_provider = self.source_klass(self.sync_job.configuration)
             if not await data_provider.changed():
                 logger.debug(
                     f"No change in {self.sync_job.service_type} data provider, skipping..."
@@ -144,7 +142,7 @@ class SyncJobRunner:
     async def prepare_docs(self, data_provider):
         logger.debug(f"Using pipeline {self.sync_job.pipeline}")
 
-        async for doc, lazy_download in data_provider.get_docs():
+        async for doc, lazy_download in data_provider.get_docs(filtering=self.sync_job.filtering):
             # adapt doc for pipeline settings
             doc[
                 "_extract_binary_content"
