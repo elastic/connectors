@@ -11,9 +11,68 @@ from unittest import mock
 import aiomysql
 import pytest
 
+from connectors.byoc import Filter
 from connectors.source import DataSourceConfiguration
 from connectors.sources.mysql import MySqlDataSource
 from connectors.sources.tests.support import create_source
+
+
+def immutable_doc(**kwargs):
+    return frozenset(kwargs.items())
+
+
+ADVANCED_SNIPPET = "advanced_snippet"
+
+DB_ONE = "db_1"
+DB_TWO = "db_2"
+
+TABLE_ONE = "table1"
+TABLE_TWO = "table2"
+
+DOC_ONE = immutable_doc(id=1, text="some text 1")
+DOC_TWO = immutable_doc(id=2, text="some text 2")
+DOC_THREE = immutable_doc(id=3, text="some text 3")
+DOC_FOUR = immutable_doc(id=4, text="some text 4")
+DOC_FIVE = immutable_doc(id=5, text="some text 5")
+DOC_SIX = immutable_doc(id=6, text="some text 6")
+DOC_SEVEN = immutable_doc(id=7, text="some text 7")
+DOC_EIGHT = immutable_doc(id=8, text="some text 8")
+
+DB_ONE_TABLE_ONE_QUERY_ALL = "query all db one table one"
+DB_ONE_TABLE_ONE_QUERY_DOC_ONE = "query doc one"
+DB_ONE_TABLE_TWO_QUERY_ALL = "query all db one table two"
+
+DB_TWO_TABLE_ONE_QUERY_ALL = "query all db two table one"
+DB_TWO_TABLE_TWO_QUERY_ALL = "query all db two table two"
+
+ALL_DOCS = "all_docs"
+ONLY_DOC_ONE = "only_doc_one"
+
+MYSQL = {
+    DB_ONE: {
+        TABLE_ONE: {
+            DB_ONE_TABLE_ONE_QUERY_ALL: [DOC_ONE, DOC_TWO],
+            DB_ONE_TABLE_ONE_QUERY_DOC_ONE: [DOC_ONE],
+        },
+        TABLE_TWO: {DB_ONE_TABLE_TWO_QUERY_ALL: [DOC_THREE, DOC_FOUR]},
+    },
+    DB_TWO: {
+        TABLE_ONE: {DB_TWO_TABLE_ONE_QUERY_ALL: [DOC_FIVE, DOC_SIX]},
+        TABLE_TWO: {DB_TWO_TABLE_TWO_QUERY_ALL: [DOC_SEVEN, DOC_EIGHT]},
+    },
+}
+
+
+@pytest.fixture
+def patch_validate_databases():
+    with mock.patch.object(MySqlDataSource, "_validate_databases", return_value=([])):
+        yield
+
+
+@pytest.fixture
+def patch_fetch_rows_for_table():
+    with mock.patch.object(MySqlDataSource, "fetch_rows_for_table") as mock_to_patch:
+        yield mock_to_patch
 
 
 @pytest.fixture
@@ -205,7 +264,7 @@ async def test_connect_with_retry(patch_logger, patch_default_wait_multiplier):
     ):
         # Execute
         streamer = source._connect(
-            query_name="TABLE_DATA", fetch_many=True, database="db", table="table"
+            query="select * from database.table", fetch_many=True
         )
 
         with pytest.raises(Exception):
@@ -251,7 +310,7 @@ async def test_fetch_documents():
 
 
 @pytest.mark.asyncio
-async def test_fetch_rows():
+async def test_fetch_rows_from_all_tables():
     """This function test fetch_rows method of MySQL"""
     # Setup
     source = create_source(MySqlDataSource)
@@ -272,7 +331,7 @@ async def test_fetch_rows():
         mock.patch("source._connect", return_value=response)
 
     # Assert
-    async for row in source.fetch_rows(database="database_name"):
+    async for row in source.fetch_rows_from_all_tables(database="database_name"):
         assert "_id" in row
 
 
@@ -303,7 +362,9 @@ async def test_get_docs_with_list():
     with mock.patch.object(
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
-        source.fetch_rows = mock.MagicMock(return_value=AsyncIter([{"a": 1, "b": 2}]))
+        source.fetch_rows_from_all_tables = mock.MagicMock(
+            return_value=AsyncIter([{"a": 1, "b": 2}])
+        )
 
     with mock.patch.object(MySqlDataSource, "_validate_databases", return_value=([])):
         # Execute
@@ -325,7 +386,9 @@ async def test_get_docs_with_str():
     with mock.patch.object(
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
-        source.fetch_rows = mock.MagicMock(return_value=AsyncIter([{"a": 1, "b": 2}]))
+        source.fetch_rows_from_all_tables = mock.MagicMock(
+            return_value=AsyncIter([{"a": 1, "b": 2}])
+        )
 
     with mock.patch.object(MySqlDataSource, "_validate_databases", return_value=([])):
         # Execute
@@ -363,12 +426,118 @@ async def test_get_docs():
     with mock.patch.object(
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
-        source.fetch_rows = mock.MagicMock(return_value=AsyncIter([{"a": 1, "b": 2}]))
+        source.fetch_rows_from_all_tables = mock.MagicMock(
+            return_value=AsyncIter([{"a": 1, "b": 2}])
+        )
 
     with mock.patch.object(MySqlDataSource, "_validate_databases", return_value=([])):
         # Execute
         async for doc, _ in source.get_docs():
             assert doc == {"a": 1, "b": 2}
+
+
+async def setup_mysql_source(databases=None):
+    if databases is None:
+        databases = []
+
+    source = create_source(MySqlDataSource)
+    source.configuration.set_field(
+        name="database", label="Databases", value=databases, type="list"
+    )
+
+    source.connection_pool = await mock_mysql_response()
+    source.connection_pool.acquire = Connection
+    source.connection_pool.acquire.cursor = Cursor
+
+    return source
+
+
+def setup_available_docs(advanced_snippet):
+    available_docs = []
+
+    for database in advanced_snippet:
+        tables = advanced_snippet[database]
+        for table in tables:
+            query = advanced_snippet[database][table]
+            available_docs += MYSQL[database][table][query]
+
+    return available_docs
+
+
+@pytest.mark.parametrize(
+    "filtering, expected_docs",
+    [
+        (
+            # single db, single table, multiple docs
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        DB_ONE: {
+                            TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_ALL,
+                        },
+                    }
+                }
+            ),
+            {DOC_ONE, DOC_TWO},
+        ),
+        (
+            # single db, single table, single doc
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        DB_ONE: {TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE}
+                    }
+                }
+            ),
+            {DOC_ONE},
+        ),
+        (
+            # single db, multiple tables, multiple docs
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        DB_ONE: {
+                            TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE,
+                            TABLE_TWO: DB_ONE_TABLE_TWO_QUERY_ALL,
+                        }
+                    }
+                }
+            ),
+            {DOC_ONE, DOC_THREE, DOC_FOUR},
+        ),
+        (
+            # multiple dbs, multiple tables, multiple docs
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        DB_ONE: {
+                            TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE,
+                            TABLE_TWO: DB_ONE_TABLE_TWO_QUERY_ALL,
+                        },
+                        DB_TWO: {
+                            TABLE_ONE: DB_TWO_TABLE_ONE_QUERY_ALL,
+                            TABLE_TWO: DB_TWO_TABLE_TWO_QUERY_ALL,
+                        },
+                    }
+                }
+            ),
+            {DOC_ONE, DOC_THREE, DOC_FOUR, DOC_FIVE, DOC_SIX, DOC_SEVEN, DOC_EIGHT},
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules(
+    filtering, expected_docs, patch_validate_databases, patch_fetch_rows_for_table
+):
+    source = await setup_mysql_source([DB_ONE, DB_TWO])
+    docs_in_db = setup_available_docs(filtering["advanced_snippet"])
+    patch_fetch_rows_for_table.return_value = AsyncIter(items=docs_in_db)
+
+    yielded_docs = set()
+    async for doc, _ in source.get_docs(filtering):
+        yielded_docs.add(doc)
+
+    assert yielded_docs == expected_docs
 
 
 @pytest.mark.asyncio

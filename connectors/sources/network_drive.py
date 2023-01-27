@@ -193,7 +193,7 @@ class NASDataSource(BaseDataSource):
             "_attachment": get_base64_value(content=attachment),
         }
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         """Executes the logic to fetch files and folders in async manner.
         Yields:
             dictionary: Dictionary containing the Network Drive files and folders as documents

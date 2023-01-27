@@ -340,7 +340,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         logger.debug(f"Downloaded {blob_name} for {blob_size} bytes ")
         return document
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         """Get buckets & blob documents from Google Cloud Storage.
 
         Yields:

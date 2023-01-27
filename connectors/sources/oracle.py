@@ -42,7 +42,7 @@ class OracleDataSource(GenericBaseDataSource):
         """Create sync engine for oracle"""
         self.engine = create_engine(self.connection_string)
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         """Executes the logic to fetch databases, tables and rows in async manner.
 
         Yields:

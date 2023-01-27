@@ -191,7 +191,7 @@ class BaseDataSource:
         """
         pass
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         """Returns an iterator on all documents present in the backend
 
         Each document is a tuple with:

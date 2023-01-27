@@ -40,7 +40,7 @@ class FakeSource:
             return
         return {"_id": doc_id, "_timestamp": timestamp, "text": "xx"}
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         if self.fail:
             raise Exception("I fail while syncing")
         yield {"_id": "1"}, partial(self._dl, "1")
@@ -109,7 +109,7 @@ class FakeSourceTS(FakeSource):
     service_type = "fake_ts"
     ts = "2022-10-31T09:04:35.277558"
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         if self.fail:
             raise Exception("I fail while syncing")
         yield {"_id": "1", "_timestamp": self.ts}, partial(self._dl, "1")
@@ -121,7 +121,7 @@ class FailsThenWork(FakeSource):
     service_type = "fail_once"
     fail = True
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         if FailsThenWork.fail:
             FailsThenWork.fail = False
             raise Exception("I fail while syncing")
@@ -133,7 +133,7 @@ class LargeFakeSource(FakeSource):
 
     service_type = "large_fake"
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         for i in range(1001):
             doc_id = str(i + 1)
             yield {"_id": doc_id, "data": "big" * 4 * 1024}, partial(self._dl, doc_id)
