@@ -3,10 +3,9 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import asyncio
 from datetime import datetime
 
-from bson import Decimal128
+from bson import Decimal128, ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from connectors.logger import logger
@@ -25,14 +24,6 @@ class MongoDataSource(BaseDataSource):
             socketTimeoutMS=120,
         )
         self.db = self.client[self.configuration["database"]]
-        self._first_sync = self._dirty = True
-
-    async def watch(self, collection):
-        logger.debug("Watching changes...")
-        async with collection.watch([]) as stream:
-            async for change in stream:
-                logger.debug("Mongo has been changed")
-                self._dirty = True
 
     @classmethod
     def get_default_configuration(cls):
@@ -43,12 +34,12 @@ class MongoDataSource(BaseDataSource):
                 "type": "str",
             },
             "database": {
-                "value": "sample_airbnb",
+                "value": "sample_database",
                 "label": "MongoDB Database",
                 "type": "str",
             },
             "collection": {
-                "value": "listingsAndReviews",
+                "value": "sample_collection",
                 "label": "MongoDB Collection",
                 "type": "str",
             },
@@ -60,6 +51,8 @@ class MongoDataSource(BaseDataSource):
     # XXX That's a lot of work...
     def serialize(self, doc):
         def _serialize(value):
+            if isinstance(value, ObjectId):
+                value = str(value)
             if isinstance(value, (list, tuple)):
                 value = [_serialize(item) for item in value]
             elif isinstance(value, dict):
@@ -76,17 +69,9 @@ class MongoDataSource(BaseDataSource):
 
         return doc
 
-    async def changed(self):
-        return self._dirty
-
     async def get_docs(self, filtering=None):
         logger.debug("Grabbing collection info")
         collection = self.db[self.configuration["collection"]]
-
-        if self._first_sync:
-            logger.debug("First Sync!")
-            asyncio.get_event_loop().create_task(self.watch(collection))
-            self._first_sync = False
 
         async for doc in collection.find():
             yield self.serialize(doc), None

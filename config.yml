@@ -24,6 +24,7 @@ service:
   max_errors_span: 600
 
 native_service_types:
+  - mongodb
   - mysql
   - network_drive
   - s3
