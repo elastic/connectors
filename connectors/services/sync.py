@@ -32,7 +32,7 @@ from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.utils import ConcurrentTasks
 
-DEFAULT_MAX_CONCURRENT_SYNCS = 5
+DEFAULT_MAX_CONCURRENT_SYNCS = 1
 
 
 class SyncService(BaseService):
