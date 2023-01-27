@@ -335,6 +335,11 @@ class ConcurrentTasks:
         """Wait for all tasks to finish."""
         await asyncio.gather(*self.tasks)
 
+    def cancel(self):
+        """Cancels all tasks"""
+        for task in self.tasks:
+            task.cancel()
+
 
 def get_event_loop(uvloop=False):
     if uvloop:
