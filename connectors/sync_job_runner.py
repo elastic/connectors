@@ -54,7 +54,9 @@ class SyncJobRunner:
             sync_status = None
             sync_error = None
 
-            data_provider = self.source_klass(self.sync_job.configuration)
+            data_provider = self.source_klass(
+                self.sync_job.configuration, self.sync_job.filtering
+            )
             if not await data_provider.changed():
                 logger.debug(
                     f"No change in {self.sync_job.service_type} data provider, skipping..."

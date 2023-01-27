@@ -243,7 +243,7 @@ class SyncJob(ESDocument):
 
     @property
     def filtering(self):
-        return Filter(self.get("connector", "filtering"))
+        return Filter(self.get("connector", "filtering", default={}))
 
     @property
     def pipeline(self):
@@ -349,11 +349,11 @@ class Filtering:
     def get_filter(self, filter_state="active", domain=DEFAULT_DOMAIN):
         return next(
             (
-                filter_[filter_state]
+                Filter(filter_[filter_state])
                 for filter_ in self.filtering
                 if filter_["domain"] == domain
             ),
-            {},
+            Filter(),
         )
 
     def to_list(self):
@@ -381,6 +381,26 @@ class Filter(dict):
 
     def has_validation_state(self, validation_state):
         return FilteringValidationState(self.validation["state"]) == validation_state
+
+
+class Filter(dict):
+    def __init__(self, filter_=None):
+        if filter_ is None:
+            filter_ = {}
+
+        super().__init__(filter_)
+
+        advanced_rules = filter_.get("advanced_snippet", {})
+
+        self.advanced_rules = advanced_rules.get("value", advanced_rules)
+        self.basic_rules = filter_.get("rules", [])
+        self.validation = filter_.get("validation", {})
+
+    def get_advanced_rules(self):
+        return self.advanced_rules
+
+    def has_advanced_rules(self):
+        return len(self.advanced_rules) > 0
 
 
 PIPELINE_DEFAULT = {

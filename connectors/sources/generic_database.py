@@ -19,13 +19,13 @@ DEFAULT_PROTOCOL = "TCP"
 class GenericBaseDataSource(BaseDataSource):
     """Class contains common functionalities for Generic Database connector"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, filtering=None):
         """Setup connection to the database-server configured by user
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
-        super().__init__(configuration=configuration)
+        super().__init__(configuration=configuration, filtering=filtering)
 
         # Connector configurations
         self.retry_count = self.configuration["retry_count"]
