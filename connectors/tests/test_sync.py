@@ -206,6 +206,7 @@ class Args:
         self.one_sync = options.get("one_sync", False)
         self.sync_now = options.get("sync_now", False)
 
+
 def create_service(config_file, **options):
     config = load_config(config_file)
     service = SyncService(config, Args(**options))
@@ -213,12 +214,14 @@ def create_service(config_file, **options):
 
     return service
 
+
 async def run_service_with_stop_after(service, stop_after):
     async def _terminate():
         await asyncio.sleep(stop_after)
         await service.stop()
 
     await asyncio.gather(service.run(), _terminate())
+
 
 async def create_and_run_service(config_file, stop_after, **options):
     service = create_service(config_file, **options)
