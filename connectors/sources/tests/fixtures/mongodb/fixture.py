@@ -1,11 +1,11 @@
 import os
 import random
 import string
-import requests
 
-from pymongo import MongoClient
-from faker import Faker
 import bson
+import requests
+from faker import Faker
+from pymongo import MongoClient
 
 DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
 _SIZES = {"small": 750, "medium": 1500, "large": 3000}
@@ -14,19 +14,20 @@ NUMBER_OF_RECORDS_TO_DELETE = 50
 fake = Faker()
 client = MongoClient("mongodb://127.0.0.1:27021")
 
+
 def setup():
     pass
 
+
 def load():
-    
     def _random_record():
         return {
-                "id": bson.ObjectId(),
-                "name": fake.name(),
-                "address": fake.address(),
-                "birthdate": fake.date(),
-                "time": fake.time(),
-                "comment": fake.sentence()
+            "id": bson.ObjectId(),
+            "name": fake.name(),
+            "address": fake.address(),
+            "birthdate": fake.date(),
+            "time": fake.time(),
+            "comment": fake.sentence(),
         }
 
     record_number = _SIZES[DATA_SIZE] + NUMBER_OF_RECORDS_TO_DELETE
@@ -46,11 +47,11 @@ def remove():
     collection = db.sample_collection
 
     records = collection.find().limit(NUMBER_OF_RECORDS_TO_DELETE)
-    doc_ids = [rec.get('_id') for rec in records]
+    doc_ids = [rec.get("_id") for rec in records]
 
     query = {"_id": {"$in": doc_ids}}
     collection.delete_many(query)
-    
+
 
 def teardown():
     pass
