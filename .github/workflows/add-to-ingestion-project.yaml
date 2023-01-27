@@ -1,0 +1,30 @@
+name: GitHub ProjectV2 Automation
+on:
+  issues:
+    types: [created]
+
+jobs:
+  sync_issues_with_table:
+    runs-on: ubuntu-latest
+    name: Sync issues with ProjectV2 projects
+    steps:
+      - name: Add Issue to project
+        env:
+          ISSUE_ID: ${{ github.event.issue.node_id }}
+          # Project ID for https://github.com/orgs/elastic/projects/740
+          PROJECT_ID: "PVT_kwDOAGc3Zs4AAfq7"
+        run: |
+          item_id="$( gh api graphql -f query='
+            mutation($project:ID!, $pr:ID!) {
+              addProjectV2ItemById(input: {projectId: $project, contentId: $issue}) {
+                item {
+                  id
+                }
+              }
+            }' -f project=$PROJECT_ID -f issue=$ISSUE_ID --jq '.data.addProjectV2ItemById.item.id')"
+
+            echo 'ITEM_ID='$item_id >> $GITHUB_ENV        
+        env:
+          GRAPHQL_API_BASE: 'https://api.github.com'
+          PAT_TOKEN: ${{ secrets.ELASTIC_ORG_GITHUB_ACTIONS_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
