@@ -158,7 +158,7 @@ class S3DataSource(BaseDataSource):
         """
         return [bucket["Name"] for bucket in self.bucket_list["Buckets"]]
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         """Get documents from Amazon S3
 
         Returns:

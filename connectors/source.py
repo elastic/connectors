@@ -4,6 +4,10 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import importlib
+from datetime import date, datetime
+from decimal import Decimal
+
+from bson import Decimal128
 
 from connectors.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
@@ -187,7 +191,7 @@ class BaseDataSource:
         """
         pass
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         """Returns an iterator on all documents present in the backend
 
         Each document is a tuple with:
@@ -222,6 +226,45 @@ class BaseDataSource:
         Returns None. The changes are done in-place
         """
         pass
+
+    def serialize(self, doc):
+        """Reads each element from the document and serializes it with respect to its datatype.
+
+        Args:
+            doc (Dict): Dictionary to be serialized
+
+        Returns:
+            doc (Dict): Serialized version of dictionary
+        """
+
+        def _serialize(value):
+            """Serialize input value with respect to its datatype.
+            Args:
+                value (Any Datatype): Value to be serialized
+
+            Returns:
+                value (Any Datatype): Serialized version of input value.
+            """
+
+            if isinstance(value, (list, tuple)):
+                value = [_serialize(item) for item in value]
+            elif isinstance(value, dict):
+                for key, svalue in value.items():
+                    value[key] = _serialize(svalue)
+            elif isinstance(value, (datetime, date)):
+                value = value.isoformat()
+            elif isinstance(value, Decimal128):
+                value = value.to_decimal()
+            elif isinstance(value, (bytes, bytearray)):
+                value = value.decode(errors="ignore")
+            elif isinstance(value, Decimal):
+                value = float(value)
+            return value
+
+        for key, value in doc.items():
+            doc[key] = _serialize(value)
+
+        return doc
 
 
 def get_source_klass(fqn):

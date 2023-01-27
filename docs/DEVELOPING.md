@@ -101,6 +101,12 @@ Features in technical preview are subject to change and are not covered by the s
 
 Elastic versions 8.6.0+ are compatible with Elastic connector frameworks.
 
+Amazon S3 permissions required to run the connector:
+  - ListAllMyBuckets
+  - ListBucket
+  - GetBucketLocation
+  - GetObject
+
 ### Setup and basic usage
 
 Complete the following steps to deploy the connector:
@@ -276,3 +282,7 @@ To implement a new source, check [CONTRIBUTE.rst](./CONTRIBUTING.md)
 
 - MacOS or Linux server. The connector has been tested with CentOS 7, MacOS Monterey v12.0.1.
 - Python version 3.10 or later.
+- To fix SSL certificate verification failed error, users have to run this to connect with Amazon S3:
+    ```shell
+    $ System/Volumes/Data/Applications/Python\ 3.10/Install\ Certificates.command
+    ```

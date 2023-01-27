@@ -250,7 +250,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
                     blob=blob, container_metadata=container["metadata"]
                 )
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         """Get documents from Azure Blob Storage
 
         Yields:

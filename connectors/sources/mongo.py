@@ -79,7 +79,7 @@ class MongoDataSource(BaseDataSource):
     async def changed(self):
         return self._dirty
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         logger.debug("Grabbing collection info")
         collection = self.db[self.configuration["collection"]]
 

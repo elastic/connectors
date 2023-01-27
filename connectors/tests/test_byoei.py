@@ -18,6 +18,7 @@ from connectors.byoei import (
     Fetcher,
     IndexMissing,
 )
+from connectors.tests.commons import AsyncDocsGeneratorFake
 
 INDEX = "some-index"
 TIMESTAMP = datetime.datetime(year=2023, month=1, day=1)
@@ -32,6 +33,9 @@ DOC_ONE_DIFFERENT_TIMESTAMP = {
 }
 
 DOC_TWO = {"_id": 2, "_timestamp": TIMESTAMP}
+
+SYNC_RULES_ENABLED = True
+SYNC_RULES_DISABLED = False
 
 
 @pytest.mark.asyncio
@@ -226,7 +230,6 @@ async def test_async_bulk(mock_responses, patch_logger):
 
 @pytest.mark.asyncio
 async def test_async_bulk_same_ts(mock_responses, patch_logger):
-
     ts = datetime.datetime.now().isoformat()
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses, ts)
@@ -320,23 +323,6 @@ def lazy_download_fake(doc):
     return lazy_download
 
 
-class AsyncDocsGeneratorFake:
-    def __init__(self, docs):
-        self.docs = docs
-
-    def __aiter__(self):
-        self.i = 0
-        return self
-
-    async def __anext__(self):
-        if self.i >= len(self.docs):
-            raise StopAsyncIteration
-
-        doc = self.docs[self.i]
-        self.i += 1
-        return doc
-
-
 def queue_called_with_operations(queue, operations):
     expected_calls = [call(operation) for operation in operations]
     actual_calls = queue.put.call_args_list
@@ -364,7 +350,7 @@ async def lazy_downloads_mock():
     return lazy_downloads
 
 
-async def setup_fetcher(basic_rule_engine, existing_docs, queue):
+async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enabled):
     client = Mock()
     existing_ids = {doc["_id"]: doc["_timestamp"] for doc in existing_docs}
 
@@ -372,12 +358,12 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue):
     filtering_mock = Mock()
     filtering_mock.get_active_filter = Mock(return_value={})
     fetcher = Fetcher(client, queue, INDEX, existing_ids, filtering=filtering_mock)
-    fetcher.basic_rule_engine = basic_rule_engine
+    fetcher.basic_rule_engine = basic_rule_engine if sync_rules_enabled else None
     return fetcher
 
 
 @pytest.mark.parametrize(
-    "existing_docs, docs_from_source, doc_should_ingest, expected_queue_operations, expected_total_docs_updated, "
+    "existing_docs, docs_from_source, doc_should_ingest, sync_rules_enabled, expected_queue_operations, expected_total_docs_updated, "
     "expected_total_docs_created, expected_total_docs_deleted, expected_total_downloads",
     [
         (
@@ -385,6 +371,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue):
             [],
             [(DOC_ONE, None)],
             NO_FILTERING,
+            SYNC_RULES_ENABLED,
             [index_operation(DOC_ONE), end_docs_operation()],
             updated(0),
             created(1),
@@ -396,6 +383,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue):
             [DOC_ONE],
             [],
             NO_FILTERING,
+            SYNC_RULES_ENABLED,
             [delete_operation(DOC_ONE), end_docs_operation()],
             updated(0),
             created(0),
@@ -407,6 +395,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue):
             [DOC_TWO],
             [(DOC_ONE, None)],
             NO_FILTERING,
+            SYNC_RULES_ENABLED,
             [index_operation(DOC_ONE), delete_operation(DOC_TWO), end_docs_operation()],
             updated(0),
             created(1),
@@ -418,6 +407,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue):
             [DOC_ONE],
             [(DOC_ONE, None)],
             NO_FILTERING,
+            SYNC_RULES_ENABLED,
             [end_docs_operation()],
             updated(0),
             created(0),
@@ -429,6 +419,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue):
             [DOC_ONE],
             [(DOC_ONE_DIFFERENT_TIMESTAMP, None)],
             NO_FILTERING,
+            SYNC_RULES_ENABLED,
             [
                 # update happens through overwriting
                 index_operation(DOC_ONE_DIFFERENT_TIMESTAMP),
@@ -444,6 +435,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue):
             [(DOC_ONE, None)],
             # filter out doc 1
             (False,),
+            SYNC_RULES_ENABLED,
             [
                 # should not ingest doc 1
                 end_docs_operation()
@@ -459,6 +451,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue):
             [(DOC_ONE, None)],
             # filter out doc 1
             (False,),
+            SYNC_RULES_ENABLED,
             [
                 delete_operation(DOC_ONE),
                 end_docs_operation(),
@@ -474,6 +467,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue):
             [(DOC_ONE_DIFFERENT_TIMESTAMP, None)],
             # still filter out doc 1
             (False,),
+            SYNC_RULES_ENABLED,
             [delete_operation(DOC_ONE), end_docs_operation()],
             updated(0),
             created(0),
@@ -485,6 +479,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue):
             [(DOC_ONE, None)],
             # filtering throws exception
             [Exception()],
+            SYNC_RULES_ENABLED,
             ["FETCH_ERROR"],
             updated(0),
             created(0),
@@ -496,6 +491,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue):
             # no doc present, lazy download for doc 1 specified -> index and increment the downloads counter
             [(DOC_ONE, lazy_download_fake(DOC_ONE))],
             NO_FILTERING,
+            SYNC_RULES_ENABLED,
             [index_operation(DOC_ONE), end_docs_operation()],
             updated(0),
             created(1),
@@ -507,6 +503,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue):
             [DOC_ONE],
             [(DOC_ONE, lazy_download_fake(DOC_ONE))],
             NO_FILTERING,
+            SYNC_RULES_ENABLED,
             [end_docs_operation()],
             updated(0),
             created(0),
@@ -524,11 +521,28 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue):
                 )
             ],
             NO_FILTERING,
+            SYNC_RULES_ENABLED,
             [index_operation(DOC_ONE_DIFFERENT_TIMESTAMP), end_docs_operation()],
             updated(1),
             created(0),
             deleted(0),
             total_downloads(1),
+        ),
+        (
+            [],
+            [(DOC_ONE, None)],
+            # filter out doc 1
+            (False,),
+            SYNC_RULES_DISABLED,
+            [
+                # should ingest doc 1 as sync rules are disabled
+                index_operation(DOC_ONE),
+                end_docs_operation(),
+            ],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(0),
         ),
     ],
 )
@@ -537,6 +551,7 @@ async def test_get_docs(
     existing_docs,
     docs_from_source,
     doc_should_ingest,
+    sync_rules_enabled,
     expected_queue_operations,
     expected_total_docs_updated,
     expected_total_docs_created,
@@ -555,7 +570,9 @@ async def test_get_docs(
             [deepcopy(doc) for doc in docs_from_source]
         )
 
-        fetcher = await setup_fetcher(basic_rule_engine, existing_docs, queue)
+        fetcher = await setup_fetcher(
+            basic_rule_engine, existing_docs, queue, sync_rules_enabled
+        )
 
         await fetcher.get_docs(doc_generator)
 

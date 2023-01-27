@@ -6,29 +6,35 @@
 import asyncio
 import json
 import os
+from copy import deepcopy
 from datetime import datetime
 from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call
 
 import pytest
 from aioresponses import CallbackResult
-from elasticsearch import AsyncElasticsearch
 
 from connectors.byoc import (
     CONNECTORS_INDEX,
+    STUCK_JOBS_THRESHOLD,
     Connector,
     ConnectorIndex,
+    Features,
+    Filter,
     Filtering,
     JobStatus,
     Status,
     SyncJob,
+    SyncJobIndex,
     e2str,
     iso_utc,
 )
 from connectors.byoei import ElasticServer
+from connectors.config import load_config
 from connectors.filtering.validation import ValidationTarget
 from connectors.logger import logger
 from connectors.source import BaseDataSource
+from connectors.tests.commons import AsyncDocsGeneratorFake
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
@@ -115,6 +121,7 @@ DOC_SOURCE = {
     "scheduling": {},
     "service_type": "SERVICE",
     "status": "connected",
+    "language": "en",
     "sync_now": False,
 }
 
@@ -137,7 +144,7 @@ OTHER_DOMAIN_ONE = "other-domain-1"
 OTHER_DOMAIN_TWO = "other-domain-2"
 NON_EXISTING_DOMAIN = "non-existing-domain"
 
-EMPTY_FILTER = {}
+EMPTY_FILTER = Filter()
 
 FILTERING = [
     {
@@ -160,11 +167,32 @@ FILTERING = [
     },
 ]
 
+EMPTY_FILTERING = Filter()
+
+ADVANCED_RULES_EMPTY = {"advanced_snippet": {}}
+
+ADVANCED_RULES = {"db": {"table": "SELECT * FROM db.table"}}
+
+ADVANCED_RULES_NON_EMPTY = {"advanced_snippet": ADVANCED_RULES}
+
+RULES = [
+    {
+        "id": 1,
+    }
+]
+BASIC_RULES_NON_EMPTY = {"rules": RULES}
+ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
+    "advanced_snippet": {"db": {"table": "SELECT * FROM db.table"}},
+    "rules": RULES,
+}
+
 
 @pytest.fixture(autouse=True)
 def patch_validate_filtering_in_byoc():
-    with mock.patch("connectors.byoc.validate_filtering", return_value=AsyncMock()):
-        yield
+    with mock.patch(
+        "connectors.byoc.validate_filtering", return_value=AsyncMock()
+    ) as validate_filtering_mock:
+        yield validate_filtering_mock
 
 
 def test_e2str():
@@ -181,7 +209,9 @@ def test_utc():
 
 @pytest.mark.asyncio
 async def test_sync_job(mock_responses):
-    client = AsyncElasticsearch(hosts=["http://nowhere.com:9200"])
+    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    jobs_index = SyncJobIndex(elastic_config=config)
+    client = jobs_index.client
 
     expected_filtering = {
         "advanced_snippet": {
@@ -192,7 +222,7 @@ async def test_sync_job(mock_responses):
         "validation": FILTERING_VALIDATION_VALID,
     }
 
-    job = SyncJob("connector-id", client)
+    job = SyncJob(connector_id="connector-id", elastic_index=jobs_index)
 
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
@@ -364,6 +394,8 @@ class Data(BaseDataSource):
             return
         self.concurrency += 1
         global max_concurrency
+        max_concurrency = 0
+
         if self.concurrency > max_concurrency:
             max_concurrency = self.concurrency
             logger.info(f"max_concurrency {max_concurrency}")
@@ -384,8 +416,11 @@ class Data(BaseDataSource):
         options["concurrent_downloads"] = 3
 
 
+@pytest.mark.parametrize("with_filtering", [True, False])
 @pytest.mark.asyncio
-async def test_sync_mongo(mock_responses, patch_logger):
+async def test_sync_mongo(
+    with_filtering, mock_responses, patch_logger, patch_validate_filtering_in_byoc
+):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
@@ -476,12 +511,19 @@ async def test_sync_mongo(mock_responses, patch_logger):
     try:
         query = connectors.build_docs_query([["mongodb"]])
         async for connector in connectors.get_all_docs(query=query):
+            connector.features.sync_rules_enabled = Mock(return_value=with_filtering)
+
             await connector.prepare(service_config)
             await connector.sync(es, 0)
             await connector.close()
     finally:
         await connectors.close()
         await es.close()
+
+    if with_filtering:
+        assert patch_validate_filtering_in_byoc.call_count
+    else:
+        assert not patch_validate_filtering_in_byoc.call_count
 
     # verify that the Data source was able to override the option
     patch_logger.assert_not_present("max_concurrency 10")
@@ -697,3 +739,335 @@ async def test_update_filtering_validation(
             retry_on_conflict=ANY,
         )
     ]
+
+
+@pytest.mark.parametrize(
+    "features_json, feature_enabled",
+    [
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": True},
+                    "advanced": {"enabled": True},
+                }
+            },
+            {
+                Features.BASIC_RULES_NEW: True,
+                Features.ADVANCED_RULES_NEW: True,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": True},
+                    "advanced": {"enabled": False},
+                }
+            },
+            {
+                Features.BASIC_RULES_NEW: True,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": False},
+                    "advanced": {"enabled": False},
+                }
+            },
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
+        ),
+        (
+            {"filtering_advanced_config": True, "filtering_rules": True},
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: True,
+                Features.ADVANCED_RULES_OLD: True,
+            },
+        ),
+        (
+            {"filtering_advanced_config": False, "filtering_rules": False},
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
+        ),
+        (
+            {"filtering_advanced_config": True, "filtering_rules": False},
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: True,
+            },
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": True},
+                    "advanced": {"enabled": True},
+                },
+                "filtering_advanced_config": True,
+                "filtering_rules": True,
+            },
+            {
+                Features.BASIC_RULES_NEW: True,
+                Features.ADVANCED_RULES_NEW: True,
+                Features.BASIC_RULES_OLD: True,
+                Features.ADVANCED_RULES_OLD: True,
+            },
+        ),
+        (
+            None,
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
+        ),
+        (
+            {},
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
+        ),
+    ],
+)
+def test_feature_enabled(features_json, feature_enabled):
+    features = Features(features_json)
+
+    assert all(
+        features.feature_enabled(feature)
+        if enabled
+        else not features.feature_enabled(feature)
+        for feature, enabled in feature_enabled.items()
+    )
+
+
+@pytest.mark.parametrize(
+    "features_json, sync_rules_enabled",
+    [
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": True},
+                    "advanced": {"enabled": False},
+                },
+                "filtering_advanced_config": False,
+                "filtering_rules": False,
+            },
+            True,
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": False},
+                    "advanced": {"enabled": True},
+                },
+                "filtering_advanced_config": False,
+                "filtering_rules": False,
+            },
+            True,
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": False},
+                    "advanced": {"enabled": False},
+                },
+                "filtering_advanced_config": True,
+                "filtering_rules": False,
+            },
+            True,
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": False},
+                    "advanced": {"enabled": False},
+                },
+                "filtering_advanced_config": False,
+                "filtering_rules": True,
+            },
+            True,
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": False},
+                    "advanced": {"enabled": False},
+                },
+                "filtering_advanced_config": False,
+                "filtering_rules": False,
+            },
+            False,
+        ),
+        ({"other_feature": True}, False),
+        (None, False),
+        ({}, False),
+    ],
+)
+def test_sync_rules_enabled(features_json, sync_rules_enabled):
+    features = Features(features_json)
+
+    assert features.sync_rules_enabled() == sync_rules_enabled
+
+
+@pytest.mark.parametrize(
+    "nested_dict, keys, default, expected",
+    [
+        # extract True
+        ({"a": {"b": {"c": True}}}, ["a", "b", "c"], False, True),
+        (
+            {"a": {"b": {"c": True}}},
+            # "d" doesn't exist -> fall back to False
+            ["a", "b", "c", "d"],
+            False,
+            False,
+        ),
+        (
+            {"a": {"b": {"c": True}}},
+            # "wrong_key" doesn't exist -> fall back to False
+            ["wrong_key", "b", "c"],
+            False,
+            False,
+        ),
+        # fallback to True
+        (None, ["a", "b", "c"], True, True),
+    ],
+)
+def test_nested_get(nested_dict, keys, default, expected):
+    assert expected == Features(nested_dict)._nested_feature_enabled(keys, default)
+
+
+def test_pending_job_query_with_connectors_ids(mock_responses, set_env):
+    config = load_config(CONFIG)
+
+    connectors_ids = [1, 2]
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    pending_jobs_query = sync_job_index.pending_job_query(connectors_ids=connectors_ids)
+
+    # validate the query
+    assert "bool" in pending_jobs_query
+    assert pending_jobs_query["bool"] == {
+        "must": [
+            {"terms": {"status": ["pending"]}},
+            {"terms": {"connector.id": connectors_ids}},
+        ]
+    }
+
+
+def test_orphaned_jobs_query(mock_responses, set_env):
+    config = load_config(CONFIG)
+
+    connectors_ids = [1, 2]
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    orphaned_jobs_query = sync_job_index.orphaned_jobs_query(
+        connectors_ids=connectors_ids
+    )
+
+    assert orphaned_jobs_query == {
+        "bool": {"must_not": {"terms": {"connector.id": connectors_ids}}}
+    }
+
+
+def test_stuck_jobs_query(mock_responses, set_env):
+    config = load_config(CONFIG)
+
+    connectors_ids = [1, 2]
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    stuck_jobs_query = sync_job_index.stuck_jobs_query(connectors_ids=connectors_ids)
+
+    assert "bool" in stuck_jobs_query
+    assert len(stuck_jobs_query["bool"]["filter"]) == 3
+    assert {"terms": {"connector.id": connectors_ids}} in stuck_jobs_query["bool"][
+        "filter"
+    ]
+    assert {
+        "terms": {"status": [e2str(JobStatus.IN_PROGRESS), e2str(JobStatus.CANCELING)]}
+    } in stuck_jobs_query["bool"]["filter"]
+
+    assert {
+        "range": {"last_seen": {"lte": f"now-{STUCK_JOBS_THRESHOLD}s"}}
+    } in stuck_jobs_query["bool"]["filter"]
+
+
+@pytest.mark.parametrize(
+    "filtering, should_advanced_rules_be_present",
+    [
+        (ADVANCED_RULES_NON_EMPTY, True),
+        (ADVANCED_AND_BASIC_RULES_NON_EMPTY, True),
+        (ADVANCED_RULES_EMPTY, False),
+        (BASIC_RULES_NON_EMPTY, False),
+        (EMPTY_FILTERING, False),
+        (None, False),
+    ],
+)
+def test_advanced_rules_present(filtering, should_advanced_rules_be_present):
+    assert Filter(filtering).has_advanced_rules() == should_advanced_rules_be_present
+
+
+@pytest.mark.parametrize(
+    "filtering, expected_advanced_rules",
+    (
+        [
+            (ADVANCED_RULES_NON_EMPTY, ADVANCED_RULES),
+            (ADVANCED_AND_BASIC_RULES_NON_EMPTY, ADVANCED_RULES),
+            (ADVANCED_RULES_EMPTY, {}),
+            (BASIC_RULES_NON_EMPTY, {}),
+            (EMPTY_FILTERING, {}),
+            (None, {}),
+        ]
+    ),
+)
+def test_extract_advanced_rules(filtering, expected_advanced_rules):
+    assert Filter(filtering).get_advanced_rules() == expected_advanced_rules
+
+
+@pytest.mark.parametrize(
+    "filtering, expected_filtering_calls",
+    [
+        (None, [Filter()]),
+        (
+            Filter({"advanced_snippet": {}, "rules": []}),
+            [Filter({"advanced_snippet": {}, "rules": []})],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_prepare_docs(filtering, expected_filtering_calls):
+    doc_source_copy = deepcopy(DOC_SOURCE)
+    connector = Connector(StubIndex(), "1", doc_source_copy, {})
+
+    docs_generator_fake = AsyncDocsGeneratorFake([(doc_source_copy, None)])
+    connector.data_provider = AsyncMock()
+    connector.data_provider.get_docs = docs_generator_fake
+
+    async for yielded_doc in connector.prepare_docs(
+        connector.data_provider, filtering=filtering
+    ):
+        assert yielded_doc is not None
+
+    assert docs_generator_fake.call_kwargs == [
+        ("filtering", expected_filtering)
+        for expected_filtering in expected_filtering_calls
+    ]
+    assert all(
+        type(filter_) == Filter for _, filter_ in docs_generator_fake.call_kwargs
+    )

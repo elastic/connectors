@@ -3,9 +3,12 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from datetime import datetime
+from decimal import Decimal
 from unittest import mock
 
 import pytest
+from bson import Decimal128
 
 from connectors.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
@@ -37,6 +40,8 @@ CONFIG = {
         "type": "str",
     },
 }
+
+DATE_STRING_ISO_FORMAT = "2023-01-01T13:37:42+02:00"
 
 
 def test_field():
@@ -166,3 +171,53 @@ async def test_base_class():
 
     with pytest.raises(NotImplementedError):
         await ds.get_docs()
+
+
+@pytest.mark.parametrize(
+    "raw_doc, expected_doc",
+    [
+        (
+            {
+                "key_1": "value",
+                "key_2": datetime.fromisoformat(DATE_STRING_ISO_FORMAT),
+                "key_3": Decimal(1234),
+                "key_4": Decimal128(Decimal("0.0005")),
+                "key_5": bytes("value", "utf-8"),
+            },
+            {
+                "key_1": "value",
+                "key_2": DATE_STRING_ISO_FORMAT,
+                "key_3": 1234,
+                "key_4": Decimal("0.0005"),
+                "key_5": "value",
+            },
+        ),
+        (
+            {
+                "key_1": {
+                    "nested_key_1": {
+                        "nested_key_2": datetime.fromisoformat(DATE_STRING_ISO_FORMAT)
+                    }
+                }
+            },
+            {"key_1": {"nested_key_1": {"nested_key_2": DATE_STRING_ISO_FORMAT}}},
+        ),
+        (
+            {"key_1": [datetime.fromisoformat(DATE_STRING_ISO_FORMAT), "abc", 123]},
+            {"key_1": [DATE_STRING_ISO_FORMAT, "abc", 123]},
+        ),
+        ({}, {}),
+    ],
+)
+@pytest.mark.asyncio
+async def test_serialize(raw_doc, expected_doc):
+    with mock.patch.object(
+        BaseDataSource, "get_default_configuration", return_value={}
+    ):
+        source = BaseDataSource(DataSourceConfiguration(CONFIG))
+        serialized_doc = source.serialize(raw_doc)
+
+        assert serialized_doc.keys() == expected_doc.keys()
+
+        for serialized_doc_key, expected_doc_key in zip(serialized_doc, expected_doc):
+            assert serialized_doc[serialized_doc_key] == expected_doc[expected_doc_key]
