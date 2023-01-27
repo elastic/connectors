@@ -142,7 +142,9 @@ class SyncJobRunner:
     async def prepare_docs(self, data_provider):
         logger.debug(f"Using pipeline {self.sync_job.pipeline}")
 
-        async for doc, lazy_download in data_provider.get_docs(filtering=self.sync_job.filtering):
+        async for doc, lazy_download in data_provider.get_docs(
+            filtering=self.sync_job.filtering
+        ):
             # adapt doc for pipeline settings
             doc[
                 "_extract_binary_content"
