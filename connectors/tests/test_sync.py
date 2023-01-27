@@ -263,12 +263,13 @@ async def set_server_responses(
         repeat=True,
     )
 
-    mock_responses.post(
-        f"{host}/.elastic-connectors-sync-jobs/_update/1",
-        headers=headers,
-        callback=jobs_update,
-        repeat=True,
-    )
+    for id_ in range(len(configs)):
+        mock_responses.post(
+            f"{host}/.elastic-connectors-sync-jobs/_update/{id_+1}",
+            headers=headers,
+            callback=jobs_update,
+            repeat=True,
+        )
     mock_responses.put(
         f"{host}/.elastic-connectors-sync-jobs/_doc/1",
         payload={"_id": "1"},
@@ -301,12 +302,14 @@ async def set_server_responses(
         callback=connectors_update,
         headers=headers,
     )
-    mock_responses.post(
-        f"{host}/.elastic-connectors/_update/1",
-        headers=headers,
-        callback=connectors_update,
-        repeat=True,
-    )
+
+    for id_ in range(len(configs)):
+        mock_responses.post(
+            f"{host}/.elastic-connectors/_update/{id_ + 1}",
+            headers=headers,
+            callback=connectors_update,
+            repeat=True,
+        )
     mock_responses.head(
         f"{host}/search-airbnb?expand_wildcards=open",
         headers=headers,
@@ -670,8 +673,12 @@ async def test_spurious_continue(mock_responses, patch_logger, set_env):
 
 @pytest.mark.asyncio
 async def test_concurrent_syncs(mock_responses, patch_logger, set_env):
-    await set_server_responses(mock_responses)
+    await set_server_responses(mock_responses, [FAKE_CONFIG, FAKE_CONFIG, FAKE_CONFIG])
     service = create_service(CONFIG_FILE)
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
-    patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
+
+    # make sure we synced the three connectors
+    patch_logger.assert_present("[1] Sync done: 1 indexed, 0  deleted. (0 seconds)")
+    patch_logger.assert_present("[2] Sync done: 1 indexed, 0  deleted. (0 seconds)")
+    patch_logger.assert_present("[3] Sync done: 1 indexed, 0  deleted. (0 seconds)")
