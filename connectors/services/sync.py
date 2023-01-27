@@ -109,6 +109,7 @@ class SyncService(BaseService):
         )
 
         es = ElasticServer(self.es_config)
+        syncs = ConcurrentTasks()
         try:
             while self.running:
                 try:
@@ -118,7 +119,9 @@ class SyncService(BaseService):
                     )
 
                     async for connector in self.connectors.get_all_docs(query=query):
-                        await self._one_sync(connector, es, sync_now)
+                        await syncs.put(functools.partial(
+                            self._one_sync, connector, es, sync_now)
+                        )
                     if one_sync:
                         break
                 except Exception as e:
@@ -127,6 +130,8 @@ class SyncService(BaseService):
                 finally:
                     if one_sync:
                         break
+
+                await syncs.join()
                 await self._sleeps.sleep(self.idling)
         finally:
             if self.connectors is not None:
