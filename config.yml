@@ -32,8 +32,9 @@ native_service_types:
   - postgresql
   - oracle
 
-# some id
-#connector_id: '1'
+# Connector client settings
+#connector_id: 'changeme'
+#service_type: 'changeme'
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
