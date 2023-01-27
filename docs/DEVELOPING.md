@@ -82,10 +82,12 @@ The connector uses the Elastic ingest attachment processor plugin for extracting
 
 ### E2E Tests
 
-The framework allows users to test the connector end to end. To perform e2e test for Network Drive connector, run the following make command:
+The end to end test is usually performed by developers after the functional and system testing is completed. The framework allows users to test the connector end to end. To perform e2e test for Network Drive connector, run the following make command:
 ```shell
 $ make ftest NAME=network_drive
 ```
+
+ℹ️ Users do not need to have a running Elasticsearch instance or a Network Drive source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Network Drive source using the docker image.
 
 ℹ️ The e2e test uses default values defined in [configure Network Drive connector](#configure-network-drive-connector)
 
@@ -179,12 +181,17 @@ The connector uses the Elastic ingest attachment processor plugin for extracting
 
 ### E2E Tests
 
-The framework allows users to test the connector end to end. To perform e2e test for Amazon S3 connector, run the following make command:
+The end to end test is usually performed by developers after the functional and system testing is completed. The framework allows users to test the connector end to end. To perform e2e test for Amazon S3 connector, run the following make command:
 ```shell
 $ make ftest NAME=s3
 ```
 
+ℹ️ Users do not need to have a running Elasticsearch instance or an Amazon S3 source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Amazon S3 source using the docker image.
+
 ℹ️ The e2e test uses default values defined in [configure Amazon S3 connector](#configure-amazon-s3-connector)
+
+## General Configuration
+The details of Elastic instance and other relevant fields such as `service` and `source` needs to be provided in the [config.yml](https://github.com/elastic/connectors-python/blob/8.6/config.yml) file. For more details check out the following [documentation](https://github.com/elastic/connectors-python/blob/8.6/docs/CONFIG.md).
 
 ## Installation
 
@@ -208,6 +215,8 @@ optional arguments:
                         Configuration file
 --debug               Run the event loop in debug mode
 ```
+
+Users can execute `make run` command to run the elastic-ingest process in `debug` mode. For more details check out the following [documentation](./CONFIG.md)
 
 # Architecture
 
