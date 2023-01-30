@@ -12,7 +12,7 @@ aiogoogle==4.5.0
 uvloop==0.17.0; sys_platform != 'win32'
 fastjsonschema==2.16.2
 base64io==1.0.3
-azure-storage-blob>=12.13.0
+azure-storage-blob==12.13.0
 SQLAlchemy==1.4.44
 cx-Oracle==7.3.0
 asyncpg==0.27.0
