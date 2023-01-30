@@ -24,6 +24,7 @@ service:
   max_errors_span: 600
 
 native_service_types:
+  - mongodb
   - mysql
   - network_drive
   - s3
@@ -32,8 +33,9 @@ native_service_types:
   - postgresql
   - oracle
 
-# some id
-#connector_id: '1'
+# Connector client settings
+#connector_id: 'changeme'
+#service_type: 'changeme'
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
