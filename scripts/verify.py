@@ -77,11 +77,8 @@ def main(args=None):
     with open(config_file) as f:
         config = yaml.safe_load(f)
 
-    loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(
-            verify(args.service_type, args.index_name, args.size, config)
-        )
+        asyncio.run(verify(args.service_type, args.index_name, args.size, config))
         print("Bye")
     except (asyncio.CancelledError, KeyboardInterrupt):
         print("Bye")
