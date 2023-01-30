@@ -162,6 +162,16 @@ class ConnectorIndex(ESIndex):
 
         return query
 
+    async def supported_connectors(
+        self, native_service_types=None, connectors_ids=None
+    ):
+        query = self.build_docs_query(native_service_types, connectors_ids)
+        if query is None:
+            return
+
+        async for connector in self.get_all_docs(query=query):
+            yield connector
+
     def _create_object(self, doc_source):
         return Connector(
             self,
@@ -170,57 +180,9 @@ class ConnectorIndex(ESIndex):
             bulk_options=self.bulk_options,
         )
 
-    async def orphaned_jobs(self, native_service_types=[], connectors_ids=[]):
-        connector_ids = [connector.id async for connector in self.get_all_docs(query=self.build_docs_query(native_service_types, connectors_ids))]
-        query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
-        async for job in self._query_with_pagination((JOBS_INDEX, query)):
-            # TODO: yield an instance of SyncJob, which doesn't accept source as instantiation params for now
-            yield job["_source"]
-
-    async def stuck_jobs(self, native_service_types=[], connectors_ids=[]):
-        connector_ids = [connector.id async for connector in self.get_all_docs(query=self.build_docs_query(native_service_types, connectors_ids))]
-        query = {
-            "bool": {
-                "filter": [
-                    {"terms": {"connector.id": connector_ids}},
-                    {"terms": {"status": [e2str(JobStatus.IN_PROGRESS), e2str(JobStatus.CANCELING)]}},
-                    {range: {"last_seen": {"lte": f"now-{STUCK_THRESHOLD}s"}}}
-                ]
-            }
-        }
-        async for job in self._query_with_pagination((JOBS_INDEX, query)):
-            # TODO: yield an instance of SyncJob, which doesn't accept source as instantiation params for now
-            yield job["_source"]
-
-    async def delete_indices(self, indices):
-        pass
-
-    async def _query_with_pagination(self, index, query, page_size=DEFAULT_PAGE_SIZE):
-        count = 0
-        offset = 0
-
-        while True:
-            try:
-                resp = await self.client.search(
-                    index=index,
-                    query=query,
-                    from_=offset,
-                    size=page_size,
-                    expand_wildcards="hidden",
-                )
-            except ApiError as e:
-                logger.critical(f"The server returned {e.status_code}")
-                logger.critical(e.body, exc_info=True)
-                return
-
-            hits = resp["hits"]["hits"]
-            total = resp["hits"]["total"]["value"]
-            count += len(hits)
-            for hit in hits:
-                yield hit
-            if count >= total:
-                break
-            offset += len(hits)
+    async def all_connectors(self):
+        async for connector in self.get_all_docs():
+            yield connector
 
 
 class SyncJob:
@@ -229,14 +191,14 @@ class SyncJob:
         self.elastic_index = elastic_index
         self.created_at = datetime.now(timezone.utc)
         self.completed_at = None
-        self.job_id = None
-        self.status = None
         self.filtering = Filter()
         self.client = elastic_index.client
         if doc_source is None:
             doc_source = dict()
 
         self.doc_source = doc_source
+        self.job_id = self.doc_source["_id"]
+        self.status = JobStatus[self.doc_source["_source"]["status"].upper()]
 
     @property
     def duration(self):
@@ -244,6 +206,10 @@ class SyncJob:
             return -1
         msec = (self.completed_at - self.created_at).microseconds
         return round(msec / 9, 2)
+
+    @property
+    def index_name(self):
+        return self.doc_source["_source"]["connector"]["index_name"]
 
     async def start(self, trigger_method=JobTriggerMethod.SCHEDULED, filtering=None):
         if filtering is None:
@@ -787,51 +753,38 @@ class SyncJobIndex(ESIndex):
         return SyncJob(
             self,
             connector_id=doc_source["_source"]["connector"]["id"],
-            doc_source=doc_source["_source"],
+            doc_source=doc_source,
         )
 
-    def pending_job_query(self, connectors_ids):
-        """
-        Args:
-            connectors_ids (list of int): A list of connectors IDs
-        Returns:
-            dict
-        """
-        status_term = {"status": [e2str(JobStatus.PENDING)]}
-
+    async def pending_jobs(self, connector_ids=[]):
         query = {
             "bool": {
                 "must": [
-                    {"terms": status_term},
-                    {"terms": {"connector.id": connectors_ids}},
+                    {
+                        "terms": {
+                            "status": [
+                                e2str(JobStatus.PENDING),
+                                e2str(JobStatus.SUSPENDED),
+                            ]
+                        }
+                    },
+                    {"terms": {"connector.id": connector_ids}},
                 ]
             }
         }
+        async for job in self.get_all_docs(query=query):
+            yield job
 
-        return query
+    async def orphaned_jobs(self, connector_ids=[]):
+        query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
+        async for job in self.get_all_docs(query=query):
+            yield job
 
-    def orphaned_jobs_query(self, connectors_ids):
-        """
-        Args:
-            connectors_ids (list of int): A list of connectors IDs
-        Returns:
-            dict
-        """
-        query = {"bool": {"must_not": {"terms": {"connector.id": connectors_ids}}}}
-
-        return query
-
-    def stuck_jobs_query(self, connectors_ids):
-        """
-        Args:
-            connectors_ids (list of int): A list of connectors IDs
-        Returns:
-            dict
-        """
+    async def stuck_jobs(self, connector_ids=[]):
         query = {
             "bool": {
                 "filter": [
-                    {"terms": {"connector.id": connectors_ids}},
+                    {"terms": {"connector.id": connector_ids}},
                     {
                         "terms": {
                             "status": [
@@ -844,5 +797,10 @@ class SyncJobIndex(ESIndex):
                 ]
             }
         }
+        logger.debug(f"query={query}")
+        async for job in self.get_all_docs(query=query):
+            yield job
 
-        return query
+    async def delete_jobs(self, job_ids=[]):
+        query = {"terms": {"_id": job_ids}}
+        return await self.client.delete_by_query(index=self.index_name, query=query)

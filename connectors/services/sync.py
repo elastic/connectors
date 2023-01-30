@@ -117,8 +117,6 @@ class SyncService(BaseService):
 
         es = ElasticServer(self.es_config)
         try:
-            self.job_cleanup_task = JobCleanUp(self.connectors, native_service_types, connectors_ids)
-            self.job_cleanup_task.start()
             while self.running:
                 syncs = ConcurrentTasks(max_concurrency=self.concurrent_syncs)
                 try:
