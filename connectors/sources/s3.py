@@ -225,8 +225,8 @@ class S3DataSource(BaseDataSource):
         """
         return {
             "buckets": {
-                "value": ["ent-search-ingest-dev"],
-                "label": "List of AWS Buckets",
+                "value": "ent-search-ingest-dev",
+                "label": "AWS Buckets",
                 "type": "list",
             },
             "read_timeout": {
