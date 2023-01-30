@@ -572,6 +572,7 @@ class Connector:
         await job.suspend()
         self.doc_source["last_sync_status"] = e2str(job.status)
         await self.sync_doc()
+        logger.info(f"Sync suspended, Job id: {job.job_id}")
 
     async def _sync_done(self, job, result, exception=None):
         doc_updated = result.get("doc_updated", 0)
