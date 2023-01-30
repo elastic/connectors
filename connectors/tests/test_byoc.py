@@ -3,11 +3,12 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import asyncio
+
 import json
 import os
 from copy import deepcopy
 from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call, patch
 
@@ -15,6 +16,7 @@ import pytest
 
 from connectors.byoc import (
     CONNECTORS_INDEX,
+    JOB_NOT_FOUND_ERROR,
     STUCK_JOBS_THRESHOLD,
     Connector,
     ConnectorIndex,
@@ -31,7 +33,6 @@ from connectors.byoc import (
     orphaned_jobs_query,
     pending_job_query,
     stuck_jobs_query,
-    supported_connectors_query,
 )
 from connectors.byoei import ElasticServer
 from connectors.config import load_config
@@ -125,24 +126,27 @@ FILTERING_OTHER_DOMAIN = {
     },
 }
 
-CONNECTOR_ID = 1
+CONNECTOR_ID = "1"
 
 DOC_SOURCE_FILTERING = [FILTERING_DEFAULT_DOMAIN, FILTERING_OTHER_DOMAIN]
 
 DOC_SOURCE = {
-    "configuration": {"key": "value"},
-    "description": "description",
-    "error": "none",
-    "features": {},
-    "filtering": DOC_SOURCE_FILTERING,
-    "index_name": "search-index",
-    "name": "MySQL",
-    "pipeline": {},
-    "scheduling": {},
-    "service_type": "SERVICE",
-    "status": "connected",
-    "language": "en",
-    "sync_now": False,
+    "_id": CONNECTOR_ID,
+    "_source": {
+        "configuration": {"key": "value"},
+        "description": "description",
+        "error": "none",
+        "features": {},
+        "filtering": DOC_SOURCE_FILTERING,
+        "index_name": "search-index",
+        "name": "MySQL",
+        "pipeline": {},
+        "scheduling": {},
+        "service_type": "SERVICE",
+        "status": "connected",
+        "language": "en",
+        "sync_now": False,
+    },
 }
 
 EXPECTED_FILTERING_AFTER_UPDATE_DRAFT = {
@@ -200,70 +204,11 @@ ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
 }
 
 
-@pytest.fixture(autouse=True)
-def patch_validate_filtering_in_byoc():
-    with mock.patch(
-        "connectors.byoc.validate_filtering", return_value=AsyncMock()
-    ) as validate_filtering_mock:
-        yield validate_filtering_mock
-
-
 def test_utc():
     # All dates are in ISO 8601 UTC so we can serialize them
     now = datetime.utcnow()
     then = json.loads(json.dumps({"date": iso_utc(when=now)}))["date"]
     assert now.isoformat() == then
-
-
-@pytest.mark.asyncio
-async def test_sync_job():
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    job_filtering = {
-        "advanced_snippet": ACTIVE_ADVANCED_SNIPPET,
-        "rules": [{"id": ACTIVE_RULE_ONE_ID}, {"id": ACTIVE_RULE_TWO_ID}],
-        "validation": FILTERING_VALIDATION_VALID,
-    }
-
-    jobs_index = SyncJobIndex(elastic_config=config)
-
-    index_mock = AsyncMock()
-    update_mock = AsyncMock()
-
-    jobs_index.client.index = index_mock
-    jobs_index.client.update = update_mock
-
-    job = SyncJob(connector_id="connector-id", elastic_index=jobs_index)
-
-    await job.start(filtering=job_filtering)
-
-    assert job.duration == -1
-    assert job.status == JobStatus.IN_PROGRESS
-    assert job.job_id is not None
-
-    job_def = index_mock.call_args.kwargs["document"]
-
-    expected_filtering = {
-        "advanced_snippet": {
-            # "value" should be omitted by extracting content inside "value" and moving it one level up
-            "find": {"settings": {}}
-        },
-        "rules": [{"id": ACTIVE_RULE_ONE_ID}, {"id": ACTIVE_RULE_TWO_ID}],
-        "validation": {"state": "valid", "errors": []},
-    }
-
-    assert job_def["status"] == "in_progress"
-    assert job_def["connector"]["filtering"] == expected_filtering
-
-    await job.done(12, 34)
-
-    assert job.status == JobStatus.COMPLETED
-    assert job.duration > 0
-
-    updated_job_def = update_mock.call_args.kwargs["doc"]
-
-    assert updated_job_def["status"] == "completed"
-    assert updated_job_def["indexed_document_count"] == 12
-    assert updated_job_def["deleted_document_count"] == 34
 
 
 mongo = {
@@ -317,9 +262,8 @@ async def test_heartbeat(mock_responses, patch_logger):
     connectors = ConnectorIndex(config)
     conns = []
 
-    async for connector in connectors.supported_connectors(
-        native_service_types=["mongodb"]
-    ):
+    query = supported_connectors_query([["mongodb"]])
+    async for connector in connectors._get_all_docs(query=query):
         connector.start_heartbeat(0.2)
         connector.start_heartbeat(1.0)  # NO-OP
         conns.append(connector)
@@ -567,31 +511,62 @@ async def test_sync_mongo(
         headers=headers,
     )
 
-    es = ElasticServer(config)
-    connectors = ConnectorIndex(config)
-    service_config = {"sources": {"mongodb": "connectors.tests.test_byoc:Data"}}
+@pytest.mark.asyncio
+async def test_sync_done_with_failed_job(patch_logger):
+    connector_doc = {"_id": "1"}
+    job = Mock()
+    job.status = JobStatus.ERROR
+    job.error = "something wrong"
+    job.terminated = False
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "last_sync_status": e2str(JobStatus.ERROR),
+        "last_synced": ANY,
+        "last_sync_error": job.error,
+        "status": e2str(Status.ERROR),
+        "error": job.error,
+    }
 
-    try:
-        async for connector in connectors.supported_connectors(
-            native_service_types=["mongodb"]
-        ):
-            connector.features.sync_rules_enabled = Mock(return_value=with_filtering)
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.sync_done(job=job)
+    assert index.update.call_args_list == [
+        call(
+            doc_id=connector.id,
+            doc=expected_doc_source_update,
+        )
+    ]
 
-            await connector.prepare(service_config)
-            await connector.sync(es, 0)
-            await connector.close()
-    finally:
-        await connectors.close()
-        await es.close()
 
-    if with_filtering:
-        assert patch_validate_filtering_in_byoc.call_count
-    else:
-        assert not patch_validate_filtering_in_byoc.call_count
+@pytest.mark.asyncio
+async def test_sync_done_with_successful_job(patch_logger):
+    connector_doc = {"_id": "1"}
+    job = Mock()
+    job.status = JobStatus.COMPLETED
+    job.error = None
+    job.terminated = True
+    job.indexed_document_count = 100
+    job.deleted_document_count = 10
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "last_sync_status": e2str(JobStatus.COMPLETED),
+        "last_synced": ANY,
+        "last_sync_error": None,
+        "status": e2str(Status.CONNECTED),
+        "error": None,
+        "last_indexed_document_count": job.indexed_document_count,
+        "last_deleted_document_count": job.deleted_document_count,
+    }
 
-    # verify that the Data source was able to override the option
-    patch_logger.assert_not_present("max_concurrency 10")
-    patch_logger.assert_present("max_concurrency 3")
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.sync_done(job=job)
+    assert index.update.call_args_list == [
+        call(
+            doc_id=connector.id,
+            doc=expected_doc_source_update,
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -605,32 +580,17 @@ async def test_properties(mock_responses):
             "language": "en",
             "scheduling": {},
             "status": "created",
+            "last_seen": iso_utc(),
         },
     }
 
-    connector = Connector(StubIndex(), connector_src)
+    index = Mock()
+    connector = Connector(elastic_index=index, doc_source=connector_src)
 
     assert connector.status == Status.CREATED
     assert connector.service_type == "test"
-    connector.service_type = "test2"
-    assert connector.service_type == "test2"
-    assert connector._dirty
-
-    await connector.sync_doc()
-    assert not connector._dirty
-
-    # setting some config with a value that is None
-    connector.configuration = {"cool": {"value": "foo"}, "cool2": {"value": None}}
-
-    assert connector.status == Status.NEEDS_CONFIGURATION
-
-    # setting some config
-    connector.configuration = {"cool": {"value": "foo"}, "cool2": {"value": "baz"}}
-
-    assert connector.status == Status.CONFIGURED
-
-    with pytest.raises(TypeError):
-        connector.status = 1234
+    assert connector.configuration.is_empty()
+    assert isinstance(connector.last_seen, datetime)
 
 
 class Banana(BaseDataSource):
@@ -649,13 +609,19 @@ async def test_prepare(mock_responses):
     class Index:
         client = Client()
 
-        async def save(self, conn):
+        async def update(self, doc_id, doc):
             pass
+
+        async def fetch_by_id(self, doc_id):
+            return Connector(
+                self,
+                connector_doc_after_prepare,
+            )
 
     # generic empty doc created by the user through the Kibana UI
     # when it's created that way, the service type is None,
     # so it's up to the connector to set it back to its value
-    doc = {
+    connector_doc = {
         "_id": "1",
         "_source": {
             "status": "created",
@@ -666,17 +632,25 @@ async def test_prepare(mock_responses):
             "scheduling": {"enabled": False},
         },
     }
-    connector = Connector(Index(), doc)
+    service_type = "mongodb"
+    connector_doc_after_prepare = deepcopy(connector_doc)
+    connector_doc_after_prepare["_source"]["status"] = "needs_configuration"
+    connector_doc_after_prepare["_source"]["service_type"] = service_type
+    connector_doc_after_prepare["_source"][
+        "configuration"
+    ] = Banana.get_default_configuration()
+    connector = Connector(Index(), connector_doc)
 
     config = {
         "connector_id": "1",
-        "service_type": "mongodb",
+        "service_type": service_type,
         "sources": {"mongodb": "connectors.tests.test_byoc:Banana"},
     }
 
     await connector.prepare(config)
-    assert connector.source_klass.__doc__ == "Banana"
     assert connector.status == Status.NEEDS_CONFIGURATION
+    assert connector.service_type == service_type
+    assert not connector.configuration.is_empty()
 
 
 @pytest.mark.parametrize(
@@ -1192,39 +1166,6 @@ def test_has_validation_state(
 )
 def test_extract_advanced_rules(filtering, expected_advanced_rules):
     assert Filter(filtering).get_advanced_rules() == expected_advanced_rules
-
-
-@pytest.mark.parametrize(
-    "filtering, expected_filtering_calls",
-    [
-        (None, [Filter()]),
-        (
-            Filter({"advanced_snippet": {}, "rules": []}),
-            [Filter({"advanced_snippet": {}, "rules": []})],
-        ),
-    ],
-)
-@pytest.mark.asyncio
-async def test_prepare_docs(filtering, expected_filtering_calls):
-    doc_source_copy = deepcopy(DOC_SOURCE)
-    connector = Connector(StubIndex(), "1", doc_source_copy, {})
-
-    docs_generator_fake = AsyncIterator([(doc_source_copy, None)])
-    connector.data_provider = AsyncMock()
-    connector.data_provider.get_docs = docs_generator_fake
-
-    async for yielded_doc in connector.prepare_docs(
-        connector.data_provider, filtering=filtering
-    ):
-        assert yielded_doc is not None
-
-    assert docs_generator_fake.call_kwargs == [
-        ("filtering", expected_filtering)
-        for expected_filtering in expected_filtering_calls
-    ]
-    assert all(
-        type(filter_) == Filter for _, filter_ in docs_generator_fake.call_kwargs
-    )
 
 
 @pytest.mark.parametrize(

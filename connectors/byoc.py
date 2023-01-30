@@ -207,13 +207,6 @@ class ESDocument:
 
 class SyncJob(ESDocument):
     @property
-    def duration(self):
-        if self.completed_at is None:
-            return -1
-        msec = (self.completed_at - self.created_at).microseconds
-        return round(msec / 9, 2)
-
-    @property
     def status(self):
         return str2e(self.get("status"), JobStatus)
 
@@ -576,7 +569,7 @@ class Connector(ESDocument):
         )
 
         doc = {
-            "last_sync_status": job_status,
+            "last_sync_status": e2str(job_status),
             "last_synced": iso_utc(),
             "last_sync_error": job_error,
             "status": e2str(connector_status),
