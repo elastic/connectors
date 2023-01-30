@@ -78,9 +78,7 @@ def main(args=None):
         config = yaml.safe_load(f)
 
     try:
-        asyncio.run(
-            verify(args.service_type, args.index_name, args.size, config)
-        )
+        asyncio.run(verify(args.service_type, args.index_name, args.size, config))
         print("Bye")
     except (asyncio.CancelledError, KeyboardInterrupt):
         print("Bye")
