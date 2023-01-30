@@ -522,6 +522,7 @@ async def test_connector_service_poll_suspended(mock_responses, patch_logger, se
     # that the running job was suspended
     assert_re(".*suspended.*Job id: 1", patch_logger.logs)
 
+
 @pytest.mark.asyncio
 async def test_connector_service_poll_sync_now(mock_responses, patch_logger, set_env):
     await set_server_responses(mock_responses, [FAKE_CONFIG_NO_SYNC])
