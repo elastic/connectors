@@ -18,7 +18,7 @@ from connectors.byoei import (
     Fetcher,
     IndexMissing,
 )
-from connectors.tests.commons import AsyncDocsGeneratorFake
+from connectors.tests.commons import AsyncGeneratorFake
 
 INDEX = "some-index"
 TIMESTAMP = datetime.datetime(year=2023, month=1, day=1)
@@ -566,9 +566,7 @@ async def test_get_docs(
 
         # deep copying docs is needed as get_docs mutates the document ids which has side effects on other test
         # instances
-        doc_generator = AsyncDocsGeneratorFake(
-            [deepcopy(doc) for doc in docs_from_source]
-        )
+        doc_generator = AsyncGeneratorFake([deepcopy(doc) for doc in docs_from_source])
 
         fetcher = await setup_fetcher(
             basic_rule_engine, existing_docs, queue, sync_rules_enabled
