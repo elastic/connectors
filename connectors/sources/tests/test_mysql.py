@@ -7,6 +7,7 @@
 import asyncio
 import ssl
 from unittest import mock
+from unittest.mock import AsyncMock
 
 import aiomysql
 import pytest
@@ -90,6 +91,12 @@ def patch_fetch_tables():
         MySqlDataSource, "fetch_tables", side_effect=([])
     ) as fetch_tables:
         yield fetch_tables
+
+
+@pytest.fixture
+def patch_ping():
+    with mock.patch.object(MySqlDataSource, "ping", return_value=AsyncMock()) as ping:
+        yield ping
 
 
 @pytest.fixture
@@ -708,6 +715,7 @@ async def test_advanced_rules_validation(
     patch_configured_databases,
     patch_validate_databases,
     patch_fetch_tables,
+    patch_ping,
 ):
     accessible_databases = list(datasource.get(ACCESSIBLE, {}).keys())
     inaccessible_databases = list(datasource.get(INACCESSIBLE, {}).keys())
