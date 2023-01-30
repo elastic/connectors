@@ -797,7 +797,7 @@ class SyncJobIndex(ESIndex):
                 ]
             }
         }
-        logger.debug(f"query={query}")
+        
         async for job in self.get_all_docs(query=query):
             yield job
 
