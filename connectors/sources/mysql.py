@@ -281,13 +281,12 @@ class MySqlDataSource(BaseDataSource):
         formatted_query = query.format(**query_kwargs)
         size = int(self.configuration.get("fetch_size", DEFAULT_FETCH_SIZE))
 
-        # retry: Current retry counter
-        # yield_once: Yield(fields) once flag
-        retry = yield_once = 1
+        retry = 1
+        yield_once = True
 
-        # rows_fetched: Rows fetched counter
-        # cursor_position: Mocked cursor position
-        rows_fetched = cursor_position = 0
+        rows_fetched = 0
+        cursor_position = 0
+
         while retry <= self.retry_count:
             try:
                 async with self.connection_pool.acquire() as connection:
@@ -406,36 +405,33 @@ class MySqlDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
 
-        # Query to get the table's primary key
-        response = await anext(
+        primary_key = await anext(
             self._connect(
                 query=QUERIES["TABLE_PRIMARY_KEY"], database=database, table=table
             )
         )
 
         keys = []
-        for column_name in response:
+        for column_name in primary_key:
             keys.append(f"{database}_{table}_{column_name[0]}")
 
         if keys:
 
-            # Query to get the table's last update time
-            response = await anext(
+            last_update_time = await anext(
                 self._connect(
                     query=QUERIES["TABLE_LAST_UPDATE_TIME"],
                     database=database,
                     table=table,
                 )
             )
-            last_update_time = response[0][0]
+            last_update_time = last_update_time[0][0]
 
-            # Query to get the table's data
-            streamer = self._connect(
+            table_rows = self._connect(
                 query=query, fetch_many=True, database=database, table=table
             )
-            column_names = await anext(streamer)
+            column_names = await anext(table_rows)
 
-            async for row in streamer:
+            async for row in table_rows:
                 row = dict(zip(column_names, row))
                 keys_value = ""
                 for key in keys:
@@ -464,9 +460,8 @@ class MySqlDataSource(BaseDataSource):
             List: List of invalid databases
         """
 
-        # Query to get all databases
-        response = await anext(self._connect(query=QUERIES["ALL_DATABASE"]))
-        accessible_databases = [database[0] for database in response]
+        all_databases = await anext(self._connect(query=QUERIES["ALL_DATABASE"]))
+        accessible_databases = [database[0] for database in all_databases]
         return list(set(databases) - set(accessible_databases))
 
     def configured_databases(self):

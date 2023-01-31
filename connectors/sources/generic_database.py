@@ -156,11 +156,9 @@ class GenericBaseDataSource(BaseDataSource):
         query = self.queries[query_name].format(**query_kwargs)
         size = self.configuration["fetch_size"]
 
-        # retry: Current retry counter
-        # yield_once: Yield(fields) once flag
-        retry = yield_once = 1
+        retry = 1
+        yield_once = True
 
-        # rows_fetched: Rows fetched counter
         rows_fetched = 0
 
         while retry <= self.retry_count:
