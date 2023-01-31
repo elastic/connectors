@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, Mock, call, patch
 import pytest
 
 from connectors.services.job_cleanup import STUCK_JOB_ERROR, JobCleanUpService
-from connectors.tests.support import AsyncIterator
+from connectors.tests.commons import AsyncGeneratorFake
 
 CONFIG = {
     "elasticsearch": {
@@ -66,11 +66,11 @@ async def test_cleanup_jobs(
     connector = mock_connector()
     sync_job = mock_sync_job()
 
-    all_connectors.return_value = AsyncIterator([connector])
-    supported_connectors.return_value = AsyncIterator([connector])
+    all_connectors.return_value = AsyncGeneratorFake([connector])
+    supported_connectors.return_value = AsyncGeneratorFake([connector])
     fetch_by_id.return_value = connector
-    orphaned_jobs.return_value = AsyncIterator([sync_job])
-    stuck_jobs.return_value = AsyncIterator([sync_job])
+    orphaned_jobs.return_value = AsyncGeneratorFake([sync_job])
+    stuck_jobs.return_value = AsyncGeneratorFake([sync_job])
     delete_jobs.return_value = {"deleted": 1, "failures": [], "total": 1}
 
     service = create_service()

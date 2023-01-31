@@ -35,7 +35,6 @@ from connectors.filtering.validation import ValidationTarget
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.tests.commons import AsyncGeneratorFake
-from connectors.tests.support import AsyncIterator
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
@@ -964,7 +963,7 @@ JOB_SOURCE = {"_id": "1", "_source": {"status": "pending", "connector": {"id": "
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
 async def test_pending_jobs(get_all_docs, set_env):
     job = Mock()
-    get_all_docs.return_value = AsyncIterator([job])
+    get_all_docs.return_value = AsyncGeneratorFake([job])
     config = load_config(CONFIG)
     connector_ids = [1, 2]
     expected_query = {
@@ -997,7 +996,7 @@ async def test_pending_jobs(get_all_docs, set_env):
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
 async def test_orphaned_jobs(get_all_docs, set_env):
     job = Mock()
-    get_all_docs.return_value = AsyncIterator([job])
+    get_all_docs.return_value = AsyncGeneratorFake([job])
     config = load_config(CONFIG)
     connector_ids = [1, 2]
     expected_query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
@@ -1016,7 +1015,7 @@ async def test_orphaned_jobs(get_all_docs, set_env):
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
 async def test_stuck_jobs(get_all_docs, set_env):
     job = Mock()
-    get_all_docs.return_value = AsyncIterator([job])
+    get_all_docs.return_value = AsyncGeneratorFake([job])
     config = load_config(CONFIG)
     connector_ids = [1, 2]
     expected_query = {
