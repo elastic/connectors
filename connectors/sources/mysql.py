@@ -62,6 +62,8 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def _remote_validation(self, advanced_rules, databases_to_filter):
+        await self.source.ping()
+
         inaccessible_databases = set(
             await self.source.validate_databases(databases=databases_to_filter)
         )
