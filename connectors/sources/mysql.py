@@ -75,7 +75,7 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
             return SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
-                validation_message=f"Inaccessible databases: {format_list(inaccessible_databases_to_filter)} for user '{self.source.configuration.get('user', 'None')}'.",
+                validation_message=f"Inaccessible databases: {format_list(inaccessible_databases_to_filter)} for user '{self.source.configuration.get('user', 'No user configured')}'.",
             )
 
         database_to_missing_tables = {}
