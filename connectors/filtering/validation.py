@@ -65,8 +65,10 @@ class SyncRuleValidationResult:
         )
 
     def __eq__(self, other):
-        if other is None:
-            return False
+        if not isinstance(other, SyncRuleValidationResult):
+            raise TypeError(
+                f"Can't compare SyncRuleValidationResult with {type(other)}"
+            )
 
         return (
             self.rule_id == other.rule_id

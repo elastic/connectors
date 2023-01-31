@@ -101,15 +101,18 @@ FILTERING_TWO_BASIC_RULES_WITHOUT_ADVANCED_RULE = Filter(
             SyncRuleValidationResult(RULE_ONE_ID, True, RULE_TWO_VALIDATION_MESSAGE),
             False,
         ),
-        (
-            SyncRuleValidationResult(RULE_ONE_ID, True, RULE_ONE_VALIDATION_MESSAGE),
-            None,
-            False,
-        ),
     ],
 )
 def test_sync_rule_validation_result_eq(result_one, result_two, should_be_equal):
     assert result_one == result_two if should_be_equal else result_one != result_two
+
+
+def test_sync_rule_validation_result_eq_wrong_type():
+    with pytest.raises(TypeError):
+        assert (
+            SyncRuleValidationResult(RULE_ONE_ID, True, RULE_ONE_VALIDATION_MESSAGE)
+            == None
+        )
 
 
 @pytest.mark.parametrize(
