@@ -111,7 +111,7 @@ def test_sync_rule_validation_result_eq_wrong_type():
     with pytest.raises(TypeError):
         assert (
             SyncRuleValidationResult(RULE_ONE_ID, True, RULE_ONE_VALIDATION_MESSAGE)
-            != int
+            != 42
         )
 
 
