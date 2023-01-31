@@ -12,6 +12,8 @@ import os
 import random
 import tempfile
 import time
+import timeit
+from textwrap import dedent
 from unittest.mock import Mock
 
 import pytest
@@ -58,21 +60,42 @@ def test_invalid_names():
             validate_index_name(name)
 
 
-@pytest.mark.asyncio
-async def test_mem_queue_speed(patch_logger):
+def test_mem_queue_speed(patch_logger):
     # with memqueue
+
+    memqueue_script = dedent(
+        """
+    import asyncio
+    from connectors.utils import MemQueue
+
     queue = MemQueue(maxmemsize=1024 * 1024, refresh_interval=0.1, refresh_timeout=2)
-    start = time.time()
-    for i in range(1000):
-        await queue.put("x" * 100)
-    mem_queue_duration = time.time() - start
+
+    async def run():
+        for i in range(1000):
+            await queue.put("x" * 100)
+
+    asyncio.run(run())
+    """
+    )
+
+    mem_queue_duration = min(timeit.repeat(memqueue_script, number=1, repeat=3))
 
     # vanilla queue
+    queue_script = dedent(
+        """
+    import asyncio
+
     queue = asyncio.Queue()
-    start = time.time()
-    for i in range(1000):
-        await queue.put("x" * 100)
-    queue_duration = time.time() - start
+
+    async def run():
+        for i in range(1000):
+            await queue.put("x" * 100)
+
+    asyncio.run(run())
+    """
+    )
+
+    queue_duration = min(timeit.repeat(queue_script, number=1, repeat=3))
 
     # mem queue should be 30 times slower at the most
     quotient, _ = divmod(mem_queue_duration, queue_duration)
