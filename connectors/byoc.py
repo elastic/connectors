@@ -439,6 +439,14 @@ class Connector:
         self.features = Features(doc_source.get("features", {}))
 
     @property
+    def last_sync_status(self):
+        status = self.doc_source.get("last_sync_status")
+        if status is None:
+            return None
+        value = JobStatus[status.upper()]
+        return value
+
+    @property
     def status(self):
         return self._status
 
@@ -648,11 +656,16 @@ class Connector:
 
         try:
             service_type = self.service_type
-            if not sync_now:
+            if sync_now:
+                self.sync_now = True
+                logger.info("Sync forced")
+            else:
                 next_sync = self.next_sync()
                 if next_sync == SYNC_DISABLED or next_sync - idling > 0:
                     if next_sync == SYNC_DISABLED:
                         logger.debug(f"Scheduling is disabled for {service_type}")
+                    elif self.last_sync_status == JobStatus.SUSPENDED:
+                        logger.info("Restarting sync after suspension")
                     else:
                         logger.debug(
                             f"Next sync for {service_type} due in {int(next_sync)} seconds"
@@ -663,9 +676,6 @@ class Connector:
                         self.status = Status.CONNECTED
                         await self.sync_doc()
                     return
-            else:
-                self.sync_now = True
-                logger.info("Sync forced")
 
             try:
                 self.data_provider = self.source_klass(self.configuration)

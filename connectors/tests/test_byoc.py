@@ -288,7 +288,7 @@ mongo = {
     "service_type": "mongodb",
     "status": "configured",
     "language": "en",
-    "last_sync_status": "null",
+    "last_sync_status": None,
     "last_sync_error": "",
     "last_synced": "",
     "last_seen": "",
