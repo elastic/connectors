@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import time
 from datetime import datetime, timezone
+from enum import Enum
 
 from base64io import Base64IO
 from cstriggers.core.trigger import QuartzCron
@@ -352,3 +353,42 @@ def get_event_loop(uvloop=False):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
     return loop
+
+
+class RetryStrategy(Enum):
+    CONSTANT = 0
+    LINEAR_BACKOFF = 1
+    EXPONENTIAL_BACKOFF = 2
+
+
+class UnknownRetryStrategyError(Exception):
+    pass
+
+
+def retryable(retries=3, interval=1.0, strategy=RetryStrategy.LINEAR_BACKOFF):
+    def wrapper(func):
+        @functools.wraps(func)
+        async def func_to_execute(*args, **kwargs):
+            retry = 1
+            while retry <= retries:
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    if retry >= retries:
+                        raise e
+
+                    match strategy:
+                        case RetryStrategy.CONSTANT:
+                            await asyncio.sleep(interval)
+                        case RetryStrategy.LINEAR_BACKOFF:
+                            await asyncio.sleep(interval * retry)
+                        case RetryStrategy.EXPONENTIAL_BACKOFF:
+                            await asyncio.sleep(interval**retry)
+                        case _:
+                            raise UnknownRetryStrategyError()
+
+                    retry += 1
+
+        return func_to_execute
+
+    return wrapper

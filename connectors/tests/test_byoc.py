@@ -34,7 +34,7 @@ from connectors.config import load_config
 from connectors.filtering.validation import ValidationTarget
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.tests.commons import AsyncDocsGeneratorFake
+from connectors.tests.commons import AsyncGeneratorFake
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
@@ -1055,7 +1055,7 @@ async def test_prepare_docs(filtering, expected_filtering_calls):
     doc_source_copy = deepcopy(DOC_SOURCE)
     connector = Connector(StubIndex(), "1", doc_source_copy, {})
 
-    docs_generator_fake = AsyncDocsGeneratorFake([(doc_source_copy, None)])
+    docs_generator_fake = AsyncGeneratorFake([(doc_source_copy, None)])
     connector.data_provider = AsyncMock()
     connector.data_provider.get_docs = docs_generator_fake
 
