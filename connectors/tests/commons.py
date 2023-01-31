@@ -1,4 +1,4 @@
-class AsyncDocsGeneratorFake:
+class AsyncGeneratorFake:
     """
     Async documents generator fake class, which records the args and kwargs it was called with.
     """

@@ -6,11 +6,17 @@
 """MySQL source module responsible to fetch documents from MySQL"""
 import asyncio
 import ssl
+from collections import OrderedDict
 
 import aiomysql
 
+from connectors.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
 from connectors.logger import logger
 from connectors.source import BaseDataSource
+from connectors.utils import RetryStrategy, retryable
 
 MAX_POOL_SIZE = 10
 QUERIES = {
@@ -21,10 +27,90 @@ QUERIES = {
     "TABLE_LAST_UPDATE_TIME": "SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}'",
 }
 DEFAULT_FETCH_SIZE = 50
-DEFAULT_RETRY_COUNT = 3
-DEFAULT_WAIT_MULTIPLIER = 2
+RETRIES = 3
+RETRY_INTERVAL = 2
 DEFAULT_SSL_DISABLED = True
 DEFAULT_SSL_CA = None
+
+
+def format_list(databases):
+    return ", ".join(databases)
+
+
+class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
+    def __init__(self, source):
+        self.source = source
+
+    async def validate(self, advanced_rules):
+        databases = set(self.source.configured_databases())
+        databases_to_filter = set(advanced_rules.keys())
+
+        missing_databases = list(databases_to_filter - databases)
+
+        if len(missing_databases) > 0:
+            return SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=f"Non-configured databases: {format_list(missing_databases)}. Configured databases: {'None' if not len(databases) else format_list(databases)}.",
+            )
+
+        return await self._remote_validation(advanced_rules, databases_to_filter)
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def _remote_validation(self, advanced_rules, databases_to_filter):
+        await self.source.ping()
+
+        inaccessible_databases = set(
+            await self.source.validate_databases(databases=databases_to_filter)
+        )
+        inaccessible_databases_to_filter = inaccessible_databases.intersection(
+            databases_to_filter
+        )
+
+        if len(inaccessible_databases_to_filter) > 0:
+            return SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=f"Inaccessible databases: {format_list(inaccessible_databases_to_filter)} for user '{self.source.configuration.get('user', 'No user configured')}'.",
+            )
+
+        database_to_missing_tables = {}
+
+        for database in databases_to_filter:
+            tables = set(
+                map(
+                    lambda table: table[0],
+                    await self.source.fetch_tables(database=database),
+                )
+            )
+            tables_to_filter = set(advanced_rules.get(database, {}).keys())
+
+            missing_tables = tables_to_filter - tables
+
+            if len(missing_tables) > 0:
+                database_to_missing_tables[database] = list(missing_tables)
+
+        if len(database_to_missing_tables) > 0:
+            missing_tables_str = format_list(
+                [
+                    f"({db} -> {format_list(sorted(database_to_missing_tables.get(db, [])))})"
+                    for db in sorted(OrderedDict(database_to_missing_tables.items()))
+                ]
+            )
+
+            return SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=f"Tables not found or inaccessible (database -> tables): {missing_tables_str}.",
+            )
+
+        return SyncRuleValidationResult.valid_result(
+            SyncRuleValidationResult.ADVANCED_RULES
+        )
 
 
 class MySqlDataSource(BaseDataSource):
@@ -86,7 +172,7 @@ class MySqlDataSource(BaseDataSource):
                 "type": "int",
             },
             "retry_count": {
-                "value": DEFAULT_RETRY_COUNT,
+                "value": RETRIES,
                 "label": "How many retry count for fetching rows on each call",
                 "type": "int",
             },
@@ -101,6 +187,9 @@ class MySqlDataSource(BaseDataSource):
                 "type": "str",
             },
         }
+
+    def advanced_rules_validators(self):
+        return [MySQLAdvancedRulesValidator(self)]
 
     async def close(self):
         if self.connection_pool is None:
@@ -250,7 +339,7 @@ class MySqlDataSource(BaseDataSource):
                 if retry == self.retry_count:
                     raise exception
                 cursor_position = rows_fetched
-                await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry)
+                await asyncio.sleep(RETRY_INTERVAL**retry)
                 retry += 1
 
     async def fetch_tables(self, database):
@@ -365,7 +454,7 @@ class MySqlDataSource(BaseDataSource):
                 f"Skipping {table} table from database {database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
             )
 
-    async def _validate_databases(self, databases):
+    async def validate_databases(self, databases):
         """Validates all user input databases
 
         Args:
@@ -380,20 +469,24 @@ class MySqlDataSource(BaseDataSource):
         accessible_databases = [database[0] for database in response]
         return list(set(databases) - set(accessible_databases))
 
-    async def get_docs(self, filtering=None):
-        """Executes the logic to fetch databases, tables and rows in async manner.
-
-        Yields:
-            dictionary: Row dictionary containing meta-data of the row.
-        """
+    def configured_databases(self):
         database_config = self.configuration["database"]
         if isinstance(database_config, str):
             dbs = database_config.split(",")
             databases = list(map(lambda s: s.strip(), dbs))
         else:
             databases = database_config
+        return databases
 
-        inaccessible_databases = await self._validate_databases(databases=databases)
+    async def get_docs(self, filtering=None):
+        """Executes the logic to fetch databases, tables and rows in async manner.
+
+        Yields:
+            dictionary: Row dictionary containing meta-data of the row.
+        """
+        databases = self.configured_databases()
+
+        inaccessible_databases = await self.validate_databases(databases=databases)
         if inaccessible_databases:
             raise Exception(
                 f"Configured databases: {inaccessible_databases} are inaccessible for user {self.configuration['user']}."
