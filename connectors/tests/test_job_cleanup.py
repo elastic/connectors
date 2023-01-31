@@ -5,11 +5,11 @@
 #
 
 import asyncio
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
 
-from connectors.services.job_cleanup import JobCleanUpService
+from connectors.services.job_cleanup import STUCK_JOB_ERROR, JobCleanUpService
 from connectors.tests.test_byoc import AsyncIterator
 
 CONFIG = {
@@ -77,6 +77,8 @@ async def test_cleanup_jobs(
     asyncio.get_event_loop().call_later(0.5, service.stop)
     await service.run()
 
-    assert delete_indices.called
-    assert delete_jobs.called
-    assert connector._sync_done.called
+    assert delete_indices.call_args_list == [call(indices=[sync_job.index_name])]
+    assert delete_jobs.call_args_list == [call(job_ids=[sync_job.job_id])]
+    assert connector._sync_done.call_args_list == [
+        call(job=sync_job, result={}, exception=STUCK_JOB_ERROR)
+    ]
