@@ -1061,9 +1061,11 @@ def test_basic_rules_set_no_conflicting_policies_validation(
 async def test_validate_filtering(validation_result, validation_target, should_raise):
     connector = MagicMock()
     source_klass = Mock()
+    source_instance = Mock()
+    source_klass.return_value = source_instance
     connector.index.update_filtering_validation = AsyncMock()
 
-    source_klass().validate_filtering = AsyncMock(return_value=validation_result)
+    source_instance.validate_filtering = AsyncMock(return_value=validation_result)
 
     if should_raise:
         with pytest.raises(InvalidFilteringError):

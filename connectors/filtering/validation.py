@@ -26,9 +26,9 @@ async def validate_filtering(
         else connector.filtering.get_draft_filter()
     )
 
-    validation_result = await source_klass(
-        connector.configuration
-    ).validate_filtering(filter_to_validate)
+    validation_result = await source_klass(connector.configuration).validate_filtering(
+        filter_to_validate
+    )
 
     await connector.index.update_filtering_validation(
         connector, validation_result, validation_target
