@@ -17,7 +17,7 @@ STUCK_JOB_ERROR = "The job has not seen any update for some time."
 class JobCleanUpService(BaseService):
     def __init__(self, config):
         super().__init__(config)
-        self.idling = int(self.config.get("job_cleanup_interval", 60 * 5))
+        self.idling = int(self.service_config.get("job_cleanup_interval", 60 * 5))
         self.native_service_types = self.config.get("native_service_types", [])
         if "connector_id" in self.config:
             self.connectors_ids = [self.config.get("connector_id")]

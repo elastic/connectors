@@ -197,8 +197,9 @@ class SyncJob:
             doc_source = dict()
 
         self.doc_source = doc_source
-        self.job_id = self.doc_source["_id"]
-        self.status = JobStatus[self.doc_source["_source"]["status"].upper()]
+        self.job_id = self.doc_source.get("_id")
+        _status = self.doc_source.get("_source", {}).get("status")
+        self.status = None if _status is None else JobStatus[_status.upper()]
 
     @property
     def duration(self):
@@ -797,7 +798,7 @@ class SyncJobIndex(ESIndex):
                 ]
             }
         }
-        
+
         async for job in self.get_all_docs(query=query):
             yield job
 

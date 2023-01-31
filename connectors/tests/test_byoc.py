@@ -298,7 +298,6 @@ mongo = {
     "sync_now": True,
 }
 
-
 @pytest.mark.asyncio
 async def test_heartbeat(mock_responses, patch_logger):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
@@ -956,54 +955,122 @@ def test_nested_get(nested_dict, keys, default, expected):
     assert expected == Features(nested_dict)._nested_feature_enabled(keys, default)
 
 
-def test_pending_job_query_with_connectors_ids(mock_responses, set_env):
-    config = load_config(CONFIG)
-
-    connectors_ids = [1, 2]
-    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    pending_jobs_query = pending_job_query(connectors_ids=connectors_ids)
-
-    # validate the query
-    assert "bool" in pending_jobs_query
-    assert pending_jobs_query["bool"] == {
-        "must": [
-            {"terms": {"status": ["pending"]}},
-            {"terms": {"connector.id": connectors_ids}},
-        ]
+JOB_SOURCE = {
+    "_id": "1",
+    "_source": {
+        "status": "pending",
+        "connector": {
+            "id": "1"
+        }
     }
+}
 
 
-def test_orphaned_jobs_query(mock_responses, set_env):
+@pytest.mark.asyncio
+async def test_pending_jobs(mock_responses, set_env):
     config = load_config(CONFIG)
-
-    connectors_ids = [1, 2]
-    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    orphaned_jobs_query = orphaned_jobs_query(connectors_ids=connectors_ids)
-
-    assert orphaned_jobs_query == {
-        "bool": {"must_not": {"terms": {"connector.id": connectors_ids}}}
+    connector_ids = [1, 2]
+    query = {
+        "bool": {
+            "must": [
+                {
+                    "terms": {
+                        "status": [
+                            e2str(JobStatus.PENDING),
+                            e2str(JobStatus.SUSPENDED),
+                        ]
+                    }
+                },
+                {"terms": {"connector.id": connector_ids}},
+            ]
+        }
     }
+    headers = {"X-Elastic-Product": "Elasticsearch"}
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_refresh", headers=headers
+    )
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_search?expand_wildcards=hidden",
+        body={"query": query},
+        payload={
+            "hits": {"hits": [JOB_SOURCE], "total": {"value": 1}}
+        },
+        headers=headers,
+    )
 
-
-def test_stuck_jobs_query(mock_responses, set_env):
-    config = load_config(CONFIG)
-
-    connectors_ids = [1, 2]
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    stuck_jobs_query = stuck_jobs_query(connectors_ids=connectors_ids)
+    jobs = [job async for job in sync_job_index.pending_jobs(connector_ids=connector_ids)]
 
-    assert "bool" in stuck_jobs_query
-    assert len(stuck_jobs_query["bool"]["filter"]) == 3
-    assert {"terms": {"connector.id": connectors_ids}} in stuck_jobs_query["bool"][
-        "filter"
-    ]
-    assert {
-        "terms": {"status": [e2str(JobStatus.IN_PROGRESS), e2str(JobStatus.CANCELING)]}
-    } in stuck_jobs_query["bool"]["filter"]
+    assert len(jobs) == 1
+    assert jobs[0].job_id == '1'
+    await sync_job_index.close()
 
-    assert {
-        "range": {"last_seen": {"lte": f"now-{STUCK_JOBS_THRESHOLD}s"}}
-    } in stuck_jobs_query["bool"]["filter"]
+
+@pytest.mark.asyncio
+async def test_orphaned_jobs(mock_responses, set_env):
+    config = load_config(CONFIG)
+    connector_ids = [1, 2]
+    query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
+    headers = {"X-Elastic-Product": "Elasticsearch"}
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_refresh", headers=headers
+    )
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_search?expand_wildcards=hidden",
+        body={"query": query},
+        payload={
+            "hits": {"hits": [JOB_SOURCE], "total": {"value": 1}}
+        },
+        headers=headers,
+    )
+
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    jobs = [job async for job in sync_job_index.orphaned_jobs(connector_ids=connector_ids)]
+
+    assert len(jobs) == 1
+    assert jobs[0].job_id == '1'
+    await sync_job_index.close()
+
+
+@pytest.mark.asyncio
+async def test_stuck_jobs(mock_responses, set_env):
+    config = load_config(CONFIG)
+    connector_ids = [1, 2]
+    query = {
+        "bool": {
+            "filter": [
+                {"terms": {"connector.id": connector_ids}},
+                {
+                    "terms": {
+                        "status": [
+                            e2str(JobStatus.IN_PROGRESS),
+                            e2str(JobStatus.CANCELING),
+                        ]
+                    }
+                },
+                {"range": {"last_seen": {"lte": f"now-{STUCK_JOBS_THRESHOLD}s"}}},
+            ]
+        }
+    }
+    headers = {"X-Elastic-Product": "Elasticsearch"}
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_refresh", headers=headers
+    )
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_search?expand_wildcards=hidden",
+        body={"query": query},
+        payload={
+            "hits": {"hits": [JOB_SOURCE], "total": {"value": 1}}
+        },
+        headers=headers,
+    )
+
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    jobs = [job async for job in sync_job_index.stuck_jobs(connector_ids=connector_ids)]
+
+    assert len(jobs) == 1
+    assert jobs[0].job_id == '1'
+    await sync_job_index.close()
 
 
 @pytest.mark.parametrize(
