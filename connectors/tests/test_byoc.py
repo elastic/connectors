@@ -9,7 +9,7 @@ import os
 from copy import deepcopy
 from datetime import datetime
 from unittest import mock
-from unittest.mock import ANY, AsyncMock, Mock, call
+from unittest.mock import ANY, AsyncMock, Mock, call, patch
 
 import pytest
 from aioresponses import CallbackResult
@@ -297,6 +297,7 @@ mongo = {
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
 }
+
 
 @pytest.mark.asyncio
 async def test_heartbeat(mock_responses, patch_logger):
@@ -955,22 +956,31 @@ def test_nested_get(nested_dict, keys, default, expected):
     assert expected == Features(nested_dict)._nested_feature_enabled(keys, default)
 
 
-JOB_SOURCE = {
-    "_id": "1",
-    "_source": {
-        "status": "pending",
-        "connector": {
-            "id": "1"
-        }
-    }
-}
+JOB_SOURCE = {"_id": "1", "_source": {"status": "pending", "connector": {"id": "1"}}}
+
+
+class AsyncIterator:
+    def __init__(self, seq):
+        self.iter = iter(seq)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self.iter)
+        except StopIteration:
+            raise StopAsyncIteration
 
 
 @pytest.mark.asyncio
-async def test_pending_jobs(mock_responses, set_env):
+@patch("connectors.byoc.SyncJobIndex.get_all_docs")
+async def test_pending_jobs(get_all_docs, set_env):
+    job = Mock()
+    get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
     connector_ids = [1, 2]
-    query = {
+    expected_query = {
         "bool": {
             "must": [
                 {
@@ -985,58 +995,44 @@ async def test_pending_jobs(mock_responses, set_env):
             ]
         }
     }
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_refresh", headers=headers
-    )
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_search?expand_wildcards=hidden",
-        body={"query": query},
-        payload={
-            "hits": {"hits": [JOB_SOURCE], "total": {"value": 1}}
-        },
-        headers=headers,
-    )
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    jobs = [job async for job in sync_job_index.pending_jobs(connector_ids=connector_ids)]
+    jobs = [
+        job async for job in sync_job_index.pending_jobs(connector_ids=connector_ids)
+    ]
 
+    assert get_all_docs.call_args_list == [call(query=expected_query)]
     assert len(jobs) == 1
-    assert jobs[0].job_id == '1'
-    await sync_job_index.close()
+    assert jobs[0] == job
 
 
 @pytest.mark.asyncio
-async def test_orphaned_jobs(mock_responses, set_env):
+@patch("connectors.byoc.SyncJobIndex.get_all_docs")
+async def test_orphaned_jobs(get_all_docs, set_env):
+    job = Mock()
+    get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
     connector_ids = [1, 2]
-    query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_refresh", headers=headers
-    )
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_search?expand_wildcards=hidden",
-        body={"query": query},
-        payload={
-            "hits": {"hits": [JOB_SOURCE], "total": {"value": 1}}
-        },
-        headers=headers,
-    )
+    expected_query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    jobs = [job async for job in sync_job_index.orphaned_jobs(connector_ids=connector_ids)]
+    jobs = [
+        job async for job in sync_job_index.orphaned_jobs(connector_ids=connector_ids)
+    ]
 
+    assert get_all_docs.call_args_list == [call(query=expected_query)]
     assert len(jobs) == 1
-    assert jobs[0].job_id == '1'
-    await sync_job_index.close()
+    assert jobs[0] == job
 
 
 @pytest.mark.asyncio
-async def test_stuck_jobs(mock_responses, set_env):
+@patch("connectors.byoc.SyncJobIndex.get_all_docs")
+async def test_stuck_jobs(get_all_docs, set_env):
+    job = Mock()
+    get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
     connector_ids = [1, 2]
-    query = {
+    expected_query = {
         "bool": {
             "filter": [
                 {"terms": {"connector.id": connector_ids}},
@@ -1052,25 +1048,13 @@ async def test_stuck_jobs(mock_responses, set_env):
             ]
         }
     }
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_refresh", headers=headers
-    )
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_search?expand_wildcards=hidden",
-        body={"query": query},
-        payload={
-            "hits": {"hits": [JOB_SOURCE], "total": {"value": 1}}
-        },
-        headers=headers,
-    )
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
     jobs = [job async for job in sync_job_index.stuck_jobs(connector_ids=connector_ids)]
 
+    assert get_all_docs.call_args_list == [call(query=expected_query)]
     assert len(jobs) == 1
-    assert jobs[0].job_id == '1'
-    await sync_job_index.close()
+    assert jobs[0] == job
 
 
 @pytest.mark.parametrize(

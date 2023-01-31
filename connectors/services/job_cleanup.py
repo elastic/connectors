@@ -47,7 +47,7 @@ class JobCleanUpService(BaseService):
 
     async def _process_orphaned_jobs(self):
         try:
-            logger.debug("Start cleaning up orphaned jobs...")
+            logger.info("Start cleaning up orphaned jobs...")
             connector_ids = [
                 connector.id
                 async for connector in self.connector_index.all_connectors()
@@ -63,7 +63,7 @@ class JobCleanUpService(BaseService):
                 job_ids.append(job.job_id)
 
             if len(job_ids) == 0:
-                logger.debug("No orphaned jobs found. Skipping...")
+                logger.info("No orphaned jobs found. Skipping...")
                 return
 
             # delete content indices in case they are re-created by sync job
@@ -81,7 +81,7 @@ class JobCleanUpService(BaseService):
 
     async def _process_stuck_jobs(self):
         try:
-            logger.debug("Start cleaning up stuck jobs...")
+            logger.info("Start cleaning up stuck jobs...")
             connector_ids = [
                 connector.id
                 async for connector in self.connector_index.supported_connectors(
@@ -115,9 +115,12 @@ class JobCleanUpService(BaseService):
                 finally:
                     total_count += 1
 
-            logger.info(
-                f"Successfully marked #{marked_count} out of #{total_count} stuck jobs as error."
-            )
+            if total_count == 0:
+                logger.info("No stuck jobs found. Skipping...")
+            else:
+                logger.info(
+                    f"Successfully marked #{marked_count} out of #{total_count} stuck jobs as error."
+                )
         except Exception as e:
             logger.critical(e, exc_info=True)
             self.raise_if_spurious(e)
