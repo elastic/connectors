@@ -24,7 +24,7 @@ def parse(basic_rules_json):
     The parser works in the following way:
       - Map every raw basic rule in the json array to the corresponding BasicRule object
       - Filter out every basic rule, which returns true for is_default_rule()
-      - Sort the result in descending order according to their basic rule order (rules are executed in descending order)
+      - Sort the result in ascending order according to their basic rule order (rules are executed in ascending order)
     """
     if not basic_rules_json:
         return []
@@ -44,7 +44,6 @@ def parse(basic_rules_json):
             )
         ),
         key=lambda basic_rule: basic_rule.order,
-        reverse=True,
     )
 
 
