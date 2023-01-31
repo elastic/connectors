@@ -35,6 +35,7 @@ from connectors.filtering.validation import ValidationTarget
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.tests.commons import AsyncGeneratorFake
+from connectors.tests.support import AsyncIterator
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
@@ -957,20 +958,6 @@ def test_nested_get(nested_dict, keys, default, expected):
 
 
 JOB_SOURCE = {"_id": "1", "_source": {"status": "pending", "connector": {"id": "1"}}}
-
-
-class AsyncIterator:
-    def __init__(self, seq):
-        self.iter = iter(seq)
-
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self):
-        try:
-            return next(self.iter)
-        except StopIteration:
-            raise StopAsyncIteration
 
 
 @pytest.mark.asyncio
