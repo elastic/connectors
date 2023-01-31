@@ -61,28 +61,18 @@ def test_invalid_names():
 @pytest.mark.asyncio
 async def test_mem_queue_speed(patch_logger):
     # with memqueue
-    mem_queue_duration = 10000
-
-    for i in range(3):
-        queue = MemQueue(maxmemsize=1024 * 1024, refresh_interval=0.1, refresh_timeout=2)
-        start = time.time()
-        for i in range(1000):
-            await queue.put("x" * 100)
-        current = time.time() - start
-        if current < mem_queue_duration:
-            mem_queue_duration = current
+    queue = MemQueue(maxmemsize=1024 * 1024, refresh_interval=0.1, refresh_timeout=2)
+    start = time.time()
+    for i in range(1000):
+        await queue.put("x" * 100)
+    mem_queue_duration = time.time() - start
 
     # vanilla queue
-    queue_duration = 10000
-
-    for i in range(3):
-        queue = asyncio.Queue()
-        start = time.time()
-        for i in range(1000):
-            await queue.put("x" * 100)
-        current = time.time() - start
-        if current < queue_duration:
-            queue_duration = current
+    queue = asyncio.Queue()
+    start = time.time()
+    for i in range(1000):
+        await queue.put("x" * 100)
+    queue_duration = time.time() - start
 
     # mem queue should be 30 times slower at the most
     quotient, _ = divmod(mem_queue_duration, queue_duration)
