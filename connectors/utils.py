@@ -365,7 +365,7 @@ class UnknownRetryStrategyError(Exception):
     pass
 
 
-def retryable(retries=1, interval=1, strategy=RetryStrategy.LINEAR_BACKOFF):
+def retryable(retries=3, interval=1.0, strategy=RetryStrategy.LINEAR_BACKOFF):
     def wrapper(func):
         @functools.wraps(func)
         async def func_to_execute(*args, **kwargs):
