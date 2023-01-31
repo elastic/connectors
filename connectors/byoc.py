@@ -443,8 +443,7 @@ class Connector:
         status = self.doc_source.get("last_sync_status")
         if status is None:
             return None
-        value = JobStatus[status.upper()]
-        return value
+        return JobStatus[status.upper()]
 
     @property
     def status(self):
