@@ -33,9 +33,10 @@ Configuration lives in [config.yml](../config.yml).
   - `preflight_idle`: The number of seconds to wait between each pre-flight check. Defaults to 30.
   - `max_errors`: The maximum number of errors allowed in one event loop.
   - `max_errors_span`: The number of seconds to reset `max_errors` count.
+  - `max_concurrent_syncs`: The maximum number of concurrent syncs. Defaults to 1.
 - `native_service_types`: An array of supported native connectors (in service type).
 - `connector_id`: The ID of the custom connector.
-- `servcie_type` The service type of the custom connector.
+- `service_type` The service type of the custom connector.
 - `sources`: A mapping/dictionary between service type and [Fully Qualified Name
 (FQN)](https://en.wikipedia.org/wiki/Fully_qualified_name). E.g. `mongodb: connectors.sources.mongo:MongoDataSource`.
 

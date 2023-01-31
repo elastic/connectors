@@ -551,7 +551,7 @@ class Connector:
         self.doc_source["last_synced"] = iso_utc()
         await self.sync_doc()
         logger.info(
-            f"Sync done: {indexed_count} indexed, {doc_deleted} "
+            f"[{self.id}] Sync done: {indexed_count} indexed, {doc_deleted} "
             f" deleted. ({int(time.time() - self._start_time)} seconds)"
         )
 
