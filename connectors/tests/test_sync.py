@@ -445,7 +445,10 @@ async def test_connector_service_poll_cron_broken(
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
     patch_logger.assert_not_present("Sync done")
-    assert calls[0]["status"] == "error"
+    assert (
+        calls[0]["status"] == "connected"
+    )  # first it's marked as connected as we picked it up
+    assert calls[1]["status"] == "error"  # and only then it's marked as error
 
 
 @pytest.mark.asyncio
@@ -615,10 +618,11 @@ async def test_connector_service_poll_buggy_service(
 ):
     def connectors_update(url, **kw):
         doc = json.loads(kw["data"])["doc"]
-        assert (
-            doc["error"]
-            == "Could not instantiate <class 'fake_sources.FakeSource'> for fake"
-        )
+        if "error" in doc:  # one time there will be update with no error
+            assert (
+                doc["error"]
+                == "Could not instantiate <class 'fake_sources.FakeSource'> for fake"
+            )
         return CallbackResult(status=200)
 
     await set_server_responses(
