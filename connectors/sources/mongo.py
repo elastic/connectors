@@ -18,8 +18,7 @@ class MongoDataSource(BaseDataSource):
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
 
-        client_params = {
-        }
+        client_params = {}
 
         host = self.configuration["host"]
         user = self.configuration["user"]
@@ -32,12 +31,8 @@ class MongoDataSource(BaseDataSource):
             client_params["username"] = user
             client_params["password"] = password
 
-
         print(f"host: {host}, params: {client_params}")
-        self.client = AsyncIOMotorClient(
-            host,
-            **client_params
-        )
+        self.client = AsyncIOMotorClient(host, **client_params)
 
         self.db = self.client[self.configuration["database"]]
 
@@ -59,21 +54,13 @@ class MongoDataSource(BaseDataSource):
                 "label": "Collection",
                 "type": "str",
             },
-            "user": {
-                "label": "Username",
-                "type": "str",
-                "value": ""
-            },
-            "password": {
-                "label": "Password",
-                "type": "str",
-                "value": ""
-            },
+            "user": {"label": "Username", "type": "str", "value": ""},
+            "password": {"label": "Password", "type": "str", "value": ""},
             "direct_connection": {
                 "label": "Direct connection? (true/false)",
                 "type": "bool",
-                "value": False
-            }
+                "value": False,
+            },
         }
 
     async def ping(self):
