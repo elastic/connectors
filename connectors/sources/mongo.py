@@ -59,7 +59,7 @@ class MongoDataSource(BaseDataSource):
             "direct_connection": {
                 "label": "Direct connection? (true/false)",
                 "type": "bool",
-                "value": False,
+                "value": True,
             },
         }
 
