@@ -6,7 +6,7 @@ The [Elastic Network Drive connector](https://github.com/elastic/connectors-pyth
 
 ### Availability and prerequisites
 
-⚠️ _Currently, this connector is available in **technical preview**_.
+z⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
 Features in technical preview are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
 
 Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
@@ -96,7 +96,7 @@ The [Elastic Amazon S3 connector](https://github.com/elastic/connectors-python/b
 
 ### Availability and prerequisites
 
-⚠️ _Currently, this connector is available in **technical preview**_.
+⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
 Features in technical preview are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
 
 Elastic versions 8.6.0+ are compatible with Elastic connector frameworks.
@@ -192,7 +192,7 @@ The [Elastic Google Cloud Storage connector](https://github.com/elastic/connecto
 
 ### Availability and prerequisites
 
-⚠️ _Currently, this connector is available in **technical preview**_.
+⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
 Features in technical preview are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
 
 Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
@@ -261,7 +261,7 @@ The [Elastic Azure Blob Storage connector](https://github.com/elastic/connectors
 
 ### Availability and prerequisites
 
-⚠️ _Currently, this connector is available in **technical preview**_.
+⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
 Features in technical preview are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
 
 Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
