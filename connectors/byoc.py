@@ -267,7 +267,7 @@ class SyncJob(ESDocument):
             "status": e2str(JobStatus.IN_PROGRESS),
             "started_at": iso_utc(),
             "last_seen": iso_utc(),
-            "worker_hostname": socket.gethostname()
+            "worker_hostname": socket.gethostname(),
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
