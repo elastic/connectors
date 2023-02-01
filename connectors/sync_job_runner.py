@@ -64,7 +64,6 @@ class SyncJobRunner:
             logger.debug(f"Syncing '{self.sync_job.service_type}'")
             logger.debug(f"Pinging the {self.source_klass} backend")
             await data_provider.ping()
-            await asyncio.sleep(0)
 
             mappings = Mappings.default_text_fields_mappings(
                 is_connectors_index=True,
@@ -74,7 +73,6 @@ class SyncJobRunner:
             await self.elastic_server.prepare_content_index(
                 self.sync_job.index_name, mappings=mappings
             )
-            await asyncio.sleep(0)
 
             # allows the data provider to change the bulk options
             bulk_options = self.bulk_options.copy()
