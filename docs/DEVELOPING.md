@@ -6,7 +6,7 @@ The [Elastic Network Drive connector](https://github.com/elastic/connectors-pyth
 
 ### Availability and prerequisites
 
-z⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
+⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
 Features in technical preview are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
 
 Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
