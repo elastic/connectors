@@ -18,13 +18,19 @@ from connectors.filtering.validation import (
 class FakeSource:
     """Fakey"""
 
-    service_type = "fake"
-
     def __init__(self, configuration):
         self.configuration = configuration
         if configuration.has_field("raise"):
             raise Exception("I break on init")
         self.fail = configuration.has_field("fail")
+
+    @staticmethod
+    def name():
+        return "Fakey"
+
+    @staticmethod
+    def service_type():
+        return "fake"
 
     async def changed(self):
         return True
@@ -63,7 +69,13 @@ class FakeSource:
 class FakeSourceFilteringValid(FakeSource):
     """Source with valid filtering."""
 
-    service_type = "filtering_state_valid"
+    @staticmethod
+    def name():
+        return "Source with valid filtering."
+
+    @staticmethod
+    def service_type():
+        return "filtering_state_valid"
 
     @classmethod
     async def validate_filtering(cls, filtering):
@@ -76,7 +88,13 @@ class FakeSourceFilteringValid(FakeSource):
 class FakeSourceFilteringStateInvalid(FakeSource):
     """Source with filtering in state invalid."""
 
-    service_type = "filtering_state_invalid"
+    @staticmethod
+    def name():
+        return "Source with filtering in state invalid."
+
+    @staticmethod
+    def service_type():
+        return "filtering_state_invalid"
 
     @classmethod
     async def validate_filtering(cls, filtering):
@@ -86,7 +104,13 @@ class FakeSourceFilteringStateInvalid(FakeSource):
 class FakeSourceFilteringStateEdited(FakeSource):
     """Source with filtering in state edited."""
 
-    service_type = "filtering_state_edited"
+    @staticmethod
+    def name():
+        return "Source with filtering in state edited."
+
+    @staticmethod
+    def service_type():
+        return "filtering_state_edited"
 
     @classmethod
     async def validate_filtering(cls, filtering):
@@ -96,7 +120,13 @@ class FakeSourceFilteringStateEdited(FakeSource):
 class FakeSourceFilteringErrorsPresent(FakeSource):
     """Source with filtering errors."""
 
-    service_type = "filtering_errors_present"
+    @staticmethod
+    def name():
+        return "Source with filtering errors."
+
+    @staticmethod
+    def service_type():
+        return "filtering_errors_present"
 
     @classmethod
     async def validate_filtering(cls, filtering):
@@ -106,8 +136,15 @@ class FakeSourceFilteringErrorsPresent(FakeSource):
 class FakeSourceTS(FakeSource):
     """Fake source with stable TS"""
 
-    service_type = "fake_ts"
     ts = "2022-10-31T09:04:35.277558"
+
+    @staticmethod
+    def name():
+        return "Fake source with stable TS"
+
+    @staticmethod
+    def service_type():
+        return "fake_ts"
 
     async def get_docs(self, filtering=None):
         if self.fail:
@@ -118,8 +155,15 @@ class FakeSourceTS(FakeSource):
 class FailsThenWork(FakeSource):
     """Buggy"""
 
-    service_type = "fail_once"
     fail = True
+
+    @staticmethod
+    def name():
+        return "Buggy"
+
+    @staticmethod
+    def service_type():
+        return "fail_once"
 
     async def get_docs(self, filtering=None):
         if FailsThenWork.fail:
@@ -131,7 +175,13 @@ class FailsThenWork(FakeSource):
 class LargeFakeSource(FakeSource):
     """Phatey"""
 
-    service_type = "large_fake"
+    @staticmethod
+    def name():
+        return "Phatey"
+
+    @staticmethod
+    def service_type():
+        return "large_fake"
 
     async def get_docs(self, filtering=None):
         for i in range(1001):

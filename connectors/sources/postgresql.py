@@ -40,6 +40,14 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         self.is_async = True
         self.dialect = "Postgresql"
 
+    @staticmethod
+    def name():
+        return "PostgreSQL"
+
+    @staticmethod
+    def service_type():
+        return "postgresql"
+
     def _create_engine(self):
         """Create async engine for postgresql"""
         self.engine = create_async_engine(

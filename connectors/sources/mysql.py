@@ -128,6 +128,14 @@ class MySqlDataSource(BaseDataSource):
         self.ssl_disabled = self.configuration["ssl_disabled"]
         self.certificate = self.configuration["ssl_ca"]
 
+    @staticmethod
+    def name():
+        return "MySQL"
+
+    @staticmethod
+    def service_type():
+        return "mysql"
+
     @classmethod
     def get_default_configuration(cls):
         """Get the default configuration for MySQL server

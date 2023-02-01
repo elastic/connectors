@@ -55,6 +55,14 @@ class S3DataSource(BaseDataSource):
         )
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
+    @staticmethod
+    def name():
+        return "Amazon S3"
+
+    @staticmethod
+    def service_type():
+        return "s3"
+
     @asynccontextmanager
     async def client(self, **kwargs):
         """This method creates client object."""

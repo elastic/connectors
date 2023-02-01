@@ -28,6 +28,14 @@ class DirectoryDataSource(BaseDataSource):
         self.pattern = self.configuration["pattern"]
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
+    @staticmethod
+    def name():
+        return "Directory"
+
+    @staticmethod
+    def service_type():
+        return "dir"
+
     @classmethod
     def get_default_configuration(cls):
         return {

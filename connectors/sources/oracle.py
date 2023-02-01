@@ -38,6 +38,14 @@ class OracleDataSource(GenericBaseDataSource):
         self.queries = QUERIES
         self.dialect = "Oracle"
 
+    @staticmethod
+    def name():
+        return "Oracle Database"
+
+    @staticmethod
+    def service_type():
+        return "oracle"
+
     def _create_engine(self):
         """Create sync engine for oracle"""
         self.engine = create_engine(self.connection_string)

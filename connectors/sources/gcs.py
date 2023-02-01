@@ -90,6 +90,14 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         self.retry_count = self.configuration["retry_count"]
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
+    @staticmethod
+    def name():
+        return "Google Cloud Storage"
+
+    @staticmethod
+    def service_type():
+        return "gcs"
+
     @classmethod
     def get_default_configuration(cls):
         """Get the default configuration for Google Cloud Storage.

@@ -120,7 +120,7 @@ def run(args):
     if args.action == "list":
         logger.info("Registered connectors:")
         for source in get_data_sources(config):
-            logger.info(f"- {source.__doc__.strip()}")
+            logger.info(f"- {source.name().strip()}")
         logger.info("Bye")
         return 0
 

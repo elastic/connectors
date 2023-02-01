@@ -39,6 +39,14 @@ class NASDataSource(BaseDataSource):
         self.drive_path = self.configuration["drive_path"]
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
+    @staticmethod
+    def name():
+        return "Network Drive"
+
+    @staticmethod
+    def service_type():
+        return "network_drive"
+
     @classmethod
     def get_default_configuration(cls):
         """Get the default configuration for Network Drive.

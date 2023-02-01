@@ -379,6 +379,14 @@ class Data(BaseDataSource):
         super().__init__(connector)
         self.concurrency = 0
 
+    @staticmethod
+    def name():
+        return "MongoDB"
+
+    @staticmethod
+    def service_type():
+        return "mongodb"
+
     @classmethod
     def get_default_configuration(cls):
         return {}

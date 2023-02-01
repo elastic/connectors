@@ -113,7 +113,15 @@ class BaseDataSource:
         self.configuration.set_defaults(self.get_default_configuration())
 
     def __str__(self):
-        return f"Datasource `{self.__class__.__doc__}`"
+        return f"Datasource `{self.__class__.name()}`"
+
+    @staticmethod
+    def name():
+        raise NotImplementedError
+
+    @staticmethod
+    def service_type():
+        raise NotImplementedError
 
     @classmethod
     def get_simple_configuration(cls):

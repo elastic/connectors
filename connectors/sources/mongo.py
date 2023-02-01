@@ -35,6 +35,14 @@ class MongoDataSource(BaseDataSource):
 
         self.db = self.client[self.configuration["database"]]
 
+    @staticmethod
+    def name():
+        return "MongoDB"
+
+    @staticmethod
+    def service_type():
+        return "mongodb"
+
     @classmethod
     def get_default_configuration(cls):
         return {

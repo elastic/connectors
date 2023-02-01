@@ -44,6 +44,14 @@ class AzureBlobStorageDataSource(BaseDataSource):
         self.retry_count = self.configuration["retry_count"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
 
+    @staticmethod
+    def name():
+        return "Azure Blob Storage"
+
+    @staticmethod
+    def service_type():
+        return "abs"
+
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by azure blob storage
 
