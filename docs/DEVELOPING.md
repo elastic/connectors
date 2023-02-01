@@ -6,7 +6,7 @@ The [Elastic Network Drive connector](https://github.com/elastic/connectors-pyth
 
 ### Availability and prerequisites
 
-⚠️ _Currently, this connector is available in **technical preview**_.
+⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
 Features in technical preview are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
 
 Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
@@ -82,10 +82,12 @@ The connector uses the Elastic ingest attachment processor plugin for extracting
 
 ### E2E Tests
 
-The framework allows users to test the connector end to end. To perform e2e test for Network Drive connector, run the following make command:
+The end to end test is usually performed by developers after the functional and system testing is completed. The framework allows users to test the connector end to end. To perform e2e test for Network Drive connector, run the following make command:
 ```shell
 $ make ftest NAME=network_drive
 ```
+
+ℹ️ Users do not need to have a running Elasticsearch instance or a Network Drive source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Network Drive source using the docker image.
 
 ℹ️ The e2e test uses default values defined in [configure Network Drive connector](#configure-network-drive-connector)
 
@@ -96,7 +98,7 @@ The [Elastic Amazon S3 connector](https://github.com/elastic/connectors-python/b
 
 ### Availability and prerequisites
 
-⚠️ _Currently, this connector is available in **technical preview**_.
+⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
 Features in technical preview are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
 
 Elastic versions 8.6.0+ are compatible with Elastic connector frameworks.
@@ -128,10 +130,11 @@ The following configuration fields need to be provided for setting up the connec
 
 ##### `buckets`
 
-List buckets for Amazon S3. For empty list connector will fetch data for all the buckets. Examples:
+List buckets for Amazon S3. For * in string connector will fetch data for all the buckets. Examples:
 
-  - `[testbucket, prodbucket]`
-  - `[]`
+  - `testbucket, prodbucket`
+  - `testbucket`
+  - `*`
 
 ##### `read_timeout`
 
@@ -179,10 +182,12 @@ The connector uses the Elastic ingest attachment processor plugin for extracting
 
 ### E2E Tests
 
-The framework allows users to test the connector end to end. To perform e2e test for Amazon S3 connector, run the following make command:
+The end to end test is usually performed by developers after the functional and system testing is completed. The framework allows users to test the connector end to end. To perform e2e test for Amazon S3 connector, run the following make command:
 ```shell
 $ make ftest NAME=s3
 ```
+
+ℹ️ Users do not need to have a running Elasticsearch instance or an Amazon S3 source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Amazon S3 source using the docker image.
 
 ℹ️ The e2e test uses default values defined in [configure Amazon S3 connector](#configure-amazon-s3-connector)
 
@@ -192,7 +197,7 @@ The [Elastic Google Cloud Storage connector](https://github.com/elastic/connecto
 
 ### Availability and prerequisites
 
-⚠️ _Currently, this connector is available in **technical preview**_.
+⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
 Features in technical preview are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
 
 Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
@@ -261,7 +266,7 @@ The [Elastic Azure Blob Storage connector](https://github.com/elastic/connectors
 
 ### Availability and prerequisites
 
-⚠️ _Currently, this connector is available in **technical preview**_.
+⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
 Features in technical preview are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
 
 Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
