@@ -147,6 +147,10 @@ class SyncService(BaseService):
                     await self.syncs.join()
                     if one_sync:
                         break
+
+                # Immediately break instead of sleeping
+                if not self.running:
+                    break
                 await self._sleeps.sleep(self.idling)
         finally:
             if self.connectors is not None:

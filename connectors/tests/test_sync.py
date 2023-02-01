@@ -402,7 +402,7 @@ async def test_connector_service_poll_unconfigured(
     # but still send out a heartbeat
 
     await set_server_responses(mock_responses, [FAKE_CONFIG_NEEDS_CONFIG])
-    await create_and_run_service(CONFIG_FILE, 0)
+    await create_and_run_service(CONFIG_FILE, 0.2)
 
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Can't sync with status `needs_configuration`")
@@ -424,7 +424,7 @@ async def test_connector_service_poll_no_sync_but_status_updated(
     await set_server_responses(
         mock_responses, [FAKE_CONFIG_NO_SYNC], connectors_update=upd
     )
-    await create_and_run_service(CONFIG_FILE, 0, sync_now=False)
+    await create_and_run_service(CONFIG_FILE, 0.2, sync_now=False)
 
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Scheduling is disabled")
@@ -485,7 +485,7 @@ async def test_connector_service_poll_just_created(
     # we should not sync a connector that is not configured
     # but still send out an heartbeat
     await set_server_responses(mock_responses, [FAKE_CONFIG_CREATED])
-    await create_and_run_service(CONFIG_FILE, 0)
+    await create_and_run_service(CONFIG_FILE, 0.2)
 
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Can't sync with status `created`")
@@ -495,7 +495,7 @@ async def test_connector_service_poll_just_created(
 @pytest.mark.asyncio
 async def test_connector_service_poll_https(mock_responses, patch_logger, set_env):
     await set_server_responses(mock_responses, host="https://safenowhere.com:443")
-    await create_and_run_service(CONFIG_HTTPS_FILE, 0.2)
+    await create_and_run_service(CONFIG_HTTPS_FILE, 0.3)
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
 
 
@@ -515,8 +515,8 @@ async def test_connector_service_poll_large(mock_responses, patch_logger, set_en
 async def test_connector_service_poll_suspended(mock_responses, patch_logger, set_env):
     # Service is having a large payload, but we terminate it ASAP
     # This way it should suspend existing running jobs
-    await set_server_responses(mock_responses, LARGE_FAKE_CONFIG)
-    await create_and_run_service(MEM_CONFIG_FILE, 0)
+    await set_server_responses(mock_responses, [LARGE_FAKE_CONFIG])
+    await create_and_run_service(MEM_CONFIG_FILE, 0.1)
 
     # For now just let's make sure that message is displayed
     # that the running job was suspended
@@ -591,7 +591,7 @@ async def test_connector_service_filtering(
     set_env,
     patch_validate_filtering_in_sync,
 ):
-    await set_server_responses(mock_responses, config)
+    await set_server_responses(mock_responses, [config])
 
     patch_validate_filtering_in_sync.side_effect = (
         [InvalidFilteringError] if should_raise_filtering_error else None
@@ -697,9 +697,7 @@ async def test_spurious_continue(mock_responses, patch_logger, set_env):
 @pytest.mark.asyncio
 async def test_concurrent_syncs(mock_responses, patch_logger, set_env):
     await set_server_responses(mock_responses, [FAKE_CONFIG, FAKE_CONFIG, FAKE_CONFIG])
-    service = create_service(CONFIG_FILE)
-    asyncio.get_event_loop().call_soon(service.stop)
-    await service.run()
+    await create_and_run_service(CONFIG_FILE, 0.1)
 
     # make sure we synced the three connectors
     patch_logger.assert_present("[1] Sync done: 1 indexed, 0  deleted. (0 seconds)")
