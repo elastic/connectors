@@ -152,7 +152,6 @@ async def test_get_container():
 
         # Execute
         async for actual_document in source.get_container():
-
             # Assert
             assert actual_document == expected_output
 
@@ -202,7 +201,6 @@ async def test_get_blob():
         async for actual_document in source.get_blob(
             {"name": "container1", "metadata": {"key1": "value1"}}
         ):
-
             # Assert
             assert actual_document == expected_output
 

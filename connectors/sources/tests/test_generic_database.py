@@ -195,7 +195,6 @@ def test_validate_configuration_ssl(patch_logger):
     source.configuration.set_field(name="ssl_disabled", value=False)
 
     with pytest.raises(Exception):
-
         # Execute
         source._validate_configuration()
 
