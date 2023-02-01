@@ -538,7 +538,7 @@ def test_parser_rejects_default_rule():
     assert not contains_default_rule(parsed_basic_rules)
 
 
-def test_rules_are_ordered_descending_with_respect_to_the_order_property():
+def test_rules_are_ordered_ascending_with_respect_to_the_order_property():
     raw_basic_rules = [BASIC_RULE_ONE_JSON, BASIC_RULE_THREE_JSON, BASIC_RULE_TWO_JSON]
 
     parsed_basic_rules = parse(raw_basic_rules)
@@ -547,9 +547,9 @@ def test_rules_are_ordered_descending_with_respect_to_the_order_property():
     third_rule = parsed_basic_rules[2]
 
     assert len(parsed_basic_rules) == 3
-    assert is_rule_three(first_rule)
+    assert is_rule_one(first_rule)
     assert is_rule_two(second_rule)
-    assert is_rule_one(third_rule)
+    assert is_rule_three(third_rule)
 
 
 def test_matches_default_rule():

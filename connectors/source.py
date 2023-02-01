@@ -150,16 +150,14 @@ class BaseDataSource:
             BasicRulesSetSemanticValidator,
         ]
 
-    @classmethod
-    async def validate_filtering(cls, filtering):
+    async def validate_filtering(self, filtering):
         """Execute all basic rule and advanced rule validators."""
 
-        return FilteringValidator(
-            cls.basic_rules_validators(), cls.advanced_rules_validators()
+        return await FilteringValidator(
+            self.basic_rules_validators(), self.advanced_rules_validators()
         ).validate(filtering)
 
-    @classmethod
-    def advanced_rules_validators(cls):
+    def advanced_rules_validators(self):
         """Return advanced rule validators.
 
         Advanced rules validators are data source specific so there are no default validators.

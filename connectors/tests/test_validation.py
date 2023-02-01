@@ -4,12 +4,14 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-from unittest.mock import AsyncMock, Mock, call
+from unittest.mock import AsyncMock, MagicMock, Mock, call
 
 import pytest
 
+from connectors.byoc import Filter
 from connectors.filtering.basic_rule import BasicRule
 from connectors.filtering.validation import (
+    AdvancedRulesValidator,
     BasicRuleAgainstSchemaValidator,
     BasicRuleNoMatchAllRegexValidator,
     BasicRulesSetSemanticValidator,
@@ -61,12 +63,56 @@ RULE_TWO = {
     "value": "value",
 }
 
-FILTERING_ONE_BASIC_RULE_WITH_ADVANCED_RULE = {
-    "rules": [RULE_ONE],
-    "advanced_snippet": {"query": {}},
-}
+FILTERING_ONE_BASIC_RULE_WITH_ADVANCED_RULE = Filter(
+    {
+        "rules": [RULE_ONE],
+        "advanced_snippet": {"query": {}},
+    }
+)
 
-FILTERING_TWO_BASIC_RULES_WITHOUT_ADVANCED_RULE = {"rules": [RULE_ONE, RULE_TWO]}
+FILTERING_TWO_BASIC_RULES_WITHOUT_ADVANCED_RULE = Filter(
+    {"rules": [RULE_ONE, RULE_TWO]}
+)
+
+
+@pytest.mark.parametrize(
+    "result_one, result_two, should_be_equal",
+    [
+        (
+            SyncRuleValidationResult(RULE_ONE_ID, True, RULE_ONE_VALIDATION_MESSAGE),
+            SyncRuleValidationResult(RULE_ONE_ID, True, RULE_ONE_VALIDATION_MESSAGE),
+            True,
+        ),
+        (
+            # ids differ
+            SyncRuleValidationResult(RULE_ONE_ID, True, RULE_ONE_VALIDATION_MESSAGE),
+            SyncRuleValidationResult(RULE_TWO_ID, True, RULE_ONE_VALIDATION_MESSAGE),
+            False,
+        ),
+        (
+            # is_valid differs
+            SyncRuleValidationResult(RULE_ONE_ID, True, RULE_ONE_VALIDATION_MESSAGE),
+            SyncRuleValidationResult(RULE_ONE_ID, False, RULE_ONE_VALIDATION_MESSAGE),
+            False,
+        ),
+        (
+            # messages differ
+            SyncRuleValidationResult(RULE_ONE_ID, True, RULE_ONE_VALIDATION_MESSAGE),
+            SyncRuleValidationResult(RULE_ONE_ID, True, RULE_TWO_VALIDATION_MESSAGE),
+            False,
+        ),
+    ],
+)
+def test_sync_rule_validation_result_eq(result_one, result_two, should_be_equal):
+    assert result_one == result_two if should_be_equal else result_one != result_two
+
+
+def test_sync_rule_validation_result_eq_wrong_type():
+    with pytest.raises(TypeError):
+        assert (
+            SyncRuleValidationResult(RULE_ONE_ID, True, RULE_ONE_VALIDATION_MESSAGE)
+            != 42
+        )
 
 
 @pytest.mark.parametrize(
@@ -630,17 +676,20 @@ def test_filtering_validation_result(
         ),
     ],
 )
-def test_filtering_validator(
+@pytest.mark.asyncio
+async def test_filtering_validator(
     basic_rule_validation_results, advanced_rule_validation_results, expected_result
 ):
     basic_rule_validators = validator_fakes(basic_rule_validation_results)
-    advanced_rule_validators = validator_fakes(advanced_rule_validation_results)
+    advanced_rule_validators = validator_fakes(
+        advanced_rule_validation_results, is_basic_rule_validator=False
+    )
 
     filtering_validator = FilteringValidator(
         basic_rule_validators, advanced_rule_validators
     )
 
-    validation_result = filtering_validator.validate(
+    validation_result = await filtering_validator.validate(
         FILTERING_ONE_BASIC_RULE_WITH_ADVANCED_RULE
     )
 
@@ -655,7 +704,7 @@ def test_filtering_validator(
     )
 
 
-def validator_fakes(results):
+def validator_fakes(results, is_basic_rule_validator=True):
     validators = []
 
     # validator 1 returns result 1, validator 2 returns result 2 ...
@@ -663,14 +712,24 @@ def validator_fakes(results):
         # We need to create different classes, otherwise we would always override the class method behavior
         # and every call would return the last result. The classes also need to inherit from the correct base class
         # so the issubclass checks in the validate function succeed
-        validator_super_type = (
-            BasicRulesSetValidator if isinstance(result, list) else BasicRuleValidator
-        )
+
+        if is_basic_rule_validator:
+            validator_super_type = (
+                BasicRulesSetValidator
+                if isinstance(result, list)
+                else BasicRuleValidator
+            )
+        else:
+            validator_super_type = AdvancedRulesValidator
 
         validator_fake = type(
             f"fake_validator_{idx}",
             (validator_super_type,),
-            {"validate": Mock(return_value=result)},
+            {
+                "validate": Mock(return_value=result)
+                if is_basic_rule_validator
+                else AsyncMock(return_value=result)
+            },
         )
         validators.append(validator_fake)
 
@@ -753,7 +812,8 @@ def assert_validators_called_with(validators, payload):
         ),
     ],
 )
-def test_filtering_validator_multiple_basic_rules(
+@pytest.mark.asyncio
+async def test_filtering_validator_multiple_basic_rules(
     basic_rules_validation_results, expected_result
 ):
     basic_rule_validator = BasicRulesSetValidator
@@ -762,7 +822,7 @@ def test_filtering_validator_multiple_basic_rules(
 
     filtering_validator = FilteringValidator([basic_rule_validator], [])
 
-    validation_result = filtering_validator.validate(
+    validation_result = await filtering_validator.validate(
         FILTERING_TWO_BASIC_RULES_WITHOUT_ADVANCED_RULE
     )
 
@@ -959,11 +1019,11 @@ def test_basic_rules_set_no_conflicting_policies_validation(
 )
 @pytest.mark.asyncio
 async def test_validate_filtering(validation_result, should_raise):
-    connector = Mock()
+    connector = MagicMock()
     index = Mock()
     index.update_filtering_validation = AsyncMock()
 
-    connector.source_klass.validate_filtering = AsyncMock(
+    connector.source_klass().validate_filtering = AsyncMock(
         return_value=validation_result
     )
 

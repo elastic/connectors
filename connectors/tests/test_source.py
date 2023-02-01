@@ -95,12 +95,45 @@ def test_get_data_sources():
     assert sources == [MyConnector, MyConnector]
 
 
+# ABCs
+class DataSource(BaseDataSource):
+    @classmethod
+    def get_default_configuration(cls):
+        return {
+            "host": {
+                "value": "127.0.0.1",
+                "label": "Host",
+                "type": "str",
+            },
+            "port": {
+                "value": 3306,
+                "label": "Port",
+                "type": "int",
+            },
+            "direct": {
+                "value": True,
+                "label": "Direct connect",
+                "type": "bool",
+            },
+            "user": {
+                "value": "root",
+                "label": "Username",
+                "type": "str",
+            },
+        }
+
+
 @pytest.mark.asyncio
 @mock.patch("connectors.filtering.validation.FilteringValidator.validate")
 async def test_validate_filter(validator_mock):
     validator_mock.return_value = "valid"
 
-    assert await BaseDataSource.validate_filtering({}) == "valid"
+    assert (
+        await DataSource(configuration=DataSourceConfiguration({})).validate_filtering(
+            {}
+        )
+        == "valid"
+    )
 
 
 @pytest.mark.asyncio
@@ -110,45 +143,8 @@ async def test_base_class():
     with pytest.raises(NotImplementedError):
         BaseDataSource(configuration=configuration)
 
-    # default rule validators for every data source (order matters)
-    assert BaseDataSource.basic_rules_validators() == [
-        BasicRuleAgainstSchemaValidator,
-        BasicRuleNoMatchAllRegexValidator,
-        BasicRulesSetSemanticValidator,
-    ]
-
-    # should be empty as advanced rules are specific to a data source
-    assert not len(BaseDataSource.advanced_rules_validators())
-
-    # ABCs
-    class DataSource(BaseDataSource):
-        @classmethod
-        def get_default_configuration(cls):
-            return {
-                "host": {
-                    "value": "127.0.0.1",
-                    "label": "Host",
-                    "type": "str",
-                },
-                "port": {
-                    "value": 3306,
-                    "label": "Port",
-                    "type": "int",
-                },
-                "direct": {
-                    "value": True,
-                    "label": "Direct connect",
-                    "type": "bool",
-                },
-                "user": {
-                    "value": "root",
-                    "label": "Username",
-                    "type": "str",
-                },
-            }
-
     ds = DataSource(configuration=configuration)
-    ds.get_default_configuration()["port"]["value"] == 3306
+    assert ds.get_default_configuration()["port"]["value"] == 3306
 
     options = {"a": "1"}
     ds.tweak_bulk_options(options)
@@ -171,6 +167,16 @@ async def test_base_class():
 
     with pytest.raises(NotImplementedError):
         await ds.get_docs()
+
+    # default rule validators for every data source (order matters)
+    assert BaseDataSource.basic_rules_validators() == [
+        BasicRuleAgainstSchemaValidator,
+        BasicRuleNoMatchAllRegexValidator,
+        BasicRulesSetSemanticValidator,
+    ]
+
+    # should be empty as advanced rules are specific to a data source
+    assert not len(DataSource(configuration=configuration).advanced_rules_validators())
 
 
 @pytest.mark.parametrize(
