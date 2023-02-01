@@ -210,7 +210,6 @@ async def test_async_bulk(mock_responses, patch_logger):
 
 @pytest.mark.asyncio
 async def test_async_bulk_same_ts(mock_responses, patch_logger):
-
     ts = datetime.datetime.now().isoformat()
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses, ts)

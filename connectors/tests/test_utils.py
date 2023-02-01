@@ -125,7 +125,6 @@ async def test_es_client_no_server(patch_logger):
 
 @pytest.mark.asyncio
 async def test_mem_queue(patch_logger):
-
     queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=2)
     await queue.put("small stuff")
 
