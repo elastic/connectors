@@ -94,7 +94,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             },
             "retry_count": {
                 "value": DEFAULT_RETRY_COUNT,
-                "label": "How many retry count for failed requests",
+                "label": "How many retries when calling the Azure server",
                 "type": "int",
             },
             "concurrent_downloads": {
