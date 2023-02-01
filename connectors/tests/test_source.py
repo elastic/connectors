@@ -42,7 +42,6 @@ def test_field():
 
 
 def test_data_source_configuration():
-
     c = DataSourceConfiguration(CONFIG)
     assert c["database"] == "sample_airbnb"
     assert c.get_field("database").label == "MongoDB Database"

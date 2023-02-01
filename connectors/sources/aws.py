@@ -67,7 +67,6 @@ class S3DataSource(BaseDataSource):
             await asyncio.sleep(0)
 
             async for obj_summary in bucket.objects.all():
-
                 doc_id = md5(obj_summary.key.encode("utf8")).hexdigest()
                 last_modified = await obj_summary.last_modified
                 await asyncio.sleep(0)

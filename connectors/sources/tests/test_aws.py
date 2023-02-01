@@ -81,7 +81,6 @@ async def test_get_docs(patch_logger, mock_aws):
             get_roles,
         ),
     ):
-
         num = 0
         async for (doc, dl) in source.get_docs():
             assert doc["_id"] in (
