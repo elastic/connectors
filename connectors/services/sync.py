@@ -31,9 +31,9 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.services.base import BaseService
-from connectors.utils import ConcurrentTasks, e2str
 from connectors.source import get_source_klass_dict
 from connectors.sync_job_runner import SyncJobRunner
+from connectors.utils import ConcurrentTasks, e2str
 
 
 DEFAULT_MAX_CONCURRENT_SYNCS = 1
