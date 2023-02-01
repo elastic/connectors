@@ -128,10 +128,11 @@ The following configuration fields need to be provided for setting up the connec
 
 ##### `buckets`
 
-List buckets for Amazon S3. For empty list connector will fetch data for all the buckets. Examples:
+List buckets for Amazon S3. For * in string connector will fetch data for all the buckets. Examples:
 
-  - `[testbucket, prodbucket]`
-  - `[]`
+  - `testbucket, prodbucket`
+  - `testbucket`
+  - `*`
 
 ##### `read_timeout`
 

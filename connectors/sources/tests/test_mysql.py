@@ -7,13 +7,15 @@
 import asyncio
 import ssl
 from unittest import mock
+from unittest.mock import AsyncMock
 
 import aiomysql
 import pytest
 
 from connectors.byoc import Filter
+from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.source import DataSourceConfiguration
-from connectors.sources.mysql import MySqlDataSource
+from connectors.sources.mysql import MySQLAdvancedRulesValidator, MySqlDataSource
 from connectors.sources.tests.support import create_source
 
 
@@ -28,6 +30,7 @@ DB_TWO = "db_2"
 
 TABLE_ONE = "table1"
 TABLE_TWO = "table2"
+TABLE_THREE = "table3"
 
 DOC_ONE = immutable_doc(id=1, text="some text 1")
 DOC_TWO = immutable_doc(id=2, text="some text 2")
@@ -48,6 +51,9 @@ DB_TWO_TABLE_TWO_QUERY_ALL = "query all db two table two"
 ALL_DOCS = "all_docs"
 ONLY_DOC_ONE = "only_doc_one"
 
+ACCESSIBLE = "accessible"
+INACCESSIBLE = "inaccessible"
+
 MYSQL = {
     DB_ONE: {
         TABLE_ONE: {
@@ -63,10 +69,34 @@ MYSQL = {
 }
 
 
+@pytest.fixture()
+def patch_configured_databases():
+    with mock.patch.object(
+        MySqlDataSource, "configured_databases", return_value=([])
+    ) as configured_databases:
+        yield configured_databases
+
+
 @pytest.fixture
 def patch_validate_databases():
-    with mock.patch.object(MySqlDataSource, "_validate_databases", return_value=([])):
-        yield
+    with mock.patch.object(
+        MySqlDataSource, "validate_databases", return_value=([])
+    ) as validate_databases:
+        yield validate_databases
+
+
+@pytest.fixture
+def patch_fetch_tables():
+    with mock.patch.object(
+        MySqlDataSource, "fetch_tables", side_effect=([])
+    ) as fetch_tables:
+        yield fetch_tables
+
+
+@pytest.fixture
+def patch_ping():
+    with mock.patch.object(MySqlDataSource, "ping", return_value=AsyncMock()) as ping:
+        yield ping
 
 
 @pytest.fixture
@@ -77,7 +107,7 @@ def patch_fetch_rows_for_table():
 
 @pytest.fixture
 def patch_default_wait_multiplier():
-    with mock.patch("connectors.sources.mysql.DEFAULT_WAIT_MULTIPLIER", 0):
+    with mock.patch("connectors.sources.mysql.RETRY_INTERVAL", 0):
         yield
 
 
@@ -349,7 +379,7 @@ class AsyncIter:
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_list():
+async def test_get_docs_with_list(patch_validate_databases):
     """Test get docs method of MySql with input as list for database field"""
     # Setup
     source = create_source(MySqlDataSource)
@@ -366,8 +396,6 @@ async def test_get_docs_with_list():
             return_value=AsyncIter([{"a": 1, "b": 2}])
         )
 
-    with mock.patch.object(MySqlDataSource, "_validate_databases", return_value=([])):
-        # Execute
         async for doc, _ in source.get_docs():
             assert doc == {"a": 1, "b": 2}
 
@@ -390,7 +418,7 @@ async def test_get_docs_with_str():
             return_value=AsyncIter([{"a": 1, "b": 2}])
         )
 
-    with mock.patch.object(MySqlDataSource, "_validate_databases", return_value=([])):
+    with mock.patch.object(MySqlDataSource, "validate_databases", return_value=([])):
         # Execute
         async for doc, _ in source.get_docs():
             assert doc == {"a": 1, "b": 2}
@@ -430,7 +458,7 @@ async def test_get_docs():
             return_value=AsyncIter([{"a": 1, "b": 2}])
         )
 
-    with mock.patch.object(MySqlDataSource, "_validate_databases", return_value=([])):
+    with mock.patch.object(MySqlDataSource, "validate_databases", return_value=([])):
         # Execute
         async for doc, _ in source.get_docs():
             assert doc == {"a": 1, "b": 2}
@@ -560,7 +588,7 @@ async def test_validate_databases():
         mock.patch("source._connect", return_value=response)
 
     # Execute
-    response = await source._validate_databases([])
+    response = await source.validate_databases([])
 
     # Assert
     assert response == []
@@ -597,3 +625,111 @@ def test_ssl_context():
     # Execute
     with mock.patch.object(ssl, "create_default_context", return_value=mock_ssl()):
         source._ssl_context(certificate=certificate)
+
+
+async def setup_fetch_tables_side_effect(
+    accessible_databases, datasource, inaccessible_databases
+):
+    fetch_tables_side_effect = []
+    for database in accessible_databases:
+        fetch_tables_side_effect.append(
+            map(
+                lambda table: (table, None),
+                list(datasource[ACCESSIBLE][database].keys()),
+            )
+        )
+    for database in inaccessible_databases:
+        fetch_tables_side_effect.append(
+            map(
+                lambda table: (table, None),
+                list(datasource[INACCESSIBLE][database].keys()),
+            )
+        )
+    return fetch_tables_side_effect
+
+
+@pytest.mark.parametrize(
+    "datasource, advanced_rules, expected_validation_result",
+    [
+        (
+            {ACCESSIBLE: {DB_ONE: {}, DB_TWO: {}}},
+            {},
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            {ACCESSIBLE: {DB_ONE: {TABLE_ONE: {}}, DB_TWO: {TABLE_ONE: {}}}},
+            {DB_ONE: {TABLE_ONE: {}}, DB_TWO: {TABLE_ONE: {}}},
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            {
+                ACCESSIBLE: {DB_ONE: {TABLE_ONE: {}, TABLE_TWO: {}}},
+                INACCESSIBLE: {DB_TWO: {}},
+            },
+            {DB_ONE: {TABLE_ONE: {}, TABLE_TWO: {}}},
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            {},
+            {DB_ONE: {}},
+            SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=f"Non-configured databases: {DB_ONE}. Configured databases: None.",
+            ),
+        ),
+        (
+            {ACCESSIBLE: {DB_ONE: {}}, INACCESSIBLE: {DB_TWO: {}}},
+            {DB_ONE: {}, DB_TWO: {}},
+            SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=f"Inaccessible databases: {DB_TWO} for user 'root'.",
+            ),
+        ),
+        (
+            {ACCESSIBLE: {DB_ONE: {TABLE_ONE: {}}, DB_TWO: {TABLE_ONE: {}}}},
+            {
+                DB_ONE: {TABLE_ONE: {}, TABLE_TWO: {}, TABLE_THREE: {}},
+                DB_TWO: {TABLE_ONE: {}, TABLE_TWO: {}, TABLE_THREE: {}},
+            },
+            SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=f"Tables not found or inaccessible (database -> tables): ({DB_ONE} -> {TABLE_TWO}, {TABLE_THREE}), ({DB_TWO} -> {TABLE_TWO}, {TABLE_THREE}).",
+            ),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation(
+    datasource,
+    advanced_rules,
+    expected_validation_result,
+    patch_configured_databases,
+    patch_validate_databases,
+    patch_fetch_tables,
+    patch_ping,
+):
+    accessible_databases = list(datasource.get(ACCESSIBLE, {}).keys())
+    inaccessible_databases = list(datasource.get(INACCESSIBLE, {}).keys())
+    configured_databases = accessible_databases + inaccessible_databases
+
+    patch_configured_databases.return_value = configured_databases
+    patch_validate_databases.return_value = inaccessible_databases
+    patch_fetch_tables.side_effect = await setup_fetch_tables_side_effect(
+        accessible_databases, datasource, inaccessible_databases
+    )
+
+    source = create_source(MySqlDataSource)
+    validation_result = await MySQLAdvancedRulesValidator(source).validate(
+        advanced_rules
+    )
+
+    assert validation_result == expected_validation_result
