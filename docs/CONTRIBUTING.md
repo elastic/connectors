@@ -12,6 +12,122 @@ Take a look at the [MongoDB connector](../connectors/sources/mongo.py) for more 
 
 Each connector will have their own specific behaviors and implementations. When a connector is loaded, it stays in memory, so you can come up with any strategy you want to make it more efficient. You just need to be careful not to blow memory.
 
+### Sync rules
+
+#### Basic rules vs advanced rules
+
+Sync rules is another term for either basic or advanced rules. 
+Basic rules are implemented generically on the framework-level and work out-of-the-box for every new connector. 
+Advanced rules are specific to each data source. 
+You can learn more about the use cases of sync rules [here (Sync rules documentation)](https://www.elastic.co/guide/en/enterprise-search/current/sync-rules.html). 
+
+Example:
+
+For MySQL we've implemented advanced rules to pass custom SQL queries directly to the corresponding MySQL instance.
+This has the advantage of offloading a lot of the filtering to the specific data source, which normally results in a reduction of the amount of data coming back from the data source.
+Also, data sources usually have highly optimized and specific filtering capabilities you may want to expose to the users of your connector.
+You can take a look at the `get_docs` method in the [MySQL connector](../connectors/sources/mysql.py) to see an advanced rules implementation.
+
+#### How to implement advanced rules
+
+When implementing a new connector you've to follow the API of the [BaseDataSource](../connectors/source.py).
+The custom implementation for advanced rules is usually located inside the `get_docs` function:
+
+```python
+async def get_docs(self, filtering=None):
+    if filtering and filtering.has_advanced_rules():
+        advanced_rules = filtering.get_advanced_rules()
+        # your custom advanced rules implementation
+    else:
+        # default fetch all data implementation 
+```
+
+Here you can pass f.e. custom queries to a database or something similar.
+The structure of the advanced rules is dependent on your implementation and your concrete use case.
+For MySQL the advanced rules structure looks like this:
+You specify databases on the top level, which contain tables, which specify a custom query.
+
+Example:
+
+```json
+{
+  "database_1": {
+    "table_1": "SELECT ... FROM ...;",
+    "table_2": "SELECT ... FROM ...;"
+  },
+  "database_2": {
+    "table_1": "SELECT ... FROM ...;"
+  }
+}
+```
+
+Note that the framework calls `get_docs` with the parameter `filtering` being of type `Filter`, which is located in [byoc.py](../connectors/sources/mysql.py).
+The `Filter` class provides convenient methods to extract advanced rules from the filter and to check, whether advanced rules are present.
+
+#### How to validate advanced rules
+
+For validating advanced rules the framework takes the list of validators returned by the method `advanced_rules_validators` and calls them in the order they appear in that list.
+On default this list is empty in the [BaseDataSource](../connectors/source.py) as advanced rules are always specific to the connector implementation.
+You can plug in custom validators by implementing a class containing a `validate` method, which accepts one parameter.
+The framework expects the custom validators to return a `SyncRuleValidationResult`, which can be found in [validation.py](../connectors/filtering/validation.py).
+
+```python
+class MyValidator(AdvancedRulesValidator):
+    
+    def validate(self, advanced_rules):
+        # custom validation logic
+        return SyncRuleValidationResult(...)
+```
+
+Note that the framework will call `validate` with the parameter `advanced_rules` being of type `dict`.
+Now you can return a list of validator instances in `advanced_rules_validators`:
+
+```python
+class MyDataSource(BaseDataSource):
+
+    def advanced_rules_validators(self):
+        return [MyValidator()]
+```
+
+The framework will handle the rest like scheduling validation, calling the custom validators and storing the corresponding results.
+
+#### How to provide custom basic rule validation
+
+The framework already provides default validations for basic rules.
+If you want to extend the default validation you can provide custom basic rules validators.
+There are two possible ways to validate basic rules:
+- Every rule gets validated in isolation (extend the class `BasicRuleValidator` located in [validation.py](../connectors/filtering/validation.py)):
+    ```python
+    class MyBasicRuleValidator(BasicRuleValidator):
+        
+        @classmethod
+        def validate(cls, rule):
+            # custom validation logic
+            return SyncRuleValidationResult(...)
+    ```
+- Validate the whole set of basic rules, if you want to validate constraints on the set of rules, f.e. to detect duplicate or conflicting rules (extend the class `BasicRulesSetValidator`located in [validation.py](../connectors/filtering/validation.py)):
+    ```python
+    class MyBasicRulesSetValidator(BasicRulesSetValidator):
+        
+        @classmethod
+        def validate(cls, set_of_rules):
+            # custom validation logic
+            return SyncRuleValidationResult(...)
+    ```
+
+If you want to preserve the default basic rule validations and extend it with your custom logic you can override `basic_rules_validators` like this:
+```python
+class MyDataSource(BaseDataSource):
+
+    @classmethod
+    def basic_rules_validators(self):
+        return BaseDataSource.basic_rule_validators() 
+                + [MyBasicRuleValidator, MyBasicRulesSetValidator]
+```
+
+It's not recommended to fully override `basic_rule_validators` as you'll lose the default validations.
+
+Again the framework will handle the rest like scheduling validation, calling the custom validators and storing the corresponding results.
 
 ## Async vs Sync
 
