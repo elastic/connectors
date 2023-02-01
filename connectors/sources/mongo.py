@@ -31,7 +31,6 @@ class MongoDataSource(BaseDataSource):
             client_params["username"] = user
             client_params["password"] = password
 
-        print(f"host: {host}, params: {client_params}")
         self.client = AsyncIOMotorClient(host, **client_params)
 
         self.db = self.client[self.configuration["database"]]
