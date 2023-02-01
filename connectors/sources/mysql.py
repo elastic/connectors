@@ -329,7 +329,6 @@ class MySqlDataSource(BaseDataSource):
             keys.append(f"{database}_{table}_{column_name[0]}")
 
         if keys:
-
             # Query to get the table's last update time
             response = await anext(
                 self._connect(

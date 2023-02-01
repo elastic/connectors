@@ -390,7 +390,6 @@ class Connector:
         doc_source,
         bulk_options,
     ):
-
         self.doc_source = doc_source
         self.id = connector_id
         self.index = elastic_index

@@ -73,7 +73,7 @@ class DataSourceConfiguration:
                     self.set_field(key, label=key.capitalize(), value=str(value))
 
     def set_defaults(self, default_config):
-        for (name, item) in default_config.items():
+        for name, item in default_config.items():
             self._defaults[name] = item["value"]
             if name in self._config:
                 self._config[name].type = item["type"]
