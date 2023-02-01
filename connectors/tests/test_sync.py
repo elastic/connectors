@@ -453,7 +453,7 @@ async def test_connector_service_poll_cron_broken(
 
 @pytest.mark.asyncio
 async def test_connector_service_poll_suspended(mock_responses, patch_logger, set_env):
-    await set_server_responses(mock_responses, FAKE_CONFIG_LAST_JOB_SUSPENDED)
+    await set_server_responses(mock_responses, [FAKE_CONFIG_LAST_JOB_SUSPENDED])
     service = create_service(CONFIG_FILE, one_sync=True)
     # one_sync means it won't loop forever
     await service.run()
@@ -465,7 +465,7 @@ async def test_connector_service_poll_suspended_when_scheduling_disabled(
     mock_responses, patch_logger, set_env
 ):
     await set_server_responses(
-        mock_responses, FAKE_CONFIG_LAST_JOB_SUSPENDED_SCHEDULING_DISABLED
+        mock_responses, [FAKE_CONFIG_LAST_JOB_SUSPENDED_SCHEDULING_DISABLED]
     )
     service = create_service(CONFIG_FILE, one_sync=True)
     # one_sync means it won't loop forever
