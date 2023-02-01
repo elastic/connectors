@@ -27,7 +27,6 @@ async def test_basics():
 
 @pytest.mark.asyncio
 async def test_get_docs(patch_logger):
-
     doc1 = {"id": "one", "tuple": (1, 2, 3), "date": datetime.now()}
     doc2 = {"id": "two", "dict": {"a": "b"}, "decimal": Decimal128("0.0005")}
 

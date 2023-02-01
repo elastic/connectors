@@ -303,7 +303,6 @@ async def test_sync_mongo(mock_responses, patch_logger):
 
 @pytest.mark.asyncio
 async def test_properties(mock_responses):
-
     connector_src = {
         "service_type": "test",
         "index_name": "search-some-index",

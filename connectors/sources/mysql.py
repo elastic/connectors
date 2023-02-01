@@ -26,6 +26,7 @@ DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
 
+
 class MySqlDataSource(BaseDataSource):
     """Class to fetch and modify documents from MySQL server"""
 
@@ -297,7 +298,6 @@ class MySqlDataSource(BaseDataSource):
 
         keys = []
         if columns:
-
             # Query to get the table's last update time
             last_update_time_query = QUERIES["TABLE_LAST_UPDATE_TIME"].format(
                 database=database, table=table

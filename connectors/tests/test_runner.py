@@ -419,7 +419,6 @@ async def test_connector_service_poll_unconfigured(
 async def test_connector_service_poll_no_sync_but_status_updated(
     mock_responses, patch_logger, patch_ping, set_env
 ):
-
     calls = []
 
     def upd(url, **kw):
@@ -446,7 +445,6 @@ async def test_connector_service_poll_no_sync_but_status_updated(
 async def test_connector_service_poll_cron_broken(
     mock_responses, patch_logger, patch_ping, set_env
 ):
-
     calls = []
 
     def upd(url, **kw):
@@ -568,6 +566,7 @@ async def test_connector_service_poll_with_entsearch(
     mock_responses, patch_logger, patch_ping, set_env, catch_stdout
 ):
     with mock.patch.dict(os.environ, {"ENT_SEARCH_CONFIG_PATH": ES_CONFIG}):
+
         def connectors_read(url, **kw):
             assert kw["headers"]["x-elastic-auth"] == "SomeYeahValue"
 
@@ -617,7 +616,6 @@ async def test_connector_service_poll_sync_ts(
 async def test_connector_service_poll_sync_fails(
     mock_responses, patch_logger, patch_ping, set_env
 ):
-
     await set_server_responses(mock_responses, FAKE_CONFIG_FAIL_SERVICE)
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
@@ -629,7 +627,6 @@ async def test_connector_service_poll_sync_fails(
 async def test_connector_service_poll_unknown_service(
     mock_responses, patch_logger, patch_ping, set_env
 ):
-
     await set_server_responses(mock_responses, FAKE_CONFIG_UNKNOWN_SERVICE)
     service = ConnectorService(CONFIG)
     asyncio.get_event_loop().call_soon(service.stop)
