@@ -49,7 +49,6 @@ async def test_ping_negative(patch_logger):
     with patch.object(
         OracleDataSource, "execute_query", side_effect=Exception("Something went wrong")
     ):
-
         # Execute
         with pytest.raises(Exception):
             await source.ping()

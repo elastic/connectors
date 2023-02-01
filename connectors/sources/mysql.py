@@ -416,7 +416,6 @@ class MySqlDataSource(BaseDataSource):
             keys.append(f"{database}_{table}_{column_name[0]}")
 
         if keys:
-
             last_update_time = await anext(
                 self._connect(
                     query=QUERIES["TABLE_LAST_UPDATE_TIME"],
