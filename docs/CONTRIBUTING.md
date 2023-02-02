@@ -105,7 +105,7 @@ There are two possible ways to validate basic rules:
             # custom validation logic
             return SyncRuleValidationResult(...)
     ```
-- Validate the whole set of basic rules, if you want to validate constraints on the set of rules, f.e. to detect duplicate or conflicting rules (extend the class `BasicRulesSetValidator`located in [validation.py](../connectors/filtering/validation.py)):
+- **Validate the whole set of basic rules**. If you want to validate constraints on the set of rules, for example to detect duplicate or conflicting rules. Extend the class `BasicRulesSetValidator` located in [validation.py](../connectors/filtering/validation.py):
     ```python
     class MyBasicRulesSetValidator(BasicRulesSetValidator):
         
