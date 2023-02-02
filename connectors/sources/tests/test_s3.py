@@ -285,7 +285,6 @@ async def test_get_docs(patch_logger, mock_aws):
         "aiobotocore.utils.AioInstanceMetadataFetcher.retrieve_iam_role_credentials",
         get_roles,
     ):
-
         num = 0
         # Execute
         async for (doc, dl) in source.get_docs():
@@ -316,3 +315,13 @@ def test_get_bucket_list():
 
     # Assert
     assert expected_response == actual_response
+
+
+def test_validate_configuration_for_empty_bucket_string():
+    """This function test _validate_configuration  when buckets string is empty"""
+    # Setup
+    source = create_source(S3DataSource)
+    source.configuration.set_field(name="buckets", value=[""])
+    # Execute
+    with pytest.raises(Exception):
+        source._validate_configuration()

@@ -59,7 +59,6 @@ def read_reqs(req_file):
                 subreq_file = req.split("-r")[-1].strip()
                 subreq_file = os.path.join(reqs_dir, subreq_file)
                 for subreq in read_reqs(subreq_file):
-
                     dep = extract_req(subreq)
                     if dep is not None and dep not in deps:
                         deps.append(dep)

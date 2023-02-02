@@ -179,7 +179,7 @@ class SyncJob:
         self.completed_at = None
         self.job_id = None
         self.status = None
-        self.filtering = {}
+        self.filtering = Filter()
         self.client = elastic_index.client
         if doc_source is None:
             doc_source = dict()
@@ -195,15 +195,15 @@ class SyncJob:
 
     async def start(self, trigger_method=JobTriggerMethod.SCHEDULED, filtering=None):
         if filtering is None:
-            filtering = {}
+            filtering = Filter()
 
         self.status = JobStatus.IN_PROGRESS
-        self.filtering = SyncJob.transform_filtering(filtering)
+        self.filtering = filtering
 
         job_def = {
             "connector": {
                 "id": self.connector_id,
-                "filtering": self.filtering,
+                "filtering": SyncJob.transform_filtering(filtering),
             },
             "trigger_method": e2str(trigger_method),
             "status": e2str(self.status),
@@ -275,7 +275,7 @@ class Filtering:
                 for filter_ in self.filtering
                 if filter_["domain"] == domain
             ),
-            {},
+            Filter(),
         )
 
 
@@ -390,7 +390,6 @@ class Connector:
         doc_source,
         bulk_options,
     ):
-
         self.doc_source = doc_source
         self.id = connector_id
         self.index = elastic_index
@@ -551,13 +550,13 @@ class Connector:
         self.doc_source["last_synced"] = iso_utc()
         await self.sync_doc()
         logger.info(
-            f"Sync done: {indexed_count} indexed, {doc_deleted} "
+            f"[{self.id}] Sync done: {indexed_count} indexed, {doc_deleted} "
             f" deleted. ({int(time.time() - self._start_time)} seconds)"
         )
 
     async def prepare_docs(self, data_provider, filtering=None):
         if filtering is None:
-            filtering = {}
+            filtering = Filter()
 
         logger.debug(f"Using pipeline {self.pipeline}")
 

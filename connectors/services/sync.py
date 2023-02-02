@@ -11,6 +11,7 @@ Event loop
 - mirrors an Elasticsearch index with a collection of documents
 """
 import asyncio
+import functools
 
 from connectors.byoc import (
     ConnectorIndex,
@@ -29,6 +30,9 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.services.base import BaseService
+from connectors.utils import ConcurrentTasks
+
+DEFAULT_MAX_CONCURRENT_SYNCS = 1
 
 
 class SyncService(BaseService):
@@ -37,6 +41,9 @@ class SyncService(BaseService):
         self.args = args
         self.idling = self.service_config["idling"]
         self.hb = self.service_config["heartbeat"]
+        self.concurrent_syncs = self.service_config.get(
+            "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
+        )
         self.connectors = None
 
     async def _one_sync(self, connector, es, sync_now):
@@ -111,22 +118,26 @@ class SyncService(BaseService):
         es = ElasticServer(self.es_config)
         try:
             while self.running:
+                syncs = ConcurrentTasks(max_concurrency=self.concurrent_syncs)
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
                     query = self.connectors.build_docs_query(
                         native_service_types, connectors_ids
                     )
-
                     async for connector in self.connectors.get_all_docs(query=query):
-                        await self._one_sync(connector, es, sync_now)
+                        await syncs.put(
+                            functools.partial(self._one_sync, connector, es, sync_now)
+                        )
                     if one_sync:
                         break
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
                 finally:
+                    await syncs.join()
                     if one_sync:
                         break
+
                 await self._sleeps.sleep(self.idling)
         finally:
             if self.connectors is not None:

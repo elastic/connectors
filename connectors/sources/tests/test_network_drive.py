@@ -339,7 +339,6 @@ async def test_get_doc(mock_get_files, mock_walk):
 
     # Execute
     async for _, _ in source.get_docs():
-
         # Assert
         mock_get_files.assert_awaited()
 
