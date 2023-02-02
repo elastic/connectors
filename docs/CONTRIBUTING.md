@@ -66,9 +66,9 @@ The `Filter` class provides convenient methods to extract advanced rules from th
 
 #### How to validate advanced rules
 
-For validating advanced rules the framework takes the list of validators returned by the method `advanced_rules_validators` and calls them in the order they appear in that list.
+To validate advanced rules the framework takes the list of validators returned by the method `advanced_rules_validators` and calls them in the order they appear in that list.
 By default, this list is empty in the [BaseDataSource](../connectors/source.py) as advanced rules are always specific to the connector implementation.
-You can plug in custom validators by implementing a class containing a `validate` method, which accepts one parameter.
+Plug in custom validators by implementing a class containing a `validate` method, which accepts one parameter.
 The framework expects the custom validators to return a `SyncRuleValidationResult`, which can be found in [validation.py](../connectors/filtering/validation.py).
 
 ```python
@@ -79,7 +79,7 @@ class MyValidator(AdvancedRulesValidator):
         return SyncRuleValidationResult(...)
 ```
 
-Note that the framework will call `validate` with the parameter `advanced_rules` being of type `dict`.
+Note that the framework will call `validate` with the parameter `advanced_rules` of type `dict`.
 Now you can return a list of validator instances in `advanced_rules_validators`:
 
 ```python
@@ -96,9 +96,9 @@ The framework will handle the rest like scheduling validation, calling the custo
 We don't recommend fully overriding `basic_rule_validators`, because you'll lose the default validations.
 
 The framework already provides default validations for basic rules.
-If you want to extend the default validation you can provide custom basic rules validators.
+To extend the default validation, provide custom basic rules validators.
 There are two possible ways to validate basic rules:
-- Every rule gets validated in isolation (extend the class `BasicRuleValidator` located in [validation.py](../connectors/filtering/validation.py)):
+- **Every rule gets validated in isolation**. Extend the class `BasicRuleValidator` located in [validation.py](../connectors/filtering/validation.py):
     ```python
     class MyBasicRuleValidator(BasicRuleValidator):
         
@@ -107,7 +107,7 @@ There are two possible ways to validate basic rules:
             # custom validation logic
             return SyncRuleValidationResult(...)
     ```
-- Validate the whole set of basic rules, if you want to validate constraints on the set of rules, f.e. to detect duplicate or conflicting rules (extend the class `BasicRulesSetValidator`located in [validation.py](../connectors/filtering/validation.py)):
+- **Validate the whole set of basic rules**. If you want to validate constraints on the set of rules, for example to detect duplicate or conflicting rules. Extend the class `BasicRulesSetValidator` located in [validation.py](../connectors/filtering/validation.py):
     ```python
     class MyBasicRulesSetValidator(BasicRulesSetValidator):
         
@@ -117,7 +117,7 @@ There are two possible ways to validate basic rules:
             return SyncRuleValidationResult(...)
     ```
 
-If you want to preserve the default basic rule validations and extend it with your custom logic you can override `basic_rules_validators` like this:
+To preserve the default basic rule validations and extend these with your custom logic, override `basic_rules_validators` like this:
 ```python
 class MyDataSource(BaseDataSource):
 
