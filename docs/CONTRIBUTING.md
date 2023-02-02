@@ -79,7 +79,7 @@ class MyValidator(AdvancedRulesValidator):
         return SyncRuleValidationResult(...)
 ```
 
-Note that the framework will call `validate` with the parameter `advanced_rules` being of type `dict`.
+Note that the framework will call `validate` with the parameter `advanced_rules` of type `dict`.
 Now you can return a list of validator instances in `advanced_rules_validators`:
 
 ```python
