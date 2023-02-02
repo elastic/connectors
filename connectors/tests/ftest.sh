@@ -37,34 +37,54 @@ fi
 $PYTHON -m pip install -r $NAME/requirements.txt
 $PYTHON fixture.py --name $NAME --action setup
 $PYTHON fixture.py --name $NAME --action start_stack
-$ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug --filtering $NAME/filtering.json
-$PYTHON fixture.py --name $NAME --action load
 
-if [[ $PERF8 == "yes" ]]
-then
-    if [[ $PLATFORM == "darwin" ]]
-    then
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
-    else
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
-    fi
-else
-    $ELASTIC_INGEST --one-sync --sync-now --debug
-fi
+run_test()
+{
+  # check if path to a filtering.json file is present
+  if [ -n "${1-}" ];
+  then
+    $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug --filtering $NAME/$1
+  else
+    $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug
+  fi
 
-$PYTHON fixture.py --name $NAME --action remove
+  $PYTHON fixture.py --name $NAME --action load
 
-$ELASTIC_INGEST --one-sync --sync-now --debug
+  if [[ $PERF8 == "yes" ]]
+  then
+      if [[ $PLATFORM == "darwin" ]]
+      then
+        $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
+      else
+        $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
+      fi
+  else
+      $ELASTIC_INGEST --one-sync --sync-now --debug
+  fi
+
+  $PYTHON fixture.py --name $NAME --action remove
+
+  $ELASTIC_INGEST --one-sync --sync-now --debug
 
 
-if [[ "$DATA_SIZE" == 'small' ]]; then
-   SIZE=750
-elif [[ "$DATA_SIZE" == 'medium' ]]; then
-   SIZE=1500
-else
-   SIZE=3000
-fi
+  if [[ "$DATA_SIZE" == 'small' ]]; then
+     SIZE=750
+  elif [[ "$DATA_SIZE" == 'medium' ]]; then
+     SIZE=1500
+  else
+     SIZE=3000
+  fi
 
-$PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size $SIZE
+  $PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size $SIZE
+}
+
+# run test once without filtering
+run_test
+
+for filtering in ./filtering*.json
+do
+  run_test $filtering
+done
+
 $PYTHON fixture.py --name $NAME --action stop_stack
 $PYTHON fixture.py --name $NAME --action teardown

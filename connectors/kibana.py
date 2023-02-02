@@ -90,6 +90,12 @@ DEFAULT_PIPELINE = {
 }
 
 
+def nullable_str(string):
+    if not string:
+        return None
+    return string
+
+
 # XXX simulating Kibana click-arounds
 async def prepare(service_type, index_name, config, filtering=None):
     if filtering is None:
@@ -254,7 +260,7 @@ def _parser():
     )
     parser.add_argument(
         "--filtering",
-        type=str,
+        type=nullable_str,
         help="Path to a json file containing an array of filters",
     )
 
@@ -262,9 +268,9 @@ def _parser():
 
 
 def _load_filtering(filtering_file_path):
-    if not os.path.exists(filtering_file_path):
+    if not filtering_file_path or not os.path.exists(filtering_file_path):
         logger.warn(
-            f"filtering file at '{filtering_file_path}' does not exist. Fallback to default filtering."
+            f"filtering file {('at' + filtering_file_path) if filtering_file_path else ''} does not exist. Fallback to default filtering."
         )
         filtering = DEFAULT_FILTERING
     else:
