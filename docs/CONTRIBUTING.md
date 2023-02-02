@@ -61,7 +61,7 @@ Example:
 }
 ```
 
-Note that the framework calls `get_docs` with the parameter `filtering` being of type `Filter`, which is located in [byoc.py](../connectors/sources/mysql.py).
+Note that the framework calls `get_docs` with the parameter `filtering` being of type `Filter`, which is located in [byoc.py](../connectors/byoc.py).
 The `Filter` class provides convenient methods to extract advanced rules from the filter and to check whether advanced rules are present.
 
 #### How to validate advanced rules
