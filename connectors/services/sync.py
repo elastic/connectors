@@ -49,7 +49,8 @@ class SyncService(BaseService):
 
     async def stop(self):
         await super().stop()
-        self.syncs.cancel()
+        if self.syncs is not None:
+            self.syncs.cancel()
 
     async def _one_sync(self, connector, es, sync_now):
         if self.running is False:
