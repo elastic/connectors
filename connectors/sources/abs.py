@@ -32,6 +32,9 @@ MAX_CONCURRENT_DOWNLOADS = 100  # Max concurrent download supported by abs
 class AzureBlobStorageDataSource(BaseDataSource):
     """Azure Blob Storage"""
 
+    name = "Azure Blob Storage"
+    service_type = "abs"
+
     def __init__(self, configuration):
         """Set up the connection to the azure base client
 
@@ -43,14 +46,6 @@ class AzureBlobStorageDataSource(BaseDataSource):
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.retry_count = self.configuration["retry_count"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
-
-    @staticmethod
-    def name():
-        return "Azure Blob Storage"
-
-    @staticmethod
-    def service_type():
-        return "abs"
 
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by azure blob storage

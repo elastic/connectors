@@ -15,6 +15,9 @@ from connectors.source import BaseDataSource
 class MongoDataSource(BaseDataSource):
     """MongoDB"""
 
+    name = "MongoDB"
+    service_type = "mongodb"
+
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
 
@@ -34,14 +37,6 @@ class MongoDataSource(BaseDataSource):
         self.client = AsyncIOMotorClient(host, **client_params)
 
         self.db = self.client[self.configuration["database"]]
-
-    @staticmethod
-    def name():
-        return "MongoDB"
-
-    @staticmethod
-    def service_type():
-        return "mongodb"
 
     @classmethod
     def get_default_configuration(cls):

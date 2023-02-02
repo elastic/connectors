@@ -36,6 +36,9 @@ else:
 class S3DataSource(BaseDataSource):
     """Amazon S3"""
 
+    name = "Amazon S3"
+    service_type = "s3"
+
     def __init__(self, configuration):
         """Set up the connection to the Amazon S3.
 
@@ -54,14 +57,6 @@ class S3DataSource(BaseDataSource):
             retries={"max_attempts": self.configuration["max_attempts"]},
         )
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
-
-    @staticmethod
-    def name():
-        return "Amazon S3"
-
-    @staticmethod
-    def service_type():
-        return "s3"
 
     @asynccontextmanager
     async def client(self, **kwargs):

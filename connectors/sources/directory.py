@@ -22,19 +22,14 @@ DEFAULT_CONTENT_EXTRACTION = True
 class DirectoryDataSource(BaseDataSource):
     """Directory"""
 
+    name = "Directory"
+    service_type = "dir"
+
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
         self.directory = self.configuration["directory"]
         self.pattern = self.configuration["pattern"]
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
-
-    @staticmethod
-    def name():
-        return "Directory"
-
-    @staticmethod
-    def service_type():
-        return "dir"
 
     @classmethod
     def get_default_configuration(cls):

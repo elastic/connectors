@@ -116,6 +116,9 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
 class MySqlDataSource(BaseDataSource):
     """MySQL"""
 
+    name = "MySQL"
+    service_type = "mysql"
+
     def __init__(self, configuration):
         """Set up the connection to the MySQL server.
 
@@ -127,14 +130,6 @@ class MySqlDataSource(BaseDataSource):
         self.connection_pool = None
         self.ssl_disabled = self.configuration["ssl_disabled"]
         self.certificate = self.configuration["ssl_ca"]
-
-    @staticmethod
-    def name():
-        return "MySQL"
-
-    @staticmethod
-    def service_type():
-        return "mysql"
 
     @classmethod
     def get_default_configuration(cls):

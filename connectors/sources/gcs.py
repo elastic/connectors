@@ -62,6 +62,9 @@ DEFAULT_PEM_FILE = os.path.join(
 class GoogleCloudStorageDataSource(BaseDataSource):
     """Google Cloud Storage"""
 
+    name = "Google Cloud Storage"
+    service_type = "gcs"
+
     def __init__(self, configuration):
         """Set up the connection to the Google Cloud Storage Client.
 
@@ -89,14 +92,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         self.user_project_id = self.service_account_credentials.project_id
         self.retry_count = self.configuration["retry_count"]
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
-
-    @staticmethod
-    def name():
-        return "Google Cloud Storage"
-
-    @staticmethod
-    def service_type():
-        return "gcs"
 
     @classmethod
     def get_default_configuration(cls):

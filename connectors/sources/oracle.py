@@ -23,6 +23,9 @@ QUERIES = {
 class OracleDataSource(GenericBaseDataSource):
     """Oracle Database"""
 
+    name = "Oracle Database"
+    service_type = "oracle"
+
     def __init__(self, configuration):
         """Setup connection to the Oracle database-server configured by user
 
@@ -37,14 +40,6 @@ class OracleDataSource(GenericBaseDataSource):
         )
         self.queries = QUERIES
         self.dialect = "Oracle"
-
-    @staticmethod
-    def name():
-        return "Oracle Database"
-
-    @staticmethod
-    def service_type():
-        return "oracle"
 
     def _create_engine(self):
         """Create sync engine for oracle"""

@@ -28,6 +28,9 @@ QUERIES = {
 class PostgreSQLDataSource(GenericBaseDataSource):
     """PostgreSQL"""
 
+    name = "PostgreSQL"
+    service_type = "postgresql"
+
     def __init__(self, configuration):
         """Setup connection to the PostgreSQL database-server configured by user
 
@@ -39,14 +42,6 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         self.queries = QUERIES
         self.is_async = True
         self.dialect = "Postgresql"
-
-    @staticmethod
-    def name():
-        return "PostgreSQL"
-
-    @staticmethod
-    def service_type():
-        return "postgresql"
 
     def _create_engine(self):
         """Create async engine for postgresql"""
