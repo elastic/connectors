@@ -43,7 +43,7 @@ async def get_docs(self, filtering=None):
 ```
 
 For example, here you could pass custom queries to a database.
-The structure of the advanced rules is dependent on your implementation and your concrete use case.
+The structure of the advanced rules depends on your implementation and your concrete use case.
 For MySQL the advanced rules structure looks like this:
 You specify databases on the top level, which contain tables, which specify a custom query.
 
