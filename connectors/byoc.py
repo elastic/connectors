@@ -522,6 +522,11 @@ class Connector(ESDocument):
     def features(self):
         return Features(self.get("features"))
 
+    @property
+    def last_sync_status(self):
+        _status = self.get("last_sync_status")
+        return None if _status is None else JobStatus[_status.upper()]
+
     async def heartbeat(self, interval):
         if (
             self.last_seen is None

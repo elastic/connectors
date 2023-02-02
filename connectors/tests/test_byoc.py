@@ -9,8 +9,7 @@ import os
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from unittest.mock import ANY, AsyncMock, Mock, call, patch
-from connectors.config import load_config
-from connectors.tests.commons import AsyncGeneratorFake
+
 import pytest
 
 from connectors.byoc import (
@@ -19,7 +18,6 @@ from connectors.byoc import (
     STUCK_JOBS_THRESHOLD,
     Connector,
     ConnectorIndex,
-    SyncJobIndex,
     Features,
     Filter,
     Filtering,

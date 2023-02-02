@@ -117,9 +117,7 @@ class JobCleanUpService(BaseService):
                     job = await self.sync_job_index.fetch_by_id(doc_id=job_id)
                     await connector.sync_done(job=job)
                 except Exception as e:
-                    logger.error(
-                        f"Failed to mark stuck job #{job_id} as error: {e}"
-                    )
+                    logger.error(f"Failed to mark stuck job #{job_id} as error: {e}")
                 finally:
                     total_count += 1
 

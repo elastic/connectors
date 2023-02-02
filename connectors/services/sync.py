@@ -17,6 +17,7 @@ from connectors.byoc import (
     ConnectorIndex,
     ConnectorUpdateError,
     DataSourceError,
+    JobStatus,
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
     Status,
@@ -203,6 +204,9 @@ class SyncService(BaseService):
         if next_sync == SYNC_DISABLED:
             logger.debug(f"Scheduling is disabled for connector {connector.id}")
             return False
+        if self.last_sync_status == JobStatus.SUSPENDED:
+            logger.debug("Restarting sync after suspension")
+            return True
         if next_sync - self.idling > 0:
             logger.debug(
                 f"Next sync for connector {connector.id} due in {int(next_sync)} seconds"
