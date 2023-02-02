@@ -119,7 +119,7 @@ class ConnectorIndex(ESIndex):
     async def update_filtering_validation(
         self, connector, validation_result, validation_target=ValidationTarget.ACTIVE
     ):
-        filtering = connector.filtering.to_dict()
+        filtering = connector.filtering.to_list()
 
         for filter_ in filtering:
             if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:

@@ -7,11 +7,10 @@
 import json
 import os
 from copy import deepcopy
-from datetime import datetime
 from datetime import datetime, timedelta, timezone
-from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call, patch
-
+from connectors.config import load_config
+from connectors.tests.commons import AsyncGeneratorFake
 import pytest
 
 from connectors.byoc import (
@@ -20,6 +19,7 @@ from connectors.byoc import (
     STUCK_JOBS_THRESHOLD,
     Connector,
     ConnectorIndex,
+    SyncJobIndex,
     Features,
     Filter,
     Filtering,
@@ -30,9 +30,6 @@ from connectors.byoc import (
     SyncJob,
     SyncJobIndex,
     iso_utc,
-    orphaned_jobs_query,
-    pending_job_query,
-    stuck_jobs_query,
 )
 from connectors.byoei import ElasticServer
 from connectors.config import load_config
