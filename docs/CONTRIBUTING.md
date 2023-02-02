@@ -66,7 +66,7 @@ The `Filter` class provides convenient methods to extract advanced rules from th
 
 #### How to validate advanced rules
 
-For validating advanced rules the framework takes the list of validators returned by the method `advanced_rules_validators` and calls them in the order they appear in that list.
+To validate advanced rules the framework takes the list of validators returned by the method `advanced_rules_validators` and calls them in the order they appear in that list.
 By default, this list is empty in the [BaseDataSource](../connectors/source.py) as advanced rules are always specific to the connector implementation.
 You can plug in custom validators by implementing a class containing a `validate` method, which accepts one parameter.
 The framework expects the custom validators to return a `SyncRuleValidationResult`, which can be found in [validation.py](../connectors/filtering/validation.py).
