@@ -37,7 +37,7 @@ fi
 $PYTHON -m pip install -r $NAME/requirements.txt
 $PYTHON fixture.py --name $NAME --action setup
 $PYTHON fixture.py --name $NAME --action start_stack
-$ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug
+$ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug --filtering $NAME/filtering.json
 $PYTHON fixture.py --name $NAME --action load
 
 if [[ $PERF8 == "yes" ]]
