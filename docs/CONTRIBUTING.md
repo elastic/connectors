@@ -30,7 +30,7 @@ Take a look at the `get_docs` method in the [MySQL connector](../connectors/sour
 
 #### How to implement advanced rules
 
-When implementing a new connector you've to follow the API of the [BaseDataSource](../connectors/source.py).
+When implementing a new connector follow the API of the [BaseDataSource](../connectors/source.py).
 The custom implementation for advanced rules is usually located inside the `get_docs` function:
 
 ```python
