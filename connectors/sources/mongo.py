@@ -17,12 +17,22 @@ class MongoDataSource(BaseDataSource):
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
-        self.client = AsyncIOMotorClient(
-            self.configuration["host"],
-            directConnection=True,
-            connectTimeoutMS=120,
-            socketTimeoutMS=120,
-        )
+
+        client_params = {}
+
+        host = self.configuration["host"]
+        user = self.configuration["user"]
+        password = self.configuration["password"]
+
+        if self.configuration["direct_connection"]:
+            client_params["directConnection"] = True
+
+        if len(user) > 0 or len(password) > 0:
+            client_params["username"] = user
+            client_params["password"] = password
+
+        self.client = AsyncIOMotorClient(host, **client_params)
+
         self.db = self.client[self.configuration["database"]]
 
     @classmethod
@@ -30,18 +40,25 @@ class MongoDataSource(BaseDataSource):
         return {
             "host": {
                 "value": "mongodb://127.0.0.1:27021",
-                "label": "MongoDB Host",
+                "label": "Server Hostname",
                 "type": "str",
             },
             "database": {
                 "value": "sample_database",
-                "label": "MongoDB Database",
+                "label": "Database",
                 "type": "str",
             },
             "collection": {
                 "value": "sample_collection",
-                "label": "MongoDB Collection",
+                "label": "Collection",
                 "type": "str",
+            },
+            "user": {"label": "Username", "type": "str", "value": ""},
+            "password": {"label": "Password", "type": "str", "value": ""},
+            "direct_connection": {
+                "label": "Direct connection? (true/false)",
+                "type": "bool",
+                "value": True,
             },
         }
 
