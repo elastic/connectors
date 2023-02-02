@@ -31,9 +31,7 @@ def create_service():
     return JobCleanUpService(CONFIG)
 
 
-def mock_connector(
-        id="1", index_name="index_name"
-):
+def mock_connector(id="1", index_name="index_name"):
     connector = Mock()
     connector.id = id
     connector.index_name = index_name
@@ -41,9 +39,7 @@ def mock_connector(
     return connector
 
 
-def mock_sync_job(
-        id="1", connector_id="1", index_name="index_name"
-):
+def mock_sync_job(id="1", connector_id="1", index_name="index_name"):
     job = Mock()
     job.job_id = id
     job.connector_id = connector_id
@@ -86,7 +82,9 @@ async def test_cleanup_jobs(
     await service.run()
 
     assert delete_indices.call_args_list == [call(indices=[to_be_deleted_index_name])]
-    assert delete_jobs.call_args_list == [call(job_ids=[sync_job.job_id, another_sync_job.job_id])]
+    assert delete_jobs.call_args_list == [
+        call(job_ids=[sync_job.job_id, another_sync_job.job_id])
+    ]
     assert connector._sync_done.call_args_list == [
         call(job=sync_job, result={}, exception=STUCK_JOB_ERROR)
     ]
