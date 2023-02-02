@@ -86,7 +86,7 @@ class SyncService(BaseService):
 
             if connector.service_type not in self.source_klass_dict:
                 raise DataSourceError(
-                    f"Could find data source class for {connector.service_type}"
+                    f"Couldn't find data source class for {connector.service_type}"
                 )
             source_klass = self.source_klass_dict[connector.service_type]
 
@@ -204,7 +204,7 @@ class SyncService(BaseService):
         if next_sync == SYNC_DISABLED:
             logger.debug(f"Scheduling is disabled for connector {connector.id}")
             return False
-        if self.last_sync_status == JobStatus.SUSPENDED:
+        if connector.last_sync_status == JobStatus.SUSPENDED:
             logger.debug("Restarting sync after suspension")
             return True
         if next_sync - self.idling > 0:

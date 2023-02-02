@@ -179,7 +179,7 @@ class ConnectorIndex(ESIndex):
         )
 
     async def all_connectors(self):
-        async for connector in self.get_all_docs():
+        async for connector in self._get_all_docs():
             yield connector
 
 
@@ -553,6 +553,7 @@ class Connector(ESDocument):
     async def sync_starts(self):
         doc = {
             "last_sync_status": e2str(JobStatus.IN_PROGRESS),
+            "last_sync_error": None,
             "status": e2str(Status.CONNECTED),
         }
         await self.index.update(doc_id=self.id, doc=doc)
