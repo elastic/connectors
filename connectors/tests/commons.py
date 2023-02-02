@@ -1,24 +1,24 @@
-class AsyncGeneratorFake:
+class AsyncIterator:
     """
     Async documents generator fake class, which records the args and kwargs it was called with.
     """
 
     def __init__(self, items):
-        self.docs = items
+        self.items = items
         self.call_args = []
         self.call_kwargs = []
+        self.i = 0
 
     def __aiter__(self):
-        self.i = 0
         return self
 
     async def __anext__(self):
-        if self.i >= len(self.docs):
+        if self.i >= len(self.items):
             raise StopAsyncIteration
 
-        doc = self.docs[self.i]
+        item = self.items[self.i]
         self.i += 1
-        return doc
+        return item
 
     def __call__(self, *args, **kwargs):
         if args:
