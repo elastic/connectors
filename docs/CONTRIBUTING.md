@@ -89,7 +89,7 @@ class MyDataSource(BaseDataSource):
         return [MyValidator()]
 ```
 
-The framework will handle the rest like scheduling validation, calling the custom validators and storing the corresponding results.
+The framework will handle the rest: scheduling validation, calling the custom validators and storing the corresponding results.
 
 #### How to provide custom basic rule validation
 
@@ -127,7 +127,7 @@ class MyDataSource(BaseDataSource):
                 + [MyBasicRuleValidator, MyBasicRulesSetValidator]
 ```
 
-Again the framework will handle the rest like scheduling validation, calling the custom validators and storing the corresponding results.
+Again the framework will handle the rest: scheduling validation, calling the custom validators and storing the corresponding results.
 
 ## Async vs Sync
 
