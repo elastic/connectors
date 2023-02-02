@@ -9,7 +9,7 @@ import os
 from copy import deepcopy
 from datetime import datetime
 from unittest import mock
-from unittest.mock import ANY, AsyncMock, Mock, call
+from unittest.mock import ANY, AsyncMock, Mock, call, patch
 
 import pytest
 from aioresponses import CallbackResult
@@ -956,56 +956,91 @@ def test_nested_get(nested_dict, keys, default, expected):
     assert expected == Features(nested_dict)._nested_feature_enabled(keys, default)
 
 
-def test_pending_job_query_with_connectors_ids(mock_responses, set_env):
+JOB_SOURCE = {"_id": "1", "_source": {"status": "pending", "connector": {"id": "1"}}}
+
+
+@pytest.mark.asyncio
+@patch("connectors.byoc.SyncJobIndex.get_all_docs")
+async def test_pending_jobs(get_all_docs, set_env):
+    job = Mock()
+    get_all_docs.return_value = AsyncGeneratorFake([job])
     config = load_config(CONFIG)
-
-    connectors_ids = [1, 2]
-    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    pending_jobs_query = sync_job_index.pending_job_query(connectors_ids=connectors_ids)
-
-    # validate the query
-    assert "bool" in pending_jobs_query
-    assert pending_jobs_query["bool"] == {
-        "must": [
-            {"terms": {"status": ["pending"]}},
-            {"terms": {"connector.id": connectors_ids}},
-        ]
+    connector_ids = [1, 2]
+    expected_query = {
+        "bool": {
+            "must": [
+                {
+                    "terms": {
+                        "status": [
+                            e2str(JobStatus.PENDING),
+                            e2str(JobStatus.SUSPENDED),
+                        ]
+                    }
+                },
+                {"terms": {"connector.id": connector_ids}},
+            ]
+        }
     }
 
-
-def test_orphaned_jobs_query(mock_responses, set_env):
-    config = load_config(CONFIG)
-
-    connectors_ids = [1, 2]
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    orphaned_jobs_query = sync_job_index.orphaned_jobs_query(
-        connectors_ids=connectors_ids
-    )
-
-    assert orphaned_jobs_query == {
-        "bool": {"must_not": {"terms": {"connector.id": connectors_ids}}}
-    }
-
-
-def test_stuck_jobs_query(mock_responses, set_env):
-    config = load_config(CONFIG)
-
-    connectors_ids = [1, 2]
-    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    stuck_jobs_query = sync_job_index.stuck_jobs_query(connectors_ids=connectors_ids)
-
-    assert "bool" in stuck_jobs_query
-    assert len(stuck_jobs_query["bool"]["filter"]) == 3
-    assert {"terms": {"connector.id": connectors_ids}} in stuck_jobs_query["bool"][
-        "filter"
+    jobs = [
+        job async for job in sync_job_index.pending_jobs(connector_ids=connector_ids)
     ]
-    assert {
-        "terms": {"status": [e2str(JobStatus.IN_PROGRESS), e2str(JobStatus.CANCELING)]}
-    } in stuck_jobs_query["bool"]["filter"]
 
-    assert {
-        "range": {"last_seen": {"lte": f"now-{STUCK_JOBS_THRESHOLD}s"}}
-    } in stuck_jobs_query["bool"]["filter"]
+    assert get_all_docs.call_args_list == [call(query=expected_query)]
+    assert len(jobs) == 1
+    assert jobs[0] == job
+
+
+@pytest.mark.asyncio
+@patch("connectors.byoc.SyncJobIndex.get_all_docs")
+async def test_orphaned_jobs(get_all_docs, set_env):
+    job = Mock()
+    get_all_docs.return_value = AsyncGeneratorFake([job])
+    config = load_config(CONFIG)
+    connector_ids = [1, 2]
+    expected_query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
+
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    jobs = [
+        job async for job in sync_job_index.orphaned_jobs(connector_ids=connector_ids)
+    ]
+
+    assert get_all_docs.call_args_list == [call(query=expected_query)]
+    assert len(jobs) == 1
+    assert jobs[0] == job
+
+
+@pytest.mark.asyncio
+@patch("connectors.byoc.SyncJobIndex.get_all_docs")
+async def test_stuck_jobs(get_all_docs, set_env):
+    job = Mock()
+    get_all_docs.return_value = AsyncGeneratorFake([job])
+    config = load_config(CONFIG)
+    connector_ids = [1, 2]
+    expected_query = {
+        "bool": {
+            "filter": [
+                {"terms": {"connector.id": connector_ids}},
+                {
+                    "terms": {
+                        "status": [
+                            e2str(JobStatus.IN_PROGRESS),
+                            e2str(JobStatus.CANCELING),
+                        ]
+                    }
+                },
+                {"range": {"last_seen": {"lte": f"now-{STUCK_JOBS_THRESHOLD}s"}}},
+            ]
+        }
+    }
+
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    jobs = [job async for job in sync_job_index.stuck_jobs(connector_ids=connector_ids)]
+
+    assert get_all_docs.call_args_list == [call(query=expected_query)]
+    assert len(jobs) == 1
+    assert jobs[0] == job
 
 
 @pytest.mark.parametrize(
