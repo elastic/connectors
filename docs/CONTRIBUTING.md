@@ -93,6 +93,8 @@ The framework will handle the rest like scheduling validation, calling the custo
 
 #### How to provide custom basic rule validation
 
+We don't recommend fully overriding `basic_rule_validators`, because you'll lose the default validations.
+
 The framework already provides default validations for basic rules.
 If you want to extend the default validation you can provide custom basic rules validators.
 There are two possible ways to validate basic rules:
@@ -124,8 +126,6 @@ class MyDataSource(BaseDataSource):
         return BaseDataSource.basic_rule_validators() 
                 + [MyBasicRuleValidator, MyBasicRulesSetValidator]
 ```
-
-It's not recommended to fully override `basic_rule_validators` as you'll lose the default validations.
 
 Again the framework will handle the rest like scheduling validation, calling the custom validators and storing the corresponding results.
 
