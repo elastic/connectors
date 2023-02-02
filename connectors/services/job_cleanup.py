@@ -48,17 +48,22 @@ class JobCleanUpService(BaseService):
     async def _process_orphaned_jobs(self):
         try:
             logger.info("Start cleaning up orphaned jobs...")
-            connector_ids = [
-                connector.id
-                async for connector in self.connector_index.all_connectors()
-            ]
+            connector_ids = []
+            existing_content_indices = set()
+            async for connector in self.connector_index.all_connectors():
+                if connector.index_name is not None:
+                    existing_content_indices.add(connector.index_name)
+                connector_ids.append(connector.id)
 
             content_indices = set()
             job_ids = []
             async for job in self.sync_job_index.orphaned_jobs(
                 connector_ids=connector_ids
             ):
-                if job.index_name is not None:
+                if (
+                    job.index_name is not None
+                    and job.index_name not in existing_content_indices
+                ):
                     content_indices.add(job.index_name)
                 job_ids.append(job.job_id)
 
