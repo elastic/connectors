@@ -19,6 +19,7 @@ from connectors import __version__
 from connectors.config import load_config
 from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
+from connectors.services.job_cleanup import JobCleanUpService
 from connectors.services.sync import SyncService
 from connectors.source import get_data_sources
 from connectors.utils import get_event_loop
@@ -99,7 +100,7 @@ async def _start_service(config, args, loop):
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.remove_signal_handler(sig)
 
-    services = [SyncService(config, args)]
+    services = [SyncService(config, args), JobCleanUpService(config)]
     for sig in (signal.SIGINT, signal.SIGTERM):
 
         def _shutdown(sig_name):

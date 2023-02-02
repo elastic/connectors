@@ -3,8 +3,8 @@ class AsyncGeneratorFake:
     Async documents generator fake class, which records the args and kwargs it was called with.
     """
 
-    def __init__(self, docs):
-        self.docs = docs
+    def __init__(self, items):
+        self.docs = items
         self.call_args = []
         self.call_kwargs = []
 
