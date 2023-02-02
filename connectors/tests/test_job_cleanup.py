@@ -31,18 +31,19 @@ def create_service():
     return JobCleanUpService(CONFIG)
 
 
-def mock_connector():
+def mock_connector(id="1", index_name="index_name"):
     connector = Mock()
-    connector.id.return_value = "1"
+    connector.id = id
+    connector.index_name = index_name
     connector._sync_done = AsyncMock()
     return connector
 
 
-def mock_sync_job():
+def mock_sync_job(id="1", connector_id="1", index_name="index_name"):
     job = Mock()
-    job.job_id.return_value = "1"
-    job.index_name.return_value = "index_name"
-    job.connector_id.return_value = "1"
+    job.job_id = id
+    job.connector_id = connector_id
+    job.index_name = index_name
     return job
 
 
@@ -63,13 +64,16 @@ async def test_cleanup_jobs(
     delete_indices,
     delete_jobs,
 ):
-    connector = mock_connector()
-    sync_job = mock_sync_job()
+    existing_index_name = "foo"
+    to_be_deleted_index_name = "bar"
+    connector = mock_connector(index_name=existing_index_name)
+    sync_job = mock_sync_job(index_name=to_be_deleted_index_name)
+    another_sync_job = mock_sync_job(index_name=existing_index_name)
 
     all_connectors.return_value = AsyncGeneratorFake([connector])
     supported_connectors.return_value = AsyncGeneratorFake([connector])
     fetch_by_id.return_value = connector
-    orphaned_jobs.return_value = AsyncGeneratorFake([sync_job])
+    orphaned_jobs.return_value = AsyncGeneratorFake([sync_job, another_sync_job])
     stuck_jobs.return_value = AsyncGeneratorFake([sync_job])
     delete_jobs.return_value = {"deleted": 1, "failures": [], "total": 1}
 
@@ -77,8 +81,10 @@ async def test_cleanup_jobs(
     asyncio.get_event_loop().call_later(0.5, service.stop)
     await service.run()
 
-    assert delete_indices.call_args_list == [call(indices=[sync_job.index_name])]
-    assert delete_jobs.call_args_list == [call(job_ids=[sync_job.job_id])]
+    assert delete_indices.call_args_list == [call(indices=[to_be_deleted_index_name])]
+    assert delete_jobs.call_args_list == [
+        call(job_ids=[sync_job.job_id, another_sync_job.job_id])
+    ]
     assert connector._sync_done.call_args_list == [
         call(job=sync_job, result={}, exception=STUCK_JOB_ERROR)
     ]
