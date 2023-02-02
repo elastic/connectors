@@ -45,7 +45,7 @@ class SyncService(BaseService):
             "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
         )
         self.connectors = None
-        self.syncs = ConcurrentTasks(max_concurrency=self.concurrent_syncs)
+        self.syncs = None
 
     async def stop(self):
         await super().stop()
@@ -129,6 +129,9 @@ class SyncService(BaseService):
         es = ElasticServer(self.es_config)
         try:
             while self.running:
+                # creating a pool of task for every round
+                self.syncs = ConcurrentTasks(max_concurrency=self.concurrent_syncs)
+
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
                     query = self.connectors.build_docs_query(
@@ -148,6 +151,7 @@ class SyncService(BaseService):
                     if one_sync:
                         break
 
+                self.syncs = None
                 # Immediately break instead of sleeping
                 if not self.running:
                     break
