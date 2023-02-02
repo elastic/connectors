@@ -19,7 +19,7 @@ Each connector will have their own specific behaviors and implementations. When 
 Sync rules are made up of basic and advanced rules. 
 Basic rules are implemented generically on the framework-level and work out-of-the-box for every new connector. 
 Advanced rules are specific to each data source. 
-You can learn more about the use cases of sync rules [here (Sync rules documentation)](https://www.elastic.co/guide/en/enterprise-search/current/sync-rules.html). 
+Learn more about sync rules [in the Enterprise Search documentation](https://www.elastic.co/guide/en/enterprise-search/current/sync-rules.html). 
 
 Example:
 
