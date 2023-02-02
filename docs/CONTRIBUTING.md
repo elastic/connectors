@@ -115,7 +115,7 @@ There are two possible ways to validate basic rules:
             return SyncRuleValidationResult(...)
     ```
 
-If you want to preserve the default basic rule validations and extend it with your custom logic you can override `basic_rules_validators` like this:
+To preserve the default basic rule validations and extend these with your custom logic, override `basic_rules_validators` like this:
 ```python
 class MyDataSource(BaseDataSource):
 
