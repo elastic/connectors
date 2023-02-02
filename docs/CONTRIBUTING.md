@@ -94,7 +94,7 @@ The framework will handle the rest like scheduling validation, calling the custo
 #### How to provide custom basic rule validation
 
 The framework already provides default validations for basic rules.
-If you want to extend the default validation you can provide custom basic rules validators.
+To extend the default validation, provide custom basic rules validators.
 There are two possible ways to validate basic rules:
 - Every rule gets validated in isolation (extend the class `BasicRuleValidator` located in [validation.py](../connectors/filtering/validation.py)):
     ```python
