@@ -24,7 +24,7 @@ Learn more about sync rules [in the Enterprise Search documentation](https://www
 Example:
 
 For MySQL we've implemented advanced rules to pass custom SQL queries directly to the corresponding MySQL instance.
-This has the advantage of offloading a lot of the filtering to the specific data source, which normally results in a reduction of the amount of data coming back from the data source.
+This offloads a lot of the filtering to the data source, which helps reduce data transfer size.
 Also, data sources usually have highly optimized and specific filtering capabilities you may want to expose to the users of your connector.
 You can take a look at the `get_docs` method in the [MySQL connector](../connectors/sources/mysql.py) to see an advanced rules implementation.
 
