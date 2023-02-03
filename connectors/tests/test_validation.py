@@ -988,7 +988,6 @@ def test_basic_rules_set_no_conflicting_policies_validation(
     if should_be_valid:
         assert all(result.is_valid for result in validation_results)
     else:
-
         assert not any(result.is_valid for result in validation_results)
 
     validation_results_rule_ids = set(

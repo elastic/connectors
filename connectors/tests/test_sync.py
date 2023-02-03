@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock
 import pytest
 from aioresponses import CallbackResult
 
-from connectors.byoc import DataSourceError
+from connectors.byoc import DataSourceError, JobStatus, e2str
 from connectors.config import load_config
 from connectors.conftest import assert_re
 from connectors.filtering.validation import InvalidFilteringError
@@ -48,7 +48,7 @@ FAKE_CONFIG = {
     "service_type": "fake",
     "status": "configured",
     "language": "en",
-    "last_sync_status": "null",
+    "last_sync_status": None,
     "last_sync_error": "",
     "last_synced": "",
     "last_seen": "",
@@ -74,6 +74,13 @@ FAKE_CONFIG_PIPELINE_CHANGED["pipeline"] = {
     "reduce_whitespace": False,
     "run_ml_inference": False,
 }
+FAKE_CONFIG_LAST_JOB_SUSPENDED = copy.deepcopy(FAKE_CONFIG)
+FAKE_CONFIG_LAST_JOB_SUSPENDED["sync_now"] = False
+FAKE_CONFIG_LAST_JOB_SUSPENDED["last_sync_status"] = e2str(JobStatus.SUSPENDED)
+FAKE_CONFIG_LAST_JOB_SUSPENDED_SCHEDULING_DISABLED = copy.deepcopy(
+    FAKE_CONFIG_LAST_JOB_SUSPENDED
+)
+FAKE_CONFIG_LAST_JOB_SUSPENDED_SCHEDULING_DISABLED["scheduling"]["enabled"] = False
 FAKE_CONFIG_TS = copy.deepcopy(FAKE_CONFIG)
 FAKE_CONFIG_TS["service_type"] = "fake_ts"
 
@@ -91,7 +98,7 @@ FAKE_CONFIG_NOT_NATIVE = {
     "service_type": "fake",
     "status": "configured",
     "language": "en",
-    "last_sync_status": "null",
+    "last_sync_status": None,
     "last_sync_error": "",
     "last_synced": "",
     "last_seen": "",
@@ -135,7 +142,7 @@ FAKE_CONFIG_FAIL_SERVICE = {
     "service_type": "fake",
     "status": "configured",
     "language": "en",
-    "last_sync_status": "null",
+    "last_sync_status": None,
     "last_sync_error": "",
     "last_synced": "",
     "last_seen": "",
@@ -152,7 +159,7 @@ FAKE_CONFIG_BUGGY_SERVICE = {
     "service_type": "fake",
     "status": "configured",
     "language": "en",
-    "last_sync_status": "null",
+    "last_sync_status": None,
     "last_sync_error": "",
     "last_synced": "",
     "last_seen": "",
@@ -169,7 +176,7 @@ FAKE_CONFIG_UNKNOWN_SERVICE = {
     "service_type": "UNKNOWN",
     "status": "configured",
     "language": "en",
-    "last_sync_status": "null",
+    "last_sync_status": None,
     "last_sync_error": "",
     "last_synced": "",
     "last_seen": "",
@@ -438,7 +445,32 @@ async def test_connector_service_poll_cron_broken(
     asyncio.get_event_loop().call_soon(service.stop)
     await service.run()
     patch_logger.assert_not_present("Sync done")
-    assert calls[0]["status"] == "error"
+    assert (
+        calls[0]["status"] == "connected"
+    )  # first it's marked as connected as we picked it up
+    assert calls[1]["status"] == "error"  # and only then it's marked as error
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_suspended(mock_responses, patch_logger, set_env):
+    await set_server_responses(mock_responses, [FAKE_CONFIG_LAST_JOB_SUSPENDED])
+    service = create_service(CONFIG_FILE, one_sync=True)
+    # one_sync means it won't loop forever
+    await service.run()
+    patch_logger.assert_present("Restarting sync after suspension")
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_suspended_when_scheduling_disabled(
+    mock_responses, patch_logger, set_env
+):
+    await set_server_responses(
+        mock_responses, [FAKE_CONFIG_LAST_JOB_SUSPENDED_SCHEDULING_DISABLED]
+    )
+    service = create_service(CONFIG_FILE, one_sync=True)
+    # one_sync means it won't loop forever
+    await service.run()
+    patch_logger.assert_present("Scheduling is disabled")
 
 
 @pytest.mark.asyncio
@@ -586,10 +618,11 @@ async def test_connector_service_poll_buggy_service(
 ):
     def connectors_update(url, **kw):
         doc = json.loads(kw["data"])["doc"]
-        assert (
-            doc["error"]
-            == "Could not instantiate <class 'fake_sources.FakeSource'> for fake"
-        )
+        if "error" in doc:  # one time there will be update with no error
+            assert (
+                doc["error"]
+                == "Could not instantiate <class 'fake_sources.FakeSource'> for fake"
+            )
         return CallbackResult(status=200)
 
     await set_server_responses(

@@ -285,7 +285,6 @@ async def test_get_docs(patch_logger, mock_aws):
         "aiobotocore.utils.AioInstanceMetadataFetcher.retrieve_iam_role_credentials",
         get_roles,
     ):
-
         num = 0
         # Execute
         async for (doc, dl) in source.get_docs():
