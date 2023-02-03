@@ -32,19 +32,19 @@ services:
       - 443:443
     environment:
       MOCKSERVER_WATCH_INITIALIZATION_JSON: "true"
-      MOCKSERVER_PROPERTY_FILE: /gcs/mockserver.properties
-      MOCKSERVER_INITIALIZATION_JSON_PATH: /gcs/mocked_http_responses.json
+      MOCKSERVER_PROPERTY_FILE: /google_cloud_storage/mockserver.properties
+      MOCKSERVER_INITIALIZATION_JSON_PATH: /google_cloud_storage/mocked_http_responses.json
       MOCKSERVER_LOG_LEVEL: "ERROR"
       MOCKSERVER_MAX_EXPECTATIONS: 2000
       MOCKSERVER_MAX_LOG_ENTRIES: 2000
     volumes:
       - type: bind
         source: .
-        target: /gcs
+        target: /google_cloud_storage
     restart: always
 
-  gcs:
-    container_name: gcs
+  google_cloud_storage:
+    container_name: google_cloud_storage
     image: fsouza/fake-gcs-server
     ports:
       - "4443:4443"

@@ -54,7 +54,7 @@ DEFAULT_PEM_FILE = os.path.join(
     os.path.dirname(__file__),
     "tests",
     "fixtures",
-    "gcs",
+    "google_cloud_storage",
     "service_account_dummy_cert.pem",
 )
 
@@ -165,7 +165,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                         logger.debug(
                             f"Using the storage emulator at {STORAGE_EMULATOR_HOST}"
                         )
-                        # Redirecting calls to fake-gcs-server for e2e test.
+                        # Redirecting calls to fake Google Cloud Storage server for e2e test.
                         storage_client.discovery_document["rootUrl"] = (
                             STORAGE_EMULATOR_HOST + "/"
                         )

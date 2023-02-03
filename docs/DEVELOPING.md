@@ -189,7 +189,7 @@ $ make ftest NAME=s3
 
 ## Google Cloud Storage Connector
 
-The [Elastic Google Cloud Storage connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/gcs.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic Google Cloud Storage connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/google_cloud_storage.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ### Availability and prerequisites
 
@@ -223,7 +223,7 @@ The following configuration fields need to be provided for setting up the connec
 
 ##### `service_account_credentials`
 
-The service account credentials generated from the Google Cloud Storage.  Default value is [here](https://github.com/elastic/connectors-python/blob/main/connectors/sources/gcs.py#L100)
+The service account credentials generated from the Google Cloud Storage.  Default value is [here](https://github.com/elastic/connectors-python/blob/main/connectors/sources/google_cloud_storage.py#L100)
 
 
 ##### `retry_count`
@@ -248,7 +248,7 @@ The connector uses the Elastic ingest attachment processor plugin for extracting
 
 The end to end test is usually performed by developers after the functional and system testing is completed. The framework allows users to test the connector end to end. To perform e2e test for Google Cloud Storage connector, run the following make command:
 ```shell
-$ make ftest NAME=gcs
+$ make ftest NAME=google_cloud_storage
 ```
 
 ℹ️ Users do not need to have a running Elasticsearch instance or an Google Cloud Storage source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Google Cloud Storage source using the docker image.
@@ -258,7 +258,7 @@ $ make ftest NAME=gcs
 
 ## Azure Blob Storage Connector
 
-The [Elastic Azure Blob Storage connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/abs.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic Azure Blob Storage connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/azure_blob_storage.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ### Availability and prerequisites
 
@@ -324,7 +324,7 @@ The connector uses the Elastic ingest attachment processor plugin for extracting
 
 The end to end test is usually performed by developers after the functional and system testing is completed. The framework allows users to test the connector end to end. To perform e2e test for Azure Blob Storage connector, run the following make command:
 ```shell
-$ make ftest NAME=abs
+$ make ftest NAME=azure_blob_storage
 ```
 
 ℹ️ Users do not need to have a running Elasticsearch instance or an Azure Blob Storage source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Azure Blob Storage source using the docker image.
