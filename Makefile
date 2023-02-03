@@ -56,3 +56,9 @@ ftest: bin/pytest bin/elastic-ingest
 
 run: install
 	bin/elastic-ingest --debug
+
+docker:
+	docker build -t elastic-connectors .
+
+docker-run:
+	docker run -v $(PWD):/config elastic-connectors /app/bin/elastic-ingest -c /config/config.yml --debug

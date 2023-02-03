@@ -1,5 +1,5 @@
 elasticsearch:
-  host: http://localhost:9200
+  host: http://host.docker.internal:9200
   username: elastic
   password: changeme
   ssl: true
