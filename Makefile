@@ -58,7 +58,7 @@ run: install
 	bin/elastic-ingest --debug
 
 docker:
-	docker build -t elastic-connectors .
+	docker build -t docker.elastic.co/enterprise-search/elastic-connectors:8.7.0.0-SNAPSHOT .
 
 docker-run:
-	docker run -v $(PWD):/config elastic-connectors /app/bin/elastic-ingest -c /config/config.yml --debug
+	docker run -v $(PWD):/config docker.elastic.co/enterprise-search/elastic-connectors:8.7.0.0-SNAPSHOT /app/bin/elastic-ingest -c /config/config.yml --debug
