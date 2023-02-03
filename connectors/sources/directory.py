@@ -72,7 +72,7 @@ class DirectoryDataSource(BaseDataSource):
         with open(file=path, mode="rb") as f:
             return {
                 "_id": self.get_id(path),
-                "timestamp": timestamp,
+                "_timestamp": timestamp,
                 "_attachment": get_base64_value(f.read()),
             }
 
@@ -92,7 +92,7 @@ class DirectoryDataSource(BaseDataSource):
             # send back as a doc
             doc = {
                 "path": str(path_object),
-                "timestamp": ts.isoformat(),
+                "_timestamp": ts.isoformat(),
                 "_id": self.get_id(path_object),
             }
 
