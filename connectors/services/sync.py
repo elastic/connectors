@@ -45,8 +45,20 @@ class SyncService(BaseService):
             "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
         )
         self.connectors = None
+        self.syncs = None
+
+    async def stop(self):
+        await super().stop()
+        if self.syncs is not None:
+            self.syncs.cancel()
 
     async def _one_sync(self, connector, es, sync_now):
+        if self.running is False:
+            logger.debug(
+                f"Skipping run for {connector.id} because service is terminating"
+            )
+            return
+
         if connector.native:
             logger.debug(f"Connector {connector.id} natively supported")
 
@@ -118,14 +130,16 @@ class SyncService(BaseService):
         es = ElasticServer(self.es_config)
         try:
             while self.running:
-                syncs = ConcurrentTasks(max_concurrency=self.concurrent_syncs)
+                # creating a pool of task for every round
+                self.syncs = ConcurrentTasks(max_concurrency=self.concurrent_syncs)
+
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
                     query = self.connectors.build_docs_query(
                         native_service_types, connectors_ids
                     )
                     async for connector in self.connectors.get_all_docs(query=query):
-                        await syncs.put(
+                        await self.syncs.put(
                             functools.partial(self._one_sync, connector, es, sync_now)
                         )
                     if one_sync:
@@ -134,10 +148,14 @@ class SyncService(BaseService):
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
                 finally:
-                    await syncs.join()
+                    await self.syncs.join()
                     if one_sync:
                         break
 
+                self.syncs = None
+                # Immediately break instead of sleeping
+                if not self.running:
+                    break
                 await self._sleeps.sleep(self.idling)
         finally:
             if self.connectors is not None:

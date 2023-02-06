@@ -47,6 +47,14 @@ def mock_sync_job(id="1", connector_id="1", index_name="index_name"):
     return job
 
 
+async def run_service_with_stop_after(service, stop_after):
+    async def _terminate():
+        await asyncio.sleep(stop_after)
+        await service.stop()
+
+    await asyncio.gather(service.run(), _terminate())
+
+
 @pytest.mark.asyncio
 @patch("connectors.byoc.SyncJobIndex.delete_jobs")
 @patch("connectors.byoc.SyncJobIndex.delete_indices")
@@ -78,8 +86,7 @@ async def test_cleanup_jobs(
     delete_jobs.return_value = {"deleted": 1, "failures": [], "total": 1}
 
     service = create_service()
-    asyncio.get_event_loop().call_later(0.5, service.stop)
-    await service.run()
+    await run_service_with_stop_after(service, 0.1)
 
     assert delete_indices.call_args_list == [call(indices=[to_be_deleted_index_name])]
     assert delete_jobs.call_args_list == [
