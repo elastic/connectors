@@ -46,6 +46,7 @@ def mock_sync_job(id="1", connector_id="1", index_name="index_name"):
     job.index_name = index_name
     return job
 
+
 async def run_service_with_stop_after(service, stop_after):
     async def _terminate():
         await asyncio.sleep(stop_after)
