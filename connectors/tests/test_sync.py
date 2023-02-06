@@ -455,7 +455,7 @@ async def test_connector_service_poll_suspended_restarts_sync(
     mock_responses, patch_logger, set_env
 ):
     await set_server_responses(mock_responses, [FAKE_CONFIG_LAST_JOB_SUSPENDED])
-    await create_and_run_service(CONFIG_FILE, 0.1, sync_now=False)
+    await create_and_run_service(CONFIG_FILE, 0.1)
     patch_logger.assert_present("Restarting sync after suspension")
 
 
@@ -466,9 +466,7 @@ async def test_connector_service_poll_suspended_does_not_restart_when_scheduling
     await set_server_responses(
         mock_responses, [FAKE_CONFIG_LAST_JOB_SUSPENDED_SCHEDULING_DISABLED]
     )
-    service = create_service(CONFIG_FILE, one_sync=True)
-    # one_sync means it won't loop forever
-    await service.run()
+    await create_and_run_service(CONFIG_FILE, 0.2)
     patch_logger.assert_present("Scheduling is disabled")
 
 
@@ -587,11 +585,11 @@ async def test_connector_service_filtering(
     )
 
     if should_raise_filtering_error:
-        await create_and_run_service(CONFIG_FILE, 0, service={"max_errors": 0})
+        await create_and_run_service(CONFIG_FILE, 0)
         patch_logger.assert_check(lambda log: isinstance(log, InvalidFilteringError))
     else:
         try:
-            await create_and_run_service(CONFIG_FILE, 0, service={"max_errors": 0})
+            await create_and_run_service(CONFIG_FILE, 0)
         except Exception as e:
             # mark test as failed
             assert False, f"Unexpected exception of type {type(e)} raised."
@@ -636,7 +634,7 @@ async def test_spurious(mock_responses, patch_logger, set_env):
     Connector.sync = _sync
 
     try:
-        await create_and_run_service(CONFIG_FILE, 0, service={"max_errors": 0})
+        await create_and_run_service(CONFIG_FILE, 0)
     except Exception:
         await asyncio.sleep(0.1)
     finally:
