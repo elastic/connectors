@@ -248,19 +248,19 @@ class SyncJob(ESDocument):
 
     @property
     def indexed_document_count(self):
-        return self.get("indexed_document_count", 0)
+        return self.get("indexed_document_count", default=0)
 
     @property
     def indexed_document_volume(self):
-        return self.get("indexed_document_volume", 0)
+        return self.get("indexed_document_volume", default=0)
 
     @property
     def deleted_document_count(self):
-        return self.get("deleted_document_count", 0)
+        return self.get("deleted_document_count", default=0)
 
     @property
     def total_document_count(self):
-        return self.get("total_document_count", 0)
+        return self.get("total_document_count", default=0)
 
     async def claim(self):
         doc = {

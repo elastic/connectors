@@ -18,6 +18,7 @@ from connectors.byoc import (
     STUCK_JOBS_THRESHOLD,
     Connector,
     ConnectorIndex,
+    ESDocument,
     Features,
     Filter,
     Filtering,
@@ -565,7 +566,34 @@ async def test_sync_done_with_successful_job(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_properties(mock_responses):
+async def test_es_document_get():
+    source = {
+        "_id": "test",
+        "_source": {
+            "string": "string_value",
+            "none_value": None,
+            "empty_dict": {},
+            "nested_dict": {"string": "string_value"},
+        },
+    }
+    default_value = "default"
+    es_doc = ESDocument(elastic_index=None, doc_source=source)
+    assert es_doc.id == "test"
+    assert es_doc.get("string", default=default_value) == "string_value"
+    assert es_doc.get("non_existing") is None
+    assert es_doc.get("non_existing", default=default_value) == default_value
+    assert es_doc.get("empty_dict", default=default_value) == {}
+    assert es_doc.get("empty_dict", "string") is None
+    assert es_doc.get("empty_dict", "string", default=default_value) == default_value
+    assert es_doc.get("nested_dict", "non_existing") is None
+    assert (
+        es_doc.get("nested_dict", "non_existing", default=default_value)
+        == default_value
+    )
+
+
+@pytest.mark.asyncio
+async def test_connector_properties():
     connector_src = {
         "_id": "test",
         "_source": {
@@ -576,16 +604,68 @@ async def test_properties(mock_responses):
             "scheduling": {},
             "status": "created",
             "last_seen": iso_utc(),
+            "last_sync_status": "completed",
         },
     }
 
     index = Mock()
     connector = Connector(elastic_index=index, doc_source=connector_src)
 
+    assert connector.id == "test"
     assert connector.status == Status.CREATED
     assert connector.service_type == "test"
     assert connector.configuration.is_empty()
+    assert connector.native is False
+    assert connector.sync_now is False
+    assert connector.index_name == "search-some-index"
+    assert connector.language == "en"
+    assert connector.last_sync_status == JobStatus.COMPLETED
     assert isinstance(connector.last_seen, datetime)
+    assert isinstance(connector.filtering, Filtering)
+    assert isinstance(connector.pipeline, PipelineSettings)
+    assert isinstance(connector.features, Features)
+
+
+@pytest.mark.asyncio
+async def test_sync_job_properties():
+    sync_job_src = {
+        "_id": "test",
+        "_source": {
+            "status": "error",
+            "error": "something wrong",
+            "indexed_document_count": 10,
+            "indexed_document_volume": 20,
+            "deleted_document_count": 30,
+            "total_document_count": 100,
+            "connector": {
+                "id": "connector_id",
+                "service_type": "test",
+                "index_name": "search-some-index",
+                "configuration": {},
+                "language": "en",
+                "filtering": {},
+                "pipeline": {},
+            },
+        },
+    }
+
+    index = Mock()
+    sync_job = SyncJob(elastic_index=index, doc_source=sync_job_src)
+
+    assert sync_job.id == "test"
+    assert sync_job.status == JobStatus.ERROR
+    assert sync_job.error == "something wrong"
+    assert sync_job.connector_id == "connector_id"
+    assert sync_job.service_type == "test"
+    assert sync_job.configuration.is_empty()
+    assert sync_job.index_name == "search-some-index"
+    assert sync_job.language == "en"
+    assert sync_job.indexed_document_count == 10
+    assert sync_job.indexed_document_volume == 20
+    assert sync_job.deleted_document_count == 30
+    assert sync_job.total_document_count == 100
+    assert isinstance(sync_job.filtering, Filter)
+    assert isinstance(sync_job.pipeline, Pipeline)
 
 
 class Banana(BaseDataSource):

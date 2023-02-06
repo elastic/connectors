@@ -52,9 +52,11 @@ class SyncJobRunner:
             self._start_time = time.time()
             sync_status = None
             sync_error = None
+            result = {}
 
             data_provider = self.source_klass(self.sync_job.configuration)
             if not await data_provider.changed():
+                sync_status = JobStatus.COMPLETED
                 logger.debug(
                     f"No change in {self.sync_job.service_type} data provider, skipping..."
                 )
@@ -91,7 +93,6 @@ class SyncJobRunner:
                 options=bulk_options,
             )
             sync_status = JobStatus.COMPLETED
-            sync_error = None
         except Exception as e:
             sync_status = JobStatus.ERROR
             sync_error = e
@@ -111,7 +112,7 @@ class SyncJobRunner:
             ingestion_stats = {
                 "indexed_document_count": indexed_count,
                 "indexed_document_volume": 0,
-                "deleted_document_count": 0,
+                "deleted_document_count": doc_deleted,
                 "total_document_count": await self.connector.document_count(),
             }
             if sync_status == JobStatus.ERROR:

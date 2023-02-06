@@ -3,7 +3,6 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import asyncio
 import os
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -96,10 +95,11 @@ def mock_connector(
 @patch("connectors.sync_job_runner.SyncJobRunner.execute")
 @patch("connectors.byoc.SyncJobIndex.create")
 @patch("connectors.byoc.ConnectorIndex.supported_connectors")
-async def test_no_connector(supported_connectors, create_job, job_execute, set_env):
+async def test_no_connector(
+    supported_connectors, create_job, job_execute, patch_logger, set_env
+):
     supported_connectors.return_value = AsyncGeneratorFake([])
     service = create_service(CONFIG_FILE, one_sync=True)
-    asyncio.get_event_loop().call_later(0.5, service.stop)
     await service.run()
 
     create_job.assert_not_called()
@@ -112,7 +112,7 @@ async def test_no_connector(supported_connectors, create_job, job_execute, set_e
 @patch("connectors.byoc.SyncJobIndex.create")
 @patch("connectors.byoc.ConnectorIndex.supported_connectors")
 async def test_connector_with_cli_sync_now_flag(
-    supported_connectors, create_job, fetch_job, job_execute, set_env
+    supported_connectors, create_job, fetch_job, job_execute, patch_logger, set_env
 ):
     connector = mock_connector()
     supported_connectors.return_value = AsyncGeneratorFake([connector])
@@ -120,7 +120,6 @@ async def test_connector_with_cli_sync_now_flag(
     create_job.return_value = "1"
     fetch_job.return_value = job
     service = create_service(CONFIG_FILE, sync_now=True, one_sync=True)
-    asyncio.get_event_loop().call_later(0.5, service.stop)
     await service.run()
 
     connector.prepare.assert_called()
@@ -136,7 +135,7 @@ async def test_connector_with_cli_sync_now_flag(
 @patch("connectors.byoc.SyncJobIndex.create")
 @patch("connectors.byoc.ConnectorIndex.supported_connectors")
 async def test_connector_with_connector_sync_now_flag(
-    supported_connectors, create_job, fetch_job, job_execute, set_env
+    supported_connectors, create_job, fetch_job, job_execute, patch_logger, set_env
 ):
     connector = mock_connector(sync_now=True, next_sync=0)
     supported_connectors.return_value = AsyncGeneratorFake([connector])
@@ -144,7 +143,6 @@ async def test_connector_with_connector_sync_now_flag(
     create_job.return_value = "1"
     fetch_job.return_value = job
     service = create_service(CONFIG_FILE, one_sync=True)
-    asyncio.get_event_loop().call_later(0.5, service.stop)
     await service.run()
 
     connector.prepare.assert_called()
@@ -160,7 +158,7 @@ async def test_connector_with_connector_sync_now_flag(
 @patch("connectors.byoc.SyncJobIndex.create")
 @patch("connectors.byoc.ConnectorIndex.supported_connectors")
 async def test_connector_with_suspended_job(
-    supported_connectors, create_job, fetch_job, job_execute, set_env
+    supported_connectors, create_job, fetch_job, job_execute, patch_logger, set_env
 ):
     connector = mock_connector(next_sync=100, last_sync_status=JobStatus.SUSPENDED)
     supported_connectors.return_value = AsyncGeneratorFake([connector])
@@ -168,7 +166,6 @@ async def test_connector_with_suspended_job(
     create_job.return_value = "1"
     fetch_job.return_value = job
     service = create_service(CONFIG_FILE, one_sync=True)
-    asyncio.get_event_loop().call_later(0.5, service.stop)
     await service.run()
 
     connector.prepare.assert_called()
@@ -184,7 +181,7 @@ async def test_connector_with_suspended_job(
 @patch("connectors.byoc.SyncJobIndex.create")
 @patch("connectors.byoc.ConnectorIndex.supported_connectors")
 async def test_connector_ready_to_sync(
-    supported_connectors, create_job, fetch_job, job_execute, set_env
+    supported_connectors, create_job, fetch_job, job_execute, patch_logger, set_env
 ):
     connector = mock_connector(next_sync=4)
     supported_connectors.return_value = AsyncGeneratorFake([connector])
@@ -192,7 +189,6 @@ async def test_connector_ready_to_sync(
     create_job.return_value = "1"
     fetch_job.return_value = job
     service = create_service(CONFIG_FILE, one_sync=True)
-    asyncio.get_event_loop().call_later(0.5, service.stop)
     await service.run()
 
     connector.prepare.assert_called()
@@ -208,7 +204,7 @@ async def test_connector_ready_to_sync(
 @patch("connectors.byoc.SyncJobIndex.create")
 @patch("connectors.byoc.ConnectorIndex.supported_connectors")
 async def test_connector_sync_disabled(
-    supported_connectors, create_job, fetch_job, job_execute, set_env
+    supported_connectors, create_job, fetch_job, job_execute, patch_logger, set_env
 ):
     connector = mock_connector()
     supported_connectors.return_value = AsyncGeneratorFake([connector])
@@ -216,7 +212,6 @@ async def test_connector_sync_disabled(
     create_job.return_value = "1"
     fetch_job.return_value = job
     service = create_service(CONFIG_FILE, one_sync=True)
-    asyncio.get_event_loop().call_later(0.5, service.stop)
     await service.run()
 
     connector.prepare.assert_called()
@@ -226,17 +221,23 @@ async def test_connector_sync_disabled(
     job_execute.assert_not_called()
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "connector_status",
     [Status.CREATED, Status.NEEDS_CONFIGURATION],
 )
-@pytest.mark.asyncio
 @patch("connectors.sync_job_runner.SyncJobRunner.execute")
 @patch("connectors.byoc.SyncJobIndex.fetch_by_id")
 @patch("connectors.byoc.SyncJobIndex.create")
 @patch("connectors.byoc.ConnectorIndex.supported_connectors")
 async def test_connector_not_configured(
-    supported_connectors, create_job, fetch_job, job_execute, set_env, connector_status
+    supported_connectors,
+    create_job,
+    fetch_job,
+    job_execute,
+    connector_status,
+    patch_logger,
+    set_env,
 ):
     connector = mock_connector(status=connector_status)
     supported_connectors.return_value = AsyncGeneratorFake([connector])
@@ -244,7 +245,6 @@ async def test_connector_not_configured(
     create_job.return_value = "1"
     fetch_job.return_value = job
     service = create_service(CONFIG_FILE, sync_now=True, one_sync=True)
-    asyncio.get_event_loop().call_later(0.5, service.stop)
     await service.run()
 
     connector.prepare.assert_called()
@@ -254,6 +254,7 @@ async def test_connector_not_configured(
     job_execute.assert_not_called()
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "prepare_exception",
     [
@@ -263,14 +264,18 @@ async def test_connector_not_configured(
         DataSourceError,
     ],
 )
-@pytest.mark.asyncio
-async def test_connector_service_filtering(
-    config,
-    should_raise_filtering_error,
-    mock_responses,
+@patch("connectors.sync_job_runner.SyncJobRunner.execute")
+@patch("connectors.byoc.SyncJobIndex.fetch_by_id")
+@patch("connectors.byoc.SyncJobIndex.create")
+@patch("connectors.byoc.ConnectorIndex.supported_connectors")
+async def test_connector_prepare_failed(
+    supported_connectors,
+    create_job,
+    fetch_job,
+    job_execute,
+    prepare_exception,
     patch_logger,
     set_env,
-    patch_validate_filtering_in_sync,
 ):
     connector = mock_connector()
     supported_connectors.return_value = AsyncGeneratorFake([connector])
@@ -279,7 +284,6 @@ async def test_connector_service_filtering(
     fetch_job.return_value = job
     connector.prepare.side_effect = prepare_exception()
     service = create_service(CONFIG_FILE, sync_now=True, one_sync=True)
-    asyncio.get_event_loop().call_later(0.5, service.stop)
     await service.run()
 
     connector.prepare.assert_called()
