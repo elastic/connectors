@@ -147,7 +147,7 @@ async def prepare(service_type, index_name, config, filtering=None):
             "status": "configured",
             "language": "en",
             # Last sync
-            "last_sync_status": "null",
+            "last_sync_status": None,
             "last_sync_error": "",
             "last_synced": "",
             # Written by connector on each operation,
