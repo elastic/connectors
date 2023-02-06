@@ -244,7 +244,12 @@ class SyncJob(ESDocument):
 
     @property
     def terminated(self):
-        return self.status in [JobStatus.ERROR, JobStatus.COMPLETED, JobStatus.CANCELED]
+        return self.status in [
+            JobStatus.ERROR,
+            JobStatus.COMPLETED,
+            JobStatus.CANCELED,
+            JobStatus.SUSPENDED,
+        ]
 
     @property
     def indexed_document_count(self):
@@ -286,6 +291,11 @@ class SyncJob(ESDocument):
             JobStatus.CANCELED, None, ingestion_stats, connector_metadata
         )
 
+    async def suspend(self, ingestion_stats={}, connector_metadata={}):
+        await self.terminate(
+            JobStatus.SUSPENDED, None, ingestion_stats, connector_metadata
+        )
+
     async def terminate(
         self, status, error=None, ingestion_stats={}, connector_metadata={}
     ):
@@ -301,12 +311,6 @@ class SyncJob(ESDocument):
         if len(connector_metadata) > 0:
             doc["metadata"] = connector_metadata
         await self.index.update(doc_id=self.id, doc=doc)
-
-    async def suspend(self):
-        self.status = JobStatus.SUSPENDED
-        job_def = {"status": e2str(self.status)}
-
-        await self.index.update(doc_id=self.id, doc=job_def)
 
     @classmethod
     def transform_filtering(cls, filtering):

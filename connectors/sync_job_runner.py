@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import asyncio
 import time
 
 from connectors.byoc import JobStatus
@@ -93,6 +94,8 @@ class SyncJobRunner:
                 options=bulk_options,
             )
             sync_status = JobStatus.COMPLETED
+        except asyncio.CancelledError:
+            sync_status = JobStatus.SUSPENDED
         except Exception as e:
             sync_status = JobStatus.ERROR
             sync_error = e
@@ -117,6 +120,8 @@ class SyncJobRunner:
             }
             if sync_status == JobStatus.ERROR:
                 await self.sync_job.fail(sync_error, ingestion_stats=ingestion_stats)
+            elif sync_status == JobStatus.SUSPENDED:
+                await self.sync_job.suspend(ingestion_stats=ingestion_stats)
             else:
                 await self.sync_job.done(ingestion_stats=ingestion_stats)
 

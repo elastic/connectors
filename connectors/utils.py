@@ -303,8 +303,11 @@ class ConcurrentTasks:
     def _callback(self, task, result_callback=None):
         self.tasks.remove(task)
         self._task_over.set()
-        if task.exception():
-            raise task.exception()
+        try:
+            if task.exception():
+                raise task.exception()
+        except asyncio.CancelledError:
+            pass
         if result_callback is not None:
             result_callback(task.result())
         # global callback
