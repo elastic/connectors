@@ -454,7 +454,7 @@ async def test_connector_service_poll_cron_broken(
 
 
 @pytest.mark.asyncio
-async def test_connector_service_poll_suspended(mock_responses, patch_logger, set_env):
+async def test_connector_service_poll_suspended_restarts_sync(mock_responses, patch_logger, set_env):
     await set_server_responses(mock_responses, [FAKE_CONFIG_LAST_JOB_SUSPENDED])
     service = create_service(CONFIG_FILE, one_sync=True)
     # one_sync means it won't loop forever
@@ -463,7 +463,7 @@ async def test_connector_service_poll_suspended(mock_responses, patch_logger, se
 
 
 @pytest.mark.asyncio
-async def test_connector_service_poll_suspended_when_scheduling_disabled(
+async def test_connector_service_poll_suspended_does_not_restart_when_scheduling_disabled(
     mock_responses, patch_logger, set_env
 ):
     await set_server_responses(
@@ -509,7 +509,7 @@ async def test_connector_service_poll_large(mock_responses, patch_logger, set_en
 
 
 @pytest.mark.asyncio
-async def test_connector_service_poll_suspended(mock_responses, patch_logger, set_env):
+async def test_connector_service_poll_suspended_suspends_job(mock_responses, patch_logger, set_env):
     # Service is having a large payload, but we terminate it ASAP
     # This way it should suspend existing running jobs
     await set_server_responses(mock_responses, [LARGE_FAKE_CONFIG])
