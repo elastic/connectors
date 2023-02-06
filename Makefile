@@ -57,7 +57,7 @@ ftest: bin/pytest bin/elastic-ingest
 run: install
 	bin/elastic-ingest --debug
 
-docker:
+docker-build:
 	docker build -t docker.elastic.co/enterprise-search/elastic-connectors:8.7.0.0-SNAPSHOT .
 
 docker-run:
