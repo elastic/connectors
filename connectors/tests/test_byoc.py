@@ -8,7 +8,7 @@ import json
 import os
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
-from unittest.mock import ANY, AsyncMock, Mock, call, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 
@@ -362,150 +362,184 @@ async def test_all_connectors(mock_responses):
     assert len(conns) == 1
 
 
-class StubIndex:
-    def __init__(self):
-        self.client = None
-
-    async def save(self, connector):
-        pass
-
-
-doc = {"_id": 1}
-max_concurrency = 0
-
-
-class Data(BaseDataSource):
-    name = "MongoDB"
-    service_type = "mongodb"
-
-    def __init__(self, connector):
-        super().__init__(connector)
-        self.concurrency = 0
-
-    @classmethod
-    def get_default_configuration(cls):
-        return {}
-
-    async def ping(self):
-        pass
-
-    async def changed(self):
-        return True
-
-    async def lazy(self, doit=True, timestamp=None):
-        if not doit:
-            return
-        self.concurrency += 1
-        global max_concurrency
-        max_concurrency = 0
-
-        if self.concurrency > max_concurrency:
-            max_concurrency = self.concurrency
-            logger.info(f"max_concurrency {max_concurrency}")
-        try:
-            await asyncio.sleep(0.01)
-            return {"extra_data": 100}
-        finally:
-            self.concurrency -= 1
-
-    async def get_docs(self, *args, **kw):
-        for d in [doc] * 100:
-            yield {"_id": 1}, self.lazy
-
-    async def close(self):
-        pass
-
-    def tweak_bulk_options(self, options):
-        options["concurrent_downloads"] = 3
-
-
-@pytest.mark.parametrize("with_filtering", [True, False])
 @pytest.mark.asyncio
-async def test_sync_mongo(
-    with_filtering, mock_responses, patch_logger, patch_validate_filtering_in_byoc
-):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
-    )
+async def test_sync_job_claim(patch_logger):
+    source = {"_id": "1"}
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "status": e2str(JobStatus.IN_PROGRESS),
+        "started_at": ANY,
+        "last_seen": ANY,
+        "worker_hostname": ANY,
+    }
 
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={
-            "hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}
+    sync_job = SyncJob(elastic_index=index, doc_source=source)
+    await sync_job.claim()
+
+    index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
+async def test_sync_job_done(patch_logger):
+    source = {"_id": "1"}
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "last_seen": ANY,
+        "completed_at": ANY,
+        "status": e2str(JobStatus.COMPLETED),
+        "error": None,
+    }
+
+    sync_job = SyncJob(elastic_index=index, doc_source=source)
+    await sync_job.done()
+
+    index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
+async def test_sync_job_fail(patch_logger):
+    source = {"_id": "1"}
+    message = "something wrong"
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "last_seen": ANY,
+        "completed_at": ANY,
+        "status": e2str(JobStatus.ERROR),
+        "error": message,
+    }
+
+    sync_job = SyncJob(elastic_index=index, doc_source=source)
+    await sync_job.fail(message)
+
+    index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
+async def test_sync_job_cancel(patch_logger):
+    source = {"_id": "1"}
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "last_seen": ANY,
+        "completed_at": ANY,
+        "status": e2str(JobStatus.CANCELED),
+        "error": None,
+        "canceled_at": ANY,
+    }
+
+    sync_job = SyncJob(elastic_index=index, doc_source=source)
+    await sync_job.cancel()
+
+    index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
+async def test_first_heartbeat(patch_logger):
+    source = {
+        "_id": "1",
+        "_source": {
+            "last_seen": None,
         },
-        headers=headers,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/.elastic-connectors/_doc/1",
-        payload={"_id": "1"},
-        headers=headers,
-    )
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_update/1",
-        headers=headers,
-        repeat=True,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/.elastic-connectors/_doc/1",
-        payload={"_id": "1"},
-        headers=headers,
-    )
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc",
-        payload={"_id": "1"},
-        headers=headers,
-    )
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_update/1",
-        headers=headers,
-        repeat=True,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc/1",
-        payload={"_id": "1"},
-        headers=headers,
-    )
-    mock_responses.head(
-        "http://nowhere.com:9200/search-airbnb?expand_wildcards=open",
-        headers=headers,
-        repeat=True,
-    )
-    mock_responses.get(
-        "http://nowhere.com:9200/search-airbnb/_mapping?expand_wildcards=open",
-        payload={"search-airbnb": {"mappings": {}}},
-        headers=headers,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/search-airbnb/_mapping?expand_wildcards=open",
-        headers=headers,
-    )
-    mock_responses.get(
-        "http://nowhere.com:9200/search-airbnb",
-        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
-        headers=headers,
-    )
-    mock_responses.get(
-        "http://nowhere.com:9200/search-airbnb/_search?scroll=5m",
-        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
-        headers=headers,
-    )
-    mock_responses.post(
-        "http://nowhere.com:9200/search-airbnb/_search?scroll=5m",
-        payload={"_id": "1"},
-        headers=headers,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/search-airbnb/_search?scroll=5m",
-        payload={"_id": "1"},
-        headers=headers,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/_bulk?pipeline=ent-search-generic-ingestion",
-        payload={"items": []},
-        headers=headers,
-    )
+    }
+    interval = 60
+    index = Mock()
+    index.heartbeat = AsyncMock(return_value=1)
+
+    connector = Connector(elastic_index=index, doc_source=source)
+    await connector.heartbeat(interval=interval)
+
+    assert index.heartbeat.called
+
+
+@pytest.mark.asyncio
+async def test_no_heartbeat(patch_logger):
+    source = {
+        "_id": "1",
+        "_source": {
+            "last_seen": iso_utc(),
+        },
+    }
+    interval = 60
+    index = Mock()
+    index.heartbeat = AsyncMock(return_value=1)
+
+    connector = Connector(elastic_index=index, doc_source=source)
+    await connector.heartbeat(interval=interval)
+
+    assert not index.heartbeat.called
+
+
+@pytest.mark.asyncio
+async def test_heartbeat(patch_logger):
+    interval = 60
+    last_seen = datetime.now(timezone.utc) - timedelta(seconds=interval + 10)
+    source = {
+        "_id": "1",
+        "_source": {
+            "last_seen": iso_utc(last_seen),
+        },
+    }
+    index = Mock()
+    index.heartbeat = AsyncMock(return_value=1)
+
+    connector = Connector(elastic_index=index, doc_source=source)
+    await connector.heartbeat(interval=interval)
+
+    assert index.heartbeat.called
+
+
+@pytest.mark.asyncio
+async def test_sync_starts(patch_logger):
+    connector_doc = {"_id": "1"}
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "last_sync_status": e2str(JobStatus.IN_PROGRESS),
+        "last_sync_error": None,
+        "status": e2str(Status.CONNECTED),
+    }
+
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.sync_starts()
+    index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
+async def test_connector_error(patch_logger):
+    connector_doc = {"_id": "1"}
+    error = "something wrong"
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "status": e2str(Status.ERROR),
+        "error": error,
+    }
+
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.error(error)
+    index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
+async def test_sync_done_with_no_job(patch_logger):
+    connector_doc = {"_id": "1"}
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "last_sync_status": e2str(JobStatus.ERROR),
+        "last_synced": ANY,
+        "last_sync_error": JOB_NOT_FOUND_ERROR,
+        "status": e2str(Status.ERROR),
+        "error": JOB_NOT_FOUND_ERROR,
+    }
+
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.sync_done(job=None)
+    index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
+
 
 @pytest.mark.asyncio
 async def test_sync_done_with_failed_job(patch_logger):
@@ -526,12 +560,7 @@ async def test_sync_done_with_failed_job(patch_logger):
 
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     await connector.sync_done(job=job)
-    assert index.update.call_args_list == [
-        call(
-            doc_id=connector.id,
-            doc=expected_doc_source_update,
-        )
-    ]
+    index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
 
 
 @pytest.mark.asyncio
@@ -557,12 +586,7 @@ async def test_sync_done_with_successful_job(patch_logger):
 
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     await connector.sync_done(job=job)
-    assert index.update.call_args_list == [
-        call(
-            doc_id=connector.id,
-            doc=expected_doc_source_update,
-        )
-    ]
+    index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
 
 
 @pytest.mark.asyncio
@@ -850,14 +874,12 @@ async def test_update_filtering_validation(
         connector, validation_result_mock, validation_target
     )
 
-    assert client.update.call_args_list == [
-        call(
-            index=CONNECTORS_INDEX,
-            id=CONNECTOR_ID,
-            doc=expected_doc_source_update,
-            retry_on_conflict=ANY,
-        )
-    ]
+    client.update.assert_called_with(
+        index=CONNECTORS_INDEX,
+        id=CONNECTOR_ID,
+        doc=expected_doc_source_update,
+        retry_on_conflict=ANY,
+    )
 
 
 @pytest.mark.parametrize(

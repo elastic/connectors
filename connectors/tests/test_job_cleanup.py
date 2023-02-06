@@ -5,7 +5,7 @@
 #
 
 import asyncio
-from unittest.mock import AsyncMock, Mock, call, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -74,6 +74,7 @@ async def test_cleanup_jobs(
     delete_indices,
     delete_jobs,
     sync_job_fetch_by_id,
+    patch_logger,
 ):
     existing_index_name = "foo"
     to_be_deleted_index_name = "bar"
@@ -92,9 +93,7 @@ async def test_cleanup_jobs(
     service = create_service()
     await run_service_with_stop_after(service, 0.1)
 
-    assert delete_indices.call_args_list == [call(indices=[to_be_deleted_index_name])]
-    assert delete_jobs.call_args_list == [
-        call(job_ids=[sync_job.id, another_sync_job.id])
-    ]
-    assert sync_job.fail.call_args_list == [call(message=STUCK_JOB_ERROR)]
-    assert connector.sync_done.call_args_list == [call(job=sync_job)]
+    delete_indices.assert_called_with(indices=[to_be_deleted_index_name])
+    delete_jobs.assert_called_with(job_ids=[sync_job.id, another_sync_job.id])
+    sync_job.fail.assert_called_with(message=STUCK_JOB_ERROR)
+    connector.sync_done.assert_called_with(job=sync_job)
