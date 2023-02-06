@@ -15,19 +15,7 @@ from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClien
 from connectors.source import DataSourceConfiguration
 from connectors.sources.abs import AzureBlobStorageDataSource
 from connectors.sources.tests.support import create_source
-
-
-class AsyncIter:
-    """This Class is use to return async generator"""
-
-    def __init__(self, items):
-        """Setup list of dictionary"""
-        self.items = items
-
-    async def __aiter__(self):
-        """This Method is used to return async generator"""
-        for item in self.items:
-            yield item
+from connectors.tests.commons import AsyncIterator
 
 
 def test_get_configuration():
@@ -132,7 +120,7 @@ async def test_get_container():
     # Setup
     source = create_source(AzureBlobStorageDataSource)
     source.connection_string = source._configure_connection_string()
-    mock_repsonse = AsyncIter(
+    mock_repsonse = AsyncIterator(
         [
             {
                 "name": "container1",
@@ -163,7 +151,7 @@ async def test_get_blob():
     # Setup
     source = create_source(AzureBlobStorageDataSource)
     source.connection_string = source._configure_connection_string()
-    mock_response = AsyncIter(
+    mock_response = AsyncIterator(
         [
             {
                 "container": "container1",
@@ -212,7 +200,7 @@ async def test_get_doc():
     # Setup
     source = create_source(AzureBlobStorageDataSource)
     source.get_container = Mock(
-        return_value=AsyncIter(
+        return_value=AsyncIterator(
             [
                 {
                     "type": "container",
@@ -227,7 +215,7 @@ async def test_get_doc():
         )
     )
     source.get_blob = Mock(
-        return_value=AsyncIter(
+        return_value=AsyncIterator(
             [
                 {
                     "type": "blob",

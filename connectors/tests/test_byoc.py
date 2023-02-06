@@ -34,7 +34,7 @@ from connectors.config import load_config
 from connectors.filtering.validation import ValidationTarget
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.tests.commons import AsyncGeneratorFake
+from connectors.tests.commons import AsyncIterator
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
@@ -963,7 +963,7 @@ JOB_SOURCE = {"_id": "1", "_source": {"status": "pending", "connector": {"id": "
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
 async def test_pending_jobs(get_all_docs, set_env):
     job = Mock()
-    get_all_docs.return_value = AsyncGeneratorFake([job])
+    get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
     connector_ids = [1, 2]
     expected_query = {
@@ -996,7 +996,7 @@ async def test_pending_jobs(get_all_docs, set_env):
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
 async def test_orphaned_jobs(get_all_docs, set_env):
     job = Mock()
-    get_all_docs.return_value = AsyncGeneratorFake([job])
+    get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
     connector_ids = [1, 2]
     expected_query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
@@ -1015,7 +1015,7 @@ async def test_orphaned_jobs(get_all_docs, set_env):
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
 async def test_stuck_jobs(get_all_docs, set_env):
     job = Mock()
-    get_all_docs.return_value = AsyncGeneratorFake([job])
+    get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
     connector_ids = [1, 2]
     expected_query = {
@@ -1090,7 +1090,7 @@ async def test_prepare_docs(filtering, expected_filtering_calls):
     doc_source_copy = deepcopy(DOC_SOURCE)
     connector = Connector(StubIndex(), "1", doc_source_copy, {})
 
-    docs_generator_fake = AsyncGeneratorFake([(doc_source_copy, None)])
+    docs_generator_fake = AsyncIterator([(doc_source_copy, None)])
     connector.data_provider = AsyncMock()
     connector.data_provider.get_docs = docs_generator_fake
 

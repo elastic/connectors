@@ -17,7 +17,7 @@ from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.source import DataSourceConfiguration
 from connectors.sources.mysql import MySQLAdvancedRulesValidator, MySqlDataSource
 from connectors.sources.tests.support import create_source
-from connectors.tests.commons import AsyncGeneratorFake
+from connectors.tests.commons import AsyncIterator
 
 
 def immutable_doc(**kwargs):
@@ -342,7 +342,7 @@ async def test_get_docs_with_list(patch_validate_databases):
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
         source.fetch_rows_from_all_tables = mock.MagicMock(
-            return_value=AsyncGeneratorFake([{"a": 1, "b": 2}])
+            return_value=AsyncIterator([{"a": 1, "b": 2}])
         )
 
         async for doc, _ in source.get_docs():
@@ -357,7 +357,7 @@ async def test_get_docs_with_str():
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
         source.fetch_rows_from_all_tables = mock.MagicMock(
-            return_value=AsyncGeneratorFake([{"a": 1, "b": 2}])
+            return_value=AsyncIterator([{"a": 1, "b": 2}])
         )
 
     with mock.patch.object(MySqlDataSource, "validate_databases", return_value=([])):
@@ -382,7 +382,7 @@ async def test_get_docs():
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
         source.fetch_rows_from_all_tables = mock.MagicMock(
-            return_value=AsyncGeneratorFake([{"a": 1, "b": 2}])
+            return_value=AsyncIterator([{"a": 1, "b": 2}])
         )
 
     with mock.patch.object(MySqlDataSource, "validate_databases", return_value=([])):
@@ -491,7 +491,7 @@ async def test_get_docs_with_advanced_rules(
 ):
     source = await setup_mysql_source([DB_ONE, DB_TWO])
     docs_in_db = setup_available_docs(filtering["advanced_snippet"])
-    patch_fetch_rows_for_table.return_value = AsyncGeneratorFake(docs_in_db)
+    patch_fetch_rows_for_table.return_value = AsyncIterator(docs_in_db)
 
     yielded_docs = set()
     async for doc, _ in source.get_docs(filtering):
