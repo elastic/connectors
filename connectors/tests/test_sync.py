@@ -19,6 +19,7 @@ from connectors.byoc import (
 )
 from connectors.config import load_config
 from connectors.services.sync import SyncService
+from connectors.tests.commons import AsyncIterator
 from connectors.tests.fake_sources import FakeSourceTS
 from connectors.utils import e2str
 
@@ -98,7 +99,7 @@ def mock_connector(
 async def test_no_connector(
     supported_connectors, create_job, job_execute, patch_logger, set_env
 ):
-    supported_connectors.return_value = AsyncGeneratorFake([])
+    supported_connectors.return_value = AsyncIterator([])
     service = create_service(CONFIG_FILE, one_sync=True)
     await service.run()
 
@@ -115,7 +116,7 @@ async def test_connector_with_cli_sync_now_flag(
     supported_connectors, create_job, fetch_job, job_execute, patch_logger, set_env
 ):
     connector = mock_connector()
-    supported_connectors.return_value = AsyncGeneratorFake([connector])
+    supported_connectors.return_value = AsyncIterator([connector])
     job = Mock()
     create_job.return_value = "1"
     fetch_job.return_value = job
@@ -138,7 +139,7 @@ async def test_connector_with_connector_sync_now_flag(
     supported_connectors, create_job, fetch_job, job_execute, patch_logger, set_env
 ):
     connector = mock_connector(sync_now=True, next_sync=0)
-    supported_connectors.return_value = AsyncGeneratorFake([connector])
+    supported_connectors.return_value = AsyncIterator([connector])
     job = Mock()
     create_job.return_value = "1"
     fetch_job.return_value = job
@@ -161,7 +162,7 @@ async def test_connector_with_suspended_job(
     supported_connectors, create_job, fetch_job, job_execute, patch_logger, set_env
 ):
     connector = mock_connector(next_sync=100, last_sync_status=JobStatus.SUSPENDED)
-    supported_connectors.return_value = AsyncGeneratorFake([connector])
+    supported_connectors.return_value = AsyncIterator([connector])
     job = Mock()
     create_job.return_value = "1"
     fetch_job.return_value = job
@@ -184,7 +185,7 @@ async def test_connector_ready_to_sync(
     supported_connectors, create_job, fetch_job, job_execute, patch_logger, set_env
 ):
     connector = mock_connector(next_sync=4)
-    supported_connectors.return_value = AsyncGeneratorFake([connector])
+    supported_connectors.return_value = AsyncIterator([connector])
     job = Mock()
     create_job.return_value = "1"
     fetch_job.return_value = job
@@ -207,7 +208,7 @@ async def test_connector_sync_disabled(
     supported_connectors, create_job, fetch_job, job_execute, patch_logger, set_env
 ):
     connector = mock_connector()
-    supported_connectors.return_value = AsyncGeneratorFake([connector])
+    supported_connectors.return_value = AsyncIterator([connector])
     job = Mock()
     create_job.return_value = "1"
     fetch_job.return_value = job
@@ -240,7 +241,7 @@ async def test_connector_not_configured(
     set_env,
 ):
     connector = mock_connector(status=connector_status)
-    supported_connectors.return_value = AsyncGeneratorFake([connector])
+    supported_connectors.return_value = AsyncIterator([connector])
     job = Mock()
     create_job.return_value = "1"
     fetch_job.return_value = job
@@ -278,7 +279,7 @@ async def test_connector_prepare_failed(
     set_env,
 ):
     connector = mock_connector()
-    supported_connectors.return_value = AsyncGeneratorFake([connector])
+    supported_connectors.return_value = AsyncIterator([connector])
     job = Mock()
     create_job.return_value = "1"
     fetch_job.return_value = job
