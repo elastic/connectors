@@ -667,7 +667,7 @@ class Connector:
 
         self.source_klass = source_klass
 
-    async def sync(self, elastic_server, idling, sync_now=False):
+    async def sync(self, elastic_server, idling):
         # If anything bad happens before we create a sync job
         # (like bad scheduling config, etc.)
         #
@@ -683,24 +683,20 @@ class Connector:
                 self.status = Status.CONNECTED
                 await self.sync_doc()
 
-            if sync_now:
-                self.sync_now = True
-                logger.info("Sync forced")
-            else:
-                next_sync = self.next_sync()
-                # First we check if sync is disabled, and it terminates all other conditions
-                if next_sync == SYNC_DISABLED:
-                    logger.debug(f"Scheduling is disabled for {service_type}")
-                    return
-                # Then we check if we need to restart SUSPENDED job
-                elif self.last_sync_status == JobStatus.SUSPENDED:
-                    logger.info("Restarting sync after suspension")
-                # And only then we check if we need to run sync right now or not
-                elif next_sync - idling > 0:
-                    logger.debug(
-                        f"Next sync for {service_type} due in {int(next_sync)} seconds"
-                    )
-                    return
+            next_sync = self.next_sync()
+            # First we check if sync is disabled, and it terminates all other conditions
+            if next_sync == SYNC_DISABLED:
+                logger.debug(f"Scheduling is disabled for {service_type}")
+                return
+            # Then we check if we need to restart SUSPENDED job
+            elif self.last_sync_status == JobStatus.SUSPENDED:
+                logger.info("Restarting sync after suspension")
+            # And only then we check if we need to run sync right now or not
+            elif next_sync - idling > 0:
+                logger.debug(
+                    f"Next sync for {service_type} due in {int(next_sync)} seconds"
+                )
+                return
 
             try:
                 self.data_provider = self.source_klass(self.configuration)

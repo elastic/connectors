@@ -201,15 +201,9 @@ def patch_validate_filtering_in_byoc():
         yield
 
 
-class Args:
-    def __init__(self, **options):
-        self.one_sync = options.get("one_sync", False)
-        self.sync_now = options.get("sync_now", False)
-
-
-def create_service(config_file, **options):
+def create_service(config_file):
     config = load_config(config_file)
-    service = SyncService(config, Args(**options))
+    service = SyncService(config)
     service.idling = 0
 
     return service
@@ -223,8 +217,8 @@ async def run_service_with_stop_after(service, stop_after):
     await asyncio.gather(service.run(), _terminate())
 
 
-async def create_and_run_service(config_file, stop_after, **options):
-    service = create_service(config_file, **options)
+async def create_and_run_service(config_file, stop_after):
+    service = create_service(config_file)
     await run_service_with_stop_after(service, stop_after)
 
 
@@ -424,7 +418,7 @@ async def test_connector_service_poll_no_sync_but_status_updated(
     await set_server_responses(
         mock_responses, [FAKE_CONFIG_NO_SYNC], connectors_update=upd
     )
-    await create_and_run_service(CONFIG_FILE, 0.2, sync_now=False)
+    await create_and_run_service(CONFIG_FILE, 0.2)
 
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Scheduling is disabled")
@@ -448,7 +442,7 @@ async def test_connector_service_poll_cron_broken(
     await set_server_responses(
         mock_responses, [FAKE_CONFIG_CRON_BROKEN], connectors_update=upd
     )
-    await create_and_run_service(CONFIG_FILE, 0, sync_now=False)
+    await create_and_run_service(CONFIG_FILE, 0)
     patch_logger.assert_not_present("Sync done")
     assert (
         calls[0]["status"] == "connected"
@@ -461,7 +455,7 @@ async def test_connector_service_poll_suspended_restarts_sync(
     mock_responses, patch_logger, set_env
 ):
     await set_server_responses(mock_responses, [FAKE_CONFIG_LAST_JOB_SUSPENDED])
-    await create_and_run_service(CONFIG_FILE, 0.1, sync_now=False)
+    await create_and_run_service(CONFIG_FILE, 0.1)
     patch_logger.assert_present("Restarting sync after suspension")
 
 
@@ -472,9 +466,7 @@ async def test_connector_service_poll_suspended_does_not_restart_when_scheduling
     await set_server_responses(
         mock_responses, [FAKE_CONFIG_LAST_JOB_SUSPENDED_SCHEDULING_DISABLED]
     )
-    service = create_service(CONFIG_FILE, one_sync=True)
-    # one_sync means it won't loop forever
-    await service.run()
+    await create_and_run_service(CONFIG_FILE, 0.2)
     patch_logger.assert_present("Scheduling is disabled")
 
 
@@ -483,7 +475,7 @@ async def test_connector_service_poll_just_created(
     mock_responses, patch_logger, set_env
 ):
     # we should not sync a connector that is not configured
-    # but still send out an heartbeat
+    # but still send out a heartbeat
     await set_server_responses(mock_responses, [FAKE_CONFIG_CREATED])
     await create_and_run_service(CONFIG_FILE, 0.2)
 
@@ -526,13 +518,6 @@ async def test_connector_service_poll_suspended_suspends_job(
 
 
 @pytest.mark.asyncio
-async def test_connector_service_poll_sync_now(mock_responses, patch_logger, set_env):
-    await set_server_responses(mock_responses, [FAKE_CONFIG_NO_SYNC])
-    await create_and_run_service(CONFIG_FILE, 0.1, sync_now=True, one_sync=True)
-    patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
-
-
-@pytest.mark.asyncio
 async def test_connector_service_poll_sync_ts(mock_responses, patch_logger, set_env):
     indexed = []
 
@@ -542,7 +527,7 @@ async def test_connector_service_poll_sync_ts(mock_responses, patch_logger, set_
         return CallbackResult(status=200, payload={"items": []})
 
     await set_server_responses(mock_responses, [FAKE_CONFIG_TS], bulk_call=bulk_call)
-    await create_and_run_service(CONFIG_FILE, 0.1, sync_now=True, one_sync=True)
+    await create_and_run_service(CONFIG_FILE, 0.1)
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
 
     # make sure we kept the original ts
@@ -600,11 +585,11 @@ async def test_connector_service_filtering(
     )
 
     if should_raise_filtering_error:
-        await create_and_run_service(CONFIG_FILE, 0, service={"max_errors": 0})
+        await create_and_run_service(CONFIG_FILE, 0)
         patch_logger.assert_check(lambda log: isinstance(log, InvalidFilteringError))
     else:
         try:
-            await create_and_run_service(CONFIG_FILE, 0, service={"max_errors": 0})
+            await create_and_run_service(CONFIG_FILE, 0)
         except Exception as e:
             # mark test as failed
             assert False, f"Unexpected exception of type {type(e)} raised."
@@ -649,7 +634,7 @@ async def test_spurious(mock_responses, patch_logger, set_env):
     Connector.sync = _sync
 
     try:
-        await create_and_run_service(CONFIG_FILE, 0, service={"max_errors": 0})
+        await create_and_run_service(CONFIG_FILE, 0)
     except Exception:
         await asyncio.sleep(0.1)
     finally:
