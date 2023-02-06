@@ -82,6 +82,8 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
+class InvalidMongoConfiguration(Exception):
+    pass
 
 class MongoDataSource(BaseDataSource):
     """MongoDB"""
@@ -106,8 +108,6 @@ class MongoDataSource(BaseDataSource):
             client_params["password"] = password
 
         self.client = AsyncIOMotorClient(host, **client_params)
-
-        self.db = self.client[self.configuration["database"]]
 
     @classmethod
     def get_default_configuration(cls):
@@ -140,7 +140,7 @@ class MongoDataSource(BaseDataSource):
         return [MongoAdvancedRulesValidator()]
 
     async def ping(self):
-        await self.client.admin.command("ping")
+        await self._validate_configuration()
 
     # TODO: That's a lot of work. Find a better way
     def serialize(self, doc):
@@ -164,10 +164,34 @@ class MongoDataSource(BaseDataSource):
         return doc
 
     async def get_docs(self, filtering=None):
+        await self._validate_configuration()
+
+        db = self.client[self.configuration["database"]]
+
         logger.debug("Grabbing collection info")
-        collection = self.db[self.configuration["collection"]]
+        collection = db[self.configuration["collection"]]
 
         async for doc in collection.find():
             yield self.serialize(doc), None
 
         self._dirty = False
+
+    async def _validate_configuration(self):
+        client = self.client
+        configured_database_name = self.configuration["database"]
+        configured_collection_name = self.configuration["collection"]
+
+        existing_database_names = await client.list_database_names()
+
+        logger.debug(f"Existing databases: {existing_database_names}")
+
+        if configured_database_name not in existing_database_names:
+            raise InvalidMongoConfiguration(f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}")
+
+        database = client[configured_database_name]
+
+        existing_collection_names = await database.list_collection_names()
+        logger.debug(f"Existing collections in {configured_database_name}: {existing_collection_names}")
+
+        if configured_collection_name not in existing_collection_names:
+            raise InvalidMongoConfiguration(f"Collection ({configured_collection_name}) does not exist within database {configured_database_name}. Existing collections: {', '.join(existing_collection_names)}")
