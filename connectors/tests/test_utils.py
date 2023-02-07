@@ -13,7 +13,6 @@ import random
 import tempfile
 import time
 import timeit
-from textwrap import dedent
 from unittest.mock import Mock
 
 import pytest
@@ -61,19 +60,24 @@ def test_invalid_names():
 
 
 def test_mem_queue_speed(patch_logger):
+    def mem_queue():
+        import asyncio
 
-    async def run():
-        for i in range(1000):
-            await queue.put("x" * 100)
+        from connectors.utils import MemQueue
 
-    asyncio.run(run())
-    """
-    )
+        queue = MemQueue(
+            maxmemsize=1024 * 1024, refresh_interval=0.1, refresh_timeout=2
+        )
 
-    mem_queue_duration = min(timeit.repeat(memqueue_script, number=1, repeat=3))
+        async def run():
+            for i in range(1000):
+                await queue.put("x" * 100)
 
+        asyncio.run(run())
 
-     def vanilla_queue():
+    mem_queue_duration = min(timeit.repeat(mem_queue, number=1, repeat=3))
+
+    def vanilla_queue():
         import asyncio
 
         queue = asyncio.Queue()
