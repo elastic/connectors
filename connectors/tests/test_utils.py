@@ -61,14 +61,6 @@ def test_invalid_names():
 
 
 def test_mem_queue_speed(patch_logger):
-    # with memqueue
-
-    memqueue_script = dedent(
-        """
-    import asyncio
-    from connectors.utils import MemQueue
-
-    queue = MemQueue(maxmemsize=1024 * 1024, refresh_interval=0.1, refresh_timeout=2)
 
     async def run():
         for i in range(1000):
