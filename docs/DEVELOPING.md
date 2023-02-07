@@ -70,6 +70,8 @@ The network drive path the connector will crawl to fetch files. Examples:
 
 Whether the connector should extract file content from network drive. Default value is `True` i.e. the connector will try to extract file contents.
 
+ℹ️ The values for these fields need to be provided [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/network_drive.py#L67) before running the connector for the first time. Further, these can be changed from UI editor which will appear on the UI once the first successful connection is made.
+
 #### Content extraction
 
 The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/network_drive.py#L19).
@@ -88,6 +90,8 @@ $ make ftest NAME=network_drive
 ```
 
 ℹ️ Users do not need to have a running Elasticsearch instance or a Network Drive source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Network Drive source using the docker image.
+
+ℹ️ The e2e test does not currently support testing ingestion against an Elastic Cloud instance. The test uses a dockerized Elasticsearch for the ingestion as configured [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/tests/fixtures/network_drive/docker-compose.yml).
 
 ℹ️ The e2e test uses default values defined in [configure Network Drive connector](#configure-network-drive-connector)
 
@@ -164,13 +168,15 @@ The page_size for iterating bucket objects in Amazon S3. Default value is `100`.
   - `50`
   - `150`
 
+ℹ️ The values for these fields need to be provided [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/s3.py#L67) before running the connector for the first time. Further, these can be changed from UI editor which will appear on the UI once the first successful connection is made.
+
 ##### `enable_content_extraction`
 
 Whether the connector should extract file content from Amazon S3. Default value is `True` i.e. the connector will try to extract file contents.
 
 #### Content extraction
 
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/s3.py#L25).
+The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/s3.py#L241).
 
 ### Connector Limitations
 
@@ -188,6 +194,8 @@ $ make ftest NAME=s3
 ```
 
 ℹ️ Users do not need to have a running Elasticsearch instance or an Amazon S3 source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Amazon S3 source using the docker image.
+
+ℹ️ The e2e test does not currently support testing ingestion against an Elastic Cloud instance. The test uses a dockerized Elasticsearch for the ingestion as configured [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/tests/fixtures/s3/docker-compose.yml).
 
 ℹ️ The e2e test uses default values defined in [configure Amazon S3 connector](#configure-amazon-s3-connector)
 
