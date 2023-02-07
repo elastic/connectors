@@ -1,9 +1,11 @@
-.PHONY: test lint autoformat run ftest install dev release
+.PHONY: test lint autoformat run ftest install dev release docker-build docker-run docker-push
 
 PYTHON=python3.10
 ARCH=$(shell uname -m)
 PERF8?=no
 SLOW_TEST_THRESHOLD=1 # seconds
+VERSION=$(shell cat connectors/VERSION)
+
 
 bin/python:
 	$(PYTHON) -m venv .
@@ -56,3 +58,12 @@ ftest: bin/pytest bin/elastic-ingest
 
 run: install
 	bin/elastic-ingest --debug
+
+docker-build:
+	docker build -t docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT .
+
+docker-run:
+	docker run -v $(PWD):/config docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT /app/bin/elastic-ingest -c /config/config.yml --debug
+
+docker-push:
+	docker push docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT
