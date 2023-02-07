@@ -25,6 +25,9 @@ DEFAULT_FILE_SIZE_LIMIT = 10485760
 class NASDataSource(BaseDataSource):
     """Network Drive"""
 
+    name = "Network Drive"
+    service_type = "network_drive"
+
     def __init__(self, configuration):
         """Set up the connection to the Network Drive
 

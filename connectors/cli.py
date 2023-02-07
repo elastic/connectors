@@ -19,6 +19,7 @@ from connectors import __version__
 from connectors.config import load_config
 from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
+from connectors.services.job_cleanup import JobCleanUpService
 from connectors.services.sync import SyncService
 from connectors.source import get_data_sources
 from connectors.utils import get_event_loop
@@ -51,13 +52,6 @@ def _parser():
     )
 
     parser.add_argument(
-        "--sync-now",
-        action="store_true",
-        default=False,
-        help="Force a sync on first run for each connector.",
-    )
-
-    parser.add_argument(
         "--filebeat",
         action="store_true",
         default=False,
@@ -72,13 +66,6 @@ def _parser():
     )
 
     parser.add_argument(
-        "--one-sync",
-        action="store_true",
-        default=False,
-        help="Runs a single sync and exits.",
-    )
-
-    parser.add_argument(
         "--uvloop",
         action="store_true",
         default=False,
@@ -88,7 +75,7 @@ def _parser():
     return parser
 
 
-async def _start_service(config, args, loop):
+async def _start_service(config, loop):
     preflight = PreflightCheck(config)
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(preflight.shutdown, sig))
@@ -99,16 +86,17 @@ async def _start_service(config, args, loop):
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.remove_signal_handler(sig)
 
-    services = [SyncService(config, args)]
+    services = [SyncService(config), JobCleanUpService(config)]
     for sig in (signal.SIGINT, signal.SIGTERM):
 
-        def _shutdown(sig_name):
+        async def _shutdown(sig_name):
             logger.info(f"Caught {sig_name}. Graceful shutdown.")
             for service in services:
                 logger.info(f"Shutdown {service.__class__.__name__}...")
-                service.stop()
+                await service.stop()
+            return
 
-        loop.add_signal_handler(sig, functools.partial(_shutdown, sig.name))
+        loop.add_signal_handler(sig, lambda: asyncio.ensure_future(_shutdown(sig.name)))
 
     async def _run_service(service):
         if "PERF8" in os.environ:
@@ -132,12 +120,12 @@ def run(args):
     if args.action == "list":
         logger.info("Registered connectors:")
         for source in get_data_sources(config):
-            logger.info(f"- {source.__doc__.strip()}")
+            logger.info(f"- {source.name}")
         logger.info("Bye")
         return 0
 
     loop = get_event_loop(args.uvloop)
-    coro = _start_service(config, args, loop)
+    coro = _start_service(config, loop)
 
     try:
         return loop.run_until_complete(coro)

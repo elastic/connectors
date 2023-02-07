@@ -20,8 +20,8 @@ from connectors.sources.postgresql import PostgreSQLDataSource
 from connectors.sources.tests.support import create_source
 
 
-class connection_async:
-    """This Class create dummy connection with database and return dummy cursor"""
+class ConnectionAsync:
+    """This class creates dummy connection with database and return dummy cursor"""
 
     async def __aenter__(self):
         """Make a dummy database connection and return it"""
@@ -33,10 +33,10 @@ class connection_async:
 
     async def execute(self, query):
         """This method returns dummy cursor"""
-        return cursor_async()
+        return CursorAsync()
 
 
-class cursor_async:
+class CursorAsync:
     """This class contains methods which returns dummy response"""
 
     async def __aenter__(self):
@@ -91,7 +91,7 @@ class cursor_async:
         pass
 
 
-class connection_sync:
+class ConnectionSync:
     """This Class create dummy connection with database and return dummy cursor"""
 
     def __enter__(self):
@@ -104,13 +104,13 @@ class connection_sync:
 
     def execute(self, statement):
         """This method returns dummy cursor"""
-        return cursor_sync()
+        return CursorSync()
 
 
-class cursor_sync:
+class CursorSync:
     """This class contains methods which returns dummy response"""
 
-    async def __enter__(self):
+    def __enter__(self):
         """Make a dummy database connection and return it"""
         return self
 
@@ -204,7 +204,7 @@ async def test_get_docs_postgresql(patch_logger):
     """Test get_docs method"""
     # Setup
     source = create_source(PostgreSQLDataSource)
-    with patch.object(AsyncEngine, "connect", return_value=connection_async()):
+    with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
         source.engine = create_async_engine(
             "postgresql+asyncpg://admin:changme@127.0.0.1:5432/testdb"
         )
@@ -244,7 +244,7 @@ async def test_get_docs_oracle(patch_logger):
     """Test get_docs method"""
     # Setup
     source = create_source(OracleDataSource)
-    with patch.object(Engine, "connect", return_value=connection_sync()):
+    with patch.object(Engine, "connect", return_value=ConnectionSync()):
         source.engine = create_engine("oracle://admin:changme@127.0.0.1:1521/testdb")
         actual_response = []
         expected_response = [

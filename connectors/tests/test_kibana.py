@@ -61,6 +61,8 @@ def test_main(patch_logger, mock_responses):
                 "fake",
                 "--index-name",
                 "data",
+                "--filtering",
+                "data",
             ]
         )
         == 0
