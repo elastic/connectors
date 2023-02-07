@@ -32,6 +32,9 @@ MAX_CONCURRENT_DOWNLOADS = 100  # Max concurrent download supported by abs
 class AzureBlobStorageDataSource(BaseDataSource):
     """Azure Blob Storage"""
 
+    name = "Azure Blob Storage"
+    service_type = "abs"
+
     def __init__(self, configuration):
         """Set up the connection to the azure base client
 

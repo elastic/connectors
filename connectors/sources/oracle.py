@@ -23,6 +23,9 @@ QUERIES = {
 class OracleDataSource(GenericBaseDataSource):
     """Oracle Database"""
 
+    name = "Oracle Database"
+    service_type = "oracle"
+
     def __init__(self, configuration):
         """Setup connection to the Oracle database-server configured by user
 
