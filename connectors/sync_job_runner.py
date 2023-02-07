@@ -50,17 +50,12 @@ class SyncJobRunner:
             return
 
         try:
-            self._start_time = time.time()
-            sync_status = None
-            sync_error = None
-            result = {}
-
             data_provider = self.source_klass(self.sync_job.configuration)
             if not await data_provider.changed():
-                sync_status = JobStatus.COMPLETED
                 logger.debug(
                     f"No change in {self.sync_job.service_type} data provider, skipping..."
                 )
+                await self._sync_done(sync_status=JobStatus.COMPLETED, result={})
                 return
 
             logger.debug(f"Syncing '{self.sync_job.service_type}'")
@@ -93,50 +88,56 @@ class SyncJobRunner:
                 sync_rules_enabled=sync_rules_enabled,
                 options=bulk_options,
             )
-            sync_status = JobStatus.COMPLETED
+            await self._sync_done(sync_status=JobStatus.COMPLETED, result=result)
         except asyncio.CancelledError:
-            sync_status = JobStatus.SUSPENDED
+            await self._sync_done(sync_status=JobStatus.SUSPENDED, result={})
         except Exception as e:
-            sync_status = JobStatus.ERROR
-            sync_error = e
-            logger.critical(e, exc_info=True)
+            await self._sync_done(sync_status=JobStatus.ERROR, result={}, sync_error=e)
         finally:
-            doc_updated = result.get("doc_updated", 0)
-            doc_created = result.get("doc_created", 0)
-            doc_deleted = result.get("doc_deleted", 0)
-            sync_error = result.get("fetch_error", sync_error)
-            indexed_count = doc_updated + doc_created
+            self._start_time = None
 
-            if sync_error is not None or sync_status is None:
-                sync_status = JobStatus.ERROR
-            if sync_status == JobStatus.ERROR and sync_error is None:
+    async def _sync_done(self, sync_status, result=None, sync_error=None):
+        if result is None:
+            result = {}
+        doc_updated = result.get("doc_updated", 0)
+        doc_created = result.get("doc_created", 0)
+        doc_deleted = result.get("doc_deleted", 0)
+        sync_error = result.get("fetch_error", sync_error)
+        indexed_count = doc_updated + doc_created
+
+        ingestion_stats = {
+            "indexed_document_count": indexed_count,
+            "indexed_document_volume": 0,
+            "deleted_document_count": doc_deleted,
+            "total_document_count": await self.connector.document_count(),
+        }
+
+        if sync_error is not None and sync_status is JobStatus.COMPLETED:
+            sync_status = JobStatus.ERROR
+
+        if sync_status == JobStatus.ERROR:
+            if sync_error is None:
                 sync_error = "Sync thread didn't finish execution. Check connector logs for more details."
+            await self.sync_job.fail(sync_error, ingestion_stats=ingestion_stats)
+        elif sync_status == JobStatus.SUSPENDED:
+            await self.sync_job.suspend(ingestion_stats=ingestion_stats)
+        elif sync_status == JobStatus.CANCELED:
+            await self.sync_job.cancel(ingestion_stats=ingestion_stats)
+        else:
+            await self.sync_job.done(ingestion_stats=ingestion_stats)
 
-            ingestion_stats = {
-                "indexed_document_count": indexed_count,
-                "indexed_document_volume": 0,
-                "deleted_document_count": doc_deleted,
-                "total_document_count": await self.connector.document_count(),
-            }
-            if sync_status == JobStatus.ERROR:
-                await self.sync_job.fail(sync_error, ingestion_stats=ingestion_stats)
-            elif sync_status == JobStatus.SUSPENDED:
-                await self.sync_job.suspend(ingestion_stats=ingestion_stats)
-            else:
-                await self.sync_job.done(ingestion_stats=ingestion_stats)
-
-            self.sync_job = await self.sync_job.reload()
-            await self.connector.sync_done(self.sync_job)
-
-            logger.info(
-                f"Sync done: {indexed_count} indexed, {doc_deleted} "
-                f" deleted. ({int(time.time() - self._start_time)} seconds)"
-            )
+        self.sync_job = await self.sync_job.reload()
+        await self.connector.sync_done(self.sync_job)
+        logger.info(
+            f"Sync done: {indexed_count} indexed, {doc_deleted} "
+            f" deleted. ({int(time.time() - self._start_time)} seconds)"
+        )
 
     async def _claim_job(self):
         try:
             await self.sync_job.claim()
             await self.connector.sync_starts()
+            self._start_time = time.time()
             return True
         except Exception as e:
             logger.critical(e, exc_info=True)
