@@ -1,0 +1,65 @@
+{
+            "api_key_id": "",
+            "status": "configured",
+            "language": "en",
+            "last_sync_status": "null",
+            "last_sync_error": "",
+            "last_synced": "",
+            "last_seen": "",
+            "created_at": "",
+            "updated_at": "",
+            "filtering": [
+              {
+                  "domain": "DEFAULT",
+                  "draft": {
+                      "advanced_snippet": {
+                          "updated_at": "2023-01-31T16:41:27.341Z",
+                          "created_at": "2023-01-31T16:38:49.244Z",
+                          "value": {}
+                      },
+                      "rules": [
+                          {
+                              "field": "_",
+                              "updated_at": "2023-01-31T16:41:27.341Z",
+                              "created_at": "2023-01-31T16:38:49.244Z",
+                              "rule": "regex",
+                              "id": "DEFAULT",
+                              "value": ".*",
+                              "order": 1,
+                              "policy": "include"
+                          }
+                      ],
+                      "validation": {"state": "valid", "errors": []}
+                  },
+                  "active": {
+                      "advanced_snippet": {
+                          "updated_at": "2023-01-31T16:41:27.341Z",
+                          "created_at": "2023-01-31T16:38:49.244Z",
+                          "value": {}
+                      },
+                      "rules": [
+                          {
+                              "field": "_",
+                              "updated_at": "2023-01-31T16:41:27.341Z",
+                              "created_at": "2023-01-31T16:38:49.244Z",
+                              "rule": "regex",
+                              "id": "DEFAULT",
+                              "value": ".*",
+                              "order": 1,
+                              "policy": "include"
+                          }
+                      ],
+                      "validation": {"state": "valid", "errors": []}
+                  }
+              }
+          ],
+            "scheduling": {"enabled": true, "interval": "1 * * * * *"},
+            "pipeline": {
+                "extract_binary_content": true,
+                "name": "ent-search-generic-ingestion",
+                "reduce_whitespace": true,
+                "run_ml_inference": true
+            },
+            "sync_now": true,
+            "is_native": true
+}

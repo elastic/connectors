@@ -35,6 +35,7 @@ fi
 
 
 $PYTHON -m pip install -r $NAME/requirements.txt
+$PYTHON test_runner.py --name $NAME
 $PYTHON fixture.py --name $NAME --action setup
 $PYTHON fixture.py --name $NAME --action start_stack
 $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug --filtering $NAME/filtering.json

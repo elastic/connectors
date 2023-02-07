@@ -22,51 +22,71 @@ from connectors.utils import validate_index_name
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
-DEFAULT_FILTERING = [
-    {
-        "domain": "DEFAULT",
-        "draft": {
-            "advanced_snippet": {
-                "updated_at": "2023-01-31T16:41:27.341Z",
-                "created_at": "2023-01-31T16:38:49.244Z",
-                "value": {},
-            },
-            "rules": [
-                {
-                    "field": "_",
+DEFAULT_CONNECTOR_CONFIG = {
+    "api_key_id": "",
+    "status": "configured",
+    "language": "en",
+    "last_sync_status": "null",
+    "last_sync_error": "",
+    "last_synced": "",
+    "last_seen": "",
+    "created_at": "",
+    "updated_at": "",
+    "filtering": [
+        {
+            "domain": "DEFAULT",
+            "draft": {
+                "advanced_snippet": {
                     "updated_at": "2023-01-31T16:41:27.341Z",
                     "created_at": "2023-01-31T16:38:49.244Z",
-                    "rule": "regex",
-                    "id": "DEFAULT",
-                    "value": ".*",
-                    "order": 1,
-                    "policy": "include",
-                }
-            ],
-            "validation": {"state": "valid", "errors": []},
-        },
-        "active": {
-            "advanced_snippet": {
-                "updated_at": "2023-01-31T16:41:27.341Z",
-                "created_at": "2023-01-31T16:38:49.244Z",
-                "value": {},
+                    "value": {},
+                },
+                "rules": [
+                    {
+                        "field": "_",
+                        "updated_at": "2023-01-31T16:41:27.341Z",
+                        "created_at": "2023-01-31T16:38:49.244Z",
+                        "rule": "regex",
+                        "id": "DEFAULT",
+                        "value": ".*",
+                        "order": 1,
+                        "policy": "include",
+                    }
+                ],
+                "validation": {"state": "valid", "errors": []},
             },
-            "rules": [
-                {
-                    "field": "_",
+            "active": {
+                "advanced_snippet": {
                     "updated_at": "2023-01-31T16:41:27.341Z",
                     "created_at": "2023-01-31T16:38:49.244Z",
-                    "rule": "regex",
-                    "id": "DEFAULT",
-                    "value": ".*",
-                    "order": 1,
-                    "policy": "include",
-                }
-            ],
-            "validation": {"state": "valid", "errors": []},
-        },
-    }
-]
+                    "value": {},
+                },
+                "rules": [
+                    {
+                        "field": "_",
+                        "updated_at": "2023-01-31T16:41:27.341Z",
+                        "created_at": "2023-01-31T16:38:49.244Z",
+                        "rule": "regex",
+                        "id": "DEFAULT",
+                        "value": ".*",
+                        "order": 1,
+                        "policy": "include",
+                    }
+                ],
+                "validation": {"state": "valid", "errors": []},
+            },
+        }
+    ],
+    "scheduling": {"enabled": True, "interval": "1 * * * * *"},
+    "pipeline": {
+        "extract_binary_content": True,
+        "name": "ent-search-generic-ingestion",
+        "reduce_whitespace": True,
+        "run_ml_inference": True,
+    },
+    "sync_now": True,
+    "is_native": True,
+}
 DEFAULT_PIPELINE = {
     "version": 1,
     "description": "For testing",
@@ -91,10 +111,7 @@ DEFAULT_PIPELINE = {
 
 
 # XXX simulating Kibana click-arounds
-async def prepare(service_type, index_name, config, filtering=None):
-    if filtering is None:
-        filtering = []
-
+async def prepare(service_type, index_name, config, connector_config):
     klass = get_source_klass(config["sources"][service_type])
     es = ElasticServer(config["elasticsearch"])
 
@@ -131,50 +148,16 @@ async def prepare(service_type, index_name, config, filtering=None):
         )
 
     try:
-        # https:#github.com/elastic/enterprise-search-team/discussions/2153#discussioncomment-2999765
-        doc = {
-            # Used by the frontend to manage the api key
-            # associated with the connector
-            "api_key_id": "",
-            # Configurations, e.g. API key
+        dynamic_fields = {
             "configuration": klass.get_default_configuration(),
-            # Name of the index the documents will be written to.
-            # Set by Kibana, *not* the connector.
             "index_name": index_name,
-            # used to surface copy and icons in the front end
             "service_type": service_type,
-            # Current status of the connector, and the value can be
-            "status": "configured",
-            "language": "en",
-            # Last sync
-            "last_sync_status": None,
-            "last_sync_error": "",
-            "last_synced": "",
-            # Written by connector on each operation,
-            # used by Kibana to hint to user about status of connector
-            "last_seen": "",
-            # Date the connector was created
-            "created_at": "",
-            # Date the connector was updated
-            "updated_at": "",
-            "filtering": filtering,
-            # Scheduling intervals
-            "scheduling": {
-                "enabled": False,
-                "interval": "1 * * * * *",
-            },  # quartz syntax
-            "pipeline": {
-                "extract_binary_content": True,
-                "name": "ent-search-generic-ingestion",
-                "reduce_whitespace": True,
-                "run_ml_inference": True,
-            },
-            "sync_now": False,
-            "is_native": True,
         }
 
+        connector_doc = connector_config | dynamic_fields
+
         logger.info(f"Prepare {CONNECTORS_INDEX}")
-        await upsert_index(es, CONNECTORS_INDEX, docs=[doc])
+        await upsert_index(es, CONNECTORS_INDEX, docs=[connector_doc])
 
         logger.info(f"Prepare {JOBS_INDEX}")
         await upsert_index(es, JOBS_INDEX, docs=[])
@@ -190,6 +173,10 @@ async def prepare(service_type, index_name, config, filtering=None):
         logger.info("Done")
     finally:
         await es.close()
+
+
+async def sync_now():
+    logger.info("Sync now")
 
 
 async def upsert_index(es, index, docs=None, mappings=None, settings=None):
@@ -255,51 +242,66 @@ def _parser():
         help="Run the event loop in debug mode.",
     )
     parser.add_argument(
-        "--filtering",
-        type=str,
-        help="Path to a json file containing an array of filters",
+        "--connector-config",
+        type=nullable,
+        help="Path to a json file containing the state of the connector (represents a document in the .elastic-connectors index)",
     )
 
     return parser
 
 
-def _load_filtering(filtering_file_path):
-    if not os.path.exists(filtering_file_path):
-        logger.warn(
-            f"filtering file at '{filtering_file_path}' does not exist. Fallback to default filtering."
+def nullable(value):
+    if not value:
+        return None
+    return value
+
+
+def _load_connector_config(connector_config_file_path):
+    if not connector_config_file_path or not os.path.exists(connector_config_file_path):
+        connector_config_file = (
+            ("at" + connector_config_file_path) if connector_config_file_path else ""
         )
-        filtering = DEFAULT_FILTERING
+
+        logger.warn(
+            f"connector config file {connector_config_file} does not exist. Fallback to default connector config."
+        )
+
+        connector_config = DEFAULT_CONNECTOR_CONFIG
     else:
-        filtering_file = open(
+        connector_config_file = open(
             os.path.join(
                 os.path.dirname(__file__),
                 "sources",
                 "tests",
                 "fixtures",
-                filtering_file_path,
+                connector_config_file_path,
             )
         )
-        filtering = json.load(filtering_file)
-        logger.info(f"Successfully loaded filtering file from '{filtering_file_path}'.")
+        connector_config = json.load(connector_config_file)
+        logger.info(
+            f"Successfully loaded connector config file from '{connector_config_file_path}'."
+        )
 
-    return filtering
+    return connector_config
 
 
 def main(args=None):
     parser = _parser()
     args = parser.parse_args(args=args)
     config_file = args.config_file
-    filtering_file = args.filtering
+    connector_config_file = args.connector_config
 
     if not os.path.exists(config_file):
         raise IOError(f"config file at '{config_file}' does not exist")
 
-    filtering = _load_filtering(filtering_file)
+    connector_config = _load_connector_config(connector_config_file)
 
     set_logger(args.debug and logging.DEBUG or logging.INFO)
     config = EnvYAML(config_file)
     try:
-        asyncio.run(prepare(args.service_type, args.index_name, config, filtering))
+        asyncio.run(
+            prepare(args.service_type, args.index_name, config, connector_config)
+        )
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("Bye")
 
