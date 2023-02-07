@@ -188,7 +188,7 @@ The connector uses the Elastic ingest attachment processor plugin for extracting
 
 ### E2E Tests
 
-The end to end test is usually performed by developers after the functional and system testing is completed. The framework allows users to test the connector end to end. To perform e2e test for Amazon S3 connector, run the following make command:
+The framework provides a way to test ingestion through a connector against a real data source. This is called a functional test. To execute a functional test for the Amazon S3 connector, run the following command:
 ```shell
 $ make ftest NAME=s3
 ```
