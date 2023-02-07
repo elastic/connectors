@@ -39,22 +39,28 @@ $PYTHON fixture.py --name $NAME --action setup
 $PYTHON fixture.py --name $NAME --action start_stack
 $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug --filtering $NAME/filtering.json
 $PYTHON fixture.py --name $NAME --action load
+$PYTHON fixture.py --name $NAME --action sync
 
 if [[ $PERF8 == "yes" ]]
 then
     if [[ $PLATFORM == "darwin" ]]
     then
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --debug & PID=$!
     else
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --one-sync --sync-now --debug
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --debug & PID=$!
     fi
 else
-    $ELASTIC_INGEST --one-sync --sync-now --debug
+    $ELASTIC_INGEST --debug & PID=$!
 fi
 
-$PYTHON fixture.py --name $NAME --action remove
+$PYTHON fixture.py --name $NAME --action monitor --pid $PID
 
-$ELASTIC_INGEST --one-sync --sync-now --debug
+$PYTHON fixture.py --name $NAME --action remove
+$PYTHON fixture.py --name $NAME --action sync
+
+$ELASTIC_INGEST --debug & PID=$!
+
+$PYTHON fixture.py --name $NAME --action monitor --pid $PID
 
 
 if [[ "$DATA_SIZE" == 'small' ]]; then

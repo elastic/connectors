@@ -147,7 +147,7 @@ async def prepare(service_type, index_name, config, filtering=None):
             "status": "configured",
             "language": "en",
             # Last sync
-            "last_sync_status": "null",
+            "last_sync_status": None,
             "last_sync_error": "",
             "last_synced": "",
             # Written by connector on each operation,
@@ -159,15 +159,17 @@ async def prepare(service_type, index_name, config, filtering=None):
             "updated_at": "",
             "filtering": filtering,
             # Scheduling intervals
-            "scheduling": {"enabled": True, "interval": "1 * * * * *"},  # quartz syntax
+            "scheduling": {
+                "enabled": False,
+                "interval": "1 * * * * *",
+            },  # quartz syntax
             "pipeline": {
                 "extract_binary_content": True,
                 "name": "ent-search-generic-ingestion",
                 "reduce_whitespace": True,
                 "run_ml_inference": True,
             },
-            # A flag to run sync immediately
-            "sync_now": True,
+            "sync_now": False,
             "is_native": True,
         }
 

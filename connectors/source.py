@@ -107,13 +107,16 @@ class DataSourceConfiguration:
 class BaseDataSource:
     """Base class, defines a loose contract."""
 
+    name = None
+    service_type = None
+
     def __init__(self, configuration):
         self.configuration = configuration
         assert isinstance(self.configuration, DataSourceConfiguration)
         self.configuration.set_defaults(self.get_default_configuration())
 
     def __str__(self):
-        return f"Datasource `{self.__class__.__doc__}`"
+        return f"Datasource `{self.__class__.name}`"
 
     @classmethod
     def get_simple_configuration(cls):

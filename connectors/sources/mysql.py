@@ -116,6 +116,9 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
 class MySqlDataSource(BaseDataSource):
     """MySQL"""
 
+    name = "MySQL"
+    service_type = "mysql"
+
     def __init__(self, configuration):
         """Set up the connection to the MySQL server.
 

@@ -11,26 +11,10 @@ import pytest
 
 from connectors.sources.postgresql import PostgreSQLDataSource
 from connectors.sources.tests.support import create_source
+from connectors.tests.commons import AsyncIterator
 
 
-class AsyncIter:
-    """This Class is use to return async generator"""
-
-    def __init__(self, items):
-        """Setup list of dictionary"""
-        self.items = items
-
-    async def __aiter__(self):
-        """This Method is used to return async generator"""
-        for item in self.items:
-            yield item
-
-    async def __anext__(self):
-        """This Method is used to return one document"""
-        return self.items[0]
-
-
-class mock_ssl:
+class MockSsl:
     """This class contains methods which returns dummy ssl context"""
 
     def load_verify_locations(self, cadata):
@@ -43,7 +27,7 @@ async def test_ping(patch_logger):
     """Test ping method of PostgreSQLDataSource class"""
     # Setup
     source = create_source(PostgreSQLDataSource)
-    source.execute_query = Mock(return_value=AsyncIter(["table1", "table2"]))
+    source.execute_query = Mock(return_value=AsyncIterator(["table1", "table2"]))
 
     # Execute
     await source.ping()
@@ -72,5 +56,5 @@ def test_get_connect_argss(patch_logger):
     source.ssl_ca = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
 
     # Execute
-    with patch.object(ssl, "create_default_context", return_value=mock_ssl()):
+    with patch.object(ssl, "create_default_context", return_value=MockSsl()):
         source.get_connect_args()

@@ -256,6 +256,12 @@ class SyncJob:
 
         return await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
 
+    async def suspend(self):
+        self.status = JobStatus.SUSPENDED
+        job_def = {"status": e2str(self.status)}
+
+        await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
+
     @classmethod
     def transform_filtering(cls, filtering):
         # deepcopy to not change the reference resulting in changing .elastic-connectors filtering
@@ -423,6 +429,7 @@ class Connector:
         self.bulk_options = bulk_options
         self.source_klass = None
         self.data_provider = None
+        self._sync_task = None
 
     def _update_config(self, doc_source):
         self.status = doc_source["status"]
@@ -490,6 +497,13 @@ class Connector:
         self.doc_source["status"] = e2str(status)
         self._update_config(self.doc_source)
 
+    async def suspend(self):
+        if self._sync_task is not None:
+            task = self._sync_task
+            task.cancel()
+            await task
+        await self.close()
+
     async def close(self):
         self._closed = True
         if self._heartbeat_started:
@@ -553,6 +567,15 @@ class Connector:
     async def error(self, error):
         self.doc_source["error"] = str(error)
         await self.sync_doc()
+
+    async def _sync_suspended(self, job):
+        await job.suspend()
+        self.doc_source["last_sync_status"] = e2str(job.status)
+        self.doc_source["last_sync_error"] = None
+        self.doc_source["error"] = None
+        self.doc_source["last_synced"] = iso_utc()
+        await self.sync_doc()
+        logger.info(f"Sync suspended, Job id: {job.job_id}")
 
     async def _sync_done(self, job, result, exception=None):
         doc_updated = result.get("doc_updated", 0)
@@ -644,7 +667,7 @@ class Connector:
 
         self.source_klass = source_klass
 
-    async def sync(self, elastic_server, idling, sync_now=False):
+    async def sync(self, elastic_server, idling):
         # If anything bad happens before we create a sync job
         # (like bad scheduling config, etc.)
         #
@@ -655,30 +678,25 @@ class Connector:
 
         try:
             service_type = self.service_type
-            # if we don't sync, we still want to make sure we tell kibana we are connected
             # if the status is different from comnected
             if self.status != Status.CONNECTED:
                 self.status = Status.CONNECTED
                 await self.sync_doc()
 
-            if sync_now:
-                self.sync_now = True
-                logger.info("Sync forced")
-            else:
-                next_sync = self.next_sync()
-                # First we check if sync is disabled, and it terminates all other conditions
-                if next_sync == SYNC_DISABLED:
-                    logger.debug(f"Scheduling is disabled for {service_type}")
-                    return
-                # Then we check if we need to restart SUSPENDED job
-                elif self.last_sync_status == JobStatus.SUSPENDED:
-                    logger.info("Restarting sync after suspension")
-                # And only then we check if we need to run sync right now or not
-                elif next_sync - idling > 0:
-                    logger.debug(
-                        f"Next sync for {service_type} due in {int(next_sync)} seconds"
-                    )
-                    return
+            next_sync = self.next_sync()
+            # First we check if sync is disabled, and it terminates all other conditions
+            if next_sync == SYNC_DISABLED:
+                logger.debug(f"Scheduling is disabled for {service_type}")
+                return
+            # Then we check if we need to restart SUSPENDED job
+            elif self.last_sync_status == JobStatus.SUSPENDED:
+                logger.info("Restarting sync after suspension")
+            # And only then we check if we need to run sync right now or not
+            elif next_sync - idling > 0:
+                logger.debug(
+                    f"Next sync for {service_type} due in {int(next_sync)} seconds"
+                )
+                return
 
             try:
                 self.data_provider = self.source_klass(self.configuration)
@@ -699,6 +717,7 @@ class Connector:
 
         logger.debug(f"Syncing '{service_type}'")
         self._syncing = True
+        self._sync_task = asyncio.current_task()
         job = await self._sync_starts()
         try:
             logger.debug(f"Pinging the {self.data_provider} backend")
@@ -733,13 +752,15 @@ class Connector:
                 options=bulk_options,
             )
             await self._sync_done(job, result)
-
+        except asyncio.CancelledError:
+            await self._sync_suspended(job)
         except Exception as e:
             await self._sync_done(job, {}, exception=e)
             raise
         finally:
             self._syncing = False
             self._start_time = None
+            self._sync_task = None
 
 
 STUCK_JOBS_THRESHOLD = 60  # 60 seconds
