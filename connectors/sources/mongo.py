@@ -15,6 +15,9 @@ from connectors.source import BaseDataSource
 class MongoDataSource(BaseDataSource):
     """MongoDB"""
 
+    name = "MongoDB"
+    service_type = "mongodb"
+
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
 
