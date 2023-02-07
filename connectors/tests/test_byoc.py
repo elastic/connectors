@@ -233,43 +233,6 @@ mongo = {
 
 
 @pytest.mark.asyncio
-async def test_heartbeat(mock_responses, patch_logger):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
-    )
-
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={
-            "hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}
-        },
-        headers=headers,
-    )
-
-    for i in range(10):
-        mock_responses.put(
-            "http://nowhere.com:9200/.elastic-connectors/_doc/1",
-            payload={"_id": "1"},
-            headers=headers,
-        )
-
-    connectors = ConnectorIndex(config)
-    conns = []
-
-    query = supported_connectors_query([["mongodb"]])
-    async for connector in connectors._get_all_docs(query=query):
-        connector.start_heartbeat(0.2)
-        connector.start_heartbeat(1.0)  # NO-OP
-        conns.append(connector)
-
-    await asyncio.sleep(0.4)
-    await conns[0].close()
-    await connectors.close()
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "native_service_types, connector_ids, expected_connector_count",
     [

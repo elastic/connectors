@@ -59,7 +59,7 @@ class SyncService(BaseService):
         if self.syncs is not None:
             self.syncs.cancel()
 
-    async def _one_sync(self, connector, es):
+    async def _sync(self, connector, es):
         if self.running is False:
             logger.debug(
                 f"Skipping run for {connector.id} because service is terminating"
@@ -95,10 +95,10 @@ class SyncService(BaseService):
                     connector, source_klass, ValidationTarget.DRAFT
                 )
 
-            if not self._ready_to_sync(connector, sync_now):
+            if not self._ready_to_sync(connector):
                 return
 
-            job_id = await self.sync_job_index.create(connector, sync_now)
+            job_id = await self.sync_job_index.create(connector)
             if connector.sync_now:
                 await connector.reset_sync_now_flag()
             sync_job = await self.sync_job_index.fetch_by_id(job_id)
@@ -147,16 +147,10 @@ class SyncService(BaseService):
                         native_service_types=native_service_types,
                         connectors_ids=connector_ids,
                     ):
-                        await self.syncs.put(
-                            functools.partial(self._one_sync, connector, es)
-                        )
+                        await self._sync(connector, es)
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
-                finally:
-                    await self.syncs.join()
-
-                self.syncs = None
                 # Immediately break instead of sleeping
                 if not self.running:
                     break
@@ -195,11 +189,7 @@ class SyncService(BaseService):
             logger.critical(e, exc_info=True)
             return False
 
-    def _ready_to_sync(self, connector, sync_now):
-        if sync_now:
-            logger.info("Sync forced")
-            return True
-
+    def _ready_to_sync(self, connector):
         next_sync = connector.next_sync()
         if next_sync == SYNC_DISABLED:
             logger.debug(f"Scheduling is disabled for connector {connector.id}")
