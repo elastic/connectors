@@ -73,15 +73,18 @@ def test_mem_queue_speed(patch_logger):
     mem_queue_duration = min(timeit.repeat(memqueue_script, number=1, repeat=3))
 
 
-    async def run():
-        for i in range(1000):
-            await queue.put("x" * 100)
+     def vanilla_queue():
+        import asyncio
 
-    asyncio.run(run())
-    """
-    )
+        queue = asyncio.Queue()
 
-    queue_duration = min(timeit.repeat(queue_script, number=1, repeat=3))
+        async def run():
+            for i in range(1000):
+                await queue.put("x" * 100)
+
+        asyncio.run(run())
+
+    queue_duration = min(timeit.repeat(vanilla_queue, number=1, repeat=3))
 
     # mem queue should be 30 times slower at the most
     quotient, _ = divmod(mem_queue_duration, queue_duration)
