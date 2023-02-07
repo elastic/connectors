@@ -287,6 +287,7 @@ def main(args=None):
     if not os.path.exists(config_file):
         raise IOError(f"config file at '{config_file}' does not exist")
 
+    logger.info(f'Loading filters from {filtering_file}')
     filtering = _load_filtering(filtering_file)
 
     set_logger(args.debug and logging.DEBUG or logging.INFO)
