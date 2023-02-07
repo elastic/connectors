@@ -244,12 +244,7 @@ class SyncJob(ESDocument):
 
     @property
     def terminated(self):
-        return self.status in [
-            JobStatus.ERROR,
-            JobStatus.COMPLETED,
-            JobStatus.CANCELED,
-            JobStatus.SUSPENDED,
-        ]
+        return self.status in (JobStatus.ERROR, JobStatus.COMPLETED, JobStatus.CANCELED)
 
     @property
     def indexed_document_count(self):
@@ -301,13 +296,14 @@ class SyncJob(ESDocument):
     ):
         doc = {
             "last_seen": iso_utc(),
-            "completed_at": iso_utc(),
             "status": e2str(status),
             "error": error,
         }
-        doc.update(ingestion_stats)
+        if status in (JobStatus.ERROR, JobStatus.COMPLETED, JobStatus.CANCELED):
+            doc["completed_at"] = iso_utc()
         if status == JobStatus.CANCELED:
             doc["canceled_at"] = iso_utc()
+        doc.update(ingestion_stats)
         if len(connector_metadata) > 0:
             doc["metadata"] = connector_metadata
         await self.index.update(doc_id=self.id, doc=doc)

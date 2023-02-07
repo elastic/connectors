@@ -16,6 +16,7 @@ from connectors.byoc import (
     CONNECTORS_INDEX,
     JOB_NOT_FOUND_ERROR,
     STUCK_JOBS_THRESHOLD,
+    SYNC_DISABLED,
     Connector,
     ConnectorIndex,
     ESDocument,
@@ -400,6 +401,23 @@ async def test_sync_job_cancel(patch_logger):
 
 
 @pytest.mark.asyncio
+async def test_sync_job_suspend(patch_logger):
+    source = {"_id": "1"}
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "last_seen": ANY,
+        "status": e2str(JobStatus.SUSPENDED),
+        "error": None,
+    }
+
+    sync_job = SyncJob(elastic_index=index, doc_source=source)
+    await sync_job.suspend()
+
+    index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
 async def test_first_heartbeat(patch_logger):
     source = {
         "_id": "1",
@@ -550,6 +568,32 @@ async def test_sync_done_with_successful_job(patch_logger):
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     await connector.sync_done(job=job)
     index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "sync_now, scheduling_enabled, expected_next_sync",
+    [
+        (True, False, 0),
+        (False, False, SYNC_DISABLED),
+        (False, True, 10),
+    ],
+)
+@patch("connectors.byoc.next_run")
+async def test_connector_next_sync(
+    next_run, sync_now, scheduling_enabled, expected_next_sync, patch_logger
+):
+    connector_doc = {
+        "_id": "1",
+        "_source": {
+            "sync_now": sync_now,
+            "scheduling": {"enabled": scheduling_enabled, "interval": "1 * * * * *"},
+        },
+    }
+    index = Mock()
+    next_run.return_value = 10
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    assert connector.next_sync() == expected_next_sync
 
 
 @pytest.mark.asyncio
