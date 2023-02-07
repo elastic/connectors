@@ -80,12 +80,6 @@ def test_mem_queue_speed(patch_logger):
 
     mem_queue_duration = min(timeit.repeat(memqueue_script, number=1, repeat=3))
 
-    # vanilla queue
-    queue_script = dedent(
-        """
-    import asyncio
-
-    queue = asyncio.Queue()
 
     async def run():
         for i in range(1000):
