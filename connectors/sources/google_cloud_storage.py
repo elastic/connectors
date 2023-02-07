@@ -63,7 +63,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
     """Google Cloud Storage"""
 
     name = "Google Cloud Storage"
-    service_type = "gcs"
+    service_type = "google_cloud_storage"
 
     def __init__(self, configuration):
         """Set up the connection to the Google Cloud Storage Client.
