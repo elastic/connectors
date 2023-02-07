@@ -375,6 +375,9 @@ max_concurrency = 0
 
 
 class Data(BaseDataSource):
+    name = "MongoDB"
+    service_type = "mongodb"
+
     def __init__(self, connector):
         super().__init__(connector)
         self.concurrency = 0
