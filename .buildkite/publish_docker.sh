@@ -29,8 +29,8 @@ printenv
 VAULT_ADDR=${VAULT_ADDR:-https://vault-ci-prod.elastic.dev}
 VAULT_USER="docker-swiftypeadmin"
 echo "Fetching Docker credentials for '$VAULT_USER' from Vault..."
-DOCKER_USER=$(vault read -address "${VAULT_ADDR}" -field login secret/ci/elastic-ent-search-ci-images/${VAULT_USER})
-DOCKER_PASSWORD=$(vault read -address "${VAULT_ADDR}" -field password secret/ci/elastic-ent-search-ci-images/${VAULT_USER})
+DOCKER_USER=$(vault read -address "${VAULT_ADDR}" -field login secret/ci/elastic-connectors-python/${VAULT_USER})
+DOCKER_PASSWORD=$(vault read -address "${VAULT_ADDR}" -field password secret/ci/elastic-connectors-python/${VAULT_USER})
 echo "Done!"
 echo
 
