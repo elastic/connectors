@@ -31,13 +31,13 @@ def create_runner(
     data_provider.ping = AsyncMock()
     if not source_available:
         data_provider.ping.side_effect = Exception()
-    source_klass.return_value = data_provider
     validation_result = FilteringValidationResult(
         state=FilteringValidationState.VALID
         if filtering_valid
         else FilteringValidationState.INVALID
     )
-    source_klass.validate_filtering = AsyncMock(return_value=validation_result)
+    data_provider.validate_filtering = AsyncMock(return_value=validation_result)
+    source_klass.return_value = data_provider
 
     sync_job = Mock()
     sync_job.id = "1"
