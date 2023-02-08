@@ -78,24 +78,19 @@ class GenericBaseDataSource(BaseDataSource):
                 "label": "Databases",
                 "type": "str",
             },
-            "connector_name": {
-                "value": "Generic Database",
-                "label": "Friendly name for the connector",
-                "type": "str",
-            },
             "fetch_size": {
                 "value": DEFAULT_FETCH_SIZE,
-                "label": "How many rows to fetch on each call",
+                "label": "Rows fetched per request",
                 "type": "int",
             },
             "retry_count": {
                 "value": DEFAULT_RETRY_COUNT,
-                "label": "How many retry count for fetching rows on each call",
+                "label": "Retries per request",
                 "type": "int",
             },
             "ssl_disabled": {
                 "value": DEFAULT_SSL_DISABLED,
-                "label": "SSL verification will be enabled or not",
+                "label": "Disable SSL (true/false)",
                 "type": "bool",
             },
             "ssl_ca": {

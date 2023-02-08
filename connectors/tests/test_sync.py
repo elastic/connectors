@@ -209,15 +209,27 @@ def create_service(config_file):
     return service
 
 
-async def run_service_with_stop_after(service, stop_after):
+async def run_service_with_stop_after(service, stop_after=0):
+    def _stop_running_service_without_cancelling():
+        service.running = False
+
     async def _terminate():
-        await asyncio.sleep(stop_after)
-        await service.stop()
+        if stop_after == 0:
+            # so we actually want the service
+            # to run current loop without interruption
+            asyncio.get_event_loop().call_soon(_stop_running_service_without_cancelling)
+        else:
+            # but if stop_after is provided we want to
+            # interrupt the service after the timeout
+            await asyncio.sleep(stop_after)
+            await service.stop()
+
+        await asyncio.sleep(0)
 
     await asyncio.gather(service.run(), _terminate())
 
 
-async def create_and_run_service(config_file, stop_after):
+async def create_and_run_service(config_file, stop_after=0):
     service = create_service(config_file)
     await run_service_with_stop_after(service, stop_after)
 
@@ -382,7 +394,7 @@ async def set_server_responses(
 @pytest.mark.asyncio
 async def test_connector_service_poll(mock_responses, patch_logger, set_env):
     await set_server_responses(mock_responses)
-    await create_and_run_service(CONFIG_FILE, 0.1)
+    await create_and_run_service(CONFIG_FILE)
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
     # we want to make sure we DON'T get memory usage report
     patch_logger.assert_not_present("===> Largest memory usage:")
@@ -396,7 +408,7 @@ async def test_connector_service_poll_unconfigured(
     # but still send out a heartbeat
 
     await set_server_responses(mock_responses, [FAKE_CONFIG_NEEDS_CONFIG])
-    await create_and_run_service(CONFIG_FILE, 0.2)
+    await create_and_run_service(CONFIG_FILE)
 
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Can't sync with status `needs_configuration`")
@@ -418,7 +430,7 @@ async def test_connector_service_poll_no_sync_but_status_updated(
     await set_server_responses(
         mock_responses, [FAKE_CONFIG_NO_SYNC], connectors_update=upd
     )
-    await create_and_run_service(CONFIG_FILE, 0.2)
+    await create_and_run_service(CONFIG_FILE)
 
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Scheduling is disabled")
@@ -442,7 +454,7 @@ async def test_connector_service_poll_cron_broken(
     await set_server_responses(
         mock_responses, [FAKE_CONFIG_CRON_BROKEN], connectors_update=upd
     )
-    await create_and_run_service(CONFIG_FILE, 0)
+    await create_and_run_service(CONFIG_FILE)
     patch_logger.assert_not_present("Sync done")
     assert (
         calls[0]["status"] == "connected"
@@ -455,7 +467,7 @@ async def test_connector_service_poll_suspended_restarts_sync(
     mock_responses, patch_logger, set_env
 ):
     await set_server_responses(mock_responses, [FAKE_CONFIG_LAST_JOB_SUSPENDED])
-    await create_and_run_service(CONFIG_FILE, 0.1)
+    await create_and_run_service(CONFIG_FILE)
     patch_logger.assert_present("Restarting sync after suspension")
 
 
@@ -466,7 +478,7 @@ async def test_connector_service_poll_suspended_does_not_restart_when_scheduling
     await set_server_responses(
         mock_responses, [FAKE_CONFIG_LAST_JOB_SUSPENDED_SCHEDULING_DISABLED]
     )
-    await create_and_run_service(CONFIG_FILE, 0.2)
+    await create_and_run_service(CONFIG_FILE)
     patch_logger.assert_present("Scheduling is disabled")
 
 
@@ -477,7 +489,7 @@ async def test_connector_service_poll_just_created(
     # we should not sync a connector that is not configured
     # but still send out a heartbeat
     await set_server_responses(mock_responses, [FAKE_CONFIG_CREATED])
-    await create_and_run_service(CONFIG_FILE, 0.2)
+    await create_and_run_service(CONFIG_FILE)
 
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Can't sync with status `created`")
@@ -487,14 +499,14 @@ async def test_connector_service_poll_just_created(
 @pytest.mark.asyncio
 async def test_connector_service_poll_https(mock_responses, patch_logger, set_env):
     await set_server_responses(mock_responses, host="https://safenowhere.com:443")
-    await create_and_run_service(CONFIG_HTTPS_FILE, 0.3)
+    await create_and_run_service(CONFIG_HTTPS_FILE)
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
 
 
 @pytest.mark.asyncio
 async def test_connector_service_poll_large(mock_responses, patch_logger, set_env):
     await set_server_responses(mock_responses, [LARGE_FAKE_CONFIG])
-    await create_and_run_service(MEM_CONFIG_FILE, 0.7)
+    await create_and_run_service(MEM_CONFIG_FILE)
 
     # let's make sure we are seeing bulk batches of various sizes
     assert_re(".*Sending a batch.*", patch_logger.logs)
@@ -510,7 +522,7 @@ async def test_connector_service_poll_suspended_suspends_job(
     # Service is having a large payload, but we terminate it ASAP
     # This way it should suspend existing running jobs
     await set_server_responses(mock_responses, [LARGE_FAKE_CONFIG])
-    await create_and_run_service(MEM_CONFIG_FILE, 0.1)
+    await create_and_run_service(MEM_CONFIG_FILE, stop_after=0.3)
 
     # For now just let's make sure that message is displayed
     # that the running job was suspended
@@ -527,7 +539,7 @@ async def test_connector_service_poll_sync_ts(mock_responses, patch_logger, set_
         return CallbackResult(status=200, payload={"items": []})
 
     await set_server_responses(mock_responses, [FAKE_CONFIG_TS], bulk_call=bulk_call)
-    await create_and_run_service(CONFIG_FILE, 0.1)
+    await create_and_run_service(CONFIG_FILE)
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
 
     # make sure we kept the original ts
@@ -537,7 +549,7 @@ async def test_connector_service_poll_sync_ts(mock_responses, patch_logger, set_
 @pytest.mark.asyncio
 async def test_connector_service_poll_sync_fails(mock_responses, patch_logger, set_env):
     await set_server_responses(mock_responses, [FAKE_CONFIG_FAIL_SERVICE])
-    await create_and_run_service(CONFIG_FILE, 0.2)
+    await create_and_run_service(CONFIG_FILE)
     patch_logger.assert_present("The document fetcher failed")
 
 
@@ -546,7 +558,7 @@ async def test_connector_service_poll_unknown_service(
     mock_responses, patch_logger, set_env
 ):
     await set_server_responses(mock_responses, [FAKE_CONFIG_UNKNOWN_SERVICE])
-    await create_and_run_service(CONFIG_FILE, 0)
+    await create_and_run_service(CONFIG_FILE)
 
 
 @pytest.mark.parametrize(
@@ -585,11 +597,11 @@ async def test_connector_service_filtering(
     )
 
     if should_raise_filtering_error:
-        await create_and_run_service(CONFIG_FILE, 0)
+        await create_and_run_service(CONFIG_FILE)
         patch_logger.assert_check(lambda log: isinstance(log, InvalidFilteringError))
     else:
         try:
-            await create_and_run_service(CONFIG_FILE, 0)
+            await create_and_run_service(CONFIG_FILE)
         except Exception as e:
             # mark test as failed
             assert False, f"Unexpected exception of type {type(e)} raised."
@@ -612,7 +624,7 @@ async def test_connector_service_poll_buggy_service(
         mock_responses, [FAKE_CONFIG_BUGGY_SERVICE], connectors_update=connectors_update
     )
 
-    await create_and_run_service(CONFIG_FILE, 0)
+    await create_and_run_service(CONFIG_FILE)
 
     for log in patch_logger.logs:
         if isinstance(log, DataSourceError):
@@ -634,7 +646,7 @@ async def test_spurious(mock_responses, patch_logger, set_env):
     Connector.sync = _sync
 
     try:
-        await create_and_run_service(CONFIG_FILE, 0)
+        await create_and_run_service(CONFIG_FILE)
     except Exception:
         await asyncio.sleep(0.1)
     finally:
@@ -672,7 +684,7 @@ async def test_spurious_continue(mock_responses, patch_logger, set_env):
     )
 
     try:
-        await create_and_run_service(CONFIG_FILE, 0.1)
+        await create_and_run_service(CONFIG_FILE)
     except Exception:
         await asyncio.sleep(0.1)
     finally:
@@ -684,7 +696,7 @@ async def test_spurious_continue(mock_responses, patch_logger, set_env):
 @pytest.mark.asyncio
 async def test_concurrent_syncs(mock_responses, patch_logger, set_env):
     await set_server_responses(mock_responses, [FAKE_CONFIG, FAKE_CONFIG, FAKE_CONFIG])
-    await create_and_run_service(CONFIG_FILE, 0.1)
+    await create_and_run_service(CONFIG_FILE)
 
     # make sure we synced the three connectors
     patch_logger.assert_present("[1] Sync done: 1 indexed, 0  deleted. (0 seconds)")
