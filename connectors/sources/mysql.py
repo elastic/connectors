@@ -171,7 +171,7 @@ class MySqlDataSource(BaseDataSource):
             },
             "retry_count": {
                 "value": RETRIES,
-                "label": "Retries per request",
+                "label": "Maximum retries per request",
                 "type": "int",
             },
             "ssl_disabled": {
