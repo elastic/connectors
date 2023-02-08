@@ -78,7 +78,7 @@ class SyncJobRunner:
             sync_rules_enabled = self.connector.features.sync_rules_enabled()
 
             if sync_rules_enabled:
-                await self._validate_filtering()
+                await self._validate_filtering(data_provider)
 
             result = await self.elastic_server.async_bulk(
                 self.sync_job.index_name,
@@ -157,8 +157,8 @@ class SyncJobRunner:
             doc["_run_ml_inference"] = self.sync_job.pipeline.run_ml_inference
             yield doc, lazy_download
 
-    async def _validate_filtering(self):
-        validation_result = await self.source_klass.validate_filtering(
+    async def _validate_filtering(self, data_provider):
+        validation_result = await data_provider.validate_filtering(
             self.sync_job.filtering
         )
         if validation_result.state != FilteringValidationState.VALID:
