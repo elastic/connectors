@@ -21,7 +21,7 @@ from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
 from connectors.services.job_cleanup import JobCleanUpService
 from connectors.services.sync import SyncService
-from connectors.source import get_data_sources
+from connectors.source import get_source_klasses
 from connectors.utils import get_event_loop
 
 
@@ -119,7 +119,7 @@ def run(args):
     # just display the list of connectors
     if args.action == "list":
         logger.info("Registered connectors:")
-        for source in get_data_sources(config):
+        for source in get_source_klasses(config):
             logger.info(f"- {source.name}")
         logger.info("Bye")
         return 0
