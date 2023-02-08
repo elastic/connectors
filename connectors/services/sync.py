@@ -147,10 +147,16 @@ class SyncService(BaseService):
                         native_service_types=native_service_types,
                         connectors_ids=connector_ids,
                     ):
-                        await self._sync(connector, es)
+                        await self.syncs.put(
+                            functools.partial(self._sync, connector, es)
+                        )
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
+                finally:
+                    await self.syncs.join()
+
+                self.syncs = None
                 # Immediately break instead of sleeping
                 if not self.running:
                     break
