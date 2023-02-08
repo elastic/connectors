@@ -13,7 +13,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 
-from connectors.es import DEFAULT_LANGUAGE, ESIndex, Mappings
+from connectors.es import ESIndex, Mappings
 from connectors.filtering.validation import ValidationTarget, validate_filtering
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
@@ -80,11 +80,10 @@ class DataSourceError(Exception):
 class ConnectorIndex(ESIndex):
     def __init__(self, elastic_config):
         logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
-        # initilize ESIndex instance
+        # initialize ESIndex instance
         super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
         # grab all bulk options
         self.bulk_options = elastic_config.get("bulk", {})
-        self.language_code = elastic_config.get("language_code", DEFAULT_LANGUAGE)
 
     async def save(self, connector):
         # we never update the configuration
@@ -103,31 +102,34 @@ class ConnectorIndex(ESIndex):
             doc=document,
         )
 
+    async def heartbeat(self, doc_id):
+        await self.update(doc_id=doc_id, doc={"last_seen": iso_utc()})
+
     async def update_filtering_validation(
         self, connector, validation_result, validation_target=ValidationTarget.ACTIVE
     ):
-        doc_to_update = deepcopy(connector.doc_source)
+        filtering = connector.filtering.to_list()
 
-        for filter_ in doc_to_update.get("filtering", []):
+        for filter_ in filtering:
             if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
                 filter_.get(e2str(validation_target), {"validation": {}})[
                     "validation"
                 ] = validation_result.to_dict()
 
         await self.client.update(
-            index=CONNECTORS_INDEX,
+            index=self.index_name,
             id=connector.id,
-            doc=doc_to_update,
+            doc={"filtering": filtering},
             retry_on_conflict=RETRY_ON_CONFLICT,
         )
 
-    def build_docs_query(self, native_service_types=None, connectors_ids=None):
+    async def supported_connectors(self, native_service_types=None, connector_ids=None):
         if native_service_types is None:
             native_service_types = []
-        if connectors_ids is None:
-            connectors_ids = []
+        if connector_ids is None:
+            connector_ids = []
 
-        if len(native_service_types) == 0 and len(connectors_ids) == 0:
+        if len(native_service_types) == 0 and len(connector_ids) == 0:
             return
 
         native_connectors_query = {
@@ -143,11 +145,11 @@ class ConnectorIndex(ESIndex):
             "bool": {
                 "filter": [
                     {"term": {"is_native": False}},
-                    {"terms": {"_id": connectors_ids}},
+                    {"terms": {"_id": connector_ids}},
                 ]
             }
         }
-        if len(native_service_types) > 0 and len(connectors_ids) > 0:
+        if len(native_service_types) > 0 and len(connector_ids) > 0:
             query = {
                 "bool": {"should": [native_connectors_query, custom_connectors_query]}
             }
@@ -155,15 +157,6 @@ class ConnectorIndex(ESIndex):
             query = native_connectors_query
         else:
             query = custom_connectors_query
-
-        return query
-
-    async def supported_connectors(
-        self, native_service_types=None, connectors_ids=None
-    ):
-        query = self.build_docs_query(native_service_types, connectors_ids)
-        if query is None:
-            return
 
         async for connector in self.get_all_docs(query=query):
             yield connector
@@ -297,6 +290,9 @@ class Filtering:
             ),
             Filter(),
         )
+
+    def to_list(self):
+        return list(self.filtering)
 
 
 class Filter(dict):
@@ -669,7 +665,7 @@ class Connector:
 
         try:
             service_type = self.service_type
-            # if the status is different from comnected
+            # if the status is different from connected
             if self.status != Status.CONNECTED:
                 self.status = Status.CONNECTED
                 await self.sync_doc()
