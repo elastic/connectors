@@ -46,7 +46,7 @@ class DirectoryDataSource(BaseDataSource):
             },
             "enable_content_extraction": {
                 "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Enable content extraction",
+                "label": "Enable content extraction (true/false)",
                 "type": "bool",
             },
         }
