@@ -28,7 +28,7 @@ from collections import defaultdict
 from elasticsearch import NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan
 
-from connectors.byoc import Filtering
+from connectors.byoc import Filter
 from connectors.es import ESClient
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger
@@ -177,7 +177,7 @@ class Fetcher:
         queue,
         index,
         existing_ids,
-        filtering=Filtering(),
+        filtering=Filter(),
         sync_rules_enabled=False,
         queue_size=DEFAULT_QUEUE_SIZE,
         display_every=DEFAULT_DISPLAY_EVERY,
@@ -198,7 +198,7 @@ class Fetcher:
         self.fetch_error = None
         self.filtering = filtering
         self.basic_rule_engine = (
-            BasicRuleEngine(parse(filtering.get_active_filter().get("rules", [])))
+            BasicRuleEngine(parse(filtering.get("rules", [])))
             if sync_rules_enabled
             else None
         )
@@ -414,7 +414,7 @@ class ElasticServer(ESClient):
         index,
         generator,
         pipeline,
-        filtering=Filtering(),
+        filtering=Filter(),
         sync_rules_enabled=False,
         options=None,
     ):
