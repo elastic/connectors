@@ -75,14 +75,9 @@ class NASDataSource(BaseDataSource):
                 "label": "SMB shared folder/directory",
                 "type": "str",
             },
-            "connector_name": {
-                "value": "Network Drive Connector",
-                "label": "Friendly name for the connector",
-                "type": "str",
-            },
             "enable_content_extraction": {
                 "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Flag to check if content extraction is enabled or not",
+                "label": "Enable content extraction (true/false)",
                 "type": "bool",
             },
         }
