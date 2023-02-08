@@ -129,7 +129,7 @@ class SyncJobRunner:
         self.sync_job = await self.sync_job.reload()
         await self.connector.sync_done(self.sync_job)
         logger.info(
-            f"Sync done: {indexed_count} indexed, {doc_deleted} "
+            f"[{self.job_id}] Sync done: {indexed_count} indexed, {doc_deleted} "
             f" deleted. ({int(time.time() - self._start_time)} seconds)"
         )
 
