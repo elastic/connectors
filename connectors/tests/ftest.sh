@@ -28,7 +28,14 @@ fi
 
 cd $ROOT_DIR/connectors/sources/tests/fixtures
 
+if [ -f "$NAME/.env" ]; then
+  echo "Loading env for $NAME"
+  export $(grep -v '^#' $NAME/.env | xargs)
+fi
+
+
 $PYTHON -m pip install -r $NAME/requirements.txt
+$PYTHON fixture.py --name $NAME --action setup
 $PYTHON fixture.py --name $NAME --action start_stack
 $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug
 $PYTHON fixture.py --name $NAME --action load
@@ -48,5 +55,16 @@ fi
 $PYTHON fixture.py --name $NAME --action remove
 
 $ELASTIC_INGEST --one-sync --sync-now --debug
-$PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size 3000
+
+
+if [[ "$DATA_SIZE" == 'small' ]]; then
+   SIZE=750
+elif [[ "$DATA_SIZE" == 'medium' ]]; then
+   SIZE=1500
+else
+   SIZE=3000
+fi
+
+$PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size $SIZE
 $PYTHON fixture.py --name $NAME --action stop_stack
+$PYTHON fixture.py --name $NAME --action teardown
