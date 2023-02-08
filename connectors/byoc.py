@@ -179,7 +179,7 @@ class ConnectorIndex(ESIndex):
         )
 
     async def all_connectors(self):
-        async for connector in self._get_all_docs():
+        async for connector in self.get_all_docs():
             yield connector
 
 
