@@ -215,7 +215,7 @@ async def run_service_with_stop_after(service, stop_after=0):
 
     async def _terminate():
         if stop_after == 0:
-            # so we actually want the loop the service
+            # so we actually want the service
             # to run current loop without interruption
             asyncio.get_event_loop().call_soon(_stop_running_service_without_cancelling)
         else:
