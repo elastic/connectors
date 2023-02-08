@@ -322,16 +322,34 @@ class Filter(dict):
 
 class PipelineSettings:
     def __init__(self, pipeline):
-        self.name = pipeline.get("name", "ent-search-generic-ingestion")
-        self.extract_binary_content = pipeline.get("extract_binary_content", True)
-        self.reduce_whitespace = pipeline.get("reduce_whitespace", True)
-        self.run_ml_inference = pipeline.get("run_ml_inference", True)
+        self._pipeline = pipeline
+        if self._pipeline is None:
+            self._pipeline = {}
+
+    @property
+    def name(self):
+        return self._pipeline.get("name", "ent-search-generic-ingestion")
+
+    @property
+    def extract_binary_content(self):
+        return self._pipeline.get("extract_binary_content", True)
+
+    @property
+    def reduce_whitespace(self):
+        return self._pipeline.get("reduce_whitespace", True)
+
+    @property
+    def run_ml_inference(self):
+        return self._pipeline.get("run_ml_inference", True)
 
     def __repr__(self):
         return (
             f"Pipeline {self.name} <binary: {self.extract_binary_content}, "
             f"whitespace {self.reduce_whitespace}, ml inference {self.run_ml_inference}>"
         )
+
+    def to_dict(self):
+        return dict(self._pipeline)
 
 
 class Features:
