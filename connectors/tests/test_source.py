@@ -19,8 +19,9 @@ from connectors.source import (
     BaseDataSource,
     DataSourceConfiguration,
     Field,
-    get_data_sources,
     get_source_klass,
+    get_source_klass_dict,
+    get_source_klasses,
 )
 
 CONFIG = {
@@ -86,13 +87,23 @@ def test_get_source_klass():
     assert get_source_klass("test_source:MyConnector") is MyConnector
 
 
-def test_get_data_sources():
+def test_get_source_klasses():
     settings = {
         "sources": {"yea": "test_source:MyConnector", "yea2": "test_source:MyConnector"}
     }
 
-    sources = list(get_data_sources(settings))
+    sources = list(get_source_klasses(settings))
     assert sources == [MyConnector, MyConnector]
+
+
+def test_get_source_klass_dict():
+    settings = {
+        "sources": {"yea": "test_source:MyConnector", "yea2": "test_source:MyConnector"}
+    }
+
+    source_klass_dict = get_source_klass_dict(settings)
+    assert source_klass_dict["yea"] == MyConnector
+    assert source_klass_dict["yea2"] == MyConnector
 
 
 # ABCs
