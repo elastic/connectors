@@ -122,7 +122,12 @@ async def _start_service(config, loop):
         else:
             return await service.run()
 
-    await asyncio.gather(*[_run_service(service) for service in services])
+    done, pending = await asyncio.wait(
+        [_run_service(service) for service in services],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    for task in pending:
+        task.cancel()
 
 
 def run(args):
