@@ -23,6 +23,7 @@ from connectors.byoc import (
     Filter,
     Filtering,
     JobStatus,
+    Pipeline,
     Status,
     SyncJob,
     SyncJobIndex,
@@ -1104,3 +1105,17 @@ async def test_prepare_docs(filtering, expected_filtering_calls):
     assert all(
         type(filter_) == Filter for _, filter_ in docs_generator_fake.call_kwargs
     )
+
+
+@pytest.mark.parametrize(
+    "key, value, default_value",
+    [
+        ("name", "foobar", "ent-search-generic-ingestion"),
+        ("extract_binary_content", False, True),
+        ("reduce_whitespace", False, True),
+        ("run_ml_inference", False, True),
+    ],
+)
+def test_pipeline_properties(key, value, default_value):
+    assert Pipeline({})[key] == default_value
+    assert Pipeline({key: value})[key] == value
