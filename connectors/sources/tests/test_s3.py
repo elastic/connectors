@@ -208,9 +208,8 @@ async def test_get_content(patch_logger, mock_aws):
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
         response = await source._get_content(
-            {"id": 1, "filename": "a.txt", "bucket": "dummy", "size": "1000000 bytes"},
+            {"id": 1, "filename": "a.txt", "bucket": "dummy", "size (bytes)": 1000000},
             "region",
-            1000000,
             doit=1,
         )
         assert response == {"_timestamp": None, "_attachment": "eHh4eHg=", "_id": 1}
@@ -223,7 +222,7 @@ async def test_get_content_with_unsupported_file(patch_logger, mock_aws):
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
         response = await source._get_content(
-            {"id": 1, "filename": "a.png", "bucket": "dummy"}, "region", 1000000, doit=1
+            {"id": 1, "filename": "a.png", "bucket": "dummy"}, "region", doit=1
         )
         assert response is None
 
@@ -235,7 +234,7 @@ async def test_get_content_when_not_doit(patch_logger, mock_aws):
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
         response = await source._get_content(
-            {"id": 1, "filename": "a.txt", "bucket": "dummy"}, "region", 1000000
+            {"id": 1, "filename": "a.txt", "bucket": "dummy"}, "region"
         )
         assert response is None
 
@@ -251,10 +250,9 @@ async def test_get_content_when_size_is_large(patch_logger, mock_aws):
                 "id": 1,
                 "filename": "a.txt",
                 "bucket": "dummy",
-                "size": "20000000000 bytes",
+                "size (bytes)": 20000000000,
             },
             "region",
-            20000000000,
             doit=1,
         )
         assert response is None
@@ -271,10 +269,9 @@ async def test_pdf_file(patch_logger, mock_aws):
                 "id": 1,
                 "filename": "dummy.pdf",
                 "bucket": "dummy",
-                "size": "1000000 bytes",
+                "size (bytes)": 1000000,
             },
             "region",
-            1000000,
             doit=1,
         )
         assert response == {"_timestamp": None, "_attachment": "eHh4eHg=", "_id": 1}
@@ -298,7 +295,6 @@ async def test_get_docs(patch_logger, mock_aws):
         "aiobotocore.utils.AioInstanceMetadataFetcher.retrieve_iam_role_credentials",
         get_roles,
     ):
-
         num = 0
         # Execute
         async for (doc, dl) in source.get_docs():

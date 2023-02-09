@@ -75,13 +75,12 @@ class S3DataSource(BaseDataSource):
             logger.exception("Error while connecting to AWS.")
             raise
 
-    async def _get_content(self, doc, region, object_size, timestamp=None, doit=None):
+    async def _get_content(self, doc, region, timestamp=None, doit=None):
         """Extracts the content for allowed file types.
 
         Args:
             doc (dict): Dictionary of document
             region (string): Name of region
-            object_size (int): Size of object
             timestamp (timestamp): Timestamp of object last modified. Defaults to None.
             doit (boolean, optional): Boolean value for whether to get content or not. Defaults to None.
 
@@ -96,7 +95,7 @@ class S3DataSource(BaseDataSource):
         if os.path.splitext(filename)[-1] not in TIKA_SUPPORTED_FILETYPES:
             logger.debug(f"{filename} can't be extracted")
             return
-        if object_size > DEFAULT_MAX_FILE_SIZE:
+        if doc["size (bytes)"] > DEFAULT_MAX_FILE_SIZE:
             logger.warning(
                 f"File size for {filename} is larger than {DEFAULT_MAX_FILE_SIZE} bytes. Discarding the file content"
             )
@@ -113,7 +112,7 @@ class S3DataSource(BaseDataSource):
                 file_content.seek(0)
                 data = file_content.read()
                 file_content.close()
-                logger.debug(f"Downloaded {filename} for {doc['size']}")
+                logger.debug(f"Downloaded {filename} for {doc['size (bytes)']} bytes ")
                 return {
                     "_timestamp": timestamp,
                     "_attachment": get_base64_value(content=data),
@@ -186,23 +185,20 @@ class S3DataSource(BaseDataSource):
                         doc_id = md5(
                             f"{bucket}/{obj_summary.key}".encode("utf8")
                         ).hexdigest()
-                        object_size = await obj_summary.size
 
                         doc = {
                             "_id": doc_id,
                             "filename": obj_summary.key,
-                            "size": f"{object_size} bytes",
+                            "size (bytes)": await obj_summary.size,
                             "bucket": bucket,
                             "owner": (await obj_summary.owner).get("DisplayName"),
                             "storage_class": await obj_summary.storage_class,
                             "_timestamp": (await obj_summary.last_modified).isoformat(),
                         }
-
                         yield doc, partial(
                             self._get_content,
                             doc=doc,
                             region=region_name,
-                            object_size=object_size,
                         )
                 except Exception as exception:
                     logger.warning(
