@@ -44,12 +44,20 @@ def _parser():
         default=os.path.join(os.path.dirname(__file__), "..", "config.yml"),
     )
 
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         "--log-level",
         type=str,
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default=None,
-        help="Run the event loop in debug mode.",
+        help="Set log level for the service.",
+    )
+    group.add_argument(
+        "--debug",
+        dest="log_level",
+        action="store_const",
+        const="DEBUG",
+        help="Run the event loop in debug mode (alias for --log-level DEBUG)",
     )
 
     parser.add_argument(

@@ -57,7 +57,7 @@ ftest: bin/pytest bin/elastic-ingest
 	connectors/tests/ftest.sh $(NAME) $(PERF8)
 
 run: install
-	bin/elastic-ingest --log-level=DEBUG
+	bin/elastic-ingest
 
 docker-build:
 	docker build -t docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT .
