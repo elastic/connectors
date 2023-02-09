@@ -135,13 +135,6 @@ EXPECTED_FILTERING_AFTER_UPDATE_ACTIVE = {
     "filtering": [FILTERING_DEFAULT_DOMAIN_ACTIVE_AFTER_UPDATE, FILTERING_OTHER_DOMAIN]
 }
 
-EXPECTED_UPDATED_DOC_SOURCE_DRAFT_FILTERING = (
-    DOC_SOURCE | EXPECTED_FILTERING_AFTER_UPDATE_DRAFT
-)
-EXPECTED_UPDATED_DOC_SOURCE_ACTIVE_FILTERING = (
-    DOC_SOURCE | EXPECTED_FILTERING_AFTER_UPDATE_ACTIVE
-)
-
 OTHER_DOMAIN_ONE = "other-domain-1"
 OTHER_DOMAIN_TWO = "other-domain-2"
 NON_EXISTING_DOMAIN = "non-existing-domain"
@@ -322,8 +315,9 @@ async def test_heartbeat(mock_responses, patch_logger):
     connectors = ConnectorIndex(config)
     conns = []
 
-    query = connectors.build_docs_query([["mongodb"]])
-    async for connector in connectors.get_all_docs(query=query):
+    async for connector in connectors.supported_connectors(
+        native_service_types=["mongodb"]
+    ):
         connector.start_heartbeat(0.2)
         connector.start_heartbeat(1.0)  # NO-OP
         conns.append(connector)
@@ -334,7 +328,75 @@ async def test_heartbeat(mock_responses, patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_connectors_get_list(mock_responses):
+@pytest.mark.parametrize(
+    "native_service_types, connector_ids, expected_connector_count",
+    [
+        ([], [], 0),
+        (["mongodb"], [], 1),
+        ([], ["1"], 1),
+        (["mongodb"], ["1"], 1),
+    ],
+)
+async def test_supported_connectors(
+    native_service_types, connector_ids, expected_connector_count, mock_responses
+):
+    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    native_connectors_query = {
+        "bool": {
+            "filter": [
+                {"term": {"is_native": True}},
+                {"terms": {"service_type": native_service_types}},
+            ]
+        }
+    }
+
+    custom_connectors_query = {
+        "bool": {
+            "filter": [
+                {"term": {"is_native": False}},
+                {"terms": {"_id": connector_ids}},
+            ]
+        }
+    }
+
+    if len(native_service_types) > 0 and len(connector_ids) > 0:
+        query = {"bool": {"should": [native_connectors_query, custom_connectors_query]}}
+    elif len(native_service_types) > 0:
+        query = native_connectors_query
+    elif len(connector_ids) > 0:
+        query = custom_connectors_query
+    else:
+        query = {}
+
+    headers = {"X-Elastic-Product": "Elasticsearch"}
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
+    )
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
+        body={"query": query},
+        payload={
+            "hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}
+        },
+        headers=headers,
+    )
+
+    connector_index = ConnectorIndex(config)
+    connectors = [
+        connector
+        async for connector in connector_index.supported_connectors(
+            native_service_types=native_service_types, connector_ids=connector_ids
+        )
+    ]
+    await connector_index.close()
+
+    assert len(connectors) == expected_connector_count
+    if expected_connector_count > 0:
+        assert connectors[0].service_type == mongo["service_type"]
+
+
+@pytest.mark.asyncio
+async def test_all_connectors(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
@@ -351,12 +413,11 @@ async def test_connectors_get_list(mock_responses):
 
     connectors = ConnectorIndex(config)
     conns = []
-    query = connectors.build_docs_query([["mongodb"]])
-    async for connector in connectors.get_all_docs(query=query):
+    async for connector in connectors.all_connectors():
         conns.append(connector)
+    await connectors.close()
 
     assert len(conns) == 1
-    await connectors.close()
 
 
 class StubIndex:
@@ -509,8 +570,9 @@ async def test_sync_mongo(
     service_config = {"sources": {"mongodb": "connectors.tests.test_byoc:Data"}}
 
     try:
-        query = connectors.build_docs_query([["mongodb"]])
-        async for connector in connectors.get_all_docs(query=query):
+        async for connector in connectors.supported_connectors(
+            native_service_types=["mongodb"]
+        ):
             connector.features.sync_rules_enabled = Mock(return_value=with_filtering)
 
             await connector.prepare(service_config)
@@ -699,12 +761,12 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
         (
             FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS,
             ValidationTarget.DRAFT,
-            EXPECTED_UPDATED_DOC_SOURCE_DRAFT_FILTERING,
+            EXPECTED_FILTERING_AFTER_UPDATE_DRAFT,
         ),
         (
             FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS,
             ValidationTarget.ACTIVE,
-            EXPECTED_UPDATED_DOC_SOURCE_ACTIVE_FILTERING,
+            EXPECTED_FILTERING_AFTER_UPDATE_ACTIVE,
         ),
     ],
 )
@@ -715,7 +777,7 @@ async def test_update_filtering_validation(
     config = {"host": "https://nowhere.com:9200", "user": "tarek", "password": "blah"}
 
     connector = Mock()
-    connector.doc_source = DOC_SOURCE
+    connector.filtering.to_list.return_value = DOC_SOURCE_FILTERING
     connector.id = CONNECTOR_ID
 
     validation_result_mock = Mock()

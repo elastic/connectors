@@ -20,9 +20,9 @@ class JobCleanUpService(BaseService):
         self.idling = int(self.service_config.get("job_cleanup_interval", 60 * 5))
         self.native_service_types = self.config.get("native_service_types", [])
         if "connector_id" in self.config:
-            self.connectors_ids = [self.config.get("connector_id")]
+            self.connector_ids = [self.config.get("connector_id")]
         else:
-            self.connectors_ids = []
+            self.connector_ids = []
         self.connector_index = None
         self.sync_job_index = None
 
@@ -91,7 +91,7 @@ class JobCleanUpService(BaseService):
                 connector.id
                 async for connector in self.connector_index.supported_connectors(
                     native_service_types=self.native_service_types,
-                    connectors_ids=self.connectors_ids,
+                    connector_ids=self.connector_ids,
                 )
             ]
 
