@@ -328,18 +328,6 @@ async def test_heartbeat(mock_responses, patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_connectors_get_list_no_connector(mock_responses):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    connectors = ConnectorIndex(config)
-    conns = []
-    async for connector in connectors.supported_connectors():
-        conns.append(connector)
-
-    assert len(conns) == 0
-    await connectors.close()
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "native_service_types, connector_ids, expected_connector_count",
     [
@@ -400,10 +388,11 @@ async def test_supported_connectors(
             native_service_types=native_service_types, connector_ids=connector_ids
         )
     ]
+    await connector_index.close()
+
     assert len(connectors) == expected_connector_count
     if expected_connector_count > 0:
         assert connectors[0].service_type == mongo["service_type"]
-    await connector_index.close()
 
 
 @pytest.mark.asyncio
@@ -426,9 +415,9 @@ async def test_all_connectors(mock_responses):
     conns = []
     async for connector in connectors.all_connectors():
         conns.append(connector)
+    await connectors.close()
 
     assert len(conns) == 1
-    await connectors.close()
 
 
 class StubIndex:
