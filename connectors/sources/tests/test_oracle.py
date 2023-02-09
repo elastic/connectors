@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Oracle Database source class methods"""
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -36,3 +36,14 @@ async def test_ping_negative(patch_logger):
         # Execute
         with pytest.raises(Exception):
             await source.ping()
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.oracle.create_engine")
+async def test_create_engine(mock_fun):
+    """Test create_engine method of OracleDataSource class"""
+    # Setup
+    source = create_source(OracleDataSource)
+    source.oracle_home = "/home/devuser"
+    mock_fun.return_value = MagicMock()
+    source._create_engine()

@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """SQLAlchemy source module is responsible to fetch documents from Oracle."""
+import os
 from urllib.parse import quote
 
 from sqlalchemy import create_engine
@@ -36,14 +37,24 @@ class OracleDataSource(GenericBaseDataSource):
         self.is_async = False
         self.dsn = f"(DESCRIPTION=(ADDRESS=(PROTOCOL={self.protocol})(HOST={self.host})(PORT={self.port}))(CONNECT_DATA=(SID={self.database})))"
         self.connection_string = (
-            f"oracle://{self.user}:{quote(self.password)}@{self.dsn}"
+            f"oracle+oracledb://{self.user}:{quote(self.password)}@{self.dsn}"
         )
         self.queries = QUERIES
         self.dialect = "Oracle"
 
     def _create_engine(self):
         """Create sync engine for oracle"""
-        self.engine = create_engine(self.connection_string)
+        if self.oracle_home is not None:
+            os.environ["ORACLE_HOME"] = self.oracle_home
+            self.engine = create_engine(
+                self.connection_string,
+                thick_mode={
+                    "lib_dir": f"{self.oracle_home}/lib",
+                    "config_dir": self.wallet_config,
+                },
+            )
+        else:
+            self.engine = create_engine(self.connection_string)
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch databases, tables and rows in async manner.

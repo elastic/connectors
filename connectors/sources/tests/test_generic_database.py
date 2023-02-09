@@ -245,7 +245,9 @@ async def test_get_docs_oracle(patch_logger):
     # Setup
     source = create_source(OracleDataSource)
     with patch.object(Engine, "connect", return_value=ConnectionSync()):
-        source.engine = create_engine("oracle://admin:changme@127.0.0.1:1521/testdb")
+        source.engine = create_engine(
+            "oracle+oracledb://admin:changme@127.0.0.1:1521/testdb"
+        )
         actual_response = []
         expected_response = [
             {
@@ -305,7 +307,9 @@ async def test_sync_connect_negative(patch_logger):
     with patch.object(
         Engine, "connect", side_effect=InternalClientError("Something went wrong")
     ):
-        source.engine = create_engine("oracle://admin:changme@127.0.0.1:1521/testdb")
+        source.engine = create_engine(
+            "oracle+oracledb://admin:changme@127.0.0.1:1521/testdb"
+        )
 
         # Execute
         with pytest.raises(InternalClientError):
@@ -338,7 +342,9 @@ async def test_fetch_documents_negative(patch_logger):
         "execute_query",
         side_effect=InternalClientError("Something went wrong"),
     ):
-        source.engine = create_engine("oracle://admin:changme@127.0.0.1:1521/testdb")
+        source.engine = create_engine(
+            "oracle+oracledb://admin:changme@127.0.0.1:1521/testdb"
+        )
 
         # Execute
         with pytest.raises(Exception):

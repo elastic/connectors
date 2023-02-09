@@ -44,6 +44,8 @@ class GenericBaseDataSource(BaseDataSource):
         self.queries = None
         self.ssl_disabled = self.configuration["ssl_disabled"]
         self.ssl_ca = self.configuration["ssl_ca"]
+        self.oracle_home = self.configuration["oracle_home"]
+        self.wallet_config = self.configuration["wallet_configuration_path"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -101,6 +103,16 @@ class GenericBaseDataSource(BaseDataSource):
             "oracle_protocol": {
                 "value": DEFAULT_PROTOCOL,
                 "label": "Oracle connection protocol",
+                "type": "str",
+            },
+            "oracle_home": {
+                "value": None,
+                "label": "Path of Oracle Service",
+                "type": "str",
+            },
+            "wallet_configuration_path": {
+                "value": None,
+                "label": "Path of oracle service configuration files",
                 "type": "str",
             },
         }
@@ -243,7 +255,8 @@ class GenericBaseDataSource(BaseDataSource):
                 executor=None, func=self.engine.connect
             )
             cursor = await loop.run_in_executor(
-                executor=None, func=partial(self.connection.execute, statement=query)
+                executor=None,
+                func=partial(self.connection.execute, statement=text(query)),
             )
             return cursor
         except Exception as exception:
