@@ -177,7 +177,7 @@ class Fetcher:
         queue,
         index,
         existing_ids,
-        filtering=Filter(),
+        filter=Filter(),
         sync_rules_enabled=False,
         queue_size=DEFAULT_QUEUE_SIZE,
         display_every=DEFAULT_DISPLAY_EVERY,
@@ -196,9 +196,9 @@ class Fetcher:
         self.total_docs_created = 0
         self.total_docs_deleted = 0
         self.fetch_error = None
-        self.filtering = filtering
+        self.filter = filter
         self.basic_rule_engine = (
-            BasicRuleEngine(parse(filtering.get("rules", [])))
+            BasicRuleEngine(parse(filter.get("rules", [])))
             if sync_rules_enabled
             else None
         )
@@ -414,7 +414,7 @@ class ElasticServer(ESClient):
         index,
         generator,
         pipeline,
-        filtering=Filter(),
+        filter=Filter(),
         sync_rules_enabled=False,
         options=None,
     ):
@@ -445,7 +445,7 @@ class ElasticServer(ESClient):
             stream,
             index,
             existing_ids,
-            filtering=filtering,
+            filter=filter,
             sync_rules_enabled=sync_rules_enabled,
             queue_size=queue_size,
             display_every=display_every,
