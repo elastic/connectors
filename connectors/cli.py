@@ -45,9 +45,10 @@ def _parser():
     )
 
     parser.add_argument(
-        "--debug",
-        action="store_true",
-        default=False,
+        "--log-level",
+        type=str,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default=None,
         help="Run the event loop in debug mode.",
     )
 
@@ -115,6 +116,8 @@ def run(args):
 
     # load config
     config = load_config(args.config_file)
+    # Presedence: CLI args >> Config Setting >> INFO
+    set_logger(args.log_level or config['service']['log_level'] or logging.INFO, filebeat=args.filebeat)
 
     # just display the list of connectors
     if args.action == "list":
@@ -143,5 +146,4 @@ def main(args=None):
     if args.version:
         print(__version__)
         return 0
-    set_logger(args.debug and logging.DEBUG or logging.INFO, filebeat=args.filebeat)
     return run(args)

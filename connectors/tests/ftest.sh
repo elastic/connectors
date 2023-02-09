@@ -47,12 +47,12 @@ if [[ $PERF8 == "yes" ]]
 then
     if [[ $PLATFORM == "darwin" ]]
     then
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --log-level=DEBUG & PID=$!
     else
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --log-level=DEBUG & PID=$!
     fi
 else
-    $ELASTIC_INGEST --debug & PID=$!
+    $ELASTIC_INGEST --log-level=DEBUG & PID=$!
 fi
 
 $PYTHON fixture.py --name $NAME --action monitor --pid $PID

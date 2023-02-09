@@ -348,14 +348,14 @@ The `elastic-ingest` CLI will be installed on your system:
 
 ```shell
 $ bin/elastic-ingest --help
-usage: elastic-ingest [-h] [--action {poll,list}] [-c CONFIG_FILE] [--debug]
+usage: elastic-ingest [-h] [--action {poll,list}] [-c CONFIG_FILE] [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}]
 
 optional arguments:
 -h, --help            show this help message and exit
 --action {poll,list}  What elastic-ingest should do
 -c CONFIG_FILE, --config-file CONFIG_FILE
                         Configuration file
---debug               Run the event loop in debug mode
+--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL} Set a log level for the service. This argument takes presedence over configuration option "service.log_level".
 ```
 
 # Architecture
