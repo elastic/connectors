@@ -117,7 +117,10 @@ def run(args):
     # load config
     config = load_config(args.config_file)
     # Presedence: CLI args >> Config Setting >> INFO
-    set_logger(args.log_level or config['service']['log_level'] or logging.INFO, filebeat=args.filebeat)
+    set_logger(
+        args.log_level or config["service"]["log_level"] or logging.INFO,
+        filebeat=args.filebeat,
+    )
 
     # just display the list of connectors
     if args.action == "list":
