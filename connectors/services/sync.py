@@ -144,7 +144,7 @@ class SyncService(BaseService):
 
                     async for connector in self.connector_index.supported_connectors(
                         native_service_types=native_service_types,
-                        connectors_ids=connector_ids,
+                        connector_ids=connector_ids,
                     ):
                         await self.syncs.put(
                             functools.partial(self._sync, connector, es)

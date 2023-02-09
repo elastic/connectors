@@ -70,42 +70,6 @@ class DataSourceError(Exception):
     pass
 
 
-def supported_connectors_query(native_service_types=None, connectors_ids=None):
-    if native_service_types is None:
-        native_service_types = []
-    if connectors_ids is None:
-        connectors_ids = []
-
-    if len(native_service_types) == 0 and len(connectors_ids) == 0:
-        return
-
-    native_connectors_query = {
-        "bool": {
-            "filter": [
-                {"term": {"is_native": True}},
-                {"terms": {"service_type": native_service_types}},
-            ]
-        }
-    }
-
-    custom_connectors_query = {
-        "bool": {
-            "filter": [
-                {"term": {"is_native": False}},
-                {"terms": {"_id": connectors_ids}},
-            ]
-        }
-    }
-    if len(native_service_types) > 0 and len(connectors_ids) > 0:
-        query = {"bool": {"should": [native_connectors_query, custom_connectors_query]}}
-    elif len(native_service_types) > 0:
-        query = native_connectors_query
-    else:
-        query = custom_connectors_query
-
-    return query
-
-
 class ConnectorIndex(ESIndex):
     def __init__(self, elastic_config):
         logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
@@ -133,7 +97,7 @@ class ConnectorIndex(ESIndex):
             retry_on_conflict=RETRY_ON_CONFLICT,
         )
 
-    async def supported_connectors(self, native_service_types=None, connectors_ids=None):
+    async def supported_connectors(self, native_service_types=None, connector_ids=None):
         if native_service_types is None:
             native_service_types = []
         if connector_ids is None:
@@ -350,29 +314,6 @@ class Filtering:
 
     def to_list(self):
         return list(self.filtering)
-
-
-class Filter(dict):
-    def __init__(self, filter_=None):
-        if filter_ is None:
-            filter_ = {}
-
-        super().__init__(filter_)
-
-        advanced_rules = filter_.get("advanced_snippet", {})
-
-        self.advanced_rules = advanced_rules.get("value", advanced_rules)
-        self.basic_rules = filter_.get("rules", [])
-        self.validation = filter_.get("validation", {"state": "", "errors": []})
-
-    def get_advanced_rules(self):
-        return self.advanced_rules
-
-    def has_advanced_rules(self):
-        return len(self.advanced_rules) > 0
-
-    def has_validation_state(self, validation_state):
-        return FilteringValidationState(self.validation["state"]) == validation_state
 
 
 class Filter(dict):
