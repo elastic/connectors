@@ -17,7 +17,7 @@
 - [ ] Create an index with a valid name and non-universal language and check language was saved correctly
 - [ ] Verify that you are redirected to "configuration" page where you can create an api key and can copy connector id / whole section of config into the connector
 - [ ] Update connector configuration with the api_key and connector_id, plus choose a service_type to test and set it in config
-- [ ] Start the connector by running `make install` - verify that it starts and does not actually do anything yet
+- [ ] Start the connector by running `make run` - verify that it starts and does not actually do anything yet
 - [ ] Wait for the Kibana page with the connector configuration to update and verify that it's possible to edit connector configuration now
 - [ ] Edit and save connector configuration, then reload the page and verify that configuration is properly saved
 - [ ] Click on "Set schedule and sync" and verify that you're redirected to the scheduling tab
