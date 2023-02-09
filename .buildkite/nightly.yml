@@ -37,3 +37,8 @@ steps:
       - ".buildkite/run_nigthly.sh postgresql"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 System Directory"
+    command:
+      - ".buildkite/run_nigthly.sh dir"
+    artifact_paths:
+      - "perf8-report-*/**/*"
