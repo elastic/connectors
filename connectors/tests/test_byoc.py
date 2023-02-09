@@ -23,6 +23,7 @@ from connectors.byoc import (
     Filter,
     Filtering,
     JobStatus,
+    JobTriggerMethod,
     Pipeline,
     Status,
     SyncJob,
@@ -955,12 +956,44 @@ def test_nested_get(nested_dict, keys, default, expected):
     assert expected == Features(nested_dict)._nested_feature_enabled(keys, default)
 
 
-JOB_SOURCE = {"_id": "1", "_source": {"status": "pending", "connector": {"id": "1"}}}
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "sync_now, trigger_method",
+    [
+        (True, JobTriggerMethod.ON_DEMAND),
+        (False, JobTriggerMethod.SCHEDULED),
+    ],
+)
+@patch("connectors.byoc.SyncJobIndex.index")
+async def test_create_job(
+    index_method, sync_now, trigger_method, patch_logger, set_env
+):
+    connector = Mock()
+    connector.id = "id"
+    connector.index_name = "index_name"
+    connector.language = "en"
+    config = load_config(CONFIG)
+    connector.sync_now = sync_now
+    connector.filtering.get_active_filter.return_value = Filter()
+    connector.pipeline = Pipeline({})
+
+    expected_index_doc = {
+        "connector": ANY,
+        "trigger_method": e2str(trigger_method),
+        "status": e2str(JobStatus.PENDING),
+        "created_at": ANY,
+        "last_seen": ANY,
+    }
+
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    await sync_job_index.create(connector=connector)
+
+    index_method.assert_called_with(expected_index_doc)
 
 
 @pytest.mark.asyncio
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
-async def test_pending_jobs(get_all_docs, set_env):
+async def test_pending_jobs(get_all_docs, patch_logger, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
@@ -986,14 +1019,14 @@ async def test_pending_jobs(get_all_docs, set_env):
         job async for job in sync_job_index.pending_jobs(connector_ids=connector_ids)
     ]
 
-    assert get_all_docs.call_args_list == [call(query=expected_query)]
+    get_all_docs.assert_called_with(query=expected_query)
     assert len(jobs) == 1
     assert jobs[0] == job
 
 
 @pytest.mark.asyncio
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
-async def test_orphaned_jobs(get_all_docs, set_env):
+async def test_orphaned_jobs(get_all_docs, patch_logger, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
@@ -1005,14 +1038,14 @@ async def test_orphaned_jobs(get_all_docs, set_env):
         job async for job in sync_job_index.orphaned_jobs(connector_ids=connector_ids)
     ]
 
-    assert get_all_docs.call_args_list == [call(query=expected_query)]
+    get_all_docs.assert_called_with(query=expected_query)
     assert len(jobs) == 1
     assert jobs[0] == job
 
 
 @pytest.mark.asyncio
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
-async def test_stuck_jobs(get_all_docs, set_env):
+async def test_stuck_jobs(get_all_docs, patch_logger, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
@@ -1037,7 +1070,7 @@ async def test_stuck_jobs(get_all_docs, set_env):
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
     jobs = [job async for job in sync_job_index.stuck_jobs(connector_ids=connector_ids)]
 
-    assert get_all_docs.call_args_list == [call(query=expected_query)]
+    get_all_docs.assert_called_with(query=expected_query)
     assert len(jobs) == 1
     assert jobs[0] == job
 

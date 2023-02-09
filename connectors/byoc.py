@@ -329,6 +329,8 @@ PIPELINE_DEFAULT = {
 
 class Pipeline(UserDict):
     def __init__(self, data):
+        if data is None:
+            data = {}
         default = PIPELINE_DEFAULT.copy()
         default.update(data)
         super().__init__(default)
@@ -438,7 +440,7 @@ class Connector:
         self.pipeline = Pipeline(doc_source.get("pipeline", {}))
         self._dirty = True
         self._filtering = Filtering(doc_source.get("filtering", []))
-        self.language_code = doc_source["language"]
+        self.language = doc_source["language"]
         self.features = Features(doc_source.get("features", {}))
 
     @property
@@ -787,6 +789,30 @@ class SyncJobIndex(ESIndex):
             connector_id=doc_source["_source"]["connector"]["id"],
             doc_source=doc_source,
         )
+
+    async def create(self, connector):
+        trigger_method = (
+            JobTriggerMethod.ON_DEMAND
+            if connector.sync_now
+            else JobTriggerMethod.SCHEDULED
+        )
+        filtering = connector.filtering.get_active_filter()
+        job_def = {
+            "connector": {
+                "id": connector.id,
+                "filtering": SyncJob.transform_filtering(filtering),
+                "index_name": connector.index_name,
+                "language": connector.language,
+                "pipeline": connector.pipeline.data,
+                "service_type": connector.service_type,
+                "configuration": connector.configuration.to_dict(),
+            },
+            "trigger_method": e2str(trigger_method),
+            "status": e2str(JobStatus.PENDING),
+            "created_at": iso_utc(),
+            "last_seen": iso_utc(),
+        }
+        return await self.index(job_def)
 
     async def pending_jobs(self, connector_ids=[]):
         query = {
