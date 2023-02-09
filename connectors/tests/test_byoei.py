@@ -355,9 +355,9 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
     existing_ids = {doc["_id"]: doc["_timestamp"] for doc in existing_docs}
 
     # filtering content doesn't matter as the BasicRuleEngine behavior is mocked
-    filtering_mock = Mock()
-    filtering_mock.get_active_filter = Mock(return_value={})
-    fetcher = Fetcher(client, queue, INDEX, existing_ids, filtering=filtering_mock)
+    filter_mock = Mock()
+    filter_mock.get_active_filter = Mock(return_value={})
+    fetcher = Fetcher(client, queue, INDEX, existing_ids, filter=filter_mock)
     fetcher.basic_rule_engine = basic_rule_engine if sync_rules_enabled else None
     return fetcher
 
