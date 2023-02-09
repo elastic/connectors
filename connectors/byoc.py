@@ -329,6 +329,8 @@ PIPELINE_DEFAULT = {
 
 class Pipeline(UserDict):
     def __init__(self, data):
+        if data is None:
+            data = {}
         default = PIPELINE_DEFAULT.copy()
         default.update(data)
         super().__init__(default)
