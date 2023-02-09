@@ -69,7 +69,7 @@ class Bulker:
     - `max_concurrency` -- a maximum number of concurrent bulk requests
 
     Extra options:
-    - `pipeline_settings` -- ingest pipeline settings to pass to the bulk API
+    - `pipeline` -- ingest pipeline settings to pass to the bulk API
     """
 
     def __init__(
@@ -77,7 +77,7 @@ class Bulker:
         client,
         queue,
         chunk_size,
-        pipeline_settings,
+        pipeline,
         chunk_mem_size,
         max_concurrency,
     ):
@@ -87,7 +87,7 @@ class Bulker:
         self.bulking = False
         self.ops = defaultdict(int)
         self.chunk_size = chunk_size
-        self.pipeline_settings = pipeline_settings
+        self.pipeline = pipeline
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.max_concurrent_bulks = max_concurrency
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
@@ -118,7 +118,7 @@ class Bulker:
         start = time.time()
         try:
             res = await self.client.bulk(
-                operations=operations, pipeline=self.pipeline_settings.name
+                operations=operations, pipeline=self.pipeline["name"]
             )
 
             if res.get("errors"):

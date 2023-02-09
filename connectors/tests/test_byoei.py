@@ -11,7 +11,7 @@ from unittest.mock import Mock, call
 
 import pytest
 
-from connectors.byoc import PipelineSettings
+from connectors.byoc import Pipeline
 from connectors.byoei import (
     ContentIndexNameInvalid,
     ElasticServer,
@@ -187,7 +187,7 @@ async def test_async_bulk(mock_responses, patch_logger):
     set_responses(mock_responses)
 
     es = ElasticServer(config)
-    pipeline = PipelineSettings({})
+    pipeline = Pipeline({})
 
     async def get_docs():
         async def _dl_none(doit=True, timestamp=None):
@@ -234,7 +234,7 @@ async def test_async_bulk_same_ts(mock_responses, patch_logger):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses, ts)
     es = ElasticServer(config)
-    pipeline = PipelineSettings({})
+    pipeline = Pipeline({})
 
     async def get_docs():
         async def _dl(doit=True, timestamp=None):
