@@ -14,6 +14,7 @@ import asyncio
 import functools
 
 from connectors.byoc import (
+    SYNC_DISABLED,
     ConnectorIndex,
     ConnectorUpdateError,
     DataSourceError,
@@ -22,7 +23,6 @@ from connectors.byoc import (
     ServiceTypeNotSupportedError,
     Status,
     SyncJobIndex,
-    SYNC_DISABLED,
 )
 from connectors.byoei import ElasticServer
 from connectors.filtering.validation import (
@@ -35,7 +35,6 @@ from connectors.services.base import BaseService
 from connectors.source import get_source_klass_dict
 from connectors.sync_job_runner import SyncJobRunner
 from connectors.utils import ConcurrentTasks, e2str
-
 
 DEFAULT_MAX_CONCURRENT_SYNCS = 1
 

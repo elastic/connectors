@@ -84,7 +84,7 @@ class SyncJobRunner:
                 self.sync_job.index_name,
                 self.prepare_docs(data_provider),
                 self.sync_job.pipeline,
-                filtering=self.sync_job.filtering,
+                filter=self.sync_job.filtering,
                 sync_rules_enabled=sync_rules_enabled,
                 options=bulk_options,
             )

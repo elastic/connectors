@@ -21,8 +21,6 @@ from connectors.byoc import (
 from connectors.config import load_config
 from connectors.services.sync import SyncService
 from connectors.tests.commons import AsyncIterator
-from connectors.tests.fake_sources import FakeSourceTS
-from connectors.utils import e2str
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yml")
 
