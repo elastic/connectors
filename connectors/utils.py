@@ -397,3 +397,7 @@ def retryable(retries=3, interval=1.0, strategy=RetryStrategy.LINEAR_BACKOFF):
         return func_to_execute
 
     return wrapper
+
+
+def e2str(entry):
+    return entry.name.lower()

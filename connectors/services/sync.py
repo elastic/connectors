@@ -20,7 +20,6 @@ from connectors.byoc import (
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
     Status,
-    e2str,
 )
 from connectors.byoei import ElasticServer
 from connectors.filtering.validation import (
@@ -30,7 +29,7 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.services.base import BaseService
-from connectors.utils import ConcurrentTasks
+from connectors.utils import ConcurrentTasks, e2str
 
 DEFAULT_MAX_CONCURRENT_SYNCS = 1
 

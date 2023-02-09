@@ -26,7 +26,6 @@ from connectors.byoc import (
     Status,
     SyncJob,
     SyncJobIndex,
-    e2str,
     iso_utc,
 )
 from connectors.byoei import ElasticServer
@@ -35,6 +34,7 @@ from connectors.filtering.validation import ValidationTarget
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.tests.commons import AsyncIterator
+from connectors.utils import e2str
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
@@ -193,11 +193,6 @@ def patch_validate_filtering_in_byoc():
         "connectors.byoc.validate_filtering", return_value=AsyncMock()
     ) as validate_filtering_mock:
         yield validate_filtering_mock
-
-
-def test_e2str():
-    # The BYOC protocol uses lower case
-    assert e2str(Status.NEEDS_CONFIGURATION) == "needs_configuration"
 
 
 def test_utc():
