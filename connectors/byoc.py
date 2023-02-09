@@ -13,7 +13,11 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from connectors.es import DEFAULT_LANGUAGE, ESIndex, Mappings
-from connectors.filtering.validation import ValidationTarget, validate_filtering
+from connectors.filtering.validation import (
+    FilteringValidationState,
+    ValidationTarget,
+    validate_filtering,
+)
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
 from connectors.utils import e2str, iso_utc, next_run
@@ -311,13 +315,19 @@ class Filter(dict):
 
         self.advanced_rules = advanced_rules.get("value", advanced_rules)
         self.basic_rules = filter_.get("rules", [])
-        self.validation = filter_.get("validation", {})
+        self.validation = filter_.get("validation", {"state": "", "errors": []})
 
     def get_advanced_rules(self):
         return self.advanced_rules
 
     def has_advanced_rules(self):
         return len(self.advanced_rules) > 0
+
+    def has_validation_state(self, validation_state):
+        return (
+            FilteringValidationState.from_string(self.validation["state"])
+            == validation_state
+        )
 
 
 class PipelineSettings:

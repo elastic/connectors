@@ -22,6 +22,7 @@ from connectors.filtering.validation import (
     FilteringValidator,
     FilterValidationError,
     InvalidFilteringError,
+    InvalidFilteringValidationStateError,
     SyncRuleValidationResult,
     ValidationTarget,
     validate_filtering,
@@ -999,25 +1000,66 @@ def test_basic_rules_set_no_conflicting_policies_validation(
 
 
 @pytest.mark.parametrize(
-    "validation_result, should_raise",
+    "validation_result, validation_target, should_raise",
     [
         (
             FilteringValidationResult(),
+            ValidationTarget.DRAFT,
             False,
         ),
-        (FilteringValidationResult(state=FilteringValidationState.EDITED), True),
-        (FilteringValidationResult(state=FilteringValidationState.INVALID), True),
-        (FilteringValidationResult(errors=["Some error"]), True),
+        (
+            FilteringValidationResult(),
+            ValidationTarget.ACTIVE,
+            False,
+        ),
+        (
+            FilteringValidationResult(state=FilteringValidationState.EDITED),
+            ValidationTarget.DRAFT,
+            True,
+        ),
+        (
+            FilteringValidationResult(state=FilteringValidationState.EDITED),
+            ValidationTarget.ACTIVE,
+            True,
+        ),
+        (
+            FilteringValidationResult(state=FilteringValidationState.INVALID),
+            ValidationTarget.DRAFT,
+            True,
+        ),
+        (
+            FilteringValidationResult(state=FilteringValidationState.INVALID),
+            ValidationTarget.ACTIVE,
+            True,
+        ),
+        (
+            FilteringValidationResult(errors=["Some error"]),
+            ValidationTarget.DRAFT,
+            True,
+        ),
+        (
+            FilteringValidationResult(errors=["Some error"]),
+            ValidationTarget.ACTIVE,
+            True,
+        ),
         (
             FilteringValidationResult(
                 state=FilteringValidationState.INVALID, errors=["Some error"]
             ),
+            ValidationTarget.DRAFT,
+            True,
+        ),
+        (
+            FilteringValidationResult(
+                state=FilteringValidationState.INVALID, errors=["Some error"]
+            ),
+            ValidationTarget.ACTIVE,
             True,
         ),
     ],
 )
 @pytest.mark.asyncio
-async def test_validate_filtering(validation_result, should_raise):
+async def test_validate_filtering(validation_result, validation_target, should_raise):
     connector = MagicMock()
     index = Mock()
     index.update_filtering_validation = AsyncMock()
@@ -1026,16 +1068,33 @@ async def test_validate_filtering(validation_result, should_raise):
         return_value=validation_result
     )
 
-    # works for both targets
-    for _ in [ValidationTarget.DRAFT, ValidationTarget.ACTIVE]:
-        if should_raise:
-            with pytest.raises(InvalidFilteringError):
-                await validate_filtering(connector, index)
-                assert index.update_filtering_validation.call_args == [
-                    call(connector, validation_result)
-                ]
-        else:
-            try:
-                await validate_filtering(connector, index)
-            except Exception as e:
-                assert False, f"Unexpected exception of type {(type(e))} raised"
+    if should_raise:
+        with pytest.raises(InvalidFilteringError):
+            await validate_filtering(connector, index, validation_target)
+    else:
+        try:
+            await validate_filtering(connector, index, validation_target)
+        except Exception as e:
+            assert False, f"Unexpected exception of type {(type(e))} raised"
+
+    assert index.update_filtering_validation.call_args == call(
+        connector, validation_result, validation_target
+    )
+
+
+@pytest.mark.parametrize(
+    "string, expected_state",
+    [
+        ("valid", FilteringValidationState.VALID),
+        ("invalid", FilteringValidationState.INVALID),
+        ("edited", FilteringValidationState.EDITED),
+        ("unknown", InvalidFilteringValidationStateError),
+        ("", InvalidFilteringValidationStateError),
+    ],
+)
+def test_filtering_validation_state_from_string(string, expected_state):
+    if expected_state is InvalidFilteringValidationStateError:
+        with pytest.raises(InvalidFilteringValidationStateError):
+            FilteringValidationState.from_string(string)
+    else:
+        assert FilteringValidationState.from_string(string) == expected_state
