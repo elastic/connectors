@@ -975,7 +975,7 @@ async def test_create_job(
     config = load_config(CONFIG)
     connector.sync_now = sync_now
     connector.filtering.get_active_filter.return_value = Filter()
-    connector.pipeline.to_dict.return_value = {}
+    connector.pipeline = Pipeline({})
 
     expected_index_doc = {
         "connector": ANY,
