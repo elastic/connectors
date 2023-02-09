@@ -23,12 +23,12 @@ from connectors.byoc import (
     Filter,
     Filtering,
     JobStatus,
+    JobTriggerMethod,
     Pipeline,
     Status,
     SyncJob,
     SyncJobIndex,
     iso_utc,
-JobTriggerMethod,
 )
 from connectors.byoei import ElasticServer
 from connectors.config import load_config
