@@ -16,7 +16,7 @@ from connectors.es import DEFAULT_LANGUAGE, ESIndex, Mappings
 from connectors.filtering.validation import ValidationTarget, validate_filtering
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
-from connectors.utils import e2str, iso_utc, next_run
+from connectors.utils import e2str, iso_utc, next_run, str2e
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
@@ -194,8 +194,7 @@ class SyncJob:
 
         self.doc_source = doc_source
         self.job_id = self.doc_source.get("_id")
-        _status = self.doc_source.get("_source", {}).get("status")
-        self.status = None if _status is None else JobStatus[_status.upper()]
+        self.status = str2e(self.doc_source.get("_source", {}).get("status"), JobStatus)
 
     @property
     def duration(self):
@@ -443,10 +442,7 @@ class Connector:
 
     @property
     def last_sync_status(self):
-        status = self.doc_source.get("last_sync_status")
-        if status is None:
-            return None
-        return JobStatus[status.upper()]
+        return str2e(self.doc_source.get("last_sync_status"), JobStatus)
 
     @property
     def status(self):
@@ -455,7 +451,7 @@ class Connector:
     @status.setter
     def status(self, value):
         if isinstance(value, str):
-            value = Status[value.upper()]
+            value = str2e(value, Status)
         if not isinstance(value, Status):
             raise TypeError(value)
 

@@ -32,6 +32,7 @@ from connectors.utils import (
     get_size,
     next_run,
     retryable,
+    str2e,
     validate_index_name,
 )
 
@@ -340,8 +341,15 @@ async def test_exponential_backoff_retry():
     await does_not_raise()
 
 
-def test_e2str():
-    class SomeEnum(Enum):
-        A_FIELD = 0
+class SomeEnum(Enum):
+    A_FIELD = 0
 
+
+def test_e2str():
     assert e2str(SomeEnum.A_FIELD) == "a_field"
+
+
+def test_str2e():
+    assert str2e(None, SomeEnum) is None
+    assert str2e("another_field", SomeEnum) is None
+    assert str2e("a_field", SomeEnum) == SomeEnum.A_FIELD
