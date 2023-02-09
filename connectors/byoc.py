@@ -324,10 +324,7 @@ class Filter(dict):
         return len(self.advanced_rules) > 0
 
     def has_validation_state(self, validation_state):
-        return (
-            FilteringValidationState.from_string(self.validation["state"])
-            == validation_state
-        )
+        return FilteringValidationState(self.validation["state"]) == validation_state
 
 
 class PipelineSettings:

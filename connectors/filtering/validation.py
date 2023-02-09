@@ -108,11 +108,9 @@ class InvalidFilteringValidationStateError(ValueError):
 
 
 class FilteringValidationState(Enum):
-    VALID = 1
-    INVALID = 2
-    EDITED = 3
-
-    STATES = [VALID, INVALID, EDITED]
+    VALID = "valid"
+    INVALID = "invalid"
+    EDITED = "edited"
 
     @classmethod
     def to_s(cls, value):
@@ -123,20 +121,6 @@ class FilteringValidationState(Enum):
                 return "invalid"
             case FilteringValidationState.EDITED:
                 return "edited"
-
-    @classmethod
-    def from_string(cls, string):
-        match string.casefold():
-            case "valid":
-                return FilteringValidationState.VALID
-            case "invalid":
-                return FilteringValidationState.INVALID
-            case "edited":
-                return FilteringValidationState.EDITED
-            case _:
-                raise InvalidFilteringValidationStateError(
-                    f"'{string}' is an unknown value for the enum FilteringValidationState. Allowed states: {FilteringValidationState.STATES}.)"
-                )
 
 
 class FilteringValidationResult:

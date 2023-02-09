@@ -1088,13 +1088,7 @@ async def test_validate_filtering(validation_result, validation_target, should_r
         ("valid", FilteringValidationState.VALID),
         ("invalid", FilteringValidationState.INVALID),
         ("edited", FilteringValidationState.EDITED),
-        ("unknown", InvalidFilteringValidationStateError),
-        ("", InvalidFilteringValidationStateError),
     ],
 )
 def test_filtering_validation_state_from_string(string, expected_state):
-    if expected_state is InvalidFilteringValidationStateError:
-        with pytest.raises(InvalidFilteringValidationStateError):
-            FilteringValidationState.from_string(string)
-    else:
-        assert FilteringValidationState.from_string(string) == expected_state
+    assert FilteringValidationState(string) == expected_state
