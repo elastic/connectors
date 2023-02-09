@@ -1079,7 +1079,9 @@ def test_advanced_rules_present(filtering, should_advanced_rules_be_present):
         (FILTER_VALIDATION_STATE_EDITED, FilteringValidationState.EDITED, True),
     ],
 )
-def test_has_validation_state(filtering, validation_state, has_expected_validation_state):
+def test_has_validation_state(
+    filtering, validation_state, has_expected_validation_state
+):
     assert (
         Filter(filtering).has_validation_state(validation_state)
         == has_expected_validation_state
