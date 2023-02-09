@@ -17,6 +17,7 @@ from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
 DEFAULT_CONTENT_EXTRACTION = True
+DEFAULT_DIR = os.environ.get("SYSTEM_DIR", os.path.dirname(__file__))
 
 
 class DirectoryDataSource(BaseDataSource):
@@ -35,7 +36,7 @@ class DirectoryDataSource(BaseDataSource):
     def get_default_configuration(cls):
         return {
             "directory": {
-                "value": os.environ.get("SYSTEM_DIR", os.path.dirname(__file__)),
+                "value": DEFAULT_DIR,
                 "label": "Directory path",
                 "type": "str",
             },
@@ -79,6 +80,7 @@ class DirectoryDataSource(BaseDataSource):
     async def get_docs(self, filtering=None):
         logger.debug(f"Reading {self.directory}...")
         root_directory = Path(self.directory)
+
         for path_object in root_directory.glob(self.pattern):
             if not path_object.is_file():
                 continue
