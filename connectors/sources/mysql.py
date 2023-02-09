@@ -164,19 +164,14 @@ class MySqlDataSource(BaseDataSource):
                 "label": "Databases",
                 "type": "list",
             },
-            "connector_name": {
-                "value": "MySQL Connector",
-                "label": "Friendly name for the connector",
-                "type": "str",
-            },
             "fetch_size": {
                 "value": DEFAULT_FETCH_SIZE,
-                "label": "How many rows to fetch on each call",
+                "label": "Number of rows fetched per request",
                 "type": "int",
             },
             "retry_count": {
                 "value": RETRIES,
-                "label": "How many retry count for fetching rows on each call",
+                "label": "Maximum retries per request",
                 "type": "int",
             },
             "ssl_disabled": {

@@ -252,14 +252,9 @@ class S3DataSource(BaseDataSource):
                 "label": "Maximum size of page",
                 "type": "int",
             },
-            "connector_name": {
-                "value": "AWS Connector",
-                "label": "Friendly name for the connector",
-                "type": "str",
-            },
             "enable_content_extraction": {
                 "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Content extraction will be enabled or not",
+                "label": "Enable content extraction (true/false)",
                 "type": "bool",
             },
         }

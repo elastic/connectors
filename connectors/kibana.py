@@ -148,15 +148,15 @@ async def prepare(service_type, index_name, config, filtering=None):
             "language": "en",
             # Last sync
             "last_sync_status": None,
-            "last_sync_error": "",
-            "last_synced": "",
+            "last_sync_error": None,
+            "last_synced": None,
             # Written by connector on each operation,
             # used by Kibana to hint to user about status of connector
-            "last_seen": "",
+            "last_seen": None,
             # Date the connector was created
-            "created_at": "",
+            "created_at": None,
             # Date the connector was updated
-            "updated_at": "",
+            "updated_at": None,
             "filtering": filtering,
             # Scheduling intervals
             "scheduling": {
@@ -264,10 +264,11 @@ def _parser():
 
 
 def _load_filtering(filtering_file_path):
-    if not os.path.exists(filtering_file_path) and not os.path.isfile(
-        filtering_file_path
+    if filtering_file_path is None or (
+        not os.path.exists(filtering_file_path)
+        and not os.path.isfile(filtering_file_path)
     ):
-        logger.warn(
+        logger.warning(
             f"filtering file at '{filtering_file_path}' does not exist. Fallback to default filtering."
         )
         filtering = DEFAULT_FILTERING

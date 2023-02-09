@@ -34,6 +34,7 @@ native_service_types:
   - abs
   - postgresql
   - oracle
+  - dir
 
 # Connector client settings
 #connector_id: 'changeme'

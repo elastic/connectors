@@ -113,22 +113,17 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         return {
             "service_account_credentials": {
                 "value": json.dumps(default_credentials),
-                "label": "JSON string for Google cloud service account",
-                "type": "str",
-            },
-            "connector_name": {
-                "value": "Google Cloud Storage Connector",
-                "label": "Friendly name for the connector",
+                "label": "JSON string for Google Cloud service account",
                 "type": "str",
             },
             "retry_count": {
                 "value": DEFAULT_RETRY_COUNT,
-                "label": "Retry count for failed requests",
+                "label": "Maximum retries for failed requests",
                 "type": "int",
             },
             "enable_content_extraction": {
                 "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Flag to check if content extraction is enabled or not",
+                "label": "Enable content extraction (true/false)",
                 "type": "bool",
             },
         }
