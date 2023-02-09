@@ -412,3 +412,25 @@ def str2e(name, enum_class):
         return None
 
     return enum_class[name]
+
+class MultiService:
+    def __init__(self, services):
+        self._services = services
+
+    async def run(self):
+        tasks = [asyncio.create_task(service.run()) for service in self._services]
+
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+        for task in pending:
+            task.cancel()
+            await task
+
+    async def shutdown(self, sig):
+        logger.info(f"Caught {sig}. Graceful shutdown.")
+        for service in self._services:
+            logger.debug(f"Shutting down {service.__class__.__name__}...")
+            await service.stop()
+            logger.debug(f"Done shutting down {service.__class__.__name__}...")
+
+        await asyncio.sleep(0)
