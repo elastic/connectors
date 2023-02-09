@@ -89,12 +89,23 @@ class DirectoryDataSource(BaseDataSource):
             download_coro = functools.partial(self._download, str(path_object))
 
             # get the last modified value of the file
-            ts = path_object.stat().st_mtime
+            stat = path_object.stat()
+            ts = stat.st_mtime
             ts = datetime.fromtimestamp(ts, tz=timezone.utc)
 
             # send back as a doc
             doc = {
                 "path": str(path_object),
+                "last_modified_time": ts,
+                "inode_protection_mode": stat.st_mode,
+                "inode_number": stat.st_ino,
+                "device_inode_reside": stat.st_dev,
+                "number_of_links": stat.st_nlink,
+                "uid": stat.st_uid,
+                "gid": stat.st_gid,
+                "ctime": stat.st_ctime,
+                "last_access_time": stat.st_atime,
+                "size": stat.st_size,
                 "_timestamp": ts.isoformat(),
                 "_id": self.get_id(path_object),
             }
