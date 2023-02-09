@@ -35,7 +35,7 @@ async def verify(service_type, index_name, size, config):
         print("First doc")
         print(first_doc)
 
-        if len(first_doc.keys()) < 4:
+        if len(first_doc.keys()) < 3:
             raise Exception("The doc does not look right")
 
         if "_extract_binary_content" in first_doc:

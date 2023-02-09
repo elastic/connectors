@@ -264,8 +264,9 @@ def _parser():
 
 
 def _load_filtering(filtering_file_path):
-    if not os.path.exists(filtering_file_path) and not os.path.isfile(
-        filtering_file_path
+    if filtering_file_path is None or (
+        not os.path.exists(filtering_file_path)
+        and not os.path.isfile(filtering_file_path)
     ):
         logger.warning(
             f"filtering file at '{filtering_file_path}' does not exist. Fallback to default filtering."

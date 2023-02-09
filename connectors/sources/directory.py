@@ -12,22 +12,22 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
-HERE = os.path.dirname(__file__)
 DEFAULT_CONTENT_EXTRACTION = True
 
 
 class DirectoryDataSource(BaseDataSource):
     """Directory"""
 
-    name = "Directory"
+    name = "System Directory"
     service_type = "dir"
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
-        self.directory = self.configuration["directory"]
+        self.directory = os.path.abspath(self.configuration["directory"])
         self.pattern = self.configuration["pattern"]
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
@@ -35,12 +35,12 @@ class DirectoryDataSource(BaseDataSource):
     def get_default_configuration(cls):
         return {
             "directory": {
-                "value": HERE,
-                "label": "Directory",
+                "value": os.environ.get("SYSTEM_DIR", os.path.dirname(__file__)),
+                "label": "Directory path",
                 "type": "str",
             },
             "pattern": {
-                "value": "**/*.py",
+                "value": "**/*.*",
                 "label": "File glob-like pattern",
                 "type": "str",
             },
@@ -77,6 +77,7 @@ class DirectoryDataSource(BaseDataSource):
             }
 
     async def get_docs(self, filtering=None):
+        logger.debug(f"Reading {self.directory}...")
         root_directory = Path(self.directory)
         for path_object in root_directory.glob(self.pattern):
             if not path_object.is_file():
