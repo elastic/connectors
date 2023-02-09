@@ -198,9 +198,7 @@ class Fetcher:
         self.fetch_error = None
         self.filter = filter
         self.basic_rule_engine = (
-            BasicRuleEngine(parse(filter.get("rules", [])))
-            if sync_rules_enabled
-            else None
+            BasicRuleEngine(parse(filter.basic_rules)) if sync_rules_enabled else None
         )
         self.display_every = display_every
         self.concurrent_downloads = concurrent_downloads
