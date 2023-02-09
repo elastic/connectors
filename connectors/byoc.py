@@ -739,7 +739,7 @@ class Connector:
                 self.index_name,
                 self.prepare_docs(self.data_provider, job.filtering),
                 self.pipeline,
-                filtering=self.filtering,
+                filter=self.filtering.get_active_filter(),
                 sync_rules_enabled=sync_rules_enabled,
                 options=bulk_options,
             )
