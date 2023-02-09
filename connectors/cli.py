@@ -101,8 +101,12 @@ async def _start_service(config, loop):
         def _shutdown(sig_name):
             logger.info(f"Caught {sig_name}. Graceful shutdown.")
             for service in services:
-                logger.info(f"Shutdown {service.__class__.__name__}...")
-                service.stop()
+                try:
+                    logger.info(f"Shutdown {service.__class__.__name__}...")
+                    service.stop()
+                except Exception e:
+                    logger.warning(f"Failed to shutdown {service.__class__.__name__} due to an error: {e}")
+
             return
 
         loop.add_signal_handler(sig, functools.partial(_shutdown, sig.name))
