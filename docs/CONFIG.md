@@ -35,6 +35,7 @@ Configuration lives in [config.yml](../config.yml).
   - `max_errors_span`: The number of seconds to reset `max_errors` count.
   - `max_concurrent_syncs`: The maximum number of concurrent syncs. Defaults to 1.
   - `job_cleanup_interval`: The interval (in seconds) to run job cleanup task.
+  - `log_level`: Connector service log level. Defaults to `INFO`.
 - `native_service_types`: An array of supported native connectors (in service type).
 - `connector_id`: The ID of the custom connector.
 - `service_type` The service type of the custom connector.
