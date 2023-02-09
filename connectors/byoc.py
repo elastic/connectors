@@ -8,6 +8,7 @@ Implementation of BYOC protocol.
 """
 import asyncio
 import time
+from collections import UserDict
 from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
@@ -20,7 +21,6 @@ from connectors.utils import e2str, iso_utc, next_run
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
-PIPELINE = "ent-search-generic-ingestion"
 RETRY_ON_CONFLICT = 3
 SYNC_DISABLED = -1
 
@@ -320,36 +320,19 @@ class Filter(dict):
         return len(self.advanced_rules) > 0
 
 
-class PipelineSettings:
-    def __init__(self, pipeline):
-        self._pipeline = pipeline
-        if self._pipeline is None:
-            self._pipeline = {}
+PIPELINE_DEFAULT = {
+    "name": "ent-search-generic-ingestion",
+    "extract_binary_content": True,
+    "reduce_whitespace": True,
+    "run_ml_inference": True,
+}
 
-    @property
-    def name(self):
-        return self._pipeline.get("name", "ent-search-generic-ingestion")
 
-    @property
-    def extract_binary_content(self):
-        return self._pipeline.get("extract_binary_content", True)
-
-    @property
-    def reduce_whitespace(self):
-        return self._pipeline.get("reduce_whitespace", True)
-
-    @property
-    def run_ml_inference(self):
-        return self._pipeline.get("run_ml_inference", True)
-
-    def __repr__(self):
-        return (
-            f"Pipeline {self.name} <binary: {self.extract_binary_content}, "
-            f"whitespace {self.reduce_whitespace}, ml inference {self.run_ml_inference}>"
-        )
-
-    def to_dict(self):
-        return dict(self._pipeline)
+class Pipeline(UserDict):
+    def __init__(self, data):
+        default = PIPELINE_DEFAULT.copy()
+        default.update(data)
+        super().__init__(default)
 
 
 class Features:
@@ -453,7 +436,7 @@ class Connector:
         self.index_name = doc_source["index_name"]
         self._configuration = DataSourceConfiguration(doc_source["configuration"])
         self.scheduling = doc_source["scheduling"]
-        self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
+        self.pipeline = Pipeline(doc_source.get("pipeline", {}))
         self._dirty = True
         self._filtering = Filtering(doc_source.get("filtering", []))
         self.language_code = doc_source["language"]
@@ -621,9 +604,9 @@ class Connector:
 
         async for doc, lazy_download in data_provider.get_docs(filtering=filtering):
             # adapt doc for pipeline settings
-            doc["_extract_binary_content"] = self.pipeline.extract_binary_content
-            doc["_reduce_whitespace"] = self.pipeline.reduce_whitespace
-            doc["_run_ml_inference"] = self.pipeline.run_ml_inference
+            doc["_extract_binary_content"] = self.pipeline["extract_binary_content"]
+            doc["_reduce_whitespace"] = self.pipeline["reduce_whitespace"]
+            doc["_run_ml_inference"] = self.pipeline["run_ml_inference"]
             yield doc, lazy_download
 
     async def prepare(self, config):
