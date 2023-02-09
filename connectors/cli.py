@@ -104,8 +104,10 @@ async def _start_service(config, loop):
                 try:
                     logger.info(f"Shutdown {service.__class__.__name__}...")
                     service.stop()
-                except Exception e:
-                    logger.warning(f"Failed to shutdown {service.__class__.__name__} due to an error: {e}")
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to shutdown {service.__class__.__name__} due to an error: {e}"
+                    )
 
             return
 
