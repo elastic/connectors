@@ -7,7 +7,6 @@
 Implementation of BYOC protocol.
 """
 import socket
-import time
 from collections import UserDict
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -524,8 +523,7 @@ class Connector(ESDocument):
 
     @property
     def last_sync_status(self):
-        _status = self.get("last_sync_status")
-        return None if _status is None else JobStatus[_status.upper()]
+        return str2e(self.get("last_sync_status"), JobStatus)
 
     async def heartbeat(self, interval):
         if (

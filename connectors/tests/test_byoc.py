@@ -636,6 +636,7 @@ async def test_connector_properties():
             "status": "created",
             "last_seen": iso_utc(),
             "last_sync_status": "completed",
+            "pipeline": {},
         },
     }
 
@@ -653,7 +654,7 @@ async def test_connector_properties():
     assert connector.last_sync_status == JobStatus.COMPLETED
     assert isinstance(connector.last_seen, datetime)
     assert isinstance(connector.filtering, Filtering)
-    assert isinstance(connector.pipeline, PipelineSettings)
+    assert isinstance(connector.pipeline, Pipeline)
     assert isinstance(connector.features, Features)
 
 

@@ -150,11 +150,11 @@ class SyncJobRunner:
             filtering=self.sync_job.filtering
         ):
             # adapt doc for pipeline settings
-            doc[
-                "_extract_binary_content"
-            ] = self.sync_job.pipeline.extract_binary_content
-            doc["_reduce_whitespace"] = self.sync_job.pipeline.reduce_whitespace
-            doc["_run_ml_inference"] = self.sync_job.pipeline.run_ml_inference
+            doc["_extract_binary_content"] = self.sync_job.pipeline[
+                "extract_binary_content"
+            ]
+            doc["_reduce_whitespace"] = self.sync_job.pipeline["reduce_whitespace"]
+            doc["_run_ml_inference"] = self.sync_job.pipeline["run_ml_inference"]
             yield doc, lazy_download
 
     async def _validate_filtering(self, data_provider):

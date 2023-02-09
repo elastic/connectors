@@ -8,7 +8,7 @@ from unittest.mock import ANY, AsyncMock, Mock
 
 import pytest
 
-from connectors.byoc import Filter, PipelineSettings
+from connectors.byoc import Filter, Pipeline
 from connectors.filtering.validation import (
     FilteringValidationResult,
     FilteringValidationState,
@@ -44,7 +44,7 @@ def create_runner(
     sync_job.configuration = {}
     sync_job.service_type = "mysql"
     sync_job.index_name = "search-mysql"
-    sync_job.pipeline = PipelineSettings(pipeline={})
+    sync_job.pipeline = Pipeline({})
     sync_job.filtering = Filter()
     sync_job.claim = AsyncMock()
     sync_job.done = AsyncMock()
