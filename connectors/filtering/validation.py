@@ -103,10 +103,6 @@ class FilterValidationError:
         return f"(ids: {self.ids}, messages: {self.messages})"
 
 
-class InvalidFilteringValidationStateError(ValueError):
-    pass
-
-
 class FilteringValidationState(Enum):
     VALID = "valid"
     INVALID = "invalid"

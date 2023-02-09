@@ -22,7 +22,6 @@ from connectors.filtering.validation import (
     FilteringValidator,
     FilterValidationError,
     InvalidFilteringError,
-    InvalidFilteringValidationStateError,
     SyncRuleValidationResult,
     ValidationTarget,
     validate_filtering,
