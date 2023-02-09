@@ -3,9 +3,12 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from datetime import datetime
+from decimal import Decimal
 from unittest import mock
 
 import pytest
+from bson import Decimal128
 
 from connectors.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
@@ -16,8 +19,9 @@ from connectors.source import (
     BaseDataSource,
     DataSourceConfiguration,
     Field,
-    get_data_sources,
     get_source_klass,
+    get_source_klass_dict,
+    get_source_klasses,
 )
 
 CONFIG = {
@@ -37,6 +41,8 @@ CONFIG = {
         "type": "str",
     },
 }
+
+DATE_STRING_ISO_FORMAT = "2023-01-01T13:37:42+02:00"
 
 
 def test_field():
@@ -81,13 +87,51 @@ def test_get_source_klass():
     assert get_source_klass("test_source:MyConnector") is MyConnector
 
 
-def test_get_data_sources():
+def test_get_source_klasses():
     settings = {
         "sources": {"yea": "test_source:MyConnector", "yea2": "test_source:MyConnector"}
     }
 
-    sources = list(get_data_sources(settings))
+    sources = list(get_source_klasses(settings))
     assert sources == [MyConnector, MyConnector]
+
+
+def test_get_source_klass_dict():
+    settings = {
+        "sources": {"yea": "test_source:MyConnector", "yea2": "test_source:MyConnector"}
+    }
+
+    source_klass_dict = get_source_klass_dict(settings)
+    assert source_klass_dict["yea"] == MyConnector
+    assert source_klass_dict["yea2"] == MyConnector
+
+
+# ABCs
+class DataSource(BaseDataSource):
+    @classmethod
+    def get_default_configuration(cls):
+        return {
+            "host": {
+                "value": "127.0.0.1",
+                "label": "Host",
+                "type": "str",
+            },
+            "port": {
+                "value": 3306,
+                "label": "Port",
+                "type": "int",
+            },
+            "direct": {
+                "value": True,
+                "label": "Direct connect",
+                "type": "bool",
+            },
+            "user": {
+                "value": "root",
+                "label": "Username",
+                "type": "str",
+            },
+        }
 
 
 @pytest.mark.asyncio
@@ -95,7 +139,12 @@ def test_get_data_sources():
 async def test_validate_filter(validator_mock):
     validator_mock.return_value = "valid"
 
-    assert await BaseDataSource.validate_filtering({}) == "valid"
+    assert (
+        await DataSource(configuration=DataSourceConfiguration({})).validate_filtering(
+            {}
+        )
+        == "valid"
+    )
 
 
 @pytest.mark.asyncio
@@ -105,45 +154,8 @@ async def test_base_class():
     with pytest.raises(NotImplementedError):
         BaseDataSource(configuration=configuration)
 
-    # default rule validators for every data source (order matters)
-    assert BaseDataSource.basic_rules_validators() == [
-        BasicRuleAgainstSchemaValidator,
-        BasicRuleNoMatchAllRegexValidator,
-        BasicRulesSetSemanticValidator,
-    ]
-
-    # should be empty as advanced rules are specific to a data source
-    assert not len(BaseDataSource.advanced_rules_validators())
-
-    # ABCs
-    class DataSource(BaseDataSource):
-        @classmethod
-        def get_default_configuration(cls):
-            return {
-                "host": {
-                    "value": "127.0.0.1",
-                    "label": "Host",
-                    "type": "str",
-                },
-                "port": {
-                    "value": 3306,
-                    "label": "Port",
-                    "type": "int",
-                },
-                "direct": {
-                    "value": True,
-                    "label": "Direct connect",
-                    "type": "bool",
-                },
-                "user": {
-                    "value": "root",
-                    "label": "Username",
-                    "type": "str",
-                },
-            }
-
     ds = DataSource(configuration=configuration)
-    ds.get_default_configuration()["port"]["value"] == 3306
+    assert ds.get_default_configuration()["port"]["value"] == 3306
 
     options = {"a": "1"}
     ds.tweak_bulk_options(options)
@@ -166,3 +178,63 @@ async def test_base_class():
 
     with pytest.raises(NotImplementedError):
         await ds.get_docs()
+
+    # default rule validators for every data source (order matters)
+    assert BaseDataSource.basic_rules_validators() == [
+        BasicRuleAgainstSchemaValidator,
+        BasicRuleNoMatchAllRegexValidator,
+        BasicRulesSetSemanticValidator,
+    ]
+
+    # should be empty as advanced rules are specific to a data source
+    assert not len(DataSource(configuration=configuration).advanced_rules_validators())
+
+
+@pytest.mark.parametrize(
+    "raw_doc, expected_doc",
+    [
+        (
+            {
+                "key_1": "value",
+                "key_2": datetime.fromisoformat(DATE_STRING_ISO_FORMAT),
+                "key_3": Decimal(1234),
+                "key_4": Decimal128(Decimal("0.0005")),
+                "key_5": bytes("value", "utf-8"),
+            },
+            {
+                "key_1": "value",
+                "key_2": DATE_STRING_ISO_FORMAT,
+                "key_3": 1234,
+                "key_4": Decimal("0.0005"),
+                "key_5": "value",
+            },
+        ),
+        (
+            {
+                "key_1": {
+                    "nested_key_1": {
+                        "nested_key_2": datetime.fromisoformat(DATE_STRING_ISO_FORMAT)
+                    }
+                }
+            },
+            {"key_1": {"nested_key_1": {"nested_key_2": DATE_STRING_ISO_FORMAT}}},
+        ),
+        (
+            {"key_1": [datetime.fromisoformat(DATE_STRING_ISO_FORMAT), "abc", 123]},
+            {"key_1": [DATE_STRING_ISO_FORMAT, "abc", 123]},
+        ),
+        ({}, {}),
+    ],
+)
+@pytest.mark.asyncio
+async def test_serialize(raw_doc, expected_doc):
+    with mock.patch.object(
+        BaseDataSource, "get_default_configuration", return_value={}
+    ):
+        source = BaseDataSource(DataSourceConfiguration(CONFIG))
+        serialized_doc = source.serialize(raw_doc)
+
+        assert serialized_doc.keys() == expected_doc.keys()
+
+        for serialized_doc_key, expected_doc_key in zip(serialized_doc, expected_doc):
+            assert serialized_doc[serialized_doc_key] == expected_doc[expected_doc_key]

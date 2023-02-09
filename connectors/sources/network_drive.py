@@ -25,6 +25,9 @@ DEFAULT_FILE_SIZE_LIMIT = 10485760
 class NASDataSource(BaseDataSource):
     """Network Drive"""
 
+    name = "Network Drive"
+    service_type = "network_drive"
+
     def __init__(self, configuration):
         """Set up the connection to the Network Drive
 
@@ -72,14 +75,9 @@ class NASDataSource(BaseDataSource):
                 "label": "SMB shared folder/directory",
                 "type": "str",
             },
-            "connector_name": {
-                "value": "Network Drive Connector",
-                "label": "Friendly name for the connector",
-                "type": "str",
-            },
             "enable_content_extraction": {
                 "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Flag to check if content extraction is enabled or not",
+                "label": "Enable content extraction (true/false)",
                 "type": "bool",
             },
         }
@@ -193,7 +191,7 @@ class NASDataSource(BaseDataSource):
             "_attachment": get_base64_value(content=attachment),
         }
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         """Executes the logic to fetch files and folders in async manner.
         Yields:
             dictionary: Dictionary containing the Network Drive files and folders as documents

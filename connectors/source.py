@@ -4,6 +4,10 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import importlib
+from datetime import date, datetime
+from decimal import Decimal
+
+from bson import Decimal128
 
 from connectors.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
@@ -54,10 +58,11 @@ class DataSourceConfiguration:
     """Holds the configuration needed by the source class"""
 
     def __init__(self, config):
+        self._raw_config = config
         self._config = {}
         self._defaults = {}
-        if config is not None:
-            for key, value in config.items():
+        if self._raw_config is not None:
+            for key, value in self._raw_config.items():
                 if isinstance(value, dict):
                     self.set_field(
                         key,
@@ -69,7 +74,7 @@ class DataSourceConfiguration:
                     self.set_field(key, label=key.capitalize(), value=str(value))
 
     def set_defaults(self, default_config):
-        for (name, item) in default_config.items():
+        for name, item in default_config.items():
             self._defaults[name] = item["value"]
             if name in self._config:
                 self._config[name].type = item["type"]
@@ -99,9 +104,15 @@ class DataSourceConfiguration:
     def is_empty(self):
         return len(self._config) == 0
 
+    def to_dict(self):
+        return dict(self._raw_config)
+
 
 class BaseDataSource:
     """Base class, defines a loose contract."""
+
+    name = None
+    service_type = None
 
     def __init__(self, configuration):
         self.configuration = configuration
@@ -109,7 +120,7 @@ class BaseDataSource:
         self.configuration.set_defaults(self.get_default_configuration())
 
     def __str__(self):
-        return f"Datasource `{self.__class__.__doc__}`"
+        return f"Datasource `{self.__class__.name}`"
 
     @classmethod
     def get_simple_configuration(cls):
@@ -146,16 +157,14 @@ class BaseDataSource:
             BasicRulesSetSemanticValidator,
         ]
 
-    @classmethod
-    async def validate_filtering(cls, filtering):
+    async def validate_filtering(self, filtering):
         """Execute all basic rule and advanced rule validators."""
 
-        return FilteringValidator(
-            cls.basic_rules_validators(), cls.advanced_rules_validators()
+        return await FilteringValidator(
+            self.basic_rules_validators(), self.advanced_rules_validators()
         ).validate(filtering)
 
-    @classmethod
-    def advanced_rules_validators(cls):
+    def advanced_rules_validators(self):
         """Return advanced rule validators.
 
         Advanced rules validators are data source specific so there are no default validators.
@@ -187,7 +196,7 @@ class BaseDataSource:
         """
         pass
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         """Returns an iterator on all documents present in the backend
 
         Each document is a tuple with:
@@ -223,6 +232,45 @@ class BaseDataSource:
         """
         pass
 
+    def serialize(self, doc):
+        """Reads each element from the document and serializes it with respect to its datatype.
+
+        Args:
+            doc (Dict): Dictionary to be serialized
+
+        Returns:
+            doc (Dict): Serialized version of dictionary
+        """
+
+        def _serialize(value):
+            """Serialize input value with respect to its datatype.
+            Args:
+                value (Any Datatype): Value to be serialized
+
+            Returns:
+                value (Any Datatype): Serialized version of input value.
+            """
+
+            if isinstance(value, (list, tuple)):
+                value = [_serialize(item) for item in value]
+            elif isinstance(value, dict):
+                for key, svalue in value.items():
+                    value[key] = _serialize(svalue)
+            elif isinstance(value, (datetime, date)):
+                value = value.isoformat()
+            elif isinstance(value, Decimal128):
+                value = value.to_decimal()
+            elif isinstance(value, (bytes, bytearray)):
+                value = value.decode(errors="ignore")
+            elif isinstance(value, Decimal):
+                value = float(value)
+            return value
+
+        for key, value in doc.items():
+            doc[key] = _serialize(value)
+
+        return doc
+
 
 def get_source_klass(fqn):
     """Converts a Fully Qualified Name into a class instance."""
@@ -231,7 +279,15 @@ def get_source_klass(fqn):
     return getattr(module, klass_name)
 
 
-def get_data_sources(config):
+def get_source_klasses(config):
     """Returns an iterator of all registered sources."""
     for name, fqn in config["sources"].items():
         yield get_source_klass(fqn)
+
+
+def get_source_klass_dict(config):
+    """Returns a service type - source klass dictionary"""
+    result = {}
+    for name, fqn in config["sources"].items():
+        result[name] = get_source_klass(fqn)
+    return result

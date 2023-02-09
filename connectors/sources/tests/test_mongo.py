@@ -43,12 +43,10 @@ def build_resp():
     "pymongo.topology.Topology._select_servers_loop", lambda *x: [mock.MagicMock()]
 )
 @mock.patch("pymongo.mongo_client.MongoClient._get_socket")
-@mock.patch("connectors.sources.mongo.MongoDataSource.watch")
 @mock.patch(
     "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
 )
 async def test_get_docs(patch_logger, *args):
-
     source = create_source(MongoDataSource)
     num = 0
     async for (doc, dl) in source.get_docs():

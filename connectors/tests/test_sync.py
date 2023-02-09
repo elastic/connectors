@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock
 import pytest
 from aioresponses import CallbackResult
 
-from connectors.byoc import DataSourceError
+from connectors.byoc import DataSourceError, JobStatus, e2str
 from connectors.config import load_config
 from connectors.conftest import assert_re
 from connectors.filtering.validation import InvalidFilteringError
@@ -48,7 +48,7 @@ FAKE_CONFIG = {
     "service_type": "fake",
     "status": "configured",
     "language": "en",
-    "last_sync_status": "null",
+    "last_sync_status": None,
     "last_sync_error": "",
     "last_synced": "",
     "last_seen": "",
@@ -74,6 +74,13 @@ FAKE_CONFIG_PIPELINE_CHANGED["pipeline"] = {
     "reduce_whitespace": False,
     "run_ml_inference": False,
 }
+FAKE_CONFIG_LAST_JOB_SUSPENDED = copy.deepcopy(FAKE_CONFIG)
+FAKE_CONFIG_LAST_JOB_SUSPENDED["sync_now"] = False
+FAKE_CONFIG_LAST_JOB_SUSPENDED["last_sync_status"] = e2str(JobStatus.SUSPENDED)
+FAKE_CONFIG_LAST_JOB_SUSPENDED_SCHEDULING_DISABLED = copy.deepcopy(
+    FAKE_CONFIG_LAST_JOB_SUSPENDED
+)
+FAKE_CONFIG_LAST_JOB_SUSPENDED_SCHEDULING_DISABLED["scheduling"]["enabled"] = False
 FAKE_CONFIG_TS = copy.deepcopy(FAKE_CONFIG)
 FAKE_CONFIG_TS["service_type"] = "fake_ts"
 
@@ -91,7 +98,7 @@ FAKE_CONFIG_NOT_NATIVE = {
     "service_type": "fake",
     "status": "configured",
     "language": "en",
-    "last_sync_status": "null",
+    "last_sync_status": None,
     "last_sync_error": "",
     "last_synced": "",
     "last_seen": "",
@@ -135,7 +142,7 @@ FAKE_CONFIG_FAIL_SERVICE = {
     "service_type": "fake",
     "status": "configured",
     "language": "en",
-    "last_sync_status": "null",
+    "last_sync_status": None,
     "last_sync_error": "",
     "last_synced": "",
     "last_seen": "",
@@ -152,7 +159,7 @@ FAKE_CONFIG_BUGGY_SERVICE = {
     "service_type": "fake",
     "status": "configured",
     "language": "en",
-    "last_sync_status": "null",
+    "last_sync_status": None,
     "last_sync_error": "",
     "last_synced": "",
     "last_seen": "",
@@ -169,7 +176,7 @@ FAKE_CONFIG_UNKNOWN_SERVICE = {
     "service_type": "UNKNOWN",
     "status": "configured",
     "language": "en",
-    "last_sync_status": "null",
+    "last_sync_status": None,
     "last_sync_error": "",
     "last_synced": "",
     "last_seen": "",
@@ -194,29 +201,50 @@ def patch_validate_filtering_in_byoc():
         yield
 
 
-class Args:
-    def __init__(self, **options):
-        self.one_sync = options.get("one_sync", False)
-        self.sync_now = options.get("sync_now", False)
-
-
-def create_service(config_file, **options):
+def create_service(config_file):
     config = load_config(config_file)
-    service = SyncService(config, Args(**options))
+    service = SyncService(config)
     service.idling = 0
 
     return service
 
 
+async def run_service_with_stop_after(service, stop_after=0):
+    def _stop_running_service_without_cancelling():
+        service.running = False
+
+    async def _terminate():
+        if stop_after == 0:
+            # so we actually want the service
+            # to run current loop without interruption
+            asyncio.get_event_loop().call_soon(_stop_running_service_without_cancelling)
+        else:
+            # but if stop_after is provided we want to
+            # interrupt the service after the timeout
+            await asyncio.sleep(stop_after)
+            await service.stop()
+
+        await asyncio.sleep(0)
+
+    await asyncio.gather(service.run(), _terminate())
+
+
+async def create_and_run_service(config_file, stop_after=0):
+    service = create_service(config_file)
+    await run_service_with_stop_after(service, stop_after)
+
+
 async def set_server_responses(
     mock_responses,
-    config=FAKE_CONFIG,
+    configs=None,
     connectors_read=None,
     connectors_update=None,
     host="http://nowhere.com:9200",
     jobs_update=None,
     bulk_call=None,
 ):
+    if configs is None:
+        configs = [FAKE_CONFIG]
     headers = {"X-Elastic-Product": "Elasticsearch"}
 
     mock_responses.get(
@@ -228,13 +256,19 @@ async def set_server_responses(
         f"{host}/.elastic-connectors/_refresh", headers=headers, repeat=True
     )
 
+    hits = []
+    for index, config in enumerate(configs):
+        hits.append({"_id": str(index + 1), "_source": config})
+
     def _connectors_read(url, **kw):
+        nonlocal hits
+
         return CallbackResult(
             status=200,
             payload={
                 "hits": {
-                    "hits": [{"_id": "1", "_source": config}],
-                    "total": {"value": 1},
+                    "hits": hits,
+                    "total": {"value": len(hits)},
                 }
             },
         )
@@ -255,12 +289,13 @@ async def set_server_responses(
         repeat=True,
     )
 
-    mock_responses.post(
-        f"{host}/.elastic-connectors-sync-jobs/_update/1",
-        headers=headers,
-        callback=jobs_update,
-        repeat=True,
-    )
+    for id_ in range(len(configs)):
+        mock_responses.post(
+            f"{host}/.elastic-connectors-sync-jobs/_update/{id_+1}",
+            headers=headers,
+            callback=jobs_update,
+            repeat=True,
+        )
     mock_responses.put(
         f"{host}/.elastic-connectors-sync-jobs/_doc/1",
         payload={"_id": "1"},
@@ -293,12 +328,14 @@ async def set_server_responses(
         callback=connectors_update,
         headers=headers,
     )
-    mock_responses.post(
-        f"{host}/.elastic-connectors/_update/1",
-        headers=headers,
-        callback=connectors_update,
-        repeat=True,
-    )
+
+    for id_ in range(len(configs)):
+        mock_responses.post(
+            f"{host}/.elastic-connectors/_update/{id_ + 1}",
+            headers=headers,
+            callback=connectors_update,
+            repeat=True,
+        )
     mock_responses.head(
         f"{host}/search-airbnb?expand_wildcards=open",
         headers=headers,
@@ -317,13 +354,13 @@ async def set_server_responses(
     )
     mock_responses.get(
         f"{host}/search-airbnb",
-        payload={"hits": {"hits": [{"_id": "1", "_source": config}]}},
+        payload={"hits": {"hits": hits}},
         headers=headers,
         repeat=True,
     )
     mock_responses.get(
         f"{host}/search-airbnb/_search?scroll=5m",
-        payload={"hits": {"hits": [{"_id": "1", "_source": config}]}},
+        payload={"hits": {"hits": hits}},
         headers=headers,
         repeat=True,
     )
@@ -357,9 +394,7 @@ async def set_server_responses(
 @pytest.mark.asyncio
 async def test_connector_service_poll(mock_responses, patch_logger, set_env):
     await set_server_responses(mock_responses)
-    service = create_service(CONFIG_FILE)
-    asyncio.get_event_loop().call_soon(service.stop)
-    await service.run()
+    await create_and_run_service(CONFIG_FILE)
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
     # we want to make sure we DON'T get memory usage report
     patch_logger.assert_not_present("===> Largest memory usage:")
@@ -372,10 +407,8 @@ async def test_connector_service_poll_unconfigured(
     # we should not sync a connector that is not configured
     # but still send out a heartbeat
 
-    await set_server_responses(mock_responses, FAKE_CONFIG_NEEDS_CONFIG)
-    service = create_service(CONFIG_FILE)
-    asyncio.get_event_loop().call_soon(service.stop)
-    await service.run()
+    await set_server_responses(mock_responses, [FAKE_CONFIG_NEEDS_CONFIG])
+    await create_and_run_service(CONFIG_FILE)
 
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Can't sync with status `needs_configuration`")
@@ -395,11 +428,9 @@ async def test_connector_service_poll_no_sync_but_status_updated(
     # if a connector is correctly configured but we don't sync (not scheduled)
     # we still want to tell kibana we are connected
     await set_server_responses(
-        mock_responses, FAKE_CONFIG_NO_SYNC, connectors_update=upd
+        mock_responses, [FAKE_CONFIG_NO_SYNC], connectors_update=upd
     )
-    service = create_service(CONFIG_FILE, sync_now=False)
-    asyncio.get_event_loop().call_soon(service.stop)
-    await service.run()
+    await create_and_run_service(CONFIG_FILE)
 
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Scheduling is disabled")
@@ -421,13 +452,34 @@ async def test_connector_service_poll_cron_broken(
     # is broken
     # we still want to tell kibana we are connected
     await set_server_responses(
-        mock_responses, FAKE_CONFIG_CRON_BROKEN, connectors_update=upd
+        mock_responses, [FAKE_CONFIG_CRON_BROKEN], connectors_update=upd
     )
-    service = create_service(CONFIG_FILE, sync_now=False)
-    asyncio.get_event_loop().call_soon(service.stop)
-    await service.run()
+    await create_and_run_service(CONFIG_FILE)
     patch_logger.assert_not_present("Sync done")
-    assert calls[0]["status"] == "error"
+    assert (
+        calls[0]["status"] == "connected"
+    )  # first it's marked as connected as we picked it up
+    assert calls[1]["status"] == "error"  # and only then it's marked as error
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_suspended_restarts_sync(
+    mock_responses, patch_logger, set_env
+):
+    await set_server_responses(mock_responses, [FAKE_CONFIG_LAST_JOB_SUSPENDED])
+    await create_and_run_service(CONFIG_FILE)
+    patch_logger.assert_present("Restarting sync after suspension")
+
+
+@pytest.mark.asyncio
+async def test_connector_service_poll_suspended_does_not_restart_when_scheduling_disabled(
+    mock_responses, patch_logger, set_env
+):
+    await set_server_responses(
+        mock_responses, [FAKE_CONFIG_LAST_JOB_SUSPENDED_SCHEDULING_DISABLED]
+    )
+    await create_and_run_service(CONFIG_FILE)
+    patch_logger.assert_present("Scheduling is disabled")
 
 
 @pytest.mark.asyncio
@@ -435,11 +487,9 @@ async def test_connector_service_poll_just_created(
     mock_responses, patch_logger, set_env
 ):
     # we should not sync a connector that is not configured
-    # but still send out an heartbeat
-    await set_server_responses(mock_responses, FAKE_CONFIG_CREATED)
-    service = create_service(CONFIG_FILE)
-    asyncio.get_event_loop().call_soon(service.stop)
-    await service.run()
+    # but still send out a heartbeat
+    await set_server_responses(mock_responses, [FAKE_CONFIG_CREATED])
+    await create_and_run_service(CONFIG_FILE)
 
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Can't sync with status `created`")
@@ -449,33 +499,34 @@ async def test_connector_service_poll_just_created(
 @pytest.mark.asyncio
 async def test_connector_service_poll_https(mock_responses, patch_logger, set_env):
     await set_server_responses(mock_responses, host="https://safenowhere.com:443")
-    service = create_service(CONFIG_HTTPS_FILE)
-    asyncio.get_event_loop().call_soon(service.stop)
-    await service.run()
+    await create_and_run_service(CONFIG_HTTPS_FILE)
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
 
 
 @pytest.mark.asyncio
 async def test_connector_service_poll_large(mock_responses, patch_logger, set_env):
-    await set_server_responses(mock_responses, LARGE_FAKE_CONFIG)
-    service = create_service(MEM_CONFIG_FILE)
-    asyncio.get_event_loop().call_soon(service.stop)
-    await service.run()
+    await set_server_responses(mock_responses, [LARGE_FAKE_CONFIG])
+    await create_and_run_service(MEM_CONFIG_FILE)
 
     # let's make sure we are seeing bulk batches of various sizes
     assert_re(".*Sending a batch.*", patch_logger.logs)
     assert_re(".*0.48MiB", patch_logger.logs)
     assert_re(".*0.17MiB", patch_logger.logs)
-    assert_re("Sync done: 1001 indexed, 0  deleted", patch_logger.logs)
+    assert_re(".*Sync done: 1001 indexed, 0  deleted", patch_logger.logs)
 
 
 @pytest.mark.asyncio
-async def test_connector_service_poll_sync_now(mock_responses, patch_logger, set_env):
-    await set_server_responses(mock_responses, FAKE_CONFIG_NO_SYNC)
-    service = create_service(CONFIG_FILE, sync_now=True, one_sync=True)
-    # one_sync means it won't loop forever
-    await service.run()
-    patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
+async def test_connector_service_poll_suspended_suspends_job(
+    mock_responses, patch_logger, set_env
+):
+    # Service is having a large payload, but we terminate it ASAP
+    # This way it should suspend existing running jobs
+    await set_server_responses(mock_responses, [LARGE_FAKE_CONFIG])
+    await create_and_run_service(MEM_CONFIG_FILE, stop_after=0.3)
+
+    # For now just let's make sure that message is displayed
+    # that the running job was suspended
+    assert_re(".*suspended.*Job id: 1", patch_logger.logs)
 
 
 @pytest.mark.asyncio
@@ -487,9 +538,8 @@ async def test_connector_service_poll_sync_ts(mock_responses, patch_logger, set_
         indexed.append(queries[1])
         return CallbackResult(status=200, payload={"items": []})
 
-    await set_server_responses(mock_responses, FAKE_CONFIG_TS, bulk_call=bulk_call)
-    service = create_service(CONFIG_FILE, sync_now=True, one_sync=True)
-    await service.run()
+    await set_server_responses(mock_responses, [FAKE_CONFIG_TS], bulk_call=bulk_call)
+    await create_and_run_service(CONFIG_FILE)
     patch_logger.assert_present("Sync done: 1 indexed, 0  deleted. (0 seconds)")
 
     # make sure we kept the original ts
@@ -498,10 +548,8 @@ async def test_connector_service_poll_sync_ts(mock_responses, patch_logger, set_
 
 @pytest.mark.asyncio
 async def test_connector_service_poll_sync_fails(mock_responses, patch_logger, set_env):
-    await set_server_responses(mock_responses, FAKE_CONFIG_FAIL_SERVICE)
-    service = create_service(CONFIG_FILE)
-    asyncio.get_event_loop().call_soon(service.stop)
-    await service.run()
+    await set_server_responses(mock_responses, [FAKE_CONFIG_FAIL_SERVICE])
+    await create_and_run_service(CONFIG_FILE)
     patch_logger.assert_present("The document fetcher failed")
 
 
@@ -509,19 +557,8 @@ async def test_connector_service_poll_sync_fails(mock_responses, patch_logger, s
 async def test_connector_service_poll_unknown_service(
     mock_responses, patch_logger, set_env
 ):
-    await set_server_responses(mock_responses, FAKE_CONFIG_UNKNOWN_SERVICE)
-    service = create_service(CONFIG_FILE)
-    asyncio.get_event_loop().call_soon(service.stop)
-    await service.run()
-
-
-async def service_with_max_errors(mock_responses, config, max_errors):
-    await set_server_responses(mock_responses, config)
-    service = create_service(CONFIG_FILE)
-    service.service_config["max_errors"] = max_errors
-    asyncio.get_event_loop().call_soon(service.stop)
-
-    return service
+    await set_server_responses(mock_responses, [FAKE_CONFIG_UNKNOWN_SERVICE])
+    await create_and_run_service(CONFIG_FILE)
 
 
 @pytest.mark.parametrize(
@@ -553,17 +590,18 @@ async def test_connector_service_filtering(
     set_env,
     patch_validate_filtering_in_sync,
 ):
-    service = await service_with_max_errors(mock_responses, config, 0)
+    await set_server_responses(mock_responses, [config])
+
     patch_validate_filtering_in_sync.side_effect = (
         [InvalidFilteringError] if should_raise_filtering_error else None
     )
 
     if should_raise_filtering_error:
-        await service.run()
+        await create_and_run_service(CONFIG_FILE)
         patch_logger.assert_check(lambda log: isinstance(log, InvalidFilteringError))
     else:
         try:
-            await service.run()
+            await create_and_run_service(CONFIG_FILE)
         except Exception as e:
             # mark test as failed
             assert False, f"Unexpected exception of type {type(e)} raised."
@@ -575,18 +613,18 @@ async def test_connector_service_poll_buggy_service(
 ):
     def connectors_update(url, **kw):
         doc = json.loads(kw["data"])["doc"]
-        assert (
-            doc["error"]
-            == "Could not instantiate <class 'fake_sources.FakeSource'> for fake"
-        )
+        if "error" in doc:  # one time there will be update with no error
+            assert (
+                doc["error"]
+                == "Could not instantiate <class 'fake_sources.FakeSource'> for fake"
+            )
         return CallbackResult(status=200)
 
     await set_server_responses(
-        mock_responses, FAKE_CONFIG_BUGGY_SERVICE, connectors_update=connectors_update
+        mock_responses, [FAKE_CONFIG_BUGGY_SERVICE], connectors_update=connectors_update
     )
-    service = create_service(CONFIG_FILE)
-    asyncio.get_event_loop().call_soon(service.stop)
-    await service.run()
+
+    await create_and_run_service(CONFIG_FILE)
 
     for log in patch_logger.logs:
         if isinstance(log, DataSourceError):
@@ -608,10 +646,7 @@ async def test_spurious(mock_responses, patch_logger, set_env):
     Connector.sync = _sync
 
     try:
-        service = create_service(CONFIG_FILE)
-        service.idling = 0
-        service.service_config["max_errors"] = 0
-        await service.run()
+        await create_and_run_service(CONFIG_FILE)
     except Exception:
         await asyncio.sleep(0.1)
     finally:
@@ -649,12 +684,21 @@ async def test_spurious_continue(mock_responses, patch_logger, set_env):
     )
 
     try:
-        service = create_service(CONFIG_FILE)
-        asyncio.get_event_loop().call_soon(service.stop)
-        await service.run()
+        await create_and_run_service(CONFIG_FILE)
     except Exception:
         await asyncio.sleep(0.1)
     finally:
         Connector.sync = old_sync
 
     patch_logger.assert_instance(Exception)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_syncs(mock_responses, patch_logger, set_env):
+    await set_server_responses(mock_responses, [FAKE_CONFIG, FAKE_CONFIG, FAKE_CONFIG])
+    await create_and_run_service(CONFIG_FILE)
+
+    # make sure we synced the three connectors
+    patch_logger.assert_present("[1] Sync done: 1 indexed, 0  deleted. (0 seconds)")
+    patch_logger.assert_present("[2] Sync done: 1 indexed, 0  deleted. (0 seconds)")
+    patch_logger.assert_present("[3] Sync done: 1 indexed, 0  deleted. (0 seconds)")

@@ -26,9 +26,9 @@ async def validate_filtering(
         else connector.filtering.get_draft_filter()
     )
 
-    validation_result = await connector.source_klass.validate_filtering(
-        filter_to_validate
-    )
+    validation_result = await connector.source_klass(
+        connector.configuration
+    ).validate_filtering(filter_to_validate)
 
     await index.update_filtering_validation(
         connector, validation_result, validation_target
@@ -51,6 +51,8 @@ class InvalidFilteringError(Exception):
 class SyncRuleValidationResult:
     """Represent the validation result for a basic or an advanced rule."""
 
+    ADVANCED_RULES = "advanced_snippet"
+
     def __init__(self, rule_id, is_valid, validation_message):
         self.rule_id = rule_id
         self.is_valid = is_valid
@@ -60,6 +62,18 @@ class SyncRuleValidationResult:
     def valid_result(cls, rule_id):
         return SyncRuleValidationResult(
             rule_id=rule_id, is_valid=True, validation_message="Valid rule"
+        )
+
+    def __eq__(self, other):
+        if not isinstance(other, SyncRuleValidationResult):
+            raise TypeError(
+                f"Can't compare SyncRuleValidationResult with {type(other)}"
+            )
+
+        return (
+            self.rule_id == other.rule_id
+            and self.is_valid == other.is_valid
+            and self.validation_message == other.validation_message
         )
 
 
@@ -169,10 +183,10 @@ class FilteringValidator:
             [] if advanced_rules_validators is None else advanced_rules_validators
         )
 
-    def validate(self, filtering):
+    async def validate(self, filtering):
         logger.info("Filtering validation started")
-        basic_rules = filtering.get("rules", [])
-        advanced_rule = filtering.get("advanced_snippet", {})
+        basic_rules = filtering.basic_rules
+        advanced_rules = filtering.advanced_rules
 
         filtering_validation_result = FilteringValidationResult()
 
@@ -189,7 +203,7 @@ class FilteringValidator:
                     filtering_validation_result += validator.validate(basic_rule)
 
         for validator in self.advanced_rules_validators:
-            filtering_validation_result += validator.validate(advanced_rule)
+            filtering_validation_result += await validator.validate(advanced_rules)
 
         logger.info(f"Filtering validation result: {filtering_validation_result.state}")
         logger.info(
@@ -326,3 +340,10 @@ class BasicRuleAgainstSchemaValidator(BasicRuleValidator):
             return SyncRuleValidationResult(
                 rule_id=rule_id, is_valid=False, validation_message=e.message
             )
+
+
+class AdvancedRulesValidator:
+    """Validate advanced rules."""
+
+    def validate(self, advanced_rules):
+        raise NotImplementedError

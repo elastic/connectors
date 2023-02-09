@@ -22,16 +22,23 @@ service:
   heartbeat: 300
   max_errors: 20
   max_errors_span: 600
+  max_concurrent_syncs: 1
+  job_cleanup_interval: 300
 
 native_service_types:
+  - mongodb
   - mysql
   - network_drive
   - s3
   - gcs
   - abs
+  - postgresql
+  - oracle
+  - dir
 
-# some id
-#connector_id: '1'
+# Connector client settings
+#connector_id: 'changeme'
+#service_type: 'changeme'
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
@@ -41,3 +48,5 @@ sources:
   network_drive: connectors.sources.network_drive:NASDataSource
   gcs: connectors.sources.gcs:GoogleCloudStorageDataSource
   abs: connectors.sources.abs:AzureBlobStorageDataSource
+  postgresql: connectors.sources.postgresql:PostgreSQLDataSource
+  oracle: connectors.sources.oracle:OracleDataSource

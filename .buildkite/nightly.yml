@@ -1,9 +1,12 @@
 agents:
   provider: "gcp"
   machineType: "n1-standard-8"
-  useVault: false
+  useVault: true
 
 steps:
+  - label: "🏗️ Docker images"
+    command:
+      - ".buildkite/publish_docker.sh"
   - label: "🔨 MySQL"
     command:
       - ".buildkite/run_nigthly.sh mysql"
@@ -27,5 +30,15 @@ steps:
   - label: "🔨 Azure Blob Storage"
     command:
       - ".buildkite/run_nigthly.sh abs"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Postgresql"
+    command:
+      - ".buildkite/run_nigthly.sh postgresql"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 System Directory"
+    command:
+      - ".buildkite/run_nigthly.sh dir"
     artifact_paths:
       - "perf8-report-*/**/*"
