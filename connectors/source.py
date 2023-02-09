@@ -58,10 +58,11 @@ class DataSourceConfiguration:
     """Holds the configuration needed by the source class"""
 
     def __init__(self, config):
+        self._raw_config = config
         self._config = {}
         self._defaults = {}
-        if config is not None:
-            for key, value in config.items():
+        if self._raw_config is not None:
+            for key, value in self._raw_config.items():
                 if isinstance(value, dict):
                     self.set_field(
                         key,
@@ -102,6 +103,9 @@ class DataSourceConfiguration:
 
     def is_empty(self):
         return len(self._config) == 0
+
+    def to_dict(self):
+        return dict(self._raw_config)
 
 
 class BaseDataSource:
@@ -275,7 +279,15 @@ def get_source_klass(fqn):
     return getattr(module, klass_name)
 
 
-def get_data_sources(config):
+def get_source_klasses(config):
     """Returns an iterator of all registered sources."""
     for name, fqn in config["sources"].items():
         yield get_source_klass(fqn)
+
+
+def get_source_klass_dict(config):
+    """Returns a service type - source klass dictionary"""
+    result = {}
+    for name, fqn in config["sources"].items():
+        result[name] = get_source_klass(fqn)
+    return result

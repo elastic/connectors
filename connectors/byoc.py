@@ -598,10 +598,6 @@ class Connector:
 
         self.doc_source["last_synced"] = iso_utc()
         await self.sync_doc()
-        logger.info(
-            f"[{self.id}] Sync done: {indexed_count} indexed, {doc_deleted} "
-            f" deleted. ({int(time.time() - self._start_time)} seconds)"
-        )
 
     async def prepare_docs(self, data_provider, filtering=None):
         if filtering is None:
@@ -758,6 +754,15 @@ class Connector:
             await self._sync_done(job, {}, exception=e)
             raise
         finally:
+            if result is None:
+                result = {}
+            doc_updated = result.get("doc_updated", 0)
+            doc_created = result.get("doc_created", 0)
+            doc_deleted = result.get("doc_deleted", 0)
+            logger.info(
+                f"[{self.id}] Sync done: {doc_updated + doc_created} indexed, {doc_deleted} "
+                f" deleted. ({int(time.time() - self._start_time)} seconds)"
+            )
             self._syncing = False
             self._start_time = None
             self._sync_task = None

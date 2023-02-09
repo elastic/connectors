@@ -34,7 +34,9 @@ if [ -f "$NAME/.env" ]; then
 fi
 
 
+if [ -f "$NAME/requirements.txt" ]; then
 $PYTHON -m pip install -r $NAME/requirements.txt
+fi
 $PYTHON fixture.py --name $NAME --action setup
 $PYTHON fixture.py --name $NAME --action start_stack
 $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug --filtering $NAME/filtering.json

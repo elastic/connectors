@@ -34,6 +34,7 @@ native_service_types:
   - azure_blob_storage
   - postgresql
   - oracle
+  - dir
 
 
 # Connector client settings
