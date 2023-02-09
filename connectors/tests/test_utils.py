@@ -13,6 +13,7 @@ import random
 import tempfile
 import time
 import timeit
+from enum import Enum
 from unittest.mock import Mock
 
 import pytest
@@ -26,6 +27,7 @@ from connectors.utils import (
     MemQueue,
     RetryStrategy,
     convert_to_b64,
+    e2str,
     get_base64_value,
     get_size,
     next_run,
@@ -336,3 +338,10 @@ async def test_exponential_backoff_retry():
 
     # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
     await does_not_raise()
+
+
+def test_e2str():
+    class SomeEnum(Enum):
+        A_FIELD = 0
+
+    assert e2str(SomeEnum.A_FIELD) == "a_field"

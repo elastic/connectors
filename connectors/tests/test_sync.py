@@ -13,12 +13,13 @@ from unittest.mock import AsyncMock
 import pytest
 from aioresponses import CallbackResult
 
-from connectors.byoc import DataSourceError, JobStatus, e2str
+from connectors.byoc import DataSourceError, JobStatus
 from connectors.config import load_config
 from connectors.conftest import assert_re
 from connectors.filtering.validation import InvalidFilteringError
 from connectors.services.sync import SyncService
 from connectors.tests.fake_sources import FakeSourceTS
+from connectors.utils import e2str
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yml")
 CONFIG_FILE_2 = os.path.join(os.path.dirname(__file__), "config_2.yml")

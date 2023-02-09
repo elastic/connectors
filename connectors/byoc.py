@@ -16,17 +16,13 @@ from connectors.es import DEFAULT_LANGUAGE, ESIndex, Mappings
 from connectors.filtering.validation import ValidationTarget, validate_filtering
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
-from connectors.utils import iso_utc, next_run
+from connectors.utils import e2str, iso_utc, next_run
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 PIPELINE = "ent-search-generic-ingestion"
 RETRY_ON_CONFLICT = 3
 SYNC_DISABLED = -1
-
-
-def e2str(entry):
-    return entry.name.lower()
 
 
 class Status(Enum):
