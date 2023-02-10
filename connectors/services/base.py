@@ -72,8 +72,8 @@ class MultiService:
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
         for task in pending:
-            task.cancel()
             try:
+                task.cancel()
                 await task
             except asyncio.CancelledError:
                 logger.error(f"Service did not handle cancellation gracefully.")
