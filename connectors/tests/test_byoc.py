@@ -253,7 +253,7 @@ async def test_sync_job():
     await job.done(12, 34)
 
     assert job.status == JobStatus.COMPLETED
-    assert job.duration >= -1
+    assert job.duration > -1
 
     updated_job_def = update_mock.call_args.kwargs["doc"]
 
