@@ -44,11 +44,20 @@ def _parser():
         default=os.path.join(os.path.dirname(__file__), "..", "config.yml"),
     )
 
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--log-level",
+        type=str,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default=None,
+        help="Set log level for the service.",
+    )
+    group.add_argument(
         "--debug",
-        action="store_true",
-        default=False,
-        help="Run the event loop in debug mode.",
+        dest="log_level",
+        action="store_const",
+        const="DEBUG",
+        help="Run the event loop in debug mode (alias for --log-level DEBUG)",
     )
 
     parser.add_argument(
@@ -115,6 +124,11 @@ def run(args):
 
     # load config
     config = load_config(args.config_file)
+    # Precedence: CLI args >> Config Setting >> INFO
+    set_logger(
+        args.log_level or config["service"]["log_level"] or logging.INFO,
+        filebeat=args.filebeat,
+    )
 
     # just display the list of connectors
     if args.action == "list":
@@ -143,5 +157,4 @@ def main(args=None):
     if args.version:
         print(__version__)
         return 0
-    set_logger(args.debug and logging.DEBUG or logging.INFO, filebeat=args.filebeat)
     return run(args)
