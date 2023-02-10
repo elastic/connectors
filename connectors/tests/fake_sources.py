@@ -18,6 +18,7 @@ from connectors.filtering.validation import (
 class FakeSource:
     """Fakey"""
 
+    name = "Fakey"
     service_type = "fake"
 
     def __init__(self, configuration):
@@ -40,7 +41,7 @@ class FakeSource:
             return
         return {"_id": doc_id, "_timestamp": timestamp, "text": "xx"}
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         if self.fail:
             raise Exception("I fail while syncing")
         yield {"_id": "1"}, partial(self._dl, "1")
@@ -63,6 +64,7 @@ class FakeSource:
 class FakeSourceFilteringValid(FakeSource):
     """Source with valid filtering."""
 
+    name = "Source with valid filtering."
     service_type = "filtering_state_valid"
 
     @classmethod
@@ -76,6 +78,7 @@ class FakeSourceFilteringValid(FakeSource):
 class FakeSourceFilteringStateInvalid(FakeSource):
     """Source with filtering in state invalid."""
 
+    name = "Source with filtering in state invalid."
     service_type = "filtering_state_invalid"
 
     @classmethod
@@ -86,6 +89,7 @@ class FakeSourceFilteringStateInvalid(FakeSource):
 class FakeSourceFilteringStateEdited(FakeSource):
     """Source with filtering in state edited."""
 
+    name = "Source with filtering in state edited."
     service_type = "filtering_state_edited"
 
     @classmethod
@@ -96,6 +100,7 @@ class FakeSourceFilteringStateEdited(FakeSource):
 class FakeSourceFilteringErrorsPresent(FakeSource):
     """Source with filtering errors."""
 
+    name = "Source with filtering errors."
     service_type = "filtering_errors_present"
 
     @classmethod
@@ -106,10 +111,11 @@ class FakeSourceFilteringErrorsPresent(FakeSource):
 class FakeSourceTS(FakeSource):
     """Fake source with stable TS"""
 
+    name = "Fake source with stable TS"
     service_type = "fake_ts"
     ts = "2022-10-31T09:04:35.277558"
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         if self.fail:
             raise Exception("I fail while syncing")
         yield {"_id": "1", "_timestamp": self.ts}, partial(self._dl, "1")
@@ -118,10 +124,11 @@ class FakeSourceTS(FakeSource):
 class FailsThenWork(FakeSource):
     """Buggy"""
 
+    name = "Buggy"
     service_type = "fail_once"
     fail = True
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         if FailsThenWork.fail:
             FailsThenWork.fail = False
             raise Exception("I fail while syncing")
@@ -131,9 +138,10 @@ class FailsThenWork(FakeSource):
 class LargeFakeSource(FakeSource):
     """Phatey"""
 
+    name = "Phatey"
     service_type = "large_fake"
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         for i in range(1001):
             doc_id = str(i + 1)
             yield {"_id": doc_id, "data": "big" * 4 * 1024}, partial(self._dl, doc_id)

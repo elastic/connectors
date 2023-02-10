@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -21,6 +22,51 @@ from connectors.utils import validate_index_name
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
+DEFAULT_FILTERING = [
+    {
+        "domain": "DEFAULT",
+        "draft": {
+            "advanced_snippet": {
+                "updated_at": "2023-01-31T16:41:27.341Z",
+                "created_at": "2023-01-31T16:38:49.244Z",
+                "value": {},
+            },
+            "rules": [
+                {
+                    "field": "_",
+                    "updated_at": "2023-01-31T16:41:27.341Z",
+                    "created_at": "2023-01-31T16:38:49.244Z",
+                    "rule": "regex",
+                    "id": "DEFAULT",
+                    "value": ".*",
+                    "order": 1,
+                    "policy": "include",
+                }
+            ],
+            "validation": {"state": "valid", "errors": []},
+        },
+        "active": {
+            "advanced_snippet": {
+                "updated_at": "2023-01-31T16:41:27.341Z",
+                "created_at": "2023-01-31T16:38:49.244Z",
+                "value": {},
+            },
+            "rules": [
+                {
+                    "field": "_",
+                    "updated_at": "2023-01-31T16:41:27.341Z",
+                    "created_at": "2023-01-31T16:38:49.244Z",
+                    "rule": "regex",
+                    "id": "DEFAULT",
+                    "value": ".*",
+                    "order": 1,
+                    "policy": "include",
+                }
+            ],
+            "validation": {"state": "valid", "errors": []},
+        },
+    }
+]
 DEFAULT_PIPELINE = {
     "version": 1,
     "description": "For testing",
@@ -45,7 +91,10 @@ DEFAULT_PIPELINE = {
 
 
 # XXX simulating Kibana click-arounds
-async def prepare(service_type, index_name, config):
+async def prepare(service_type, index_name, config, filtering=None):
+    if filtering is None:
+        filtering = []
+
     klass = get_source_klass(config["sources"][service_type])
     es = ElasticServer(config["elasticsearch"])
 
@@ -98,26 +147,29 @@ async def prepare(service_type, index_name, config):
             "status": "configured",
             "language": "en",
             # Last sync
-            "last_sync_status": "null",
-            "last_sync_error": "",
-            "last_synced": "",
+            "last_sync_status": None,
+            "last_sync_error": None,
+            "last_synced": None,
             # Written by connector on each operation,
             # used by Kibana to hint to user about status of connector
-            "last_seen": "",
+            "last_seen": None,
             # Date the connector was created
-            "created_at": "",
+            "created_at": None,
             # Date the connector was updated
-            "updated_at": "",
+            "updated_at": None,
+            "filtering": filtering,
             # Scheduling intervals
-            "scheduling": {"enabled": True, "interval": "1 * * * * *"},  # quartz syntax
+            "scheduling": {
+                "enabled": False,
+                "interval": "1 * * * * *",
+            },  # quartz syntax
             "pipeline": {
                 "extract_binary_content": True,
                 "name": "ent-search-generic-ingestion",
                 "reduce_whitespace": True,
                 "run_ml_inference": True,
             },
-            # A flag to run sync immediately
-            "sync_now": True,
+            "sync_now": False,
             "is_native": True,
         }
 
@@ -202,22 +254,49 @@ def _parser():
         default=False,
         help="Run the event loop in debug mode.",
     )
+    parser.add_argument(
+        "--filtering",
+        type=str,
+        help="Path to a json file containing an array of filters",
+    )
 
     return parser
+
+
+def _load_filtering(filtering_file_path):
+    if filtering_file_path is None or (
+        not os.path.exists(filtering_file_path)
+        and not os.path.isfile(filtering_file_path)
+    ):
+        logger.warning(
+            f"filtering file at '{filtering_file_path}' does not exist. Fallback to default filtering."
+        )
+        filtering = DEFAULT_FILTERING
+    else:
+        with open(filtering_file_path) as f:
+            filtering = json.loads(f.read())
+
+        logger.info(f"Successfully loaded filtering file from '{filtering_file_path}'.")
+
+    return filtering
 
 
 def main(args=None):
     parser = _parser()
     args = parser.parse_args(args=args)
     config_file = args.config_file
+    filtering_file = args.filtering
 
     if not os.path.exists(config_file):
-        raise IOError(f"{config_file} does not exist")
+        raise IOError(f"config file at '{config_file}' does not exist")
+
+    logger.info(f"Loading filters from {filtering_file}")
+    filtering = _load_filtering(filtering_file)
 
     set_logger(args.debug and logging.DEBUG or logging.INFO)
     config = EnvYAML(config_file)
     try:
-        asyncio.run(prepare(args.service_type, args.index_name, config))
+        asyncio.run(prepare(args.service_type, args.index_name, config, filtering))
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("Bye")
 

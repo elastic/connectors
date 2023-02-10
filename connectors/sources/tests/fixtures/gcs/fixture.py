@@ -131,7 +131,7 @@ def load():
     )
 
 
-def remove_blobs():
+def remove():
     """Method for removing random blobs from the fake gcs server"""
     create_connection()
     try:

@@ -12,6 +12,8 @@ import os
 import random
 import tempfile
 import time
+import timeit
+from unittest.mock import Mock
 
 import pytest
 from freezegun import freeze_time
@@ -22,10 +24,12 @@ from connectors.utils import (
     ConcurrentTasks,
     InvalidIndexNameError,
     MemQueue,
+    RetryStrategy,
     convert_to_b64,
     get_base64_value,
     get_size,
     next_run,
+    retryable,
     validate_index_name,
 )
 
@@ -55,21 +59,36 @@ def test_invalid_names():
             validate_index_name(name)
 
 
-@pytest.mark.asyncio
-async def test_mem_queue_speed(patch_logger):
-    # with memqueue
-    queue = MemQueue(maxmemsize=1024 * 1024, refresh_interval=0.1, refresh_timeout=2)
-    start = time.time()
-    for i in range(1000):
-        await queue.put("x" * 100)
-    mem_queue_duration = time.time() - start
+def test_mem_queue_speed(patch_logger):
+    def mem_queue():
+        import asyncio
 
-    # vanilla queue
-    queue = asyncio.Queue()
-    start = time.time()
-    for i in range(1000):
-        await queue.put("x" * 100)
-    queue_duration = time.time() - start
+        from connectors.utils import MemQueue
+
+        queue = MemQueue(
+            maxmemsize=1024 * 1024, refresh_interval=0.1, refresh_timeout=2
+        )
+
+        async def run():
+            for i in range(1000):
+                await queue.put("x" * 100)
+
+        asyncio.run(run())
+
+    mem_queue_duration = min(timeit.repeat(mem_queue, number=1, repeat=3))
+
+    def vanilla_queue():
+        import asyncio
+
+        queue = asyncio.Queue()
+
+        async def run():
+            for i in range(1000):
+                await queue.put("x" * 100)
+
+        asyncio.run(run())
+
+    queue_duration = min(timeit.repeat(vanilla_queue, number=1, repeat=3))
 
     # mem queue should be 30 times slower at the most
     quotient, _ = divmod(mem_queue_duration, queue_duration)
@@ -283,3 +302,37 @@ def test_convert_to_b64_no_overwrite(converter):
         finally:
             if os.path.exists(target):
                 os.remove(target)
+
+
+class CustomException(Exception):
+    pass
+
+
+@pytest.mark.fail_slow(1)
+@pytest.mark.asyncio
+async def test_exponential_backoff_retry():
+    mock_func = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        interval=0,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def raises():
+        mock_func()
+        raise CustomException()
+
+    with pytest.raises(CustomException):
+        await raises()
+
+        # retried 10 times
+        assert mock_func.call_count == num_retries
+
+    # would lead to roughly ~ 50 seconds of retrying
+    @retryable(retries=10, interval=5, strategy=RetryStrategy.LINEAR_BACKOFF)
+    async def does_not_raise():
+        pass
+
+    # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
+    await does_not_raise()

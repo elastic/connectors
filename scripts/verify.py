@@ -35,7 +35,7 @@ async def verify(service_type, index_name, size, config):
         print("First doc")
         print(first_doc)
 
-        if len(first_doc.keys()) < 4:
+        if len(first_doc.keys()) < 3:
             raise Exception("The doc does not look right")
 
         if "_extract_binary_content" in first_doc:
@@ -77,11 +77,8 @@ def main(args=None):
     with open(config_file) as f:
         config = yaml.safe_load(f)
 
-    loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(
-            verify(args.service_type, args.index_name, args.size, config)
-        )
+        asyncio.run(verify(args.service_type, args.index_name, args.size, config))
         print("Bye")
     except (asyncio.CancelledError, KeyboardInterrupt):
         print("Bye")

@@ -32,6 +32,9 @@ MAX_CONCURRENT_DOWNLOADS = 100  # Max concurrent download supported by abs
 class AzureBlobStorageDataSource(BaseDataSource):
     """Azure Blob Storage"""
 
+    name = "Azure Blob Storage"
+    service_type = "abs"
+
     def __init__(self, configuration):
         """Set up the connection to the azure base client
 
@@ -82,24 +85,19 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "label": "Azure Blob Storage blob endpoint",
                 "type": "str",
             },
-            "connector_name": {
-                "value": "Azure Blob Storage Connector",
-                "label": "Friendly name for the connector",
-                "type": "str",
-            },
             "enable_content_extraction": {
                 "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Flag to check if content extraction is enabled or not",
+                "label": "Enable content extraction (true/false)",
                 "type": "bool",
             },
             "retry_count": {
                 "value": DEFAULT_RETRY_COUNT,
-                "label": "How many retry count for fetching rows on each call",
+                "label": "Retries per request",
                 "type": "int",
             },
             "concurrent_downloads": {
                 "value": MAX_CONCURRENT_DOWNLOADS,
-                "label": "How many concurrent downloads for fetching blob content",
+                "label": "Maximum concurrent downloads",
                 "type": "int",
             },
         }
@@ -250,7 +248,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
                     blob=blob, container_metadata=container["metadata"]
                 )
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         """Get documents from Azure Blob Storage
 
         Yields:

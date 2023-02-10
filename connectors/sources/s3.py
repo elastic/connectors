@@ -36,6 +36,9 @@ else:
 class S3DataSource(BaseDataSource):
     """Amazon S3"""
 
+    name = "Amazon S3"
+    service_type = "s3"
+
     def __init__(self, configuration):
         """Set up the connection to the Amazon S3.
 
@@ -47,6 +50,7 @@ class S3DataSource(BaseDataSource):
         set_extra_logger(aws_logger, log_level=logging.DEBUG, prefix="S3")
         set_extra_logger("aioboto3.resources", log_level=logging.INFO, prefix="S3")
         self.bucket_list = []
+        self.buckets = self.configuration["buckets"]
         self.config = AioConfig(
             read_timeout=self.configuration["read_timeout"],
             connect_timeout=self.configuration["connect_timeout"],
@@ -65,8 +69,19 @@ class S3DataSource(BaseDataSource):
         ) as s3:
             yield s3
 
+    def _validate_configuration(self):
+        """Validates whether user input is empty or not for configuration fields
+
+        Raises:
+            Exception: Configured keys can't be empty
+        """
+        if self.configuration["buckets"] == [""]:
+            raise Exception("Configured keys: buckets can't be empty.")
+
     async def ping(self):
         """Verify the connection with AWS"""
+        logger.info("Validating Amazon S3 Configuration...")
+        self._validate_configuration()
         try:
             async with self.client() as s3:
                 self.bucket_list = await s3.list_buckets()
@@ -158,7 +173,7 @@ class S3DataSource(BaseDataSource):
         """
         return [bucket["Name"] for bucket in self.bucket_list["Buckets"]]
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         """Get documents from Amazon S3
 
         Returns:
@@ -167,7 +182,7 @@ class S3DataSource(BaseDataSource):
         Yields:
             dictionary: Document from Amazon S3.
         """
-        bucket_list = self.configuration["buckets"] or self.get_bucket_list()
+        bucket_list = self.buckets if self.buckets != ["*"] else self.get_bucket_list()
         page_size = int(self.configuration.get("page_size", DEFAULT_PAGE_SIZE))
         for bucket in bucket_list:
             region_name = await self.get_bucket_region(bucket)
@@ -185,13 +200,13 @@ class S3DataSource(BaseDataSource):
                         doc_id = md5(
                             f"{bucket}/{obj_summary.key}".encode("utf8")
                         ).hexdigest()
-
+                        owner = await obj_summary.owner
                         doc = {
                             "_id": doc_id,
                             "filename": obj_summary.key,
                             "size_in_bytes": await obj_summary.size,
                             "bucket": bucket,
-                            "owner": (await obj_summary.owner).get("DisplayName"),
+                            "owner": owner.get("DisplayName") if owner else "",
                             "storage_class": await obj_summary.storage_class,
                             "_timestamp": (await obj_summary.last_modified).isoformat(),
                         }
@@ -214,8 +229,8 @@ class S3DataSource(BaseDataSource):
         """
         return {
             "buckets": {
-                "value": ["ent-search-ingest-dev"],
-                "label": "List of AWS Buckets",
+                "value": "ent-search-ingest-dev",
+                "label": "AWS Buckets",
                 "type": "list",
             },
             "read_timeout": {
@@ -238,14 +253,9 @@ class S3DataSource(BaseDataSource):
                 "label": "Maximum size of page",
                 "type": "int",
             },
-            "connector_name": {
-                "value": "AWS Connector",
-                "label": "Friendly name for the connector",
-                "type": "str",
-            },
             "enable_content_extraction": {
                 "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Content extraction will be enabled or not",
+                "label": "Enable content extraction (true/false)",
                 "type": "bool",
             },
         }

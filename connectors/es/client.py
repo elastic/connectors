@@ -11,6 +11,7 @@ from elasticsearch import ApiError, AsyncElasticsearch
 from elasticsearch import ConnectionError as ElasticConnectionError
 from elasticsearch import NotFoundError
 
+from connectors import __version__
 from connectors.logger import logger, set_extra_logger
 from connectors.utils import CancellableSleeps
 
@@ -59,8 +60,8 @@ class ESClient:
         self.max_wait_duration = config.get("max_wait_duration", 60)
         self.initial_backoff_duration = config.get("initial_backoff_duration", 5)
         self.backoff_multiplier = config.get("backoff_multiplier", 2)
-        if "headers" in config:
-            options["headers"] = config["headers"]
+        options["headers"] = config.get("headers", {})
+        options["headers"]["user-agent"] = f"elastic-connectors-python-{__version__}"
         self.client = AsyncElasticsearch(**options)
         self._keep_waiting = True
 
@@ -123,3 +124,6 @@ class ESClient:
                 await self.client.ingest.get_pipeline(id=pipeline)
             except NotFoundError:
                 raise PreflightCheckError(f"Could not find pipeline {pipeline}")
+
+    async def delete_indices(self, indices=[]):
+        await self.client.indices.delete(index=indices, ignore_unavailable=True)

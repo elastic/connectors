@@ -162,6 +162,16 @@ class ConnectorIndex(ESIndex):
 
         return query
 
+    async def supported_connectors(
+        self, native_service_types=None, connectors_ids=None
+    ):
+        query = self.build_docs_query(native_service_types, connectors_ids)
+        if query is None:
+            return
+
+        async for connector in self.get_all_docs(query=query):
+            yield connector
+
     def _create_object(self, doc_source):
         return Connector(
             self,
@@ -170,6 +180,10 @@ class ConnectorIndex(ESIndex):
             bulk_options=self.bulk_options,
         )
 
+    async def all_connectors(self):
+        async for connector in self.get_all_docs():
+            yield connector
+
 
 class SyncJob:
     def __init__(self, elastic_index, connector_id, doc_source=None):
@@ -177,13 +191,15 @@ class SyncJob:
         self.elastic_index = elastic_index
         self.created_at = datetime.now(timezone.utc)
         self.completed_at = None
-        self.job_id = None
-        self.status = None
+        self.filtering = Filter()
         self.client = elastic_index.client
         if doc_source is None:
             doc_source = dict()
 
         self.doc_source = doc_source
+        self.job_id = self.doc_source.get("_id")
+        _status = self.doc_source.get("_source", {}).get("status")
+        self.status = None if _status is None else JobStatus[_status.upper()]
 
     @property
     def duration(self):
@@ -192,11 +208,17 @@ class SyncJob:
         msec = (self.completed_at - self.created_at).microseconds
         return round(msec / 9, 2)
 
+    @property
+    def index_name(self):
+        return self.doc_source["_source"]["connector"]["index_name"]
+
     async def start(self, trigger_method=JobTriggerMethod.SCHEDULED, filtering=None):
         if filtering is None:
-            filtering = {}
+            filtering = Filter()
 
         self.status = JobStatus.IN_PROGRESS
+        self.filtering = filtering
+
         job_def = {
             "connector": {
                 "id": self.connector_id,
@@ -234,6 +256,12 @@ class SyncJob:
 
         return await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
 
+    async def suspend(self):
+        self.status = JobStatus.SUSPENDED
+        job_def = {"status": e2str(self.status)}
+
+        await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
+
     @classmethod
     def transform_filtering(cls, filtering):
         # deepcopy to not change the reference resulting in changing .elastic-connectors filtering
@@ -268,12 +296,32 @@ class Filtering:
     def get_filter(self, filter_state="active", domain=DEFAULT_DOMAIN):
         return next(
             (
-                filter_[filter_state]
+                Filter(filter_[filter_state])
                 for filter_ in self.filtering
                 if filter_["domain"] == domain
             ),
-            {},
+            Filter(),
         )
+
+
+class Filter(dict):
+    def __init__(self, filter_=None):
+        if filter_ is None:
+            filter_ = {}
+
+        super().__init__(filter_)
+
+        advanced_rules = filter_.get("advanced_snippet", {})
+
+        self.advanced_rules = advanced_rules.get("value", advanced_rules)
+        self.basic_rules = filter_.get("rules", [])
+        self.validation = filter_.get("validation", {})
+
+    def get_advanced_rules(self):
+        return self.advanced_rules
+
+    def has_advanced_rules(self):
+        return len(self.advanced_rules) > 0
 
 
 class PipelineSettings:
@@ -367,7 +415,6 @@ class Connector:
         doc_source,
         bulk_options,
     ):
-
         self.doc_source = doc_source
         self.id = connector_id
         self.index = elastic_index
@@ -382,6 +429,7 @@ class Connector:
         self.bulk_options = bulk_options
         self.source_klass = None
         self.data_provider = None
+        self._sync_task = None
 
     def _update_config(self, doc_source):
         self.status = doc_source["status"]
@@ -396,6 +444,13 @@ class Connector:
         self._filtering = Filtering(doc_source.get("filtering", []))
         self.language_code = doc_source["language"]
         self.features = Features(doc_source.get("features", {}))
+
+    @property
+    def last_sync_status(self):
+        status = self.doc_source.get("last_sync_status")
+        if status is None:
+            return None
+        return JobStatus[status.upper()]
 
     @property
     def status(self):
@@ -441,6 +496,13 @@ class Connector:
         )
         self.doc_source["status"] = e2str(status)
         self._update_config(self.doc_source)
+
+    async def suspend(self):
+        if self._sync_task is not None:
+            task = self._sync_task
+            task.cancel()
+            await task
+        await self.close()
 
     async def close(self):
         self._closed = True
@@ -506,6 +568,15 @@ class Connector:
         self.doc_source["error"] = str(error)
         await self.sync_doc()
 
+    async def _sync_suspended(self, job):
+        await job.suspend()
+        self.doc_source["last_sync_status"] = e2str(job.status)
+        self.doc_source["last_sync_error"] = None
+        self.doc_source["error"] = None
+        self.doc_source["last_synced"] = iso_utc()
+        await self.sync_doc()
+        logger.info(f"Sync suspended, Job id: {job.job_id}")
+
     async def _sync_done(self, job, result, exception=None):
         doc_updated = result.get("doc_updated", 0)
         doc_created = result.get("doc_created", 0)
@@ -527,15 +598,14 @@ class Connector:
 
         self.doc_source["last_synced"] = iso_utc()
         await self.sync_doc()
-        logger.info(
-            f"Sync done: {indexed_count} indexed, {doc_deleted} "
-            f" deleted. ({int(time.time() - self._start_time)} seconds)"
-        )
 
-    async def prepare_docs(self, data_provider):
+    async def prepare_docs(self, data_provider, filtering=None):
+        if filtering is None:
+            filtering = Filter()
+
         logger.debug(f"Using pipeline {self.pipeline}")
 
-        async for doc, lazy_download in data_provider.get_docs():
+        async for doc, lazy_download in data_provider.get_docs(filtering=filtering):
             # adapt doc for pipeline settings
             doc["_extract_binary_content"] = self.pipeline.extract_binary_content
             doc["_reduce_whitespace"] = self.pipeline.reduce_whitespace
@@ -593,7 +663,7 @@ class Connector:
 
         self.source_klass = source_klass
 
-    async def sync(self, elastic_server, idling, sync_now=False):
+    async def sync(self, elastic_server, idling):
         # If anything bad happens before we create a sync job
         # (like bad scheduling config, etc.)
         #
@@ -604,24 +674,25 @@ class Connector:
 
         try:
             service_type = self.service_type
-            if not sync_now:
-                next_sync = self.next_sync()
-                if next_sync == SYNC_DISABLED or next_sync - idling > 0:
-                    if next_sync == SYNC_DISABLED:
-                        logger.debug(f"Scheduling is disabled for {service_type}")
-                    else:
-                        logger.debug(
-                            f"Next sync for {service_type} due in {int(next_sync)} seconds"
-                        )
-                    # if we don't sync, we still want to make sure we tell kibana we are connected
-                    # if the status is different from comnected
-                    if self.status != Status.CONNECTED:
-                        self.status = Status.CONNECTED
-                        await self.sync_doc()
-                    return
-            else:
-                self.sync_now = True
-                logger.info("Sync forced")
+            # if the status is different from comnected
+            if self.status != Status.CONNECTED:
+                self.status = Status.CONNECTED
+                await self.sync_doc()
+
+            next_sync = self.next_sync()
+            # First we check if sync is disabled, and it terminates all other conditions
+            if next_sync == SYNC_DISABLED:
+                logger.debug(f"Scheduling is disabled for {service_type}")
+                return
+            # Then we check if we need to restart SUSPENDED job
+            elif self.last_sync_status == JobStatus.SUSPENDED:
+                logger.info("Restarting sync after suspension")
+            # And only then we check if we need to run sync right now or not
+            elif next_sync - idling > 0:
+                logger.debug(
+                    f"Next sync for {service_type} due in {int(next_sync)} seconds"
+                )
+                return
 
             try:
                 self.data_provider = self.source_klass(self.configuration)
@@ -642,6 +713,7 @@ class Connector:
 
         logger.debug(f"Syncing '{service_type}'")
         self._syncing = True
+        self._sync_task = asyncio.current_task()
         job = await self._sync_starts()
         try:
             logger.debug(f"Pinging the {self.data_provider} backend")
@@ -669,20 +741,31 @@ class Connector:
 
             result = await elastic_server.async_bulk(
                 self.index_name,
-                self.prepare_docs(self.data_provider),
+                self.prepare_docs(self.data_provider, job.filtering),
                 self.pipeline,
                 filtering=self.filtering,
                 sync_rules_enabled=sync_rules_enabled,
                 options=bulk_options,
             )
             await self._sync_done(job, result)
-
+        except asyncio.CancelledError:
+            await self._sync_suspended(job)
         except Exception as e:
             await self._sync_done(job, {}, exception=e)
             raise
         finally:
+            if result is None:
+                result = {}
+            doc_updated = result.get("doc_updated", 0)
+            doc_created = result.get("doc_created", 0)
+            doc_deleted = result.get("doc_deleted", 0)
+            logger.info(
+                f"[{self.id}] Sync done: {doc_updated + doc_created} indexed, {doc_deleted} "
+                f" deleted. ({int(time.time() - self._start_time)} seconds)"
+            )
             self._syncing = False
             self._start_time = None
+            self._sync_task = None
 
 
 STUCK_JOBS_THRESHOLD = 60  # 60 seconds
@@ -709,51 +792,38 @@ class SyncJobIndex(ESIndex):
         return SyncJob(
             self,
             connector_id=doc_source["_source"]["connector"]["id"],
-            doc_source=doc_source["_source"],
+            doc_source=doc_source,
         )
 
-    def pending_job_query(self, connectors_ids):
-        """
-        Args:
-            connectors_ids (list of int): A list of connectors IDs
-        Returns:
-            dict
-        """
-        status_term = {"status": [e2str(JobStatus.PENDING)]}
-
+    async def pending_jobs(self, connector_ids=[]):
         query = {
             "bool": {
                 "must": [
-                    {"terms": status_term},
-                    {"terms": {"connector.id": connectors_ids}},
+                    {
+                        "terms": {
+                            "status": [
+                                e2str(JobStatus.PENDING),
+                                e2str(JobStatus.SUSPENDED),
+                            ]
+                        }
+                    },
+                    {"terms": {"connector.id": connector_ids}},
                 ]
             }
         }
+        async for job in self.get_all_docs(query=query):
+            yield job
 
-        return query
+    async def orphaned_jobs(self, connector_ids=[]):
+        query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
+        async for job in self.get_all_docs(query=query):
+            yield job
 
-    def orphaned_jobs_query(self, connectors_ids):
-        """
-        Args:
-            connectors_ids (list of int): A list of connectors IDs
-        Returns:
-            dict
-        """
-        query = {"bool": {"must_not": {"terms": {"connector.id": connectors_ids}}}}
-
-        return query
-
-    def stuck_jobs_query(self, connectors_ids):
-        """
-        Args:
-            connectors_ids (list of int): A list of connectors IDs
-        Returns:
-            dict
-        """
+    async def stuck_jobs(self, connector_ids=[]):
         query = {
             "bool": {
                 "filter": [
-                    {"terms": {"connector.id": connectors_ids}},
+                    {"terms": {"connector.id": connector_ids}},
                     {
                         "terms": {
                             "status": [
@@ -767,4 +837,9 @@ class SyncJobIndex(ESIndex):
             }
         }
 
-        return query
+        async for job in self.get_all_docs(query=query):
+            yield job
+
+    async def delete_jobs(self, job_ids=[]):
+        query = {"terms": {"_id": job_ids}}
+        return await self.client.delete_by_query(index=self.index_name, query=query)
