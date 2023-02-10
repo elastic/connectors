@@ -20,7 +20,6 @@ from connectors.byoc import (
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
     Status,
-    e2str,
 )
 from connectors.byoei import ElasticServer
 from connectors.filtering.validation import (
@@ -30,7 +29,7 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.services.base import BaseService
-from connectors.utils import ConcurrentTasks
+from connectors.utils import ConcurrentTasks, e2str
 
 DEFAULT_MAX_CONCURRENT_SYNCS = 1
 
@@ -114,11 +113,11 @@ class SyncService(BaseService):
 
         # XXX we can support multiple connectors but Ruby can't so let's use a
         # single id
-        # connectors_ids = self.config.get("connectors_ids", [])
+        # connector_ids = self.config.get("connector_ids", [])
         if "connector_id" in self.config:
-            connectors_ids = [self.config.get("connector_id")]
+            connector_ids = [self.config.get("connector_id")]
         else:
-            connectors_ids = []
+            connector_ids = []
 
         logger.info(
             f"Service started, listening to events from {self.es_config['host']}"
@@ -132,10 +131,10 @@ class SyncService(BaseService):
 
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
-                    query = self.connectors.build_docs_query(
-                        native_service_types, connectors_ids
-                    )
-                    async for connector in self.connectors.get_all_docs(query=query):
+                    async for connector in self.connectors.supported_connectors(
+                        native_service_types=native_service_types,
+                        connector_ids=connector_ids,
+                    ):
                         await self.syncs.put(
                             functools.partial(self._one_sync, connector, es)
                         )

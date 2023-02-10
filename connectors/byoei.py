@@ -28,7 +28,7 @@ from collections import defaultdict
 from elasticsearch import NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan
 
-from connectors.byoc import Filtering
+from connectors.byoc import Filter
 from connectors.es import ESClient
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger
@@ -69,7 +69,7 @@ class Bulker:
     - `max_concurrency` -- a maximum number of concurrent bulk requests
 
     Extra options:
-    - `pipeline_settings` -- ingest pipeline settings to pass to the bulk API
+    - `pipeline` -- ingest pipeline settings to pass to the bulk API
     """
 
     def __init__(
@@ -77,7 +77,7 @@ class Bulker:
         client,
         queue,
         chunk_size,
-        pipeline_settings,
+        pipeline,
         chunk_mem_size,
         max_concurrency,
     ):
@@ -87,7 +87,7 @@ class Bulker:
         self.bulking = False
         self.ops = defaultdict(int)
         self.chunk_size = chunk_size
-        self.pipeline_settings = pipeline_settings
+        self.pipeline = pipeline
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.max_concurrent_bulks = max_concurrency
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
@@ -118,7 +118,7 @@ class Bulker:
         start = time.time()
         try:
             res = await self.client.bulk(
-                operations=operations, pipeline=self.pipeline_settings.name
+                operations=operations, pipeline=self.pipeline["name"]
             )
 
             if res.get("errors"):
@@ -177,7 +177,7 @@ class Fetcher:
         queue,
         index,
         existing_ids,
-        filtering=Filtering(),
+        filter=Filter(),
         sync_rules_enabled=False,
         queue_size=DEFAULT_QUEUE_SIZE,
         display_every=DEFAULT_DISPLAY_EVERY,
@@ -196,11 +196,9 @@ class Fetcher:
         self.total_docs_created = 0
         self.total_docs_deleted = 0
         self.fetch_error = None
-        self.filtering = filtering
+        self.filter = filter
         self.basic_rule_engine = (
-            BasicRuleEngine(parse(filtering.get_active_filter().get("rules", [])))
-            if sync_rules_enabled
-            else None
+            BasicRuleEngine(parse(filter.basic_rules)) if sync_rules_enabled else None
         )
         self.display_every = display_every
         self.concurrent_downloads = concurrent_downloads
@@ -414,7 +412,7 @@ class ElasticServer(ESClient):
         index,
         generator,
         pipeline,
-        filtering=Filtering(),
+        filter=Filter(),
         sync_rules_enabled=False,
         options=None,
     ):
@@ -445,7 +443,7 @@ class ElasticServer(ESClient):
             stream,
             index,
             existing_ids,
-            filtering=filtering,
+            filter=filter,
             sync_rules_enabled=sync_rules_enabled,
             queue_size=queue_size,
             display_every=display_every,

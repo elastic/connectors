@@ -11,7 +11,7 @@ from unittest.mock import Mock, call
 
 import pytest
 
-from connectors.byoc import PipelineSettings
+from connectors.byoc import Pipeline
 from connectors.byoei import (
     ContentIndexNameInvalid,
     ElasticServer,
@@ -187,7 +187,7 @@ async def test_async_bulk(mock_responses, patch_logger):
     set_responses(mock_responses)
 
     es = ElasticServer(config)
-    pipeline = PipelineSettings({})
+    pipeline = Pipeline({})
 
     async def get_docs():
         async def _dl_none(doit=True, timestamp=None):
@@ -234,7 +234,7 @@ async def test_async_bulk_same_ts(mock_responses, patch_logger):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses, ts)
     es = ElasticServer(config)
-    pipeline = PipelineSettings({})
+    pipeline = Pipeline({})
 
     async def get_docs():
         async def _dl(doit=True, timestamp=None):
@@ -355,9 +355,9 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
     existing_ids = {doc["_id"]: doc["_timestamp"] for doc in existing_docs}
 
     # filtering content doesn't matter as the BasicRuleEngine behavior is mocked
-    filtering_mock = Mock()
-    filtering_mock.get_active_filter = Mock(return_value={})
-    fetcher = Fetcher(client, queue, INDEX, existing_ids, filtering=filtering_mock)
+    filter_mock = Mock()
+    filter_mock.get_active_filter = Mock(return_value={})
+    fetcher = Fetcher(client, queue, INDEX, existing_ids, filter=filter_mock)
     fetcher.basic_rule_engine = basic_rule_engine if sync_rules_enabled else None
     return fetcher
 
