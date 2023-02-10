@@ -22,7 +22,7 @@ from connectors.preflight_check import PreflightCheck
 from connectors.services.job_cleanup import JobCleanUpService
 from connectors.services.sync import SyncService
 from connectors.source import get_source_klasses
-from connectors.utils import get_event_loop, MultiService
+from connectors.utils import MultiService, get_event_loop
 
 
 def _parser():
@@ -97,7 +97,9 @@ async def _start_service(config, loop):
 
     multiservice = MultiService([SyncService(config), JobCleanUpService(config)])
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, lambda: asyncio.ensure_future(multiservice.shutdown(sig.name)))
+        loop.add_signal_handler(
+            sig, functools.partial(multiservice.shutdown, sig.name)
+        )
 
     if "PERF8" in os.environ:
         import perf8
