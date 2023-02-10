@@ -30,11 +30,12 @@ native_service_types:
   - mysql
   - network_drive
   - s3
-  - gcs
-  - abs
+  - google_cloud_storage
+  - azure_blob_storage
   - postgresql
   - oracle
   - dir
+
 
 # Connector client settings
 #connector_id: 'changeme'
@@ -46,7 +47,7 @@ sources:
   dir: connectors.sources.directory:DirectoryDataSource
   mysql: connectors.sources.mysql:MySqlDataSource
   network_drive: connectors.sources.network_drive:NASDataSource
-  gcs: connectors.sources.gcs:GoogleCloudStorageDataSource
-  abs: connectors.sources.abs:AzureBlobStorageDataSource
+  google_cloud_storage: connectors.sources.google_cloud_storage:GoogleCloudStorageDataSource
+  azure_blob_storage: connectors.sources.azure_blob_storage:AzureBlobStorageDataSource
   postgresql: connectors.sources.postgresql:PostgreSQLDataSource
   oracle: connectors.sources.oracle:OracleDataSource

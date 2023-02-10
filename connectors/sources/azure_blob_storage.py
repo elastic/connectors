@@ -26,14 +26,16 @@ BLOB_SCHEMA = {
 DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_FILE_SIZE_LIMIT = 10485760
 DEFAULT_RETRY_COUNT = 3
-MAX_CONCURRENT_DOWNLOADS = 100  # Max concurrent download supported by abs
+MAX_CONCURRENT_DOWNLOADS = (
+    100  # Max concurrent download supported by Azure Blob Storage
+)
 
 
 class AzureBlobStorageDataSource(BaseDataSource):
     """Azure Blob Storage"""
 
     name = "Azure Blob Storage"
-    service_type = "abs"
+    service_type = "azure_blob_storage"
 
     def __init__(self, configuration):
         """Set up the connection to the azure base client

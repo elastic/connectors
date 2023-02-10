@@ -13,11 +13,12 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 
-from connectors.es import DEFAULT_LANGUAGE, ESIndex, Mappings
+
+from connectors.es import ESIndex, Mappings
 from connectors.filtering.validation import (
     FilteringValidationState,
-    ValidationTarget,
-    validate_filtering,
+    ValidationTarget, 
+    validate_filtering
 )
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
@@ -84,11 +85,10 @@ class DataSourceError(Exception):
 class ConnectorIndex(ESIndex):
     def __init__(self, elastic_config):
         logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
-        # initilize ESIndex instance
+        # initialize ESIndex instance
         super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
         # grab all bulk options
         self.bulk_options = elastic_config.get("bulk", {})
-        self.language_code = elastic_config.get("language_code", DEFAULT_LANGUAGE)
 
     async def save(self, connector):
         # we never update the configuration
@@ -107,31 +107,34 @@ class ConnectorIndex(ESIndex):
             doc=document,
         )
 
+    async def heartbeat(self, doc_id):
+        await self.update(doc_id=doc_id, doc={"last_seen": iso_utc()})
+
     async def update_filtering_validation(
         self, connector, validation_result, validation_target=ValidationTarget.ACTIVE
     ):
-        doc_to_update = deepcopy(connector.doc_source)
+        filtering = connector.filtering.to_list()
 
-        for filter_ in doc_to_update.get("filtering", []):
+        for filter_ in filtering:
             if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
                 filter_.get(e2str(validation_target), {"validation": {}})[
                     "validation"
                 ] = validation_result.to_dict()
 
         await self.client.update(
-            index=CONNECTORS_INDEX,
+            index=self.index_name,
             id=connector.id,
-            doc=doc_to_update,
+            doc={"filtering": filtering},
             retry_on_conflict=RETRY_ON_CONFLICT,
         )
 
-    def build_docs_query(self, native_service_types=None, connectors_ids=None):
+    async def supported_connectors(self, native_service_types=None, connector_ids=None):
         if native_service_types is None:
             native_service_types = []
-        if connectors_ids is None:
-            connectors_ids = []
+        if connector_ids is None:
+            connector_ids = []
 
-        if len(native_service_types) == 0 and len(connectors_ids) == 0:
+        if len(native_service_types) == 0 and len(connector_ids) == 0:
             return
 
         native_connectors_query = {
@@ -147,11 +150,11 @@ class ConnectorIndex(ESIndex):
             "bool": {
                 "filter": [
                     {"term": {"is_native": False}},
-                    {"terms": {"_id": connectors_ids}},
+                    {"terms": {"_id": connector_ids}},
                 ]
             }
         }
-        if len(native_service_types) > 0 and len(connectors_ids) > 0:
+        if len(native_service_types) > 0 and len(connector_ids) > 0:
             query = {
                 "bool": {"should": [native_connectors_query, custom_connectors_query]}
             }
@@ -159,15 +162,6 @@ class ConnectorIndex(ESIndex):
             query = native_connectors_query
         else:
             query = custom_connectors_query
-
-        return query
-
-    async def supported_connectors(
-        self, native_service_types=None, connectors_ids=None
-    ):
-        query = self.build_docs_query(native_service_types, connectors_ids)
-        if query is None:
-            return
 
         async for connector in self.get_all_docs(query=query):
             yield connector
@@ -302,6 +296,9 @@ class Filtering:
             Filter(),
         )
 
+    def to_list(self):
+        return list(self.filtering)
+
 
 class Filter(dict):
     def __init__(self, filter_=None):
@@ -336,6 +333,8 @@ PIPELINE_DEFAULT = {
 
 class Pipeline(UserDict):
     def __init__(self, data):
+        if data is None:
+            data = {}
         default = PIPELINE_DEFAULT.copy()
         default.update(data)
         super().__init__(default)
@@ -445,7 +444,7 @@ class Connector:
         self.pipeline = Pipeline(doc_source.get("pipeline", {}))
         self._dirty = True
         self._filtering = Filtering(doc_source.get("filtering", []))
-        self.language_code = doc_source["language"]
+        self.language = doc_source["language"]
         self.features = Features(doc_source.get("features", {}))
 
     @property
@@ -674,7 +673,7 @@ class Connector:
 
         try:
             service_type = self.service_type
-            # if the status is different from comnected
+            # if the status is different from connected
             if self.status != Status.CONNECTED:
                 self.status = Status.CONNECTED
                 await self.sync_doc()
@@ -794,6 +793,30 @@ class SyncJobIndex(ESIndex):
             connector_id=doc_source["_source"]["connector"]["id"],
             doc_source=doc_source,
         )
+
+    async def create(self, connector):
+        trigger_method = (
+            JobTriggerMethod.ON_DEMAND
+            if connector.sync_now
+            else JobTriggerMethod.SCHEDULED
+        )
+        filtering = connector.filtering.get_active_filter()
+        job_def = {
+            "connector": {
+                "id": connector.id,
+                "filtering": SyncJob.transform_filtering(filtering),
+                "index_name": connector.index_name,
+                "language": connector.language,
+                "pipeline": connector.pipeline.data,
+                "service_type": connector.service_type,
+                "configuration": connector.configuration.to_dict(),
+            },
+            "trigger_method": e2str(trigger_method),
+            "status": e2str(JobStatus.PENDING),
+            "created_at": iso_utc(),
+            "last_seen": iso_utc(),
+        }
+        return await self.index(job_def)
 
     async def pending_jobs(self, connector_ids=[]):
         query = {

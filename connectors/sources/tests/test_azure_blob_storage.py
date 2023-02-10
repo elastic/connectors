@@ -13,7 +13,7 @@ import pytest
 from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClient
 
 from connectors.source import DataSourceConfiguration
-from connectors.sources.abs import AzureBlobStorageDataSource
+from connectors.sources.azure_blob_storage import AzureBlobStorageDataSource
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
 

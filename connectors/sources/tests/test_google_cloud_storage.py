@@ -15,7 +15,7 @@ from aiogoogle.auth.managers import ServiceAccountManager
 from aiogoogle.models import Request, Response
 
 from connectors.source import DataSourceConfiguration
-from connectors.sources.gcs import GoogleCloudStorageDataSource
+from connectors.sources.google_cloud_storage import GoogleCloudStorageDataSource
 
 SERVICE_ACCOUNT_CREDENTIALS = '{"project_id": "dummy123"}'
 API_NAME = "storage"
