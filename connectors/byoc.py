@@ -13,12 +13,11 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 
-
 from connectors.es import ESIndex, Mappings
 from connectors.filtering.validation import (
     FilteringValidationState,
-    ValidationTarget, 
-    validate_filtering
+    ValidationTarget,
+    validate_filtering,
 )
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
