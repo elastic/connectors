@@ -348,14 +348,19 @@ The `elastic-ingest` CLI will be installed on your system:
 
 ```shell
 $ bin/elastic-ingest --help
-usage: elastic-ingest [-h] [--action {poll,list}] [-c CONFIG_FILE] [--debug]
+usage: elastic-ingest [-h] [--action {poll,list}] [-c CONFIG_FILE] [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL} | --debug] [--filebeat] [--version] [--uvloop]
 
-optional arguments:
--h, --help            show this help message and exit
---action {poll,list}  What elastic-ingest should do
--c CONFIG_FILE, --config-file CONFIG_FILE
+options:
+  -h, --help            show this help message and exit
+  --action {poll,list}  What elastic-ingest should do
+  -c CONFIG_FILE, --config-file CONFIG_FILE
                         Configuration file
---debug               Run the event loop in debug mode
+  --log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}
+                        Set log level for the service.
+  --debug               Run the event loop in debug mode (alias for --log-level DEBUG)
+  --filebeat            Output in filebeat format.
+  --version             Display the version and exit.
+  --uvloop              Use uvloop if possible
 ```
 
 # Architecture
