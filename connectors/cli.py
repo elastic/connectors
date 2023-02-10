@@ -138,10 +138,10 @@ def run(args):
 
     # just display the list of connectors
     if args.action == "list":
-        logger.info("Registered connectors:")
+        print("Registered connectors:")
         for source in get_source_klasses(config):
-            logger.info(f"- {source.name}")
-        logger.info("Bye")
+            print(f"- {source.name}")
+        print("Bye")
         return 0
 
     loop = get_event_loop(args.uvloop)

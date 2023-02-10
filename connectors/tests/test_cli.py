@@ -6,7 +6,9 @@
 import asyncio
 import os
 import signal
+from io import StringIO
 from unittest import mock
+from unittest.mock import patch
 
 from connectors import __version__
 from connectors.cli import main, run
@@ -44,10 +46,15 @@ def test_main_and_kill(patch_logger, mock_responses):
 
 def test_run(mock_responses, patch_logger, set_env):
     args = mock.MagicMock()
+    args.log_level = "DEBUG"
     args.config_file = CONFIG
     args.action = "list"
-    args.log_level = "DEBUG"
-    assert run(args) == 0
-    patch_logger.assert_present(
-        ["Registered connectors:", "- Fakey", "- Phatey", "Bye"]
-    )
+    with patch("sys.stdout", new=StringIO()) as patched_stdout:
+        assert run(args) == 0
+
+        output = patched_stdout.getvalue().strip()
+
+        assert "Registered connectors:" in output
+        assert "- Fakey" in output
+        assert "- Phatey" in output
+        assert "Bye" in output
