@@ -12,7 +12,6 @@ from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call, patch
 
 import pytest
-from aioresponses import CallbackResult
 
 from connectors.byoc import (
     CONNECTORS_INDEX,
