@@ -104,9 +104,9 @@ class FilterValidationError:
 
 
 class FilteringValidationState(Enum):
-    VALID = 1
-    INVALID = 2
-    EDITED = 3
+    VALID = "valid"
+    INVALID = "invalid"
+    EDITED = "edited"
 
     @classmethod
     def to_s(cls, value):

@@ -32,7 +32,7 @@ from connectors.byoc import (
 )
 from connectors.byoei import ElasticServer
 from connectors.config import load_config
-from connectors.filtering.validation import ValidationTarget
+from connectors.filtering.validation import FilteringValidationState, ValidationTarget
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.tests.commons import AsyncIterator
@@ -56,6 +56,21 @@ ACTIVE_FILTER_STATE = "active"
 DRAFT_FILTER_STATE = "draft"
 
 FILTERING_VALIDATION_VALID = {"state": "valid", "errors": []}
+FILTERING_VALIDATION_INVALID = {"state": "invalid", "errors": []}
+FILTERING_VALIDATION_EDITED = {"state": "edited", "errors": []}
+
+FILTER_VALIDATION_STATE_VALID = {
+    "advanced_snippet": ACTIVE_ADVANCED_SNIPPET,
+    "rules": [{"id": DRAFT_RULE_ONE_ID}],
+    "validation": FILTERING_VALIDATION_VALID,
+}
+
+FILTER_VALIDATION_STATE_INVALID = FILTER_VALIDATION_STATE_VALID | {
+    "validation": FILTERING_VALIDATION_INVALID
+}
+FILTER_VALIDATION_STATE_EDITED = FILTER_VALIDATION_STATE_VALID | {
+    "validation": FILTERING_VALIDATION_EDITED
+}
 
 DRAFT_FILTERING_DEFAULT_DOMAIN = {
     "advanced_snippet": DRAFT_ADVANCED_SNIPPET,
@@ -1150,6 +1165,23 @@ async def test_stuck_jobs(get_all_docs, patch_logger, set_env):
 )
 def test_advanced_rules_present(filtering, should_advanced_rules_be_present):
     assert Filter(filtering).has_advanced_rules() == should_advanced_rules_be_present
+
+
+@pytest.mark.parametrize(
+    "filtering, validation_state, has_expected_validation_state",
+    [
+        (FILTER_VALIDATION_STATE_VALID, FilteringValidationState.EDITED, False),
+        (FILTER_VALIDATION_STATE_INVALID, FilteringValidationState.EDITED, False),
+        (FILTER_VALIDATION_STATE_EDITED, FilteringValidationState.EDITED, True),
+    ],
+)
+def test_has_validation_state(
+    filtering, validation_state, has_expected_validation_state
+):
+    assert (
+        Filter(filtering).has_validation_state(validation_state)
+        == has_expected_validation_state
+    )
 
 
 @pytest.mark.parametrize(
