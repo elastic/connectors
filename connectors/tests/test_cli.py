@@ -46,6 +46,7 @@ def test_main_and_kill(patch_logger, mock_responses):
 
 def test_run(mock_responses, patch_logger, set_env):
     args = mock.MagicMock()
+    args.log_level = "DEBUG"
     args.config_file = CONFIG
     args.action = "list"
     with patch("sys.stdout", new=StringIO()) as patched_stdout:
