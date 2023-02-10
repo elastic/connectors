@@ -22,7 +22,7 @@ class BaseService:
         self._sleeps = CancellableSleeps()
         self.errors = [0, time.time()]
 
-    async def stop(self):
+    def stop(self):
         self.running = False
         self._sleeps.cancel()
 
@@ -42,7 +42,7 @@ class BaseService:
             logger.critical(e, exc_info=True)
             self.raise_if_spurious(e)
         finally:
-            await self.stop()
+            self.stop()
 
     def raise_if_spurious(self, exception):
         errors, first = self.errors
