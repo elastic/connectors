@@ -45,8 +45,6 @@ def test_main_and_kill(patch_logger, mock_responses):
 
 
 def test_run(mock_responses, patch_logger, set_env):
-    import sys
-
     args = mock.MagicMock()
     args.config_file = CONFIG
     args.action = "list"
