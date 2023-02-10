@@ -25,7 +25,6 @@ from connectors.utils import (
     ConcurrentTasks,
     InvalidIndexNameError,
     MemQueue,
-    MultiService,
     RetryStrategy,
     convert_to_b64,
     e2str,
@@ -354,82 +353,3 @@ def test_str2e():
     assert str2e(None, SomeEnum) is None
     assert str2e("another_field", SomeEnum) is None
     assert str2e("a_field", SomeEnum) == SomeEnum.A_FIELD
-
-
-class StubService:
-    def __init__(self):
-        self.running = False
-        self.cancelled = False
-        self.exploding = False
-        self.stopped = False
-
-    async def run(self):
-        try:
-            self.running = True
-            while self.running:
-                if self.exploding:
-                    raise Exception("Something went wrong")
-                await asyncio.sleep(0)
-        except asyncio.CancelledError:
-            self.running = False
-            self.cancelled = True
-
-    def stop(self):
-        self.running = False
-        self.stopped = True
-
-    def explode(self):
-        self.exploding = True
-
-
-@pytest.mark.asyncio
-async def test_multiservice_run_stops_all_services_when_one_stops():
-    service_1 = StubService()
-    service_2 = StubService()
-    service_3 = StubService()
-
-    multiservice = MultiService([service_1, service_2, service_3])
-
-    asyncio.get_event_loop().call_later(0.1, service_1.stop)
-
-    await multiservice.run()
-
-    assert not service_1.cancelled
-    assert service_2.cancelled
-    assert service_3.cancelled
-
-
-@pytest.mark.asyncio
-async def test_multiservice_run_stops_all_services_when_one_raises_exception():
-    service_1 = StubService()
-    service_2 = StubService()
-    service_3 = StubService()
-
-    multiservice = MultiService([service_1, service_2, service_3])
-
-    asyncio.get_event_loop().call_later(0.1, service_1.explode)
-
-    await multiservice.run()
-
-    assert not service_1.cancelled
-    assert service_2.cancelled
-    assert service_3.cancelled
-
-
-@pytest.mark.asyncio
-async def test_multiservice_run_stops_all_services_when_shutdown_happens():
-    service_1 = StubService()
-    service_2 = StubService()
-    service_3 = StubService()
-
-    multiservice = MultiService([service_1, service_2, service_3])
-
-    asyncio.get_event_loop().call_later(
-        0.1, functools.partial(multiservice.shutdown, "SIGTERM")
-    )
-
-    await multiservice.run()
-
-    assert service_1.stopped
-    assert service_2.stopped
-    assert service_3.stopped
