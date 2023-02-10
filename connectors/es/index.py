@@ -54,6 +54,13 @@ class ESIndex(ESClient):
 
         return self._create_object(resp)
 
+    async def index(self, doc):
+        resp = await self.client.index(index=self.index_name, document=doc)
+        return resp["_id"]
+
+    async def update(self, doc_id, doc):
+        await self.client.update(index=self.index_name, id=doc_id, doc=doc)
+
     async def get_all_docs(self, query=None, page_size=DEFAULT_PAGE_SIZE):
         """
         Lookup for elasticsearch documents using {query}
