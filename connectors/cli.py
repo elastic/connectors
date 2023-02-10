@@ -98,14 +98,20 @@ async def _start_service(config, loop):
     services = [SyncService(config), JobCleanUpService(config)]
     for sig in (signal.SIGINT, signal.SIGTERM):
 
-        async def _shutdown(sig_name):
+        def _shutdown(sig_name):
             logger.info(f"Caught {sig_name}. Graceful shutdown.")
             for service in services:
-                logger.info(f"Shutdown {service.__class__.__name__}...")
-                await service.stop()
+                try:
+                    logger.info(f"Shutdown {service.__class__.__name__}...")
+                    service.stop()
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to correctly shutdown {service.__class__.__name__} due to an error: {e}"
+                    )
+
             return
 
-        loop.add_signal_handler(sig, lambda: asyncio.ensure_future(_shutdown(sig.name)))
+        loop.add_signal_handler(sig, functools.partial(_shutdown, sig.name))
 
     async def _run_service(service):
         if "PERF8" in os.environ:

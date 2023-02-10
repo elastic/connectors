@@ -223,7 +223,7 @@ async def run_service_with_stop_after(service, stop_after=0):
             # but if stop_after is provided we want to
             # interrupt the service after the timeout
             await asyncio.sleep(stop_after)
-            await service.stop()
+            service.stop()
 
         await asyncio.sleep(0)
 
