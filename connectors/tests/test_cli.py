@@ -46,6 +46,7 @@ def test_run(mock_responses, patch_logger, set_env):
     args = mock.MagicMock()
     args.config_file = CONFIG
     args.action = "list"
+    args.log_level = "DEBUG"
     assert run(args) == 0
     patch_logger.assert_present(
         ["Registered connectors:", "- Fakey", "- Phatey", "Bye"]

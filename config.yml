@@ -24,6 +24,7 @@ service:
   max_errors_span: 600
   max_concurrent_syncs: 1
   job_cleanup_interval: 300
+  log_level: INFO
 
 native_service_types:
   - mongodb
