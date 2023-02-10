@@ -12,7 +12,6 @@ from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call, patch
 
 import pytest
-from aioresponses import CallbackResult
 
 from connectors.byoc import (
     CONNECTORS_INDEX,
@@ -213,10 +212,31 @@ def test_utc():
 
 
 @pytest.mark.asyncio
-async def test_sync_job(mock_responses):
+async def test_sync_job():
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    job_filtering = {
+        "advanced_snippet": ACTIVE_ADVANCED_SNIPPET,
+        "rules": [{"id": ACTIVE_RULE_ONE_ID}, {"id": ACTIVE_RULE_TWO_ID}],
+        "validation": FILTERING_VALIDATION_VALID,
+    }
+
     jobs_index = SyncJobIndex(elastic_config=config)
-    client = jobs_index.client
+
+    index_mock = AsyncMock()
+    update_mock = AsyncMock()
+
+    jobs_index.client.index = index_mock
+    jobs_index.client.update = update_mock
+
+    job = SyncJob(connector_id="connector-id", elastic_index=jobs_index)
+
+    await job.start(filtering=job_filtering)
+
+    assert job.duration == -1
+    assert job.status == JobStatus.IN_PROGRESS
+    assert job.job_id is not None
+
+    job_def = index_mock.call_args.kwargs["document"]
 
     expected_filtering = {
         "advanced_snippet": {
@@ -224,59 +244,22 @@ async def test_sync_job(mock_responses):
             "find": {"settings": {}}
         },
         "rules": [{"id": ACTIVE_RULE_ONE_ID}, {"id": ACTIVE_RULE_TWO_ID}],
-        "validation": FILTERING_VALIDATION_VALID,
+        "validation": {"state": "valid", "errors": []},
     }
 
-    job = SyncJob(connector_id="connector-id", elastic_index=jobs_index)
+    assert job_def["status"] == "in_progress"
+    assert job_def["connector"]["filtering"] == expected_filtering
 
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
-    )
-
-    sent_docs = []
-
-    def callback(url, **kwargs):
-        sent_docs.append(json.loads(kwargs["data"]))
-        return CallbackResult(
-            body=json.dumps({"_id": "1"}), status=200, headers=headers
-        )
-
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc",
-        callback=callback,
-        headers=headers,
-    )
-
-    mock_responses.put(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc/1",
-        callback=callback,
-        headers=headers,
-    )
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_update/1",
-        callback=callback,
-        repeat=True,
-    )
-
-    assert job.duration == -1
-    await job.start(filtering=ACTIVE_FILTERING_DEFAULT_DOMAIN)
-    assert job.status == JobStatus.IN_PROGRESS
-    assert job.job_id is not None
-    await asyncio.sleep(0.2)
     await job.done(12, 34)
-    assert job.status == JobStatus.COMPLETED
-    await client.close()
-    assert job.duration >= 0.2
 
-    # verify what was sent
-    assert len(sent_docs) == 2
-    doc, update = sent_docs
-    assert doc["status"] == "in_progress"
-    assert doc["connector"]["filtering"] == expected_filtering
-    assert update["doc"]["status"] == "completed"
-    assert update["doc"]["indexed_document_count"] == 12
-    assert update["doc"]["deleted_document_count"] == 34
+    assert job.status == JobStatus.COMPLETED
+    assert job.duration > 0
+
+    updated_job_def = update_mock.call_args.kwargs["doc"]
+
+    assert updated_job_def["status"] == "completed"
+    assert updated_job_def["indexed_document_count"] == 12
+    assert updated_job_def["deleted_document_count"] == 34
 
 
 mongo = {
