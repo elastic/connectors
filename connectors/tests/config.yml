@@ -10,7 +10,7 @@ elasticsearch:
   backoff_multiplier: 0
 
 service:
-  idling: 5
+  idling: 0.5
   heartbeat: 300
   max_errors: 20
   max_errors_span: 600

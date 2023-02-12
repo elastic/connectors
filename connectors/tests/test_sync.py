@@ -28,6 +28,7 @@ CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yml")
 def create_service(config_file):
     config = load_config(config_file)
     service = SyncService(config)
+    service.idling = 5
 
     return service
 
