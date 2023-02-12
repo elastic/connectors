@@ -711,6 +711,139 @@ async def test_sync_job_suspend(patch_logger):
     index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
 
 
+@pytest.mark.asyncio
+async def test_sync_job_properties():
+    sync_job_src = {
+        "_id": "test",
+        "_source": {
+            "status": "error",
+            "error": "something wrong",
+            "indexed_document_count": 10,
+            "indexed_document_volume": 20,
+            "deleted_document_count": 30,
+            "total_document_count": 100,
+            "connector": {
+                "id": "connector_id",
+                "service_type": "test",
+                "index_name": "search-some-index",
+                "configuration": {},
+                "language": "en",
+                "filtering": {},
+                "pipeline": {},
+            },
+        },
+    }
+
+    index = Mock()
+    sync_job = SyncJob(elastic_index=index, doc_source=sync_job_src)
+
+    assert sync_job.id == "test"
+    assert sync_job.status == JobStatus.ERROR
+    assert sync_job.error == "something wrong"
+    assert sync_job.connector_id == "connector_id"
+    assert sync_job.service_type == "test"
+    assert sync_job.configuration.is_empty()
+    assert sync_job.index_name == "search-some-index"
+    assert sync_job.language == "en"
+    assert sync_job.indexed_document_count == 10
+    assert sync_job.indexed_document_volume == 20
+    assert sync_job.deleted_document_count == 30
+    assert sync_job.total_document_count == 100
+    assert isinstance(sync_job.filtering, Filter)
+    assert isinstance(sync_job.pipeline, Pipeline)
+
+
+@pytest.mark.asyncio
+async def test_sync_job_claim(patch_logger):
+    source = {"_id": "1"}
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "status": e2str(JobStatus.IN_PROGRESS),
+        "started_at": ANY,
+        "last_seen": ANY,
+        "worker_hostname": ANY,
+    }
+
+    sync_job = SyncJob(elastic_index=index, doc_source=source)
+    await sync_job.claim()
+
+    index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
+async def test_sync_job_done(patch_logger):
+    source = {"_id": "1"}
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "last_seen": ANY,
+        "completed_at": ANY,
+        "status": e2str(JobStatus.COMPLETED),
+        "error": None,
+    }
+
+    sync_job = SyncJob(elastic_index=index, doc_source=source)
+    await sync_job.done()
+
+    index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
+async def test_sync_job_fail(patch_logger):
+    source = {"_id": "1"}
+    message = "something wrong"
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "last_seen": ANY,
+        "completed_at": ANY,
+        "status": e2str(JobStatus.ERROR),
+        "error": message,
+    }
+
+    sync_job = SyncJob(elastic_index=index, doc_source=source)
+    await sync_job.fail(message)
+
+    index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
+async def test_sync_job_cancel(patch_logger):
+    source = {"_id": "1"}
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "last_seen": ANY,
+        "completed_at": ANY,
+        "status": e2str(JobStatus.CANCELED),
+        "error": None,
+        "canceled_at": ANY,
+    }
+
+    sync_job = SyncJob(elastic_index=index, doc_source=source)
+    await sync_job.cancel()
+
+    index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
+async def test_sync_job_suspend(patch_logger):
+    source = {"_id": "1"}
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "last_seen": ANY,
+        "status": e2str(JobStatus.SUSPENDED),
+        "error": None,
+    }
+
+    sync_job = SyncJob(elastic_index=index, doc_source=source)
+    await sync_job.suspend()
+
+    index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
+
+
 class Banana(BaseDataSource):
     """Banana"""
 
