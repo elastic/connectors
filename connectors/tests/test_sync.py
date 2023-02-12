@@ -330,6 +330,13 @@ async def set_server_responses(
             repeat=True,
         )
 
+    mock_responses.get(
+        f"{host}/.elastic-connectors-sync-jobs/_doc/1",
+        payload={"_id": "1", "_source": {"status": "completed"}},
+        headers=headers,
+        repeat=True,
+    )
+
     mock_responses.put(
         f"{host}/.elastic-connectors/_doc/1",
         payload={"_id": "1"},
