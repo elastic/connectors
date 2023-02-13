@@ -15,6 +15,7 @@ from connectors.logger import logger
 class ValidationTarget(Enum):
     DRAFT = 'draft'
     ACTIVE = 'active'
+    UNSET = None
 
 
 async def validate_filtering(
