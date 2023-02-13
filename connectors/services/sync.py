@@ -29,7 +29,7 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.services.base import BaseService
-from connectors.utils import ConcurrentTasks, e2str
+from connectors.utils import ConcurrentTasks
 
 DEFAULT_MAX_CONCURRENT_SYNCS = 1
 
@@ -88,7 +88,7 @@ class SyncService(BaseService):
             # we trigger a sync
             if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
                 # we can't sync in that state
-                logger.info(f"Can't sync with status `{e2str(connector.status)}`")
+                logger.info(f"Can't sync with status `{connector.status.value}`")
             else:
                 if connector.features.sync_rules_enabled():
                     await validate_filtering(

@@ -35,7 +35,6 @@ from connectors.filtering.validation import FilteringValidationState, Validation
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.tests.commons import AsyncIterator
-from connectors.utils import e2str
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
@@ -1039,8 +1038,8 @@ async def test_create_job(
 
     expected_index_doc = {
         "connector": ANY,
-        "trigger_method": e2str(trigger_method),
-        "status": e2str(JobStatus.PENDING),
+        "trigger_method": trigger_method.value,
+        "status": JobStatus.PENDING.value,
         "created_at": ANY,
         "last_seen": ANY,
     }
@@ -1064,8 +1063,8 @@ async def test_pending_jobs(get_all_docs, patch_logger, set_env):
                 {
                     "terms": {
                         "status": [
-                            e2str(JobStatus.PENDING),
-                            e2str(JobStatus.SUSPENDED),
+                            JobStatus.PENDING.value,
+                            JobStatus.SUSPENDED.value,
                         ]
                     }
                 },
@@ -1117,8 +1116,8 @@ async def test_stuck_jobs(get_all_docs, patch_logger, set_env):
                 {
                     "terms": {
                         "status": [
-                            e2str(JobStatus.IN_PROGRESS),
-                            e2str(JobStatus.CANCELING),
+                            JobStatus.IN_PROGRESS.value,
+                            JobStatus.CANCELING.value,
                         ]
                     }
                 },
