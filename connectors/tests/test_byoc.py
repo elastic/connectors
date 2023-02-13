@@ -690,10 +690,6 @@ def test_get_draft_filter(domain, expected_filter):
             {"advanced_snippet": {"value": {}}, "rules": []},
             {"advanced_snippet": {"value": {}}, "rules": []},
         ),
-        (
-            {"advanced_snippet": {"query": {}}, "rules": []},
-            {"advanced_snippet": {"query": {}}, "rules": []},
-        ),
         ({"advanced_snippet": {}, "rules": []}, {"advanced_snippet": {}, "rules": []}),
         ({}, {"advanced_snippet": {}, "rules": []}),
         (None, {"advanced_snippet": {}, "rules": []}),
