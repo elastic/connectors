@@ -32,7 +32,12 @@ from connectors.byoc import (
 )
 from connectors.byoei import ElasticServer
 from connectors.config import load_config
-from connectors.filtering.validation import FilteringValidationState, ValidationTarget
+from connectors.filtering.validation import (
+    FilteringValidationResult,
+    FilteringValidationState,
+    InvalidFilteringError,
+    ValidationTarget,
+)
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.tests.commons import AsyncIterator
@@ -199,7 +204,7 @@ ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
 @pytest.fixture(autouse=True)
 def patch_validate_filtering_in_byoc():
     with mock.patch(
-        "connectors.byoc.validate_filtering", return_value=AsyncMock()
+        "connectors.byoc.SyncJob.validate_filtering", return_value=AsyncMock()
     ) as validate_filtering_mock:
         yield validate_filtering_mock
 
@@ -652,6 +657,46 @@ async def test_sync_job_properties():
     assert sync_job.total_document_count == 100
     assert isinstance(sync_job.filtering, Filter)
     assert isinstance(sync_job.pipeline, Pipeline)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "validation_result_state, validation_result_errors, should_raise_exception",
+    [
+        (
+            FilteringValidationState.VALID,
+            [],
+            False,
+        ),
+        (
+            FilteringValidationState.INVALID,
+            ["something wrong"],
+            True,
+        ),
+        (
+            FilteringValidationState.VALID,
+            ["something wrong"],
+            True,
+        ),
+    ],
+)
+async def test_sync_job_validate_filtering(
+    validation_result_state, validation_result_errors, should_raise_exception
+):
+    source = {"_id": "1"}
+    index = Mock()
+    validator = Mock()
+    validation_result = FilteringValidationResult(
+        state=validation_result_state, errors=validation_result_errors
+    )
+    validator.validate_filtering = AsyncMock(return_value=validation_result)
+
+    sync_job = SyncJob(elastic_index=index, doc_source=source)
+
+    try:
+        await sync_job.validate_filtering(validator=validator)
+    except InvalidFilteringError:
+        assert should_raise_exception
 
 
 @pytest.mark.asyncio

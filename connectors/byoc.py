@@ -16,8 +16,8 @@ from enum import Enum
 from connectors.es import ESIndex, Mappings
 from connectors.filtering.validation import (
     FilteringValidationState,
+    InvalidFilteringError,
     ValidationTarget,
-    validate_filtering,
 )
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
@@ -259,6 +259,18 @@ class SyncJob(ESDocument):
     @property
     def total_document_count(self):
         return self.get("total_document_count", default=0)
+
+    async def validate_filtering(self, validator):
+        validation_result = await validator.validate_filtering(self.filtering)
+
+        if validation_result.state != FilteringValidationState.VALID:
+            raise InvalidFilteringError(
+                f"Filtering in state {validation_result.state}. Expected: {FilteringValidationState.VALID}."
+            )
+        if len(validation_result.errors):
+            raise InvalidFilteringError(
+                f"Filtering validation errors present: {validation_result.errors}."
+            )
 
     async def claim(self):
         doc = {
@@ -794,7 +806,7 @@ class Connector:
             sync_rules_enabled = self.features.sync_rules_enabled()
 
             if sync_rules_enabled:
-                await validate_filtering(self, self.index, ValidationTarget.ACTIVE)
+                await job.validate_filtering(validator=self.data_provider)
 
             result = await elastic_server.async_bulk(
                 self.index_name,
