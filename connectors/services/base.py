@@ -63,7 +63,7 @@ class BaseService:
 
 
 class MultiService:
-    def __init__(self, services):
+    def __init__(self, *services):
         self._services = services
 
     async def run(self):

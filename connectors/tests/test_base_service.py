@@ -50,7 +50,7 @@ async def test_multiservice_run_stops_all_services_when_one_stops():
     service_2 = StubService()
     service_3 = StubService()
 
-    multiservice = MultiService([service_1, service_2, service_3])
+    multiservice = MultiService(service_1, service_2, service_3)
 
     asyncio.get_event_loop().call_later(0.1, service_1.stop)
 
@@ -67,7 +67,7 @@ async def test_multiservice_run_stops_all_services_when_one_raises_exception():
     service_2 = StubService()
     service_3 = StubService()
 
-    multiservice = MultiService([service_1, service_2, service_3])
+    multiservice = MultiService(service_1, service_2, service_3)
 
     asyncio.get_event_loop().call_later(0.1, service_1.explode)
 
@@ -84,7 +84,7 @@ async def test_multiservice_run_stops_all_services_when_shutdown_happens():
     service_2 = StubService()
     service_3 = StubService()
 
-    multiservice = MultiService([service_1, service_2, service_3])
+    multiservice = MultiService(service_1, service_2, service_3)
 
     asyncio.get_event_loop().call_later(
         0.1, functools.partial(multiservice.shutdown, "SIGTERM")
@@ -105,7 +105,7 @@ async def test_multiservice_run_stops_all_services_when_shutdown_happens_and_som
 
     service_3.handle_cancellation = False
 
-    multiservice = MultiService([service_1, service_2, service_3])
+    multiservice = MultiService(service_1, service_2, service_3)
 
     asyncio.get_event_loop().call_later(0.1, service_1.stop)
 

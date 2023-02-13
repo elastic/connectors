@@ -96,7 +96,7 @@ async def _start_service(config, loop):
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.remove_signal_handler(sig)
 
-    multiservice = MultiService([SyncService(config), JobCleanUpService(config)])
+    multiservice = MultiService(SyncService(config), JobCleanUpService(config))
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(multiservice.shutdown, sig.name))
 
