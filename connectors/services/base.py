@@ -76,7 +76,7 @@ class MultiService:
             try:
                 await task
             except asyncio.CancelledError:
-                logger.error(f"Service did not handle cancellation gracefully.")
+                logger.error("Service did not handle cancellation gracefully.")
 
     def shutdown(self, sig):
         logger.info(f"Caught {sig}. Graceful shutdown.")
