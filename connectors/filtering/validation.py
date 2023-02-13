@@ -13,8 +13,8 @@ from connectors.logger import logger
 
 
 class ValidationTarget(Enum):
-    DRAFT = 1
-    ACTIVE = 2
+    DRAFT = 'draft'
+    ACTIVE = 'active'
 
 
 async def validate_filtering(
