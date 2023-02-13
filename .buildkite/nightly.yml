@@ -24,12 +24,12 @@ steps:
       - "perf8-report-*/**/*"
   - label: "🔨 Google Cloud Storage"
     command:
-      - ".buildkite/run_nigthly.sh gcs"
+      - ".buildkite/run_nigthly.sh google_cloud_storage"
     artifact_paths:
       - "perf8-report-*/**/*"
   - label: "🔨 Azure Blob Storage"
     command:
-      - ".buildkite/run_nigthly.sh abs"
+      - ".buildkite/run_nigthly.sh azure_blob_storage"
     artifact_paths:
       - "perf8-report-*/**/*"
   - label: "🔨 Postgresql"
