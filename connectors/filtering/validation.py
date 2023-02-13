@@ -13,8 +13,8 @@ from connectors.logger import logger
 
 
 class ValidationTarget(Enum):
-    DRAFT = 'draft'
-    ACTIVE = 'active'
+    DRAFT = "draft"
+    ACTIVE = "active"
     UNSET = None
 
 

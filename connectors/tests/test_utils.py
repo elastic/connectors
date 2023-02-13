@@ -13,7 +13,6 @@ import random
 import tempfile
 import time
 import timeit
-from enum import Enum
 from unittest.mock import Mock
 
 import pytest
