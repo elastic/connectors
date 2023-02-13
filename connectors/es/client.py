@@ -125,5 +125,7 @@ class ESClient:
             except NotFoundError:
                 raise PreflightCheckError(f"Could not find pipeline {pipeline}")
 
-    async def delete_indices(self, indices=[]):
+    async def delete_indices(self, indices=None):
+        if indices is None:
+            indices = []
         await self.client.indices.delete(index=indices, ignore_unavailable=True)
