@@ -306,17 +306,6 @@ class SyncJob(ESDocument):
             doc["metadata"] = connector_metadata
         await self.index.update(doc_id=self.id, doc=doc)
 
-    @classmethod
-    def transform_filtering(cls, filtering):
-        # deepcopy to not change the reference resulting in changing .elastic-connectors filtering
-        filtering = (
-            {"advanced_snippet": {}, "rules": []}
-            if (filtering is None or len(filtering) == 0)
-            else deepcopy(filtering)
-        )
-
-        return filtering
-
 
 class Filtering:
     DEFAULT_DOMAIN = "DEFAULT"
@@ -377,8 +366,6 @@ class Filter(dict):
             {"advanced_snippet": {}, "rules": []} if len(self) == 0 else deepcopy(self)
         )
 
-        # extract value for sync job
-        filtering["advanced_snippet"] = self.advanced_rules
         return filtering
 
 
