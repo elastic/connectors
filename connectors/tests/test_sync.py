@@ -195,12 +195,6 @@ def patch_validate_filtering_in_sync():
         yield validate_filtering_mock
 
 
-@pytest.fixture(autouse=True)
-def patch_validate_filtering_in_byoc():
-    with mock.patch("connectors.byoc.validate_filtering", return_value=AsyncMock()):
-        yield
-
-
 def create_service(config_file):
     config = load_config(config_file)
     service = SyncService(config)
