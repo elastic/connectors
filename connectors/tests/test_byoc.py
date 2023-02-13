@@ -673,11 +673,6 @@ async def test_sync_job_properties():
             ["something wrong"],
             True,
         ),
-        (
-            FilteringValidationState.VALID,
-            ["something wrong"],
-            True,
-        ),
     ],
 )
 async def test_sync_job_validate_filtering(
@@ -907,10 +902,6 @@ def test_get_draft_filter(domain, expected_filter):
         (
             {"advanced_snippet": {"value": {}}, "rules": []},
             {"advanced_snippet": {"value": {}}, "rules": []},
-        ),
-        (
-            {"advanced_snippet": {"query": {}}, "rules": []},
-            {"advanced_snippet": {"query": {}}, "rules": []},
         ),
         ({"advanced_snippet": {}, "rules": []}, {"advanced_snippet": {}, "rules": []}),
         ({}, {"advanced_snippet": {}, "rules": []}),

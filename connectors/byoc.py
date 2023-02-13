@@ -265,11 +265,7 @@ class SyncJob(ESDocument):
 
         if validation_result.state != FilteringValidationState.VALID:
             raise InvalidFilteringError(
-                f"Filtering in state {validation_result.state}. Expected: {FilteringValidationState.VALID}."
-            )
-        if len(validation_result.errors):
-            raise InvalidFilteringError(
-                f"Filtering validation errors present: {validation_result.errors}."
+                f"Filtering in state {validation_result.state}, errors: {validation_result.errors}."
             )
 
     async def claim(self):
