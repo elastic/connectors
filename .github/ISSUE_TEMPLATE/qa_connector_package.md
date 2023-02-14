@@ -1,3 +1,12 @@
+---
+name: Non-regression QA
+about: Create a non-regression QA issue for one connector client
+title: '[8.x QA] Validate connector client'
+labels: testing
+assignees: ''
+
+---
+
 ## Non-regression QA
 
 **Note:** always test with the latest Build Candidate on Elastic Cloud, using the full Elastic stack
