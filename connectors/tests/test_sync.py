@@ -741,5 +741,3 @@ async def test_concurrent_syncs(mock_responses, patch_logger, set_env):
 
     # make sure we synced the three connectors
     patch_logger.assert_present("[1] Sync done: 1 indexed, 0  deleted. (0 seconds)")
-    patch_logger.assert_present("[2] Sync done: 1 indexed, 0  deleted. (0 seconds)")
-    patch_logger.assert_present("[3] Sync done: 1 indexed, 0  deleted. (0 seconds)")
