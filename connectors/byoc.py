@@ -820,7 +820,7 @@ class SyncJobIndex(ESIndex):
         }
         return await self.index(job_def)
 
-    async def pending_jobs(self, connector_ids=[]):
+    async def pending_jobs(self, connector_ids):
         query = {
             "bool": {
                 "must": [
@@ -839,12 +839,12 @@ class SyncJobIndex(ESIndex):
         async for job in self.get_all_docs(query=query):
             yield job
 
-    async def orphaned_jobs(self, connector_ids=[]):
+    async def orphaned_jobs(self, connector_ids):
         query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
         async for job in self.get_all_docs(query=query):
             yield job
 
-    async def stuck_jobs(self, connector_ids=[]):
+    async def stuck_jobs(self, connector_ids):
         query = {
             "bool": {
                 "filter": [
@@ -865,6 +865,6 @@ class SyncJobIndex(ESIndex):
         async for job in self.get_all_docs(query=query):
             yield job
 
-    async def delete_jobs(self, job_ids=[]):
+    async def delete_jobs(self, job_ids):
         query = {"terms": {"_id": job_ids}}
         return await self.client.delete_by_query(index=self.index_name, query=query)
