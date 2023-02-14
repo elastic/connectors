@@ -397,18 +397,3 @@ def retryable(retries=3, interval=1.0, strategy=RetryStrategy.LINEAR_BACKOFF):
         return func_to_execute
 
     return wrapper
-
-
-def e2str(entry):
-    return entry.name.lower()
-
-
-def str2e(name, enum_class):
-    if name is None:
-        return None
-
-    name = str(name).upper()
-    if name not in enum_class.__members__:
-        return None
-
-    return enum_class[name]

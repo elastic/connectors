@@ -21,7 +21,7 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
-from connectors.utils import e2str, iso_utc, next_run, str2e
+from connectors.utils import iso_utc, next_run
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
@@ -30,26 +30,29 @@ SYNC_DISABLED = -1
 
 
 class Status(Enum):
-    CREATED = 1
-    NEEDS_CONFIGURATION = 2
-    CONFIGURED = 3
-    CONNECTED = 4
-    ERROR = 5
+    CREATED = "created"
+    NEEDS_CONFIGURATION = "needs_configuration"
+    CONFIGURED = "configured"
+    CONNECTED = "connected"
+    ERROR = "error"
+    UNSET = None
 
 
 class JobStatus(Enum):
-    PENDING = 1
-    IN_PROGRESS = 2
-    CANCELING = 3
-    CANCELED = 4
-    SUSPENDED = 5
-    COMPLETED = 6
-    ERROR = 7
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    CANCELING = "canceling"
+    CANCELED = "canceled"
+    SUSPENDED = "suspended"
+    COMPLETED = "completed"
+    ERROR = "error"
+    UNSET = None
 
 
 class JobTriggerMethod(Enum):
-    ON_DEMAND = 1
-    SCHEDULED = 2
+    ON_DEMAND = "on_demand"
+    SCHEDULED = "scheduled"
+    UNSET = None
 
 
 CUSTOM_READ_ONLY_FIELDS = (
@@ -116,7 +119,7 @@ class ConnectorIndex(ESIndex):
 
         for filter_ in filtering:
             if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
-                filter_.get(e2str(validation_target), {"validation": {}})[
+                filter_.get(validation_target.value, {"validation": {}})[
                     "validation"
                 ] = validation_result.to_dict()
 
@@ -191,7 +194,7 @@ class SyncJob:
 
         self.doc_source = doc_source
         self.job_id = self.doc_source.get("_id")
-        self.status = str2e(self.doc_source.get("_source", {}).get("status"), JobStatus)
+        self.status = JobStatus(self.doc_source.get("_source", {}).get("status"))
 
     @property
     def duration(self):
@@ -216,8 +219,8 @@ class SyncJob:
                 "id": self.connector_id,
                 "filtering": SyncJob.transform_filtering(filtering),
             },
-            "trigger_method": e2str(trigger_method),
-            "status": e2str(self.status),
+            "trigger_method": trigger_method.value,
+            "status": self.status.value,
             "error": None,
             "deleted_document_count": 0,
             "indexed_document_count": 0,
@@ -244,13 +247,13 @@ class SyncJob:
             self.status = JobStatus.ERROR
             job_def["error"] = str(exception)
 
-        job_def["status"] = e2str(self.status)
+        job_def["status"] = self.status.value
 
         return await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
 
     async def suspend(self):
         self.status = JobStatus.SUSPENDED
-        job_def = {"status": e2str(self.status)}
+        job_def = {"status": self.status.value}
 
         await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
 
@@ -448,7 +451,7 @@ class Connector:
 
     @property
     def last_sync_status(self):
-        return str2e(self.doc_source.get("last_sync_status"), JobStatus)
+        return JobStatus(self.doc_source.get("last_sync_status"))
 
     @property
     def status(self):
@@ -457,12 +460,12 @@ class Connector:
     @status.setter
     def status(self, value):
         if isinstance(value, str):
-            value = str2e(value, Status)
+            value = Status(value)
         if not isinstance(value, Status):
             raise TypeError(value)
 
         self._status = value
-        self.doc_source["status"] = e2str(self._status)
+        self.doc_source["status"] = self._status.value
 
     @property
     def service_type(self):
@@ -492,7 +495,7 @@ class Connector:
             )
             else Status.NEEDS_CONFIGURATION
         )
-        self.doc_source["status"] = e2str(status)
+        self.doc_source["status"] = status.value
         self._update_config(self.doc_source)
 
     async def suspend(self):
@@ -554,7 +557,7 @@ class Connector:
         job_id = await job.start(trigger_method, self.filtering.get_active_filter())
 
         self.sync_now = self.doc_source["sync_now"] = False
-        self.doc_source["last_sync_status"] = e2str(job.status)
+        self.doc_source["last_sync_status"] = job.status.value
         self.status = Status.CONNECTED
         await self.sync_doc()
 
@@ -568,7 +571,7 @@ class Connector:
 
     async def _sync_suspended(self, job):
         await job.suspend()
-        self.doc_source["last_sync_status"] = e2str(job.status)
+        self.doc_source["last_sync_status"] = job.status.value
         self.doc_source["last_sync_error"] = None
         self.doc_source["error"] = None
         self.doc_source["last_synced"] = iso_utc()
@@ -585,7 +588,7 @@ class Connector:
 
         await job.done(indexed_count, doc_deleted, exception)
 
-        self.doc_source["last_sync_status"] = e2str(job.status)
+        self.doc_source["last_sync_status"] = job.status.value
         if exception is None:
             self.doc_source["last_sync_error"] = None
             self.doc_source["error"] = None
@@ -643,7 +646,7 @@ class Connector:
                 self.doc_source[
                     "configuration"
                 ] = source_klass.get_simple_configuration()
-                self.doc_source["status"] = e2str(Status.NEEDS_CONFIGURATION)
+                self.doc_source["status"] = Status.NEEDS_CONFIGURATION.value
                 self._update_config(self.doc_source)
                 logger.debug(f"Populated configuration for connector {self.id}")
 
@@ -810,8 +813,8 @@ class SyncJobIndex(ESIndex):
                 "service_type": connector.service_type,
                 "configuration": connector.configuration.to_dict(),
             },
-            "trigger_method": e2str(trigger_method),
-            "status": e2str(JobStatus.PENDING),
+            "trigger_method": trigger_method.value,
+            "status": JobStatus.PENDING.value,
             "created_at": iso_utc(),
             "last_seen": iso_utc(),
         }
@@ -824,8 +827,8 @@ class SyncJobIndex(ESIndex):
                     {
                         "terms": {
                             "status": [
-                                e2str(JobStatus.PENDING),
-                                e2str(JobStatus.SUSPENDED),
+                                JobStatus.PENDING.value,
+                                JobStatus.SUSPENDED.value,
                             ]
                         }
                     },
@@ -849,8 +852,8 @@ class SyncJobIndex(ESIndex):
                     {
                         "terms": {
                             "status": [
-                                e2str(JobStatus.IN_PROGRESS),
-                                e2str(JobStatus.CANCELING),
+                                JobStatus.IN_PROGRESS.value,
+                                JobStatus.CANCELING.value,
                             ]
                         }
                     },
