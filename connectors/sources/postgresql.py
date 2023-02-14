@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Postgresql source module is responsible to fetch documents from PostgreSQL."""
-import copy
 import ssl
 from urllib.parse import quote
 
@@ -55,7 +54,7 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         Returns:
             dictionary: Default configuration
         """
-        postgresql_configuration = copy.deepcopy(super().get_default_configuration())
+        postgresql_configuration = super().get_default_configuration().copy()
         postgresql_configuration.update(
             {
                 "ssl_disabled": {

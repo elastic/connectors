@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Oracle source module is responsible to fetch documents from Oracle."""
-import copy
 import os
 from urllib.parse import quote
 
@@ -56,7 +55,7 @@ class OracleDataSource(GenericBaseDataSource):
         Returns:
             dictionary: Default configuration
         """
-        oracle_configuration = copy.deepcopy(super().get_default_configuration())
+        oracle_configuration = super().get_default_configuration().copy()
         oracle_configuration.update(
             {
                 "oracle_protocol": {
