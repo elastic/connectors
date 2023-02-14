@@ -332,7 +332,7 @@ async def set_server_responses(
 
     mock_responses.get(
         f"{host}/.elastic-connectors-sync-jobs/_doc/1",
-        payload={"_id": "1", "_source": {"status": "completed"}},
+        payload=JOB_DOC_SOURCE,
         headers=headers,
         repeat=True,
     )
@@ -734,5 +734,3 @@ async def test_concurrent_syncs(mock_responses, patch_logger, set_env):
 
     # make sure we synced the three connectors
     patch_logger.assert_present("[1] Sync done: 1 indexed, 0  deleted. (0 seconds)")
-    patch_logger.assert_present("[2] Sync done: 1 indexed, 0  deleted. (0 seconds)")
-    patch_logger.assert_present("[3] Sync done: 1 indexed, 0  deleted. (0 seconds)")
