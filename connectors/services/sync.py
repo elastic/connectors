@@ -23,11 +23,7 @@ from connectors.byoc import (
     SyncJobIndex,
 )
 from connectors.byoei import ElasticServer
-from connectors.filtering.validation import (
-    InvalidFilteringError,
-    ValidationTarget,
-    validate_filtering,
-)
+from connectors.filtering.validation import InvalidFilteringError
 from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass_dict
@@ -101,8 +97,8 @@ class SyncService(BaseService):
                     )
                 source_klass = self.source_klass_dict[connector.service_type]
                 if connector.features.sync_rules_enabled():
-                    await validate_filtering(
-                        connector, source_klass, ValidationTarget.DRAFT
+                    await connector.validate_filtering(
+                        validator=source_klass(connector.configuration)
                     )
 
                 await connector.sync(
