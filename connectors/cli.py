@@ -19,6 +19,7 @@ from connectors import __version__
 from connectors.config import load_config
 from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
+from connectors.services.base import MultiService
 from connectors.services.job_cleanup import JobCleanUpService
 from connectors.services.sync import SyncService
 from connectors.source import get_source_klasses
@@ -95,34 +96,17 @@ async def _start_service(config, loop):
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.remove_signal_handler(sig)
 
-    services = [SyncService(config), JobCleanUpService(config)]
+    multiservice = MultiService(SyncService(config), JobCleanUpService(config))
     for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, functools.partial(multiservice.shutdown, sig.name))
 
-        def _shutdown(sig_name):
-            logger.info(f"Caught {sig_name}. Graceful shutdown.")
-            for service in services:
-                try:
-                    logger.info(f"Shutdown {service.__class__.__name__}...")
-                    service.stop()
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to correctly shutdown {service.__class__.__name__} due to an error: {e}"
-                    )
+    if "PERF8" in os.environ:
+        import perf8
 
-            return
-
-        loop.add_signal_handler(sig, functools.partial(_shutdown, sig.name))
-
-    async def _run_service(service):
-        if "PERF8" in os.environ:
-            import perf8
-
-            async with perf8.measure():
-                return await service.run()
-        else:
-            return await service.run()
-
-    await asyncio.gather(*[_run_service(service) for service in services])
+        async with perf8.measure():
+            return await multiservice.run()
+    else:
+        return await multiservice.run()
 
 
 def run(args):
