@@ -12,13 +12,21 @@ class InvalidDocumentSourceError(Exception):
 
 
 class ESDocument:
-    def __init__(self, elastic_index, doc_source=None):
+    def __init__(self, elastic_index, doc_source):
         self.index = elastic_index
         try:
             self.id = doc_source.get("_id")
-            assert isinstance(self.id, str)
+            if not isinstance(self.id, str):
+                raise InvalidDocumentSourceError(
+                    f"Invalid format found for id: {self.id}"
+                )
             self._source = doc_source.get("_source", {})
-            assert isinstance(self._source, dict)
+            if not isinstance(self._source, dict):
+                raise InvalidDocumentSourceError(
+                    f"Invalid format found for source: {self._source}"
+                )
+        except InvalidDocumentSourceError:
+            raise
         except Exception as e:
             logger.critical(e, exc_info=True)
             raise InvalidDocumentSourceError(f"Invalid doc source found: {doc_source}")

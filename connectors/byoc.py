@@ -579,23 +579,19 @@ class Connector:
             return SYNC_DISABLED
         return next_run(self.scheduling["interval"])
 
-    async def _sync_starts(self):
-        try:
-            sync_job_index = SyncJobIndex(self.index.elastic_config)
-            job_id = await sync_job_index.create(self)
-            sync_job = await sync_job_index.fetch_by_id(job_id)
-            await sync_job.claim()
+    async def _sync_starts(self, sync_job_index):
+        job_id = await sync_job_index.create(self)
+        sync_job = await sync_job_index.fetch_by_id(job_id)
+        await sync_job.claim()
 
-            self.sync_now = self.doc_source["sync_now"] = False
-            self.doc_source["last_sync_status"] = JobStatus.IN_PROGRESS.value
-            self.status = Status.CONNECTED
-            await self.sync_doc()
+        self.sync_now = self.doc_source["sync_now"] = False
+        self.doc_source["last_sync_status"] = JobStatus.IN_PROGRESS.value
+        self.status = Status.CONNECTED
+        await self.sync_doc()
 
-            self._start_time = time.time()
-            logger.info(f"Sync starts, Job id: {job_id}")
-            return await sync_job_index.fetch_by_id(job_id)
-        finally:
-            await sync_job_index.close()
+        self._start_time = time.time()
+        logger.info(f"Sync starts, Job id: {job_id}")
+        return await sync_job_index.fetch_by_id(job_id)
 
     async def error(self, error):
         self.doc_source["error"] = str(error)
@@ -610,27 +606,36 @@ class Connector:
         await self.sync_doc()
         logger.info(f"Sync suspended, Job id: {job.job_id}")
 
-    async def _sync_done(self, job, result, exception=None):
+    async def _sync_done(self, job, status, result, exception=None):
         doc_updated = result.get("doc_updated", 0)
         doc_created = result.get("doc_created", 0)
         doc_deleted = result.get("doc_deleted", 0)
         exception = result.get("fetch_error", exception)
+        if exception is not None:
+            status = JobStatus.ERROR
 
         indexed_count = doc_updated + doc_created
+        ingestion_stats = {
+            "indexed_document_count": indexed_count,
+            "indexed_document_volume": 0,
+            "deleted_document_count": doc_deleted,
+        }
 
-        await job.done(indexed_count, doc_deleted, exception)
-
-        self.doc_source["last_sync_status"] = job.status.value
-        if exception is None:
-            self.doc_source["last_sync_error"] = None
-            self.doc_source["error"] = None
+        job_id = job.id
+        if status == JobStatus.ERROR:
+            await job.fail(exception, ingestion_stats=ingestion_stats)
+        elif status == JobStatus.SUSPENDED:
+            await job.suspend(ingestion_stats=ingestion_stats)
+            logger.info(f"Sync suspended, Job id: {job.id}")
         else:
-            self.doc_source["last_sync_error"] = str(exception)
-            self.doc_source["error"] = str(exception)
-            self.status = Status.ERROR
+            await job.done(ingestion_stats=ingestion_stats)
 
-        self.doc_source["last_synced"] = iso_utc()
-        await self.sync_doc()
+        job = await job.reload()
+        await self.sync_done(job)
+        logger.info(
+            f"[{job_id}] Sync done: {doc_updated + doc_created} indexed, {doc_deleted} "
+            f" deleted. ({int(time.time() - self._start_time)} seconds)"
+        )
 
     async def sync_done(self, job):
         self.doc_source["last_sync_status"] = job.status.value
@@ -642,17 +647,19 @@ class Connector:
         self.doc_source["last_synced"] = iso_utc()
         await self.sync_doc()
 
-    async def prepare_docs(self, data_provider, filtering=None):
+    async def prepare_docs(self, data_provider, pipeline=None, filtering=None):
+        if pipeline is None:
+            pipeline = Pipeline({})
         if filtering is None:
             filtering = Filter()
 
-        logger.debug(f"Using pipeline {self.pipeline}")
+        logger.debug(f"Using pipeline {pipeline}")
 
         async for doc, lazy_download in data_provider.get_docs(filtering=filtering):
             # adapt doc for pipeline settings
-            doc["_extract_binary_content"] = self.pipeline["extract_binary_content"]
-            doc["_reduce_whitespace"] = self.pipeline["reduce_whitespace"]
-            doc["_run_ml_inference"] = self.pipeline["run_ml_inference"]
+            doc["_extract_binary_content"] = pipeline["extract_binary_content"]
+            doc["_reduce_whitespace"] = pipeline["reduce_whitespace"]
+            doc["_run_ml_inference"] = pipeline["run_ml_inference"]
             yield doc, lazy_download
 
     async def prepare(self, config):
@@ -706,7 +713,7 @@ class Connector:
 
         self.source_klass = source_klass
 
-    async def sync(self, elastic_server, idling):
+    async def sync(self, sync_job_index, elastic_server, idling):
         # If anything bad happens before we create a sync job
         # (like bad scheduling config, etc.)
         #
@@ -757,7 +764,7 @@ class Connector:
         logger.debug(f"Syncing '{service_type}'")
         self._syncing = True
         self._sync_task = asyncio.current_task()
-        job = await self._sync_starts()
+        job = await self._sync_starts(sync_job_index)
         try:
             logger.debug(f"Pinging the {self.data_provider} backend")
             await self.data_provider.ping()
@@ -783,57 +790,21 @@ class Connector:
                 await job.validate_filtering(validator=self.data_provider)
 
             result = await elastic_server.async_bulk(
-                self.index_name,
-                self.prepare_docs(self.data_provider, job.filtering),
-                self.pipeline,
-                filter=self.filtering.get_active_filter(),
+                job.index_name,
+                self.prepare_docs(self.data_provider, job.pipeline, job.filtering),
+                job.pipeline,
+                filter=job.filtering,
                 sync_rules_enabled=sync_rules_enabled,
                 options=bulk_options,
             )
-            fetch_error = result.get("fetch_error")
-            if fetch_error is not None:
-                raise fetch_error
-            doc_updated = result.get("doc_updated", 0)
-            doc_created = result.get("doc_created", 0)
-            doc_deleted = result.get("doc_deleted", 0)
-            indexed_count = doc_updated + doc_created
-            ingestion_stats = {
-                "indexed_document_count": indexed_count,
-                "indexed_document_volume": 0,
-                "deleted_document_count": doc_deleted,
-            }
-            await job.done(ingestion_stats=ingestion_stats)
-            job = await job.reload()
-            await self.sync_done(job)
+            await self._sync_done(job, JobStatus.COMPLETED, result)
         except asyncio.CancelledError:
-            await job.suspend()
-            job = await job.reload()
-            await self.sync_done(job)
+            await self._sync_done(job, JobStatus.SUSPENDED, {})
             logger.info(f"Sync suspended, Job id: {job.id}")
         except Exception as e:
-            doc_updated = result.get("doc_updated", 0)
-            doc_created = result.get("doc_created", 0)
-            doc_deleted = result.get("doc_deleted", 0)
-            indexed_count = doc_updated + doc_created
-            ingestion_stats = {
-                "indexed_document_count": indexed_count,
-                "indexed_document_volume": 0,
-                "deleted_document_count": doc_deleted,
-            }
-            await job.fail(e, ingestion_stats=ingestion_stats)
-            job = await job.reload()
-            await self.sync_done(job)
+            await self._sync_done(job, JobStatus.ERROR, {}, exception=e)
             raise
         finally:
-            if result is None:
-                result = {}
-            doc_updated = result.get("doc_updated", 0)
-            doc_created = result.get("doc_created", 0)
-            doc_deleted = result.get("doc_deleted", 0)
-            logger.info(
-                f"[{self.id}] Sync done: {doc_updated + doc_created} indexed, {doc_deleted} "
-                f" deleted. ({int(time.time() - self._start_time)} seconds)"
-            )
             self._syncing = False
             self._start_time = None
             self._sync_task = None

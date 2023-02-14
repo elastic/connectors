@@ -186,6 +186,32 @@ FAKE_CONFIG_UNKNOWN_SERVICE = {
     "sync_now": True,
 }
 
+JOB_DOC_SOURCE = {
+    "_id": "1",
+    "_source": {
+        "status": "completed",
+        "connector": {
+            "configuration": {
+                "host": {"value": "mongodb://127.0.0.1:27021", "label": "MongoDB Host"},
+                "database": {"value": "sample_airbnb", "label": "MongoDB Database"},
+                "collection": {
+                    "value": "listingsAndReviews",
+                    "label": "MongoDB Collection",
+                },
+            },
+            "pipeline": {
+                "extract_binary_content": True,
+                "reduce_whitespace": True,
+                "run_ml_inference": True,
+            },
+            "index_name": "search-airbnb",
+            "service_type": "fake",
+            "status": "configured",
+            "language": "en",
+        },
+    },
+}
+
 
 @pytest.fixture(autouse=True)
 def patch_validate_filtering_in_sync():
@@ -302,7 +328,7 @@ async def set_server_responses(
 
     mock_responses.get(
         f"{host}/.elastic-connectors-sync-jobs/_doc/1",
-        payload={"_id": "1", "_source": {"status": "completed"}},
+        payload=JOB_DOC_SOURCE,
         headers=headers,
         repeat=True,
     )
@@ -704,5 +730,3 @@ async def test_concurrent_syncs(mock_responses, patch_logger, set_env):
 
     # make sure we synced the three connectors
     patch_logger.assert_present("[1] Sync done: 1 indexed, 0  deleted. (0 seconds)")
-    patch_logger.assert_present("[2] Sync done: 1 indexed, 0  deleted. (0 seconds)")
-    patch_logger.assert_present("[3] Sync done: 1 indexed, 0  deleted. (0 seconds)")

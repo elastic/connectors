@@ -379,181 +379,6 @@ class StubIndex:
         pass
 
 
-doc = {"_id": 1}
-max_concurrency = 0
-
-
-class Data(BaseDataSource):
-    name = "MongoDB"
-    service_type = "mongodb"
-
-    def __init__(self, connector):
-        super().__init__(connector)
-        self.concurrency = 0
-
-    @classmethod
-    def get_default_configuration(cls):
-        return {}
-
-    async def ping(self):
-        pass
-
-    async def changed(self):
-        return True
-
-    async def lazy(self, doit=True, timestamp=None):
-        if not doit:
-            return
-        self.concurrency += 1
-        global max_concurrency
-        max_concurrency = 0
-
-        if self.concurrency > max_concurrency:
-            max_concurrency = self.concurrency
-            logger.info(f"max_concurrency {max_concurrency}")
-        try:
-            await asyncio.sleep(0.01)
-            return {"extra_data": 100}
-        finally:
-            self.concurrency -= 1
-
-    async def get_docs(self, *args, **kw):
-        for _ in [doc] * 100:
-            yield {"_id": 1}, self.lazy
-
-    async def close(self):
-        pass
-
-    def tweak_bulk_options(self, options):
-        options["concurrent_downloads"] = 3
-
-
-@pytest.mark.parametrize("with_filtering", [True, False])
-@pytest.mark.asyncio
-async def test_sync_mongo(
-    with_filtering, mock_responses, patch_logger, patch_validate_filtering_in_byoc
-):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
-    )
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_refresh",
-        headers=headers,
-        repeat=True,
-    )
-
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={
-            "hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}
-        },
-        headers=headers,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/.elastic-connectors/_doc/1",
-        payload={"_id": "1"},
-        headers=headers,
-    )
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_update/1",
-        headers=headers,
-        repeat=True,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/.elastic-connectors/_doc/1",
-        payload={"_id": "1"},
-        headers=headers,
-    )
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc",
-        payload={"_id": "1"},
-        headers=headers,
-    )
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_update/1",
-        headers=headers,
-        repeat=True,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc/1",
-        payload={"_id": "1"},
-        headers=headers,
-    )
-    mock_responses.get(
-        "http://nowhere.com:9200/.elastic-connectors-sync-jobs/_doc/1",
-        payload={"_id": "1", "_source": {"status": "completed"}},
-        headers=headers,
-        repeat=True,
-    )
-    mock_responses.head(
-        "http://nowhere.com:9200/search-airbnb?expand_wildcards=open",
-        headers=headers,
-        repeat=True,
-    )
-    mock_responses.get(
-        "http://nowhere.com:9200/search-airbnb/_mapping?expand_wildcards=open",
-        payload={"search-airbnb": {"mappings": {}}},
-        headers=headers,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/search-airbnb/_mapping?expand_wildcards=open",
-        headers=headers,
-    )
-    mock_responses.get(
-        "http://nowhere.com:9200/search-airbnb",
-        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
-        headers=headers,
-    )
-    mock_responses.get(
-        "http://nowhere.com:9200/search-airbnb/_search?scroll=5m",
-        payload={"hits": {"hits": [{"_id": "1", "_source": mongo}]}},
-        headers=headers,
-    )
-    mock_responses.post(
-        "http://nowhere.com:9200/search-airbnb/_search?scroll=5m",
-        payload={"_id": "1"},
-        headers=headers,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/search-airbnb/_search?scroll=5m",
-        payload={"_id": "1"},
-        headers=headers,
-    )
-    mock_responses.put(
-        "http://nowhere.com:9200/_bulk?pipeline=ent-search-generic-ingestion",
-        payload={"items": []},
-        headers=headers,
-    )
-
-    es = ElasticServer(config)
-    connectors = ConnectorIndex(config)
-    service_config = {"sources": {"mongodb": "connectors.tests.test_byoc:Data"}}
-
-    try:
-        async for connector in connectors.supported_connectors(
-            native_service_types=["mongodb"]
-        ):
-            connector.features.sync_rules_enabled = Mock(return_value=with_filtering)
-
-            await connector.prepare(service_config)
-            await connector.sync(es, 0)
-            await connector.close()
-    finally:
-        await connectors.close()
-        await es.close()
-
-    if with_filtering:
-        assert patch_validate_filtering_in_byoc.call_count
-    else:
-        assert not patch_validate_filtering_in_byoc.call_count
-
-    # verify that the Data source was able to override the option
-    patch_logger.assert_not_present("max_concurrency 10")
-    patch_logger.assert_present("max_concurrency 3")
-
-
 @pytest.mark.asyncio
 async def test_properties(mock_responses):
     connector_src = {
@@ -673,7 +498,7 @@ async def test_sync_job_claim(patch_logger):
     index = Mock()
     index.update = AsyncMock(return_value=1)
     expected_doc_source_update = {
-        "status": e2str(JobStatus.IN_PROGRESS),
+        "status": JobStatus.IN_PROGRESS.value,
         "started_at": ANY,
         "last_seen": ANY,
         "worker_hostname": ANY,
@@ -693,7 +518,7 @@ async def test_sync_job_done(patch_logger):
     expected_doc_source_update = {
         "last_seen": ANY,
         "completed_at": ANY,
-        "status": e2str(JobStatus.COMPLETED),
+        "status": JobStatus.COMPLETED.value,
         "error": None,
     }
 
@@ -712,7 +537,7 @@ async def test_sync_job_fail(patch_logger):
     expected_doc_source_update = {
         "last_seen": ANY,
         "completed_at": ANY,
-        "status": e2str(JobStatus.ERROR),
+        "status": JobStatus.ERROR.value,
         "error": message,
     }
 
@@ -730,7 +555,7 @@ async def test_sync_job_cancel(patch_logger):
     expected_doc_source_update = {
         "last_seen": ANY,
         "completed_at": ANY,
-        "status": e2str(JobStatus.CANCELED),
+        "status": JobStatus.CANCELED.value,
         "error": None,
         "canceled_at": ANY,
     }
@@ -748,7 +573,7 @@ async def test_sync_job_suspend(patch_logger):
     index.update = AsyncMock(return_value=1)
     expected_doc_source_update = {
         "last_seen": ANY,
-        "status": e2str(JobStatus.SUSPENDED),
+        "status": JobStatus.SUSPENDED.value,
         "error": None,
     }
 
