@@ -216,7 +216,7 @@ JOB_DOC_SOURCE = {
 @pytest.fixture(autouse=True)
 def patch_validate_filtering_in_sync():
     with mock.patch(
-        "connectors.services.sync.validate_filtering", return_value=AsyncMock()
+        "connectors.byoc.Connector.validate_filtering", return_value=AsyncMock()
     ) as validate_filtering_mock:
         yield validate_filtering_mock
 
