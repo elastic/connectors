@@ -29,7 +29,6 @@ from connectors.byoc import (
     SyncJobIndex,
     iso_utc,
 )
-from connectors.byoei import ElasticServer
 from connectors.config import load_config
 from connectors.filtering.validation import (
     FilteringValidationResult,
@@ -37,7 +36,6 @@ from connectors.filtering.validation import (
     InvalidFilteringError,
     ValidationTarget,
 )
-from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.tests.commons import AsyncIterator
 
