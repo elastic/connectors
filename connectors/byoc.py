@@ -656,6 +656,27 @@ class Connector(ESDocument):
                 f"Could not update service type/configuration for connector {self.id}"
             )
 
+    async def validate_filtering(self, validator):
+        draft_filter = self.filtering.get_draft_filter()
+        if not draft_filter.has_validation_state(FilteringValidationState.EDITED):
+            return
+
+        logger.info(f"Filtering of connector {self.id} is edited, validating...)")
+        validation_result = await validator.validate_filtering(draft_filter)
+        logger.info(f"The filtering is validated to be {validation_result.state.value}")
+
+        filtering = self.filtering.to_list()
+        for filter_ in filtering:
+            if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
+                filter_.get("draft", {"validation": {}})[
+                    "validation"
+                ] = validation_result.to_dict()
+                if validation_result.state == FilteringValidationState.VALID:
+                    filter_["active"] = filter_.get("draft")
+
+        self.filtering = filtering
+        await self.index.update(doc_id=self.id, doc={"filtering": filtering})
+
     async def document_count(self):
         await self.index.client.indices.refresh(
             index=self.index_name, ignore_unavailable=True
