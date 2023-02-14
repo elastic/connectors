@@ -18,7 +18,6 @@ from connectors.byoc import (
     IDLE_JOBS_THRESHOLD,
     Connector,
     ConnectorIndex,
-    ESDocument,
     Features,
     Filter,
     Filtering,
@@ -553,32 +552,6 @@ async def test_sync_mongo(
     # verify that the Data source was able to override the option
     patch_logger.assert_not_present("max_concurrency 10")
     patch_logger.assert_present("max_concurrency 3")
-
-
-def test_es_document_get():
-    source = {
-        "_id": "test",
-        "_source": {
-            "string": "string_value",
-            "none_value": None,
-            "empty_dict": {},
-            "nested_dict": {"string": "string_value"},
-        },
-    }
-    default_value = "default"
-    es_doc = ESDocument(elastic_index=None, doc_source=source)
-    assert es_doc.id == "test"
-    assert es_doc.get("string", default=default_value) == "string_value"
-    assert es_doc.get("non_existing") is None
-    assert es_doc.get("non_existing", default=default_value) == default_value
-    assert es_doc.get("empty_dict", default=default_value) == {}
-    assert es_doc.get("empty_dict", "string") is None
-    assert es_doc.get("empty_dict", "string", default=default_value) == default_value
-    assert es_doc.get("nested_dict", "non_existing") is None
-    assert (
-        es_doc.get("nested_dict", "non_existing", default=default_value)
-        == default_value
-    )
 
 
 @pytest.mark.asyncio

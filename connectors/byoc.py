@@ -13,7 +13,7 @@ from collections import UserDict
 from copy import deepcopy
 from enum import Enum
 
-from connectors.es import ESIndex, Mappings
+from connectors.es import ESDocument, ESIndex, Mappings
 from connectors.filtering.validation import (
     FilteringValidationState,
     InvalidFilteringError,
@@ -179,28 +179,6 @@ class ConnectorIndex(ESIndex):
     async def all_connectors(self):
         async for connector in self.get_all_docs():
             yield connector
-
-
-class ESDocument:
-    def __init__(self, elastic_index, doc_source=None):
-        self.index = elastic_index
-        if doc_source is None:
-            doc_source = dict()
-        self.id = doc_source.get("_id")
-        self._source = doc_source.get("_source", {})
-
-    def get(self, *keys, default=None):
-        value = self._source
-        for key in keys:
-            if not isinstance(value, dict):
-                return default
-            value = value.get(key)
-        if value is None:
-            return default
-        return value
-
-    async def reload(self):
-        return await self.index.fetch_by_id(self.id)
 
 
 class SyncJob(ESDocument):
