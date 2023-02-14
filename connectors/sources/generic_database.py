@@ -1,3 +1,8 @@
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
 import asyncio
 from functools import partial
 
@@ -11,9 +16,6 @@ from connectors.utils import iso_utc
 DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
-DEFAULT_SSL_DISABLED = True
-DEFAULT_SSL_CA = None
-DEFAULT_PROTOCOL = "TCP"
 
 
 class GenericBaseDataSource(BaseDataSource):
@@ -39,11 +41,8 @@ class GenericBaseDataSource(BaseDataSource):
         self.is_async = False
         self.engine = None
         self.dialect = ""
-        self.protocol = self.configuration["oracle_protocol"]
         self.connection = None
         self.queries = None
-        self.ssl_disabled = self.configuration["ssl_disabled"]
-        self.ssl_ca = self.configuration["ssl_ca"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -88,21 +87,6 @@ class GenericBaseDataSource(BaseDataSource):
                 "label": "Retries per request",
                 "type": "int",
             },
-            "ssl_disabled": {
-                "value": DEFAULT_SSL_DISABLED,
-                "label": "Disable SSL (true/false)",
-                "type": "bool",
-            },
-            "ssl_ca": {
-                "value": DEFAULT_SSL_CA,
-                "label": "SSL certificate",
-                "type": "str",
-            },
-            "oracle_protocol": {
-                "value": DEFAULT_PROTOCOL,
-                "label": "Oracle connection protocol",
-                "type": "str",
-            },
         }
 
     def _validate_configuration(self):
@@ -132,7 +116,9 @@ class GenericBaseDataSource(BaseDataSource):
         ):
             raise Exception("Configured port has to be an integer.")
 
-        if not (self.configuration["ssl_disabled"] or self.configuration["ssl_ca"]):
+        if self.dialect == "Postgresql" and not (
+            self.configuration["ssl_disabled"] or self.configuration["ssl_ca"]
+        ):
             raise Exception("SSL certificate must be configured.")
 
     async def execute_query(self, query_name, fetch_many=False, **query_kwargs):
@@ -243,7 +229,8 @@ class GenericBaseDataSource(BaseDataSource):
                 executor=None, func=self.engine.connect
             )
             cursor = await loop.run_in_executor(
-                executor=None, func=partial(self.connection.execute, statement=query)
+                executor=None,
+                func=partial(self.connection.execute, statement=text(query)),
             )
             return cursor
         except Exception as exception:
@@ -294,6 +281,7 @@ class GenericBaseDataSource(BaseDataSource):
                 columns = await anext(
                     self.execute_query(
                         query_name="TABLE_PRIMARY_KEY",
+                        user=self.user.upper(),
                         database=self.database,
                         schema=schema,
                         table=table,

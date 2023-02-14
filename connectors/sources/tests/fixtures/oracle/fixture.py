@@ -5,15 +5,22 @@
 #
 """Oracle module responsible to generate records on the Oracle server.
 """
+import asyncio
 import os
 import random
 import string
 
-import cx_Oracle
+import oracledb
+
+from connectors.utils import RetryStrategy, retryable
 
 DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
 _SIZES = {"small": 5, "medium": 10, "large": 30}
 NUM_TABLES = _SIZES[DATA_SIZE]
+
+# If the Oracle Service takes too much time to respond, modify the following retry constants accordingly.
+RETRY_INTERVAL = 4
+RETRIES = 5
 
 
 def random_text(k=1024 * 20):
@@ -26,7 +33,10 @@ def random_text(k=1024 * 20):
 
 
 BIG_TEXT = random_text()
-DSN = "127.0.0.1:9090/xe"
+USER = "admin"
+PASSWORD = "Password_123"
+ENCODING = "UTF-8"
+DSN = "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=9090))(CONNECT_DATA=(SID=xe)))"
 
 
 def inject_lines(table, cursor, start, lines):
@@ -47,35 +57,42 @@ def inject_lines(table, cursor, start, lines):
 
 
 def load():
-    """N tables of 10001 rows each. each row is ~ 1024*20 bytes"""
-    connection = cx_Oracle.connect(
-        user="system", password="oracle", dsn=DSN, encoding="UTF-8"
-    )
-    cursor = connection.cursor()
-    cursor.execute("CREATE USER admin IDENTIFIED by Password_123")
-    cursor.execute("GRANT CONNECT, RESOURCE, DBA TO admin")
-    connection.commit()
+    """Generate tables and loads table data in the oracle server."""
 
-    connection = cx_Oracle.connect(
-        user="admin", password="Password_123", dsn=DSN, encoding="UTF-8"
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    cursor = connection.cursor()
-    cursor.execute(
-        r"ALTER DATABASE DATAFILE '/u01/app/oracle/oradata/XE/system.dbf' AUTOEXTEND ON maxsize unlimited"
-    )
-    for table in range(NUM_TABLES):
-        print(f"Adding data in {table}...")
-        sql_query = f"CREATE TABLE customers_{table} (id int, name VARCHAR(255), age int, description long, PRIMARY KEY (id))"
-        cursor.execute(sql_query)
-        for i in range(10):
-            inject_lines(table, cursor, i * 1000, 1000)
-    connection.commit()
+    async def load_rows():
+        """N tables of 10000 rows each. each row is ~ 1024*20 bytes"""
+        connection = oracledb.connect(
+            user="system", password=PASSWORD, dsn=DSN, encoding=ENCODING
+        )
+        cursor = connection.cursor()
+        cursor.execute("CREATE USER admin IDENTIFIED by Password_123")
+        cursor.execute("GRANT CONNECT, RESOURCE, DBA TO admin")
+        connection.commit()
+
+        connection = oracledb.connect(
+            user=USER, password=PASSWORD, dsn=DSN, encoding=ENCODING
+        )
+        cursor = connection.cursor()
+        for table in range(NUM_TABLES):
+            print(f"Adding data in {table}...")
+            sql_query = f"CREATE TABLE customers_{table} (id int, name VARCHAR(255), age int, description long, PRIMARY KEY (id))"
+            cursor.execute(sql_query)
+            for i in range(10):
+                inject_lines(table, cursor, i * 1000, 1000)
+        connection.commit()
+
+    asyncio.get_event_loop().run_until_complete(load_rows())
 
 
 def remove():
     """Removes 10 random items per table"""
-    connection = cx_Oracle.connect(
-        user="admin", password="Password_123", dsn=DSN, encoding="UTF-8"
+    connection = oracledb.connect(
+        user=USER, password=PASSWORD, dsn=DSN, encoding=ENCODING
     )
     cursor = connection.cursor()
 
