@@ -157,4 +157,6 @@ this in the PR text, and talk to the reviewer.
 
 One exception is when the PR needs a review on a specific architecture.
 
+### Add the appropriate backport labels
 
+Make sure to include the appropriate backport labels, if your PR needs to be backported to a past version.
