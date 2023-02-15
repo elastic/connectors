@@ -117,7 +117,7 @@ class BaseDataSource:
     def __init__(self, configuration):
         if not isinstance(configuration, DataSourceConfiguration):
             raise TypeError(
-                f"Configuration expected type is DataSourceConfiguration, actual: {type(configuration).__name__}."
+                f"Configuration expected type is {DataSourceConfiguration.__name__}, actual: {type(configuration).__name__}."
             )
 
         self.configuration = configuration
