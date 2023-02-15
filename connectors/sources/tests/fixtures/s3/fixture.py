@@ -1,7 +1,6 @@
 import os
 import random
 import string
-import sys
 
 BUCKET_NAME = "ent-search-ingest-dev"
 REGION_NAME = "us-west-2"

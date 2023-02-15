@@ -73,7 +73,7 @@ def test_mem_queue_speed(patch_logger):
         )
 
         async def run():
-            for i in range(1000):
+            for _ in range(1000):
                 await queue.put("x" * 100)
 
         asyncio.run(run())
@@ -86,7 +86,7 @@ def test_mem_queue_speed(patch_logger):
         queue = asyncio.Queue()
 
         async def run():
-            for i in range(1000):
+            for _ in range(1000):
                 await queue.put("x" * 100)
 
         asyncio.run(run())
@@ -118,7 +118,7 @@ async def test_mem_queue_race(patch_logger):
         await queue.get()
 
     tasks = []
-    for i in range(1000):
+    for _ in range(1000):
         tasks.append(put_one())
         tasks.append(remove_one())
 
