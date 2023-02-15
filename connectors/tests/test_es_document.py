@@ -9,23 +9,24 @@ from connectors.es import ESDocument, InvalidDocumentSourceError
 
 
 @pytest.mark.parametrize(
-    "doc_source, exception",
+    "doc_source",
     [
-        (None, InvalidDocumentSourceError),
-        ("hahaha", InvalidDocumentSourceError),
-        ({}, InvalidDocumentSourceError),
-        ({"_id": {}}, InvalidDocumentSourceError),
-        ({"_id": "1", "_source": "hahaha"}, InvalidDocumentSourceError),
-        ({"_id": "1", "_source": {}}, None),
+        None,
+        "hahaha",
+        {},
+        {"_id": {}},
+        {"_id": "1", "_source": "hahaha"},
     ],
 )
-def test_es_document(doc_source, exception, patch_logger):
-    try:
+def test_es_document_raise(doc_source, patch_logger):
+    with pytest.raises(InvalidDocumentSourceError):
         ESDocument(elastic_index=None, doc_source=doc_source)
-    except Exception as e:
-        assert e.__class__ == exception
-    else:
-        assert exception is None
+
+
+def test_es_document_ok(patch_logger):
+    doc_source = {"_id": "1", "_source": {}}
+    es_document = ESDocument(elastic_index=None, doc_source=doc_source)
+    assert isinstance(es_document, ESDocument)
 
 
 def test_es_document_get():
