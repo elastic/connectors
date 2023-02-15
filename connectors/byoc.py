@@ -266,10 +266,6 @@ class SyncJob:
             else deepcopy(filtering)
         )
 
-        # extract value for sync job
-        filtering["advanced_snippet"] = filtering.get("advanced_snippet", {}).get(
-            "value", {}
-        )
         return filtering
 
 
@@ -309,14 +305,12 @@ class Filter(dict):
 
         super().__init__(filter_)
 
-        advanced_rules = filter_.get("advanced_snippet", {})
-
-        self.advanced_rules = advanced_rules.get("value", advanced_rules)
+        self.advanced_rules = filter_.get("advanced_snippet", {})
         self.basic_rules = filter_.get("rules", [])
         self.validation = filter_.get("validation", {"state": "", "errors": []})
 
     def get_advanced_rules(self):
-        return self.advanced_rules
+        return self.advanced_rules.get("value", self.advanced_rules)
 
     def has_advanced_rules(self):
         return len(self.advanced_rules) > 0
