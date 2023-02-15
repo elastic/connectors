@@ -266,10 +266,6 @@ class SyncJob:
             else deepcopy(filtering)
         )
 
-        # extract value for sync job
-        filtering["advanced_snippet"] = filtering.get("advanced_snippet", {}).get(
-            "value", {}
-        )
         return filtering
 
 
@@ -309,17 +305,16 @@ class Filter(dict):
 
         super().__init__(filter_)
 
-        advanced_rules = filter_.get("advanced_snippet", {})
-
-        self.advanced_rules = advanced_rules.get("value", advanced_rules)
+        self.advanced_rules = filter_.get("advanced_snippet", {})
         self.basic_rules = filter_.get("rules", [])
         self.validation = filter_.get("validation", {"state": "", "errors": []})
 
     def get_advanced_rules(self):
-        return self.advanced_rules
+        return self.advanced_rules.get("value", {})
 
     def has_advanced_rules(self):
-        return len(self.advanced_rules) > 0
+        advanced_rules = self.get_advanced_rules()
+        return advanced_rules is not None and len(advanced_rules) > 0
 
     def has_validation_state(self, validation_state):
         return FilteringValidationState(self.validation["state"]) == validation_state
@@ -820,7 +815,7 @@ class SyncJobIndex(ESIndex):
         }
         return await self.index(job_def)
 
-    async def pending_jobs(self, connector_ids=[]):
+    async def pending_jobs(self, connector_ids):
         query = {
             "bool": {
                 "must": [
@@ -839,12 +834,12 @@ class SyncJobIndex(ESIndex):
         async for job in self.get_all_docs(query=query):
             yield job
 
-    async def orphaned_jobs(self, connector_ids=[]):
+    async def orphaned_jobs(self, connector_ids):
         query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
         async for job in self.get_all_docs(query=query):
             yield job
 
-    async def stuck_jobs(self, connector_ids=[]):
+    async def stuck_jobs(self, connector_ids):
         query = {
             "bool": {
                 "filter": [
@@ -865,6 +860,6 @@ class SyncJobIndex(ESIndex):
         async for job in self.get_all_docs(query=query):
             yield job
 
-    async def delete_jobs(self, job_ids=[]):
+    async def delete_jobs(self, job_ids):
         query = {"terms": {"_id": job_ids}}
         return await self.client.delete_by_query(index=self.index_name, query=query)

@@ -187,7 +187,7 @@ class FilteringValidator:
     async def validate(self, filtering):
         logger.info("Filtering validation started")
         basic_rules = filtering.basic_rules
-        advanced_rules = filtering.advanced_rules
+        advanced_rules = filtering.get_advanced_rules()
 
         filtering_validation_result = FilteringValidationResult()
 
