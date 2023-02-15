@@ -1,9 +1,6 @@
 import os
-import random
-import string
 
 import bson
-import requests
 from faker import Faker
 from pymongo import MongoClient
 
@@ -37,9 +34,9 @@ def load():
     collection = db.sample_collection
 
     data = []
-    for i in range(record_number):
+    for _ in range(record_number):
         data.append(_random_record())
-    result = collection.insert_many(data)
+    collection.insert_many(data)
 
 
 def remove():

@@ -293,7 +293,7 @@ async def test_heartbeat(mock_responses, patch_logger):
         headers=headers,
     )
 
-    for i in range(10):
+    for _ in range(10):
         mock_responses.put(
             "http://nowhere.com:9200/.elastic-connectors/_doc/1",
             payload={"_id": "1"},
@@ -455,7 +455,7 @@ class Data(BaseDataSource):
             self.concurrency -= 1
 
     async def get_docs(self, *args, **kw):
-        for d in [doc] * 100:
+        for _ in [doc] * 100:
             yield {"_id": 1}, self.lazy
 
     async def close(self):
