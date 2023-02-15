@@ -500,6 +500,7 @@ class Connector(ESDocument):
             self.last_seen is None
             or (datetime.now(timezone.utc) - self.last_seen).total_seconds() > interval
         ):
+            logger.info(f"*** Connector {self.id} HEARTBEAT")
             await self.index.heartbeat(doc_id=self.id)
 
     def next_sync(self):

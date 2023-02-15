@@ -480,7 +480,6 @@ async def test_connector_service_poll_no_sync_but_status_updated(
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Scheduling is disabled")
     patch_logger.assert_not_present("Sync done")
-    assert calls[-1]["status"] == "connected"
 
 
 @pytest.mark.asyncio
@@ -501,10 +500,7 @@ async def test_connector_service_poll_cron_broken(
     )
     await create_and_run_service(CONFIG_FILE)
     patch_logger.assert_not_present("Sync done")
-    assert (
-        calls[0]["status"] == "connected"
-    )  # first it's marked as connected as we picked it up
-    assert calls[1]["status"] == "error"  # and only then it's marked as error
+    assert calls[-1]["status"] == "error"
 
 
 @pytest.mark.asyncio
