@@ -604,7 +604,7 @@ async def test_connector_service_filtering(
             await create_and_run_service(CONFIG_FILE)
         except Exception as e:
             # mark test as failed
-            assert False, f"Unexpected exception of type {type(e)} raised."
+            raise AssertionError(f"Unexpected exception of type {type(e)} raised.")
 
 
 @pytest.mark.asyncio

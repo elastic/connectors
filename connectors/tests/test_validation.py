@@ -1074,7 +1074,7 @@ async def test_validate_filtering(validation_result, validation_target, should_r
         try:
             await validate_filtering(connector, index, validation_target)
         except Exception as e:
-            assert False, f"Unexpected exception of type {(type(e))} raised"
+            raise AssertionError(f"Unexpected exception of type {(type(e))} raised")
 
     assert index.update_filtering_validation.call_args == call(
         connector, validation_result, validation_target

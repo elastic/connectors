@@ -111,7 +111,7 @@ def main(args=None):
 
     if args.action == "monitor":
         if args.pid == 0:
-            print(f"Invalid pid specified, exit the monitor process.")
+            print("Invalid pid specified, exit the monitor process.")
             return
         _monitor_service(args.pid)
         return
