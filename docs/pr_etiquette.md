@@ -53,12 +53,12 @@ extra context. Include a reference to the subsystem affected, if this is a
 large codebase.
 
 
-### Use the Draft feature and proper labels
+### Be explicit about the PR status
 
 If your PR is not fully ready yet for reviews, convert it to a `draft` so people
-don't waste time reviewing unfinished code.
+don't waste time reviewing unfinished code, and don't assign anyone as a reviewer.
 
-Use the proper lables to help people understand your intention with the PR and 
+Use the proper labels to help people understand your intention with the PR and 
 its scope.
 
 
@@ -138,24 +138,6 @@ It is of course possible to find a new reviewer, but generally change will be
 speedier if you require the original submitter to fix the code themselves.
 Alternatively, if the original PR is 'good enough', raise the changes you'd
 like to see as separate stories/issues, and rework in your own PR.
-
-### It is not the reviewers responsibility to test the code
-
-We are all busy people, and in the case of many PRs against our codebase we are
-not able or time-permitted to test the new code.
-
-We need to assume that the submitter has tested their code to the point of
-being happy with the work to be merged to master and subsequently released.
-
-If you, as a reviewer, are suspicious that the work in the PR has not been
-tested, raise this with the submitter. Find out how they have tested it, and
-refuse the work if they have not. They may not have a mechanism to test it, in
-which case you may need to help.
-
-If, as a submitter, you know that this change is not fully tested, highlight
-this in the PR text, and talk to the reviewer.
-
-One exception is when the PR needs a review on a specific architecture.
 
 ### Add the appropriate backport labels
 
