@@ -148,6 +148,14 @@ async def test_validate_filter(validator_mock):
 
 
 @pytest.mark.asyncio
+async def test_invalid_configuration_raises_error():
+    configuration = {}
+
+    with pytest.raises(TypeError):
+        DataSource(configuration=configuration)
+
+
+@pytest.mark.asyncio
 async def test_base_class():
     configuration = DataSourceConfiguration({})
 
