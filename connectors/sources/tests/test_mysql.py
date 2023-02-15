@@ -432,9 +432,11 @@ def setup_available_docs(advanced_snippet):
             Filter(
                 {
                     ADVANCED_SNIPPET: {
-                        DB_ONE: {
-                            TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_ALL,
-                        },
+                        "value": {
+                            DB_ONE: {
+                                TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_ALL,
+                            }
+                        }
                     }
                 }
             ),
@@ -445,7 +447,7 @@ def setup_available_docs(advanced_snippet):
             Filter(
                 {
                     ADVANCED_SNIPPET: {
-                        DB_ONE: {TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE}
+                        "value": {DB_ONE: {TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE}}
                     }
                 }
             ),
@@ -456,9 +458,11 @@ def setup_available_docs(advanced_snippet):
             Filter(
                 {
                     ADVANCED_SNIPPET: {
-                        DB_ONE: {
-                            TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE,
-                            TABLE_TWO: DB_ONE_TABLE_TWO_QUERY_ALL,
+                        "value": {
+                            DB_ONE: {
+                                TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE,
+                                TABLE_TWO: DB_ONE_TABLE_TWO_QUERY_ALL,
+                            }
                         }
                     }
                 }
@@ -470,14 +474,16 @@ def setup_available_docs(advanced_snippet):
             Filter(
                 {
                     ADVANCED_SNIPPET: {
-                        DB_ONE: {
-                            TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE,
-                            TABLE_TWO: DB_ONE_TABLE_TWO_QUERY_ALL,
-                        },
-                        DB_TWO: {
-                            TABLE_ONE: DB_TWO_TABLE_ONE_QUERY_ALL,
-                            TABLE_TWO: DB_TWO_TABLE_TWO_QUERY_ALL,
-                        },
+                        "value": {
+                            DB_ONE: {
+                                TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE,
+                                TABLE_TWO: DB_ONE_TABLE_TWO_QUERY_ALL,
+                            },
+                            DB_TWO: {
+                                TABLE_ONE: DB_TWO_TABLE_ONE_QUERY_ALL,
+                                TABLE_TWO: DB_TWO_TABLE_TWO_QUERY_ALL,
+                            },
+                        }
                     }
                 }
             ),
@@ -490,7 +496,7 @@ async def test_get_docs_with_advanced_rules(
     filtering, expected_docs, patch_validate_databases, patch_fetch_rows_for_table
 ):
     source = await setup_mysql_source([DB_ONE, DB_TWO])
-    docs_in_db = setup_available_docs(filtering["advanced_snippet"])
+    docs_in_db = setup_available_docs(filtering.get_advanced_rules())
     patch_fetch_rows_for_table.return_value = AsyncIterator(docs_in_db)
 
     yielded_docs = set()

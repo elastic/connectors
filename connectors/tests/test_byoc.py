@@ -237,17 +237,8 @@ async def test_sync_job():
 
     job_def = index_mock.call_args.kwargs["document"]
 
-    expected_filtering = {
-        "advanced_snippet": {
-            # "value" should be omitted by extracting content inside "value" and moving it one level up
-            "find": {"settings": {}}
-        },
-        "rules": [{"id": ACTIVE_RULE_ONE_ID}, {"id": ACTIVE_RULE_TWO_ID}],
-        "validation": {"state": "valid", "errors": []},
-    }
-
     assert job_def["status"] == "in_progress"
-    assert job_def["connector"]["filtering"] == expected_filtering
+    assert job_def["connector"]["filtering"] == job_filtering
 
     await job.done(12, 34)
 
@@ -737,11 +728,11 @@ def test_get_draft_filter(domain, expected_filter):
     [
         (
             {"advanced_snippet": {"value": {"query": {}}}, "rules": []},
-            {"advanced_snippet": {"query": {}}, "rules": []},
+            {"advanced_snippet": {"value": {"query": {}}}, "rules": []},
         ),
         (
             {"advanced_snippet": {"value": {}}, "rules": []},
-            {"advanced_snippet": {}, "rules": []},
+            {"advanced_snippet": {"value": {}}, "rules": []},
         ),
         ({"advanced_snippet": {}, "rules": []}, {"advanced_snippet": {}, "rules": []}),
         ({}, {"advanced_snippet": {}, "rules": []}),
@@ -1137,11 +1128,11 @@ async def test_stuck_jobs(get_all_docs, patch_logger, set_env):
 @pytest.mark.parametrize(
     "filtering, should_advanced_rules_be_present",
     [
-        (ADVANCED_RULES_NON_EMPTY, True),
-        (ADVANCED_AND_BASIC_RULES_NON_EMPTY, True),
-        (ADVANCED_RULES_EMPTY, False),
-        (BASIC_RULES_NON_EMPTY, False),
-        (EMPTY_FILTERING, False),
+        ({"advanced_snippet": {"value": ADVANCED_RULES_NON_EMPTY}}, True),
+        ({"advanced_snippet": {"value": ADVANCED_AND_BASIC_RULES_NON_EMPTY}}, True),
+        ({"advanced_snippet": {"value": {}}}, False),
+        ({"advanced_snippet": {"value": None}}, False),
+        ({"advanced_snippet": {"value": {}}, "rules": BASIC_RULES_NON_EMPTY}, False),
         (None, False),
     ],
 )
@@ -1164,23 +1155,6 @@ def test_has_validation_state(
         Filter(filtering).has_validation_state(validation_state)
         == has_expected_validation_state
     )
-
-
-@pytest.mark.parametrize(
-    "filtering, expected_advanced_rules",
-    (
-        [
-            (ADVANCED_RULES_NON_EMPTY, ADVANCED_RULES),
-            (ADVANCED_AND_BASIC_RULES_NON_EMPTY, ADVANCED_RULES),
-            (ADVANCED_RULES_EMPTY, {}),
-            (BASIC_RULES_NON_EMPTY, {}),
-            (EMPTY_FILTERING, {}),
-            (None, {}),
-        ]
-    ),
-)
-def test_extract_advanced_rules(filtering, expected_advanced_rules):
-    assert Filter(filtering).get_advanced_rules() == expected_advanced_rules
 
 
 @pytest.mark.parametrize(
@@ -1228,3 +1202,17 @@ async def test_prepare_docs(filtering, expected_filtering_calls):
 def test_pipeline_properties(key, value, default_value):
     assert Pipeline({})[key] == default_value
     assert Pipeline({key: value})[key] == value
+
+
+@pytest.mark.parametrize(
+    "filtering, expected_advanced_rules",
+    [
+        ({"advanced_snippet": {"value": {"query": {}}}, "rules": []}, {"query": {}}),
+        ({"advanced_snippet": {"value": {}}, "rules": []}, {}),
+        ({"advanced_snippet": {}, "rules": []}, {}),
+        ({}, {}),
+        (None, {}),
+    ],
+)
+def test_get_advanced_rules(filtering, expected_advanced_rules):
+    assert Filter(filtering).get_advanced_rules() == expected_advanced_rules
