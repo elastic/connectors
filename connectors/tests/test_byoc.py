@@ -219,7 +219,14 @@ async def test_sync_job():
         "validation": FILTERING_VALIDATION_VALID,
     }
 
+    connector_id = "connector-id"
+    index_name = "search-target"
+
     jobs_index = SyncJobIndex(elastic_config=config)
+
+    connector_mock = Mock()
+    connector_mock.id = connector_id
+    connector_mock.index_name = index_name
 
     index_mock = AsyncMock()
     update_mock = AsyncMock()
@@ -227,9 +234,9 @@ async def test_sync_job():
     jobs_index.client.index = index_mock
     jobs_index.client.update = update_mock
 
-    job = SyncJob(connector_id="connector-id", elastic_index=jobs_index)
+    job = SyncJob(connector_id=connector_id, elastic_index=jobs_index)
 
-    await job.start(filtering=job_filtering)
+    await job.start(connector_mock, filtering=job_filtering)
 
     assert job.duration == -1
     assert job.status == JobStatus.IN_PROGRESS
@@ -239,6 +246,7 @@ async def test_sync_job():
 
     assert job_def["status"] == "in_progress"
     assert job_def["connector"]["filtering"] == job_filtering
+    assert job_def["connector"]["index_name"] == index_name
 
     await job.done(12, 34)
 
