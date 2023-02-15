@@ -154,8 +154,8 @@ async def test_invalid_configuration_raises_error():
     with pytest.raises(TypeError) as e:
         DataSource(configuration=configuration)
 
-    assert e.match(".*DataSourceConfiguration.*") # expected
-    assert e.match(".*dict.*") # actual
+    assert e.match(".*DataSourceConfiguration.*")  # expected
+    assert e.match(".*dict.*")  # actual
 
 
 @pytest.mark.asyncio
