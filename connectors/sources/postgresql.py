@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""SQLAlchemy source module is responsible to fetch documents from PostgreSQL."""
+"""Postgresql source module is responsible to fetch documents from PostgreSQL."""
 import ssl
 from urllib.parse import quote
 
@@ -13,6 +13,8 @@ from connectors.sources.generic_database import GenericBaseDataSource
 
 # Below schemas are system schemas and the tables of the systems schema's will not get indexed
 SYSTEM_SCHEMA = ["pg_toast", "pg_catalog", "information_schema"]
+DEFAULT_SSL_DISABLED = True
+DEFAULT_SSL_CA = ""
 
 QUERIES = {
     "PING": "SELECT 1+1",
@@ -38,10 +40,36 @@ class PostgreSQLDataSource(GenericBaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
+        self.ssl_disabled = self.configuration["ssl_disabled"]
+        self.ssl_ca = self.configuration["ssl_ca"]
         self.connection_string = f"postgresql+asyncpg://{self.user}:{quote(self.password)}@{self.host}:{self.port}/{self.database}"
         self.queries = QUERIES
         self.is_async = True
         self.dialect = "Postgresql"
+
+    @classmethod
+    def get_default_configuration(cls):
+        """Get the default configuration for database-server configured by user
+
+        Returns:
+            dictionary: Default configuration
+        """
+        postgresql_configuration = super().get_default_configuration().copy()
+        postgresql_configuration.update(
+            {
+                "ssl_disabled": {
+                    "value": DEFAULT_SSL_DISABLED,
+                    "label": "SSL verification will be disabled or not",
+                    "type": "bool",
+                },
+                "ssl_ca": {
+                    "value": DEFAULT_SSL_CA,
+                    "label": "SSL certificate",
+                    "type": "str",
+                },
+            }
+        )
+        return postgresql_configuration
 
     def _create_engine(self):
         """Create async engine for postgresql"""

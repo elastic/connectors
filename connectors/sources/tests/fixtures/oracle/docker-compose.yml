@@ -74,12 +74,12 @@ services:
       - esnet
 
   oracle:
-    image: oracleinanutshell/oracle-xe-11g:latest
+    image: gvenzl/oracle-xe:latest
     ports:
       - 9090:1521
     environment: 
-      - ORACLE_ALLOW_REMOTE=true
-      - ORACLE_ENABLE_XDB=true
+      - ORACLE_PASSWORD=Password_123
+    restart: always
 
 networks:
   esnet:
