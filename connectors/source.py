@@ -291,7 +291,4 @@ def get_source_klasses(config):
 
 def get_source_klass_dict(config):
     """Returns a service type - source klass dictionary"""
-    result = {}
-    for name, fqn in config["sources"].items():
-        result[name] = get_source_klass(fqn)
-    return result
+    return {name: get_source_klass(fqn) for name, fqn in config["sources"].items()}
