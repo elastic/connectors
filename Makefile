@@ -36,7 +36,7 @@ lint: bin/python bin/black bin/elastic-ingest
 	bin/isort --check . --sp .isort.cfg
 	bin/black --check connectors
 	bin/black --check setup.py
-	bin/flake8 connectors --exclude fixtures
+	bin/flake8 connectors
 	bin/flake8 setup.py
 	bin/black --check scripts
 	bin/flake8 scripts
@@ -57,13 +57,13 @@ ftest: bin/pytest bin/elastic-ingest
 	connectors/tests/ftest.sh $(NAME) $(PERF8)
 
 run: install
-	bin/elastic-ingest --debug
+	bin/elastic-ingest
 
 docker-build:
 	docker build -t docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT .
 
 docker-run:
-	docker run -v $(PWD):/config docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT /app/bin/elastic-ingest -c /config/config.yml --debug
+	docker run -v $(PWD):/config docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT /app/bin/elastic-ingest -c /config/config.yml --log-level=DEBUG
 
 docker-push:
 	docker push docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT

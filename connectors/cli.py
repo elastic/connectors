@@ -19,6 +19,7 @@ from connectors import __version__
 from connectors.config import load_config
 from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
+from connectors.services.base import MultiService
 from connectors.services.job_cleanup import JobCleanUpService
 from connectors.services.sync import SyncService
 from connectors.source import get_source_klasses
@@ -44,11 +45,20 @@ def _parser():
         default=os.path.join(os.path.dirname(__file__), "..", "config.yml"),
     )
 
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--log-level",
+        type=str,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default=None,
+        help="Set log level for the service.",
+    )
+    group.add_argument(
         "--debug",
-        action="store_true",
-        default=False,
-        help="Run the event loop in debug mode.",
+        dest="log_level",
+        action="store_const",
+        const="DEBUG",
+        help="Run the event loop in debug mode (alias for --log-level DEBUG)",
     )
 
     parser.add_argument(
@@ -86,28 +96,17 @@ async def _start_service(config, loop):
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.remove_signal_handler(sig)
 
-    services = [SyncService(config), JobCleanUpService(config)]
+    multiservice = MultiService(SyncService(config), JobCleanUpService(config))
     for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, functools.partial(multiservice.shutdown, sig.name))
 
-        async def _shutdown(sig_name):
-            logger.info(f"Caught {sig_name}. Graceful shutdown.")
-            for service in services:
-                logger.info(f"Shutdown {service.__class__.__name__}...")
-                await service.stop()
-            return
+    if "PERF8" in os.environ:
+        import perf8
 
-        loop.add_signal_handler(sig, lambda: asyncio.ensure_future(_shutdown(sig.name)))
-
-    async def _run_service(service):
-        if "PERF8" in os.environ:
-            import perf8
-
-            async with perf8.measure():
-                return await service.run()
-        else:
-            return await service.run()
-
-    await asyncio.gather(*[_run_service(service) for service in services])
+        async with perf8.measure():
+            return await multiservice.run()
+    else:
+        return await multiservice.run()
 
 
 def run(args):
@@ -115,13 +114,18 @@ def run(args):
 
     # load config
     config = load_config(args.config_file)
+    # Precedence: CLI args >> Config Setting >> INFO
+    set_logger(
+        args.log_level or config["service"]["log_level"] or logging.INFO,
+        filebeat=args.filebeat,
+    )
 
     # just display the list of connectors
     if args.action == "list":
-        logger.info("Registered connectors:")
+        print("Registered connectors:")
         for source in get_source_klasses(config):
-            logger.info(f"- {source.name}")
-        logger.info("Bye")
+            print(f"- {source.name}")
+        print("Bye")
         return 0
 
     loop = get_event_loop(args.uvloop)
@@ -143,5 +147,4 @@ def main(args=None):
     if args.version:
         print(__version__)
         return 0
-    set_logger(args.debug and logging.DEBUG or logging.INFO, filebeat=args.filebeat)
     return run(args)

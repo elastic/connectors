@@ -20,6 +20,7 @@ from connectors.byoc import (
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
     Status,
+    SyncJobIndex,
 )
 from connectors.byoei import ElasticServer
 from connectors.filtering.validation import (
@@ -29,7 +30,7 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.services.base import BaseService
-from connectors.utils import ConcurrentTasks, e2str
+from connectors.utils import ConcurrentTasks
 
 DEFAULT_MAX_CONCURRENT_SYNCS = 1
 
@@ -43,10 +44,11 @@ class SyncService(BaseService):
             "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
         )
         self.connectors = None
+        self.sync_job_index = None
         self.syncs = None
 
-    async def stop(self):
-        await super().stop()
+    def stop(self):
+        super().stop()
         if self.syncs is not None:
             self.syncs.cancel()
 
@@ -88,14 +90,14 @@ class SyncService(BaseService):
             # we trigger a sync
             if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
                 # we can't sync in that state
-                logger.info(f"Can't sync with status `{e2str(connector.status)}`")
+                logger.info(f"Can't sync with status `{connector.status.value}`")
             else:
                 if connector.features.sync_rules_enabled():
                     await validate_filtering(
                         connector, self.connectors, ValidationTarget.DRAFT
                     )
 
-                await connector.sync(es, self.idling)
+                await connector.sync(self.sync_job_index, es, self.idling)
 
             await asyncio.sleep(0)
         except InvalidFilteringError as e:
@@ -107,6 +109,7 @@ class SyncService(BaseService):
     async def _run(self):
         """Main event loop."""
         self.connectors = ConnectorIndex(self.es_config)
+        self.sync_job_index = SyncJobIndex(self.es_config)
 
         native_service_types = self.config.get("native_service_types", [])
         logger.debug(f"Native support for {', '.join(native_service_types)}")
@@ -153,5 +156,8 @@ class SyncService(BaseService):
             if self.connectors is not None:
                 self.connectors.stop_waiting()
                 await self.connectors.close()
+            if self.sync_job_index is not None:
+                self.sync_job_index.stop_waiting()
+                await self.sync_job_index.close()
             await es.close()
         return 0

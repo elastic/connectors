@@ -19,7 +19,6 @@ from connectors.conftest import assert_re
 from connectors.filtering.validation import InvalidFilteringError
 from connectors.services.sync import SyncService
 from connectors.tests.fake_sources import FakeSourceTS
-from connectors.utils import e2str
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yml")
 CONFIG_FILE_2 = os.path.join(os.path.dirname(__file__), "config_2.yml")
@@ -77,7 +76,7 @@ FAKE_CONFIG_PIPELINE_CHANGED["pipeline"] = {
 }
 FAKE_CONFIG_LAST_JOB_SUSPENDED = copy.deepcopy(FAKE_CONFIG)
 FAKE_CONFIG_LAST_JOB_SUSPENDED["sync_now"] = False
-FAKE_CONFIG_LAST_JOB_SUSPENDED["last_sync_status"] = e2str(JobStatus.SUSPENDED)
+FAKE_CONFIG_LAST_JOB_SUSPENDED["last_sync_status"] = JobStatus.SUSPENDED.value
 FAKE_CONFIG_LAST_JOB_SUSPENDED_SCHEDULING_DISABLED = copy.deepcopy(
     FAKE_CONFIG_LAST_JOB_SUSPENDED
 )
@@ -187,6 +186,32 @@ FAKE_CONFIG_UNKNOWN_SERVICE = {
     "sync_now": True,
 }
 
+JOB_DOC_SOURCE = {
+    "_id": "1",
+    "_source": {
+        "status": "completed",
+        "connector": {
+            "configuration": {
+                "host": {"value": "mongodb://127.0.0.1:27021", "label": "MongoDB Host"},
+                "database": {"value": "sample_airbnb", "label": "MongoDB Database"},
+                "collection": {
+                    "value": "listingsAndReviews",
+                    "label": "MongoDB Collection",
+                },
+            },
+            "pipeline": {
+                "extract_binary_content": True,
+                "reduce_whitespace": True,
+                "run_ml_inference": True,
+            },
+            "index_name": "search-airbnb",
+            "service_type": "fake",
+            "status": "configured",
+            "language": "en",
+        },
+    },
+}
+
 
 @pytest.fixture(autouse=True)
 def patch_validate_filtering_in_sync():
@@ -194,12 +219,6 @@ def patch_validate_filtering_in_sync():
         "connectors.services.sync.validate_filtering", return_value=AsyncMock()
     ) as validate_filtering_mock:
         yield validate_filtering_mock
-
-
-@pytest.fixture(autouse=True)
-def patch_validate_filtering_in_byoc():
-    with mock.patch("connectors.byoc.validate_filtering", return_value=AsyncMock()):
-        yield
 
 
 def create_service(config_file):
@@ -223,7 +242,7 @@ async def run_service_with_stop_after(service, stop_after=0):
             # but if stop_after is provided we want to
             # interrupt the service after the timeout
             await asyncio.sleep(stop_after)
-            await service.stop()
+            service.stop()
 
         await asyncio.sleep(0)
 
@@ -256,6 +275,9 @@ async def set_server_responses(
     mock_responses.post(
         f"{host}/.elastic-connectors/_refresh", headers=headers, repeat=True
     )
+    mock_responses.post(
+        f"{host}/.elastic-connectors-sync-jobs/_refresh", headers=headers, repeat=True
+    )
 
     hits = []
     for index, config in enumerate(configs):
@@ -283,26 +305,30 @@ async def set_server_responses(
         callback=connectors_read,
         repeat=True,
     )
-    mock_responses.post(
-        f"{host}/.elastic-connectors-sync-jobs/_doc",
-        payload={"_id": "1"},
-        headers=headers,
-        repeat=True,
-    )
-
     for id_ in range(len(configs)):
+        mock_responses.post(
+            f"{host}/.elastic-connectors-sync-jobs/_doc",
+            payload={"_id": f"{id_+1}"},
+            headers=headers,
+        )
         mock_responses.post(
             f"{host}/.elastic-connectors-sync-jobs/_update/{id_+1}",
             headers=headers,
             callback=jobs_update,
             repeat=True,
         )
-    mock_responses.put(
-        f"{host}/.elastic-connectors-sync-jobs/_doc/1",
-        payload={"_id": "1"},
-        callback=jobs_update,
-        headers=headers,
-    )
+        mock_responses.put(
+            f"{host}/.elastic-connectors-sync-jobs/_doc/{id_+1}",
+            payload={"_id": f"{id_+1}"},
+            callback=jobs_update,
+            headers=headers,
+        )
+        mock_responses.get(
+            f"{host}/.elastic-connectors-sync-jobs/_doc/{id_+1}",
+            payload=JOB_DOC_SOURCE | {"_id": f"{id_+1}"},
+            headers=headers,
+            repeat=True,
+        )
 
     mock_responses.put(
         f"{host}/.elastic-connectors/_doc/1",
@@ -523,7 +549,7 @@ async def test_connector_service_poll_suspended_suspends_job(
     # Service is having a large payload, but we terminate it ASAP
     # This way it should suspend existing running jobs
     await set_server_responses(mock_responses, [LARGE_FAKE_CONFIG])
-    await create_and_run_service(MEM_CONFIG_FILE, stop_after=0.3)
+    await create_and_run_service(MEM_CONFIG_FILE, stop_after=0.1)
 
     # For now just let's make sure that message is displayed
     # that the running job was suspended
@@ -605,7 +631,7 @@ async def test_connector_service_filtering(
             await create_and_run_service(CONFIG_FILE)
         except Exception as e:
             # mark test as failed
-            assert False, f"Unexpected exception of type {type(e)} raised."
+            raise AssertionError(f"Unexpected exception of type {type(e)} raised.")
 
 
 @pytest.mark.asyncio

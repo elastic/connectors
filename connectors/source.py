@@ -281,7 +281,7 @@ def get_source_klass(fqn):
 
 def get_source_klasses(config):
     """Returns an iterator of all registered sources."""
-    for name, fqn in config["sources"].items():
+    for fqn in config["sources"].values():
         yield get_source_klass(fqn)
 
 

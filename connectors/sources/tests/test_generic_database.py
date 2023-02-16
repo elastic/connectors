@@ -19,6 +19,11 @@ from connectors.sources.oracle import OracleDataSource
 from connectors.sources.postgresql import PostgreSQLDataSource
 from connectors.sources.tests.support import create_source
 
+POSTGRESQL_CONNECTION_STRING = (
+    "postgresql+asyncpg://admin:changme@127.0.0.1:5432/testdb"
+)
+ORACLE_CONNECTION_STRING = "oracle+oracledb://admin:changme@127.0.0.1:1521/testdb"
+
 
 class ConnectionAsync:
     """This class creates dummy connection with database and return dummy cursor"""
@@ -191,7 +196,7 @@ def test_validate_configuration_port(patch_logger):
 def test_validate_configuration_ssl(patch_logger):
     """Test _validate_configuration method check port"""
     # Setup
-    source = create_source(GenericBaseDataSource)
+    source = create_source(PostgreSQLDataSource)
     source.configuration.set_field(name="ssl_disabled", value=False)
 
     with pytest.raises(Exception):
@@ -205,9 +210,7 @@ async def test_get_docs_postgresql(patch_logger):
     # Setup
     source = create_source(PostgreSQLDataSource)
     with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
-        source.engine = create_async_engine(
-            "postgresql+asyncpg://admin:changme@127.0.0.1:5432/testdb"
-        )
+        source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
         actual_response = []
         expected_response = [
             {
@@ -245,7 +248,7 @@ async def test_get_docs_oracle(patch_logger):
     # Setup
     source = create_source(OracleDataSource)
     with patch.object(Engine, "connect", return_value=ConnectionSync()):
-        source.engine = create_engine("oracle://admin:changme@127.0.0.1:1521/testdb")
+        source.engine = create_engine(ORACLE_CONNECTION_STRING)
         actual_response = []
         expected_response = [
             {
@@ -289,9 +292,7 @@ async def test_async_connect_negative(patch_logger):
     with patch.object(
         AsyncEngine, "connect", side_effect=InternalClientError("Something went wrong")
     ):
-        source.engine = create_async_engine(
-            "postgresql+asyncpg://admin:changme@127.0.0.1:5432/testdb"
-        )
+        source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
 
         # Execute
         with pytest.raises(InternalClientError):
@@ -305,7 +306,7 @@ async def test_sync_connect_negative(patch_logger):
     with patch.object(
         Engine, "connect", side_effect=InternalClientError("Something went wrong")
     ):
-        source.engine = create_engine("oracle://admin:changme@127.0.0.1:1521/testdb")
+        source.engine = create_engine(ORACLE_CONNECTION_STRING)
 
         # Execute
         with pytest.raises(InternalClientError):
@@ -320,7 +321,7 @@ async def test_execute_query_negative_for_internalclienterror(patch_logger):
         AsyncEngine, "connect", side_effect=InternalClientError("Something went wrong")
     ):
         source.engine = source.engine = create_async_engine(
-            "postgresql+asyncpg://admin:changme@127.0.0.1:5432/testdb"
+            POSTGRESQL_CONNECTION_STRING
         )
         source.is_async = True
 
@@ -338,7 +339,7 @@ async def test_fetch_documents_negative(patch_logger):
         "execute_query",
         side_effect=InternalClientError("Something went wrong"),
     ):
-        source.engine = create_engine("oracle://admin:changme@127.0.0.1:1521/testdb")
+        source.engine = create_engine(ORACLE_CONNECTION_STRING)
 
         # Execute
         with pytest.raises(Exception):

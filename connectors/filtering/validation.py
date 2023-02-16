@@ -13,8 +13,9 @@ from connectors.logger import logger
 
 
 class ValidationTarget(Enum):
-    DRAFT = 1
-    ACTIVE = 2
+    DRAFT = "draft"
+    ACTIVE = "active"
+    UNSET = None
 
 
 async def validate_filtering(
@@ -104,9 +105,9 @@ class FilterValidationError:
 
 
 class FilteringValidationState(Enum):
-    VALID = 1
-    INVALID = 2
-    EDITED = 3
+    VALID = "valid"
+    INVALID = "invalid"
+    EDITED = "edited"
 
     @classmethod
     def to_s(cls, value):
@@ -186,7 +187,7 @@ class FilteringValidator:
     async def validate(self, filtering):
         logger.info("Filtering validation started")
         basic_rules = filtering.basic_rules
-        advanced_rules = filtering.advanced_rules
+        advanced_rules = filtering.get_advanced_rules()
 
         filtering_validation_result = FilteringValidationResult()
 
