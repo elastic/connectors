@@ -37,7 +37,9 @@ class ESClient:
 
         if "username" in config:
             if "api_key" in config:
-                raise KeyError("You can't use basic auth and Api Key at the same time")
+                raise KeyError(
+                    "You can't use basic auth ('username' and 'password') and 'api_key' at the same time in config.yml"
+                )
             auth = config["username"], config["password"]
             options["basic_auth"] = auth
             logger.debug(f"Connecting using Basic Auth (user: {config['username']})")
