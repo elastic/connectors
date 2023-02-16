@@ -30,6 +30,7 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.services.base import BaseService
+from connectors.source import get_source_klass_dict
 from connectors.utils import ConcurrentTasks
 
 DEFAULT_MAX_CONCURRENT_SYNCS = 1
@@ -43,6 +44,7 @@ class SyncService(BaseService):
         self.concurrent_syncs = self.service_config.get(
             "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
         )
+        self.source_klass_dict = get_source_klass_dict(config)
         self.connectors = None
         self.sync_job_index = None
         self.syncs = None
@@ -92,9 +94,14 @@ class SyncService(BaseService):
                 # we can't sync in that state
                 logger.info(f"Can't sync with status `{connector.status.value}`")
             else:
+                if connector.service_type not in self.source_klass_dict:
+                    raise DataSourceError(
+                        f"Couldn't find data source class for {connector.service_type}"
+                    )
+                source_klass = self.source_klass_dict[connector.service_type]
                 if connector.features.sync_rules_enabled():
                     await validate_filtering(
-                        connector, self.connectors, ValidationTarget.DRAFT
+                        connector, source_klass, ValidationTarget.DRAFT
                     )
 
                 await connector.sync(self.sync_job_index, es, self.idling)

@@ -1060,8 +1060,10 @@ def test_basic_rules_set_no_conflicting_policies_validation(
 @pytest.mark.asyncio
 async def test_validate_filtering(validation_result, validation_target, should_raise):
     connector = MagicMock()
-    index = Mock()
-    index.update_filtering_validation = AsyncMock()
+    connector.index.update_filtering_validation = AsyncMock()
+    source_instance = Mock()
+    source_klass = Mock(return_value=source_instance)
+    source_instance.validate_filtering = AsyncMock(return_value=validation_result)
 
     connector.source_klass().validate_filtering = AsyncMock(
         return_value=validation_result
@@ -1069,14 +1071,14 @@ async def test_validate_filtering(validation_result, validation_target, should_r
 
     if should_raise:
         with pytest.raises(InvalidFilteringError):
-            await validate_filtering(connector, index, validation_target)
+            await validate_filtering(connector, source_klass, validation_target)
     else:
         try:
-            await validate_filtering(connector, index, validation_target)
+            await validate_filtering(connector, source_klass, validation_target)
         except Exception as e:
             raise AssertionError(f"Unexpected exception of type {(type(e))} raised")
 
-    assert index.update_filtering_validation.call_args == call(
+    assert connector.index.update_filtering_validation.call_args == call(
         connector, validation_result, validation_target
     )
 
