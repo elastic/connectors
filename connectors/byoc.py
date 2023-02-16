@@ -7,17 +7,17 @@
 Implementation of BYOC protocol.
 """
 import asyncio
+import socket
 import time
 from collections import UserDict
 from copy import deepcopy
-from datetime import datetime, timezone
 from enum import Enum
 
-from connectors.es import ESIndex, Mappings
+from connectors.es import ESDocument, ESIndex, Mappings
 from connectors.filtering.validation import (
     FilteringValidationState,
+    InvalidFilteringError,
     ValidationTarget,
-    validate_filtering,
 )
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
@@ -181,92 +181,120 @@ class ConnectorIndex(ESIndex):
             yield connector
 
 
-class SyncJob:
-    def __init__(self, elastic_index, connector_id, doc_source=None):
-        self.connector_id = connector_id
-        self.elastic_index = elastic_index
-        self.created_at = datetime.now(timezone.utc)
-        self.completed_at = None
-        self.filtering = Filter()
-        self.client = elastic_index.client
-        if doc_source is None:
-            doc_source = dict()
-
-        self.doc_source = doc_source
-        self.job_id = self.doc_source.get("_id")
-        self.status = JobStatus(self.doc_source.get("_source", {}).get("status"))
+class SyncJob(ESDocument):
+    @property
+    def status(self):
+        return JobStatus(self.get("status"))
 
     @property
-    def duration(self):
-        if self.completed_at is None:
-            return -1
-        msec = (self.completed_at - self.created_at).microseconds
-        return round(msec / 9, 2)
+    def error(self):
+        return self.get("error")
+
+    @property
+    def connector_id(self):
+        return self.get("connector", "id")
 
     @property
     def index_name(self):
-        return self.doc_source["_source"]["connector"]["index_name"]
+        return self.get("connector", "index_name")
 
-    async def start(self, trigger_method=JobTriggerMethod.SCHEDULED, filtering=None):
-        if filtering is None:
-            filtering = Filter()
+    @property
+    def language(self):
+        return self.get("connector", "language")
 
-        self.status = JobStatus.IN_PROGRESS
-        self.filtering = filtering
+    @property
+    def service_type(self):
+        return self.get("connector", "service_type")
 
-        job_def = {
-            "connector": {
-                "id": self.connector_id,
-                "filtering": SyncJob.transform_filtering(filtering),
-            },
-            "trigger_method": trigger_method.value,
-            "status": self.status.value,
-            "error": None,
-            "deleted_document_count": 0,
-            "indexed_document_count": 0,
-            "created_at": iso_utc(self.created_at),
-            "completed_at": None,
+    @property
+    def configuration(self):
+        return DataSourceConfiguration(self.get("connector", "configuration"))
+
+    @property
+    def filtering(self):
+        return Filter(self.get("connector", "filtering", default={}))
+
+    @property
+    def pipeline(self):
+        return Pipeline(self.get("connector", "pipeline"))
+
+    @property
+    def terminated(self):
+        return self.status in (JobStatus.ERROR, JobStatus.COMPLETED, JobStatus.CANCELED)
+
+    @property
+    def indexed_document_count(self):
+        return self.get("indexed_document_count", default=0)
+
+    @property
+    def indexed_document_volume(self):
+        return self.get("indexed_document_volume", default=0)
+
+    @property
+    def deleted_document_count(self):
+        return self.get("deleted_document_count", default=0)
+
+    @property
+    def total_document_count(self):
+        return self.get("total_document_count", default=0)
+
+    async def validate_filtering(self, validator):
+        validation_result = await validator.validate_filtering(self.filtering)
+
+        if validation_result.state != FilteringValidationState.VALID:
+            raise InvalidFilteringError(
+                f"Filtering in state {validation_result.state}, errors: {validation_result.errors}."
+            )
+
+    async def claim(self):
+        doc = {
+            "status": JobStatus.IN_PROGRESS.value,
+            "started_at": iso_utc(),
+            "last_seen": iso_utc(),
+            "worker_hostname": socket.gethostname(),
         }
-        resp = await self.client.index(index=JOBS_INDEX, document=job_def)
-        self.job_id = resp["_id"]
-        return self.job_id
+        await self.index.update(doc_id=self.id, doc=doc)
 
-    async def done(self, indexed_count=0, deleted_count=0, exception=None):
-        self.completed_at = datetime.now(timezone.utc)
-
-        job_def = {
-            "deleted_document_count": deleted_count,
-            "indexed_document_count": indexed_count,
-            "completed_at": iso_utc(self.completed_at),
-        }
-
-        if exception is None:
-            self.status = JobStatus.COMPLETED
-            job_def["error"] = None
-        else:
-            self.status = JobStatus.ERROR
-            job_def["error"] = str(exception)
-
-        job_def["status"] = self.status.value
-
-        return await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
-
-    async def suspend(self):
-        self.status = JobStatus.SUSPENDED
-        job_def = {"status": self.status.value}
-
-        await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
-
-    @classmethod
-    def transform_filtering(cls, filtering):
-        # deepcopy to not change the reference resulting in changing .elastic-connectors filtering
-        filtering = (
-            {"advanced_snippet": {}, "rules": []}
-            if (filtering is None or len(filtering) == 0)
-            else deepcopy(filtering)
+    async def done(self, ingestion_stats=None, connector_metadata=None):
+        await self._terminate(
+            JobStatus.COMPLETED, None, ingestion_stats, connector_metadata
         )
 
-        return filtering
+    async def fail(self, message, ingestion_stats=None, connector_metadata=None):
+        await self._terminate(
+            JobStatus.ERROR, str(message), ingestion_stats, connector_metadata
+        )
+
+    async def cancel(self, ingestion_stats=None, connector_metadata=None):
+        await self._terminate(
+            JobStatus.CANCELED, None, ingestion_stats, connector_metadata
+        )
+
+    async def suspend(self, ingestion_stats=None, connector_metadata=None):
+        await self._terminate(
+            JobStatus.SUSPENDED, None, ingestion_stats, connector_metadata
+        )
+
+    async def _terminate(
+        self, status, error=None, ingestion_stats=None, connector_metadata=None
+    ):
+        if ingestion_stats is None:
+            ingestion_stats = {}
+        if connector_metadata is None:
+            connector_metadata = {}
+        doc = {
+            "last_seen": iso_utc(),
+            "status": status.value,
+            "error": error,
+        }
+        if status in (JobStatus.ERROR, JobStatus.COMPLETED, JobStatus.CANCELED):
+            doc["completed_at"] = iso_utc()
+        if status == JobStatus.CANCELED:
+            doc["canceled_at"] = iso_utc()
+        doc.update(ingestion_stats)
+        if len(connector_metadata) > 0:
+            doc["metadata"] = connector_metadata
+        await self.index.update(doc_id=self.id, doc=doc)
 
 
 class Filtering:
@@ -318,6 +346,17 @@ class Filter(dict):
 
     def has_validation_state(self, validation_state):
         return FilteringValidationState(self.validation["state"]) == validation_state
+
+    def transform_filtering(self):
+        """
+        Transform the filtering in .elastic-connectors to filtering ready-to-use in .elastic-connectors-sync-jobs
+        """
+        # deepcopy to not change the reference resulting in changing .elastic-connectors filtering
+        filtering = (
+            {"advanced_snippet": {}, "rules": []} if len(self) == 0 else deepcopy(self)
+        )
+
+        return filtering
 
 
 PIPELINE_DEFAULT = {
@@ -544,21 +583,19 @@ class Connector:
             return SYNC_DISABLED
         return next_run(self.scheduling["interval"])
 
-    async def _sync_starts(self):
-        job = SyncJob(connector_id=self.id, elastic_index=self.index)
-        trigger_method = (
-            JobTriggerMethod.ON_DEMAND if self.sync_now else JobTriggerMethod.SCHEDULED
-        )
-        job_id = await job.start(trigger_method, self.filtering.get_active_filter())
+    async def _sync_starts(self, sync_job_index):
+        job_id = await sync_job_index.create(self)
+        sync_job = await sync_job_index.fetch_by_id(job_id)
+        await sync_job.claim()
 
         self.sync_now = self.doc_source["sync_now"] = False
-        self.doc_source["last_sync_status"] = job.status.value
+        self.doc_source["last_sync_status"] = JobStatus.IN_PROGRESS.value
         self.status = Status.CONNECTED
         await self.sync_doc()
 
         self._start_time = time.time()
         logger.info(f"Sync starts, Job id: {job_id}")
-        return job
+        return await sync_job_index.fetch_by_id(job_id)
 
     async def error(self, error):
         self.doc_source["error"] = str(error)
@@ -573,39 +610,60 @@ class Connector:
         await self.sync_doc()
         logger.info(f"Sync suspended, Job id: {job.job_id}")
 
-    async def _sync_done(self, job, result, exception=None):
+    async def _sync_done(self, job, status, result, exception=None):
         doc_updated = result.get("doc_updated", 0)
         doc_created = result.get("doc_created", 0)
         doc_deleted = result.get("doc_deleted", 0)
         exception = result.get("fetch_error", exception)
+        if exception is not None:
+            status = JobStatus.ERROR
 
         indexed_count = doc_updated + doc_created
+        ingestion_stats = {
+            "indexed_document_count": indexed_count,
+            "indexed_document_volume": 0,
+            "deleted_document_count": doc_deleted,
+        }
 
-        await job.done(indexed_count, doc_deleted, exception)
-
-        self.doc_source["last_sync_status"] = job.status.value
-        if exception is None:
-            self.doc_source["last_sync_error"] = None
-            self.doc_source["error"] = None
+        job_id = job.id
+        if status == JobStatus.ERROR:
+            await job.fail(exception, ingestion_stats=ingestion_stats)
+        elif status == JobStatus.SUSPENDED:
+            await job.suspend(ingestion_stats=ingestion_stats)
+            logger.info(f"Sync suspended, Job id: {job.id}")
         else:
-            self.doc_source["last_sync_error"] = str(exception)
-            self.doc_source["error"] = str(exception)
-            self.status = Status.ERROR
+            await job.done(ingestion_stats=ingestion_stats)
 
+        job = await job.reload()
+        await self.sync_done(job)
+        logger.info(
+            f"[{job_id}] Sync done: {doc_updated + doc_created} indexed, {doc_deleted} "
+            f" deleted. ({int(time.time() - self._start_time)} seconds)"
+        )
+
+    async def sync_done(self, job):
+        self.doc_source["last_sync_status"] = job.status.value
+        self.doc_source["last_sync_error"] = job.error
+        self.doc_source["error"] = job.error
+        self.status = (
+            Status.ERROR if job.status == JobStatus.ERROR else Status.CONNECTED
+        )
         self.doc_source["last_synced"] = iso_utc()
         await self.sync_doc()
 
-    async def prepare_docs(self, data_provider, filtering=None):
+    async def prepare_docs(self, data_provider, pipeline=None, filtering=None):
+        if pipeline is None:
+            pipeline = Pipeline({})
         if filtering is None:
             filtering = Filter()
 
-        logger.debug(f"Using pipeline {self.pipeline}")
+        logger.debug(f"Using pipeline {pipeline}")
 
         async for doc, lazy_download in data_provider.get_docs(filtering=filtering):
             # adapt doc for pipeline settings
-            doc["_extract_binary_content"] = self.pipeline["extract_binary_content"]
-            doc["_reduce_whitespace"] = self.pipeline["reduce_whitespace"]
-            doc["_run_ml_inference"] = self.pipeline["run_ml_inference"]
+            doc["_extract_binary_content"] = pipeline["extract_binary_content"]
+            doc["_reduce_whitespace"] = pipeline["reduce_whitespace"]
+            doc["_run_ml_inference"] = pipeline["run_ml_inference"]
             yield doc, lazy_download
 
     async def prepare(self, config):
@@ -659,7 +717,7 @@ class Connector:
 
         self.source_klass = source_klass
 
-    async def sync(self, elastic_server, idling):
+    async def sync(self, sync_job_index, elastic_server, idling):
         # If anything bad happens before we create a sync job
         # (like bad scheduling config, etc.)
         #
@@ -710,7 +768,7 @@ class Connector:
         logger.debug(f"Syncing '{service_type}'")
         self._syncing = True
         self._sync_task = asyncio.current_task()
-        job = await self._sync_starts()
+        job = await self._sync_starts(sync_job_index)
         try:
             logger.debug(f"Pinging the {self.data_provider} backend")
             await self.data_provider.ping()
@@ -733,32 +791,24 @@ class Connector:
             sync_rules_enabled = self.features.sync_rules_enabled()
 
             if sync_rules_enabled:
-                await validate_filtering(self, self.index, ValidationTarget.ACTIVE)
+                await job.validate_filtering(validator=self.data_provider)
 
             result = await elastic_server.async_bulk(
-                self.index_name,
-                self.prepare_docs(self.data_provider, job.filtering),
-                self.pipeline,
-                filter=self.filtering.get_active_filter(),
+                job.index_name,
+                self.prepare_docs(self.data_provider, job.pipeline, job.filtering),
+                job.pipeline,
+                filter=job.filtering,
                 sync_rules_enabled=sync_rules_enabled,
                 options=bulk_options,
             )
-            await self._sync_done(job, result)
+            await self._sync_done(job, JobStatus.COMPLETED, result)
         except asyncio.CancelledError:
-            await self._sync_suspended(job)
+            await self._sync_done(job, JobStatus.SUSPENDED, {})
+            logger.info(f"Sync suspended, Job id: {job.id}")
         except Exception as e:
-            await self._sync_done(job, {}, exception=e)
+            await self._sync_done(job, JobStatus.ERROR, {}, exception=e)
             raise
         finally:
-            if result is None:
-                result = {}
-            doc_updated = result.get("doc_updated", 0)
-            doc_created = result.get("doc_created", 0)
-            doc_deleted = result.get("doc_deleted", 0)
-            logger.info(
-                f"[{self.id}] Sync done: {doc_updated + doc_created} indexed, {doc_deleted} "
-                f" deleted. ({int(time.time() - self._start_time)} seconds)"
-            )
             self._syncing = False
             self._start_time = None
             self._sync_task = None
@@ -787,7 +837,6 @@ class SyncJobIndex(ESIndex):
         """
         return SyncJob(
             self,
-            connector_id=doc_source["_source"]["connector"]["id"],
             doc_source=doc_source,
         )
 
@@ -797,11 +846,11 @@ class SyncJobIndex(ESIndex):
             if connector.sync_now
             else JobTriggerMethod.SCHEDULED
         )
-        filtering = connector.filtering.get_active_filter()
+        filtering = connector.filtering.get_active_filter().transform_filtering()
         job_def = {
             "connector": {
                 "id": connector.id,
-                "filtering": SyncJob.transform_filtering(filtering),
+                "filtering": filtering,
                 "index_name": connector.index_name,
                 "language": connector.language,
                 "pipeline": connector.pipeline.data,
