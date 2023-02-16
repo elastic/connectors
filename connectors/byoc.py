@@ -335,7 +335,9 @@ class Filter(dict):
 
         self.advanced_rules = filter_.get("advanced_snippet", {})
         self.basic_rules = filter_.get("rules", [])
-        self.validation = filter_.get("validation", {"state": "", "errors": []})
+        self.validation = filter_.get(
+            "validation", {"state": FilteringValidationState.VALID.value, "errors": []}
+        )
 
     def get_advanced_rules(self):
         return self.advanced_rules.get("value", {})
