@@ -115,8 +115,12 @@ class BaseDataSource:
     service_type = None
 
     def __init__(self, configuration):
+        if not isinstance(configuration, DataSourceConfiguration):
+            raise TypeError(
+                f"Configuration expected type is {DataSourceConfiguration.__name__}, actual: {type(configuration).__name__}."
+            )
+
         self.configuration = configuration
-        assert isinstance(self.configuration, DataSourceConfiguration)
         self.configuration.set_defaults(self.get_default_configuration())
 
     def __str__(self):
