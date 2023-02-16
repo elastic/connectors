@@ -207,10 +207,14 @@ class SyncJob:
     def index_name(self):
         return self.doc_source["_source"]["connector"]["index_name"]
 
-    async def start(self, connector, trigger_method=JobTriggerMethod.SCHEDULED, filtering=None):
-        # Okay that's temporary here. When we separate scheduling from execution , this code will go away
+    async def start(
+        self, connector, trigger_method=JobTriggerMethod.SCHEDULED, filtering=None
+    ):
+        # TODO: that's temporary here. When we separate scheduling from execution, this code will go away
         if connector.id != self.connector_id:
-            raise Exception("Job.connector_id is not equal to connector.id that is passed into the method")
+            raise Exception(
+                "Job.connector_id is not equal to connector.id that is passed into the method"
+            )
 
         if filtering is None:
             filtering = Filter()
@@ -222,7 +226,7 @@ class SyncJob:
             "connector": {
                 "id": self.connector_id,
                 "index_name": connector.index_name,
-                "filtering": SyncJob.transform_filtering(filtering)
+                "filtering": SyncJob.transform_filtering(filtering),
             },
             "trigger_method": trigger_method.value,
             "status": self.status.value,
@@ -554,7 +558,9 @@ class Connector:
         trigger_method = (
             JobTriggerMethod.ON_DEMAND if self.sync_now else JobTriggerMethod.SCHEDULED
         )
-        job_id = await job.start(self, trigger_method, self.filtering.get_active_filter())
+        job_id = await job.start(
+            self, trigger_method, self.filtering.get_active_filter()
+        )
 
         self.sync_now = self.doc_source["sync_now"] = False
         self.doc_source["last_sync_status"] = job.status.value
