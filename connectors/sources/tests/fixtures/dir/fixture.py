@@ -10,6 +10,24 @@ import urllib.request
 import zipfile
 
 SYSTEM_DIR = os.path.join(os.path.dirname(__file__), "data")
+DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
+
+if DATA_SIZE == "small":
+    REPO = "connectors-python"
+elif DATA_SIZE == "medium":
+    REPO = "elasticsearch"
+else:
+    REPO = "kibana"
+
+
+def get_num_docs():
+    match os.environ.get("DATA_SIZE", "medium"):
+        case "small":
+            print("100")
+        case "medium":
+            print("200")
+        case _:
+            print("300")
 
 
 def load():
@@ -20,9 +38,9 @@ def load():
     repo_zip = os.path.join(SYSTEM_DIR, "repo.zip")
 
     # lazy tree generator: we download the elasticsearch repo and unzip it
-    print("Downloading some source this may take a while...")
+    print(f"Downloading some source from {REPO} this may take a while...")
     urllib.request.urlretrieve(
-        "https://github.com/elastic/elasticsearch/zipball/main", repo_zip
+        f"https://github.com/elastic/{REPO}/zipball/main", repo_zip
     )
 
     print("Unzipping the tree")
