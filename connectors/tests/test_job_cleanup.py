@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
 
-from connectors.services.job_cleanup import STUCK_JOB_ERROR, JobCleanUpService
+from connectors.services.job_cleanup import IDLE_JOB_ERROR, JobCleanUpService
 from connectors.tests.commons import AsyncIterator
 
 CONFIG = {
@@ -58,7 +58,7 @@ async def run_service_with_stop_after(service, stop_after):
 @pytest.mark.asyncio
 @patch("connectors.byoc.SyncJobIndex.delete_jobs")
 @patch("connectors.byoc.SyncJobIndex.delete_indices")
-@patch("connectors.byoc.SyncJobIndex.stuck_jobs")
+@patch("connectors.byoc.SyncJobIndex.idle_jobs")
 @patch("connectors.byoc.SyncJobIndex.orphaned_jobs")
 @patch("connectors.byoc.ConnectorIndex.fetch_by_id")
 @patch("connectors.byoc.ConnectorIndex.supported_connectors")
@@ -68,7 +68,7 @@ async def test_cleanup_jobs(
     supported_connectors,
     fetch_by_id,
     orphaned_jobs,
-    stuck_jobs,
+    idle_jobs,
     delete_indices,
     delete_jobs,
 ):
@@ -82,7 +82,7 @@ async def test_cleanup_jobs(
     supported_connectors.return_value = AsyncIterator([connector])
     fetch_by_id.return_value = connector
     orphaned_jobs.return_value = AsyncIterator([sync_job, another_sync_job])
-    stuck_jobs.return_value = AsyncIterator([sync_job])
+    idle_jobs.return_value = AsyncIterator([sync_job])
     delete_jobs.return_value = {"deleted": 1, "failures": [], "total": 1}
 
     service = create_service()
@@ -93,5 +93,5 @@ async def test_cleanup_jobs(
         call(job_ids=[sync_job.job_id, another_sync_job.job_id])
     ]
     assert connector._sync_done.call_args_list == [
-        call(job=sync_job, result={}, exception=STUCK_JOB_ERROR)
+        call(job=sync_job, result={}, exception=IDLE_JOB_ERROR)
     ]

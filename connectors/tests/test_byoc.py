@@ -15,7 +15,7 @@ import pytest
 
 from connectors.byoc import (
     CONNECTORS_INDEX,
-    STUCK_JOBS_THRESHOLD,
+    IDLE_JOBS_THRESHOLD,
     Connector,
     ConnectorIndex,
     Features,
@@ -1095,7 +1095,7 @@ async def test_orphaned_jobs(get_all_docs, patch_logger, set_env):
 
 @pytest.mark.asyncio
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
-async def test_stuck_jobs(get_all_docs, patch_logger, set_env):
+async def test_idle_jobs(get_all_docs, patch_logger, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
@@ -1112,13 +1112,13 @@ async def test_stuck_jobs(get_all_docs, patch_logger, set_env):
                         ]
                     }
                 },
-                {"range": {"last_seen": {"lte": f"now-{STUCK_JOBS_THRESHOLD}s"}}},
+                {"range": {"last_seen": {"lte": f"now-{IDLE_JOBS_THRESHOLD}s"}}},
             ]
         }
     }
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    jobs = [job async for job in sync_job_index.stuck_jobs(connector_ids=connector_ids)]
+    jobs = [job async for job in sync_job_index.idle_jobs(connector_ids=connector_ids)]
 
     get_all_docs.assert_called_with(query=expected_query)
     assert len(jobs) == 1
