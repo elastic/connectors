@@ -340,10 +340,11 @@ class Filter(dict):
         )
 
     def get_advanced_rules(self):
-        return self.advanced_rules
+        return self.advanced_rules.get("value", {})
 
     def has_advanced_rules(self):
-        return len(self.advanced_rules) > 0
+        advanced_rules = self.get_advanced_rules()
+        return advanced_rules is not None and len(advanced_rules) > 0
 
     def has_validation_state(self, validation_state):
         return FilteringValidationState(self.validation["state"]) == validation_state
