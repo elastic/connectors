@@ -4,14 +4,14 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """
-A task periodically clean up orphaned and stuck jobs.
+A task periodically clean up orphaned and idle jobs.
 """
 
 from connectors.byoc import ConnectorIndex, SyncJobIndex
 from connectors.logger import logger
 from connectors.services.base import BaseService
 
-STUCK_JOB_ERROR = "The job has not seen any update for some time."
+IDLE_JOB_ERROR = "The job has not seen any update for some time."
 
 
 class JobCleanUpService(BaseService):
@@ -34,7 +34,7 @@ class JobCleanUpService(BaseService):
         try:
             while self.running:
                 await self._process_orphaned_jobs()
-                await self._process_stuck_jobs()
+                await self._process_idle_jobs()
                 await self._sleeps.sleep(self.idling)
         finally:
             if self.connector_index is not None:
@@ -84,9 +84,9 @@ class JobCleanUpService(BaseService):
             logger.critical(e, exc_info=True)
             self.raise_if_spurious(e)
 
-    async def _process_stuck_jobs(self):
+    async def _process_idle_jobs(self):
         try:
-            logger.info("Start cleaning up stuck jobs...")
+            logger.info("Start cleaning up idle jobs...")
             connector_ids = [
                 connector.id
                 async for connector in self.connector_index.supported_connectors(
@@ -96,9 +96,7 @@ class JobCleanUpService(BaseService):
             ]
 
             marked_count = total_count = 0
-            async for job in self.sync_job_index.stuck_jobs(
-                connector_ids=connector_ids
-            ):
+            async for job in self.sync_job_index.idle_jobs(connector_ids=connector_ids):
                 try:
                     connector_id = job.connector_id
                     connector = await self.connector_index.fetch_by_id(
@@ -110,21 +108,19 @@ class JobCleanUpService(BaseService):
                         )
                     else:
                         await connector._sync_done(
-                            job=job, result={}, exception=STUCK_JOB_ERROR
+                            job=job, result={}, exception=IDLE_JOB_ERROR
                         )
                         marked_count += 1
                 except Exception as e:
-                    logger.error(
-                        f"Failed to mark stuck job #{job.job_id} as error: {e}"
-                    )
+                    logger.error(f"Failed to mark idle job #{job.job_id} as error: {e}")
                 finally:
                     total_count += 1
 
             if total_count == 0:
-                logger.info("No stuck jobs found. Skipping...")
+                logger.info("No idle jobs found. Skipping...")
             else:
                 logger.info(
-                    f"Successfully marked #{marked_count} out of #{total_count} stuck jobs as error."
+                    f"Successfully marked #{marked_count} out of #{total_count} idle jobs as error."
                 )
         except Exception as e:
             logger.critical(e, exc_info=True)
