@@ -10,8 +10,6 @@ Event loop
 - instantiates connector plugins
 - mirrors an Elasticsearch index with a collection of documents
 """
-import functools
-
 from connectors.byoc import (
     SYNC_DISABLED,
     ConnectorIndex,
@@ -27,6 +25,7 @@ from connectors.byoei import ElasticServer
 from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass_dict
+from connectors.sync_job_runner import SyncJobRunner
 from connectors.utils import ConcurrentTasks
 
 DEFAULT_MAX_CONCURRENT_SYNCS = 1
@@ -104,11 +103,18 @@ class SyncService(BaseService):
         if not await self._should_sync(connector):
             return
 
-        await self.syncs.put(
-            functools.partial(
-                connector.sync, self.sync_job_index, source_klass, es, self.bulk_options
-            )
+        job_id = await self.sync_job_index.create(connector)
+        if connector.sync_now:
+            await connector.reset_sync_now_flag()
+        sync_job = await self.sync_job_index.fetch_by_id(job_id)
+        sync_job_runner = SyncJobRunner(
+            source_klass=source_klass,
+            sync_job=sync_job,
+            connector=connector,
+            elastic_server=es,
+            bulk_options=self.bulk_options,
         )
+        await self.syncs.put(sync_job_runner.execute)
 
     async def _run(self):
         """Main event loop."""
