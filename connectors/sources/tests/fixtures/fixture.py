@@ -32,6 +32,7 @@ def _parser():
             "teardown",
             "sync",
             "monitor",
+            "get_num_docs",
         ],
     )
 
@@ -126,7 +127,19 @@ def main(args=None):
         func = getattr(module, args.action)
         return func()
     else:
-        print(f"Fixture {args.name} does not have an {args.action} action, skipping")
+        if args.action == "get_num_docs":
+            # returns default
+            match os.environ.get("DATA_SIZE", "medium"):
+                case "small":
+                    print("750")
+                case "medium":
+                    print("1500")
+                case _:
+                    print("3000")
+        else:
+            print(
+                f"Fixture {args.name} does not have an {args.action} action, skipping"
+            )
 
 
 if __name__ == "__main__":
