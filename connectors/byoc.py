@@ -671,7 +671,9 @@ class Connector(ESDocument):
         if not draft_filter.has_validation_state(FilteringValidationState.EDITED):
             return
 
-        logger.info(f"Filtering of connector {self.id} is edited, validating...)")
+        logger.info(
+            f"Filtering of connector {self.id} is in state {FilteringValidationState.EDITED.value}, validating...)"
+        )
         validation_result = await validator.validate_filtering(draft_filter)
         logger.info(f"The filtering is validated to be {validation_result.state.value}")
 
