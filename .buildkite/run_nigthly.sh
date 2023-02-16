@@ -1,6 +1,7 @@
 #!/bin/bash
 set -exuo pipefail
 
+# XXX convert all this install in a docker image we can just use
 sudo apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get install ca-certificates curl gnupg lsb-release -y
 sudo mkdir -p /etc/apt/keyrings
@@ -23,7 +24,6 @@ sudo TZ=UTC DEBIAN_FRONTEND=noninteractive apt install --no-install-recommends p
 
 
 curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python3.10
-
 
 echo "Starting test task"
 BASEDIR=$(realpath $(dirname $0))
