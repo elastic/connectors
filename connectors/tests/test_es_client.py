@@ -5,6 +5,7 @@
 #
 import base64
 from unittest import mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from elasticsearch import ConnectionError
@@ -100,3 +101,26 @@ async def test_es_client_no_server(patch_logger):
         # Execute
         assert not await es_client.ping()
         await es_client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "indices, expect_es_call", [(None, False), ([], False), (["search-mongo"], True)]
+)
+async def test_delete_indices(indices, expect_es_call):
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    es_client = ESClient(config)
+    es_client.client = Mock()
+    es_client.client.indices.delete = AsyncMock()
+
+    await es_client.delete_indices(indices=indices)
+    if expect_es_call:
+        es_client.client.indices.delete.assert_awaited_with(
+            index=indices, ignore_unavailable=True
+        )
+    else:
+        es_client.client.indices.delete.assert_not_awaited()
