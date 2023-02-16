@@ -167,10 +167,6 @@ FILTERING = [
     },
 ]
 
-EMPTY_FILTERING = Filter()
-
-ADVANCED_RULES_EMPTY = {"advanced_snippet": {}}
-
 ADVANCED_RULES = {"db": {"table": "SELECT * FROM db.table"}}
 
 ADVANCED_RULES_NON_EMPTY = {"advanced_snippet": ADVANCED_RULES}
