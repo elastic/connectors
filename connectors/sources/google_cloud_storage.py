@@ -72,26 +72,12 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        if not self.configuration["service_account_credentials"]:
-            raise Exception("service_account_credentials can't be empty.")
 
-        self.credentials = (
-            self.configuration["service_account_credentials"]
-            .strip()
-            .encode("unicode_escape")
-            .decode()
-        )
-        self.service_account_credentials = ServiceAccountCreds(
-            scopes=[CLOUD_STORAGE_READ_ONLY_SCOPE],
-            **json.loads(
-                self.configuration["service_account_credentials"]
-                if RUNNING_FTEST
-                else self.credentials
-            ),
-        )
-        self.user_project_id = self.service_account_credentials.project_id
         self.retry_count = self.configuration["retry_count"]
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
+
+        self.service_account_credentials = None
+        self.user_project_id = None
 
     @classmethod
     def get_default_configuration(cls):
@@ -113,7 +99,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         return {
             "service_account_credentials": {
                 "value": json.dumps(default_credentials),
-                "label": "JSON string for Google Cloud service account",
+                "label": "Google Cloud service account json",
                 "type": "str",
             },
             "retry_count": {
@@ -199,8 +185,54 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 )
                 await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry_counter)
 
+    def _validate_configurations(self):
+        """Validates whether user input is empty or not for configuration field.
+
+        Raises:
+            Exception: Configured keys can't be empty.
+        """
+        if self.configuration["service_account_credentials"] == "":
+            raise Exception("service_account_credentials can't be empty.")
+
+    def get_pem_format(self, private_key, max_split=-1):
+        """Convert key into PEM format.
+
+        Args:
+            private_key (str): Private_key in raw format.
+            max_split (int): Specifies how many splits to do. Defaults to -1.
+
+        Returns:
+            string: PEM format
+        """
+        private_key = private_key.replace(" ", "\n")
+        private_key = " ".join(private_key.split("\n", max_split))
+        private_key = " ".join(private_key.rsplit("\n", max_split))
+        return private_key
+
+    def _initialize_configurations(self):
+        """Initialize the ServiceAccountCreds"""
+        json_creds = json.loads(self.configuration["service_account_credentials"])
+        if (
+            not RUNNING_FTEST
+            and json_creds.get("private_key")
+            and "\n" not in json_creds["private_key"]
+        ):
+            json_creds["private_key"] = self.get_pem_format(
+                private_key=json_creds["private_key"].strip(), max_split=2
+            )
+
+        self.service_account_credentials = ServiceAccountCreds(
+            scopes=[CLOUD_STORAGE_READ_ONLY_SCOPE],
+            **json_creds,
+        )
+        self.user_project_id = self.service_account_credentials.project_id
+
     async def ping(self):
-        """Verify the connection with Google Cloud Storage"""
+        """Verify the configurations and connection with Google Cloud Storage"""
+
+        self._validate_configurations()
+        self._initialize_configurations()
+
         if RUNNING_FTEST:
             return
         try:

@@ -32,6 +32,7 @@ def get_mocked_source_object():
         {"service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS, "retry_count": 0}
     )
     mocked_gcs_object = GoogleCloudStorageDataSource(configuration=configuration)
+    mocked_gcs_object._initialize_configurations()
     return mocked_gcs_object
 
 
@@ -62,10 +63,11 @@ async def test_empty_configuration():
 
     # Setup
     configuration = DataSourceConfiguration({"service_account_credentials": ""})
+    gcs_object = GoogleCloudStorageDataSource(configuration=configuration)
 
     # Execute
     with pytest.raises(Exception, match="service_account_credentials can't be empty."):
-        _ = GoogleCloudStorageDataSource(configuration=configuration)
+        gcs_object._validate_configurations()
 
 
 @pytest.mark.asyncio
@@ -499,3 +501,28 @@ async def test_api_call_for_attribute_error(catch_stdout, patch_logger):
             userProject=mocked_gcs_object.user_project_id,
         ):
             print("Method called successfully....")
+
+
+def test_get_pem_format():
+    """This function tests prepare private key with dummy values"""
+    # Setup
+    expected_formated_pem_key = """-----BEGIN PRIVATE KEY-----
+PrivateKey
+-----END PRIVATE KEY-----"""
+    source = get_mocked_source_object()
+    private_key = "-----BEGIN PRIVATE KEY----- PrivateKey -----END PRIVATE KEY-----"
+
+    # Execute
+    formated_privat_key = source.get_pem_format(private_key, max_split=2)
+    assert formated_privat_key == expected_formated_pem_key
+
+    # Setup
+    expected_formated_certificate = """-----BEGIN CERTIFICATE-----
+Certificate1
+Certificate2
+-----END CERTIFICATE-----"""
+    private_key = "-----BEGIN CERTIFICATE----- Certificate1 Certificate2 -----END CERTIFICATE-----"
+
+    # Execute
+    formated_privat_key = source.get_pem_format(private_key, max_split=1)
+    assert formated_privat_key == expected_formated_certificate
