@@ -764,7 +764,7 @@ class Connector:
             self._sync_task = None
 
 
-STUCK_JOBS_THRESHOLD = 60  # 60 seconds
+IDLE_JOBS_THRESHOLD = 60  # 60 seconds
 
 
 class SyncJobIndex(ESIndex):
@@ -839,7 +839,7 @@ class SyncJobIndex(ESIndex):
         async for job in self.get_all_docs(query=query):
             yield job
 
-    async def stuck_jobs(self, connector_ids):
+    async def idle_jobs(self, connector_ids):
         query = {
             "bool": {
                 "filter": [
@@ -852,7 +852,7 @@ class SyncJobIndex(ESIndex):
                             ]
                         }
                     },
-                    {"range": {"last_seen": {"lte": f"now-{STUCK_JOBS_THRESHOLD}s"}}},
+                    {"range": {"last_seen": {"lte": f"now-{IDLE_JOBS_THRESHOLD}s"}}},
                 ]
             }
         }
