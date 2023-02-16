@@ -12,6 +12,7 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 import pytest
 
 from connectors.byoc import (
+    CONNECTORS_INDEX,
     IDLE_JOBS_THRESHOLD,
     JOB_NOT_FOUND_ERROR,
     SYNC_DISABLED,
@@ -32,8 +33,8 @@ from connectors.config import load_config
 from connectors.filtering.validation import (
     FilteringValidationResult,
     FilteringValidationState,
-    FilterValidationError,
     InvalidFilteringError,
+    ValidationTarget,
 )
 from connectors.source import BaseDataSource
 from connectors.tests.commons import AsyncIterator
@@ -88,6 +89,28 @@ ACTIVE_FILTERING_DEFAULT_DOMAIN = {
     "validation": FILTERING_VALIDATION_VALID,
 }
 
+FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS = {
+    "state": "invalid",
+    "errors": [
+        {"ids": ["1"], "errors": ["some error"]},
+        {"ids": ["2"], "errors": ["another error"]},
+    ],
+}
+
+FILTERING_DEFAULT_DOMAIN_DRAFT_AFTER_UPDATE = {
+    "domain": DEFAULT_DOMAIN,
+    "draft": DRAFT_FILTERING_DEFAULT_DOMAIN
+    | {"validation": FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS},
+    "active": ACTIVE_FILTERING_DEFAULT_DOMAIN,
+}
+
+FILTERING_DEFAULT_DOMAIN_ACTIVE_AFTER_UPDATE = {
+    "domain": DEFAULT_DOMAIN,
+    "draft": DRAFT_FILTERING_DEFAULT_DOMAIN,
+    "active": ACTIVE_FILTERING_DEFAULT_DOMAIN
+    | {"validation": FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS},
+}
+
 FILTERING_DEFAULT_DOMAIN = {
     "domain": DEFAULT_DOMAIN,
     "draft": DRAFT_FILTERING_DEFAULT_DOMAIN,
@@ -130,6 +153,14 @@ DOC_SOURCE = {
         "language": "en",
         "sync_now": False,
     },
+}
+
+EXPECTED_FILTERING_AFTER_UPDATE_DRAFT = {
+    "filtering": [FILTERING_DEFAULT_DOMAIN_DRAFT_AFTER_UPDATE, FILTERING_OTHER_DOMAIN]
+}
+
+EXPECTED_FILTERING_AFTER_UPDATE_ACTIVE = {
+    "filtering": [FILTERING_DEFAULT_DOMAIN_ACTIVE_AFTER_UPDATE, FILTERING_OTHER_DOMAIN]
 }
 
 DOC_SOURCE_WITH_EDITED_FILTERING = DOC_SOURCE | {
@@ -747,85 +778,6 @@ async def test_prepare(mock_responses):
     assert not connector.configuration.is_empty()
 
 
-@pytest.mark.asyncio
-async def test_connector_validate_filtering_not_edited(patch_logger):
-    index = Mock()
-    index.update = AsyncMock()
-    validator = Mock()
-    validator.validate_filtering = AsyncMock()
-
-    connector = Connector(elastic_index=index, doc_source=DOC_SOURCE)
-    await connector.validate_filtering(validator=validator)
-
-    validator.validate_filtering.assert_not_awaited()
-    index.update.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_connector_validate_filtering_invalid(patch_logger):
-    index = Mock()
-    index.update = AsyncMock()
-    validation_result = FilteringValidationResult(
-        state=FilteringValidationState.INVALID,
-        errors=[FilterValidationError(ids=[1], messages="something wrong")],
-    )
-    validator = Mock()
-    validator.validate_filtering = AsyncMock(return_value=validation_result)
-    expected_validation_update_doc = {
-        "filtering": [
-            {
-                "domain": DEFAULT_DOMAIN,
-                "draft": DRAFT_FILTERING_DEFAULT_DOMAIN
-                | {"validation": validation_result.to_dict()},
-                "active": ACTIVE_FILTERING_DEFAULT_DOMAIN,
-            },
-            FILTERING_OTHER_DOMAIN,
-        ]
-    }
-
-    connector = Connector(
-        elastic_index=index, doc_source=deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
-    )
-    await connector.validate_filtering(validator=validator)
-
-    validator.validate_filtering.assert_awaited()
-    index.update.assert_awaited_with(
-        doc_id=CONNECTOR_ID, doc=expected_validation_update_doc
-    )
-
-
-@pytest.mark.asyncio
-async def test_connector_validate_filtering_valid(patch_logger):
-    index = Mock()
-    index.update = AsyncMock()
-    validation_result = FilteringValidationResult()
-    validator = Mock()
-    validator.validate_filtering = AsyncMock(return_value=validation_result)
-    expected_validation_update_doc = {
-        "filtering": [
-            {
-                "domain": DEFAULT_DOMAIN,
-                "draft": DRAFT_FILTERING_DEFAULT_DOMAIN
-                | {"validation": validation_result.to_dict()},
-                "active": DRAFT_FILTERING_DEFAULT_DOMAIN
-                | {"validation": validation_result.to_dict()},
-            },
-            FILTERING_OTHER_DOMAIN,
-        ]
-    }
-
-    connector = Connector(
-        elastic_index=index, doc_source=deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
-    )
-    index.fetch_by_id = AsyncMock(return_value=connector)
-    await connector.validate_filtering(validator=validator)
-
-    validator.validate_filtering.assert_awaited()
-    index.update.assert_awaited_with(
-        doc_id=CONNECTOR_ID, doc=expected_validation_update_doc
-    )
-
-
 @pytest.mark.parametrize(
     "filtering_json, filter_state, domain, expected_filter",
     [
@@ -911,6 +863,54 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
         Filter(filter_=filtering).transform_filtering()
         == expected_transformed_filtering
     )
+
+
+@pytest.mark.parametrize(
+    "validation_result, validation_target, expected_doc_source_update",
+    [
+        (
+            FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS,
+            ValidationTarget.DRAFT,
+            EXPECTED_FILTERING_AFTER_UPDATE_DRAFT,
+        ),
+        (
+            FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS,
+            ValidationTarget.ACTIVE,
+            EXPECTED_FILTERING_AFTER_UPDATE_ACTIVE,
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_update_filtering_validation(
+    validation_result, validation_target, expected_doc_source_update
+):
+    config = {"host": "https://nowhere.com:9200", "user": "tarek", "password": "blah"}
+
+    connector = Mock()
+    connector.filtering.to_list.return_value = DOC_SOURCE_FILTERING
+    connector.id = CONNECTOR_ID
+
+    validation_result_mock = Mock()
+    validation_result_mock.to_dict = Mock(return_value=validation_result)
+
+    client = Mock()
+    client.update = AsyncMock(return_value=1)
+
+    index = ConnectorIndex(config)
+    index.client = client
+
+    await index.update_filtering_validation(
+        connector, validation_result_mock, validation_target
+    )
+
+    assert client.update.call_args_list == [
+        call(
+            index=CONNECTORS_INDEX,
+            id=CONNECTOR_ID,
+            doc=expected_doc_source_update,
+            retry_on_conflict=ANY,
+        )
+    ]
 
 
 @pytest.mark.parametrize(
