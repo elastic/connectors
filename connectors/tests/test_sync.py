@@ -19,7 +19,6 @@ from connectors.conftest import assert_re
 from connectors.filtering.validation import InvalidFilteringError
 from connectors.services.sync import SyncService
 from connectors.tests.fake_sources import FakeSourceTS
-from connectors.utils import e2str
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yml")
 CONFIG_FILE_2 = os.path.join(os.path.dirname(__file__), "config_2.yml")
@@ -77,7 +76,7 @@ FAKE_CONFIG_PIPELINE_CHANGED["pipeline"] = {
 }
 FAKE_CONFIG_LAST_JOB_SUSPENDED = copy.deepcopy(FAKE_CONFIG)
 FAKE_CONFIG_LAST_JOB_SUSPENDED["sync_now"] = False
-FAKE_CONFIG_LAST_JOB_SUSPENDED["last_sync_status"] = e2str(JobStatus.SUSPENDED)
+FAKE_CONFIG_LAST_JOB_SUSPENDED["last_sync_status"] = JobStatus.SUSPENDED.value
 FAKE_CONFIG_LAST_JOB_SUSPENDED_SCHEDULING_DISABLED = copy.deepcopy(
     FAKE_CONFIG_LAST_JOB_SUSPENDED
 )
