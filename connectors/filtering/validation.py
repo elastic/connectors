@@ -19,7 +19,7 @@ class ValidationTarget(Enum):
 
 
 async def validate_filtering(
-    connector, index, validation_target=ValidationTarget.ACTIVE
+    connector, source_klass, validation_target=ValidationTarget.ACTIVE
 ):
     filter_to_validate = (
         connector.filtering.get_active_filter()
@@ -27,11 +27,11 @@ async def validate_filtering(
         else connector.filtering.get_draft_filter()
     )
 
-    validation_result = await connector.source_klass(
-        connector.configuration
-    ).validate_filtering(filter_to_validate)
+    validation_result = await source_klass(connector.configuration).validate_filtering(
+        filter_to_validate
+    )
 
-    await index.update_filtering_validation(
+    await connector.index.update_filtering_validation(
         connector, validation_result, validation_target
     )
 
