@@ -1114,6 +1114,7 @@ def test_advanced_rules_present(filtering, should_advanced_rules_be_present):
         (FILTER_VALIDATION_STATE_VALID, FilteringValidationState.EDITED, False),
         (FILTER_VALIDATION_STATE_INVALID, FilteringValidationState.EDITED, False),
         (FILTER_VALIDATION_STATE_EDITED, FilteringValidationState.EDITED, True),
+        ({}, FilteringValidationState.VALID, True),
     ],
 )
 def test_has_validation_state(
