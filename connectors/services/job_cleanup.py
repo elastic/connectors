@@ -65,7 +65,7 @@ class JobCleanUpService(BaseService):
                     and job.index_name not in existing_content_indices
                 ):
                     content_indices.add(job.index_name)
-                job_ids.append(job.job_id)
+                job_ids.append(job.id)
 
             if len(job_ids) == 0:
                 logger.info("No orphaned jobs found. Skipping...")
@@ -98,7 +98,12 @@ class JobCleanUpService(BaseService):
             marked_count = total_count = 0
             async for job in self.sync_job_index.idle_jobs(connector_ids=connector_ids):
                 try:
+                    job_id = job.id
                     connector_id = job.connector_id
+
+                    await job.fail(message=IDLE_JOB_ERROR)
+                    marked_count += 1
+
                     connector = await self.connector_index.fetch_by_id(
                         doc_id=connector_id
                     )
@@ -106,13 +111,11 @@ class JobCleanUpService(BaseService):
                         logger.warning(
                             f"Could not found connector by id #{connector_id}"
                         )
-                    else:
-                        await connector._sync_done(
-                            job=job, result={}, exception=IDLE_JOB_ERROR
-                        )
-                        marked_count += 1
+                        continue
+                    job = await self.sync_job_index.fetch_by_id(doc_id=job_id)
+                    await connector.sync_done(job=job)
                 except Exception as e:
-                    logger.error(f"Failed to mark idle job #{job.job_id} as error: {e}")
+                    logger.error(f"Failed to mark idle job #{job_id} as error: {e}")
                 finally:
                     total_count += 1
 

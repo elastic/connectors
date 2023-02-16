@@ -20,6 +20,7 @@ from connectors.byoc import (
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
     Status,
+    SyncJobIndex,
 )
 from connectors.byoei import ElasticServer
 from connectors.filtering.validation import (
@@ -43,6 +44,7 @@ class SyncService(BaseService):
             "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
         )
         self.connectors = None
+        self.sync_job_index = None
         self.syncs = None
 
     def stop(self):
@@ -95,7 +97,7 @@ class SyncService(BaseService):
                         connector, self.connectors, ValidationTarget.DRAFT
                     )
 
-                await connector.sync(es, self.idling)
+                await connector.sync(self.sync_job_index, es, self.idling)
 
             await asyncio.sleep(0)
         except InvalidFilteringError as e:
@@ -107,6 +109,7 @@ class SyncService(BaseService):
     async def _run(self):
         """Main event loop."""
         self.connectors = ConnectorIndex(self.es_config)
+        self.sync_job_index = SyncJobIndex(self.es_config)
 
         native_service_types = self.config.get("native_service_types", [])
         logger.debug(f"Native support for {', '.join(native_service_types)}")
@@ -153,5 +156,8 @@ class SyncService(BaseService):
             if self.connectors is not None:
                 self.connectors.stop_waiting()
                 await self.connectors.close()
+            if self.sync_job_index is not None:
+                self.sync_job_index.stop_waiting()
+                await self.sync_job_index.close()
             await es.close()
         return 0
