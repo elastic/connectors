@@ -305,33 +305,30 @@ async def set_server_responses(
         callback=connectors_read,
         repeat=True,
     )
-    mock_responses.post(
-        f"{host}/.elastic-connectors-sync-jobs/_doc",
-        payload={"_id": "1"},
-        headers=headers,
-        repeat=True,
-    )
-
     for id_ in range(len(configs)):
+        mock_responses.post(
+            f"{host}/.elastic-connectors-sync-jobs/_doc",
+            payload={"_id": f"{id_+1}"},
+            headers=headers,
+        )
         mock_responses.post(
             f"{host}/.elastic-connectors-sync-jobs/_update/{id_+1}",
             headers=headers,
             callback=jobs_update,
             repeat=True,
         )
-    mock_responses.put(
-        f"{host}/.elastic-connectors-sync-jobs/_doc/1",
-        payload={"_id": "1"},
-        callback=jobs_update,
-        headers=headers,
-    )
-
-    mock_responses.get(
-        f"{host}/.elastic-connectors-sync-jobs/_doc/1",
-        payload=JOB_DOC_SOURCE,
-        headers=headers,
-        repeat=True,
-    )
+        mock_responses.put(
+            f"{host}/.elastic-connectors-sync-jobs/_doc/{id_+1}",
+            payload={"_id": f"{id_+1}"},
+            callback=jobs_update,
+            headers=headers,
+        )
+        mock_responses.get(
+            f"{host}/.elastic-connectors-sync-jobs/_doc/{id_+1}",
+            payload=JOB_DOC_SOURCE | {"_id": f"{id_+1}"},
+            headers=headers,
+            repeat=True,
+        )
 
     mock_responses.put(
         f"{host}/.elastic-connectors/_doc/1",
@@ -730,3 +727,5 @@ async def test_concurrent_syncs(mock_responses, patch_logger, set_env):
 
     # make sure we synced the three connectors
     patch_logger.assert_present("[1] Sync done: 1 indexed, 0  deleted. (0 seconds)")
+    patch_logger.assert_present("[2] Sync done: 1 indexed, 0  deleted. (0 seconds)")
+    patch_logger.assert_present("[3] Sync done: 1 indexed, 0  deleted. (0 seconds)")
