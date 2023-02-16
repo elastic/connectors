@@ -59,19 +59,6 @@ class JobTriggerMethod(Enum):
     UNSET = None
 
 
-CUSTOM_READ_ONLY_FIELDS = (
-    "is_native",
-    "api_key_id",
-    "pipeline",
-    "scheduling",
-)
-
-NATIVE_READ_ONLY_FIELDS = CUSTOM_READ_ONLY_FIELDS + (
-    "service_type",
-    "configuration",
-)
-
-
 class ServiceTypeNotSupportedError(Exception):
     pass
 
