@@ -44,4 +44,4 @@ $PYTHON setup.py develop
 
 make test
 make lint
-make ftest NAME=dir DATA_SIZE=small
+make ftest NAME=dir DATA_SIZE=small PYTHON=$ROOT/bin/python
