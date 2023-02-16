@@ -110,7 +110,7 @@ class S3DataSource(BaseDataSource):
         if os.path.splitext(filename)[-1] not in TIKA_SUPPORTED_FILETYPES:
             logger.debug(f"{filename} can't be extracted")
             return
-        if doc["size"] > DEFAULT_MAX_FILE_SIZE:
+        if doc["size_in_bytes"] > DEFAULT_MAX_FILE_SIZE:
             logger.warning(
                 f"File size for {filename} is larger than {DEFAULT_MAX_FILE_SIZE} bytes. Discarding the file content"
             )
@@ -127,7 +127,7 @@ class S3DataSource(BaseDataSource):
                 file_content.seek(0)
                 data = file_content.read()
                 file_content.close()
-                logger.debug(f"Downloaded {filename} for {doc['size']} bytes ")
+                logger.debug(f"Downloaded {filename} for {doc['size_in_bytes']} bytes ")
                 return {
                     "_timestamp": timestamp,
                     "_attachment": get_base64_value(content=data),
@@ -204,15 +204,16 @@ class S3DataSource(BaseDataSource):
                         doc = {
                             "_id": doc_id,
                             "filename": obj_summary.key,
-                            "size": await obj_summary.size,
+                            "size_in_bytes": await obj_summary.size,
                             "bucket": bucket,
                             "owner": owner.get("DisplayName") if owner else "",
                             "storage_class": await obj_summary.storage_class,
                             "_timestamp": (await obj_summary.last_modified).isoformat(),
                         }
-
                         yield doc, partial(
-                            self._get_content, doc=doc, region=region_name
+                            self._get_content,
+                            doc=doc,
+                            region=region_name,
                         )
                 except Exception as exception:
                     logger.warning(

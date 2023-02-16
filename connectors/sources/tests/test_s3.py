@@ -208,7 +208,7 @@ async def test_get_content(patch_logger, mock_aws):
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
         response = await source._get_content(
-            {"id": 1, "filename": "a.txt", "bucket": "dummy", "size": 1000000},
+            {"id": 1, "filename": "a.txt", "bucket": "dummy", "size_in_bytes": 1000000},
             "region",
             doit=1,
         )
@@ -246,7 +246,12 @@ async def test_get_content_when_size_is_large(patch_logger, mock_aws):
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
         response = await source._get_content(
-            {"id": 1, "filename": "a.txt", "bucket": "dummy", "size": 20000000000},
+            {
+                "id": 1,
+                "filename": "a.txt",
+                "bucket": "dummy",
+                "size_in_bytes": 20000000000,
+            },
             "region",
             doit=1,
         )
@@ -260,7 +265,12 @@ async def test_pdf_file(patch_logger, mock_aws):
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
         response = await source._get_content(
-            {"id": 1, "filename": "dummy.pdf", "bucket": "dummy", "size": 1000000},
+            {
+                "id": 1,
+                "filename": "dummy.pdf",
+                "bucket": "dummy",
+                "size_in_bytes": 1000000,
+            },
             "region",
             doit=1,
         )
