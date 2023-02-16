@@ -7,12 +7,11 @@ import json
 import os
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
-from unittest.mock import ANY, AsyncMock, Mock, call, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 
 from connectors.byoc import (
-    CONNECTORS_INDEX,
     IDLE_JOBS_THRESHOLD,
     JOB_NOT_FOUND_ERROR,
     SYNC_DISABLED,
