@@ -495,6 +495,7 @@ class Connector(ESDocument):
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
+    # TODO: This method is to be removed once the SyncService is refactored and SyncJobRunner class is added.
     async def _sync_starts(self, sync_job_index):
         job_id = await sync_job_index.create(self)
         if self.sync_now:
@@ -514,6 +515,7 @@ class Connector(ESDocument):
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
+    # TODO: This method is to be moved to the new SyncJobRunner class, together with sync method.
     async def _sync_done(self, job, status, result, start_time, exception=None):
         doc_updated = result.get("doc_updated", 0)
         doc_created = result.get("doc_created", 0)
@@ -567,6 +569,7 @@ class Connector(ESDocument):
 
         await self.index.update(doc_id=self.id, doc=doc)
 
+    # TODO: This method is to be moved to the new SyncJobRunner class, together with sync method.
     async def prepare_docs(self, data_provider, pipeline=None, filtering=None):
         if pipeline is None:
             pipeline = Pipeline({})
@@ -666,6 +669,7 @@ class Connector(ESDocument):
         )
         return result["count"]
 
+    # TODO: Part of this method will be moved to SyncService once it's refactored, and the rest will be moved to the new SyncJobRunner class.
     async def sync(
         self, sync_job_index, source_klass, elastic_server, idling, bulk_options
     ):
