@@ -3,33 +3,31 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-
-from connectors.logger import logger
-
-
 class InvalidDocumentSourceError(Exception):
     pass
 
 
 class ESDocument:
+    """
+    Represents a document in an Elasticsearch index.
+    """
+
     def __init__(self, elastic_index, doc_source):
         self.index = elastic_index
-        try:
-            self.id = doc_source.get("_id")
-            if not isinstance(self.id, str):
-                raise InvalidDocumentSourceError(
-                    f"Invalid format found for id: {self.id}"
-                )
-            self._source = doc_source.get("_source", {})
-            if not isinstance(self._source, dict):
-                raise InvalidDocumentSourceError(
-                    f"Invalid format found for source: {self._source}"
-                )
-        except InvalidDocumentSourceError:
-            raise
-        except Exception as e:
-            logger.critical(e, exc_info=True)
-            raise InvalidDocumentSourceError(f"Invalid doc source found: {doc_source}")
+        if not isinstance(doc_source, dict):
+            raise InvalidDocumentSourceError(
+                f"Invalid type found for doc_source: {type(doc_source).__name__}, expected: {dict.__name__}"
+            )
+        self.id = doc_source.get("_id")
+        if not isinstance(self.id, str):
+            raise InvalidDocumentSourceError(
+                f"Invalid type found for id: {type(self.id).__name__}, expected: {str.__name__}"
+            )
+        self._source = doc_source.get("_source", {})
+        if not isinstance(self._source, dict):
+            raise InvalidDocumentSourceError(
+                f"Invalid type found for source: {type(self._source).__name__}, expected: {dict.__name__}"
+            )
 
     def get(self, *keys, default=None):
         value = self._source
