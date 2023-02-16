@@ -12,8 +12,8 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 import pytest
 
 from connectors.byoc import (
-    JOB_NOT_FOUND_ERROR,
     IDLE_JOBS_THRESHOLD,
+    JOB_NOT_FOUND_ERROR,
     SYNC_DISABLED,
     Connector,
     ConnectorIndex,
