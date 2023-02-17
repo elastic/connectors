@@ -10,6 +10,7 @@ import json
 import os
 import urllib.parse
 from functools import partial
+from json.decoder import JSONDecodeError
 
 import aiofiles
 from aiofiles.os import remove
@@ -18,7 +19,7 @@ from aiogoogle import Aiogoogle
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, DataSourceConfigurationError
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
@@ -78,6 +79,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
 
         self.service_account_credentials = None
         self.user_project_id = None
+        self.json_creds = None
 
     @classmethod
     def get_default_configuration(cls):
@@ -186,13 +188,22 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry_counter)
 
     def _validate_configurations(self):
-        """Validates whether user input is empty or not for configuration field.
+        """Validates whether user inputs are valid or not for configuration field.
 
         Raises:
-            Exception: Configured keys can't be empty.
+            DataSourceConfigurationError: The service account json is empty.
+            DataSourceConfigurationError: The service account json is in invalid format.
         """
         if self.configuration["service_account_credentials"] == "":
-            raise Exception("service_account_credentials can't be empty.")
+            raise DataSourceConfigurationError("Service account json can't be empty.")
+        try:
+            self.json_creds = json.loads(
+                self.configuration["service_account_credentials"]
+            )
+        except JSONDecodeError:
+            raise DataSourceConfigurationError(
+                "Service account json is not in valid format."
+            )
 
     def get_pem_format(self, private_key, max_split=-1):
         """Convert key into PEM format.
@@ -211,19 +222,17 @@ class GoogleCloudStorageDataSource(BaseDataSource):
 
     def _initialize_configurations(self):
         """Initialize the ServiceAccountCreds"""
-        json_creds = json.loads(self.configuration["service_account_credentials"])
         if (
-            not RUNNING_FTEST
-            and json_creds.get("private_key")
-            and "\n" not in json_creds["private_key"]
+            self.json_creds.get("private_key")
+            and "\n" not in self.json_creds["private_key"]
         ):
-            json_creds["private_key"] = self.get_pem_format(
-                private_key=json_creds["private_key"].strip(), max_split=2
+            self.json_creds["private_key"] = self.get_pem_format(
+                private_key=self.json_creds["private_key"].strip(), max_split=2
             )
 
         self.service_account_credentials = ServiceAccountCreds(
             scopes=[CLOUD_STORAGE_READ_ONLY_SCOPE],
-            **json_creds,
+            **self.json_creds,
         )
         self.user_project_id = self.service_account_credentials.project_id
 

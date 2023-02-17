@@ -20,6 +20,16 @@ from connectors.filtering.validation import (
 """
 
 
+class DataSourceConfigurationError(Exception):
+    """Raise when configurations are invalid.
+
+    Args:
+        Exception (DataSourceConfigurationError): Invalid configurations exception.
+    """
+
+    pass
+
+
 class Field:
     def __init__(self, name, label=None, value="", type="str"):
         if label is None:

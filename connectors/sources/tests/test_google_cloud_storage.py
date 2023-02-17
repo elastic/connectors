@@ -32,6 +32,7 @@ def get_mocked_source_object():
         {"service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS, "retry_count": 0}
     )
     mocked_gcs_object = GoogleCloudStorageDataSource(configuration=configuration)
+    mocked_gcs_object._validate_configurations()
     mocked_gcs_object._initialize_configurations()
     return mocked_gcs_object
 
@@ -66,7 +67,21 @@ async def test_empty_configuration():
     gcs_object = GoogleCloudStorageDataSource(configuration=configuration)
 
     # Execute
-    with pytest.raises(Exception, match="service_account_credentials can't be empty."):
+    with pytest.raises(Exception, match="Service account json can't be empty."):
+        gcs_object._validate_configurations()
+
+
+def test_invalid_configuration():
+    """Tests that the service account credential is in invalid json format"""
+
+    # Setup
+    configuration = DataSourceConfiguration(
+        {"service_account_credentials": "{'abc':'bcd','cd'}"}
+    )
+    gcs_object = GoogleCloudStorageDataSource(configuration=configuration)
+
+    # Execute
+    with pytest.raises(Exception, match="Service account json is not in valid format."):
         gcs_object._validate_configurations()
 
 
