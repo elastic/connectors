@@ -784,7 +784,7 @@ async def test_connector_validate_filtering_invalid(patch_logger):
     }
 
     connector = Connector(
-        elastic_index=index, doc_source=DOC_SOURCE_WITH_EDITED_FILTERING
+        elastic_index=index, doc_source=deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     )
     await connector.validate_filtering(validator=validator)
 
@@ -815,7 +815,7 @@ async def test_connector_validate_filtering_valid(patch_logger):
     }
 
     connector = Connector(
-        elastic_index=index, doc_source=DOC_SOURCE_WITH_EDITED_FILTERING
+        elastic_index=index, doc_source=deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     )
     index.fetch_by_id = AsyncMock(return_value=connector)
     await connector.validate_filtering(validator=validator)
