@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
 from connectors.source import DataSourceConfiguration
 from connectors.sources.generic_database import GenericBaseDataSource
+from connectors.sources.mssql import MSSQLDataSource
 from connectors.sources.oracle import OracleDataSource
 from connectors.sources.postgresql import PostgreSQLDataSource
 from connectors.sources.tests.support import create_source
@@ -23,6 +24,18 @@ POSTGRESQL_CONNECTION_STRING = (
     "postgresql+asyncpg://admin:changme@127.0.0.1:5432/testdb"
 )
 ORACLE_CONNECTION_STRING = "oracle+oracledb://admin:changme@127.0.0.1:1521/testdb"
+
+
+class mock_engine:
+    """This Class create mock engine for mssql dialect"""
+
+    def connect(self):
+        """Make a connection
+
+        Returns:
+            connection: connection object
+        """
+        return ConnectionSync()
 
 
 class ConnectionAsync:
@@ -276,6 +289,42 @@ async def test_get_docs_oracle(patch_logger):
 
         # Assert
         assert actual_response == expected_response
+
+
+@pytest.mark.asyncio
+async def test_get_docs_mssql(patch_logger):
+    """Test get_docs method"""
+    # Setup
+    source = create_source(MSSQLDataSource)
+    source.engine = mock_engine()
+    actual_response = []
+    expected_response = [
+        {
+            "10_10_ids": 1,
+            "10_10_names": "abcd",
+            "_id": "xe_10_10_",
+            "_timestamp": 10,
+            "Database": "xe",
+            "Table": 10,
+            "schema": 10,
+        },
+        {
+            "10_10_ids": 2,
+            "10_10_names": "xyz",
+            "_id": "xe_10_10_",
+            "_timestamp": 10,
+            "Database": "xe",
+            "Table": 10,
+            "schema": 10,
+        },
+    ]
+
+    # Execute
+    async for i in source.get_docs():
+        actual_response.append(i[0])
+
+    # Assert
+    assert actual_response == expected_response
 
 
 @pytest.mark.asyncio
