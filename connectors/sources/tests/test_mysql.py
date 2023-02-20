@@ -197,9 +197,6 @@ class ConnectionPool:
     def close(self):
         pass
 
-    def terminate(self):
-        pass
-
     async def wait_closed(self):
         pass
 

@@ -193,7 +193,7 @@ class MySqlDataSource(BaseDataSource):
         self._sleeps.cancel()
         if self.connection_pool is None:
             return
-        self.connection_pool.terminate()
+        self.connection_pool.close()
         await self.connection_pool.wait_closed()
         self.connection_pool = None
 
