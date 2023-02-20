@@ -123,6 +123,7 @@ class SyncJobRunner:
                 self.update_ingestion_stats(JOB_REPORTING_INTERVAL)
             )
             while not self.elastic_server.done():
+                await self.check_job()
                 await asyncio.sleep(JOB_CHECK_INTERVAL)
             fetch_error = self.elastic_server.fetch_error()
             sync_status = (
