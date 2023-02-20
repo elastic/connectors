@@ -58,6 +58,10 @@ class SyncJobRunner:
             logger.debug(f"Pinging the {self.source_klass} backend")
             await data_provider.ping()
 
+            sync_rules_enabled = self.connector.features.sync_rules_enabled()
+            if sync_rules_enabled:
+                await self.sync_job.validate_filtering(validator=data_provider)
+
             mappings = Mappings.default_text_fields_mappings(
                 is_connectors_index=True,
             )
@@ -70,11 +74,6 @@ class SyncJobRunner:
             # allows the data provider to change the bulk options
             bulk_options = self.bulk_options.copy()
             data_provider.tweak_bulk_options(bulk_options)
-
-            sync_rules_enabled = self.connector.features.sync_rules_enabled()
-
-            if sync_rules_enabled:
-                await self.sync_job.validate_filtering(validator=data_provider)
 
             result = await self.elastic_server.async_bulk(
                 self.sync_job.index_name,
