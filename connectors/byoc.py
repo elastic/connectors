@@ -204,6 +204,20 @@ class SyncJob(ESDocument):
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
+    async def update_metadata(self, ingestion_stats=None, connector_metadata=None):
+        if ingestion_stats is None:
+            ingestion_stats = {}
+        if connector_metadata is None:
+            connector_metadata = {}
+
+        doc = {
+            "last_seen": iso_utc(),
+        }
+        doc.update(ingestion_stats)
+        if len(connector_metadata) > 0:
+            doc["metadata"] = connector_metadata
+        await self.index.update(doc_id=self.id, doc=doc)
+
     async def done(self, ingestion_stats=None, connector_metadata=None):
         await self._terminate(
             JobStatus.COMPLETED, None, ingestion_stats, connector_metadata

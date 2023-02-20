@@ -12,6 +12,7 @@ from connectors.es import Mappings
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 
+JOB_REPORTING_INTERVAL = 1
 JOB_CHECK_INTERVAL = 1
 ES_ID_SIZE_LIMIT = 512
 
@@ -55,6 +56,7 @@ class SyncJobRunner:
         self.elastic_server = None
         self.bulk_options = self.es_config.get("bulk", {})
         self._start_time = None
+        self._reporting_cycle_start_time = None
         self.running = False
 
     async def execute(self):
@@ -117,7 +119,9 @@ class SyncJobRunner:
                 options=bulk_options,
             )
 
+            self._reporting_cycle_start_time = time.time()
             while not self.elastic_server.done():
+                await self.check_job()
                 await asyncio.sleep(JOB_CHECK_INTERVAL)
             fetch_error = self.elastic_server.fetch_error()
             sync_status = (
@@ -203,3 +207,19 @@ class SyncJobRunner:
             doc["_reduce_whitespace"] = self.sync_job.pipeline["reduce_whitespace"]
             doc["_run_ml_inference"] = self.sync_job.pipeline["run_ml_inference"]
             yield doc, lazy_download
+
+    async def check_job(self):
+        if time.time() - self._reporting_cycle_start_time < JOB_REPORTING_INTERVAL:
+            return
+
+        result = (
+            {} if self.elastic_server is None else self.elastic_server.ingestion_stats()
+        )
+        ingestion_stats = {
+            "indexed_document_count": result.get("indexed_document_count", 0),
+            "indexed_document_volume": result.get("indexed_document_volume", 0),
+            "deleted_document_count": result.get("deleted_document_count", 0),
+        }
+        await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
+
+        self._reporting_cycle_start_time = time.time()

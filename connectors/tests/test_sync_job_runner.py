@@ -46,6 +46,7 @@ def create_runner(
     sync_job.suspend = AsyncMock()
     sync_job.reload = AsyncMock(return_value=sync_job)
     sync_job.validate_filtering = AsyncMock()
+    sync_job.update_metadata = AsyncMock()
 
     connector = Mock()
     connector.id = "1"
@@ -330,3 +331,32 @@ async def test_prepare_docs_when_id_below_limit_then_yield_doc():
 
     assert len(docs) == 1
     assert docs[0]["_id"] == _id_within_limit
+
+
+@pytest.mark.asyncio
+@patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
+@patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
+async def test_sync_job_runner_reporting_metadata(elastic_server_mock, patch_logger):
+    ingestion_stats = {
+        "indexed_document_count": 15,
+        "indexed_document_volume": 230,
+        "deleted_document_count": 10,
+    }
+    elastic_server_mock.ingestion_stats.return_value = ingestion_stats
+    elastic_server_mock.done.side_effect = [False, True, True]
+    service = create_runner()
+    await service.execute()
+
+    service.sync_job.claim.assert_awaited()
+    service.connector.sync_starts.assert_awaited()
+    service.elastic_server.async_bulk.assert_awaited()
+    service.sync_job.update_metadata.assert_awaited_with(
+        ingestion_stats=ingestion_stats
+    )
+    service.sync_job.done.assert_awaited_with(
+        ingestion_stats=ingestion_stats | {"total_document_count": total_document_count}
+    )
+    service.sync_job.fail.assert_not_awaited
+    service.sync_job.cancel.assert_not_awaited()
+    service.sync_job.suspend.assert_not_awaited()
+    service.connector.sync_done.assert_awaited_with(service.sync_job)
