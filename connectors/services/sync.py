@@ -121,7 +121,7 @@ class SyncService(BaseService):
         native_service_types = self.config.get("native_service_types", [])
         logger.debug(f"Native support for {', '.join(native_service_types)}")
 
-        # XXX we can support multiple connectors but Ruby can't so let's use a
+        # TODO: we can support multiple connectors but Ruby can't so let's use a
         # single id
         # connector_ids = self.config.get("connector_ids", [])
         if "connector_id" in self.config:
