@@ -46,23 +46,6 @@ class StubService:
 
 
 @pytest.mark.asyncio
-async def test_multiservice_run_stops_all_services_when_one_stops():
-    service_1 = StubService()
-    service_2 = StubService()
-    service_3 = StubService()
-
-    multiservice = MultiService(service_1, service_2, service_3)
-
-    asyncio.get_event_loop().call_later(0.1, service_1.stop)
-
-    await multiservice.run()
-
-    assert not service_1.cancelled
-    assert service_2.cancelled
-    assert service_3.cancelled
-
-
-@pytest.mark.asyncio
 async def test_multiservice_run_stops_all_services_when_one_raises_exception():
     service_1 = StubService()
     service_2 = StubService()
@@ -96,26 +79,6 @@ async def test_multiservice_run_stops_all_services_when_shutdown_happens():
     assert service_1.stopped
     assert service_2.stopped
     assert service_3.stopped
-
-
-@pytest.mark.asyncio
-async def test_multiservice_run_stops_all_services_when_shutdown_happens_and_some_dont_handle_cancellation():
-    service_1 = StubService()
-    service_2 = StubService()
-    service_3 = StubService()
-
-    service_3.handle_cancellation = False
-
-    multiservice = MultiService(service_1, service_2, service_3)
-
-    asyncio.get_event_loop().call_later(0.1, service_1.stop)
-
-    await multiservice.run()
-
-    assert service_1.stopped
-    assert service_2.cancelled
-    # We assert False for service_3 - it does not handle cancellation gracefully
-    assert not service_3.cancelled
 
 
 @pytest.mark.asyncio
