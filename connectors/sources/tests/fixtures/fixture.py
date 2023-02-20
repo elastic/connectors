@@ -100,7 +100,7 @@ def main(args=None):
         os.chdir(os.path.join(os.path.dirname(__file__), args.name))
         if args.action == "start_stack":
             os.system("docker compose up -d")
-            # XXX do better
+            # TODO: do better
             time.sleep(30)
         else:
             os.system("docker compose down --volumes")

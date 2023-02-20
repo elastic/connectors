@@ -109,7 +109,7 @@ class Bulker:
         raise TypeError(operation)
 
     async def _batch_bulk(self, operations):
-        # todo treat result to retry errors like in async_streaming_bulk
+        # TODO: treat result to retry errors like in async_streaming_bulk
         task_num = len(self.bulk_tasks)
 
         logger.debug(
