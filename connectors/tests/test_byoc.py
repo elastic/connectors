@@ -180,14 +180,6 @@ ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
 }
 
 
-@pytest.fixture(autouse=True)
-def patch_validate_filtering_in_byoc():
-    with mock.patch(
-        "connectors.byoc.SyncJob.validate_filtering", return_value=AsyncMock()
-    ) as validate_filtering_mock:
-        yield validate_filtering_mock
-
-
 def test_utc():
     # All dates are in ISO 8601 UTC so we can serialize them
     now = datetime.utcnow()
