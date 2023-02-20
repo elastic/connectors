@@ -64,15 +64,7 @@ $ELASTIC_INGEST --debug & PID=$!
 
 $PYTHON fixture.py --name $NAME --action monitor --pid $PID
 
-
-if [[ "$DATA_SIZE" == 'small' ]]; then
-   SIZE=750
-elif [[ "$DATA_SIZE" == 'medium' ]]; then
-   SIZE=1500
-else
-   SIZE=3000
-fi
-
-$PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size $SIZE
+NUM_DOCS=`$PYTHON fixture.py --name $NAME --action get_num_docs`
+$PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size $NUM_DOCS
 $PYTHON fixture.py --name $NAME --action stop_stack
 $PYTHON fixture.py --name $NAME --action teardown
