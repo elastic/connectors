@@ -7,7 +7,6 @@ import json
 import os
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
-from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
