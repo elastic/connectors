@@ -1065,10 +1065,6 @@ async def test_validate_filtering(validation_result, validation_target, should_r
     source_klass = Mock(return_value=source_instance)
     source_instance.validate_filtering = AsyncMock(return_value=validation_result)
 
-    connector.source_klass().validate_filtering = AsyncMock(
-        return_value=validation_result
-    )
-
     if should_raise:
         with pytest.raises(InvalidFilteringError):
             await validate_filtering(connector, source_klass, validation_target)
