@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """MySQL source module responsible to fetch documents from MySQL"""
-import asyncio
 import ssl
 from collections import OrderedDict
 
@@ -16,7 +15,7 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import RetryStrategy, retryable
+from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
 MAX_POOL_SIZE = 10
 QUERIES = {
@@ -126,6 +125,7 @@ class MySqlDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
+        self._sleeps = CancellableSleeps()
         self.retry_count = self.configuration["retry_count"]
         self.connection_pool = None
         self.ssl_disabled = self.configuration["ssl_disabled"]
@@ -190,9 +190,10 @@ class MySqlDataSource(BaseDataSource):
         return [MySQLAdvancedRulesValidator(self)]
 
     async def close(self):
+        self._sleeps.cancel()
         if self.connection_pool is None:
             return
-        self.connection_pool.close()
+        self.connection_pool.terminate()
         await self.connection_pool.wait_closed()
         self.connection_pool = None
 
@@ -319,7 +320,7 @@ class MySqlDataSource(BaseDataSource):
                                     yield row
 
                                 rows_fetched += rows_length
-                                await asyncio.sleep(0)
+                                await self._sleeps.sleep(0)
                         else:
                             yield await cursor.fetchall()
                         break
@@ -336,7 +337,7 @@ class MySqlDataSource(BaseDataSource):
                 if retry == self.retry_count:
                     raise exception
                 cursor_position = rows_fetched
-                await asyncio.sleep(RETRY_INTERVAL**retry)
+                await self._sleeps.sleep(RETRY_INTERVAL**retry)
                 retry += 1
 
     async def fetch_tables(self, database):
@@ -506,9 +507,9 @@ class MySqlDataSource(BaseDataSource):
                                 query=query,
                             ):
                                 yield row, None
-                            await asyncio.sleep(0)
+                            await self._sleeps.sleep(0)
         else:
             for database in databases:
                 async for row in self.fetch_rows_from_all_tables(database=database):
                     yield row, None
-                await asyncio.sleep(0)
+                await self._sleeps.sleep(0)
