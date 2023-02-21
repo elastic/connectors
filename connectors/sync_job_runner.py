@@ -20,7 +20,19 @@ class JobClaimError(Exception):
 
 
 class SyncJobRunner:
-    """The class to run a sync job."""
+    """
+    The class to run a sync job.
+
+    It takes a sync job, and tries to claim it, and executes it. It also makes sure the sync job is updated
+    appropriately when it errors out, is canceled, completes successfully or the service shuts down.
+
+    :param source_klass: The source class of the connector
+    :param sync_job: The sync job to run
+    :param connector: The connector of the sync job
+    :param elastic_server: The sync orchestrator used to fetch data from 3rd-party source and ingest into Elasticsearch
+    :param bulk_options: The bulk options used for the ingestion
+
+    """
 
     def __init__(
         self,
