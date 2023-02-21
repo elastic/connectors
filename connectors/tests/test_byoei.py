@@ -357,7 +357,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
     # filtering content doesn't matter as the BasicRuleEngine behavior is mocked
     filter_mock = Mock()
     filter_mock.get_active_filter = Mock(return_value={})
-    fetcher = Fetcher(client, queue, INDEX, existing_ids, filter=filter_mock)
+    fetcher = Fetcher(client, queue, INDEX, existing_ids, filter_=filter_mock)
     fetcher.basic_rule_engine = basic_rule_engine if sync_rules_enabled else None
     return fetcher
 

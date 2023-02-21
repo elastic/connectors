@@ -23,13 +23,9 @@ from connectors.byoc import (
     SyncJobIndex,
 )
 from connectors.byoei import ElasticServer
-from connectors.filtering.validation import (
-    InvalidFilteringError,
-    ValidationTarget,
-    validate_filtering,
-)
 from connectors.logger import logger
 from connectors.services.base import BaseService
+from connectors.source import get_source_klass_dict
 from connectors.utils import ConcurrentTasks
 
 DEFAULT_MAX_CONCURRENT_SYNCS = 1
@@ -43,6 +39,8 @@ class SyncService(BaseService):
         self.concurrent_syncs = self.service_config.get(
             "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
         )
+        self.bulk_options = self.es_config.get("bulk", {})
+        self.source_klass_dict = get_source_klass_dict(config)
         self.connectors = None
         self.sync_job_index = None
         self.syncs = None
@@ -81,30 +79,35 @@ class SyncService(BaseService):
             self.raise_if_spurious(e)
             return
 
-        try:
-            # the heartbeat is always triggered
-            connector.start_heartbeat(self.hb)
+        # the heartbeat is always triggered
+        await connector.heartbeat(self.hb)
 
-            logger.debug(f"Connector status is {connector.status}")
+        logger.debug(f"Connector status is {connector.status}")
 
-            # we trigger a sync
-            if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
-                # we can't sync in that state
-                logger.info(f"Can't sync with status `{connector.status.value}`")
-            else:
-                if connector.features.sync_rules_enabled():
-                    await validate_filtering(
-                        connector, self.connectors, ValidationTarget.DRAFT
-                    )
+        # we trigger a sync
+        if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
+            # we can't sync in that state
+            logger.info(f"Can't sync with status `{connector.status.value}`")
+        else:
+            if connector.service_type not in self.source_klass_dict:
+                raise DataSourceError(
+                    f"Couldn't find data source class for {connector.service_type}"
+                )
+            source_klass = self.source_klass_dict[connector.service_type]
+            if connector.features.sync_rules_enabled():
+                await connector.validate_filtering(
+                    validator=source_klass(connector.configuration)
+                )
 
-                await connector.sync(self.sync_job_index, es, self.idling)
+            await connector.sync(
+                self.sync_job_index,
+                source_klass,
+                es,
+                self.idling,
+                self.bulk_options,
+            )
 
-            await asyncio.sleep(0)
-        except InvalidFilteringError as e:
-            logger.error(e)
-            return
-        finally:
-            await connector.close()
+        await asyncio.sleep(0)
 
     async def _run(self):
         """Main event loop."""
@@ -114,7 +117,7 @@ class SyncService(BaseService):
         native_service_types = self.config.get("native_service_types", [])
         logger.debug(f"Native support for {', '.join(native_service_types)}")
 
-        # XXX we can support multiple connectors but Ruby can't so let's use a
+        # TODO: we can support multiple connectors but Ruby can't so let's use a
         # single id
         # connector_ids = self.config.get("connector_ids", [])
         if "connector_id" in self.config:
