@@ -10,7 +10,7 @@ import pytest
 
 from connectors.byoc import Filter, Pipeline
 from connectors.filtering.validation import InvalidFilteringError
-from connectors.sync_job_runner import SyncJobRunner
+from connectors.sync_job_runner import JobClaimError, SyncJobRunner
 
 total_document_count = 100
 
@@ -71,7 +71,8 @@ def create_runner(
 async def test_job_claim_fail(patch_logger):
     sync_job_runner = create_runner()
     sync_job_runner.sync_job.claim.side_effect = Exception()
-    await sync_job_runner.execute()
+    with pytest.raises(JobClaimError):
+        await sync_job_runner.execute()
 
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_not_awaited()
@@ -87,7 +88,8 @@ async def test_job_claim_fail(patch_logger):
 async def test_connector_starts_fail(patch_logger):
     sync_job_runner = create_runner()
     sync_job_runner.connector.sync_starts.side_effect = Exception()
-    await sync_job_runner.execute()
+    with pytest.raises(JobClaimError):
+        await sync_job_runner.execute()
 
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
