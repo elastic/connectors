@@ -44,6 +44,7 @@ class SyncService(BaseService):
         self.concurrent_syncs = self.service_config.get(
             "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
         )
+        self.bulk_options = self.es_config.get("bulk", {})
         self.source_klass_dict = get_source_klass_dict(config)
         self.connectors = None
         self.sync_job_index = None
@@ -85,7 +86,7 @@ class SyncService(BaseService):
 
         try:
             # the heartbeat is always triggered
-            connector.start_heartbeat(self.hb)
+            await connector.heartbeat(self.hb)
 
             logger.debug(f"Connector status is {connector.status}")
 
@@ -104,14 +105,17 @@ class SyncService(BaseService):
                         connector, source_klass, ValidationTarget.DRAFT
                     )
 
-                await connector.sync(self.sync_job_index, es, self.idling)
+                await connector.sync(
+                    self.sync_job_index,
+                    source_klass,
+                    es,
+                    self.idling,
+                    self.bulk_options,
+                )
 
             await asyncio.sleep(0)
         except InvalidFilteringError as e:
             logger.error(e)
-            return
-        finally:
-            await connector.close()
 
     async def _run(self):
         """Main event loop."""

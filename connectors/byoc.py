@@ -11,6 +11,7 @@ import socket
 import time
 from collections import UserDict
 from copy import deepcopy
+from datetime import datetime, timezone
 from enum import Enum
 
 from connectors.es import ESDocument, ESIndex, Mappings
@@ -27,6 +28,9 @@ CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 RETRY_ON_CONFLICT = 3
 SYNC_DISABLED = -1
+
+JOB_NOT_FOUND_ERROR = "Couldn't find the job"
+UNKNOWN_ERROR = "unknown error"
 
 
 class Status(Enum):
@@ -55,19 +59,6 @@ class JobTriggerMethod(Enum):
     UNSET = None
 
 
-CUSTOM_READ_ONLY_FIELDS = (
-    "is_native",
-    "api_key_id",
-    "pipeline",
-    "scheduling",
-)
-
-NATIVE_READ_ONLY_FIELDS = CUSTOM_READ_ONLY_FIELDS + (
-    "service_type",
-    "configuration",
-)
-
-
 class ServiceTypeNotSupportedError(Exception):
     pass
 
@@ -89,25 +80,6 @@ class ConnectorIndex(ESIndex):
         logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
         # initialize ESIndex instance
         super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
-        # grab all bulk options
-        self.bulk_options = elastic_config.get("bulk", {})
-
-    async def save(self, connector):
-        # we never update the configuration
-        document = dict(connector.doc_source)
-
-        # read only we never update
-        for key in (
-            NATIVE_READ_ONLY_FIELDS if connector.native else CUSTOM_READ_ONLY_FIELDS
-        ):
-            if key in document:
-                del document[key]
-
-        return await self.client.update(
-            index=CONNECTORS_INDEX,
-            id=connector.id,
-            doc=document,
-        )
 
     async def heartbeat(self, doc_id):
         await self.update(doc_id=doc_id, doc={"last_seen": iso_utc()})
@@ -171,9 +143,7 @@ class ConnectorIndex(ESIndex):
     def _create_object(self, doc_source):
         return Connector(
             self,
-            doc_source["_id"],
-            doc_source["_source"],
-            bulk_options=self.bulk_options,
+            doc_source,
         )
 
     async def all_connectors(self):
@@ -435,63 +405,10 @@ class Features:
         return nested_get(self.features, keys, default)
 
 
-class Connector:
-    """Represents one doc in `.elastic-connectors` and triggers sync.
-
-    The pattern to use it is:
-
-        await connector.prepare(config)
-        await connector.start_heartbeat(delay)
-        try:
-            await connector.sync(es)
-        finally:
-            await connector.close()
-    """
-
-    def __init__(
-        self,
-        elastic_index,
-        connector_id,
-        doc_source,
-        bulk_options,
-    ):
-        self.doc_source = doc_source
-        self.id = connector_id
-        self.index = elastic_index
-        self._update_config(doc_source)
-        self._dirty = False
-        self.client = elastic_index.client
-        self.doc_source["last_seen"] = iso_utc()
-        self._heartbeat_started = self._syncing = False
-        self._closed = False
-        self._start_time = None
-        self._hb = None
-        self.bulk_options = bulk_options
-        self.source_klass = None
-        self.data_provider = None
-        self._sync_task = None
-
-    def _update_config(self, doc_source):
-        self.status = doc_source["status"]
-        self.sync_now = doc_source.get("sync_now", False)
-        self.native = doc_source.get("is_native", False)
-        self._service_type = doc_source["service_type"]
-        self.index_name = doc_source["index_name"]
-        self._configuration = DataSourceConfiguration(doc_source["configuration"])
-        self.scheduling = doc_source["scheduling"]
-        self.pipeline = Pipeline(doc_source.get("pipeline", {}))
-        self._dirty = True
-        self._filtering = Filtering(doc_source.get("filtering", []))
-        self.language = doc_source["language"]
-        self.features = Features(doc_source.get("features", {}))
-
-    @property
-    def last_sync_status(self):
-        return JobStatus(self.doc_source.get("last_sync_status"))
-
+class Connector(ESDocument):
     @property
     def status(self):
-        return self._status
+        return Status(self.get("status"))
 
     @status.setter
     def status(self, value):
@@ -500,77 +417,78 @@ class Connector:
         if not isinstance(value, Status):
             raise TypeError(value)
 
-        self._status = value
-        self.doc_source["status"] = self._status.value
+        self._source["status"] = value
 
     @property
     def service_type(self):
-        return self._service_type
+        return self.get("service_type")
 
     @service_type.setter
     def service_type(self, value):
-        self._service_type = self.doc_source["service_type"] = value
-        self._update_config(self.doc_source)
+        self._source["service_type"] = value
+
+    @property
+    def last_seen(self):
+        last_seen = self.get("last_seen")
+        if last_seen is not None:
+            last_seen = datetime.fromisoformat(last_seen)
+        return last_seen
+
+    @property
+    def native(self):
+        return self.get("is_native", default=False)
+
+    @property
+    def sync_now(self):
+        return self.get("sync_now", default=False)
+
+    @property
+    def scheduling(self):
+        return self.get("scheduling", default={})
 
     @property
     def configuration(self):
-        return self._configuration
-
-    @property
-    def filtering(self):
-        return self._filtering
+        return DataSourceConfiguration(self.get("configuration"))
 
     @configuration.setter
     def configuration(self, value):
-        self.doc_source["configuration"] = value
-        status = (
-            Status.CONFIGURED
-            if all(
-                isinstance(value, dict) and value.get("value") is not None
-                for value in value.values()
-            )
-            else Status.NEEDS_CONFIGURATION
-        )
-        self.doc_source["status"] = status.value
-        self._update_config(self.doc_source)
+        self._source["configuration"] = value
 
-    async def suspend(self):
-        if self._sync_task is not None:
-            task = self._sync_task
-            task.cancel()
-            await task
-        await self.close()
+    @property
+    def index_name(self):
+        return self.get("index_name")
 
-    async def close(self):
-        self._closed = True
-        if self._heartbeat_started:
-            self._hb.cancel()
-            self._heartbeat_started = False
-        if self.data_provider is not None:
-            await self.data_provider.close()
-            self.data_provider = None
+    @property
+    def language(self):
+        return self.get("language")
 
-    async def sync_doc(self, force=True):
-        if not self._dirty and not force:
-            return
-        self.doc_source["last_seen"] = iso_utc()
-        await self.index.save(self)
-        self._dirty = False
+    @property
+    def filtering(self):
+        return Filtering(self.get("filtering"))
 
-    def start_heartbeat(self, delay):
-        if self._heartbeat_started:
-            return
-        self._heartbeat_started = True
+    @filtering.setter
+    def filtering(self, value):
+        self._source["filtering"] = value
 
-        async def _heartbeat():
-            while not self._closed:
-                logger.info(f"*** Connector {self.id} HEARTBEAT")
-                if not self._syncing:
-                    self.doc_source["last_seen"] = iso_utc()
-                    await self.sync_doc()
-                await asyncio.sleep(delay)
+    @property
+    def pipeline(self):
+        return Pipeline(self.get("pipeline"))
 
-        self._hb = asyncio.create_task(_heartbeat())
+    @property
+    def features(self):
+        return Features(self.get("features"))
+
+    @property
+    def last_sync_status(self):
+        return JobStatus(self.get("last_sync_status"))
+
+    async def heartbeat(self, interval):
+        if (
+            self.last_seen is None
+            or (datetime.now(timezone.utc) - self.last_seen).total_seconds() > interval
+        ):
+            logger.info(f"*** Connector {self.id} HEARTBEAT")
+            await self.index.heartbeat(doc_id=self.id)
 
     def next_sync(self):
         """Returns in seconds when the next sync should happen.
@@ -580,39 +498,44 @@ class Connector:
         if self.sync_now:
             logger.debug("sync_now is true, syncing!")
             return 0
-        if not self.scheduling["enabled"]:
+        if not self.scheduling.get("enabled", False):
             logger.debug("scheduler is disabled")
             return SYNC_DISABLED
-        return next_run(self.scheduling["interval"])
+        return next_run(self.scheduling.get("interval"))
 
+    async def reset_sync_now_flag(self):
+        await self.index.update(doc_id=self.id, doc={"sync_now": False})
+
+    async def sync_starts(self):
+        doc = {
+            "last_sync_status": JobStatus.IN_PROGRESS.value,
+            "last_sync_error": None,
+            "status": Status.CONNECTED.value,
+        }
+        await self.index.update(doc_id=self.id, doc=doc)
+
+    # TODO: This method is to be removed once the SyncService is refactored and SyncJobRunner class is added.
     async def _sync_starts(self, sync_job_index):
         job_id = await sync_job_index.create(self)
+        if self.sync_now:
+            await self.reset_sync_now_flag()
+
         sync_job = await sync_job_index.fetch_by_id(job_id)
         await sync_job.claim()
+        await self.sync_starts()
 
-        self.sync_now = self.doc_source["sync_now"] = False
-        self.doc_source["last_sync_status"] = JobStatus.IN_PROGRESS.value
-        self.status = Status.CONNECTED
-        await self.sync_doc()
-
-        self._start_time = time.time()
         logger.info(f"Sync starts, Job id: {job_id}")
         return await sync_job_index.fetch_by_id(job_id)
 
     async def error(self, error):
-        self.doc_source["error"] = str(error)
-        await self.sync_doc()
+        doc = {
+            "status": Status.ERROR.value,
+            "error": str(error),
+        }
+        await self.index.update(doc_id=self.id, doc=doc)
 
-    async def _sync_suspended(self, job):
-        await job.suspend()
-        self.doc_source["last_sync_status"] = job.status.value
-        self.doc_source["last_sync_error"] = None
-        self.doc_source["error"] = None
-        self.doc_source["last_synced"] = iso_utc()
-        await self.sync_doc()
-        logger.info(f"Sync suspended, Job id: {job.job_id}")
-
-    async def _sync_done(self, job, status, result, exception=None):
+    # TODO: This method is to be moved to the new SyncJobRunner class, together with sync method.
+    async def _sync_done(self, job, status, result, start_time, exception=None):
         doc_updated = result.get("doc_updated", 0)
         doc_created = result.get("doc_created", 0)
         doc_deleted = result.get("doc_deleted", 0)
@@ -632,7 +555,6 @@ class Connector:
             await job.fail(exception, ingestion_stats=ingestion_stats)
         elif status == JobStatus.SUSPENDED:
             await job.suspend(ingestion_stats=ingestion_stats)
-            logger.info(f"Sync suspended, Job id: {job.id}")
         else:
             await job.done(ingestion_stats=ingestion_stats)
 
@@ -640,19 +562,33 @@ class Connector:
         await self.sync_done(job)
         logger.info(
             f"[{job_id}] Sync done: {doc_updated + doc_created} indexed, {doc_deleted} "
-            f" deleted. ({int(time.time() - self._start_time)} seconds)"
+            f" deleted. ({int(time.time() - start_time)} seconds)"
         )
 
     async def sync_done(self, job):
-        self.doc_source["last_sync_status"] = job.status.value
-        self.doc_source["last_sync_error"] = job.error
-        self.doc_source["error"] = job.error
-        self.status = (
-            Status.ERROR if job.status == JobStatus.ERROR else Status.CONNECTED
+        job_status = JobStatus.ERROR if job is None else job.status
+        job_error = JOB_NOT_FOUND_ERROR if job is None else job.error
+        if job_error is None and job_status == JobStatus.ERROR:
+            job_error = UNKNOWN_ERROR
+        connector_status = (
+            Status.ERROR if job_status == JobStatus.ERROR else Status.CONNECTED
         )
-        self.doc_source["last_synced"] = iso_utc()
-        await self.sync_doc()
 
+        doc = {
+            "last_sync_status": job_status.value,
+            "last_synced": iso_utc(),
+            "last_sync_error": job_error,
+            "status": connector_status.value,
+            "error": job_error,
+        }
+
+        if job is not None and job.terminated:
+            doc["last_indexed_document_count"] = job.indexed_document_count
+            doc["last_deleted_document_count"] = job.deleted_document_count
+
+        await self.index.update(doc_id=self.id, doc=doc)
+
+    # TODO: This method is to be moved to the new SyncJobRunner class, together with sync method.
     async def prepare_docs(self, data_provider, pipeline=None, filtering=None):
         if pipeline is None:
             pipeline = Pipeline({})
@@ -670,71 +606,79 @@ class Connector:
 
     async def prepare(self, config):
         """Prepares the connector, given a configuration
-
-        If the connector id and the service is in the config, we want to
+        If the connector id and the service type is in the config, we want to
         populate the service type and then sets the default configuration.
-
-        Returns the source class.
         """
         configured_connector_id = config.get("connector_id", "")
-        configured_service_type = config.get("service_type", "")
+        if self.id != configured_connector_id:
+            return
 
-        if self.id == configured_connector_id and self.service_type is None:
+        if self.service_type is not None and not self.configuration.is_empty():
+            return
+
+        doc = {}
+        if self.service_type is None:
+            configured_service_type = config.get("service_type", "")
             if not configured_service_type:
                 logger.error(
                     f"Service type is not configured for connector {configured_connector_id}"
                 )
                 raise ServiceTypeNotConfiguredError("Service type is not configured.")
-            self.service_type = configured_service_type
-            logger.debug(f"Populated service type for connector {self.id}")
+            self.service_type = doc["service_type"] = configured_service_type
+            logger.debug(
+                f"Populated service type {configured_service_type} for connector {self.id}"
+            )
 
-        service_type = self.service_type
-        if service_type not in config["sources"]:
-            raise ServiceTypeNotSupportedError(service_type)
+        if self.configuration.is_empty():
+            if configured_service_type not in config["sources"]:
+                raise ServiceTypeNotSupportedError(configured_service_type)
+            fqn = config["sources"][configured_service_type]
+            try:
+                source_klass = get_source_klass(fqn)
 
-        fqn = config["sources"][service_type]
-        try:
-            source_klass = get_source_klass(fqn)
-
-            if self.configuration.is_empty():
                 # sets the defaults and the flag to NEEDS_CONFIGURATION
-                self.doc_source[
+                self.configuration = doc[
                     "configuration"
                 ] = source_klass.get_simple_configuration()
-                self.doc_source["status"] = Status.NEEDS_CONFIGURATION.value
-                self._update_config(self.doc_source)
+                self.status = doc["status"] = Status.NEEDS_CONFIGURATION.value
                 logger.debug(f"Populated configuration for connector {self.id}")
-
-            # sync state if needed (when service type or configuration is updated)
-            try:
-                await self.sync_doc(force=False)
             except Exception as e:
                 logger.critical(e, exc_info=True)
-                raise ConnectorUpdateError(
-                    f"Could not update configuration for connector {self.id}"
+                raise DataSourceError(
+                    f"Could not instantiate {fqn} for {configured_service_type}"
                 )
+
+        try:
+            await self.index.update(doc_id=self.id, doc=doc)
         except Exception as e:
             logger.critical(e, exc_info=True)
-            raise DataSourceError(f"Could not instantiate {fqn} for {service_type}")
+            raise ConnectorUpdateError(
+                f"Could not update service type/configuration for connector {self.id}"
+            )
 
-        self.source_klass = source_klass
+    async def document_count(self):
+        await self.index.client.indices.refresh(
+            index=self.index_name, ignore_unavailable=True
+        )
+        result = await self.index.client.count(
+            index=self.index_name, ignore_unavailable=True
+        )
+        return result["count"]
 
-    async def sync(self, sync_job_index, elastic_server, idling):
+    # TODO: Part of this method will be moved to SyncService once it's refactored, and the rest will be moved to the new SyncJobRunner class.
+    async def sync(
+        self, sync_job_index, source_klass, elastic_server, idling, bulk_options
+    ):
         # If anything bad happens before we create a sync job
         # (like bad scheduling config, etc.)
         #
         # we will raise the error in the logs here and let Kibana knows
         # by toggling the status and setting the error and status field
-        if self.source_klass is None:
+        if source_klass is None:
             raise Exception("Can't call `sync()` before `prepare()`")
 
         try:
             service_type = self.service_type
-            # if the status is different from connected
-            if self.status != Status.CONNECTED:
-                self.status = Status.CONNECTED
-                await self.sync_doc()
-
             next_sync = self.next_sync()
             # First we check if sync is disabled, and it terminates all other conditions
             if next_sync == SYNC_DISABLED:
@@ -751,29 +695,26 @@ class Connector:
                 return
 
             try:
-                self.data_provider = self.source_klass(self.configuration)
+                data_provider = source_klass(self.configuration)
             except Exception as e:
                 logger.critical(e, exc_info=True)
                 raise DataSourceError(
-                    f"Could not instantiate {self.source_klass} for {service_type}"
+                    f"Could not instantiate {source_klass} for {service_type}"
                 )
 
-            if not await self.data_provider.changed():
+            if not await data_provider.changed():
                 logger.debug(f"No change in {service_type} data provider, skipping...")
                 return
         except Exception as exc:
-            self.doc_source["error"] = str(exc)
-            self.status = Status.ERROR
-            await self.sync_doc()
+            await self.error(str(exc))
             raise
 
         logger.debug(f"Syncing '{service_type}'")
-        self._syncing = True
-        self._sync_task = asyncio.current_task()
         job = await self._sync_starts(sync_job_index)
+        start_time = time.time()
         try:
-            logger.debug(f"Pinging the {self.data_provider} backend")
-            await self.data_provider.ping()
+            logger.debug(f"Pinging the {data_provider} backend")
+            await data_provider.ping()
             await asyncio.sleep(0)
 
             mappings = Mappings.default_text_fields_mappings(
@@ -787,33 +728,29 @@ class Connector:
             await asyncio.sleep(0)
 
             # allows the data provider to change the bulk options
-            bulk_options = self.bulk_options.copy()
-            self.data_provider.tweak_bulk_options(bulk_options)
+            bulk_options = bulk_options.copy()
+            data_provider.tweak_bulk_options(bulk_options)
 
             sync_rules_enabled = self.features.sync_rules_enabled()
 
             if sync_rules_enabled:
-                await job.validate_filtering(validator=self.data_provider)
+                await job.validate_filtering(validator=data_provider)
 
             result = await elastic_server.async_bulk(
                 job.index_name,
-                self.prepare_docs(self.data_provider, job.pipeline, job.filtering),
+                self.prepare_docs(data_provider, job.pipeline, job.filtering),
                 job.pipeline,
                 filter=job.filtering,
                 sync_rules_enabled=sync_rules_enabled,
                 options=bulk_options,
             )
-            await self._sync_done(job, JobStatus.COMPLETED, result)
+            await self._sync_done(job, JobStatus.COMPLETED, result, start_time)
         except asyncio.CancelledError:
-            await self._sync_done(job, JobStatus.SUSPENDED, {})
+            await self._sync_done(job, JobStatus.SUSPENDED, {}, start_time)
             logger.info(f"Sync suspended, Job id: {job.id}")
         except Exception as e:
-            await self._sync_done(job, JobStatus.ERROR, {}, exception=e)
+            await self._sync_done(job, JobStatus.ERROR, {}, start_time, exception=e)
             raise
-        finally:
-            self._syncing = False
-            self._start_time = None
-            self._sync_task = None
 
 
 IDLE_JOBS_THRESHOLD = 60  # 60 seconds
