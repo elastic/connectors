@@ -640,13 +640,18 @@ class Connector(ESDocument):
     async def validate_filtering(self, validator):
         draft_filter = self.filtering.get_draft_filter()
         if not draft_filter.has_validation_state(FilteringValidationState.EDITED):
+            logger.debug(
+                f"Filtering of connector {self.id} is in state {draft_filter.validation['state']}, skipping..."
+            )
             return
 
         logger.info(
             f"Filtering of connector {self.id} is in state {FilteringValidationState.EDITED.value}, validating...)"
         )
         validation_result = await validator.validate_filtering(draft_filter)
-        logger.info(f"The filtering is validated to be {validation_result.state.value}")
+        logger.info(
+            f"Filtering validation result for connector {self.id}: {validation_result.state.value}"
+        )
 
         filtering = self.filtering.to_list()
         for filter_ in filtering:
