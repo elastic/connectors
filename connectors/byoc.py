@@ -749,7 +749,7 @@ class Connector(ESDocument):
                 job.index_name,
                 self.prepare_docs(data_provider, job.pipeline, job.filtering),
                 job.pipeline,
-                filter=job.filtering,
+                filter_=job.filtering,
                 sync_rules_enabled=sync_rules_enabled,
                 options=bulk_options,
             )
