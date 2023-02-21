@@ -113,7 +113,17 @@ def run(args):
     """Runner"""
 
     # load config
-    config = load_config(args.config_file)
+    config = {}
+    try:
+        config = load_config(args.config_file)
+    except Exception as e:
+        # If something goes wrong while parsing config file, we still want
+        # to set up the logger so that Cloud deployments report errors to
+        # logs properly
+        set_logger(logging.INFO, filebeat=args.filebeat)
+        logger.exception(f"Could not parse {args.config_file}:\n{e}")
+        raise
+
     # Precedence: CLI args >> Config Setting >> INFO
     set_logger(
         args.log_level or config["service"]["log_level"] or logging.INFO,
