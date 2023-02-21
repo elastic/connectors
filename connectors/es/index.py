@@ -52,7 +52,7 @@ class ESIndex(ESClient):
                 return None
             raise
 
-        return self._create_object(resp)
+        return self._create_object(resp.body)
 
     async def index(self, doc):
         resp = await self.client.index(index=self.index_name, document=doc)

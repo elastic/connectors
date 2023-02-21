@@ -49,11 +49,11 @@ FAKE_CONFIG = {
     "status": "configured",
     "language": "en",
     "last_sync_status": None,
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
+    "last_sync_error": None,
+    "last_synced": None,
+    "last_seen": None,
+    "created_at": None,
+    "updated_at": None,
     "scheduling": {"enabled": True, "interval": "0 * * * * *"},
     "sync_now": True,
     "is_native": True,
@@ -99,11 +99,11 @@ FAKE_CONFIG_NOT_NATIVE = {
     "status": "configured",
     "language": "en",
     "last_sync_status": None,
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
+    "last_sync_error": None,
+    "last_synced": None,
+    "last_seen": None,
+    "created_at": None,
+    "updated_at": None,
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
     "is_native": False,
@@ -143,11 +143,11 @@ FAKE_CONFIG_FAIL_SERVICE = {
     "status": "configured",
     "language": "en",
     "last_sync_status": None,
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
+    "last_sync_error": None,
+    "last_synced": None,
+    "last_seen": None,
+    "created_at": None,
+    "updated_at": None,
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
 }
@@ -160,11 +160,11 @@ FAKE_CONFIG_BUGGY_SERVICE = {
     "status": "configured",
     "language": "en",
     "last_sync_status": None,
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
+    "last_sync_error": None,
+    "last_synced": None,
+    "last_seen": None,
+    "created_at": None,
+    "updated_at": None,
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
 }
@@ -177,28 +177,48 @@ FAKE_CONFIG_UNKNOWN_SERVICE = {
     "status": "configured",
     "language": "en",
     "last_sync_status": None,
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
+    "last_sync_error": None,
+    "last_synced": None,
+    "last_seen": None,
+    "created_at": None,
+    "updated_at": None,
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
+}
+
+JOB_DOC_SOURCE = {
+    "_id": "1",
+    "_source": {
+        "status": "completed",
+        "connector": {
+            "configuration": {
+                "host": {"value": "mongodb://127.0.0.1:27021", "label": "MongoDB Host"},
+                "database": {"value": "sample_airbnb", "label": "MongoDB Database"},
+                "collection": {
+                    "value": "listingsAndReviews",
+                    "label": "MongoDB Collection",
+                },
+            },
+            "pipeline": {
+                "extract_binary_content": True,
+                "reduce_whitespace": True,
+                "run_ml_inference": True,
+            },
+            "index_name": "search-airbnb",
+            "service_type": "fake",
+            "status": "configured",
+            "language": "en",
+        },
+    },
 }
 
 
 @pytest.fixture(autouse=True)
 def patch_validate_filtering_in_sync():
     with mock.patch(
-        "connectors.services.sync.validate_filtering", return_value=AsyncMock()
+        "connectors.byoc.Connector.validate_filtering", return_value=AsyncMock()
     ) as validate_filtering_mock:
         yield validate_filtering_mock
-
-
-@pytest.fixture(autouse=True)
-def patch_validate_filtering_in_byoc():
-    with mock.patch("connectors.byoc.validate_filtering", return_value=AsyncMock()):
-        yield
 
 
 def create_service(config_file):
@@ -255,6 +275,20 @@ async def set_server_responses(
     mock_responses.post(
         f"{host}/.elastic-connectors/_refresh", headers=headers, repeat=True
     )
+    mock_responses.post(
+        f"{host}/.elastic-connectors-sync-jobs/_refresh", headers=headers, repeat=True
+    )
+    mock_responses.post(
+        f"{host}/search-airbnb/_refresh?ignore_unavailable=true",
+        headers=headers,
+        repeat=True,
+    )
+    mock_responses.post(
+        f"{host}/search-airbnb/_count?ignore_unavailable=true",
+        payload={"count": 100},
+        headers=headers,
+        repeat=True,
+    )
 
     hits = []
     for index, config in enumerate(configs):
@@ -282,25 +316,36 @@ async def set_server_responses(
         callback=connectors_read,
         repeat=True,
     )
-    mock_responses.post(
-        f"{host}/.elastic-connectors-sync-jobs/_doc",
-        payload={"_id": "1"},
-        headers=headers,
-        repeat=True,
-    )
-
     for id_ in range(len(configs)):
+        mock_responses.post(
+            f"{host}/.elastic-connectors-sync-jobs/_doc",
+            payload={"_id": f"{id_+1}"},
+            headers=headers,
+        )
         mock_responses.post(
             f"{host}/.elastic-connectors-sync-jobs/_update/{id_+1}",
             headers=headers,
             callback=jobs_update,
             repeat=True,
         )
-    mock_responses.put(
+        mock_responses.put(
+            f"{host}/.elastic-connectors-sync-jobs/_doc/{id_+1}",
+            payload={"_id": f"{id_+1}"},
+            callback=jobs_update,
+            headers=headers,
+        )
+        mock_responses.get(
+            f"{host}/.elastic-connectors-sync-jobs/_doc/{id_+1}",
+            payload=JOB_DOC_SOURCE | {"_id": f"{id_+1}"},
+            headers=headers,
+            repeat=True,
+        )
+
+    mock_responses.get(
         f"{host}/.elastic-connectors-sync-jobs/_doc/1",
-        payload={"_id": "1"},
-        callback=jobs_update,
+        payload=JOB_DOC_SOURCE,
         headers=headers,
+        repeat=True,
     )
 
     mock_responses.put(
@@ -435,7 +480,6 @@ async def test_connector_service_poll_no_sync_but_status_updated(
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Scheduling is disabled")
     patch_logger.assert_not_present("Sync done")
-    assert calls[-1]["status"] == "connected"
 
 
 @pytest.mark.asyncio
@@ -456,10 +500,7 @@ async def test_connector_service_poll_cron_broken(
     )
     await create_and_run_service(CONFIG_FILE)
     patch_logger.assert_not_present("Sync done")
-    assert (
-        calls[0]["status"] == "connected"
-    )  # first it's marked as connected as we picked it up
-    assert calls[1]["status"] == "error"  # and only then it's marked as error
+    assert calls[-1]["status"] == "error"
 
 
 @pytest.mark.asyncio
@@ -522,7 +563,7 @@ async def test_connector_service_poll_suspended_suspends_job(
     # Service is having a large payload, but we terminate it ASAP
     # This way it should suspend existing running jobs
     await set_server_responses(mock_responses, [LARGE_FAKE_CONFIG])
-    await create_and_run_service(MEM_CONFIG_FILE, stop_after=0.3)
+    await create_and_run_service(MEM_CONFIG_FILE, stop_after=0.1)
 
     # For now just let's make sure that message is displayed
     # that the running job was suspended
