@@ -15,6 +15,10 @@ class SyncJobRunningError(Exception):
     pass
 
 
+class JobClaimError(Exception):
+    pass
+
+
 class SyncJobRunner:
     """The class to run a sync job."""
 
@@ -43,7 +47,7 @@ class SyncJobRunner:
         self.running = True
         if not await self._claim_job():
             logger.error(f"Unable to claim job #{self.job_id}")
-            return
+            raise JobClaimError
 
         try:
             data_provider = self.source_klass(self.sync_job.configuration)
