@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import importlib
+import ssl
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -235,6 +236,22 @@ class BaseDataSource:
         Returns None. The changes are done in-place
         """
         pass
+
+    def _ssl_context(self, certificate):
+        """Convert string to pem format and create a SSL context
+
+        Args:
+            certificate (str): certificate in string format
+
+        Returns:
+            ssl_context: SSL context with certificate
+        """
+        certificate = certificate.replace(" ", "\n")
+        certificate = " ".join(certificate.split("\n", 1))
+        certificate = " ".join(certificate.rsplit("\n", 1))
+        ctx = ssl.create_default_context()
+        ctx.load_verify_locations(cadata=certificate)
+        return ctx
 
     def serialize(self, doc):
         """Reads each element from the document and serializes it with respect to its datatype.
