@@ -136,10 +136,6 @@ DOC_SOURCE_WITH_EDITED_FILTERING = DOC_SOURCE | {
     "_source": {"filtering": DOC_SOURCE_FILTERING_EDITED}
 }
 
-DOC_SOURCE_WITH_EDITED_FILTERING = DOC_SOURCE | {
-    "_source": {"filtering": DOC_SOURCE_FILTERING_EDITED}
-}
-
 OTHER_DOMAIN_ONE = "other-domain-1"
 OTHER_DOMAIN_TWO = "other-domain-2"
 NON_EXISTING_DOMAIN = "non-existing-domain"
