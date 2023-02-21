@@ -6,7 +6,15 @@
 """
 Command Line Interface.
 
-Parses arguments and call run() with them.
+This is the main entry point of the framework. When the project is installed as
+a Python package, an `elastic-ingest` executable is added in the PATH.
+
+
+`main` is doing the following:
+
+- parses the arguments
+- reads the config file
+- starts the event loop against a series of services
 """
 import asyncio
 import functools
@@ -25,8 +33,11 @@ from connectors.services.sync import SyncService
 from connectors.source import get_source_klasses
 from connectors.utils import get_event_loop
 
+__all__ = ["main"]
+
 
 def _parser():
+    """Parses command-line arguments using ArgumentParser and returns it"""
     parser = ArgumentParser(prog="elastic-ingest")
 
     parser.add_argument(
@@ -86,6 +97,12 @@ def _parser():
 
 
 async def _start_service(config, loop):
+    """Starts the service.
+
+    Steps:
+    - performs a preflight checks using `PreflightCheck`
+    - instanciates a `MultiService` instance and run its `run` async function
+    """
     preflight = PreflightCheck(config)
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(preflight.shutdown, sig))
@@ -110,7 +127,11 @@ async def _start_service(config, loop):
 
 
 def run(args):
-    """Runner"""
+    """Loads the config file, sets the logger and starts the event loop.
+
+    When `--action list` is used, the list of connectors is displayed and the
+    function exits.
+    """
 
     # load config
     config = {}
@@ -152,6 +173,11 @@ def run(args):
 
 
 def main(args=None):
+    """Main entry point.
+
+    Parses the arguments and calls `run` with them.
+    If `--version` is used, it displays the version and exits.
+    """
     parser = _parser()
     args = parser.parse_args(args=args)
     if args.version:
