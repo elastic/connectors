@@ -15,7 +15,6 @@ import pytest
 
 from connectors import __version__
 from connectors.cli import main, run
-from connectors.logger import logger
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
