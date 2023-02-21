@@ -94,6 +94,8 @@ class SyncJobRunner:
             await self._sync_done(sync_status=JobStatus.ERROR, result={}, sync_error=e)
         finally:
             self._start_time = None
+            if data_provider is not None:
+                await data_provider.close()
 
     async def _sync_done(self, sync_status, result=None, sync_error=None):
         if result is None:

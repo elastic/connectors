@@ -27,6 +27,7 @@ def create_runner(
     data_provider.ping = AsyncMock()
     if not source_available:
         data_provider.ping.side_effect = Exception()
+    data_provider.close = AsyncMock()
     source_klass.return_value = data_provider
 
     sync_job = Mock()
@@ -68,40 +69,40 @@ def create_runner(
 
 @pytest.mark.asyncio
 async def test_job_claim_fail(patch_logger):
-    service = create_runner()
-    service.sync_job.claim.side_effect = Exception()
-    await service.execute()
+    sync_job_runner = create_runner()
+    sync_job_runner.sync_job.claim.side_effect = Exception()
+    await sync_job_runner.execute()
 
-    service.sync_job.claim.assert_awaited()
-    service.connector.sync_starts.assert_not_awaited()
-    service.elastic_server.async_bulk.assert_not_awaited()
-    service.sync_job.done.assert_not_awaited()
-    service.sync_job.fail.assert_not_awaited()
-    service.sync_job.cancel.assert_not_awaited()
-    service.sync_job.suspend.assert_not_awaited()
-    service.connector.sync_done.assert_not_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_not_awaited()
+    sync_job_runner.elastic_server.async_bulk.assert_not_awaited()
+    sync_job_runner.sync_job.done.assert_not_awaited()
+    sync_job_runner.sync_job.fail.assert_not_awaited()
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_not_awaited()
+    sync_job_runner.connector.sync_done.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_connector_starts_fail(patch_logger):
-    service = create_runner()
-    service.connector.sync_starts.side_effect = Exception()
-    await service.execute()
+    sync_job_runner = create_runner()
+    sync_job_runner.connector.sync_starts.side_effect = Exception()
+    await sync_job_runner.execute()
 
-    service.sync_job.claim.assert_awaited()
-    service.connector.sync_starts.assert_awaited()
-    service.elastic_server.async_bulk.assert_not_awaited()
-    service.sync_job.done.assert_not_awaited()
-    service.sync_job.fail.assert_not_awaited()
-    service.sync_job.cancel.assert_not_awaited()
-    service.sync_job.suspend.assert_not_awaited()
-    service.connector.sync_done.assert_not_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.elastic_server.async_bulk.assert_not_awaited()
+    sync_job_runner.sync_job.done.assert_not_awaited()
+    sync_job_runner.sync_job.fail.assert_not_awaited()
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_not_awaited()
+    sync_job_runner.connector.sync_done.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_source_not_changed(patch_logger):
-    service = create_runner(source_changed=False)
-    await service.execute()
+    sync_job_runner = create_runner(source_changed=False)
+    await sync_job_runner.execute()
 
     ingestion_stats = {
         "indexed_document_count": 0,
@@ -110,20 +111,20 @@ async def test_source_not_changed(patch_logger):
         "total_document_count": total_document_count,
     }
 
-    service.sync_job.claim.assert_awaited()
-    service.connector.sync_starts.assert_awaited()
-    service.elastic_server.async_bulk.assert_not_awaited()
-    service.sync_job.done.assert_awaited_with(ingestion_stats=ingestion_stats)
-    service.sync_job.fail.assert_not_awaited()
-    service.sync_job.cancel.assert_not_awaited()
-    service.sync_job.suspend.assert_not_awaited()
-    service.connector.sync_done.assert_awaited_with(service.sync_job)
+    sync_job_runner.sync_job.claim.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.elastic_server.async_bulk.assert_not_awaited()
+    sync_job_runner.sync_job.done.assert_awaited_with(ingestion_stats=ingestion_stats)
+    sync_job_runner.sync_job.fail.assert_not_awaited()
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_not_awaited()
+    sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
 
 
 @pytest.mark.asyncio
 async def test_source_not_available(patch_logger):
-    service = create_runner(source_available=False)
-    await service.execute()
+    sync_job_runner = create_runner(source_available=False)
+    await sync_job_runner.execute()
 
     ingestion_stats = {
         "indexed_document_count": 0,
@@ -132,21 +133,23 @@ async def test_source_not_available(patch_logger):
         "total_document_count": total_document_count,
     }
 
-    service.sync_job.claim.assert_awaited()
-    service.connector.sync_starts.assert_awaited()
-    service.elastic_server.async_bulk.assert_not_awaited()
-    service.sync_job.done.assert_not_awaited
-    service.sync_job.fail.assert_awaited_with(ANY, ingestion_stats=ingestion_stats)
-    service.sync_job.cancel.assert_not_awaited()
-    service.sync_job.suspend.assert_not_awaited()
-    service.connector.sync_done.assert_awaited_with(service.sync_job)
+    sync_job_runner.sync_job.claim.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.elastic_server.async_bulk.assert_not_awaited()
+    sync_job_runner.sync_job.done.assert_not_awaited
+    sync_job_runner.sync_job.fail.assert_awaited_with(
+        ANY, ingestion_stats=ingestion_stats
+    )
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_not_awaited()
+    sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
 
 
 @pytest.mark.asyncio
 async def test_invalid_filtering(patch_logger):
-    service = create_runner()
-    service.sync_job.validate_filtering.side_effect = InvalidFilteringError()
-    await service.execute()
+    sync_job_runner = create_runner()
+    sync_job_runner.sync_job.validate_filtering.side_effect = InvalidFilteringError()
+    await sync_job_runner.execute()
 
     ingestion_stats = {
         "indexed_document_count": 0,
@@ -155,22 +158,24 @@ async def test_invalid_filtering(patch_logger):
         "total_document_count": total_document_count,
     }
 
-    service.sync_job.claim.assert_awaited()
-    service.connector.sync_starts.assert_awaited()
-    service.elastic_server.async_bulk.assert_not_awaited()
-    service.sync_job.done.assert_not_awaited
-    service.sync_job.fail.assert_awaited_with(ANY, ingestion_stats=ingestion_stats)
-    service.sync_job.cancel.assert_not_awaited()
-    service.sync_job.suspend.assert_not_awaited()
-    service.connector.sync_done.assert_awaited_with(service.sync_job)
+    sync_job_runner.sync_job.claim.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.elastic_server.async_bulk.assert_not_awaited()
+    sync_job_runner.sync_job.done.assert_not_awaited
+    sync_job_runner.sync_job.fail.assert_awaited_with(
+        ANY, ingestion_stats=ingestion_stats
+    )
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_not_awaited()
+    sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
 
 
 @pytest.mark.asyncio
 async def test_async_bulk_error(patch_logger):
     error = "something wrong"
     async_bulk_result = {"fetch_error": error}
-    service = create_runner(async_bulk_result=async_bulk_result)
-    await service.execute()
+    sync_job_runner = create_runner(async_bulk_result=async_bulk_result)
+    await sync_job_runner.execute()
 
     ingestion_stats = {
         "indexed_document_count": 0,
@@ -179,14 +184,16 @@ async def test_async_bulk_error(patch_logger):
         "total_document_count": total_document_count,
     }
 
-    service.sync_job.claim.assert_awaited()
-    service.connector.sync_starts.assert_awaited()
-    service.elastic_server.async_bulk.assert_awaited()
-    service.sync_job.done.assert_not_awaited
-    service.sync_job.fail.assert_awaited_with(error, ingestion_stats=ingestion_stats)
-    service.sync_job.cancel.assert_not_awaited()
-    service.sync_job.suspend.assert_not_awaited()
-    service.connector.sync_done.assert_awaited_with(service.sync_job)
+    sync_job_runner.sync_job.claim.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.elastic_server.async_bulk.assert_awaited()
+    sync_job_runner.sync_job.done.assert_not_awaited
+    sync_job_runner.sync_job.fail.assert_awaited_with(
+        error, ingestion_stats=ingestion_stats
+    )
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_not_awaited()
+    sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
 
 
 @pytest.mark.asyncio
@@ -199,8 +206,8 @@ async def test_sync_job_runner(patch_logger):
         "doc_created": doc_created,
         "doc_deleted": doc_deleted,
     }
-    service = create_runner(async_bulk_result=async_bulk_result)
-    await service.execute()
+    sync_job_runner = create_runner(async_bulk_result=async_bulk_result)
+    await sync_job_runner.execute()
 
     ingestion_stats = {
         "indexed_document_count": doc_updated + doc_created,
@@ -209,26 +216,26 @@ async def test_sync_job_runner(patch_logger):
         "total_document_count": total_document_count,
     }
 
-    service.sync_job.claim.assert_awaited()
-    service.connector.sync_starts.assert_awaited()
-    service.elastic_server.async_bulk.assert_awaited()
-    service.sync_job.done.assert_awaited_with(ingestion_stats=ingestion_stats)
-    service.sync_job.fail.assert_not_awaited
-    service.sync_job.cancel.assert_not_awaited()
-    service.sync_job.suspend.assert_not_awaited()
-    service.connector.sync_done.assert_awaited_with(service.sync_job)
+    sync_job_runner.sync_job.claim.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.elastic_server.async_bulk.assert_awaited()
+    sync_job_runner.sync_job.done.assert_awaited_with(ingestion_stats=ingestion_stats)
+    sync_job_runner.sync_job.fail.assert_not_awaited
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_not_awaited()
+    sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
 
 
 @pytest.mark.asyncio
 async def test_sync_job_runner_suspend(patch_logger):
-    service = create_runner()
+    sync_job_runner = create_runner()
 
     async def _simulate_sync(*args, **kwargs):
         await asyncio.sleep(0.3)
         return {}
 
-    service.elastic_server.async_bulk.side_effect = _simulate_sync
-    task = asyncio.create_task(service.execute())
+    sync_job_runner.elastic_server.async_bulk.side_effect = _simulate_sync
+    task = asyncio.create_task(sync_job_runner.execute())
     asyncio.get_event_loop().call_later(0.1, task.cancel)
     await task
 
@@ -239,11 +246,13 @@ async def test_sync_job_runner_suspend(patch_logger):
         "total_document_count": total_document_count,
     }
 
-    service.sync_job.claim.assert_awaited()
-    service.connector.sync_starts.assert_awaited()
-    service.elastic_server.async_bulk.assert_awaited()
-    service.sync_job.done.assert_not_awaited()
-    service.sync_job.fail.assert_not_awaited()
-    service.sync_job.cancel.assert_not_awaited()
-    service.sync_job.suspend.assert_awaited_with(ingestion_stats=ingestion_stats)
-    service.connector.sync_done.assert_awaited_with(service.sync_job)
+    sync_job_runner.sync_job.claim.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.elastic_server.async_bulk.assert_awaited()
+    sync_job_runner.sync_job.done.assert_not_awaited()
+    sync_job_runner.sync_job.fail.assert_not_awaited()
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_awaited_with(
+        ingestion_stats=ingestion_stats
+    )
+    sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
