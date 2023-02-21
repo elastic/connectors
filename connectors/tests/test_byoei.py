@@ -7,7 +7,7 @@ import asyncio
 import datetime
 from copy import deepcopy
 from unittest import mock
-from unittest.mock import Mock, call
+from unittest.mock import ANY, Mock, call
 
 import pytest
 
@@ -210,6 +210,9 @@ async def test_async_bulk(mock_responses, patch_logger):
         "attachment_extracted": 1,
         "doc_updated": 1,
         "fetch_error": None,
+        "indexed_document_count": 2,
+        "indexed_document_volume": ANY,
+        "deleted_document_count": 1,
     }
 
     # two syncs
@@ -223,6 +226,9 @@ async def test_async_bulk(mock_responses, patch_logger):
         "attachment_extracted": 1,
         "doc_updated": 1,
         "fetch_error": None,
+        "indexed_document_count": 2,
+        "indexed_document_volume": ANY,
+        "deleted_document_count": 1,
     }
 
     await es.close()
@@ -254,6 +260,9 @@ async def test_async_bulk_same_ts(mock_responses, patch_logger):
         "attachment_extracted": 0,
         "doc_updated": 0,
         "fetch_error": None,
+        "indexed_document_count": 1,
+        "indexed_document_volume": ANY,
+        "deleted_document_count": 1,
     }
 
     set_responses(mock_responses, ts)
@@ -266,6 +275,9 @@ async def test_async_bulk_same_ts(mock_responses, patch_logger):
         "attachment_extracted": 0,
         "doc_updated": 0,
         "fetch_error": None,
+        "indexed_document_count": 1,
+        "indexed_document_volume": ANY,
+        "deleted_document_count": 1,
     }
 
     await es.close()

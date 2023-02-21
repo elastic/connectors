@@ -59,6 +59,11 @@ def get_mb_size(ob):
     return round(get_size(ob) / (1024 * 1024), 2)
 
 
+def get_byte_size(ob):
+    """Returns the size of ob in bytes"""
+    return round(get_size(ob) / 1024, 2)
+
+
 class Bulker:
     """Send bulk operations in batches by consuming a queue.
 
@@ -94,6 +99,9 @@ class Bulker:
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.max_concurrent_bulks = max_concurrency
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
+        self.indexed_document_count = 0
+        self.indexed_document_volume = 0
+        self.deleted_document_count = 0
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -130,6 +138,17 @@ class Bulker:
                         if "error" in data:
                             logger.error(f"operation {op} failed, {data['error']}")
                             raise Exception(data["error"]["reason"])
+
+            for op in operations:
+                if OP_INDEX in op or OP_UPSERT in op:
+                    self.indexed_document_count += 1
+                elif OP_DELETE in op:
+                    self.deleted_document_count += 1
+                elif "doc" in op:  # update payload
+                    self.indexed_document_volume += get_byte_size(op["doc"])
+                else:  # index payload
+                    self.indexed_document_volume += get_byte_size(op)
+
         finally:
             self.bulk_time += time.time() - start
 
@@ -502,4 +521,7 @@ class ElasticServer(ESClient):
             "doc_updated": fetcher.total_docs_updated,
             "doc_deleted": fetcher.total_docs_deleted,
             "fetch_error": fetcher.fetch_error,
+            "indexed_document_count": bulker.indexed_document_count,
+            "indexed_document_volume": bulker.indexed_document_volume,
+            "deleted_document_count": bulker.deleted_document_count,
         }
