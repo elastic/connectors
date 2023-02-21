@@ -74,7 +74,7 @@ class GenericBaseDataSource(BaseDataSource):
             },
             "database": {
                 "value": "xe",
-                "label": "Databases",
+                "label": "Database",
                 "type": "str",
             },
             "fetch_size": {
