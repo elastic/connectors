@@ -3,6 +3,9 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+""" Helpers to build sources + FQN-based Registry
+"""
+
 import importlib
 from datetime import date, datetime
 from decimal import Decimal
@@ -15,9 +18,6 @@ from connectors.filtering.validation import (
     BasicRulesSetSemanticValidator,
     FilteringValidator,
 )
-
-""" Helpers to build sources + FQN-based Registry
-"""
 
 
 class Field:
@@ -115,8 +115,12 @@ class BaseDataSource:
     service_type = None
 
     def __init__(self, configuration):
+        if not isinstance(configuration, DataSourceConfiguration):
+            raise TypeError(
+                f"Configuration expected type is {DataSourceConfiguration.__name__}, actual: {type(configuration).__name__}."
+            )
+
         self.configuration = configuration
-        assert isinstance(self.configuration, DataSourceConfiguration)
         self.configuration.set_defaults(self.get_default_configuration())
 
     def __str__(self):
@@ -281,13 +285,10 @@ def get_source_klass(fqn):
 
 def get_source_klasses(config):
     """Returns an iterator of all registered sources."""
-    for name, fqn in config["sources"].items():
+    for fqn in config["sources"].values():
         yield get_source_klass(fqn)
 
 
 def get_source_klass_dict(config):
     """Returns a service type - source klass dictionary"""
-    result = {}
-    for name, fqn in config["sources"].items():
-        result[name] = get_source_klass(fqn)
-    return result
+    return {name: get_source_klass(fqn) for name, fqn in config["sources"].items()}

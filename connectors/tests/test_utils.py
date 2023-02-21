@@ -13,7 +13,6 @@ import random
 import tempfile
 import time
 import timeit
-from enum import Enum
 from unittest.mock import Mock
 
 import pytest
@@ -27,12 +26,10 @@ from connectors.utils import (
     MemQueue,
     RetryStrategy,
     convert_to_b64,
-    e2str,
     get_base64_value,
     get_size,
     next_run,
     retryable,
-    str2e,
     validate_index_name,
 )
 
@@ -73,7 +70,7 @@ def test_mem_queue_speed(patch_logger):
         )
 
         async def run():
-            for i in range(1000):
+            for _ in range(1000):
                 await queue.put("x" * 100)
 
         asyncio.run(run())
@@ -86,7 +83,7 @@ def test_mem_queue_speed(patch_logger):
         queue = asyncio.Queue()
 
         async def run():
-            for i in range(1000):
+            for _ in range(1000):
                 await queue.put("x" * 100)
 
         asyncio.run(run())
@@ -118,7 +115,7 @@ async def test_mem_queue_race(patch_logger):
         await queue.get()
 
     tasks = []
-    for i in range(1000):
+    for _ in range(1000):
         tasks.append(put_one())
         tasks.append(remove_one())
 
@@ -339,17 +336,3 @@ async def test_exponential_backoff_retry():
 
     # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
     await does_not_raise()
-
-
-class SomeEnum(Enum):
-    A_FIELD = 0
-
-
-def test_e2str():
-    assert e2str(SomeEnum.A_FIELD) == "a_field"
-
-
-def test_str2e():
-    assert str2e(None, SomeEnum) is None
-    assert str2e("another_field", SomeEnum) is None
-    assert str2e("a_field", SomeEnum) == SomeEnum.A_FIELD

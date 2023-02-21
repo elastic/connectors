@@ -90,7 +90,6 @@ DEFAULT_PIPELINE = {
 }
 
 
-# XXX simulating Kibana click-arounds
 async def prepare(service_type, index_name, config, filtering=None):
     if filtering is None:
         filtering = []
@@ -224,7 +223,7 @@ async def upsert_index(es, index, docs=None, mappings=None, settings=None):
 
     if docs is None:
         return
-    # XXX bulk
+    # TODO: bulk
     doc_id = 1
     for doc in docs:
         await es.client.index(index=index, id=doc_id, document=doc)
