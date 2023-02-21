@@ -18,7 +18,6 @@ from connectors.es import ESDocument, ESIndex, Mappings
 from connectors.filtering.validation import (
     FilteringValidationState,
     InvalidFilteringError,
-    ValidationTarget,
 )
 from connectors.logger import logger
 from connectors.source import DataSourceConfiguration, get_source_klass
@@ -83,24 +82,6 @@ class ConnectorIndex(ESIndex):
 
     async def heartbeat(self, doc_id):
         await self.update(doc_id=doc_id, doc={"last_seen": iso_utc()})
-
-    async def update_filtering_validation(
-        self, connector, validation_result, validation_target=ValidationTarget.ACTIVE
-    ):
-        filtering = connector.filtering.to_list()
-
-        for filter_ in filtering:
-            if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
-                filter_.get(validation_target.value, {"validation": {}})[
-                    "validation"
-                ] = validation_result.to_dict()
-
-        await self.client.update(
-            index=self.index_name,
-            id=connector.id,
-            doc={"filtering": filtering},
-            retry_on_conflict=RETRY_ON_CONFLICT,
-        )
 
     async def supported_connectors(self, native_service_types=None, connector_ids=None):
         if native_service_types is None:
@@ -655,6 +636,34 @@ class Connector(ESDocument):
             raise ConnectorUpdateError(
                 f"Could not update service type/configuration for connector {self.id}"
             )
+
+    async def validate_filtering(self, validator):
+        draft_filter = self.filtering.get_draft_filter()
+        if not draft_filter.has_validation_state(FilteringValidationState.EDITED):
+            logger.debug(
+                f"Filtering of connector {self.id} is in state {draft_filter.validation['state']}, skipping..."
+            )
+            return
+
+        logger.info(
+            f"Filtering of connector {self.id} is in state {FilteringValidationState.EDITED.value}, validating...)"
+        )
+        validation_result = await validator.validate_filtering(draft_filter)
+        logger.info(
+            f"Filtering validation result for connector {self.id}: {validation_result.state.value}"
+        )
+
+        filtering = self.filtering.to_list()
+        for filter_ in filtering:
+            if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
+                filter_.get("draft", {"validation": {}})[
+                    "validation"
+                ] = validation_result.to_dict()
+                if validation_result.state == FilteringValidationState.VALID:
+                    filter_["active"] = filter_.get("draft")
+
+        self.filtering = filtering
+        await self.index.update(doc_id=self.id, doc={"filtering": filtering})
 
     async def document_count(self):
         await self.index.client.indices.refresh(

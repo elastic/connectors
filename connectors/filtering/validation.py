@@ -18,33 +18,6 @@ class ValidationTarget(Enum):
     UNSET = None
 
 
-async def validate_filtering(
-    connector, source_klass, validation_target=ValidationTarget.ACTIVE
-):
-    filter_to_validate = (
-        connector.filtering.get_active_filter()
-        if validation_target == ValidationTarget.ACTIVE
-        else connector.filtering.get_draft_filter()
-    )
-
-    validation_result = await source_klass(connector.configuration).validate_filtering(
-        filter_to_validate
-    )
-
-    await connector.index.update_filtering_validation(
-        connector, validation_result, validation_target
-    )
-
-    if validation_result.state != FilteringValidationState.VALID:
-        raise InvalidFilteringError(
-            f"Filtering in state {validation_result.state}. Expected: {FilteringValidationState.VALID}."
-        )
-    if len(validation_result.errors):
-        raise InvalidFilteringError(
-            f"Filtering validation errors present: {validation_result.errors}."
-        )
-
-
 class InvalidFilteringError(Exception):
     pass
 
