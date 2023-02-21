@@ -46,6 +46,8 @@ from connectors.utils import (
     iso_utc,
 )
 
+__all__ = ["ElasticServer"]
+
 OP_INDEX = "index"
 OP_UPSERT = "update"
 OP_DELETE = "delete"
@@ -63,13 +65,14 @@ class Bulker:
     This class runs a coroutine that gets operations out of a `queue` and collects them to
     build and send bulk requests using a `client`
 
-    The bulk requests are controlled in several ways:
+    Arguments:
+
+    - `client` -- an `connectors.es.ESClient` instance
+    - `queue` -- an `asyncio,Queue` instance to pull docs from
     - `chunk_size` -- a maximum number of operations to send per request
+    - `pipeline` -- ingest pipeline settings to pass to the bulk API
     - `chunk_mem_size` -- a maximum size in MiB for each bulk request
     - `max_concurrency` -- a maximum number of concurrent bulk requests
-
-    Extra options:
-    - `pipeline` -- ingest pipeline settings to pass to the bulk API
     """
 
     def __init__(
@@ -133,6 +136,13 @@ class Bulker:
         return res
 
     async def run(self):
+        """Creates batches of bulk calls given a queue of documents.
+
+        Exits when the document is "END_DOCS" or "FETCH_ERROR".
+
+        Bulk calls are done concurrently with a maximum number of concurrent
+        requests.
+        """
         batch = []
         self.bulk_time = 0
         self.bulking = True
@@ -167,25 +177,30 @@ class Bulker:
 class Fetcher:
     """Grabs data and adds them in the queue for the bulker.
 
-    This class runs a coroutine that puts docs in `queue`, given
-    a document generator.
+    This class runs a coroutine that puts docs in `queue`, given a document generator.
+
+    Arguments:
+    - queue: an `asyncio.Queue` to put docs in
+    - index: the target Elasticsearch index
+    - existing_ids: a list of existing ELasticsearch documents ids found in the index
+    - filter: a `Filter` instance -- default: `None`
+    - sync_rules_enabled: if `True`, we apply rules -- default: `False`
+    - display_every -- display a log every `display_every` doc -- default: `DEFAULT_DISPLAY_EVERY`
+    - concurrent_downloads: -- concurrency level for downloads -- default: `DEFAULT_CONCURRENT_DOWNLOADS`
     """
 
     def __init__(
         self,
-        client,
         queue,
         index,
         existing_ids,
         filter_=None,
         sync_rules_enabled=False,
-        queue_size=DEFAULT_QUEUE_SIZE,
         display_every=DEFAULT_DISPLAY_EVERY,
         concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
     ):
         if filter_ is None:
             filter_ = Filter()
-        self.client = client
         self.queue = queue
         self.bulk_time = 0
         self.bulking = False
@@ -213,9 +228,6 @@ class Fetcher:
             f"delete: {self.total_docs_deleted}>"
         )
 
-    async def run(self, generator):
-        await self.get_docs(generator)
-
     async def _deferred_index(self, lazy_download, doc_id, doc, operation):
         data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
 
@@ -234,7 +246,12 @@ class Fetcher:
             }
         )
 
-    async def get_docs(self, generator):
+    async def run(self, generator):
+        """Iterate on a generator of documents to fill a queue of bulk operations for the `Bulker` to consume.
+
+        A document might be discarded if its timestamp has not changed.
+        For documents that contain files to extract, the extraction happens in a separate task.
+        """
         logger.info("Starting doc lookups")
         self.sync_runs = True
         count = 0
@@ -418,6 +435,16 @@ class ElasticServer(ESClient):
         sync_rules_enabled=False,
         options=None,
     ):
+        """Performs a batch of `_bulk` calls, given a generator of documents
+
+        Arguments:
+        - index: target index
+        - generator: documents generator
+        - pipeline: ingest pipeline settings to pass to the bulk API
+        - filter: a `Filter` instances -- default: `None`
+        - sync_rules_enabled: if enabled, applies rules -- default: `False`
+        - options: dict of options (from `elasticsearch.bulk` in the config file)
+        """
         if filter_ is None:
             filter_ = Filter()
         if options is None:
@@ -443,13 +470,11 @@ class ElasticServer(ESClient):
 
         # start the fetcher
         fetcher = Fetcher(
-            self.client,
             stream,
             index,
             existing_ids,
             filter_=filter_,
             sync_rules_enabled=sync_rules_enabled,
-            queue_size=queue_size,
             display_every=display_every,
             concurrent_downloads=concurrent_downloads,
         )
