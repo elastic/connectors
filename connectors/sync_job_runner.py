@@ -58,7 +58,9 @@ class SyncJobRunner:
                 await self._sync_done(sync_status=JobStatus.COMPLETED, result={})
                 return
 
-            logger.debug(f"Syncing '{self.sync_job.service_type}' for connector '{self.connector_id}'")
+            logger.debug(
+                f"Syncing '{self.sync_job.service_type}' for connector '{self.connector_id}'"
+            )
             logger.debug(f"Pinging the {self.source_klass} backend")
             await data_provider.ping()
 
