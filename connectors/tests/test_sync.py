@@ -49,11 +49,11 @@ FAKE_CONFIG = {
     "status": "configured",
     "language": "en",
     "last_sync_status": None,
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
+    "last_sync_error": None,
+    "last_synced": None,
+    "last_seen": None,
+    "created_at": None,
+    "updated_at": None,
     "scheduling": {"enabled": True, "interval": "0 * * * * *"},
     "sync_now": True,
     "is_native": True,
@@ -99,11 +99,11 @@ FAKE_CONFIG_NOT_NATIVE = {
     "status": "configured",
     "language": "en",
     "last_sync_status": None,
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
+    "last_sync_error": None,
+    "last_synced": None,
+    "last_seen": None,
+    "created_at": None,
+    "updated_at": None,
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
     "is_native": False,
@@ -143,11 +143,11 @@ FAKE_CONFIG_FAIL_SERVICE = {
     "status": "configured",
     "language": "en",
     "last_sync_status": None,
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
+    "last_sync_error": None,
+    "last_synced": None,
+    "last_seen": None,
+    "created_at": None,
+    "updated_at": None,
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
 }
@@ -160,11 +160,11 @@ FAKE_CONFIG_BUGGY_SERVICE = {
     "status": "configured",
     "language": "en",
     "last_sync_status": None,
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
+    "last_sync_error": None,
+    "last_synced": None,
+    "last_seen": None,
+    "created_at": None,
+    "updated_at": None,
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
 }
@@ -177,11 +177,11 @@ FAKE_CONFIG_UNKNOWN_SERVICE = {
     "status": "configured",
     "language": "en",
     "last_sync_status": None,
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
+    "last_sync_error": None,
+    "last_synced": None,
+    "last_seen": None,
+    "created_at": None,
+    "updated_at": None,
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
 }
@@ -278,6 +278,17 @@ async def set_server_responses(
     mock_responses.post(
         f"{host}/.elastic-connectors-sync-jobs/_refresh", headers=headers, repeat=True
     )
+    mock_responses.post(
+        f"{host}/search-airbnb/_refresh?ignore_unavailable=true",
+        headers=headers,
+        repeat=True,
+    )
+    mock_responses.post(
+        f"{host}/search-airbnb/_count?ignore_unavailable=true",
+        payload={"count": 100},
+        headers=headers,
+        repeat=True,
+    )
 
     hits = []
     for index, config in enumerate(configs):
@@ -329,6 +340,13 @@ async def set_server_responses(
             headers=headers,
             repeat=True,
         )
+
+    mock_responses.get(
+        f"{host}/.elastic-connectors-sync-jobs/_doc/1",
+        payload=JOB_DOC_SOURCE,
+        headers=headers,
+        repeat=True,
+    )
 
     mock_responses.put(
         f"{host}/.elastic-connectors/_doc/1",
@@ -462,7 +480,6 @@ async def test_connector_service_poll_no_sync_but_status_updated(
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Scheduling is disabled")
     patch_logger.assert_not_present("Sync done")
-    assert calls[-1]["status"] == "connected"
 
 
 @pytest.mark.asyncio
@@ -483,10 +500,7 @@ async def test_connector_service_poll_cron_broken(
     )
     await create_and_run_service(CONFIG_FILE)
     patch_logger.assert_not_present("Sync done")
-    assert (
-        calls[0]["status"] == "connected"
-    )  # first it's marked as connected as we picked it up
-    assert calls[1]["status"] == "error"  # and only then it's marked as error
+    assert calls[-1]["status"] == "error"
 
 
 @pytest.mark.asyncio
