@@ -96,6 +96,7 @@ def try_coerce(value):
 
 class RuleMatchStats:
     """Class to record how many documents a basic rule matched and which policy it used."""
+
     def __init__(self, policy, matches_count):
         self.policy = policy
         self.matches_count = matches_count
@@ -117,6 +118,7 @@ class RuleMatchStats:
 
 class BasicRuleEngine:
     """Class executing a list of basic rules in order against a document."""
+
     def __init__(self, rules):
         self.rules = rules
         self.rules_match_stats = {
