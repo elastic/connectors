@@ -182,7 +182,7 @@ class Fetcher:
     Arguments:
     - queue: an `asyncio.Queue` to put docs in
     - index: the target Elasticsearch index
-    - existing_ids: a list of existing ELasticsearch documents ids found in the index
+    - existing_ids: a list of existing Elasticsearch document ids found in the index
     - filter: a `Filter` instance -- default: `None`
     - sync_rules_enabled: if `True`, we apply rules -- default: `False`
     - display_every -- display a log every `display_every` doc -- default: `DEFAULT_DISPLAY_EVERY`
