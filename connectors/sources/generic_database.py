@@ -93,7 +93,7 @@ class GenericBaseDataSource(BaseDataSource):
             },
             "database": {
                 "value": "xe",
-                "label": "Databases",
+                "label": "Database",
                 "type": "str",
             },
             "tables": {"value": ALL_TABLES, "label": "Tables", "type": "list"},

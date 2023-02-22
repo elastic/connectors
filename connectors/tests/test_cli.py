@@ -4,11 +4,14 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+import logging
 import os
 import signal
 from io import StringIO
 from unittest import mock
 from unittest.mock import patch
+
+import pytest
 
 from connectors import __version__
 from connectors.cli import main, run
@@ -58,3 +61,16 @@ def test_run(mock_responses, patch_logger, set_env):
         assert "- Fakey" in output
         assert "- Phatey" in output
         assert "Bye" in output
+
+
+@patch("connectors.cli.set_logger")
+@patch("connectors.cli.load_config", side_effect=Exception("something went wrong"))
+def test_main_with_invalid_configuration(load_config, set_logger, patch_logger):
+    args = mock.MagicMock()
+    args.log_level = logging.DEBUG  # should be ignored!
+    args.filebeat = True
+
+    with pytest.raises(Exception):
+        run(args)
+
+    set_logger.assert_called_with(logging.INFO, filebeat=True)

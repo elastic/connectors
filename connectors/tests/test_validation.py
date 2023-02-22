@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-from unittest.mock import AsyncMock, MagicMock, Mock, call
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -21,10 +21,7 @@ from connectors.filtering.validation import (
     FilteringValidationState,
     FilteringValidator,
     FilterValidationError,
-    InvalidFilteringError,
     SyncRuleValidationResult,
-    ValidationTarget,
-    validate_filtering,
 )
 
 RULE_ONE_ID = 1
@@ -996,87 +993,6 @@ def test_basic_rules_set_no_conflicting_policies_validation(
     basic_rule_ids = set(map(lambda rule: rule["id"], basic_rules))
 
     assert validation_results_rule_ids == basic_rule_ids
-
-
-@pytest.mark.parametrize(
-    "validation_result, validation_target, should_raise",
-    [
-        (
-            FilteringValidationResult(),
-            ValidationTarget.DRAFT,
-            False,
-        ),
-        (
-            FilteringValidationResult(),
-            ValidationTarget.ACTIVE,
-            False,
-        ),
-        (
-            FilteringValidationResult(state=FilteringValidationState.EDITED),
-            ValidationTarget.DRAFT,
-            True,
-        ),
-        (
-            FilteringValidationResult(state=FilteringValidationState.EDITED),
-            ValidationTarget.ACTIVE,
-            True,
-        ),
-        (
-            FilteringValidationResult(state=FilteringValidationState.INVALID),
-            ValidationTarget.DRAFT,
-            True,
-        ),
-        (
-            FilteringValidationResult(state=FilteringValidationState.INVALID),
-            ValidationTarget.ACTIVE,
-            True,
-        ),
-        (
-            FilteringValidationResult(errors=["Some error"]),
-            ValidationTarget.DRAFT,
-            True,
-        ),
-        (
-            FilteringValidationResult(errors=["Some error"]),
-            ValidationTarget.ACTIVE,
-            True,
-        ),
-        (
-            FilteringValidationResult(
-                state=FilteringValidationState.INVALID, errors=["Some error"]
-            ),
-            ValidationTarget.DRAFT,
-            True,
-        ),
-        (
-            FilteringValidationResult(
-                state=FilteringValidationState.INVALID, errors=["Some error"]
-            ),
-            ValidationTarget.ACTIVE,
-            True,
-        ),
-    ],
-)
-@pytest.mark.asyncio
-async def test_validate_filtering(validation_result, validation_target, should_raise):
-    connector = MagicMock()
-    connector.index.update_filtering_validation = AsyncMock()
-    source_instance = Mock()
-    source_klass = Mock(return_value=source_instance)
-    source_instance.validate_filtering = AsyncMock(return_value=validation_result)
-
-    if should_raise:
-        with pytest.raises(InvalidFilteringError):
-            await validate_filtering(connector, source_klass, validation_target)
-    else:
-        try:
-            await validate_filtering(connector, source_klass, validation_target)
-        except Exception as e:
-            raise AssertionError(f"Unexpected exception of type {(type(e))} raised")
-
-    assert connector.index.update_filtering_validation.call_args == call(
-        connector, validation_result, validation_target
-    )
 
 
 @pytest.mark.parametrize(
