@@ -250,7 +250,7 @@ class Fetcher:
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Bulker` to consume.
 
         A document might be discarded if its timestamp has not changed.
-        For documents that contain files to extract, the extraction happens in a separate task.
+        Extraction happens in a separate task, when a document contains files.
         """
         logger.info("Starting doc lookups")
         self.sync_runs = True
