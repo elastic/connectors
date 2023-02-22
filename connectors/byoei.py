@@ -177,14 +177,14 @@ class Fetcher:
         queue,
         index,
         existing_ids,
-        filter=None,
+        filter_=None,
         sync_rules_enabled=False,
         queue_size=DEFAULT_QUEUE_SIZE,
         display_every=DEFAULT_DISPLAY_EVERY,
         concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
     ):
-        if filter is None:
-            filter = Filter()
+        if filter_ is None:
+            filter_ = Filter()
         self.client = client
         self.queue = queue
         self.bulk_time = 0
@@ -198,9 +198,9 @@ class Fetcher:
         self.total_docs_created = 0
         self.total_docs_deleted = 0
         self.fetch_error = None
-        self.filter = filter
+        self.filter_ = filter_
         self.basic_rule_engine = (
-            BasicRuleEngine(parse(filter.basic_rules)) if sync_rules_enabled else None
+            BasicRuleEngine(parse(filter_.basic_rules)) if sync_rules_enabled else None
         )
         self.display_every = display_every
         self.concurrent_downloads = concurrent_downloads
@@ -414,12 +414,12 @@ class ElasticServer(ESClient):
         index,
         generator,
         pipeline,
-        filter=None,
+        filter_=None,
         sync_rules_enabled=False,
         options=None,
     ):
-        if filter is None:
-            filter = Filter()
+        if filter_ is None:
+            filter_ = Filter()
         if options is None:
             options = {}
         queue_size = options.get("queue_max_size", DEFAULT_QUEUE_SIZE)
@@ -447,7 +447,7 @@ class ElasticServer(ESClient):
             stream,
             index,
             existing_ids,
-            filter=filter,
+            filter_=filter_,
             sync_rules_enabled=sync_rules_enabled,
             queue_size=queue_size,
             display_every=display_every,

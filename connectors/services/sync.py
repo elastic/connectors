@@ -23,11 +23,6 @@ from connectors.byoc import (
     SyncJobIndex,
 )
 from connectors.byoei import ElasticServer
-from connectors.filtering.validation import (
-    InvalidFilteringError,
-    ValidationTarget,
-    validate_filtering,
-)
 from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass_dict
@@ -44,6 +39,7 @@ class SyncService(BaseService):
         self.concurrent_syncs = self.service_config.get(
             "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
         )
+        self.bulk_options = self.es_config.get("bulk", {})
         self.source_klass_dict = get_source_klass_dict(config)
         self.connectors = None
         self.sync_job_index = None
@@ -83,35 +79,35 @@ class SyncService(BaseService):
             self.raise_if_spurious(e)
             return
 
-        try:
-            # the heartbeat is always triggered
-            connector.start_heartbeat(self.hb)
+        # the heartbeat is always triggered
+        await connector.heartbeat(self.hb)
 
-            logger.debug(f"Connector status is {connector.status}")
+        logger.debug(f"Connector status is {connector.status}")
 
-            # we trigger a sync
-            if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
-                # we can't sync in that state
-                logger.info(f"Can't sync with status `{connector.status.value}`")
-            else:
-                if connector.service_type not in self.source_klass_dict:
-                    raise DataSourceError(
-                        f"Couldn't find data source class for {connector.service_type}"
-                    )
-                source_klass = self.source_klass_dict[connector.service_type]
-                if connector.features.sync_rules_enabled():
-                    await validate_filtering(
-                        connector, source_klass, ValidationTarget.DRAFT
-                    )
+        # we trigger a sync
+        if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
+            # we can't sync in that state
+            logger.info(f"Can't sync with status `{connector.status.value}`")
+        else:
+            if connector.service_type not in self.source_klass_dict:
+                raise DataSourceError(
+                    f"Couldn't find data source class for {connector.service_type}"
+                )
+            source_klass = self.source_klass_dict[connector.service_type]
+            if connector.features.sync_rules_enabled():
+                await connector.validate_filtering(
+                    validator=source_klass(connector.configuration)
+                )
 
-                await connector.sync(self.sync_job_index, es, self.idling)
+            await connector.sync(
+                self.sync_job_index,
+                source_klass,
+                es,
+                self.idling,
+                self.bulk_options,
+            )
 
-            await asyncio.sleep(0)
-        except InvalidFilteringError as e:
-            logger.error(e)
-            return
-        finally:
-            await connector.close()
+        await asyncio.sleep(0)
 
     async def _run(self):
         """Main event loop."""

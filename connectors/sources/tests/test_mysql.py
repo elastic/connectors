@@ -3,7 +3,6 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Tests the MySQL source class methods"""
 import asyncio
 import ssl
 from unittest import mock
@@ -15,7 +14,11 @@ import pytest
 from connectors.byoc import Filter
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.source import DataSourceConfiguration
-from connectors.sources.mysql import MySQLAdvancedRulesValidator, MySqlDataSource
+from connectors.sources.mysql import (
+    MySQLAdvancedRulesValidator,
+    MySqlDataSource,
+    NoDatabaseConfiguredError,
+)
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
 
@@ -26,8 +29,7 @@ def immutable_doc(**kwargs):
 
 ADVANCED_SNIPPET = "advanced_snippet"
 
-DB_ONE = "db_1"
-DB_TWO = "db_2"
+DATABASE = "database"
 
 TABLE_ONE = "table1"
 TABLE_TWO = "table2"
@@ -42,9 +44,9 @@ DOC_SIX = immutable_doc(id=6, text="some text 6")
 DOC_SEVEN = immutable_doc(id=7, text="some text 7")
 DOC_EIGHT = immutable_doc(id=8, text="some text 8")
 
-DB_ONE_TABLE_ONE_QUERY_ALL = "query all db one table one"
-DB_ONE_TABLE_ONE_QUERY_DOC_ONE = "query doc one"
-DB_ONE_TABLE_TWO_QUERY_ALL = "query all db one table two"
+TABLE_ONE_QUERY_ALL = "query all db one table one"
+TABLE_ONE_QUERY_DOC_ONE = "query doc one"
+TABLE_TWO_QUERY_ALL = "query all db one table two"
 
 DB_TWO_TABLE_ONE_QUERY_ALL = "query all db two table one"
 DB_TWO_TABLE_TWO_QUERY_ALL = "query all db two table two"
@@ -56,34 +58,12 @@ ACCESSIBLE = "accessible"
 INACCESSIBLE = "inaccessible"
 
 MYSQL = {
-    DB_ONE: {
-        TABLE_ONE: {
-            DB_ONE_TABLE_ONE_QUERY_ALL: [DOC_ONE, DOC_TWO],
-            DB_ONE_TABLE_ONE_QUERY_DOC_ONE: [DOC_ONE],
-        },
-        TABLE_TWO: {DB_ONE_TABLE_TWO_QUERY_ALL: [DOC_THREE, DOC_FOUR]},
+    TABLE_ONE: {
+        TABLE_ONE_QUERY_ALL: [DOC_ONE, DOC_TWO],
+        TABLE_ONE_QUERY_DOC_ONE: [DOC_ONE],
     },
-    DB_TWO: {
-        TABLE_ONE: {DB_TWO_TABLE_ONE_QUERY_ALL: [DOC_FIVE, DOC_SIX]},
-        TABLE_TWO: {DB_TWO_TABLE_TWO_QUERY_ALL: [DOC_SEVEN, DOC_EIGHT]},
-    },
+    TABLE_TWO: {TABLE_TWO_QUERY_ALL: [DOC_THREE, DOC_FOUR]},
 }
-
-
-@pytest.fixture()
-def patch_configured_databases():
-    with mock.patch.object(
-        MySqlDataSource, "configured_databases", return_value=([])
-    ) as configured_databases:
-        yield configured_databases
-
-
-@pytest.fixture
-def patch_validate_databases():
-    with mock.patch.object(
-        MySqlDataSource, "validate_databases", return_value=([])
-    ) as validate_databases:
-        yield validate_databases
 
 
 @pytest.fixture
@@ -287,7 +267,7 @@ async def test_connect_with_retry(patch_logger, patch_default_wait_multiplier):
 
 @pytest.mark.asyncio
 async def test_fetch_documents():
-    source = await setup_mysql_source()
+    source = await setup_mysql_source(DATABASE)
 
     query = "select * from table"
 
@@ -299,7 +279,7 @@ async def test_fetch_documents():
 
         mock.patch("source._connect", return_value=response)
 
-    response = source.fetch_documents(database="database_name", table="table_name")
+    response = source.fetch_documents(table="table_name")
 
     # Assert
     document_list = []
@@ -307,11 +287,11 @@ async def test_fetch_documents():
         document_list.append(document)
 
     assert {
-        "Database": "database_name",
+        "Database": f"{DATABASE}",
         "Table": "table_name",
-        "_id": "database_name_table_name_",
+        "_id": f"{DATABASE}_table_name_",
         "_timestamp": "table1",
-        "database_name_table_name_Database": "table1",
+        f"{DATABASE}_table_name_Database": "table1",
     } in document_list
 
 
@@ -330,53 +310,22 @@ async def test_fetch_rows_from_all_tables():
         mock.patch("source._connect", return_value=response)
 
     # Assert
-    async for row in source.fetch_rows_from_all_tables(database="database_name"):
+    async for row in source.fetch_rows_from_all_tables():
         assert "_id" in row
-
-
-@pytest.mark.asyncio
-async def test_get_docs_with_list(patch_validate_databases):
-    source = await setup_mysql_source(["database_1"])
-
-    with mock.patch.object(
-        aiomysql, "create_pool", return_value=(await mock_mysql_response())
-    ):
-        source.fetch_rows_from_all_tables = mock.MagicMock(
-            return_value=AsyncIterator([{"a": 1, "b": 2}])
-        )
-
-        async for doc, _ in source.get_docs():
-            assert doc == {"a": 1, "b": 2}
-
-
-@pytest.mark.asyncio
-async def test_get_docs_with_str():
-    source = await setup_mysql_source("database_1")
-
-    with mock.patch.object(
-        aiomysql, "create_pool", return_value=(await mock_mysql_response())
-    ):
-        source.fetch_rows_from_all_tables = mock.MagicMock(
-            return_value=AsyncIterator([{"a": 1, "b": 2}])
-        )
-
-    with mock.patch.object(MySqlDataSource, "validate_databases", return_value=([])):
-        async for doc, _ in source.get_docs():
-            assert doc == {"a": 1, "b": 2}
 
 
 @pytest.mark.asyncio
 async def test_get_docs_with_empty():
     source = await setup_mysql_source("")
 
-    with pytest.raises(Exception):
+    with pytest.raises(NoDatabaseConfiguredError):
         async for doc, _ in source.get_docs():
             pass
 
 
 @pytest.mark.asyncio
 async def test_get_docs():
-    source = await setup_mysql_source()
+    source = await setup_mysql_source(DATABASE)
 
     with mock.patch.object(
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
@@ -385,25 +334,17 @@ async def test_get_docs():
             return_value=AsyncIterator([{"a": 1, "b": 2}])
         )
 
-    with mock.patch.object(MySqlDataSource, "validate_databases", return_value=([])):
-        async for doc, _ in source.get_docs():
-            assert doc == {"a": 1, "b": 2}
+    async for doc, _ in source.get_docs():
+        assert doc == {"a": 1, "b": 2}
 
 
-async def setup_mysql_source(databases=None, is_connection_lost=False):
-    if databases is None:
-        databases = []
-
+async def setup_mysql_source(database="", is_connection_lost=False):
     source = create_source(MySqlDataSource)
-    if isinstance(databases, list):
-        source.configuration.set_field(
-            name="database", label="Databases", value=databases, type="list"
-        )
-    else:
-        source.configuration.set_field(
-            name="database", label="Databases", value=databases, type="str"
-        )
+    source.configuration.set_field(
+        name="database", label="Database", value=database, type="str"
+    )
 
+    source.database = database
     source.connection_pool = await mock_mysql_response()
     source.connection_pool.acquire = Connection
     source.connection_pool.acquire.cursor = Cursor
@@ -415,11 +356,9 @@ async def setup_mysql_source(databases=None, is_connection_lost=False):
 def setup_available_docs(advanced_snippet):
     available_docs = []
 
-    for database in advanced_snippet:
-        tables = advanced_snippet[database]
-        for table in tables:
-            query = advanced_snippet[database][table]
-            available_docs += MYSQL[database][table][query]
+    for table in advanced_snippet:
+        query = advanced_snippet[table]
+        available_docs += MYSQL[table][query]
 
     return available_docs
 
@@ -428,14 +367,12 @@ def setup_available_docs(advanced_snippet):
     "filtering, expected_docs",
     [
         (
-            # single db, single table, multiple docs
+            # single table, multiple docs
             Filter(
                 {
                     ADVANCED_SNIPPET: {
                         "value": {
-                            DB_ONE: {
-                                TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_ALL,
-                            }
+                            TABLE_ONE: TABLE_ONE_QUERY_ALL,
                         }
                     }
                 }
@@ -443,59 +380,31 @@ def setup_available_docs(advanced_snippet):
             {DOC_ONE, DOC_TWO},
         ),
         (
-            # single db, single table, single doc
-            Filter(
-                {
-                    ADVANCED_SNIPPET: {
-                        "value": {DB_ONE: {TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE}}
-                    }
-                }
-            ),
+            # single table, single doc
+            Filter({ADVANCED_SNIPPET: {"value": {TABLE_ONE: TABLE_ONE_QUERY_DOC_ONE}}}),
             {DOC_ONE},
         ),
         (
-            # single db, multiple tables, multiple docs
+            # multiple tables, multiple docs
             Filter(
                 {
                     ADVANCED_SNIPPET: {
                         "value": {
-                            DB_ONE: {
-                                TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE,
-                                TABLE_TWO: DB_ONE_TABLE_TWO_QUERY_ALL,
-                            }
+                            TABLE_ONE: TABLE_ONE_QUERY_DOC_ONE,
+                            TABLE_TWO: TABLE_TWO_QUERY_ALL,
                         }
                     }
                 }
             ),
             {DOC_ONE, DOC_THREE, DOC_FOUR},
         ),
-        (
-            # multiple dbs, multiple tables, multiple docs
-            Filter(
-                {
-                    ADVANCED_SNIPPET: {
-                        "value": {
-                            DB_ONE: {
-                                TABLE_ONE: DB_ONE_TABLE_ONE_QUERY_DOC_ONE,
-                                TABLE_TWO: DB_ONE_TABLE_TWO_QUERY_ALL,
-                            },
-                            DB_TWO: {
-                                TABLE_ONE: DB_TWO_TABLE_ONE_QUERY_ALL,
-                                TABLE_TWO: DB_TWO_TABLE_TWO_QUERY_ALL,
-                            },
-                        }
-                    }
-                }
-            ),
-            {DOC_ONE, DOC_THREE, DOC_FOUR, DOC_FIVE, DOC_SIX, DOC_SEVEN, DOC_EIGHT},
-        ),
     ],
 )
 @pytest.mark.asyncio
 async def test_get_docs_with_advanced_rules(
-    filtering, expected_docs, patch_validate_databases, patch_fetch_rows_for_table
+    filtering, expected_docs, patch_fetch_rows_for_table
 ):
-    source = await setup_mysql_source([DB_ONE, DB_TWO])
+    source = await setup_mysql_source(DATABASE)
     docs_in_db = setup_available_docs(filtering.get_advanced_rules())
     patch_fetch_rows_for_table.return_value = AsyncIterator(docs_in_db)
 
@@ -504,32 +413,6 @@ async def test_get_docs_with_advanced_rules(
         yielded_docs.add(doc)
 
     assert yielded_docs == expected_docs
-
-
-@pytest.mark.asyncio
-async def test_validate_databases():
-    """This function test _validate_databases method of MySQL"""
-    # Setup
-    source = create_source(MySqlDataSource)
-
-    source.connection_pool = await mock_mysql_response()
-    source.connection_pool.acquire = Connection
-    source.connection_pool.acquire.cursor = Cursor
-
-    query = "SHOW DATABASES"
-
-    with mock.patch.object(
-        aiomysql, "create_pool", return_value=(await mock_mysql_response())
-    ):
-        response = source._connect(query)
-
-        mock.patch("source._connect", return_value=response)
-
-    # Execute
-    response = await source.validate_databases([])
-
-    # Assert
-    assert response == []
 
 
 def test_validate_configuration():
@@ -565,105 +448,61 @@ def test_ssl_context():
         source._ssl_context(certificate=certificate)
 
 
-async def setup_fetch_tables_side_effect(
-    accessible_databases, datasource, inaccessible_databases
-):
-    fetch_tables_side_effect = []
-    for database in accessible_databases:
-        fetch_tables_side_effect.append(
-            map(
-                lambda table: (table, None),
-                list(datasource[ACCESSIBLE][database].keys()),
-            )
-        )
-    for database in inaccessible_databases:
-        fetch_tables_side_effect.append(
-            map(
-                lambda table: (table, None),
-                list(datasource[INACCESSIBLE][database].keys()),
-            )
-        )
-    return fetch_tables_side_effect
-
-
 @pytest.mark.parametrize(
     "datasource, advanced_rules, expected_validation_result",
     [
         (
-            {ACCESSIBLE: {DB_ONE: {}, DB_TWO: {}}},
+            {},
             {},
             SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
             ),
         ),
         (
-            {ACCESSIBLE: {DB_ONE: {TABLE_ONE: {}}, DB_TWO: {TABLE_ONE: {}}}},
-            {DB_ONE: {TABLE_ONE: {}}, DB_TWO: {TABLE_ONE: {}}},
+            {TABLE_ONE: {}},
+            {TABLE_ONE: {}},
             SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
             ),
         ),
         (
-            {
-                ACCESSIBLE: {DB_ONE: {TABLE_ONE: {}, TABLE_TWO: {}}},
-                INACCESSIBLE: {DB_TWO: {}},
-            },
-            {DB_ONE: {TABLE_ONE: {}, TABLE_TWO: {}}},
+            {TABLE_ONE: {}, TABLE_TWO: {}},
+            {TABLE_ONE: {}, TABLE_TWO: {}},
             SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
             ),
         ),
         (
             {},
-            {DB_ONE: {}},
+            {TABLE_ONE: {}},
             SyncRuleValidationResult(
                 rule_id=SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
-                validation_message=f"Non-configured databases: {DB_ONE}. Configured databases: None.",
+                validation_message=f"Tables not found or inaccessible: {TABLE_ONE}.",
             ),
         ),
         (
-            {ACCESSIBLE: {DB_ONE: {}}, INACCESSIBLE: {DB_TWO: {}}},
-            {DB_ONE: {}, DB_TWO: {}},
+            {},
+            {TABLE_ONE: {}, TABLE_TWO: {}},
             SyncRuleValidationResult(
                 rule_id=SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
-                validation_message=f"Inaccessible databases: {DB_TWO} for user 'root'.",
-            ),
-        ),
-        (
-            {ACCESSIBLE: {DB_ONE: {TABLE_ONE: {}}, DB_TWO: {TABLE_ONE: {}}}},
-            {
-                DB_ONE: {TABLE_ONE: {}, TABLE_TWO: {}, TABLE_THREE: {}},
-                DB_TWO: {TABLE_ONE: {}, TABLE_TWO: {}, TABLE_THREE: {}},
-            },
-            SyncRuleValidationResult(
-                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
-                is_valid=False,
-                validation_message=f"Tables not found or inaccessible (database -> tables): ({DB_ONE} -> {TABLE_TWO}, {TABLE_THREE}), ({DB_TWO} -> {TABLE_TWO}, {TABLE_THREE}).",
+                validation_message=f"Tables not found or inaccessible: {TABLE_ONE}, {TABLE_TWO}.",
             ),
         ),
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(
+async def test_advanced_rules_tables_validation(
     datasource,
     advanced_rules,
     expected_validation_result,
-    patch_configured_databases,
-    patch_validate_databases,
     patch_fetch_tables,
     patch_ping,
 ):
-    accessible_databases = list(datasource.get(ACCESSIBLE, {}).keys())
-    inaccessible_databases = list(datasource.get(INACCESSIBLE, {}).keys())
-    configured_databases = accessible_databases + inaccessible_databases
-
-    patch_configured_databases.return_value = configured_databases
-    patch_validate_databases.return_value = inaccessible_databases
-    patch_fetch_tables.side_effect = await setup_fetch_tables_side_effect(
-        accessible_databases, datasource, inaccessible_databases
-    )
+    patch_fetch_tables.side_effect = [
+        map(lambda table: (table, None), datasource.keys())
+    ]
 
     source = create_source(MySqlDataSource)
     validation_result = await MySQLAdvancedRulesValidator(source).validate(
