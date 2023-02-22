@@ -441,7 +441,7 @@ class ElasticServer(ESClient):
         - index: target index
         - generator: documents generator
         - pipeline: ingest pipeline settings to pass to the bulk API
-        - filter: a `Filter` instances -- default: `None`
+        - filter_: an instance of `Filter` to apply on the fetched document  -- default: `None`
         - sync_rules_enabled: if enabled, applies rules -- default: `False`
         - options: dict of options (from `elasticsearch.bulk` in the config file)
         """
