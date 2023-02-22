@@ -200,6 +200,8 @@ class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
 
     A semantic duplicate is defined as two basic rules having the same values for `field`, `rule` and `value`.
     Therefore, two basic rules are also seen as semantic duplicates, if their `policy` values differ.
+
+    If a semantic duplicate is detected both rules will be marked as invalid.
     """
 
     @classmethod
