@@ -13,9 +13,27 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import iso_utc
 
+ALL_TABLES = "*"
+
 DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
+
+
+def configured_tables(tables):
+    def table_filter(table):
+        return table is not None and len(table) > 0
+
+    return (
+        list(
+            filter(
+                lambda table: table_filter(table),
+                map(lambda table: table.strip(), tables.split(",")),
+            )
+        )
+        if isinstance(tables, str)
+        else list(filter(lambda table: table_filter(table), tables))
+    )
 
 
 class GenericBaseDataSource(BaseDataSource):
@@ -38,6 +56,7 @@ class GenericBaseDataSource(BaseDataSource):
         self.host = self.configuration["host"]
         self.port = self.configuration["port"]
         self.database = self.configuration["database"]
+        self.tables = self.configuration["tables"]
         self.is_async = False
         self.engine = None
         self.dialect = ""
@@ -77,6 +96,11 @@ class GenericBaseDataSource(BaseDataSource):
                 "label": "Database",
                 "type": "str",
             },
+            "tables": {
+                "value": ALL_TABLES,
+                "label": "Comma-separated list of tables",
+                "type": "list",
+            },
             "fetch_size": {
                 "value": DEFAULT_FETCH_SIZE,
                 "label": "Rows fetched per request",
@@ -95,13 +119,7 @@ class GenericBaseDataSource(BaseDataSource):
         Raises:
             Exception: Configured keys can't be empty
         """
-        connection_fields = [
-            "host",
-            "port",
-            "user",
-            "password",
-            "database",
-        ]
+        connection_fields = ["host", "port", "user", "password", "database", "tables"]
 
         if empty_connection_fields := [
             field for field in connection_fields if self.configuration[field] == ""
@@ -362,23 +380,15 @@ class GenericBaseDataSource(BaseDataSource):
         Yields:
             Dict: Row document to index
         """
-        # Query to get all table names from a database
-        list_of_tables = await anext(
-            self.execute_query(
-                query_name="ALL_TABLE",
-                user=self.user.upper(),
-                database=self.database,
+        tables_to_fetch = await self.get_tables_to_fetch(schema)
+
+        for table in tables_to_fetch:
+            logger.debug(f"Found table: {table} in database: {self.database}.")
+            async for row in self.fetch_documents(
+                table=table,
                 schema=schema,
-            )
-        )
-        if len(list_of_tables) > 0:
-            for [table_name] in list_of_tables:
-                logger.debug(f"Found table: {table_name} in database: {self.database}.")
-                async for row in self.fetch_documents(
-                    table=table_name,
-                    schema=schema,
-                ):
-                    yield row
+            ):
+                yield row
         else:
             if schema:
                 logger.warning(
@@ -386,3 +396,27 @@ class GenericBaseDataSource(BaseDataSource):
                 )
             else:
                 logger.warning(f"Fetched 0 tables for the database: {self.database}")
+
+    async def get_tables_to_fetch(self, schema):
+        tables = configured_tables(self.tables)
+        fetch_all_tables = tables == ALL_TABLES or (
+            isinstance(tables, list) and tables == [ALL_TABLES]
+        )
+
+        tables_to_fetch = (
+            map(
+                lambda table: table[0],
+                await anext(
+                    self.execute_query(
+                        query_name="ALL_TABLE",
+                        user=self.user.upper(),
+                        database=self.database,
+                        schema=schema,
+                    )
+                ),
+            )
+            if fetch_all_tables
+            else tables
+        )
+
+        return tables_to_fetch

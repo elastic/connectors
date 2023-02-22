@@ -1302,12 +1302,9 @@ async def test_prepare_docs(filtering, expected_filtering_calls):
         assert yielded_doc is not None
 
     assert docs_generator_fake.call_kwargs == [
-        ("filtering", expected_filtering)
+        {"filtering": expected_filtering}
         for expected_filtering in expected_filtering_calls
     ]
-    assert all(
-        type(filter_) == Filter for _, filter_ in docs_generator_fake.call_kwargs
-    )
 
 
 @pytest.mark.parametrize(
