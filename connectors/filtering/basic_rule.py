@@ -288,7 +288,7 @@ class BasicRule:
             - GREATER_THAN: Is the document's field value greater than the basic rule's value?
             - EQUALS: Is the document's field value equal to the basic rule's value?
 
-        If the basic rule is the default rule it's always a match.
+        If the basic rule is the default rule it's always a match (the default rule matches every document).
         If the field is not in the document it's always a no match.
 
         Arguments:
