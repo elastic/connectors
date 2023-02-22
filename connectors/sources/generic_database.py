@@ -96,7 +96,7 @@ class GenericBaseDataSource(BaseDataSource):
                 "label": "Database",
                 "type": "str",
             },
-            "tables": {"value": ALL_TABLES, "label": "Tables", "type": "list"},
+            "tables": {"value": ALL_TABLES, "label": "Comma-separated list of tables", "type": "list"},
             "fetch_size": {
                 "value": DEFAULT_FETCH_SIZE,
                 "label": "Rows fetched per request",
