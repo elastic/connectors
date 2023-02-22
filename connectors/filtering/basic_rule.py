@@ -119,7 +119,10 @@ class RuleMatchStats:
 class BasicRuleEngine:
     """BasicRuleEngine matches a document against a list of basic rules in order.
 
-    The main concern of the engine is to decide, whether a document should be ingested during a sync or not.
+    The main concern of the engine is to decide, whether a document should be ingested during a sync or not:
+        - If a document matches a basic rule and the basic rule uses the `INCLUDE` policy the document will be ingested
+        - If a document matches a basic rule and the basic rule uses the `EXCLUDE` policy the document won't be ingested
+
     It also records stats, which basic rule matched how many documents with a certain policy.
     """
 
@@ -236,7 +239,7 @@ class Policy(Enum):
 
 
 class BasicRule:
-    """Class representing a basic rule, which is part of the connector's filtering."""
+    """A BasicRule is used to match documents based on different comparisons (see `matches` method)."""
 
     DEFAULT_RULE_ID = "DEFAULT"
 
@@ -271,7 +274,7 @@ class BasicRule:
         )
 
     def matches(self, document):
-        """Method to check whether a document matches the basic rule.
+        """Check whether a document matches the basic rule.
 
         A basic rule matches or doesn't match a document based on the following comparisons:
             - STARTS_WITH: Does the document's field value start with the basic rule's value?
