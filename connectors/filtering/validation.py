@@ -21,6 +21,13 @@ class ValidationTarget(Enum):
 async def validate_filtering(
     connector, source_klass, validation_target=ValidationTarget.ACTIVE
 ):
+    """Validate filtering by calling the corresponding `validate_filtering` method of the `source_klass`.
+
+    Arguments:
+    - `connector`: connector instance
+    - `source_klass`: data source class
+    - `validation_target`: validation target to specify whether active or draft filtering should be validated
+    """
     filter_to_validate = (
         connector.filtering.get_active_filter()
         if validation_target == ValidationTarget.ACTIVE
@@ -223,6 +230,11 @@ class BasicRulesSetValidator:
 
 
 class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
+    """Class validating, that a set of rules does not contain semantic duplicates.
+
+    A semantic duplicate is defined as two basic rules having the same values for `field`, `rule` and `value`.
+    Therefore, two basic rules are also seen as semantic duplicates, if their `policy` values differ.
+    """
     @classmethod
     def validate(cls, rules):
         rules_dict = {}
@@ -282,6 +294,8 @@ class BasicRuleValidator:
 
 
 class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
+    """Class validating that a basic rule does not use a match all regex."""
+
     MATCH_ALL_REGEXPS = [".*", "(.*)"]
 
     @classmethod
@@ -306,6 +320,8 @@ class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
 
 
 class BasicRuleAgainstSchemaValidator(BasicRuleValidator):
+    """Class validating if a basic rule follows the specified json schema."""
+
     SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {
