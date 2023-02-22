@@ -7,14 +7,8 @@
 Command Line Interface.
 
 This is the main entry point of the framework. When the project is installed as
-a Python package, an `elastic-ingest` executable is added in the PATH.
-
-
-`main` is doing the following:
-
-- parses the arguments
-- reads the config file
-- starts the event loop against a series of services
+a Python package, an `elastic-ingest` executable is added in the PATH and
+executes the `main` function of this module, which starts the service.
 """
 import asyncio
 import functools
@@ -127,10 +121,11 @@ async def _start_service(config, loop):
 
 
 def run(args):
-    """Loads the config file, sets the logger and starts the event loop.
+    """Loads the config file, sets the logger and executes an action.
 
-    When `--action list` is used, the list of connectors is displayed and the
-    function exits.
+    Actions:
+    - list: prints out a list of all connectors and exits
+    - poll: starts the event loop and run forever (default)
     """
 
     # load config
@@ -173,10 +168,10 @@ def run(args):
 
 
 def main(args=None):
-    """Main entry point.
+    """Entry point to the service, responsible for all operations.
 
     Parses the arguments and calls `run` with them.
-    If `--version` is used, it displays the version and exits.
+    If `--version` is used, displays the version and exits.
     """
     parser = _parser()
     args = parser.parse_args(args=args)
