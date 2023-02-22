@@ -14,10 +14,11 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
 from connectors.source import DataSourceConfiguration
-from connectors.sources.generic_database import GenericBaseDataSource
+from connectors.sources.generic_database import GenericBaseDataSource, configured_tables
 from connectors.sources.oracle import OracleDataSource
 from connectors.sources.postgresql import PostgreSQLDataSource
 from connectors.sources.tests.support import create_source
+from connectors.tests.commons import AsyncIterator
 
 POSTGRESQL_CONNECTION_STRING = (
     "postgresql+asyncpg://admin:changme@127.0.0.1:5432/testdb"
@@ -314,7 +315,7 @@ async def test_sync_connect_negative(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_execute_query_negative_for_internalclienterror(patch_logger):
+async def test_execute_query_negative_for_internal_client_error(patch_logger):
     """Test _execute_query method with negative case"""
     source = create_source(PostgreSQLDataSource)
     with patch.object(
@@ -360,3 +361,39 @@ async def test_execute_query_negative():
         # Execute
         with pytest.raises(Exception):
             await anext(source.execute_query("PING"))
+
+
+@pytest.mark.parametrize(
+    "tables, expected_tables",
+    [
+        ("", []),
+        ("table", ["table"]),
+        ("table_1, table_2", ["table_1", "table_2"]),
+        (["table_1", "table_2"], ["table_1", "table_2"]),
+        (["table_1", "table_2", ""], ["table_1", "table_2"]),
+    ],
+)
+def test_configured_tables(tables, expected_tables):
+    actual_tables = configured_tables(tables)
+
+    assert actual_tables == expected_tables
+
+
+@pytest.mark.parametrize("tables", ["*", ["*"]])
+@pytest.mark.asyncio
+async def test_get_tables_to_fetch_remote_tables(tables):
+    source = create_source(GenericBaseDataSource)
+    source.execute_query = AsyncIterator(["table"])
+
+    await source.get_tables_to_fetch("schema")
+
+    assert "ALL_TABLE" == source.execute_query.call_kwargs[0]["query_name"]
+
+
+@pytest.mark.asyncio
+async def test_get_tables_to_fetch_configured_tables():
+    source = create_source(GenericBaseDataSource)
+    tables = ["table_1", "table_2"]
+    source.tables = tables
+
+    assert tables == await source.get_tables_to_fetch("schema")
