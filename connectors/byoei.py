@@ -140,7 +140,7 @@ class Bulker:
 
         Exits when the document is "END_DOCS" or "FETCH_ERROR".
 
-        Bulk calls are done concurrently with a maximum number of concurrent
+        Bulk calls are executed concurrently with a maximum number of concurrent
         requests.
         """
         batch = []
