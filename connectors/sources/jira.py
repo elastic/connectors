@@ -298,7 +298,7 @@ class JiraDataSource(BaseDataSource):
 
         if attachment_size > FILE_SIZE_LIMIT:
             logger.warning(
-                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding the file content"
+                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
             )
             return
 
