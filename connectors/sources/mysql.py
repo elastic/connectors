@@ -6,7 +6,6 @@
 """MySQL source module responsible to fetch documents from MySQL"""
 import asyncio
 import ssl
-from collections import OrderedDict
 
 import aiomysql
 
@@ -20,7 +19,6 @@ from connectors.utils import RetryStrategy, retryable
 
 MAX_POOL_SIZE = 10
 QUERIES = {
-    "ALL_DATABASE": "SHOW DATABASES",
     "ALL_TABLE": "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}'",
     "TABLE_DATA": "SELECT * FROM {database}.{table}",
     "TABLE_PRIMARY_KEY": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'",
@@ -33,8 +31,12 @@ DEFAULT_SSL_DISABLED = True
 DEFAULT_SSL_CA = None
 
 
-def format_list(databases):
-    return ", ".join(databases)
+def format_list(list_):
+    return ", ".join(list_)
+
+
+class NoDatabaseConfiguredError(Exception):
+    pass
 
 
 class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
@@ -42,70 +44,31 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         self.source = source
 
     async def validate(self, advanced_rules):
-        databases = set(self.source.configured_databases())
-        databases_to_filter = set(advanced_rules.keys())
-
-        missing_databases = list(databases_to_filter - databases)
-
-        if len(missing_databases) > 0:
-            return SyncRuleValidationResult(
-                SyncRuleValidationResult.ADVANCED_RULES,
-                is_valid=False,
-                validation_message=f"Non-configured databases: {format_list(missing_databases)}. Configured databases: {'None' if not len(databases) else format_list(databases)}.",
-            )
-
-        return await self._remote_validation(advanced_rules, databases_to_filter)
+        return await self._remote_validation(advanced_rules)
 
     @retryable(
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules, databases_to_filter):
+    async def _remote_validation(self, advanced_rules):
         await self.source.ping()
 
-        inaccessible_databases = set(
-            await self.source.validate_databases(databases=databases_to_filter)
+        tables = set(
+            map(
+                lambda table: table[0],
+                await self.source.fetch_tables(),
+            )
         )
-        inaccessible_databases_to_filter = inaccessible_databases.intersection(
-            databases_to_filter
-        )
+        tables_to_filter = set(advanced_rules.keys())
 
-        if len(inaccessible_databases_to_filter) > 0:
+        missing_tables = tables_to_filter - tables
+
+        if len(missing_tables) > 0:
             return SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
-                validation_message=f"Inaccessible databases: {format_list(inaccessible_databases_to_filter)} for user '{self.source.configuration.get('user', 'No user configured')}'.",
-            )
-
-        database_to_missing_tables = {}
-
-        for database in databases_to_filter:
-            tables = set(
-                map(
-                    lambda table: table[0],
-                    await self.source.fetch_tables(database=database),
-                )
-            )
-            tables_to_filter = set(advanced_rules.get(database, {}).keys())
-
-            missing_tables = tables_to_filter - tables
-
-            if len(missing_tables) > 0:
-                database_to_missing_tables[database] = list(missing_tables)
-
-        if len(database_to_missing_tables) > 0:
-            missing_tables_str = format_list(
-                [
-                    f"({db} -> {format_list(sorted(database_to_missing_tables.get(db, [])))})"
-                    for db in sorted(OrderedDict(database_to_missing_tables.items()))
-                ]
-            )
-
-            return SyncRuleValidationResult(
-                SyncRuleValidationResult.ADVANCED_RULES,
-                is_valid=False,
-                validation_message=f"Tables not found or inaccessible (database -> tables): {missing_tables_str}.",
+                validation_message=f"Tables not found or inaccessible: {format_list(sorted(list(missing_tables)))}.",
             )
 
         return SyncRuleValidationResult.valid_result(
@@ -123,13 +86,14 @@ class MySqlDataSource(BaseDataSource):
         """Set up the connection to the MySQL server.
 
         Args:
-            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
+            configuration (DataSourceConfiguration): Object  of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
         self.retry_count = self.configuration["retry_count"]
         self.connection_pool = None
         self.ssl_disabled = self.configuration["ssl_disabled"]
         self.certificate = self.configuration["ssl_ca"]
+        self.database = self.configuration["database"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -161,8 +125,8 @@ class MySqlDataSource(BaseDataSource):
             },
             "database": {
                 "value": "customerinfo",
-                "label": "Databases",
-                "type": "list",
+                "label": "Database",
+                "type": "str",
             },
             "fetch_size": {
                 "value": DEFAULT_FETCH_SIZE,
@@ -276,6 +240,7 @@ class MySqlDataSource(BaseDataSource):
             list: Column names and query response
         """
 
+        query_kwargs["database"] = self.database
         formatted_query = query.format(**query_kwargs)
         size = int(self.configuration.get("fetch_size", DEFAULT_FETCH_SIZE))
 
@@ -339,14 +304,13 @@ class MySqlDataSource(BaseDataSource):
                 await asyncio.sleep(RETRY_INTERVAL**retry)
                 retry += 1
 
-    async def fetch_tables(self, database):
-        return await anext(self._connect(query=QUERIES["ALL_TABLE"], database=database))
+    async def fetch_tables(self):
+        return await anext(self._connect(query=QUERIES["ALL_TABLE"]))
 
-    async def fetch_rows_for_table(self, database, table=None, query=None):
+    async def fetch_rows_for_table(self, table=None, query=None):
         """Fetches all the rows from all the tables of the database.
 
         Args:
-            database (str): Name of the database to fetch from
             table (str): Name of the table to fetch from
             query (str): MySQL query
 
@@ -355,47 +319,40 @@ class MySqlDataSource(BaseDataSource):
         """
 
         if table:
-            async for row in self.fetch_documents(
-                database=database, table=table, query=query
-            ):
+            async for row in self.fetch_documents(table=table, query=query):
                 yield row
         else:
             logger.warning(
                 f"Fetched 0 rows for the table: {table}. As table has no rows."
             )
 
-    async def fetch_rows_from_all_tables(self, database):
+    async def fetch_rows_from_all_tables(self):
         """Fetches all the rows from all the tables of the database.
-
-        Args:
-            database (str): Name of database
 
         Yields:
             Dict: Row document to index
         """
-        tables = await self.fetch_tables(database=database)
+        tables = await self.fetch_tables()
 
         if tables:
             for table in tables:
                 table_name = table[0]
-                logger.debug(f"Found table: {table_name} in database: {database}.")
+                logger.debug(f"Found table: {table_name} in database: {self.database}.")
 
                 async for row in self.fetch_rows_for_table(
-                    database=database,
                     table=table_name,
                     query=QUERIES["TABLE_DATA"],
                 ):
                     yield row
         else:
             logger.warning(
-                f"Fetched 0 tables for the database: {database}. As database has no tables."
+                f"Fetched 0 tables for database: {self.database}. As database has no tables."
             )
 
-    async def fetch_documents(self, database, table, query=QUERIES["TABLE_DATA"]):
+    async def fetch_documents(self, table, query=QUERIES["TABLE_DATA"]):
         """Fetches all the table entries and format them in Elasticsearch documents
 
         Args:
-            database (str): Name of database
             table (str): Name of table
             query (str): Query to fetch data from a table
 
@@ -404,28 +361,23 @@ class MySqlDataSource(BaseDataSource):
         """
 
         primary_key = await anext(
-            self._connect(
-                query=QUERIES["TABLE_PRIMARY_KEY"], database=database, table=table
-            )
+            self._connect(query=QUERIES["TABLE_PRIMARY_KEY"], table=table)
         )
 
         keys = []
         for column_name in primary_key:
-            keys.append(f"{database}_{table}_{column_name[0]}")
+            keys.append(f"{self.database}_{table}_{column_name[0]}")
 
         if keys:
             last_update_time = await anext(
                 self._connect(
                     query=QUERIES["TABLE_LAST_UPDATE_TIME"],
-                    database=database,
                     table=table,
                 )
             )
             last_update_time = last_update_time[0][0]
 
-            table_rows = self._connect(
-                query=query, fetch_many=True, database=database, table=table
-            )
+            table_rows = self._connect(query=query, fetch_many=True, table=table)
             column_names = await anext(table_rows)
 
             async for row in table_rows:
@@ -435,80 +387,42 @@ class MySqlDataSource(BaseDataSource):
                     keys_value += f"{row.get(key)}_" if row.get(key) else ""
                 row.update(
                     {
-                        "_id": f"{database}_{table}_{keys_value}",
+                        "_id": f"{self.database}_{table}_{keys_value}",
                         "_timestamp": last_update_time,
-                        "Database": database,
+                        "Database": self.database,
                         "Table": table,
                     }
                 )
                 yield self.serialize(doc=row)
         else:
             logger.warning(
-                f"Skipping {table} table from database {database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
+                f"Skipping {table} table from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
             )
 
-    async def validate_databases(self, databases):
-        """Validates all user input databases
-
-        Args:
-            databases (list): User input databases
-
-        Returns:
-            List: List of invalid databases
-        """
-
-        all_databases = await anext(self._connect(query=QUERIES["ALL_DATABASE"]))
-        accessible_databases = [database[0] for database in all_databases]
-        return list(set(databases) - set(accessible_databases))
-
-    def configured_databases(self):
-        database_config = self.configuration["database"]
-        if isinstance(database_config, str):
-            dbs = database_config.split(",")
-            databases = list(map(lambda s: s.strip(), dbs))
-        else:
-            databases = database_config
-        return databases
-
     async def get_docs(self, filtering=None):
-        """Executes the logic to fetch databases, tables and rows in async manner.
+        """Executes the logic to fetch tables and rows in async manner.
 
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        databases = self.configured_databases()
-
-        inaccessible_databases = await self.validate_databases(databases=databases)
-        if inaccessible_databases:
-            raise Exception(
-                f"Configured databases: {inaccessible_databases} are inaccessible for user {self.configuration['user']}."
-            )
+        if self.database is None or not len(self.database):
+            raise NoDatabaseConfiguredError
 
         if filtering and filtering.has_advanced_rules():
-            for database in databases:
-                advanced_rules = filtering.get_advanced_rules()
+            advanced_rules = filtering.get_advanced_rules()
 
-                if database in advanced_rules:
-                    database_filtering = advanced_rules.get(database, {})
-                    tables = await self.fetch_tables(database)
-
-                    for table in tables:
-                        table_name = table[0]
-
-                        if table_name in database_filtering:
-                            query = database_filtering[table_name]
-                            logger.debug(
-                                f"Fetching rows from table '{table_name}' in database '{database}' with a custom query."
-                            )
-                            async for row in self.fetch_rows_for_table(
-                                database=database,
-                                table=table_name,
-                                query=query,
-                            ):
-                                yield row, None
-                            await asyncio.sleep(0)
-        else:
-            for database in databases:
-                async for row in self.fetch_rows_from_all_tables(database=database):
+            for table in advanced_rules:
+                query = advanced_rules.get(table)
+                logger.debug(
+                    f"Fetching rows from table '{table}' in database '{self.database}' with a custom query."
+                )
+                async for row in self.fetch_rows_for_table(
+                    table=table,
+                    query=query,
+                ):
                     yield row, None
                 await asyncio.sleep(0)
+        else:
+            async for row in self.fetch_rows_from_all_tables():
+                yield row, None
+            await asyncio.sleep(0)
