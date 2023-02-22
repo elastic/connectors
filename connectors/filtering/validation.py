@@ -196,7 +196,7 @@ class BasicRulesSetValidator:
 
 
 class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
-    """Class validating, that a set of rules does not contain semantic duplicates.
+    """BasicRulesSetSemanticValidator can be used to validate that a set of filtering rules does not contain semantic duplicates.
 
     A semantic duplicate is defined as two basic rules having the same values for `field`, `rule` and `value`.
     Therefore, two basic rules are also seen as semantic duplicates, if their `policy` values differ.
