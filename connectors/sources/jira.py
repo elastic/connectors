@@ -293,7 +293,7 @@ class JiraDataSource(BaseDataSource):
 
         attachment_name = attachment["filename"]
         if os.path.splitext(attachment_name)[-1] not in TIKA_SUPPORTED_FILETYPES:
-            logger.debug(f"{attachment_name} can't be extracted")
+            logger.debug(f"{attachment_name} is not supported by TIKA, skipping")
             return
 
         if attachment_size > FILE_SIZE_LIMIT:
