@@ -100,7 +100,7 @@ async def _start_service(config, loop):
     """Starts the service.
 
     Steps:
-    - performs a preflight checks using `PreflightCheck`
+    - performs a preflight check using `PreflightCheck`
     - instantiates a `MultiService` instance and runs its `run` async function
     """
     preflight = PreflightCheck(config)
