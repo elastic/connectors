@@ -95,7 +95,10 @@ def try_coerce(value):
 
 
 class RuleMatchStats:
-    """RuleMatchStats records how many documents a basic rule matched and which policy it used."""
+    """RuleMatchStats records how many documents a basic rule matched and which policy it used.
+
+    It's an internal class and is not expected to be used outside the module.
+    """
 
     def __init__(self, policy, matches_count):
         self.policy = policy
