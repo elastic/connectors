@@ -287,7 +287,7 @@ class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
 
 
 class BasicRuleAgainstSchemaValidator(BasicRuleValidator):
-    """Class validating if a basic rule follows the specified json schema."""
+    """BasicRuleAgainstSchemaValidator can be used to check if basic rule follows specified json schema."""
 
     SCHEMA_DEFINITION = {
         "type": "object",
