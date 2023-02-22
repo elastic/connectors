@@ -128,7 +128,7 @@ class BasicRuleEngine:
     def should_ingest(self, document):
         """Method to check, whether a document should be ingested or not.
 
-        On default the document will be ingested, if it doesn't match any rule.
+        By default the document will be ingested, if it doesn't match any rule.
 
         Arguments:
         - `document`: document matched against the basic rules
