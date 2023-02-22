@@ -328,7 +328,7 @@ class BasicRule:
         return self.policy == Policy.INCLUDE
 
     def coerce_rule_value_based_on_document_value(self, doc_value):
-        """Method coercing the value inside the basic rule.
+        """Coerce the value inside the basic rule.
 
         This method tries to coerce the value inside the basic rule to the type used in the document.
 
