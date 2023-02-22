@@ -3,6 +3,9 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+""" Helpers to build sources + FQN-based Registry
+"""
+
 import importlib
 from datetime import date, datetime
 from decimal import Decimal
@@ -15,9 +18,6 @@ from connectors.filtering.validation import (
     BasicRulesSetSemanticValidator,
     FilteringValidator,
 )
-
-""" Helpers to build sources + FQN-based Registry
-"""
 
 
 class Field:
@@ -291,7 +291,4 @@ def get_source_klasses(config):
 
 def get_source_klass_dict(config):
     """Returns a service type - source klass dictionary"""
-    result = {}
-    for name, fqn in config["sources"].items():
-        result[name] = get_source_klass(fqn)
-    return result
+    return {name: get_source_klass(fqn) for name, fqn in config["sources"].items()}
