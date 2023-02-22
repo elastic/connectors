@@ -101,7 +101,7 @@ async def _start_service(config, loop):
 
     Steps:
     - performs a preflight checks using `PreflightCheck`
-    - instanciates a `MultiService` instance and run its `run` async function
+    - instantiates a `MultiService` instance and runs its `run` async function
     """
     preflight = PreflightCheck(config)
     for sig in (signal.SIGINT, signal.SIGTERM):
