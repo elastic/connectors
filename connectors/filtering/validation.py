@@ -261,7 +261,7 @@ class BasicRuleValidator:
 
 
 class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
-    """Class validating that a basic rule does not use a match all regex."""
+    """BasicRuleNoMatchAllRegexValidator can be used to check that a basic rule does not use a match all regex."""
 
     MATCH_ALL_REGEXPS = [".*", "(.*)"]
 
