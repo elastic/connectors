@@ -68,7 +68,7 @@ class Bulker:
     Arguments:
 
     - `client` -- an instance of `connectors.es.ESClient`
-    - `queue` -- an `asyncio,Queue` instance to pull docs from
+    - `queue` -- an instance of `asyncio.Queue` to pull docs from
     - `chunk_size` -- a maximum number of operations to send per request
     - `pipeline` -- ingest pipeline settings to pass to the bulk API
     - `chunk_mem_size` -- a maximum size in MiB for each bulk request
