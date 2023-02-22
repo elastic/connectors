@@ -117,7 +117,11 @@ class RuleMatchStats:
 
 
 class BasicRuleEngine:
-    """Class executing a list of basic rules in order against a document."""
+    """BasicRuleEngine matches a document against a list of basic rules in order.
+
+    The main concern of the engine is to decide, whether a document should be ingested during a sync or not.
+    It also records stats, which basic rule matched how many documents with a certain policy.
+    """
 
     def __init__(self, rules):
         self.rules = rules
@@ -126,7 +130,7 @@ class BasicRuleEngine:
         }
 
     def should_ingest(self, document):
-        """Method to check, whether a document should be ingested or not.
+        """Check, whether a document should be ingested or not.
 
         On default the document will be ingested, if it doesn't match any rule.
 
