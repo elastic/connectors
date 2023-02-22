@@ -183,7 +183,7 @@ class Fetcher:
     - queue: an `asyncio.Queue` to put docs in
     - index: the target Elasticsearch index
     - existing_ids: a list of existing Elasticsearch document ids found in the index
-    - filter: a `Filter` instance -- default: `None`
+    - filter_: an instance of `Filter` to apply on the fetched document -- default: `None`
     - sync_rules_enabled: if `True`, we apply rules -- default: `False`
     - display_every -- display a log every `display_every` doc -- default: `DEFAULT_DISPLAY_EVERY`
     - concurrent_downloads: -- concurrency level for downloads -- default: `DEFAULT_CONCURRENT_DOWNLOADS`
