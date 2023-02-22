@@ -323,7 +323,7 @@ class BasicRule:
         This method tries to coerce the value inside the basic rule to the type used in the document.
 
         Arguments:
-        - `doc_value`: one value of a document
+        - `doc_value`: value of the field in the document to coerce
 
         """
         try:
