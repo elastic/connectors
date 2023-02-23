@@ -103,7 +103,7 @@ class SyncService(BaseService):
                 validator=source_klass(connector.configuration)
             )
 
-        if not await self._ready_to_sync(connector):
+        if not await self._should_sync(connector):
             return
 
         await connector.sync(
@@ -171,7 +171,7 @@ class SyncService(BaseService):
             await es.close()
         return 0
 
-    async def _ready_to_sync(self, connector):
+    async def _should_sync(self, connector):
         try:
             next_sync = connector.next_sync()
             # First we check if sync is disabled, and it terminates all other conditions
