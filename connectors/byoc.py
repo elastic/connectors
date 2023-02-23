@@ -586,8 +586,7 @@ class Connector(ESDocument):
             yield doc, lazy_download
 
     async def prepare(self, config):
-        """
-        Prepares the custom connector
+        """Prepares the custom connector
 
         When a custom connector is configured in the config.yml, this method updates service type and the default
         configuration when they are absent.
