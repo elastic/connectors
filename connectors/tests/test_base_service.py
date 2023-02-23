@@ -17,6 +17,7 @@ class StubService:
         self.running = False
         self.cancelled = False
         self.exploding = False
+        self.run_sleep_delay = 0
         self.stopped = False
         self.handle_cancellation = True
 
@@ -35,7 +36,7 @@ class StubService:
         while self.running:
             if self.exploding:
                 raise Exception("Something went wrong")
-            await asyncio.sleep(0)
+            await asyncio.sleep(self.run_sleep_delay)
 
     def stop(self):
         self.running = False
@@ -103,3 +104,25 @@ async def test_registry():
 
     await multiservice.run()
     assert ran == ["kool", "beans"]
+
+
+@pytest.mark.asyncio
+async def test_multiservice_stop_gracefully_stops_service_that_takes_too_long_to_run():
+    service_1 = StubService()
+
+    service_2 = StubService()
+    service_2.run_sleep_delay = 0.3  # large enough
+
+    multiservice = MultiService(service_1, service_2)
+
+    asyncio.get_event_loop().call_later(
+        0.1, functools.partial(multiservice.shutdown, "SIGTERM")
+    )
+
+    await multiservice.run()
+
+    assert service_1.stopped
+    assert service_2.stopped
+    assert (
+        not service_2.cancelled
+    )  # we're not supposed to cancel it as it's already stopping
