@@ -47,3 +47,8 @@ steps:
       - ".buildkite/run_nigthly.sh oracle"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Sharepoint"
+    command:
+      - ".buildkite/run_nigthly.sh sharepoint"
+    artifact_paths:
+      - "perf8-report-*/**/*"
