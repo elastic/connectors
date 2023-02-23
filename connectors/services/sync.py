@@ -60,23 +60,7 @@ class SyncService(BaseService):
         if connector.native:
             logger.debug(f"Connector {connector.id} natively supported")
 
-        try:
-            await connector.prepare(self.config)
-        except ServiceTypeNotConfiguredError:
-            logger.error(
-                f"Service type is not configured for connector {self.config['connector_id']}"
-            )
-            return
-        except ConnectorUpdateError as e:
-            logger.error(e)
-            return
-        except ServiceTypeNotSupportedError:
-            logger.debug(f"Can't handle source of type {connector.service_type}")
-            return
-        except DataSourceError as e:
-            await connector.error(e)
-            logger.critical(e, exc_info=True)
-            self.raise_if_spurious(e)
+        if not await self._prepare_connector(connector):
             return
 
         # the heartbeat is always triggered
@@ -164,3 +148,27 @@ class SyncService(BaseService):
                 await self.sync_job_index.close()
             await es.close()
         return 0
+
+    async def _prepare_connector(self, connector):
+        try:
+            await connector.prepare(self.config)
+            return True
+        except ServiceTypeNotConfiguredError:
+            logger.error(
+                f"Service type is not configured for connector {self.config['connector_id']}"
+            )
+            return False
+        except ConnectorUpdateError as e:
+            logger.error(e)
+            return False
+        except ServiceTypeNotSupportedError:
+            logger.debug(f"Can't handle source of type {connector.service_type}")
+            return False
+        except DataSourceError as e:
+            await connector.error(e)
+            logger.critical(e, exc_info=True)
+            self.raise_if_spurious(e)
+            return False
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+            return False
