@@ -136,9 +136,10 @@ class Bulker:
         return res
 
     async def run(self):
-        """Creates batches of bulk calls given a queue of documents.
+        """Creates batches of bulk calls given a queue of items.
 
-        Exits when the document is "END_DOCS" or "FETCH_ERROR".
+        An item is a (size, object) tuple. Exits when the
+        item is the `END_DOCS` or `FETCH_ERROR` string.
 
         Bulk calls are executed concurrently with a maximum number of concurrent
         requests.
