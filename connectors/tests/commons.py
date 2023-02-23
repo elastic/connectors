@@ -3,14 +3,17 @@ class AsyncIterator:
     Async documents generator fake class, which records the args and kwargs it was called with.
     """
 
-    def __init__(self, items):
-        self.items = items
+    def __init__(self, *args):
+        self.result = args
         self.call_args = []
         self.call_kwargs = []
         self.i = 0
 
-    def __aiter__(self):
-        return self
+    async def __aiter__(self):
+        if len(self.result) == 1:
+            yield self.result[0]
+        else:
+            yield (*self.result,)
 
     async def __anext__(self):
         if self.i >= len(self.items):
@@ -22,9 +25,9 @@ class AsyncIterator:
 
     def __call__(self, *args, **kwargs):
         if args:
-            self.call_args.append(args)
+            self.call_args.append(*args)
 
         if kwargs:
-            self.call_kwargs.append(kwargs)
+            self.call_kwargs.append(*kwargs.items())
 
         return self
