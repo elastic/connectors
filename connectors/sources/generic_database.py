@@ -21,6 +21,15 @@ DEFAULT_WAIT_MULTIPLIER = 2
 
 
 def configured_tables(tables):
+    """Split a string containing a comma-seperated list of tables by comma and strip the table names.
+
+    Filter out `None` and zero-length values from the tables.
+    If `tables` is a list return the list also without `None` and zero-length values.
+
+    Arguments:
+    - `tables`: string containing a comma-seperated list of tables or a list of tables
+    """
+
     def table_filter(table):
         return table is not None and len(table) > 0
 
@@ -34,6 +43,10 @@ def configured_tables(tables):
         if isinstance(tables, str)
         else list(filter(lambda table: table_filter(table), tables))
     )
+
+
+def should_fetch_all_tables(tables):
+    return tables == ALL_TABLES or (isinstance(tables, list) and tables == [ALL_TABLES])
 
 
 class GenericBaseDataSource(BaseDataSource):
@@ -399,11 +412,8 @@ class GenericBaseDataSource(BaseDataSource):
 
     async def get_tables_to_fetch(self, schema):
         tables = configured_tables(self.tables)
-        fetch_all_tables = tables == ALL_TABLES or (
-            isinstance(tables, list) and tables == [ALL_TABLES]
-        )
 
-        tables_to_fetch = (
+        return (
             map(
                 lambda table: table[0],
                 await anext(
@@ -415,8 +425,6 @@ class GenericBaseDataSource(BaseDataSource):
                     )
                 ),
             )
-            if fetch_all_tables
+            if should_fetch_all_tables(tables)
             else tables
         )
-
-        return tables_to_fetch
