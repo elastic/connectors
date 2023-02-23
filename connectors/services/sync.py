@@ -98,24 +98,17 @@ class SyncService(BaseService):
             )
 
         source_klass = self.source_klass_dict[connector.service_type]
-
-        try:
-            data_provider = source_klass(connector.configuration)
-        except Exception as e:
-            logger.critical(e, exc_info=True)
-            raise DataSourceError(
-                f"Could not instantiate {source_klass} for {connector.service_type}"
+        if connector.features.sync_rules_enabled():
+            await connector.validate_filtering(
+                validator=source_klass(connector.configuration)
             )
 
-        if connector.features.sync_rules_enabled():
-            await connector.validate_filtering(validator=data_provider)
-
-        if not await self._ready_to_sync(connector, data_provider):
+        if not await self._ready_to_sync(connector):
             return
 
         await connector.sync(
             self.sync_job_index,
-            data_provider,
+            source_klass,
             es,
             self.bulk_options,
         )
@@ -178,7 +171,7 @@ class SyncService(BaseService):
             await es.close()
         return 0
 
-    async def _ready_to_sync(self, connector, data_provider):
+    async def _ready_to_sync(self, connector):
         try:
             next_sync = connector.next_sync()
             # First we check if sync is disabled, and it terminates all other conditions
@@ -193,12 +186,6 @@ class SyncService(BaseService):
             if next_sync - self.idling > 0:
                 logger.debug(
                     f"Next sync for connector {connector.id} due in {int(next_sync)} seconds"
-                )
-                return False
-            # Lastly we skip job scheduling if there's no change in the remote source
-            if not await data_provider.changed():
-                logger.debug(
-                    f"No change in the remote source of connector {connector.id}, skipping..."
                 )
                 return False
             return True

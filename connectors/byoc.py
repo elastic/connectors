@@ -675,11 +675,26 @@ class Connector(ESDocument):
         return result["count"]
 
     # TODO: Part of this method will be moved to SyncService once it's refactored, and the rest will be moved to the new SyncJobRunner class.
-    async def sync(self, sync_job_index, data_provider, elastic_server, bulk_options):
+    async def sync(self, sync_job_index, source_klass, elastic_server, bulk_options):
+        try:
+            data_provider = source_klass(self.configuration)
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+            raise DataSourceError(
+                f"Could not instantiate {source_klass} for {self.service_type}"
+            )
+
         logger.debug(f"Syncing '{self.service_type}'")
         job = await self._sync_starts(sync_job_index)
         start_time = time.time()
         try:
+            if not await data_provider.changed():
+                logger.debug(
+                    f"No change in {self.service_type} data provider, skipping..."
+                )
+                self._sync_done(job, JobStatus.COMPLETED, {}, start_time)
+                return
+
             logger.debug(f"Pinging the {data_provider} backend")
             await data_provider.ping()
             await asyncio.sleep(0)
