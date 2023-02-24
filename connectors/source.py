@@ -186,6 +186,15 @@ class BaseDataSource:
         """
         return True
 
+    async def validate_configuration(self):
+        """When called, validates configuration of the connector that is contained in self.configuration
+
+        If connector configuration is invalid, this method will raise an exception
+        with human-friendly and actionable description
+        """
+        # TODO: when validate_configuration is implemented everywhere, we should make this method raise NotImplementedError
+        pass
+
     async def ping(self):
         """When called, pings the backend
 

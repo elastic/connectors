@@ -137,6 +137,10 @@ ALL_SYNC_RULES_FEATURES_DISABLED = {
 
 NO_FEATURES_PRESENT = {"features": {}}
 
+CONFIGURATION_INVALID = {
+    "configuration": {"configuration_invalid": {"value": True, "label": ""}}
+}
+
 FAKE_CONFIG_FAIL_SERVICE = {
     "api_key_id": "",
     "configuration": {"fail": {"value": True, "label": ""}},
@@ -745,3 +749,14 @@ async def test_concurrent_syncs(mock_responses, patch_logger, set_env):
     patch_logger.assert_present("[1] Sync done: 1 indexed, 0  deleted. (0 seconds)")
     patch_logger.assert_present("[2] Sync done: 1 indexed, 0  deleted. (0 seconds)")
     patch_logger.assert_present("[3] Sync done: 1 indexed, 0  deleted. (0 seconds)")
+
+
+@pytest.mark.asyncio
+async def test_invalid_configuration(mock_responses, set_env):
+    await set_server_responses(mock_responses, [FAKE_CONFIG | CONFIGURATION_INVALID])
+
+    with pytest.raises(ValueError) as e:
+        await create_and_run_service(CONFIG_FILE)
+
+    assert e is not None
+    assert e.match(".*validating configuration.*")

@@ -700,6 +700,10 @@ class Connector(ESDocument):
             await data_provider.ping()
             await asyncio.sleep(0)
 
+            logger.debug(f"Validating configuration for {data_provider}")
+            await data_provider.validate_configuration()
+            await asyncio.sleep(0)
+
             mappings = Mappings.default_text_fields_mappings(
                 is_connectors_index=True,
             )
