@@ -8,7 +8,7 @@
   "targetPRLabels": ["backport"],
   "branchLabelMapping": {
     "^v8.8.0$": "main",
-    "^v(\\d+).(\\d+).\\d+$": "$1.$2"
+    "^v(\\d+).(\\d+)(.\\d+)+$": "$1.$2"
   },
   "upstream": "elastic/connectors-python"
 }
