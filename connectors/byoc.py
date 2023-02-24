@@ -591,6 +591,8 @@ class Connector(ESDocument):
         populate the service type and then sets the default configuration.
         """
         configured_connector_id = config.get("connector_id", "")
+        configured_service_type = config.get("service_type", "")
+
         if self.id != configured_connector_id:
             return
 
@@ -599,7 +601,6 @@ class Connector(ESDocument):
 
         doc = {}
         if self.service_type is None:
-            configured_service_type = config.get("service_type", "")
             if not configured_service_type:
                 logger.error(
                     f"Service type is not configured for connector {configured_connector_id}"
