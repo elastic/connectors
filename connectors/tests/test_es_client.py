@@ -22,7 +22,7 @@ def test_esclient():
     assert es_client.host.port == 9200
     assert es_client.host.scheme == "http"
 
-    # XXX find a more elegant way
+    # TODO: find a more elegant way
     assert es_client.client._retry_on_timeout
     basic = f"Basic {base64.b64encode(b'elastic:changeme').decode()}"
     assert es_client.client._headers["Authorization"] == basic

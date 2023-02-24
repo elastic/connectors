@@ -3,19 +3,18 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import asyncio
 import json
 import os
 from copy import deepcopy
-from datetime import datetime
-from unittest import mock
-from unittest.mock import ANY, AsyncMock, Mock, call, patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 
 from connectors.byoc import (
-    CONNECTORS_INDEX,
     IDLE_JOBS_THRESHOLD,
+    JOB_NOT_FOUND_ERROR,
+    SYNC_DISABLED,
     Connector,
     ConnectorIndex,
     Features,
@@ -33,8 +32,8 @@ from connectors.config import load_config
 from connectors.filtering.validation import (
     FilteringValidationResult,
     FilteringValidationState,
+    FilterValidationError,
     InvalidFilteringError,
-    ValidationTarget,
 )
 from connectors.source import BaseDataSource
 from connectors.tests.commons import AsyncIterator
@@ -79,38 +78,24 @@ DRAFT_FILTERING_DEFAULT_DOMAIN = {
     "validation": FILTERING_VALIDATION_VALID,
 }
 
+DRAFT_FILTERING_DEFAULT_DOMAIN_EDITED = DRAFT_FILTERING_DEFAULT_DOMAIN | {
+    "validation": FILTERING_VALIDATION_EDITED
+}
+
 ACTIVE_FILTERING_DEFAULT_DOMAIN = {
     "advanced_snippet": ACTIVE_ADVANCED_SNIPPET,
     "rules": [{"id": ACTIVE_RULE_ONE_ID}, {"id": ACTIVE_RULE_TWO_ID}],
     "validation": FILTERING_VALIDATION_VALID,
 }
 
-FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS = {
-    "state": "invalid",
-    "errors": [
-        {"ids": ["1"], "errors": ["some error"]},
-        {"ids": ["2"], "errors": ["another error"]},
-    ],
-}
-
-FILTERING_DEFAULT_DOMAIN_DRAFT_AFTER_UPDATE = {
-    "domain": DEFAULT_DOMAIN,
-    "draft": DRAFT_FILTERING_DEFAULT_DOMAIN
-    | {"validation": FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS},
-    "active": ACTIVE_FILTERING_DEFAULT_DOMAIN,
-}
-
-FILTERING_DEFAULT_DOMAIN_ACTIVE_AFTER_UPDATE = {
-    "domain": DEFAULT_DOMAIN,
-    "draft": DRAFT_FILTERING_DEFAULT_DOMAIN,
-    "active": ACTIVE_FILTERING_DEFAULT_DOMAIN
-    | {"validation": FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS},
-}
-
 FILTERING_DEFAULT_DOMAIN = {
     "domain": DEFAULT_DOMAIN,
     "draft": DRAFT_FILTERING_DEFAULT_DOMAIN,
     "active": ACTIVE_FILTERING_DEFAULT_DOMAIN,
+}
+
+FILTERING_DEFAULT_DOMAIN_EDITED = FILTERING_DEFAULT_DOMAIN | {
+    "draft": DRAFT_FILTERING_DEFAULT_DOMAIN_EDITED
 }
 
 FILTERING_OTHER_DOMAIN = {
@@ -123,32 +108,32 @@ FILTERING_OTHER_DOMAIN = {
     },
 }
 
-CONNECTOR_ID = 1
+CONNECTOR_ID = "1"
 
 DOC_SOURCE_FILTERING = [FILTERING_DEFAULT_DOMAIN, FILTERING_OTHER_DOMAIN]
+DOC_SOURCE_FILTERING_EDITED = [FILTERING_DEFAULT_DOMAIN_EDITED, FILTERING_OTHER_DOMAIN]
 
 DOC_SOURCE = {
-    "configuration": {"key": "value"},
-    "description": "description",
-    "error": "none",
-    "features": {},
-    "filtering": DOC_SOURCE_FILTERING,
-    "index_name": "search-index",
-    "name": "MySQL",
-    "pipeline": {},
-    "scheduling": {},
-    "service_type": "SERVICE",
-    "status": "connected",
-    "language": "en",
-    "sync_now": False,
+    "_id": CONNECTOR_ID,
+    "_source": {
+        "configuration": {"key": "value"},
+        "description": "description",
+        "error": "none",
+        "features": {},
+        "filtering": DOC_SOURCE_FILTERING,
+        "index_name": "search-index",
+        "name": "MySQL",
+        "pipeline": {},
+        "scheduling": {},
+        "service_type": "SERVICE",
+        "status": "connected",
+        "language": "en",
+        "sync_now": False,
+    },
 }
 
-EXPECTED_FILTERING_AFTER_UPDATE_DRAFT = {
-    "filtering": [FILTERING_DEFAULT_DOMAIN_DRAFT_AFTER_UPDATE, FILTERING_OTHER_DOMAIN]
-}
-
-EXPECTED_FILTERING_AFTER_UPDATE_ACTIVE = {
-    "filtering": [FILTERING_DEFAULT_DOMAIN_ACTIVE_AFTER_UPDATE, FILTERING_OTHER_DOMAIN]
+DOC_SOURCE_WITH_EDITED_FILTERING = DOC_SOURCE | {
+    "_source": {"filtering": DOC_SOURCE_FILTERING_EDITED}
 }
 
 OTHER_DOMAIN_ONE = "other-domain-1"
@@ -178,10 +163,6 @@ FILTERING = [
     },
 ]
 
-EMPTY_FILTERING = Filter()
-
-ADVANCED_RULES_EMPTY = {"advanced_snippet": {}}
-
 ADVANCED_RULES = {"db": {"table": "SELECT * FROM db.table"}}
 
 ADVANCED_RULES_NON_EMPTY = {"advanced_snippet": ADVANCED_RULES}
@@ -196,14 +177,6 @@ ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
     "advanced_snippet": {"db": {"table": "SELECT * FROM db.table"}},
     "rules": RULES,
 }
-
-
-@pytest.fixture(autouse=True)
-def patch_validate_filtering_in_byoc():
-    with mock.patch(
-        "connectors.byoc.SyncJob.validate_filtering", return_value=AsyncMock()
-    ) as validate_filtering_mock:
-        yield validate_filtering_mock
 
 
 def test_utc():
@@ -236,44 +209,6 @@ mongo = {
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
 }
-
-
-@pytest.mark.asyncio
-async def test_heartbeat(mock_responses, patch_logger):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
-    )
-
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={
-            "hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}
-        },
-        headers=headers,
-    )
-
-    for _ in range(10):
-        mock_responses.put(
-            "http://nowhere.com:9200/.elastic-connectors/_doc/1",
-            payload={"_id": "1"},
-            headers=headers,
-        )
-
-    connectors = ConnectorIndex(config)
-    conns = []
-
-    async for connector in connectors.supported_connectors(
-        native_service_types=["mongodb"]
-    ):
-        connector.start_heartbeat(0.2)
-        connector.start_heartbeat(1.0)  # NO-OP
-        conns.append(connector)
-
-    await asyncio.sleep(0.4)
-    await conns[0].close()
-    await connectors.close()
 
 
 @pytest.mark.asyncio
@@ -369,48 +304,215 @@ async def test_all_connectors(mock_responses):
     assert len(conns) == 1
 
 
-class StubIndex:
-    def __init__(self):
-        self.client = None
+@pytest.mark.asyncio
+async def test_connector_properties():
+    connector_src = {
+        "_id": "test",
+        "_source": {
+            "service_type": "test",
+            "index_name": "search-some-index",
+            "configuration": {},
+            "language": "en",
+            "scheduling": {},
+            "status": "created",
+            "last_seen": iso_utc(),
+            "last_sync_status": "completed",
+            "pipeline": {},
+        },
+    }
 
-    async def save(self, connector):
-        pass
+    index = Mock()
+    connector = Connector(elastic_index=index, doc_source=connector_src)
+
+    assert connector.id == "test"
+    assert connector.status == Status.CREATED
+    assert connector.service_type == "test"
+    assert connector.configuration.is_empty()
+    assert connector.native is False
+    assert connector.sync_now is False
+    assert connector.index_name == "search-some-index"
+    assert connector.language == "en"
+    assert connector.last_sync_status == JobStatus.COMPLETED
+    assert isinstance(connector.last_seen, datetime)
+    assert isinstance(connector.filtering, Filtering)
+    assert isinstance(connector.pipeline, Pipeline)
+    assert isinstance(connector.features, Features)
 
 
 @pytest.mark.asyncio
-async def test_properties(mock_responses):
-    connector_src = {
-        "service_type": "test",
-        "index_name": "search-some-index",
-        "configuration": {},
-        "language": "en",
-        "scheduling": {},
-        "status": "created",
+@pytest.mark.parametrize(
+    "interval, last_seen, should_send_heartbeat",
+    [
+        (60, None, True),
+        (
+            60,
+            iso_utc(),
+            False,
+        ),
+        (60, iso_utc(datetime.now(timezone.utc) - timedelta(seconds=70)), True),
+    ],
+)
+async def test_heartbeat(interval, last_seen, should_send_heartbeat):
+    source = {
+        "_id": "1",
+        "_source": {
+            "last_seen": last_seen,
+        },
+    }
+    index = Mock()
+    index.heartbeat = AsyncMock(return_value=1)
+
+    connector = Connector(elastic_index=index, doc_source=source)
+    await connector.heartbeat(interval=interval)
+
+    if should_send_heartbeat:
+        index.heartbeat.assert_awaited()
+    else:
+        index.heartbeat.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sync_starts():
+    connector_doc = {"_id": "1"}
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "last_sync_status": JobStatus.IN_PROGRESS.value,
+        "last_sync_error": None,
+        "status": Status.CONNECTED.value,
     }
 
-    connector = Connector(StubIndex(), "test", connector_src, {})
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.sync_starts()
+    index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
 
-    assert connector.status == Status.CREATED
-    assert connector.service_type == "test"
-    connector.service_type = "test2"
-    assert connector.service_type == "test2"
-    assert connector._dirty
 
-    await connector.sync_doc()
-    assert not connector._dirty
+@pytest.mark.asyncio
+async def test_connector_error():
+    connector_doc = {"_id": "1"}
+    error = "something wrong"
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    expected_doc_source_update = {
+        "status": Status.ERROR.value,
+        "error": error,
+    }
 
-    # setting some config with a value that is None
-    connector.configuration = {"cool": {"value": "foo"}, "cool2": {"value": None}}
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.error(error)
+    index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
 
-    assert connector.status == Status.NEEDS_CONFIGURATION
 
-    # setting some config
-    connector.configuration = {"cool": {"value": "foo"}, "cool2": {"value": "baz"}}
+def mock_job(
+    status=JobStatus.COMPLETED,
+    error=None,
+    terminated=True,
+):
+    job = Mock()
+    job.status = status
+    job.error = error
+    job.terminated = terminated
+    job.indexed_document_count = 0
+    job.deleted_document_count = 0
+    return job
 
-    assert connector.status == Status.CONFIGURED
 
-    with pytest.raises(TypeError):
-        connector.status = 1234
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "job, expected_doc_source_update",
+    [
+        (
+            None,
+            {
+                "last_sync_status": JobStatus.ERROR.value,
+                "last_synced": ANY,
+                "last_sync_error": JOB_NOT_FOUND_ERROR,
+                "status": Status.ERROR.value,
+                "error": JOB_NOT_FOUND_ERROR,
+            },
+        ),
+        (
+            mock_job(status=JobStatus.ERROR, error="something wrong"),
+            {
+                "last_sync_status": JobStatus.ERROR.value,
+                "last_synced": ANY,
+                "last_sync_error": "something wrong",
+                "status": Status.ERROR.value,
+                "error": "something wrong",
+                "last_indexed_document_count": 0,
+                "last_deleted_document_count": 0,
+            },
+        ),
+        (
+            mock_job(status=JobStatus.CANCELED),
+            {
+                "last_sync_status": JobStatus.CANCELED.value,
+                "last_synced": ANY,
+                "last_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+                "last_indexed_document_count": 0,
+                "last_deleted_document_count": 0,
+            },
+        ),
+        (
+            mock_job(status=JobStatus.SUSPENDED, terminated=False),
+            {
+                "last_sync_status": JobStatus.SUSPENDED.value,
+                "last_synced": ANY,
+                "last_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+            },
+        ),
+        (
+            mock_job(),
+            {
+                "last_sync_status": JobStatus.COMPLETED.value,
+                "last_synced": ANY,
+                "last_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+                "last_indexed_document_count": 0,
+                "last_deleted_document_count": 0,
+            },
+        ),
+    ],
+)
+async def test_sync_done(job, expected_doc_source_update):
+    connector_doc = {"_id": "1"}
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.sync_done(job=job)
+    index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "sync_now, scheduling_enabled, expected_next_sync",
+    [
+        (True, False, 0),
+        (False, False, SYNC_DISABLED),
+        (False, True, 10),
+    ],
+)
+@patch("connectors.byoc.next_run")
+async def test_connector_next_sync(
+    next_run, sync_now, scheduling_enabled, expected_next_sync, patch_logger
+):
+    connector_doc = {
+        "_id": "1",
+        "_source": {
+            "sync_now": sync_now,
+            "scheduling": {"enabled": scheduling_enabled, "interval": "1 * * * * *"},
+        },
+    }
+    index = Mock()
+    next_run.return_value = 10
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    assert connector.next_sync() == expected_next_sync
 
 
 @pytest.mark.asyncio
@@ -597,31 +699,127 @@ async def test_prepare(mock_responses):
     class Index:
         client = Client()
 
-        async def save(self, conn):
+        async def update(self, doc_id, doc):
             pass
+
+        async def fetch_by_id(self, doc_id):
+            return Connector(
+                self,
+                connector_doc_after_prepare,
+            )
 
     # generic empty doc created by the user through the Kibana UI
     # when it's created that way, the service type is None,
     # so it's up to the connector to set it back to its value
-    doc = {
-        "status": "created",
-        "service_type": None,
-        "index_name": "test",
-        "configuration": {},
-        "language": "en",
-        "scheduling": {"enabled": False},
+    connector_doc = {
+        "_id": "1",
+        "_source": {
+            "status": "created",
+            "service_type": None,
+            "index_name": "test",
+            "configuration": {},
+            "language": "en",
+            "scheduling": {"enabled": False},
+        },
     }
-    connector = Connector(Index(), "1", doc, {})
+    service_type = "mongodb"
+    connector_doc_after_prepare = deepcopy(connector_doc)
+    connector_doc_after_prepare["_source"]["status"] = "needs_configuration"
+    connector_doc_after_prepare["_source"]["service_type"] = service_type
+    connector_doc_after_prepare["_source"][
+        "configuration"
+    ] = Banana.get_default_configuration()
+    connector = Connector(Index(), connector_doc)
 
     config = {
         "connector_id": "1",
-        "service_type": "mongodb",
+        "service_type": service_type,
         "sources": {"mongodb": "connectors.tests.test_byoc:Banana"},
     }
 
     await connector.prepare(config)
-    assert connector.source_klass.__doc__ == "Banana"
     assert connector.status == Status.NEEDS_CONFIGURATION
+    assert connector.service_type == service_type
+    assert not connector.configuration.is_empty()
+
+
+@pytest.mark.asyncio
+async def test_connector_validate_filtering_not_edited(patch_logger):
+    index = Mock()
+    index.update = AsyncMock()
+    validator = Mock()
+    validator.validate_filtering = AsyncMock()
+
+    connector = Connector(elastic_index=index, doc_source=DOC_SOURCE)
+    await connector.validate_filtering(validator=validator)
+
+    validator.validate_filtering.assert_not_awaited()
+    index.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_validate_filtering_invalid(patch_logger):
+    index = Mock()
+    index.update = AsyncMock()
+    validation_result = FilteringValidationResult(
+        state=FilteringValidationState.INVALID,
+        errors=[FilterValidationError(ids=[1], messages="something wrong")],
+    )
+    validator = Mock()
+    validator.validate_filtering = AsyncMock(return_value=validation_result)
+    expected_validation_update_doc = {
+        "filtering": [
+            {
+                "domain": DEFAULT_DOMAIN,
+                "draft": DRAFT_FILTERING_DEFAULT_DOMAIN
+                | {"validation": validation_result.to_dict()},
+                "active": ACTIVE_FILTERING_DEFAULT_DOMAIN,
+            },
+            FILTERING_OTHER_DOMAIN,
+        ]
+    }
+
+    connector = Connector(
+        elastic_index=index, doc_source=deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
+    )
+    await connector.validate_filtering(validator=validator)
+
+    validator.validate_filtering.assert_awaited()
+    index.update.assert_awaited_with(
+        doc_id=CONNECTOR_ID, doc=expected_validation_update_doc
+    )
+
+
+@pytest.mark.asyncio
+async def test_connector_validate_filtering_valid(patch_logger):
+    index = Mock()
+    index.update = AsyncMock()
+    validation_result = FilteringValidationResult()
+    validator = Mock()
+    validator.validate_filtering = AsyncMock(return_value=validation_result)
+    expected_validation_update_doc = {
+        "filtering": [
+            {
+                "domain": DEFAULT_DOMAIN,
+                "draft": DRAFT_FILTERING_DEFAULT_DOMAIN
+                | {"validation": validation_result.to_dict()},
+                "active": DRAFT_FILTERING_DEFAULT_DOMAIN
+                | {"validation": validation_result.to_dict()},
+            },
+            FILTERING_OTHER_DOMAIN,
+        ]
+    }
+
+    connector = Connector(
+        elastic_index=index, doc_source=deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
+    )
+    index.fetch_by_id = AsyncMock(return_value=connector)
+    await connector.validate_filtering(validator=validator)
+
+    validator.validate_filtering.assert_awaited()
+    index.update.assert_awaited_with(
+        doc_id=CONNECTOR_ID, doc=expected_validation_update_doc
+    )
 
 
 @pytest.mark.parametrize(
@@ -709,54 +907,6 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
         Filter(filter_=filtering).transform_filtering()
         == expected_transformed_filtering
     )
-
-
-@pytest.mark.parametrize(
-    "validation_result, validation_target, expected_doc_source_update",
-    [
-        (
-            FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS,
-            ValidationTarget.DRAFT,
-            EXPECTED_FILTERING_AFTER_UPDATE_DRAFT,
-        ),
-        (
-            FILTERING_VALIDATION_DEFAULT_DOMAIN_WITH_ERRORS,
-            ValidationTarget.ACTIVE,
-            EXPECTED_FILTERING_AFTER_UPDATE_ACTIVE,
-        ),
-    ],
-)
-@pytest.mark.asyncio
-async def test_update_filtering_validation(
-    validation_result, validation_target, expected_doc_source_update
-):
-    config = {"host": "https://nowhere.com:9200", "user": "tarek", "password": "blah"}
-
-    connector = Mock()
-    connector.filtering.to_list.return_value = DOC_SOURCE_FILTERING
-    connector.id = CONNECTOR_ID
-
-    validation_result_mock = Mock()
-    validation_result_mock.to_dict = Mock(return_value=validation_result)
-
-    client = Mock()
-    client.update = AsyncMock(return_value=1)
-
-    index = ConnectorIndex(config)
-    index.client = client
-
-    await index.update_filtering_validation(
-        connector, validation_result_mock, validation_target
-    )
-
-    assert client.update.call_args_list == [
-        call(
-            index=CONNECTORS_INDEX,
-            id=CONNECTOR_ID,
-            doc=expected_doc_source_update,
-            retry_on_conflict=ANY,
-        )
-    ]
 
 
 @pytest.mark.parametrize(
@@ -1139,7 +1289,8 @@ def test_has_validation_state(
 @pytest.mark.asyncio
 async def test_prepare_docs(filtering, expected_filtering_calls):
     doc_source_copy = deepcopy(DOC_SOURCE)
-    connector = Connector(StubIndex(), "1", doc_source_copy, {})
+    index = Mock()
+    connector = Connector(elastic_index=index, doc_source=doc_source_copy)
 
     docs_generator_fake = AsyncIterator([(doc_source_copy, None)])
     connector.data_provider = AsyncMock()
@@ -1151,12 +1302,9 @@ async def test_prepare_docs(filtering, expected_filtering_calls):
         assert yielded_doc is not None
 
     assert docs_generator_fake.call_kwargs == [
-        ("filtering", expected_filtering)
+        {"filtering": expected_filtering}
         for expected_filtering in expected_filtering_calls
     ]
-    assert all(
-        type(filter_) == Filter for _, filter_ in docs_generator_fake.call_kwargs
-    )
 
 
 @pytest.mark.parametrize(
