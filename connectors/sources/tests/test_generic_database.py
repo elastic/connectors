@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Generic Database source class methods"""
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from asyncpg.exceptions._base import InternalClientError
@@ -14,8 +14,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
 from connectors.source import DataSourceConfiguration
-from connectors.sources.generic_database import GenericBaseDataSource, configured_tables
-from connectors.sources.mssql import MSSQLDataSource
+from connectors.sources.generic_database import GenericBaseDataSource
+from connectors.sources.mssql import MSSQLQueries
 from connectors.sources.oracle import OracleDataSource
 from connectors.sources.postgresql import PostgreSQLDataSource
 from connectors.sources.tests.support import create_source
@@ -25,89 +25,6 @@ POSTGRESQL_CONNECTION_STRING = (
     "postgresql+asyncpg://admin:changme@127.0.0.1:5432/testdb"
 )
 ORACLE_CONNECTION_STRING = "oracle+oracledb://admin:changme@127.0.0.1:1521/testdb"
-
-
-class mock_engine:
-    """This Class create mock engine for mssql dialect"""
-
-    def connect(self):
-        """Make a connection
-
-        Returns:
-            connection: connection object
-        """
-        return ConnectionSync()
-
-
-class ConnectionAsync:
-    """This class creates dummy connection with database and return dummy cursor"""
-
-    async def __aenter__(self):
-        """Make a dummy database connection and return it"""
-        return self
-
-    async def __aexit__(self, exception_type, exception_value, exception_traceback):
-        """Make sure the dummy database connection gets closed"""
-        pass
-
-    async def execute(self, query):
-        """This method returns dummy cursor"""
-        return CursorAsync()
-
-
-class CursorAsync:
-    """This class contains methods which returns dummy response"""
-
-    async def __aenter__(self):
-        """Make a dummy database connection and return it"""
-        return self
-
-    def __init__(self, *args, **kw):
-        self.first_call = True
-
-    def keys(self):
-        """Return Columns of table
-
-        Returns:
-            list: List of columns
-        """
-        return ["ids", "names"]
-
-    def fetchmany(self, size):
-        """This method returns response of fetchmany
-
-        Args:
-            size (int): Number of rows
-
-        Returns:
-            list: List of rows
-        """
-        if self.first_call:
-            self.first_call = False
-            return [
-                (
-                    1,
-                    "abcd",
-                ),
-                (
-                    2,
-                    "xyz",
-                ),
-            ]
-        return []
-
-    def fetchall(self):
-        """This method returns object of Return class
-
-
-        Returns:
-            list: List of rows
-        """
-        return [(10,)]
-
-    async def __aexit__(self, exception_type, exception_value, exception_traceback):
-        """Make sure the dummy database connection gets closed"""
-        pass
 
 
 class ConnectionSync:
@@ -123,7 +40,10 @@ class ConnectionSync:
 
     def execute(self, statement):
         """This method returns dummy cursor"""
-        return CursorSync()
+        return CursorSync(statement=statement)
+
+    def close(self):
+        pass
 
 
 class CursorSync:
@@ -135,6 +55,7 @@ class CursorSync:
 
     def __init__(self, *args, **kw):
         self.first_call = True
+        self.query = kw["statement"]
 
     def keys(self):
         """Return Columns of table
@@ -169,7 +90,32 @@ class CursorSync:
 
     def fetchall(self):
         """This method returns object of Return class"""
-        return [(10,)]
+        self.query = str(self.query)
+        if (
+            self.query
+            == "SELECT s.name from sys.schemas s inner join sys.sysusers u on u.uid = s.principal_id"
+        ):
+            return [("public",)]
+        elif self.query in [
+            "SELECT table_name FROM information_schema.tables WHERE TABLE_SCHEMA = 'public'",
+            "SELECT TABLE_NAME FROM all_tables where OWNER = 'ADMIN'",
+        ]:
+            return [("emp_table",)]
+        elif self.query in [
+            'SELECT COUNT(*) FROM public."emp_table"',
+            "SELECT COUNT(*) FROM emp_table",
+        ]:
+            return [(10,)]
+        elif self.query in [
+            "SELECT C.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS T JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE C ON C.CONSTRAINT_NAME=T.CONSTRAINT_NAME WHERE C.TABLE_NAME='emp_table' and C.TABLE_SCHEMA='public' and T.CONSTRAINT_TYPE='PRIMARY KEY'",
+            "SELECT cols.column_name FROM all_constraints cons, all_cons_columns cols WHERE cols.table_name = 'emp_table' AND cons.constraint_type = 'P' AND cons.constraint_name = cols.constraint_name AND cons.owner = 'ADMIN' AND cons.owner = cols.owner ORDER BY cols.table_name, cols.position",
+        ]:
+            return [("ids",)]
+        elif self.query in [
+            "SELECT SCN_TO_TIMESTAMP(MAX(ora_rowscn)) from emp_table",
+            "SELECT last_user_update FROM sys.dm_db_index_usage_stats WHERE object_id=object_id('public.emp_table')",
+        ]:
+            return [("2023-02-21T08:37:15+00:00",)]
 
 
 def test_get_configuration(patch_logger):
@@ -219,116 +165,6 @@ def test_validate_configuration_ssl(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_docs_postgresql(patch_logger):
-    """Test get_docs method"""
-    # Setup
-    source = create_source(PostgreSQLDataSource)
-    with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
-        source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
-        actual_response = []
-        expected_response = [
-            {
-                "10_10_ids": 1,
-                "10_10_names": "abcd",
-                "_id": "xe_10_10_",
-                "_timestamp": "",
-                "Database": "xe",
-                "Table": 10,
-                "schema": 10,
-            },
-            {
-                "10_10_ids": 2,
-                "10_10_names": "xyz",
-                "_id": "xe_10_10_",
-                "_timestamp": "",
-                "Database": "xe",
-                "Table": 10,
-                "schema": 10,
-            },
-        ]
-
-        # Execute
-        async for i in source.get_docs():
-            i[0]["_timestamp"] = ""
-            actual_response.append(i[0])
-
-        # Assert
-        assert actual_response == expected_response
-
-
-@pytest.mark.asyncio
-async def test_get_docs_oracle(patch_logger):
-    """Test get_docs method"""
-    # Setup
-    source = create_source(OracleDataSource)
-    with patch.object(Engine, "connect", return_value=ConnectionSync()):
-        source.engine = create_engine(ORACLE_CONNECTION_STRING)
-        actual_response = []
-        expected_response = [
-            {
-                "10_ids": 1,
-                "10_names": "abcd",
-                "_id": "xe_10_",
-                "_timestamp": "",
-                "Database": "xe",
-                "Table": 10,
-            },
-            {
-                "10_ids": 2,
-                "10_names": "xyz",
-                "_id": "xe_10_",
-                "_timestamp": "",
-                "Database": "xe",
-                "Table": 10,
-            },
-        ]
-
-        # Execute
-        async for i in source.get_docs():
-            i[0]["_timestamp"] = ""
-            actual_response.append(i[0])
-
-        # Assert
-        assert actual_response == expected_response
-
-
-@pytest.mark.asyncio
-async def test_get_docs_mssql(patch_logger):
-    """Test get_docs method"""
-    # Setup
-    source = create_source(MSSQLDataSource)
-    source.engine = mock_engine()
-    actual_response = []
-    expected_response = [
-        {
-            "10_10_ids": 1,
-            "10_10_names": "abcd",
-            "_id": "xe_10_10_",
-            "_timestamp": 10,
-            "Database": "xe",
-            "Table": 10,
-            "schema": 10,
-        },
-        {
-            "10_10_ids": 2,
-            "10_10_names": "xyz",
-            "_id": "xe_10_10_",
-            "_timestamp": 10,
-            "Database": "xe",
-            "Table": 10,
-            "schema": 10,
-        },
-    ]
-
-    # Execute
-    async for i in source.get_docs():
-        actual_response.append(i[0])
-
-    # Assert
-    assert actual_response == expected_response
-
-
-@pytest.mark.asyncio
 async def test_close(patch_logger):
     """Test close method"""
     source = create_source(GenericBaseDataSource)
@@ -364,7 +200,7 @@ async def test_sync_connect_negative(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_execute_query_negative_for_internal_client_error(patch_logger):
+async def test_execute_query_negative_for_internalclienterror(patch_logger):
     """Test _execute_query method with negative case"""
     source = create_source(PostgreSQLDataSource)
     with patch.object(
@@ -396,8 +232,15 @@ async def test_fetch_documents_negative(patch_logger):
             await anext(source.fetch_documents("table1"))
 
 
+@pytest.fixture
+def patch_default_wait_multiplier():
+    """Patch retry interval to 0"""
+    with patch("connectors.sources.generic_database.DEFAULT_WAIT_MULTIPLIER", 0):
+        yield
+
+
 @pytest.mark.asyncio
-async def test_execute_query_negative():
+async def test_execute_query_negative(patch_default_wait_multiplier):
     """Test execute_query method with negative case"""
     source = create_source(OracleDataSource)
     with patch.object(
@@ -405,44 +248,53 @@ async def test_execute_query_negative():
         "_sync_connect",
         side_effect=Exception("Something went wrong"),
     ):
-        source.retry_count = 1
-
         # Execute
         with pytest.raises(Exception):
             await anext(source.execute_query("PING"))
 
 
-@pytest.mark.parametrize(
-    "tables, expected_tables",
-    [
-        ("", []),
-        ("table", ["table"]),
-        ("table_1, table_2", ["table_1", "table_2"]),
-        (["table_1", "table_2"], ["table_1", "table_2"]),
-        (["table_1", "table_2", ""], ["table_1", "table_2"]),
-    ],
-)
-def test_configured_tables(tables, expected_tables):
-    actual_tables = configured_tables(tables)
-
-    assert actual_tables == expected_tables
-
-
-@pytest.mark.parametrize("tables", ["*", ["*"]])
 @pytest.mark.asyncio
-async def test_get_tables_to_fetch_remote_tables(tables):
+async def test_ping(patch_logger):
+    """Test ping method of MSSQLDataSource class"""
+    # Setup
     source = create_source(GenericBaseDataSource)
-    source.execute_query = AsyncIterator(["table"])
+    source._create_engine = Mock()
+    source.queries = MSSQLQueries()
+    source.execute_query = Mock(return_value=AsyncIterator(["table1", "table2"]))
 
-    await source.get_tables_to_fetch("schema")
-
-    assert "ALL_TABLE" == source.execute_query.call_kwargs[0]["query_name"]
+    # Execute
+    await source.ping()
 
 
 @pytest.mark.asyncio
-async def test_get_tables_to_fetch_configured_tables():
+async def test_ping_negative(patch_logger):
+    """Test ping method of MSSQLDataSource class with negative case"""
+    # Setup
     source = create_source(GenericBaseDataSource)
-    tables = ["table_1", "table_2"]
-    source.tables = tables
 
-    assert tables == await source.get_tables_to_fetch("schema")
+    with patch.object(
+        GenericBaseDataSource,
+        "execute_query",
+        side_effect=Exception("Something went wrong"),
+    ):
+        # Execute
+        with pytest.raises(Exception):
+            await source.ping()
+
+
+@pytest.mark.asyncio
+async def test_fetch_rows_with_zero_table():
+    # Setup
+    source = create_source(GenericBaseDataSource)
+    source._create_engine = Mock()
+    source.queries = MSSQLQueries()
+    source.execute_query = Mock(return_value=AsyncIterator([[]]))
+
+    # Execute
+    async for doc in source.fetch_rows():
+        assert doc == []
+
+    source.execute_query = Mock(return_value=AsyncIterator([[]]))
+    # Execute
+    async for doc in source.fetch_rows(schema="public"):
+        assert doc == []

@@ -4,36 +4,84 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the microsoft sql database source class methods"""
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
 from connectors.sources.mssql import MSSQLDataSource
 from connectors.sources.tests.support import create_source
-from connectors.tests.commons import AsyncIterator
+from connectors.sources.tests.test_generic_database import ConnectionSync
+
+MSSQL_CONNECTION_STRING = "mssql+pyodbc://admin:Password_123@127.0.0.1:9090/xe?TrustServerCertificate=yes&driver=ODBC+Driver+18+for+SQL+Server"
 
 
-@pytest.mark.asyncio
-async def test_ping(patch_logger):
-    """Test ping method of MSSQLDataSource class"""
+class MockEngine:
+    """This Class create mock engine for mssql dialect"""
+
+    def connect(self):
+        """Make a connection
+
+        Returns:
+            connection: Instance of ConnectionSync
+        """
+        return ConnectionSync()
+
+
+@patch("connectors.sources.mssql.create_engine")
+@patch("connectors.sources.mssql.URL.create")
+def test_create_engine(mock_url, mock_fun):
     # Setup
     source = create_source(MSSQLDataSource)
-    source._create_engine = Mock()
-    source.execute_query = Mock(return_value=AsyncIterator(["table1", "table2"]))
+    mock_fun.return_value = "Mock engine"
+    mock_url.return_value = MSSQL_CONNECTION_STRING
 
     # Execute
-    await source.ping()
+    source._create_engine()
+
+    # Assert
+    mock_fun.assert_called_with(MSSQL_CONNECTION_STRING)
+
+    # Test with secured_connection = True
+    # Setup
+    source.secured_connection = True
+
+    # Execute
+    source._create_engine()
+
+    # Assert
+    mock_fun.assert_called_with(MSSQL_CONNECTION_STRING)
 
 
 @pytest.mark.asyncio
-async def test_ping_negative(patch_logger):
-    """Test ping method of MSSQLDataSource class with negative case"""
+async def test_get_docs_mssql(patch_logger):
     # Setup
     source = create_source(MSSQLDataSource)
+    source.engine = MockEngine()
+    actual_response = []
+    expected_response = [
+        {
+            "public_emp_table_ids": 1,
+            "public_emp_table_names": "abcd",
+            "_id": "xe_public_emp_table_1_",
+            "_timestamp": "2023-02-21T08:37:15+00:00",
+            "Database": "xe",
+            "Table": "emp_table",
+            "schema": "public",
+        },
+        {
+            "public_emp_table_ids": 2,
+            "public_emp_table_names": "xyz",
+            "_id": "xe_public_emp_table_2_",
+            "_timestamp": "2023-02-21T08:37:15+00:00",
+            "Database": "xe",
+            "Table": "emp_table",
+            "schema": "public",
+        },
+    ]
 
-    with patch.object(
-        MSSQLDataSource, "execute_query", side_effect=Exception("Something went wrong")
-    ):
-        # Execute
-        with pytest.raises(Exception):
-            await source.ping()
+    # Execute
+    async for doc in source.get_docs():
+        actual_response.append(doc[0])
+
+    # Assert
+    assert actual_response == expected_response

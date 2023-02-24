@@ -7,7 +7,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 
-from connectors.sources.generic_database import GenericBaseDataSource
+from connectors.sources.generic_database import GenericBaseDataSource, Queries
 
 SECURED_CONNECTION = False
 # Below schemas are system schemas and the tables of the systems schema's will not get indexed
@@ -25,15 +25,37 @@ SYSTEM_SCHEMA = [
     "sys",
 ]
 
-QUERIES = {
-    "PING": "SELECT 1+1",
-    "ALL_TABLE": "SELECT table_name FROM information_schema.tables WHERE TABLE_SCHEMA = '{schema}'",
-    "TABLE_PRIMARY_KEY": "SELECT C.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS T JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE C ON C.CONSTRAINT_NAME=T.CONSTRAINT_NAME WHERE C.TABLE_NAME='{table}' and C.TABLE_SCHEMA='{schema}' and T.CONSTRAINT_TYPE='PRIMARY KEY' ",
-    "TABLE_DATA": 'SELECT * FROM {schema}."{table}"',
-    "TABLE_LAST_UPDATE_TIME": "SELECT last_user_update FROM sys.dm_db_index_usage_stats WHERE object_id=object_id('{schema}.{table}')",
-    "TABLE_DATA_COUNT": 'SELECT COUNT(*) FROM {schema}."{table}"',
-    "ALL_SCHEMAS": "SELECT s.name from sys.schemas s inner join sys.sysusers u on u.uid = s.principal_id",
-}
+
+class MSSQLQueries(Queries):
+    """Class contains methods which return query"""
+
+    def ping(self):
+        """Query to ping source"""
+        return "SELECT 1+1"
+
+    def all_tables(self, **kwargs):
+        """Query to get all tables"""
+        return f"SELECT table_name FROM information_schema.tables WHERE TABLE_SCHEMA = '{ kwargs['schema'] }'"
+
+    def table_primary_key(self, **kwargs):
+        """Query to get the primary key"""
+        return f"SELECT C.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS T JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE C ON C.CONSTRAINT_NAME=T.CONSTRAINT_NAME WHERE C.TABLE_NAME='{kwargs['table']}' and C.TABLE_SCHEMA='{kwargs['schema']}' and T.CONSTRAINT_TYPE='PRIMARY KEY'"
+
+    def table_data(self, **kwargs):
+        """Query to get the table data"""
+        return f'SELECT * FROM {kwargs["schema"]}."{kwargs["table"]}"'
+
+    def table_last_update_time(self, **kwargs):
+        """Query to get the last update time of the table"""
+        return f"SELECT last_user_update FROM sys.dm_db_index_usage_stats WHERE object_id=object_id('{kwargs['schema']}.{kwargs['table']}')"
+
+    def table_data_count(self, **kwargs):
+        """Query to get the number of rows in the table"""
+        return f'SELECT COUNT(*) FROM {kwargs["schema"]}."{kwargs["table"]}"'
+
+    def all_schemas(self):
+        """Query to get all schemas of database"""
+        return "SELECT s.name from sys.schemas s inner join sys.sysusers u on u.uid = s.principal_id"
 
 
 class MSSQLDataSource(GenericBaseDataSource):
@@ -43,13 +65,12 @@ class MSSQLDataSource(GenericBaseDataSource):
         """Setup connection to the Microsoft SQL database-server configured by user
 
         Args:
-            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
+            configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
         self.mssql_driver = self.configuration["mssql_driver"]
         self.secured_connection = self.configuration["secured_connection"]
-        self.connection_string = ""
-        self.queries = QUERIES
+        self.queries = MSSQLQueries()
         self.dialect = "Microsoft SQL"
 
     @classmethod
@@ -64,7 +85,7 @@ class MSSQLDataSource(GenericBaseDataSource):
             {
                 "mssql_driver": {
                     "value": "ODBC Driver 18 for SQL Server",
-                    "label": "Microsoft SQL Driver",
+                    "label": "Microsoft SQL Driver Name (ODBC Driver 18 for SQL Server)",
                     "type": "str",
                 },
                 "secured_connection": {
@@ -79,7 +100,7 @@ class MSSQLDataSource(GenericBaseDataSource):
     def _create_engine(self):
         """Create sync engine for mssql"""
         if self.secured_connection:
-            self.connection_string = URL.create(
+            connection_string = URL.create(
                 "mssql+pyodbc",
                 username=self.user,
                 password=self.password,
@@ -93,7 +114,7 @@ class MSSQLDataSource(GenericBaseDataSource):
                 },
             )
         else:
-            self.connection_string = URL.create(
+            connection_string = URL.create(
                 "mssql+pyodbc",
                 username=self.user,
                 password=self.password,
@@ -102,7 +123,7 @@ class MSSQLDataSource(GenericBaseDataSource):
                 database=self.database,
                 query={"driver": self.mssql_driver, "TrustServerCertificate": "yes"},
             )
-        self.engine = create_engine(self.connection_string)
+        self.engine = create_engine(connection_string)
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch databases, tables and rows in async manner.
@@ -115,7 +136,7 @@ class MSSQLDataSource(GenericBaseDataSource):
         """
         schema_list = await anext(
             self.execute_query(
-                query_name="ALL_SCHEMAS",
+                query=self.queries.all_schemas(),
             )
         )
         for [schema] in schema_list:
