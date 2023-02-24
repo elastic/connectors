@@ -14,9 +14,11 @@ import asyncio
 import functools
 
 from connectors.byoc import (
+    SYNC_DISABLED,
     ConnectorIndex,
     ConnectorUpdateError,
     DataSourceError,
+    JobStatus,
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
     Status,
@@ -88,24 +90,28 @@ class SyncService(BaseService):
         if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
             # we can't sync in that state
             logger.info(f"Can't sync with status `{connector.status.value}`")
-        else:
-            if connector.service_type not in self.source_klass_dict:
-                raise DataSourceError(
-                    f"Couldn't find data source class for {connector.service_type}"
-                )
-            source_klass = self.source_klass_dict[connector.service_type]
-            if connector.features.sync_rules_enabled():
-                await connector.validate_filtering(
-                    validator=source_klass(connector.configuration)
-                )
+            return
 
-            await connector.sync(
-                self.sync_job_index,
-                source_klass,
-                es,
-                self.idling,
-                self.bulk_options,
+        if connector.service_type not in self.source_klass_dict:
+            raise DataSourceError(
+                f"Couldn't find data source class for {connector.service_type}"
             )
+
+        source_klass = self.source_klass_dict[connector.service_type]
+        if connector.features.sync_rules_enabled():
+            await connector.validate_filtering(
+                validator=source_klass(connector.configuration)
+            )
+
+        if not await self._should_sync(connector):
+            return
+
+        await connector.sync(
+            self.sync_job_index,
+            source_klass,
+            es,
+            self.bulk_options,
+        )
 
         await asyncio.sleep(0)
 
@@ -164,3 +170,26 @@ class SyncService(BaseService):
                 await self.sync_job_index.close()
             await es.close()
         return 0
+
+    async def _should_sync(self, connector):
+        try:
+            next_sync = connector.next_sync()
+            # First we check if sync is disabled, and it terminates all other conditions
+            if next_sync == SYNC_DISABLED:
+                logger.debug(f"Scheduling is disabled for connector {connector.id}")
+                return False
+            # Then we check if we need to restart SUSPENDED job
+            if connector.last_sync_status == JobStatus.SUSPENDED:
+                logger.debug("Restarting sync after suspension")
+                return True
+            # And only then we check if we need to run sync right now or not
+            if next_sync - self.idling > 0:
+                logger.debug(
+                    f"Next sync for connector {connector.id} due in {int(next_sync)} seconds"
+                )
+                return False
+            return True
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+            await connector.error(str(e))
+            return False
