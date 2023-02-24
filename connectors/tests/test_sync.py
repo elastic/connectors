@@ -498,8 +498,9 @@ async def test_connector_service_poll_cron_broken(
     await set_server_responses(
         mock_responses, [FAKE_CONFIG_CRON_BROKEN], connectors_update=upd
     )
-    with pytest.raises(Exception):
-        await create_and_run_service(CONFIG_FILE)
+
+    await create_and_run_service(CONFIG_FILE)
+
     patch_logger.assert_not_present("Sync done")
     assert calls[-1]["status"] == "error"
 
