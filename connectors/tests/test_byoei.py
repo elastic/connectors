@@ -351,13 +351,12 @@ async def lazy_downloads_mock():
 
 
 async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enabled):
-    client = Mock()
     existing_ids = {doc["_id"]: doc["_timestamp"] for doc in existing_docs}
 
     # filtering content doesn't matter as the BasicRuleEngine behavior is mocked
     filter_mock = Mock()
     filter_mock.get_active_filter = Mock(return_value={})
-    fetcher = Fetcher(client, queue, INDEX, existing_ids, filter_=filter_mock)
+    fetcher = Fetcher(queue, INDEX, existing_ids, filter_=filter_mock)
     fetcher.basic_rule_engine = basic_rule_engine if sync_rules_enabled else None
     return fetcher
 
@@ -572,7 +571,7 @@ async def test_get_docs(
             basic_rule_engine, existing_docs, queue, sync_rules_enabled
         )
 
-        await fetcher.get_docs(doc_generator)
+        await fetcher.run(doc_generator)
 
         assert fetcher.total_docs_updated == expected_total_docs_updated
         assert fetcher.total_docs_created == expected_total_docs_created
