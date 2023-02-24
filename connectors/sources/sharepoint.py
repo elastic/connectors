@@ -27,11 +27,7 @@ from connectors.utils import (
     retryable,
 )
 
-IS_CLOUD = False
 RETRY_INTERVAL = 2
-DEFAULT_CONTENT_EXTRACTION = True
-DEFAULT_SSL_DISABLED = True
-DEFAULT_SSL_CA = ""
 RETRIES = 3
 FILE_SIZE_LIMIT = 10485760
 CHUNK_SIZE = 1024
@@ -169,7 +165,7 @@ class SharepointDataSource(BaseDataSource):
         """
         return {
             "is_cloud": {
-                "value": IS_CLOUD,
+                "value": False,
                 "label": "True if Sharepoint Online, False if Sharepoint Server",
                 "type": "bool",
             },
@@ -214,17 +210,17 @@ class SharepointDataSource(BaseDataSource):
                 "type": "list",
             },
             "ssl_disabled": {
-                "value": DEFAULT_SSL_DISABLED,
+                "value": True,
                 "label": "Disable SSL verification",
                 "type": "bool",
             },
             "ssl_ca": {
-                "value": DEFAULT_SSL_CA,
+                "value": "",
                 "label": "SSL certificate",
                 "type": "str",
             },
             "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
+                "value": True,
                 "label": "Enable content extraction (true/false)",
                 "type": "bool",
             },
