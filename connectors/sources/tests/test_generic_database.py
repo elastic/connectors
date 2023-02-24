@@ -14,9 +14,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
 from connectors.source import DataSourceConfiguration
-from connectors.sources.generic_database import GenericBaseDataSource
+from connectors.sources.generic_database import GenericBaseDataSource, configured_tables
 from connectors.sources.mssql import MSSQLQueries
-from connectors.sources.oracle import OracleDataSource
+from connectors.sources.oracle import OracleDataSource, OracleQueries
 from connectors.sources.postgresql import PostgreSQLDataSource
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
@@ -25,6 +25,9 @@ POSTGRESQL_CONNECTION_STRING = (
     "postgresql+asyncpg://admin:changme@127.0.0.1:5432/testdb"
 )
 ORACLE_CONNECTION_STRING = "oracle+oracledb://admin:changme@127.0.0.1:1521/testdb"
+SCHEMA = "public"
+TABLE = "emp_table"
+USER = "ADMIN"
 
 
 class ConnectionSync:
@@ -42,9 +45,6 @@ class ConnectionSync:
         """This method returns dummy cursor"""
         return CursorSync(statement=statement)
 
-    def close(self):
-        pass
-
 
 class CursorSync:
     """This class contains methods which returns dummy response"""
@@ -53,9 +53,10 @@ class CursorSync:
         """Make a dummy database connection and return it"""
         return self
 
-    def __init__(self, *args, **kw):
+    def __init__(self, *args, **kwargs):
+        """Setup dummy cursor"""
         self.first_call = True
-        self.query = kw["statement"]
+        self.query = kwargs["statement"]
 
     def keys(self):
         """Return Columns of table
@@ -89,31 +90,30 @@ class CursorSync:
         return []
 
     def fetchall(self):
-        """This method returns object of Return class"""
+        """This method returns results of query"""
         self.query = str(self.query)
-        if (
-            self.query
-            == "SELECT s.name from sys.schemas s inner join sys.sysusers u on u.uid = s.principal_id"
-        ):
-            return [("public",)]
+        query_object_mssql = MSSQLQueries()
+        query_object_oracle = OracleQueries()
+        if self.query == query_object_mssql.all_schemas():
+            return [(SCHEMA,)]
         elif self.query in [
-            "SELECT table_name FROM information_schema.tables WHERE TABLE_SCHEMA = 'public'",
-            "SELECT TABLE_NAME FROM all_tables where OWNER = 'ADMIN'",
+            query_object_mssql.all_tables(schema=SCHEMA),
+            query_object_oracle.all_tables(user=USER),
         ]:
-            return [("emp_table",)]
+            return [(TABLE,)]
         elif self.query in [
-            'SELECT COUNT(*) FROM public."emp_table"',
-            "SELECT COUNT(*) FROM emp_table",
+            query_object_mssql.table_data_count(schema=SCHEMA, table=TABLE),
+            query_object_oracle.table_data_count(table=TABLE),
         ]:
             return [(10,)]
         elif self.query in [
-            "SELECT C.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS T JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE C ON C.CONSTRAINT_NAME=T.CONSTRAINT_NAME WHERE C.TABLE_NAME='emp_table' and C.TABLE_SCHEMA='public' and T.CONSTRAINT_TYPE='PRIMARY KEY'",
-            "SELECT cols.column_name FROM all_constraints cons, all_cons_columns cols WHERE cols.table_name = 'emp_table' AND cons.constraint_type = 'P' AND cons.constraint_name = cols.constraint_name AND cons.owner = 'ADMIN' AND cons.owner = cols.owner ORDER BY cols.table_name, cols.position",
+            query_object_mssql.table_primary_key(schema=SCHEMA, table=TABLE),
+            query_object_oracle.table_primary_key(table=TABLE, user=USER),
         ]:
             return [("ids",)]
         elif self.query in [
-            "SELECT SCN_TO_TIMESTAMP(MAX(ora_rowscn)) from emp_table",
-            "SELECT last_user_update FROM sys.dm_db_index_usage_stats WHERE object_id=object_id('public.emp_table')",
+            query_object_mssql.table_last_update_time(schema=SCHEMA, table=TABLE),
+            query_object_oracle.table_last_update_time(table=TABLE),
         ]:
             return [("2023-02-21T08:37:15+00:00",)]
 
@@ -200,7 +200,7 @@ async def test_sync_connect_negative(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_execute_query_negative_for_internalclienterror(patch_logger):
+async def test_execute_query_negative_for_internal_client_error(patch_logger):
     """Test _execute_query method with negative case"""
     source = create_source(PostgreSQLDataSource)
     with patch.object(
@@ -213,7 +213,7 @@ async def test_execute_query_negative_for_internalclienterror(patch_logger):
 
         # Execute
         with pytest.raises(InternalClientError):
-            await anext(source.execute_query("PING"))
+            await anext(source.execute_query("select 1+1"))
 
 
 @pytest.mark.asyncio
@@ -234,14 +234,14 @@ async def test_fetch_documents_negative(patch_logger):
 
 @pytest.fixture
 def patch_default_wait_multiplier():
-    """Patch retry interval to 0"""
+    """Patch wait multiplier to 0"""
     with patch("connectors.sources.generic_database.DEFAULT_WAIT_MULTIPLIER", 0):
         yield
 
 
 @pytest.mark.asyncio
 async def test_execute_query_negative(patch_default_wait_multiplier):
-    """Test execute_query method with negative case"""
+    """Test execute_query method when server is unavailable"""
     source = create_source(OracleDataSource)
     with patch.object(
         OracleDataSource,
@@ -249,13 +249,12 @@ async def test_execute_query_negative(patch_default_wait_multiplier):
         side_effect=Exception("Something went wrong"),
     ):
         # Execute
-        with pytest.raises(Exception):
-            await anext(source.execute_query("PING"))
+        with pytest.raises(Exception, match="Something went wrong"):
+            await anext(source.execute_query("select 1+1 from dual"))
 
 
 @pytest.mark.asyncio
 async def test_ping(patch_logger):
-    """Test ping method of MSSQLDataSource class"""
     # Setup
     source = create_source(GenericBaseDataSource)
     source._create_engine = Mock()
@@ -268,7 +267,7 @@ async def test_ping(patch_logger):
 
 @pytest.mark.asyncio
 async def test_ping_negative(patch_logger):
-    """Test ping method of MSSQLDataSource class with negative case"""
+    """Test ping method of MSSQLDataSource class when connection is not established"""
     # Setup
     source = create_source(GenericBaseDataSource)
 
@@ -277,13 +276,15 @@ async def test_ping_negative(patch_logger):
         "execute_query",
         side_effect=Exception("Something went wrong"),
     ):
+        source.dialect = "Oracle"
         # Execute
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="Can't connect to Oracle on 127.0.0.1"):
             await source.ping()
 
 
 @pytest.mark.asyncio
 async def test_fetch_rows_with_zero_table():
+    """Test fetch_rows method when no tables found in schema/database"""
     # Setup
     source = create_source(GenericBaseDataSource)
     source._create_engine = Mock()
@@ -298,3 +299,46 @@ async def test_fetch_rows_with_zero_table():
     # Execute
     async for doc in source.fetch_rows(schema="public"):
         assert doc == []
+        with pytest.raises(Exception):
+            await anext(source.execute_query("select 1+1"))
+
+
+@pytest.mark.parametrize(
+    "tables, expected_tables",
+    [
+        ("", []),
+        ("table", ["table"]),
+        ("table_1, table_2", ["table_1", "table_2"]),
+        (["table_1", "table_2"], ["table_1", "table_2"]),
+        (["table_1", "table_2", ""], ["table_1", "table_2"]),
+    ],
+)
+def test_configured_tables(tables, expected_tables):
+    actual_tables = configured_tables(tables)
+
+    assert actual_tables == expected_tables
+
+
+@pytest.mark.parametrize("tables", ["*", ["*"]])
+@pytest.mark.asyncio
+async def test_get_tables_to_fetch_remote_tables(tables):
+    source = create_source(GenericBaseDataSource)
+    source.execute_query = AsyncIterator(["table"])
+    source.queries = MSSQLQueries()
+
+    await source.get_tables_to_fetch("schema")
+
+    assert (
+        source.queries.all_tables(schema="schema")
+        == source.execute_query.call_kwargs[0]["query"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_tables_to_fetch_configured_tables():
+    source = create_source(GenericBaseDataSource)
+    tables = ["table_1", "table_2"]
+    source.queries = MSSQLQueries()
+    source.tables = tables
+
+    assert tables == await source.get_tables_to_fetch("schema")
