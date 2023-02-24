@@ -135,9 +135,7 @@ ALL_SYNC_RULES_FEATURES_DISABLED = {
     }
 }
 
-NO_FEATURES_PRESENT = {
-    "features": {}
-}
+NO_FEATURES_PRESENT = {"features": {}}
 
 FAKE_CONFIG_FAIL_SERVICE = {
     "api_key_id": "",
