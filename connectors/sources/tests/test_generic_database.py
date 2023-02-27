@@ -215,22 +215,22 @@ async def test_get_docs_postgresql(patch_logger):
         actual_response = []
         expected_response = [
             {
-                "10_10_ids": 1,
-                "10_10_names": "abcd",
-                "_id": "xe_10_10_",
-                "_timestamp": "",
                 "Database": "xe",
                 "Table": 10,
-                "schema": 10,
+                "_id": "xe_public_10_",
+                "_timestamp": "",
+                "public_10_ids": 1,
+                "public_10_names": "abcd",
+                "schema": "public",
             },
             {
-                "10_10_ids": 2,
-                "10_10_names": "xyz",
-                "_id": "xe_10_10_",
-                "_timestamp": "",
                 "Database": "xe",
                 "Table": 10,
-                "schema": 10,
+                "_id": "xe_public_10_",
+                "_timestamp": "",
+                "public_10_ids": 2,
+                "public_10_names": "xyz",
+                "schema": "public",
             },
         ]
 
