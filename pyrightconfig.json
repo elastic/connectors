@@ -8,5 +8,11 @@
   "exclude": [
     "**/tests",
     "**/__pycache__"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "./",
+      "venv": "./"
+    }
   ]
 }
