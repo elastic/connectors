@@ -11,8 +11,6 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from connectors.sources.generic_database import GenericBaseDataSource
 
-# Below schemas are system schemas and the tables of the systems schema's will not get indexed
-SYSTEM_SCHEMA = ["pg_toast", "pg_catalog", "information_schema"]
 DEFAULT_SSL_DISABLED = True
 DEFAULT_SSL_CA = ""
 
@@ -23,7 +21,6 @@ QUERIES = {
     "TABLE_DATA": 'SELECT * FROM {schema}."{table}"',
     "TABLE_LAST_UPDATE_TIME": 'SELECT MAX(pg_xact_commit_timestamp(xmin)) FROM {schema}."{table}"',
     "TABLE_DATA_COUNT": 'SELECT COUNT(*) FROM {schema}."{table}"',
-    "ALL_SCHEMAS": "SELECT schema_name FROM information_schema.schemata",
 }
 
 
@@ -46,6 +43,7 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         self.queries = QUERIES
         self.is_async = True
         self.dialect = "Postgresql"
+        self.schema = self.configuration["schema"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -57,6 +55,7 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         postgresql_configuration = super().get_default_configuration().copy()
         postgresql_configuration.update(
             {
+                "schema": {"value": "public", "label": "Schema", "type": "str"},
                 "ssl_disabled": {
                     "value": DEFAULT_SSL_DISABLED,
                     "label": "SSL verification will be disabled or not",
@@ -107,8 +106,5 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        schema_list = await anext(self.execute_query(query_name="ALL_SCHEMAS"))
-        for [schema] in schema_list:
-            if schema not in SYSTEM_SCHEMA:
-                async for row in self.fetch_rows(schema=schema):
-                    yield row, None
+        async for row in self.fetch_rows(schema=self.schema):
+            yield row, None

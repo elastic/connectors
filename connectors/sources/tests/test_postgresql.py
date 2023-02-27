@@ -24,8 +24,6 @@ class MockSsl:
 
 @pytest.mark.asyncio
 async def test_ping(patch_logger):
-    """Test ping method of PostgreSQLDataSource class"""
-    # Setup
     source = create_source(PostgreSQLDataSource)
     source.execute_query = Mock(return_value=AsyncIterator(["table1", "table2"]))
 
@@ -35,8 +33,6 @@ async def test_ping(patch_logger):
 
 @pytest.mark.asyncio
 async def test_ping_negative(patch_logger):
-    """Test ping method of PostgreSQLDataSource class with negative case"""
-    # Setup
     source = create_source(PostgreSQLDataSource)
 
     with patch.object(
@@ -50,8 +46,6 @@ async def test_ping_negative(patch_logger):
 
 
 def test_get_connect_argss(patch_logger):
-    """This function test get_connect_args with dummy certificate"""
-    # Setup
     source = create_source(PostgreSQLDataSource)
     source.ssl_ca = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
 
