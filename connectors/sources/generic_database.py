@@ -46,7 +46,7 @@ def configured_tables(tables):
 
 
 def should_fetch_all_tables(tables):
-    return tables == ALL_TABLES or (isinstance(tables, list) and tables == [ALL_TABLES])
+    return tables in (ALL_TABLES, [ALL_TABLES])
 
 
 class GenericBaseDataSource(BaseDataSource):
