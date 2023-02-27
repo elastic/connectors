@@ -697,7 +697,7 @@ class Connector(ESDocument):
                 return
 
             logger.debug(f"Validating configuration for {data_provider}")
-            await data_provider.validate_configuration()
+            await data_provider.validate_config()
 
             logger.debug(f"Pinging the {data_provider} backend")
             await data_provider.ping()

@@ -58,7 +58,7 @@ class FakeSource:
             state=FilteringValidationState.VALID, errors=[]
         )
 
-    async def validate_configuration(self):
+    async def validate_config(self):
         if self.configuration_invalid:
             raise ValueError("I fail when validating configuration")
 
