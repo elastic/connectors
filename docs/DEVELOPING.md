@@ -367,10 +367,10 @@ Complete the following steps to deploy the connector:
 Collect the information that is required to connect to your PostgreSQL server:
 
 - The server host address where the PostgreSQL is hosted.
-- The port where the PostgreSQL server is hosted.
+- The port on which the PostgreSQL server runs.
 - The username the connector will use to log in to PostgreSQL.
 - The password the connector will use to log in to PostgreSQL.
-- Name of the database.
+- Name of the database to ingest data from.
 - SSL certificate if you want to establish secured connections.
 
 ℹ️ User needs to set `track_commit_timestamp` to `on` using `ALTER SYSTEM SET track_commit_timestamp = on;` query to fetch last updated time.
@@ -388,7 +388,7 @@ The server host address where the PostgreSQL is hosted. Default value is `127.0.
 
 ##### `port`
 
-The server port where PostgreSQL service is available. Default value is `9090`. Examples:
+The server port on which the PostgreSQL server runs on. Default value is `9090`. Examples:
 
   - `5432`
   - `9090`
@@ -403,14 +403,14 @@ The password of the account to be used for the PostgreSQL. Default value is `Pas
 
 ##### `database`
 
-Name of the PostgreSQL database. Default value is `xe`.
+Name of the PostgreSQL database. Default value is `xe`. Examples:
 
   - `employee_database`
   - `customer_database`
 
 ##### `tables`
 
-Comma-separated list of tables. For * in string connector will fetch data for all the Tables. Default value is `*`. Examples:
+Comma-separated list of tables. The PostgreSQL connector will fetch data from all tables present in the configured database, if the value is `*` . Default value is `*`. Examples:
 
   - `table_1, table_2`
   - `*`
