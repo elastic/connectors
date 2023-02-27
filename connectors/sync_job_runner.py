@@ -43,6 +43,7 @@ class SyncJobRunner:
         bulk_options,
     ):
         self.source_klass = source_klass
+        self.data_provider = None
         self.sync_job = sync_job
         self.job_id = self.sync_job.id
         self.connector = connector
@@ -62,8 +63,8 @@ class SyncJobRunner:
             raise JobClaimError
 
         try:
-            data_provider = self.source_klass(self.sync_job.configuration)
-            if not await data_provider.changed():
+            self.data_provider = self.source_klass(self.sync_job.configuration)
+            if not await self.data_provider.changed():
                 logger.debug(
                     f"No change in {self.sync_job.service_type} data provider, skipping..."
                 )
@@ -74,11 +75,11 @@ class SyncJobRunner:
                 f"Syncing '{self.sync_job.service_type}' for connector '{self.connector_id}'"
             )
             logger.debug(f"Pinging the {self.source_klass} backend")
-            await data_provider.ping()
+            await self.data_provider.ping()
 
             sync_rules_enabled = self.connector.features.sync_rules_enabled()
             if sync_rules_enabled:
-                await self.sync_job.validate_filtering(validator=data_provider)
+                await self.sync_job.validate_filtering(validator=self.data_provider)
 
             mappings = Mappings.default_text_fields_mappings(
                 is_connectors_index=True,
@@ -91,11 +92,11 @@ class SyncJobRunner:
 
             # allows the data provider to change the bulk options
             bulk_options = self.bulk_options.copy()
-            data_provider.tweak_bulk_options(bulk_options)
+            self.data_provider.tweak_bulk_options(bulk_options)
 
             result = await self.elastic_server.async_bulk(
                 self.sync_job.index_name,
-                self.prepare_docs(data_provider),
+                self.prepare_docs(),
                 self.sync_job.pipeline,
                 filter_=self.sync_job.filtering,
                 sync_rules_enabled=sync_rules_enabled,
@@ -112,8 +113,8 @@ class SyncJobRunner:
             await self._sync_done(sync_status=JobStatus.ERROR, result={}, sync_error=e)
         finally:
             self._start_time = None
-            if data_provider is not None:
-                await data_provider.close()
+            if self.data_provider is not None:
+                await self.data_provider.close()
 
     async def _sync_done(self, sync_status, result=None, sync_error=None):
         if result is None:
@@ -143,7 +144,7 @@ class SyncJobRunner:
         await self.connector.sync_done(self.sync_job)
         logger.info(
             f"[{self.job_id}] Sync done: {indexed_count} indexed, {doc_deleted} "
-            f" deleted. ({int(time.time() - self._start_time)} seconds)"
+            f" deleted. ({int(time.time() - self._start_time)} seconds)"  # pyright: ignore
         )
 
     async def _claim_job(self):
@@ -156,10 +157,10 @@ class SyncJobRunner:
             logger.critical(e, exc_info=True)
             return False
 
-    async def prepare_docs(self, data_provider):
+    async def prepare_docs(self):
         logger.debug(f"Using pipeline {self.sync_job.pipeline}")
 
-        async for doc, lazy_download in data_provider.get_docs(
+        async for doc, lazy_download in self.data_provider.get_docs(
             filtering=self.sync_job.filtering
         ):
             # adapt doc for pipeline settings
