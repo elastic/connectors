@@ -211,7 +211,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
                 # base64 on macOS will add a EOL, so we strip() here
                 document["_attachment"] = (await async_buffer.read()).strip()
-            await remove(temp_filename)
+            await remove(str(temp_filename))
         return document
 
     async def get_container(self):

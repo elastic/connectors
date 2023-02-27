@@ -171,7 +171,9 @@ class S3DataSource(BaseDataSource):
         Returns:
             list: List of buckets
         """
-        return [bucket["Name"] for bucket in self.bucket_list["Buckets"]]
+        return [
+            bucket["Name"] for bucket in self.bucket_list["Buckets"]  # pyright: ignore
+        ]
 
     async def get_docs(self, filtering=None):
         """Get documents from Amazon S3
@@ -183,7 +185,7 @@ class S3DataSource(BaseDataSource):
             dictionary: Document from Amazon S3.
         """
         bucket_list = self.buckets if self.buckets != ["*"] else self.get_bucket_list()
-        page_size = int(self.configuration.get("page_size", DEFAULT_PAGE_SIZE))
+        page_size = self.configuration["page_size"]
         for bucket in bucket_list:
             region_name = await self.get_bucket_region(bucket)
             async with self.session.resource(
