@@ -1,0 +1,12 @@
+{
+  "include": [
+    "connectors"
+  ],
+  "reportMissingImports": false,
+  "reportMissingModuleSource": false,
+  "reportOptionalMemberAccess": false,
+  "exclude": [
+    "**/tests",
+    "**/__pycache__"
+  ]
+}

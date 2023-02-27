@@ -412,7 +412,7 @@ class Connector(ESDocument):
     def last_seen(self):
         last_seen = self.get("last_seen")
         if last_seen is not None:
-            last_seen = datetime.fromisoformat(last_seen)
+            last_seen = datetime.fromisoformat(last_seen)  # pyright: ignore
         return last_seen
 
     @property
@@ -693,7 +693,7 @@ class Connector(ESDocument):
                 logger.debug(
                     f"No change in {self.service_type} data provider, skipping..."
                 )
-                self._sync_done(job, JobStatus.COMPLETED, {}, start_time)
+                await self._sync_done(job, JobStatus.COMPLETED, {}, start_time)
                 return
 
             logger.debug(f"Pinging the {data_provider} backend")
