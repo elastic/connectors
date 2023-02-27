@@ -367,10 +367,10 @@ Complete the following steps to deploy the connector:
 Collect the information that is required to connect to your Oracle:
 
 - The server host address where the Oracle is hosted.
-- The port where the Oracle server is hosted.
+- The port on which the Oracle server runs
 - The username the connector will use to log in to Oracle.
 - The password the connector will use to log in to Oracle.
-- The Oracle database name where the connector will crawl to fetch rows.
+- The Oracle database name to ingest data from.
 
 #### Configure Oracle connector
 
@@ -378,25 +378,25 @@ The following configuration fields need to be provided for setting up the connec
 
 ##### `host`
 
-The server host address where the Oracle is hosted. Default value is `127.0.0.1`. Examples:
+The server host address where the Oracle server is hosted. Default value is `127.0.0.1`. Examples:
 
   - `192.158.1.38`
   - `demo.instance.demo-region.demo.service.com`
 
 ##### `port`
 
-The server port where Oracle service is available. Default value is `9090`. i.e. For secured connection, user needs to pass SSL port.
+The server port where the Oracle server runs on. Default value is `9090`. i.e. For a secured connection, a user needs to configure a SSL port.
 
   - `5432`
   - `9090`
 
 ##### `user`
 
-The username of the account for Oracle. Default value is `admin`. Examples:
+The username of the account for Oracle. Default value is `admin`.
 
 ##### `password`
 
-The password of the account to be used for the Oracle. Default value is `Password_123`.
+The password of the account to be used for the Oracle server. Default value is `Password_123`.
 
 ##### `database`
 
@@ -407,7 +407,7 @@ Name of the Oracle database. Default value is `xe`. Examples:
 
 ##### `tables`
 
-Comma-separated list of tables. For * in string connector will fetch data for all the Tables. Default value is `*`. Examples:
+Comma-separated list of tables. The Oracle connector will fetch data from all tables present in the configured database, if the value is `*` . Default value is `*`. Examples:
 
   - `table_1, table_2`
   - `*`
@@ -422,19 +422,19 @@ The number of retry attempts after failed call to Oracle. Default value is `3`.
 
 ##### `oracle_protocol`
 
-Protocol which connector use to established connection. Default value is `TCP`. i.e. For secured connection, user needs to pass `TCPS`.
+Protocol which the connector uses to establish a connection. Default value is `TCP`. i.e. For a secured connection, a user needs to pass `TCPS`.
 
 ##### `oracle_home`
 
-Path of the Oracle home directory to run  connector with thick mode for secured connection. Default value is `None`.
+Path of the Oracle home directory to run connector with thick mode for secured connection. Default value is `None`.
 
 ##### `wallet_configuration_path`
 
 Path of the directory where oracle configuration files are present. Only applicable while configuration files are not at default location. Default value is `None`.
 
 ### Setup for a secured connection with Oracle
- - User needs to install Oracle service in system where connector is running.
- - Set the `oracle_home` parameter to the location of your Oracle home directory, If configuration files are not at default location set `wallet_configuration_path` parameter.
+ - User needs to install the Oracle service on the system where the connector is running.
+ - Set the `oracle_home` parameter to the location of your Oracle home directory, if configuration files are not at default location set `wallet_configuration_path` parameter.
   - Now create a directory to store the wallet.
 ```shell
 $ mkdir $ORACLE_HOME/ssl_wallet
@@ -461,7 +461,7 @@ Replace the file name with your file.
 ### Connector Limitations
 
 - If the value of the table's system change number (SCN) is not between the `min(SCN)` and `max(SCN)` values of the `SMON_SCN_TIME` table, the connector will not be able to retrieve the most recently updated time, and data will index in every sync. For more details check out the following [documentation](https://community.oracle.com/tech/apps-infra/discussion/4076446/show-error-about-ora-08181-specified-number-is-not-a-valid-system-change-number-when-using-scn-t).
-- The Oracle database connector does not allow sys user as it contains 1000+ system tables which are irrelevant for users. If the user is working with `sys` user, the user needs to pass either `sysdba` or `sysoper` mode.
+- The Oracle database connector does not allow the `sys` user as it contains 1000+ system tables which are irrelevant for users. If the user is working with `sys` user, the user needs to pass either `sysdba` or `sysoper` mode.
 - Permission are not synced. **All documents** indexed to an Elastic deployment will be visible to all the users having access to that Elastic Deployment.
 - Filtering rules are not available in the present version. Currently, the filtering is controlled via ingest pipelines.
 
