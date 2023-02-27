@@ -31,8 +31,6 @@ services:
     ports:
       - "445:445/tcp"
     restart: unless-stopped
-    volumes:
-      - /tmp/mnt:/mnt:z
     command: '-s "Folder1;/mnt;yes;no;yes;admin" -u "admin;abc@123" -p'
 
 
