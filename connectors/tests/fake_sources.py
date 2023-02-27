@@ -61,7 +61,6 @@ class FakeSource:
     async def validate_configuration(self):
         if self.configuration_invalid:
             raise ValueError("I fail when validating configuration")
-        pass
 
     def tweak_bulk_options(self, options):
         pass
