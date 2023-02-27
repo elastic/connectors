@@ -10,7 +10,6 @@ Event loop
 - instantiates connector plugins
 - mirrors an Elasticsearch index with a collection of documents
 """
-import asyncio
 import functools
 
 from connectors.byoc import (
@@ -110,8 +109,6 @@ class SyncService(BaseService):
                 connector.sync, self.sync_job_index, source_klass, es, self.bulk_options
             )
         )
-
-        await asyncio.sleep(0)
 
     async def _run(self):
         """Main event loop."""
