@@ -675,53 +675,26 @@ class Connector(ESDocument):
         return result["count"]
 
     # TODO: Part of this method will be moved to SyncService once it's refactored, and the rest will be moved to the new SyncJobRunner class.
-    async def sync(
-        self, sync_job_index, source_klass, elastic_server, idling, bulk_options
-    ):
-        # If anything bad happens before we create a sync job
-        # (like bad scheduling config, etc.)
-        #
-        # we will raise the error in the logs here and let Kibana knows
-        # by toggling the status and setting the error and status field
-        if source_klass is None:
-            raise Exception("Can't call `sync()` before `prepare()`")
-
+    async def sync(self, sync_job_index, source_klass, elastic_server, bulk_options):
         try:
-            service_type = self.service_type
-            next_sync = self.next_sync()
-            # First we check if sync is disabled, and it terminates all other conditions
-            if next_sync == SYNC_DISABLED:
-                logger.debug(f"Scheduling is disabled for {service_type}")
-                return
-            # Then we check if we need to restart SUSPENDED job
-            elif self.last_sync_status == JobStatus.SUSPENDED:
-                logger.info("Restarting sync after suspension")
-            # And only then we check if we need to run sync right now or not
-            elif next_sync - idling > 0:
-                logger.debug(
-                    f"Next sync for {service_type} due in {int(next_sync)} seconds"
-                )
-                return
+            data_provider = source_klass(self.configuration)
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+            raise DataSourceError(
+                f"Could not instantiate {source_klass} for {self.service_type}"
+            )
 
-            try:
-                data_provider = source_klass(self.configuration)
-            except Exception as e:
-                logger.critical(e, exc_info=True)
-                raise DataSourceError(
-                    f"Could not instantiate {source_klass} for {service_type}"
-                )
-
-            if not await data_provider.changed():
-                logger.debug(f"No change in {service_type} data provider, skipping...")
-                return
-        except Exception as exc:
-            await self.error(str(exc))
-            raise
-
-        logger.debug(f"Syncing '{service_type}'")
+        logger.debug(f"Syncing '{self.service_type}'")
         job = await self._sync_starts(sync_job_index)
         start_time = time.time()
         try:
+            if not await data_provider.changed():
+                logger.debug(
+                    f"No change in {self.service_type} data provider, skipping..."
+                )
+                self._sync_done(job, JobStatus.COMPLETED, {}, start_time)
+                return
+
             logger.debug(f"Pinging the {data_provider} backend")
             await data_provider.ping()
             await asyncio.sleep(0)
