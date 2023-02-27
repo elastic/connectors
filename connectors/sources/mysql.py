@@ -14,11 +14,7 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.sources.generic_database import (
-    WILDCARD,
-    configured_tables,
-    is_wildcard,
-)
+from connectors.sources.generic_database import WILDCARD, configured_tables, is_wildcard
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
 MAX_POOL_SIZE = 10
