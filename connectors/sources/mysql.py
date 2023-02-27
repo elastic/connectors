@@ -15,9 +15,9 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.sources.generic_database import (
-    ALL_TABLES,
+    WILDCARD,
     configured_tables,
-    should_fetch_all_tables,
+    is_wildcard,
 )
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
@@ -135,7 +135,7 @@ class MySqlDataSource(BaseDataSource):
                 "type": "str",
             },
             "tables": {
-                "value": ALL_TABLES,
+                "value": WILDCARD,
                 "label": "Comma-separated list of tables",
                 "type": "list",
             },
@@ -446,6 +446,6 @@ class MySqlDataSource(BaseDataSource):
 
         return (
             map(lambda table: table_name(table), await self.fetch_all_tables())
-            if should_fetch_all_tables(tables)
+            if is_wildcard(tables)
             else tables
         )

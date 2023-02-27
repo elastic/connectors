@@ -17,7 +17,7 @@ from connectors.source import DataSourceConfiguration
 from connectors.sources.generic_database import (
     GenericBaseDataSource,
     configured_tables,
-    should_fetch_all_tables,
+    is_wildcard,
 )
 from connectors.sources.oracle import OracleDataSource
 from connectors.sources.postgresql import PostgreSQLDataSource
@@ -404,5 +404,5 @@ async def test_get_tables_to_fetch_configured_tables():
 
 
 @pytest.mark.parametrize("tables", ["*", ["*"]])
-def test_should_fetch_all_tables(tables):
-    assert should_fetch_all_tables(tables)
+def test_is_wildcard(tables):
+    assert is_wildcard(tables)

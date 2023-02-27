@@ -13,7 +13,7 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import iso_utc
 
-ALL_TABLES = "*"
+WILDCARD = "*"
 
 DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
@@ -45,8 +45,8 @@ def configured_tables(tables):
     )
 
 
-def should_fetch_all_tables(tables):
-    return tables in (ALL_TABLES, [ALL_TABLES])
+def is_wildcard(tables):
+    return tables in (WILDCARD, [WILDCARD])
 
 
 class GenericBaseDataSource(BaseDataSource):
@@ -110,7 +110,7 @@ class GenericBaseDataSource(BaseDataSource):
                 "type": "str",
             },
             "tables": {
-                "value": ALL_TABLES,
+                "value": WILDCARD,
                 "label": "Comma-separated list of tables",
                 "type": "list",
             },
@@ -425,6 +425,6 @@ class GenericBaseDataSource(BaseDataSource):
                     )
                 ),
             )
-            if should_fetch_all_tables(tables)
+            if is_wildcard(tables)
             else tables
         )
