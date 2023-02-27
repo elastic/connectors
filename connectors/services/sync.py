@@ -10,7 +10,6 @@ Event loop
 - instantiates connector plugins
 - mirrors an Elasticsearch index with a collection of documents
 """
-import asyncio
 import functools
 
 from connectors.byoc import (
@@ -37,13 +36,13 @@ class SyncService(BaseService):
     def __init__(self, config):
         super().__init__(config)
         self.idling = self.service_config["idling"]
-        self.hb = self.service_config["heartbeat"]
+        self.heartbeat_interval = self.service_config["heartbeat"]
         self.concurrent_syncs = self.service_config.get(
             "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
         )
         self.bulk_options = self.es_config.get("bulk", {})
         self.source_klass_dict = get_source_klass_dict(config)
-        self.connectors = None
+        self.connector_index = None
         self.sync_job_index = None
         self.syncs = None
 
@@ -52,7 +51,7 @@ class SyncService(BaseService):
         if self.syncs is not None:
             self.syncs.cancel()
 
-    async def _one_sync(self, connector, es):
+    async def _sync(self, connector, es):
         if self.running is False:
             logger.debug(
                 f"Skipping run for {connector.id} because service is terminating"
@@ -78,11 +77,10 @@ class SyncService(BaseService):
         except DataSourceError as e:
             await connector.error(e)
             logger.critical(e, exc_info=True)
-            self.raise_if_spurious(e)
-            return
+            raise
 
         # the heartbeat is always triggered
-        await connector.heartbeat(self.hb)
+        await connector.heartbeat(self.heartbeat_interval)
 
         logger.debug(f"Connector status is {connector.status}")
 
@@ -106,18 +104,15 @@ class SyncService(BaseService):
         if not await self._should_sync(connector):
             return
 
-        await connector.sync(
-            self.sync_job_index,
-            source_klass,
-            es,
-            self.bulk_options,
+        await self.syncs.put(
+            functools.partial(
+                connector.sync, self.sync_job_index, source_klass, es, self.bulk_options
+            )
         )
-
-        await asyncio.sleep(0)
 
     async def _run(self):
         """Main event loop."""
-        self.connectors = ConnectorIndex(self.es_config)
+        self.connector_index = ConnectorIndex(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
 
         native_service_types = self.config.get("native_service_types", [])
@@ -143,13 +138,11 @@ class SyncService(BaseService):
 
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
-                    async for connector in self.connectors.supported_connectors(
+                    async for connector in self.connector_index.supported_connectors(
                         native_service_types=native_service_types,
                         connector_ids=connector_ids,
                     ):
-                        await self.syncs.put(
-                            functools.partial(self._one_sync, connector, es)
-                        )
+                        await self._sync(connector, es)
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
@@ -162,9 +155,9 @@ class SyncService(BaseService):
                     break
                 await self._sleeps.sleep(self.idling)
         finally:
-            if self.connectors is not None:
-                self.connectors.stop_waiting()
-                await self.connectors.close()
+            if self.connector_index is not None:
+                self.connector_index.stop_waiting()
+                await self.connector_index.close()
             if self.sync_job_index is not None:
                 self.sync_job_index.stop_waiting()
                 await self.sync_job_index.close()
