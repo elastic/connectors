@@ -20,6 +20,31 @@ from connectors.filtering.validation import (
 )
 
 
+class ConfigurationFieldMissingError(ValueError):
+    pass
+
+
+class ConfigurationFieldEmptyError(ValueError):
+    pass
+
+
+class ConfigurationFieldTypeError(ValueError):
+    pass
+
+
+class ConfigurationValueError(ValueError):
+    pass
+
+
+def validate_non_empty_config_fields(expected_fields, configuration):
+    any_field_is_empty, empty_fields = configuration.any_field_is_empty(expected_fields)
+
+    if any_field_is_empty:
+        raise ConfigurationFieldEmptyError(
+            f"Configurable fields '{empty_fields}' can't be empty."
+        )
+
+
 class Field:
     def __init__(self, name, label=None, value="", type="str"):
         if label is None:
@@ -38,6 +63,13 @@ class Field:
         self._type = value
         self.value = self._convert(self.value, self._type)
 
+    def is_empty(self):
+        return (
+            self.value is None
+            or (isinstance(self.value, list) and len(self.value) == 0)
+            or len(str(self.value)) == 0
+        )
+
     def _convert(self, value, type_):
         if not isinstance(value, str):
             # we won't convert the value if it's not a str
@@ -50,7 +82,12 @@ class Field:
         elif type_ == "bool":
             return value.lower() in ("y", "yes", "true", "1")
         elif type_ == "list":
-            return [item.strip() for item in value.split(",")]
+            return list(
+                filter(
+                    lambda item: len(item) > 0,
+                    [item.strip() for item in value.split(",")],
+                )
+            )
         return value
 
 
@@ -91,6 +128,14 @@ class DataSourceConfiguration:
 
     def has_field(self, name):
         return name in self._config
+
+    def any_field_is_empty(self, names):
+        if any(not self.has_field(name) for name in names):
+            raise ConfigurationFieldMissingError
+
+        empty_fields = list(filter(lambda name: self._config[name].is_empty(), names))
+
+        return len(empty_fields) > 0, empty_fields
 
     def set_field(self, name, label=None, value="", type="str"):
         self._config[name] = Field(name, label, value, type)

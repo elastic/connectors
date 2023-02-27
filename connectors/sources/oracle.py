@@ -9,7 +9,11 @@ from urllib.parse import quote
 
 from sqlalchemy import create_engine
 
-from connectors.sources.generic_database import GenericBaseDataSource
+from connectors.source import validate_non_empty_config_fields
+from connectors.sources.generic_database import (
+    GenericBaseDataSource,
+    validate_db_connection_fields,
+)
 
 QUERIES = {
     "PING": "SELECT 1+1 FROM DUAL",
@@ -47,6 +51,10 @@ class OracleDataSource(GenericBaseDataSource):
         )
         self.queries = QUERIES
         self.dialect = "Oracle"
+
+    def _validate_configuration(self):
+        validate_db_connection_fields(self.configuration)
+        validate_non_empty_config_fields(["database", "tables"], self.configuration)
 
     @classmethod
     def get_default_configuration(cls):

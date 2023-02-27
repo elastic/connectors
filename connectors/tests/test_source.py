@@ -17,11 +17,14 @@ from connectors.filtering.validation import (
 )
 from connectors.source import (
     BaseDataSource,
+    ConfigurationFieldEmptyError,
+    ConfigurationFieldMissingError,
     DataSourceConfiguration,
     Field,
     get_source_klass,
     get_source_klass_dict,
     get_source_klasses,
+    validate_non_empty_config_fields,
 )
 
 CONFIG = {
@@ -249,3 +252,45 @@ async def test_serialize(raw_doc, expected_doc):
 
         for serialized_doc_key, expected_doc_key in zip(serialized_doc, expected_doc):
             assert serialized_doc[serialized_doc_key] == expected_doc[expected_doc_key]
+
+
+@pytest.mark.parametrize(
+    "config, names, expected_any_field_is_empty, expected_empty_fields",
+    [
+        ({"field_one": "value_one"}, [], False, []),
+        ({"field_one": "value_one"}, ["field_one"], False, []),
+        ({"field_one": ""}, ["field_one"], True, ["field_one"]),
+    ],
+)
+def test_any_field_is_empty(
+    config, names, expected_any_field_is_empty, expected_empty_fields
+):
+    any_field_is_empty, actual_empty_fields = DataSourceConfiguration(
+        config
+    ).any_field_is_empty(names)
+
+    assert any_field_is_empty == expected_any_field_is_empty
+    assert actual_empty_fields == expected_empty_fields
+
+
+def test_fields_any_field_is_empty_raises_on_missing_field():
+    config = DataSourceConfiguration({"field_one": "value_one"})
+
+    with pytest.raises(ConfigurationFieldMissingError):
+        config.any_field_is_empty("field_two")
+
+
+def test_validate_non_empty_config_fields_raise_error():
+    with pytest.raises(ConfigurationFieldEmptyError):
+        validate_non_empty_config_fields(
+            ["field_one"], DataSourceConfiguration({"field_one": ""})
+        )
+
+
+def test_validate_non_empty_config_fields_no_error():
+    try:
+        validate_non_empty_config_fields(
+            ["field_one"], DataSourceConfiguration({"field_one": "value_one"})
+        )
+    except ConfigurationFieldEmptyError:
+        raise AssertionError(f"Unexpected {type(ConfigurationFieldEmptyError)}")

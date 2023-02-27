@@ -6,10 +6,9 @@
 from connectors.source import DataSourceConfiguration
 
 
-def create_source(klass, **extras):
-    config = klass.get_default_configuration()
-    for k, v in extras.items():
-        config[k] = {"value": v}
+def create_source(klass, config=None):
+    if config is None:
+        config = klass.get_default_configuration()
 
     return klass(configuration=DataSourceConfiguration(config))
 

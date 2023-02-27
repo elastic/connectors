@@ -13,8 +13,17 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
-from connectors.source import DataSourceConfiguration
-from connectors.sources.generic_database import GenericBaseDataSource, configured_tables
+from connectors.source import (
+    ConfigurationFieldEmptyError,
+    ConfigurationFieldMissingError,
+    ConfigurationFieldTypeError,
+    DataSourceConfiguration,
+)
+from connectors.sources.generic_database import (
+    GenericBaseDataSource,
+    configured_tables,
+    validate_db_connection_fields,
+)
 from connectors.sources.oracle import OracleDataSource
 from connectors.sources.postgresql import PostgreSQLDataSource
 from connectors.sources.tests.support import create_source
@@ -170,28 +179,6 @@ def test_get_configuration(patch_logger):
 
     # Assert
     assert config["host"] == "127.0.0.1"
-
-
-def test_validate_configuration_missing_fields(patch_logger):
-    """Test _validate_configuration method check missing fields"""
-    # Setup
-    source = create_source(GenericBaseDataSource)
-    with pytest.raises(Exception):
-        source.configuration.set_field(name="host", value="")
-
-        # Execute
-        source._validate_configuration()
-
-
-def test_validate_configuration_port(patch_logger):
-    """Test _validate_configuration method check port"""
-    # Setup
-    source = create_source(GenericBaseDataSource)
-    with pytest.raises(Exception):
-        source.configuration.set_field(name="port", value="abcd")
-
-        # Execute
-        source._validate_configuration()
 
 
 def test_validate_configuration_ssl(patch_logger):
@@ -397,3 +384,106 @@ async def test_get_tables_to_fetch_configured_tables():
     source.tables = tables
 
     assert tables == await source.get_tables_to_fetch("schema")
+
+
+@pytest.mark.parametrize(
+    "config, expect_error",
+    [
+        (
+            {"host": "host", "port": "42", "user": "user", "password": "password"},
+            (False, None),
+        ),
+        (
+            # host missing
+            {"port": "42", "user": "user", "password": "password"},
+            (True, ConfigurationFieldMissingError),
+        ),
+        (
+            # port missing
+            {"host": "host", "user": "user", "password": "password"},
+            (True, ConfigurationFieldMissingError),
+        ),
+        (
+            # user missing
+            {"host": "host", "port": "42", "password": "password"},
+            (True, ConfigurationFieldMissingError),
+        ),
+        (
+            # password missing
+            {"host": "host", "port": "42", "user": "user"},
+            (True, ConfigurationFieldMissingError),
+        ),
+        (
+            {
+                # host empty
+                "host": "",
+                "port": "42",
+                "user": "user",
+                "password": "password",
+            },
+            (True, ConfigurationFieldEmptyError),
+        ),
+        (
+            {
+                # host empty
+                "host": "",
+                "port": "42",
+                "user": "user",
+                "password": "password",
+            },
+            (True, ConfigurationFieldEmptyError),
+        ),
+        (
+            {
+                # port empty
+                "host": "host",
+                "port": "",
+                "user": "user",
+                "password": "password",
+            },
+            (True, ConfigurationFieldEmptyError),
+        ),
+        (
+            {
+                # user empty
+                "host": "host",
+                "port": "42",
+                "user": "",
+                "password": "password",
+            },
+            (True, ConfigurationFieldEmptyError),
+        ),
+        (
+            {
+                # password empty
+                "host": "",
+                "port": "42",
+                "user": "user",
+                "password": "",
+            },
+            (True, ConfigurationFieldEmptyError),
+        ),
+        (
+            {
+                # port has wrong type
+                "host": "host",
+                "port": "abc",
+                "user": "user",
+                "password": "password",
+            },
+            (True, ConfigurationFieldTypeError),
+        ),
+    ],
+)
+def test_validate_db_connection_fields(config, expect_error):
+    should_raise, expected_error_type = expect_error
+    data_source_config = DataSourceConfiguration(config)
+
+    if should_raise:
+        with pytest.raises(expected_error_type):
+            validate_db_connection_fields(data_source_config)
+    else:
+        try:
+            validate_db_connection_fields(data_source_config)
+        except Exception as e:
+            raise AssertionError(f"Raised unexpectedly: {e}")

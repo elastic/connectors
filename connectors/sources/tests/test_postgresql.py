@@ -9,6 +9,11 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from connectors.source import (
+    ConfigurationFieldEmptyError,
+    ConfigurationFieldMissingError,
+    ConfigurationValueError,
+)
 from connectors.sources.postgresql import PostgreSQLDataSource
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
@@ -58,3 +63,64 @@ def test_get_connect_argss(patch_logger):
     # Execute
     with patch.object(ssl, "create_default_context", return_value=MockSsl()):
         source.get_connect_args()
+
+
+@pytest.mark.parametrize(
+    "config, expect_error",
+    [
+        (
+            {
+                "database": "database",
+                "tables": "tables",
+                "ssl_disabled": False,
+                "ssl_ca": "certificate",
+            },
+            (False, None),
+        ),
+        (
+            # database missing
+            {"tables": "tables"},
+            (True, ConfigurationFieldMissingError),
+        ),
+        (
+            # tables missing
+            {"database": "database"},
+            (True, ConfigurationFieldMissingError),
+        ),
+        (
+            # database empty
+            {"database": "", "tables": "tables"},
+            (True, ConfigurationFieldEmptyError),
+        ),
+        (
+            # tables empty
+            {"database": "database", "tables": ""},
+            (True, ConfigurationFieldEmptyError),
+        ),
+        (
+            # SSL enabled, but certificate empty
+            {
+                "database": "database",
+                "tables": "tables",
+                "ssl_disabled": False,
+                "ssl_ca": "",
+            },
+            (True, ConfigurationValueError),
+        ),
+    ],
+)
+def test_validate_configuration(config, expect_error):
+    # merge with db connection config
+    config |= {"host": "host", "port": 42, "user": "user", "password": "password"}
+
+    should_raise, expected_error_type = expect_error
+    source = create_source(PostgreSQLDataSource, config)
+
+    if should_raise:
+        with pytest.raises(expected_error_type):
+            source._validate_configuration()
+    else:
+        try:
+            source._validate_configuration()
+        except Exception as e:
+            raise AssertionError(f"Raised unexpectedly: {e}")

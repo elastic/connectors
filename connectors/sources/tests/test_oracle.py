@@ -8,6 +8,10 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from connectors.source import (
+    ConfigurationFieldEmptyError,
+    ConfigurationFieldMissingError,
+)
 from connectors.sources.oracle import OracleDataSource
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
@@ -69,3 +73,46 @@ async def test_create_engine_in_thin_mode(mock_fun):
 
     # Assert
     mock_fun.assert_called_with(DSN)
+
+
+@pytest.mark.parametrize(
+    "config, expect_error",
+    [
+        ({"database": "database", "tables": "tables"}, (False, None)),
+        (
+            # database missing
+            {"tables": "tables"},
+            (True, ConfigurationFieldMissingError),
+        ),
+        (
+            # tables missing
+            {"database": "database"},
+            (True, ConfigurationFieldMissingError),
+        ),
+        (
+            # database empty
+            {"database": "", "tables": "tables"},
+            (True, ConfigurationFieldEmptyError),
+        ),
+        (
+            # tables empty
+            {"database": "database", "tables": ""},
+            (True, ConfigurationFieldEmptyError),
+        ),
+    ],
+)
+def test_validate_configuration(config, expect_error):
+    # merge with db connection config
+    config |= {"host": "host", "port": 42, "user": "user", "password": "password"}
+
+    should_raise, expected_error_type = expect_error
+    source = create_source(OracleDataSource, config)
+
+    if should_raise:
+        with pytest.raises(expected_error_type):
+            source._validate_configuration()
+    else:
+        try:
+            source._validate_configuration()
+        except Exception as e:
+            raise AssertionError(f"Raised unexpectedly: {e}")

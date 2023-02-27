@@ -9,7 +9,11 @@ from urllib.parse import quote
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from connectors.sources.generic_database import GenericBaseDataSource
+from connectors.source import ConfigurationValueError, validate_non_empty_config_fields
+from connectors.sources.generic_database import (
+    GenericBaseDataSource,
+    validate_db_connection_fields,
+)
 
 # Below schemas are system schemas and the tables of the systems schema's will not get indexed
 SYSTEM_SCHEMA = ["pg_toast", "pg_catalog", "information_schema"]
@@ -46,6 +50,17 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         self.queries = QUERIES
         self.is_async = True
         self.dialect = "Postgresql"
+
+    def _validate_configuration(self):
+        validate_db_connection_fields(self.configuration)
+        # TODO: add schema, when https://github.com/elastic/connectors-python/pull/559 is merged
+        validate_non_empty_config_fields(["database", "tables"], self.configuration)
+
+        if (
+            not self.configuration["ssl_disabled"]
+            and len(self.configuration["ssl_ca"]) == 0
+        ):
+            raise ConfigurationValueError("SSL certificate must be configured.")
 
     @classmethod
     def get_default_configuration(cls):

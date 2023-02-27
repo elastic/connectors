@@ -10,7 +10,11 @@ from asyncpg.exceptions._base import InternalClientError
 from sqlalchemy import text
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import (
+    BaseDataSource,
+    ConfigurationFieldTypeError,
+    validate_non_empty_config_fields,
+)
 from connectors.utils import iso_utc
 
 ALL_TABLES = "*"
@@ -34,6 +38,33 @@ def configured_tables(tables):
         if isinstance(tables, str)
         else list(filter(lambda table: table_filter(table), tables))
     )
+
+
+def validate_db_connection_fields(configuration):
+    """Validate that common database connection parameters are present, non-empty and have the correct types.
+
+    Common database connection parameters:
+        - `host`
+        - `port`
+        - `user`
+        - `password`
+
+    Raises:
+        `ConfigurationFieldMissingError`, if a field is not present
+        `ConfigurationFieldEmptyError`, if a field is empty
+        `ConfigurationFieldTypeError`, if `port` has the wrong type
+    """
+
+    db_server_connection_fields = ["host", "port", "user", "password"]
+
+    validate_non_empty_config_fields(db_server_connection_fields, configuration)
+
+    port = configuration["port"]
+
+    if isinstance(port, str) and not port.isnumeric():
+        raise ConfigurationFieldTypeError(
+            f"Configured port {port} has to be an integer."
+        )
 
 
 class GenericBaseDataSource(BaseDataSource):
@@ -113,31 +144,9 @@ class GenericBaseDataSource(BaseDataSource):
             },
         }
 
+    # TODO: remove, when https://github.com/elastic/connectors-python/pull/552 is merged
     def _validate_configuration(self):
-        """Validates the configuration parameters
-
-        Raises:
-            Exception: Configured keys can't be empty
-        """
-        connection_fields = ["host", "port", "user", "password", "database", "tables"]
-
-        if empty_connection_fields := [
-            field for field in connection_fields if self.configuration[field] == ""
-        ]:
-            raise Exception(
-                f"Configured keys: {empty_connection_fields} can't be empty."
-            )
-
-        if (
-            isinstance(self.configuration["port"], str)
-            and not self.configuration["port"].isnumeric()
-        ):
-            raise Exception("Configured port has to be an integer.")
-
-        if self.dialect == "Postgresql" and not (
-            self.configuration["ssl_disabled"] or self.configuration["ssl_ca"]
-        ):
-            raise Exception("SSL certificate must be configured.")
+        raise NotImplementedError
 
     async def execute_query(self, query_name, fetch_many=False, **query_kwargs):
         """Executes a query and yield rows
