@@ -82,12 +82,7 @@ class Field:
         elif type_ == "bool":
             return value.lower() in ("y", "yes", "true", "1")
         elif type_ == "list":
-            return list(
-                filter(
-                    lambda item: len(item) > 0,
-                    [item.strip() for item in value.split(",")],
-                )
-            )
+            return [item.strip() for item in value.split(",") if len(item.strip()) > 0]
         return value
 
 
@@ -133,7 +128,7 @@ class DataSourceConfiguration:
         if any(not self.has_field(name) for name in names):
             raise ConfigurationFieldMissingError
 
-        empty_fields = list(filter(lambda name: self._config[name].is_empty(), names))
+        empty_fields = [name for name in names if self._config[name].is_empty()]
 
         return len(empty_fields) > 0, empty_fields
 
