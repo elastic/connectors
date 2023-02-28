@@ -243,8 +243,7 @@ class MySqlDataSource(BaseDataSource):
 
         query_kwargs["database"] = self.database
         formatted_query = query.format(**query_kwargs)
-        size = int(self.configuration.get("fetch_size", DEFAULT_FETCH_SIZE))
-
+        size = self.configuration["fetch_size"]
         retry = 1
         yield_once = True
 
@@ -308,7 +307,7 @@ class MySqlDataSource(BaseDataSource):
     async def fetch_tables(self):
         return await anext(self._connect(query=QUERIES["ALL_TABLE"]))
 
-    async def fetch_rows_for_table(self, table=None, query=None):
+    async def fetch_rows_for_table(self, table=None, query=QUERIES["TABLE_DATA"]):
         """Fetches all the rows from all the tables of the database.
 
         Args:
@@ -318,8 +317,7 @@ class MySqlDataSource(BaseDataSource):
         Yields:
             Dict: Row document to index
         """
-
-        if table:
+        if table is not None:
             async for row in self.fetch_documents(table=table, query=query):
                 yield row
         else:

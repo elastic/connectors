@@ -412,7 +412,7 @@ class Connector(ESDocument):
     def last_seen(self):
         last_seen = self.get("last_seen")
         if last_seen is not None:
-            last_seen = datetime.fromisoformat(last_seen)
+            last_seen = datetime.fromisoformat(last_seen)  # pyright: ignore
         return last_seen
 
     @property
@@ -591,6 +591,8 @@ class Connector(ESDocument):
         populate the service type and then sets the default configuration.
         """
         configured_connector_id = config.get("connector_id", "")
+        configured_service_type = config.get("service_type", "")
+
         if self.id != configured_connector_id:
             return
 
@@ -599,7 +601,6 @@ class Connector(ESDocument):
 
         doc = {}
         if self.service_type is None:
-            configured_service_type = config.get("service_type", "")
             if not configured_service_type:
                 logger.error(
                     f"Service type is not configured for connector {configured_connector_id}"
@@ -692,7 +693,7 @@ class Connector(ESDocument):
                 logger.debug(
                     f"No change in {self.service_type} data provider, skipping..."
                 )
-                self._sync_done(job, JobStatus.COMPLETED, {}, start_time)
+                await self._sync_done(job, JobStatus.COMPLETED, {}, start_time)
                 return
 
             logger.debug(f"Pinging the {data_provider} backend")

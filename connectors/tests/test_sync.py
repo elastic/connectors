@@ -128,12 +128,14 @@ FAIL_FILTERING_ERRORS_PRESENT_CONFIG = copy.deepcopy(FAKE_CONFIG)
 FAIL_FILTERING_ERRORS_PRESENT_CONFIG["service_type"] = "filtering_errors_present"
 
 ALL_SYNC_RULES_FEATURES_DISABLED = {
-    "sync_rules": {"advanced": {"enabled": False}, "basic": {"enabled": False}},
-    "filtering_advanced_config": False,
-    "filtering_rules": False,
+    "features": {
+        "sync_rules": {"advanced": {"enabled": False}, "basic": {"enabled": False}},
+        "filtering_advanced_config": False,
+        "filtering_rules": False,
+    }
 }
 
-NO_FEATURES_PRESENT = {}
+NO_FEATURES_PRESENT = {"features": {}}
 
 FAKE_CONFIG_FAIL_SERVICE = {
     "api_key_id": "",
@@ -225,6 +227,7 @@ def create_service(config_file):
     config = load_config(config_file)
     service = SyncService(config)
     service.idling = 0
+    service.service_config["max_errors"] = 0
 
     return service
 
@@ -638,8 +641,9 @@ async def test_connector_service_filtering(
     )
 
     if should_raise_filtering_error:
-        await create_and_run_service(CONFIG_FILE)
-        patch_logger.assert_check(lambda log: isinstance(log, InvalidFilteringError))
+        with pytest.raises(InvalidFilteringError) as e:
+            await create_and_run_service(CONFIG_FILE)
+        assert e is not None
     else:
         try:
             await create_and_run_service(CONFIG_FILE)
@@ -665,13 +669,11 @@ async def test_connector_service_poll_buggy_service(
         mock_responses, [FAKE_CONFIG_BUGGY_SERVICE], connectors_update=connectors_update
     )
 
-    await create_and_run_service(CONFIG_FILE)
+    with pytest.raises(DataSourceError) as e:
+        await create_and_run_service(CONFIG_FILE)
 
-    for log in patch_logger.logs:
-        if isinstance(log, DataSourceError):
-            return
-
-    raise AssertionError
+    if e is None:
+        raise AssertionError("No exception raised when expected one")
 
 
 @pytest.mark.asyncio
