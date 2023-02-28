@@ -696,6 +696,9 @@ class Connector(ESDocument):
                 await self._sync_done(job, JobStatus.COMPLETED, {}, start_time)
                 return
 
+            logger.debug(f"Validating configuration for {data_provider}")
+            await data_provider.validate_config()
+
             logger.debug(f"Pinging the {data_provider} backend")
             await data_provider.ping()
             await asyncio.sleep(0)
