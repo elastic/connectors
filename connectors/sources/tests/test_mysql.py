@@ -235,7 +235,7 @@ async def test_close_with_connection_pool():
 
 @pytest.mark.asyncio
 async def test_ping(patch_logger):
-    source = create_source(MySqlDataSource)
+    source = await setup_mysql_source(MySqlDataSource)
 
     with mock.patch.object(
         source, "with_connection_pool", return_value=ConnectionPool()
@@ -352,10 +352,13 @@ async def setup_mysql_source(database="", is_connection_lost=False):
     )
 
     source.database = database
-    source._connection_pool = await mock_mysql_response()
-    source._connection_pool.acquire = Connection
-    source._connection_pool.acquire.cursor = Cursor
-    source._connection_pool.acquire.cursor.is_connection_lost = is_connection_lost
+
+    connection_pool = await mock_mysql_response()
+    connection_pool.acquire = Connection
+    connection_pool.acquire.cursor = Cursor
+    connection_pool.acquire.cursor.is_connection_lost = is_connection_lost
+
+    patch.object(source, "_get_connection_pool", connection_pool)
 
     return source
 

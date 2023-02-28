@@ -220,11 +220,13 @@ class MySqlDataSource(BaseDataSource):
             else None,
         }
 
-        async with await aiomysql.create_pool(**connection_string) as connection_pool:
+        try:
+            connection_pool = await aiomysql.create_pool(**connection_string)
             yield connection_pool
-
-            connection_pool.close()
-            await connection_pool.wait_closed()
+        finally:
+            if connection_pool:
+                connection_pool.close()
+                await connection_pool.wait_closed()
 
     async def ping(self):
         """Verify the connection with MySQL server"""
