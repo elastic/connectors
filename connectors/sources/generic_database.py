@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+from abc import ABC, abstractmethod
 from functools import partial
 
 from asyncpg.exceptions._base import InternalClientError
@@ -34,6 +35,45 @@ def configured_tables(tables):
         if isinstance(tables, str)
         else list(filter(lambda table: table_filter(table), tables))
     )
+
+
+class Queries(ABC):
+    """Class contains abstract methods for queries"""
+
+    @abstractmethod
+    def ping(self):
+        """Query to ping source"""
+        pass
+
+    @abstractmethod
+    def all_tables(self, **kwargs):
+        """Query to get all tables"""
+        pass
+
+    @abstractmethod
+    def table_primary_key(self, **kwargs):
+        """Query to get the primary key"""
+        pass
+
+    @abstractmethod
+    def table_data(self, **kwargs):
+        """Query to get the table data"""
+        pass
+
+    @abstractmethod
+    def table_last_update_time(self, **kwargs):
+        """Query to get the last update time of the table"""
+        pass
+
+    @abstractmethod
+    def table_data_count(self, **kwargs):
+        """Query to get the number of rows in the table"""
+        pass
+
+    @abstractmethod
+    def all_schemas(self):
+        """Query to get all schemas of database"""
+        pass
 
 
 class GenericBaseDataSource(BaseDataSource):
@@ -139,11 +179,11 @@ class GenericBaseDataSource(BaseDataSource):
         ):
             raise Exception("SSL certificate must be configured.")
 
-    async def execute_query(self, query_name, fetch_many=False, **query_kwargs):
+    async def execute_query(self, query, fetch_many=False, **kwargs):
         """Executes a query and yield rows
 
         Args:
-            query_name (str): Name of query.
+            query (str): Query.
             fetch_many (bool): Flag to use fetchmany method. Defaults to False.
 
         Raises:
@@ -152,10 +192,6 @@ class GenericBaseDataSource(BaseDataSource):
         Yields:
             list: Column names and query response
         """
-        if self.queries is None:
-            raise NotImplementedError()
-
-        query = self.queries[query_name].format(**query_kwargs)
         size = self.configuration["fetch_size"]
 
         retry = 1
@@ -172,14 +208,14 @@ class GenericBaseDataSource(BaseDataSource):
                 if fetch_many:
                     # sending back column names only once
                     if yield_once:
-                        if query_kwargs["schema"]:
+                        if kwargs["schema"] is not None:
                             yield [
-                                f"{query_kwargs['schema']}_{query_kwargs['table']}_{column}".lower()
+                                f"{kwargs['schema']}_{kwargs['table']}_{column}".lower()
                                 for column in cursor.keys()
                             ]
                         else:
                             yield [
-                                f"{query_kwargs['table']}_{column}".lower()
+                                f"{kwargs['table']}_{column}".lower()
                                 for column in cursor.keys()
                             ]
                         yield_once = False
@@ -219,10 +255,10 @@ class GenericBaseDataSource(BaseDataSource):
         Returns:
             cursor: Asynchronous cursor
         """
-        if self.engine is None:
-            raise NotImplementedError()
         try:
-            async with self.engine.connect() as connection:
+            if self.engine is None:
+                self._create_engine()
+            async with self.engine.connect() as connection:  # pyright: ignore
                 cursor = await connection.execute(text(query))
                 return cursor
         except Exception as exception:
@@ -246,13 +282,14 @@ class GenericBaseDataSource(BaseDataSource):
         Returns:
             cursor: Synchronous cursor
         """
-        if self.engine is None:
-            raise NotImplementedError()
         try:
+            if self.engine is None:
+                self._create_engine()
             loop = asyncio.get_running_loop()
-            self.connection = await loop.run_in_executor(
-                executor=None, func=self.engine.connect
-            )
+            if self.connection is None:
+                self.connection = await loop.run_in_executor(
+                    executor=None, func=self.engine.connect  # pyright: ignore
+                )
             cursor = await loop.run_in_executor(
                 executor=None,
                 func=partial(self.connection.execute, statement=text(query)),
@@ -272,11 +309,13 @@ class GenericBaseDataSource(BaseDataSource):
         """Verify the connection with the database-server configured by user"""
         logger.info("Validating the Connector Configuration...")
         try:
+            if self.queries is None:
+                raise NotImplementedError
+
             self._validate_configuration()
-            self._create_engine()
             await anext(
                 self.execute_query(
-                    query_name="PING",
+                    query=self.queries.ping(),
                 )
             )
             logger.info(f"Successfully connected to {self.dialect}.")
@@ -294,22 +333,27 @@ class GenericBaseDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
         try:
+            if self.queries is None:
+                raise NotImplementedError
+
             [[row_count]] = await anext(
                 self.execute_query(
-                    query_name="TABLE_DATA_COUNT",
-                    schema=schema,
-                    table=table,
+                    query=self.queries.table_data_count(
+                        schema=schema,
+                        table=table,
+                    ),
                 )
             )
             if row_count > 0:
                 # Query to get the table's primary key
                 columns = await anext(
                     self.execute_query(
-                        query_name="TABLE_PRIMARY_KEY",
-                        user=self.user.upper(),
-                        database=self.database,
-                        schema=schema,
-                        table=table,
+                        query=self.queries.table_primary_key(
+                            user=self.user.upper(),
+                            database=self.database,
+                            schema=schema,
+                            table=table,
+                        ),
                     )
                 )
                 if schema:
@@ -328,10 +372,11 @@ class GenericBaseDataSource(BaseDataSource):
                     try:
                         last_update_time = await anext(
                             self.execute_query(
-                                query_name="TABLE_LAST_UPDATE_TIME",
-                                database=self.database,
-                                schema=schema,
-                                table=table,
+                                query=self.queries.table_last_update_time(
+                                    database=self.database,
+                                    schema=schema,
+                                    table=table,
+                                ),
                             )
                         )
                         last_update_time = last_update_time[0][0]
@@ -339,7 +384,10 @@ class GenericBaseDataSource(BaseDataSource):
                         logger.warning(f"Unable to fetch last_updated_time for {table}")
                         last_update_time = None
                     streamer = self.execute_query(
-                        query_name="TABLE_DATA",
+                        query=self.queries.table_data(
+                            schema=schema,
+                            table=table,
+                        ),
                         fetch_many=True,
                         schema=schema,
                         table=table,
@@ -409,16 +457,18 @@ class GenericBaseDataSource(BaseDataSource):
         fetch_all_tables = tables == ALL_TABLES or (
             isinstance(tables, list) and tables == [ALL_TABLES]
         )
-
+        if self.queries is None:
+            raise NotImplementedError
         tables_to_fetch = (
             map(
                 lambda table: table[0],
                 await anext(
                     self.execute_query(
-                        query_name="ALL_TABLE",
-                        user=self.user.upper(),
-                        database=self.database,
-                        schema=schema,
+                        query=self.queries.all_tables(
+                            user=self.user.upper(),
+                            database=self.database,
+                            schema=schema,
+                        )
                     )
                 ),
             )
