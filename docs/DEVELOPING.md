@@ -201,7 +201,7 @@ $ make ftest NAME=s3
 
 ## Google Cloud Storage Connector
 
-The [Elastic Google Cloud Storage connector](https://github.com/elastic/connectors-python/blob/8.7/connectors/sources/google_cloud_storage.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic Google Cloud Storage connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/google_cloud_storage.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ### Availability and prerequisites
 
@@ -235,7 +235,7 @@ The following configuration fields need to be provided for setting up the connec
 
 ##### `service_account_credentials`
 
-The service account credentials generated from Google Cloud Storage.  Default value is [here](https://github.com/elastic/connectors-python/blob/8.7/connectors/sources/google_cloud_storage.py#L103)
+The service account credentials generated from Google Cloud Storage.  Default value is [here](https://github.com/elastic/connectors-python/blob/main/connectors/sources/google_cloud_storage.py#L100)
 
 
 ##### `retry_count`
@@ -258,7 +258,7 @@ The connector uses the Elastic ingest attachment processor plugin for extracting
 
 ### E2E Tests
 
-The framework provides a way to test ingestion through a connector against a real data source. This is called a functional test. To execute a functional test for the Google Cloud Storage connector, run the following command:
+The end to end test is usually performed by developers after the functional and system testing is completed. The framework allows users to test the connector end to end. To perform e2e test for Google Cloud Storage connector, run the following make command:
 ```shell
 $ make ftest NAME=google_cloud_storage
 ```
@@ -270,7 +270,7 @@ $ make ftest NAME=google_cloud_storage
 
 ## Azure Blob Storage Connector
 
-The [Elastic Azure Blob Storage connector](https://github.com/elastic/connectors-python/blob/8.7/connectors/sources/azure_blob_storage.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic Azure Blob Storage connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/azure_blob_storage.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ### Availability and prerequisites
 
@@ -327,14 +327,14 @@ The connector uses the Elastic ingest attachment processor plugin for extracting
 
 ### Connector Limitations
 
-- Currently, Lease data and Blob tier won’t be updated in the document, because the blob timestamp is not updated. Issue can be found [here](https://github.com/elastic/connectors-python/issues/289).
+- Currently, Lease data and Blob tier wonâ€™t be updated in the document, because the blob timestamp is not updated. Issue can be found [here](https://github.com/elastic/connectors-python/issues/289).
 - Files bigger than 10 MB won't be extracted.
 - Permission are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
 - Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
 
 ### E2E Tests
 
-The framework provides a way to test ingestion through a connector against a real data source. This is called a functional test. To execute a functional test for the Azure Blob Storage connector, run the following command:
+The end to end test is usually performed by developers after the functional and system testing is completed. The framework allows users to test the connector end to end. To perform e2e test for Azure Blob Storage connector, run the following make command:
 ```shell
 $ make ftest NAME=azure_blob_storage
 ```
@@ -367,10 +367,10 @@ Complete the following steps to deploy the connector:
 Collect the information that is required to connect to your PostgreSQL server:
 
 - The server host address where the PostgreSQL is hosted.
-- The port on which the PostgreSQL server runs.
-- The username the connector will use to log in to PostgreSQL.
-- The password the connector will use to log in to PostgreSQL.
-- Name of the database to ingest data from.
+- The port where the PostgreSQL is hosted.
+- The username the connector will use to log in to the PostgreSQL.
+- The password the connector will use to log in to the PostgreSQL.
+- The database name where the connector will query data.
 - SSL certificate if you want to establish secured connections.
 
 ℹ️ User needs to set `track_commit_timestamp` to `on` using `ALTER SYSTEM SET track_commit_timestamp = on;` query to fetch last updated time.
@@ -388,12 +388,12 @@ The server host address where the PostgreSQL is hosted. Default value is `127.0.
 
 ##### `port`
 
-The server port on which the PostgreSQL server runs on. Default value is `9090`. Examples:
+The port where the PostgreSQL is hosted. Default value is `9090`. Examples:
 
   - `5432`
   - `9090`
 
-##### `user`
+##### `username`
 
 The username of the account for PostgreSQL. Default value is `admin`.
 
@@ -417,11 +417,11 @@ Comma-separated list of tables. The PostgreSQL connector will fetch data from al
 
 ##### `fetch_size`
 
-The number of rows to fetch on each call to PostgreSQL. Default value is `50`.
+The number of rows to fetch on each request to the PostgreSQL. Default value is `50`.
 
 ##### `retry_count`
 
-The number of retry attempts after failed call to PostgreSQL. Default value is `3`.
+The number of retry attempts after failed request to the PostgreSQL. Default value is `3`.
 
 ##### `ssl_disabled`
 
@@ -429,7 +429,7 @@ Whether SSL verification will be disabled. Default value is `True`.
 
 ##### `ssl_ca`
 
-Content of SSL certificate. Default value is `None`.
+Content of SSL certificate. Note: In case of ssl_disabled `True`, keep `ssl_ca` field empty.
 
 ### Connector Limitations
 
