@@ -371,10 +371,10 @@ Complete the following steps to deploy the connector:
 Collect the information that is required to connect to your Microsoft SQL Server:
 
 - The server host address where the Microsoft SQL Server is hosted.
-- The port where the Microsoft SQL server is hosted.
-- The username the connector will use to log in to Microsoft SQL.
-- The password the connector will use to log in to Microsoft SQL.
-- The Microsoft SQL database name where the connector will crawl to fetch rows.
+- The port where the Microsoft SQL Server is hosted.
+- The username the connector will use to log in to the Microsoft SQL Server.
+- The password the connector will use to log in to the Microsoft SQL Server.
+- The database name where the connector will query data.
 
 #### Configure Microsoft SQL connector
 
@@ -389,14 +389,14 @@ The server host address where the Microsoft SQL Server is hosted. Default value 
 
 ##### `port`
 
-The server port where Microsoft SQL Server is available. Default value is `9090`. Examples:
+The port where the Microsoft SQL Server is hosted. Default value is `9090`. Examples:
 
   - `5432`
   - `9090`
 
 ##### `user`
 
-The username of the account for Microsoft SQL Server. Default value is `admin`. Examples:
+The username of the account for Microsoft SQL Server. Default value is `admin`.
 
 ##### `password`
 
@@ -418,11 +418,11 @@ Comma-separated list of tables. For * in string connector will fetch data for al
 
 ##### `fetch_size`
 
-Number of rows to fetch on each call. Default value is `50`.
+The number of rows to fetch on each request to Microsoft SQL Server. Default value is `50`.
 
 ##### `retry_count`
 
-The number of retry attempts after failed call to Microsoft SQL Server. Default value is `3`.
+The number of retry attempts after failed request to Microsoft SQL Server. Default value is `3`.
 
 ##### `mssql_driver`
 
@@ -430,14 +430,14 @@ Name of Microsoft SQL Driver. Default value is `ODBC Driver 18 for SQL Server`.
 
 ##### `secured_connection`
 
-Whether the connector established secured connection or not. Default value is `False`.
+Whether the connector should establish a secured connection. Default value is `False`.
 
-ℹ️ For secured connection Microsoft SQL Driver uses the OpenSSL library, which gets a certificate from Default Certificate Trust Store of OpenSSL.
+ℹ️ For secured connection Microsoft SQL Driver uses the OpenSSL library, which gets a certificate from the Default Certificate Trust Store of OpenSSL.
 
 ### Connector Limitations
 
-- If connector does not get last updated time for table then data will index in every sync.
-- Permission are not synced. **All documents** indexed to an Elastic deployment will be visible to all the users having access to that Elastic Deployment.
+- If the last updated time for a table is not available then all data in that table will be synced.
+- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
 - Filtering rules are not available in the present version. Currently, the filtering is controlled via ingest pipelines.
 
 ### E2E Tests
@@ -449,7 +449,7 @@ $ make ftest NAME=mssql
 
 ℹ️ Users do not need to have a running Elasticsearch instance or a mssql source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Microsoft SQL source using the docker image.
 
-ℹ️ The e2e test uses default values defined in [configure microsoft sql connector](#configure-microsoft-sql-connector)
+ℹ️ The e2e test uses default values defined in [Configure Microsoft SQL connector](#configure-microsoft-sql-connector)
 
 ## General Configuration
 
