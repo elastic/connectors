@@ -417,7 +417,7 @@ Comma-separated list of tables. The PostgreSQL connector will fetch data from al
 
 ##### `fetch_size`
 
-Number of rows to fetch on each call. Default value is `50`.
+The number of rows to fetch on each call to PostgreSQL. Default value is `50`.
 
 ##### `retry_count`
 
@@ -425,7 +425,7 @@ The number of retry attempts after failed call to PostgreSQL. Default value is `
 
 ##### `ssl_disabled`
 
-SSL verification will be disabled or not. Default value is `True`.
+Whether SSL verification will be disabled. Default value is `True`.
 
 ##### `ssl_ca`
 
@@ -433,8 +433,8 @@ Content of SSL certificate. Default value is `None`.
 
 ### Connector Limitations
 
-- To fetch last updated time in PostgreSQL, User needs to ensure that the `track_commit_timestamp` is set to `on`. If not, then data will index in every sync.
-- Permission are not synced. **All documents** indexed to an Elastic deployment will be visible to all the users having access to that Elastic Deployment.
+- To fetch the last updated time in PostgreSQL, `track_commit_timestamp` must be set to `on`. Otherwise, all data will index in every sync.
+- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
 - Filtering rules are not available in the present version. Currently, the filtering is controlled via ingest pipelines.
 
 ### E2E Tests
@@ -446,7 +446,7 @@ $ make ftest NAME=postgresql
 
 ℹ️ Users do not need to have a running Elasticsearch instance or a PostgreSQL source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock PostgreSQL source using the docker image.
 
-ℹ️ The e2e test uses default values defined in [configure PostgreSQL connector](#configure-postgresql-connector)
+ℹ️ The e2e test uses default values defined in [Configure PostgreSQL connector](#configure-postgresql-connector)
 
 ## General Configuration
 
