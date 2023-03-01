@@ -18,12 +18,14 @@ total_document_count = 100
 def create_runner(
     source_changed=True,
     source_available=True,
+    validate_config_exception=None,
     async_bulk_result=None,
 ):
     source_klass = Mock()
     data_provider = Mock()
     data_provider.tweak_bulk_options = Mock()
     data_provider.changed = AsyncMock(return_value=source_changed)
+    data_provider.validate_config = AsyncMock(side_effect=validate_config_exception)
     data_provider.ping = AsyncMock()
     if not source_available:
         data_provider.ping.side_effect = Exception()
@@ -118,6 +120,30 @@ async def test_source_not_changed(patch_logger):
     sync_job_runner.elastic_server.async_bulk.assert_not_awaited()
     sync_job_runner.sync_job.done.assert_awaited_with(ingestion_stats=ingestion_stats)
     sync_job_runner.sync_job.fail.assert_not_awaited()
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_not_awaited()
+    sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
+
+
+@pytest.mark.asyncio
+async def test_source_invalid_config(patch_logger):
+    sync_job_runner = create_runner(validate_config_exception=Exception())
+    await sync_job_runner.execute()
+
+    ingestion_stats = {
+        "indexed_document_count": 0,
+        "indexed_document_volume": 0,
+        "deleted_document_count": 0,
+        "total_document_count": total_document_count,
+    }
+
+    sync_job_runner.sync_job.claim.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.elastic_server.async_bulk.assert_not_awaited()
+    sync_job_runner.sync_job.done.assert_not_awaited
+    sync_job_runner.sync_job.fail.assert_awaited_with(
+        ANY, ingestion_stats=ingestion_stats
+    )
     sync_job_runner.sync_job.cancel.assert_not_awaited()
     sync_job_runner.sync_job.suspend.assert_not_awaited()
     sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)

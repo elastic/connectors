@@ -71,6 +71,9 @@ class SyncJobRunner:
                 await self._sync_done(sync_status=JobStatus.COMPLETED, result={})
                 return
 
+            logger.debug(f"Validating configuration for {self.data_provider}")
+            await self.data_provider.validate_config()
+
             logger.debug(
                 f"Syncing '{self.sync_job.service_type}' for connector '{self.connector_id}'"
             )
