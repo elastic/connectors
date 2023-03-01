@@ -20,17 +20,17 @@ class JobClaimError(Exception):
 
 
 class SyncJobRunner:
-    """
-    The class to run a sync job.
+    """The class to run a sync job.
 
     It takes a sync job, and tries to claim it, and executes it. It also makes sure the sync job is updated
     appropriately when it errors out, is canceled, completes successfully or the service shuts down.
 
-    :param source_klass: The source class of the connector
-    :param sync_job: The sync job to run
-    :param connector: The connector of the sync job
-    :param elastic_server: The sync orchestrator used to fetch data from 3rd-party source and ingest into Elasticsearch
-    :param bulk_options: The bulk options used for the ingestion
+    Arguments:
+        - `source_klass`: The source class of the connector
+        - `sync_job`: The sync job to run
+        - `connector`: The connector of the sync job
+        - `elastic_server`: The sync orchestrator used to fetch data from 3rd-party source and ingest into Elasticsearch
+        - `bulk_options`: The bulk options used for the ingestion
 
     """
 
@@ -55,11 +55,13 @@ class SyncJobRunner:
 
     async def execute(self):
         if self.running:
-            raise SyncJobRunningError(f"Sync job #{self.job_id} is already running.")
+            raise SyncJobRunningError(f"Sync job {self.job_id} is already running.")
 
         self.running = True
         if not await self._claim_job():
-            logger.error(f"Unable to claim job #{self.job_id}")
+            logger.error(
+                f"Unable to claim job {self.job_id} for connector {self.connector_id}"
+            )
             raise JobClaimError
 
         try:
@@ -115,7 +117,6 @@ class SyncJobRunner:
         except Exception as e:
             await self._sync_done(sync_status=JobStatus.ERROR, result={}, sync_error=e)
         finally:
-            self._start_time = None
             if self.data_provider is not None:
                 await self.data_provider.close()
 
