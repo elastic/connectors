@@ -394,7 +394,7 @@ The port where the Microsoft SQL Server is hosted. Default value is `9090`. Exam
   - `5432`
   - `9090`
 
-##### `user`
+##### `username`
 
 The username of the account for Microsoft SQL Server. Default value is `admin`.
 
@@ -411,7 +411,7 @@ Name of the Microsoft SQL Server database. Default value is `xe`. Examples:
 
 ##### `tables`
 
-Comma-separated list of tables. For * in string connector will fetch data for all the Tables. Default value is `*`. Examples:
+Comma-separated list of tables. The Microsoft SQL connector will fetch data from all tables present in the configured database, if the value is `*` . Default value is `*`. Examples:
 
   - `table_1, table_2`
   - `*`
