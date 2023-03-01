@@ -346,7 +346,7 @@ $ make ftest NAME=azure_blob_storage
 
 ## Oracle Database Connector
 
-The [Elastic Oracle connector](https://github.com/elastic/connectors-python/blob/8.7/connectors/sources/oracle.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic Oracle Database connector](https://github.com/elastic/connectors-python/blob/8.7/connectors/sources/oracle.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ### Availability and prerequisites
 
@@ -367,7 +367,7 @@ Complete the following steps to deploy the connector:
 Collect the information that is required to connect to your Oracle Database:
 
 - The server host address where the Oracle Database is hosted.
-- The port on where the Oracle Database is hosted
+- The port where the Oracle Database is hosted.
 - The username the connector will use to log in to the Oracle Database.
 - The password the connector will use to log in to the Oracle Database.
 - The database name where the connector will query data.
@@ -390,9 +390,9 @@ The port where the Oracle Database is hosted. Default value is `9090`. Note: For
   - `5432`
   - `9090`
 
-##### `user`
+##### `username`
 
-The username of the account for Oracle Database. Default value is `admin`.
+The username of the account for the Oracle Database. Default value is `admin`.
 
 ##### `password`
 
@@ -426,11 +426,11 @@ The protocol which the connector uses to establish a connection. Default value i
 
 ##### `oracle_home`
 
-Path of the Oracle home directory to run connector with thick mode for secured connection. Default value is `None`.
+Path of the Oracle home directory to run connector with thick mode for secured connection. Note: In case of unsecured connection, keep `oracle_home` field empty.
 
 ##### `wallet_configuration_path`
 
-Path of the oracle configuration files. Only applicable when configuration files are not at the default location. Default value is `None`.
+Path of the oracle configuration files. Only applicable when configuration files are not at the default location. Note: If Wallet configuration files are located at default location, keep `wallet_configuration_path` field empty.
 
 ### Setup for a secured connection with Oracle
  - User needs to install the Oracle service on the system where the connector is running.
