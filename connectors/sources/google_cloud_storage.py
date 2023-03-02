@@ -10,7 +10,6 @@ import json
 import os
 import urllib.parse
 from functools import partial
-from json.decoder import JSONDecodeError
 
 import aiofiles
 from aiofiles.os import remove
@@ -19,7 +18,7 @@ from aiogoogle import Aiogoogle
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource, DataSourceConfigurationError
+from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
@@ -73,13 +72,11 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-
         self.retry_count = self.configuration["retry_count"]
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
         self.service_account_credentials = None
         self.user_project_id = None
-        self.json_creds = None
 
     @classmethod
     def get_default_configuration(cls):
@@ -115,6 +112,23 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 "type": "bool",
             },
         }
+
+    async def validate_config(self):
+        """Validates whether user inputs are valid or not for configuration field.
+
+        Raises:
+            Exception: The service account json is empty.
+            Exception: The format of service account json is invalid.
+        """
+        if (
+            self.configuration["service_account_credentials"] == ""
+            or self.configuration["service_account_credentials"] is None
+        ):
+            raise Exception("Google Cloud service account json can't be empty.")
+        try:
+            _ = json.loads(self.configuration["service_account_credentials"])
+        except ValueError:
+            raise Exception("Google Cloud service account is not a valid JSON.")
 
     async def _api_call(
         self,
@@ -187,24 +201,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 )
                 await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry_counter)
 
-    def _validate_configurations(self):
-        """Validates whether user inputs are valid or not for configuration field.
-
-        Raises:
-            DataSourceConfigurationError: The service account json is empty.
-            DataSourceConfigurationError: The service account json is in invalid format.
-        """
-        if self.configuration["service_account_credentials"] == "":
-            raise DataSourceConfigurationError("Service account json can't be empty.")
-        try:
-            self.json_creds = json.loads(
-                self.configuration["service_account_credentials"]
-            )
-        except JSONDecodeError:
-            raise DataSourceConfigurationError(
-                "Service account json is not in valid format."
-            )
-
     def get_pem_format(self, private_key, max_split=-1):
         """Convert key into PEM format.
 
@@ -222,28 +218,33 @@ class GoogleCloudStorageDataSource(BaseDataSource):
 
     def _initialize_configurations(self):
         """Initialize the ServiceAccountCreds"""
+        if self.service_account_credentials is not None:
+            return
+
+        json_credentials = json.loads(self.configuration["service_account_credentials"])
+
         if (
-            self.json_creds.get("private_key")
-            and "\n" not in self.json_creds["private_key"]
+            json_credentials.get("private_key")
+            and "\n" not in json_credentials["private_key"]
         ):
-            self.json_creds["private_key"] = self.get_pem_format(
-                private_key=self.json_creds["private_key"].strip(), max_split=2
+            json_credentials["private_key"] = self.get_pem_format(
+                private_key=json_credentials["private_key"].strip(),
+                max_split=2,
             )
 
         self.service_account_credentials = ServiceAccountCreds(
             scopes=[CLOUD_STORAGE_READ_ONLY_SCOPE],
-            **self.json_creds,
+            **json_credentials,
         )
         self.user_project_id = self.service_account_credentials.project_id
 
     async def ping(self):
-        """Verify the configurations and connection with Google Cloud Storage"""
-
-        self._validate_configurations()
-        self._initialize_configurations()
+        """Verify the connection with Google Cloud Storage"""
 
         if RUNNING_FTEST:
             return
+
+        self._initialize_configurations()
         try:
             await anext(
                 self._api_call(
@@ -385,6 +386,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Documents from Google Cloud Storage.
         """
+        self._initialize_configurations()
         async for buckets in self.fetch_buckets():
             if not buckets.get("items"):
                 continue
