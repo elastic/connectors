@@ -73,7 +73,7 @@ class MongoDataSource(BaseDataSource):
         def _serialize(value):
             if isinstance(value, ObjectId):
                 value = str(value)
-            if isinstance(value, (list, tuple)):
+            elif isinstance(value, (list, tuple)):
                 value = [_serialize(item) for item in value]
             elif isinstance(value, dict):
                 for key, svalue in value.items():

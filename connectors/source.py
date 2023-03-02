@@ -3,6 +3,9 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+""" Helpers to build sources + FQN-based Registry
+"""
+
 import importlib
 import ssl
 from datetime import date, datetime
@@ -16,9 +19,6 @@ from connectors.filtering.validation import (
     BasicRulesSetSemanticValidator,
     FilteringValidator,
 )
-
-""" Helpers to build sources + FQN-based Registry
-"""
 
 
 class Field:
@@ -187,6 +187,15 @@ class BaseDataSource:
         """
         return True
 
+    async def validate_config(self):
+        """When called, validates configuration of the connector that is contained in self.configuration
+
+        If connector configuration is invalid, this method will raise an exception
+        with human-friendly and actionable description
+        """
+        # TODO: when validate_config is implemented everywhere, we should make this method raise NotImplementedError
+        pass
+
     async def ping(self):
         """When called, pings the backend
 
@@ -308,7 +317,4 @@ def get_source_klasses(config):
 
 def get_source_klass_dict(config):
     """Returns a service type - source klass dictionary"""
-    result = {}
-    for name, fqn in config["sources"].items():
-        result[name] = get_source_klass(fqn)
-    return result
+    return {name: get_source_klass(fqn) for name, fqn in config["sources"].items()}

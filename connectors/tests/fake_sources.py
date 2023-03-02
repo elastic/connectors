@@ -26,6 +26,7 @@ class FakeSource:
         if configuration.has_field("raise"):
             raise Exception("I break on init")
         self.fail = configuration.has_field("fail")
+        self.configuration_invalid = configuration.has_field("configuration_invalid")
 
     async def changed(self):
         return True
@@ -56,6 +57,10 @@ class FakeSource:
         return FilteringValidationResult(
             state=FilteringValidationState.VALID, errors=[]
         )
+
+    async def validate_config(self):
+        if self.configuration_invalid:
+            raise ValueError("I fail when validating configuration")
 
     def tweak_bulk_options(self, options):
         pass
