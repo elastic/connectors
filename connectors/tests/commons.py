@@ -22,9 +22,9 @@ class AsyncIterator:
 
     def __call__(self, *args, **kwargs):
         if args:
-            self.call_args.append(*args)
+            self.call_args.append(args)
 
         if kwargs:
-            self.call_kwargs.append(*kwargs.items())
+            self.call_kwargs.append(kwargs)
 
         return self

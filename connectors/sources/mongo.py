@@ -68,12 +68,12 @@ class MongoDataSource(BaseDataSource):
     async def ping(self):
         await self.client.admin.command("ping")
 
-    # XXX That's a lot of work...
+    # TODO: That's a lot of work. Find a better way
     def serialize(self, doc):
         def _serialize(value):
             if isinstance(value, ObjectId):
                 value = str(value)
-            if isinstance(value, (list, tuple)):
+            elif isinstance(value, (list, tuple)):
                 value = [_serialize(item) for item in value]
             elif isinstance(value, dict):
                 for key, svalue in value.items():

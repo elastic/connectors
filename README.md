@@ -8,7 +8,7 @@ If you are looking for the implementation in Ruby, See [connectors-ruby](https:/
 
 **The connector will be operated by an administrative user from within Kibana.**
 
-> Note: The connector framework is a tech preview feature. Tech preview
+> Note: The connector framework is a beta feature. Beta
 > features are subject to change and are not covered by the support SLA of
 > general release (GA) features. Elastic plans to promote this feature to GA in
 > a future release.

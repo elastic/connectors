@@ -18,33 +18,6 @@ class ValidationTarget(Enum):
     UNSET = None
 
 
-async def validate_filtering(
-    connector, source_klass, validation_target=ValidationTarget.ACTIVE
-):
-    filter_to_validate = (
-        connector.filtering.get_active_filter()
-        if validation_target == ValidationTarget.ACTIVE
-        else connector.filtering.get_draft_filter()
-    )
-
-    validation_result = await source_klass(connector.configuration).validate_filtering(
-        filter_to_validate
-    )
-
-    await connector.index.update_filtering_validation(
-        connector, validation_result, validation_target
-    )
-
-    if validation_result.state != FilteringValidationState.VALID:
-        raise InvalidFilteringError(
-            f"Filtering in state {validation_result.state}. Expected: {FilteringValidationState.VALID}."
-        )
-    if len(validation_result.errors):
-        raise InvalidFilteringError(
-            f"Filtering validation errors present: {validation_result.errors}."
-        )
-
-
 class InvalidFilteringError(Exception):
     pass
 
@@ -223,6 +196,14 @@ class BasicRulesSetValidator:
 
 
 class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
+    """BasicRulesSetSemanticValidator can be used to validate that a set of filtering rules does not contain semantic duplicates.
+
+    A semantic duplicate is defined as two basic rules having the same values for `field`, `rule` and `value`.
+    Therefore, two basic rules are also seen as semantic duplicates, if their `policy` values differ.
+
+    If a semantic duplicate is detected both rules will be marked as invalid.
+    """
+
     @classmethod
     def validate(cls, rules):
         rules_dict = {}
@@ -282,6 +263,8 @@ class BasicRuleValidator:
 
 
 class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
+    """BasicRuleNoMatchAllRegexValidator can be used to check that a basic rule does not use a match all regex."""
+
     MATCH_ALL_REGEXPS = [".*", "(.*)"]
 
     @classmethod
@@ -306,6 +289,8 @@ class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
 
 
 class BasicRuleAgainstSchemaValidator(BasicRuleValidator):
+    """BasicRuleAgainstSchemaValidator can be used to check if basic rule follows specified json schema."""
+
     SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {

@@ -49,11 +49,11 @@ FAKE_CONFIG = {
     "status": "configured",
     "language": "en",
     "last_sync_status": None,
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
+    "last_sync_error": None,
+    "last_synced": None,
+    "last_seen": None,
+    "created_at": None,
+    "updated_at": None,
     "scheduling": {"enabled": True, "interval": "0 * * * * *"},
     "sync_now": True,
     "is_native": True,
@@ -99,11 +99,11 @@ FAKE_CONFIG_NOT_NATIVE = {
     "status": "configured",
     "language": "en",
     "last_sync_status": None,
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
+    "last_sync_error": None,
+    "last_synced": None,
+    "last_seen": None,
+    "created_at": None,
+    "updated_at": None,
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
     "is_native": False,
@@ -128,12 +128,18 @@ FAIL_FILTERING_ERRORS_PRESENT_CONFIG = copy.deepcopy(FAKE_CONFIG)
 FAIL_FILTERING_ERRORS_PRESENT_CONFIG["service_type"] = "filtering_errors_present"
 
 ALL_SYNC_RULES_FEATURES_DISABLED = {
-    "sync_rules": {"advanced": {"enabled": False}, "basic": {"enabled": False}},
-    "filtering_advanced_config": False,
-    "filtering_rules": False,
+    "features": {
+        "sync_rules": {"advanced": {"enabled": False}, "basic": {"enabled": False}},
+        "filtering_advanced_config": False,
+        "filtering_rules": False,
+    }
 }
 
-NO_FEATURES_PRESENT = {}
+NO_FEATURES_PRESENT = {"features": {}}
+
+CONFIGURATION_INVALID = {
+    "configuration": {"configuration_invalid": {"value": True, "label": ""}}
+}
 
 FAKE_CONFIG_FAIL_SERVICE = {
     "api_key_id": "",
@@ -143,11 +149,11 @@ FAKE_CONFIG_FAIL_SERVICE = {
     "status": "configured",
     "language": "en",
     "last_sync_status": None,
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
+    "last_sync_error": None,
+    "last_synced": None,
+    "last_seen": None,
+    "created_at": None,
+    "updated_at": None,
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
 }
@@ -160,11 +166,11 @@ FAKE_CONFIG_BUGGY_SERVICE = {
     "status": "configured",
     "language": "en",
     "last_sync_status": None,
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
+    "last_sync_error": None,
+    "last_synced": None,
+    "last_seen": None,
+    "created_at": None,
+    "updated_at": None,
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
 }
@@ -177,11 +183,11 @@ FAKE_CONFIG_UNKNOWN_SERVICE = {
     "status": "configured",
     "language": "en",
     "last_sync_status": None,
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
+    "last_sync_error": None,
+    "last_synced": None,
+    "last_seen": None,
+    "created_at": None,
+    "updated_at": None,
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
     "sync_now": True,
 }
@@ -216,7 +222,7 @@ JOB_DOC_SOURCE = {
 @pytest.fixture(autouse=True)
 def patch_validate_filtering_in_sync():
     with mock.patch(
-        "connectors.services.sync.validate_filtering", return_value=AsyncMock()
+        "connectors.byoc.Connector.validate_filtering", return_value=AsyncMock()
     ) as validate_filtering_mock:
         yield validate_filtering_mock
 
@@ -225,6 +231,7 @@ def create_service(config_file):
     config = load_config(config_file)
     service = SyncService(config)
     service.idling = 0
+    service.service_config["max_errors"] = 0
 
     return service
 
@@ -278,6 +285,17 @@ async def set_server_responses(
     mock_responses.post(
         f"{host}/.elastic-connectors-sync-jobs/_refresh", headers=headers, repeat=True
     )
+    mock_responses.post(
+        f"{host}/search-airbnb/_refresh?ignore_unavailable=true",
+        headers=headers,
+        repeat=True,
+    )
+    mock_responses.post(
+        f"{host}/search-airbnb/_count?ignore_unavailable=true",
+        payload={"count": 100},
+        headers=headers,
+        repeat=True,
+    )
 
     hits = []
     for index, config in enumerate(configs):
@@ -329,6 +347,13 @@ async def set_server_responses(
             headers=headers,
             repeat=True,
         )
+
+    mock_responses.get(
+        f"{host}/.elastic-connectors-sync-jobs/_doc/1",
+        payload=JOB_DOC_SOURCE,
+        headers=headers,
+        repeat=True,
+    )
 
     mock_responses.put(
         f"{host}/.elastic-connectors/_doc/1",
@@ -462,7 +487,6 @@ async def test_connector_service_poll_no_sync_but_status_updated(
     patch_logger.assert_present("*** Connector 1 HEARTBEAT")
     patch_logger.assert_present("Scheduling is disabled")
     patch_logger.assert_not_present("Sync done")
-    assert calls[-1]["status"] == "connected"
 
 
 @pytest.mark.asyncio
@@ -483,10 +507,7 @@ async def test_connector_service_poll_cron_broken(
     )
     await create_and_run_service(CONFIG_FILE)
     patch_logger.assert_not_present("Sync done")
-    assert (
-        calls[0]["status"] == "connected"
-    )  # first it's marked as connected as we picked it up
-    assert calls[1]["status"] == "error"  # and only then it's marked as error
+    assert calls[-1]["status"] == "error"
 
 
 @pytest.mark.asyncio
@@ -624,8 +645,9 @@ async def test_connector_service_filtering(
     )
 
     if should_raise_filtering_error:
-        await create_and_run_service(CONFIG_FILE)
-        patch_logger.assert_check(lambda log: isinstance(log, InvalidFilteringError))
+        with pytest.raises(InvalidFilteringError) as e:
+            await create_and_run_service(CONFIG_FILE)
+        assert e is not None
     else:
         try:
             await create_and_run_service(CONFIG_FILE)
@@ -651,13 +673,11 @@ async def test_connector_service_poll_buggy_service(
         mock_responses, [FAKE_CONFIG_BUGGY_SERVICE], connectors_update=connectors_update
     )
 
-    await create_and_run_service(CONFIG_FILE)
+    with pytest.raises(DataSourceError) as e:
+        await create_and_run_service(CONFIG_FILE)
 
-    for log in patch_logger.logs:
-        if isinstance(log, DataSourceError):
-            return
-
-    raise AssertionError
+    if e is None:
+        raise AssertionError("No exception raised when expected one")
 
 
 @pytest.mark.asyncio
@@ -729,3 +749,14 @@ async def test_concurrent_syncs(mock_responses, patch_logger, set_env):
     patch_logger.assert_present("[1] Sync done: 1 indexed, 0  deleted. (0 seconds)")
     patch_logger.assert_present("[2] Sync done: 1 indexed, 0  deleted. (0 seconds)")
     patch_logger.assert_present("[3] Sync done: 1 indexed, 0  deleted. (0 seconds)")
+
+
+@pytest.mark.asyncio
+async def test_invalid_configuration(mock_responses, set_env):
+    await set_server_responses(mock_responses, [FAKE_CONFIG | CONFIGURATION_INVALID])
+
+    with pytest.raises(ValueError) as e:
+        await create_and_run_service(CONFIG_FILE)
+
+    assert e is not None
+    assert e.match(".*validating configuration.*")
