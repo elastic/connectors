@@ -6,15 +6,13 @@
 """
 Implementation of BYOC protocol.
 """
-import asyncio
 import socket
-import time
 from collections import UserDict
 from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 
-from connectors.es import ESDocument, ESIndex, Mappings
+from connectors.es import ESDocument, ESIndex
 from connectors.filtering.validation import (
     FilteringValidationState,
     InvalidFilteringError,
@@ -468,7 +466,7 @@ class Connector(ESDocument):
             self.last_seen is None
             or (datetime.now(timezone.utc) - self.last_seen).total_seconds() > interval
         ):
-            logger.info(f"*** Connector {self.id} HEARTBEAT")
+            logger.debug(f"Sending heartbeat for connector {self.id}")
             await self.index.heartbeat(doc_id=self.id)
 
     def next_sync(self):
@@ -495,56 +493,12 @@ class Connector(ESDocument):
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
-    # TODO: This method is to be removed once the SyncService is refactored and SyncJobRunner class is added.
-    async def _sync_starts(self, sync_job_index):
-        job_id = await sync_job_index.create(self)
-        if self.sync_now:
-            await self.reset_sync_now_flag()
-
-        sync_job = await sync_job_index.fetch_by_id(job_id)
-        await sync_job.claim()
-        await self.sync_starts()
-
-        logger.info(f"Sync starts, Job id: {job_id}")
-        return await sync_job_index.fetch_by_id(job_id)
-
     async def error(self, error):
         doc = {
             "status": Status.ERROR.value,
             "error": str(error),
         }
         await self.index.update(doc_id=self.id, doc=doc)
-
-    # TODO: This method is to be moved to the new SyncJobRunner class, together with sync method.
-    async def _sync_done(self, job, status, result, start_time, exception=None):
-        doc_updated = result.get("doc_updated", 0)
-        doc_created = result.get("doc_created", 0)
-        doc_deleted = result.get("doc_deleted", 0)
-        exception = result.get("fetch_error", exception)
-        if exception is not None:
-            status = JobStatus.ERROR
-
-        indexed_count = doc_updated + doc_created
-        ingestion_stats = {
-            "indexed_document_count": indexed_count,
-            "indexed_document_volume": 0,
-            "deleted_document_count": doc_deleted,
-        }
-
-        job_id = job.id
-        if status == JobStatus.ERROR:
-            await job.fail(exception, ingestion_stats=ingestion_stats)
-        elif status == JobStatus.SUSPENDED:
-            await job.suspend(ingestion_stats=ingestion_stats)
-        else:
-            await job.done(ingestion_stats=ingestion_stats)
-
-        job = await job.reload()
-        await self.sync_done(job)
-        logger.info(
-            f"[{job_id}] Sync done: {doc_updated + doc_created} indexed, {doc_deleted} "
-            f" deleted. ({int(time.time() - start_time)} seconds)"
-        )
 
     async def sync_done(self, job):
         job_status = JobStatus.ERROR if job is None else job.status
@@ -568,22 +522,6 @@ class Connector(ESDocument):
             doc["last_deleted_document_count"] = job.deleted_document_count
 
         await self.index.update(doc_id=self.id, doc=doc)
-
-    # TODO: This method is to be moved to the new SyncJobRunner class, together with sync method.
-    async def prepare_docs(self, data_provider, pipeline=None, filtering=None):
-        if pipeline is None:
-            pipeline = Pipeline({})
-        if filtering is None:
-            filtering = Filter()
-
-        logger.debug(f"Using pipeline {pipeline}")
-
-        async for doc, lazy_download in data_provider.get_docs(filtering=filtering):
-            # adapt doc for pipeline settings
-            doc["_extract_binary_content"] = pipeline["extract_binary_content"]
-            doc["_reduce_whitespace"] = pipeline["reduce_whitespace"]
-            doc["_run_ml_inference"] = pipeline["run_ml_inference"]
-            yield doc, lazy_download
 
     async def prepare(self, config):
         """Prepares the connector, given a configuration
@@ -674,69 +612,6 @@ class Connector(ESDocument):
             index=self.index_name, ignore_unavailable=True
         )
         return result["count"]
-
-    # TODO: Part of this method will be moved to SyncService once it's refactored, and the rest will be moved to the new SyncJobRunner class.
-    async def sync(self, sync_job_index, source_klass, elastic_server, bulk_options):
-        try:
-            data_provider = source_klass(self.configuration)
-        except Exception as e:
-            logger.critical(e, exc_info=True)
-            raise DataSourceError(
-                f"Could not instantiate {source_klass} for {self.service_type}"
-            )
-
-        logger.debug(f"Syncing '{self.service_type}'")
-        job = await self._sync_starts(sync_job_index)
-        start_time = time.time()
-        try:
-            if not await data_provider.changed():
-                logger.debug(
-                    f"No change in {self.service_type} data provider, skipping..."
-                )
-                await self._sync_done(job, JobStatus.COMPLETED, {}, start_time)
-                return
-
-            logger.debug(f"Validating configuration for {data_provider}")
-            await data_provider.validate_config()
-
-            logger.debug(f"Pinging the {data_provider} backend")
-            await data_provider.ping()
-            await asyncio.sleep(0)
-
-            mappings = Mappings.default_text_fields_mappings(
-                is_connectors_index=True,
-            )
-
-            logger.debug("Preparing the content index")
-            await elastic_server.prepare_content_index(
-                self.index_name, mappings=mappings
-            )
-            await asyncio.sleep(0)
-
-            # allows the data provider to change the bulk options
-            bulk_options = bulk_options.copy()
-            data_provider.tweak_bulk_options(bulk_options)
-
-            sync_rules_enabled = self.features.sync_rules_enabled()
-
-            if sync_rules_enabled:
-                await job.validate_filtering(validator=data_provider)
-
-            result = await elastic_server.async_bulk(
-                job.index_name,
-                self.prepare_docs(data_provider, job.pipeline, job.filtering),
-                job.pipeline,
-                filter_=job.filtering,
-                sync_rules_enabled=sync_rules_enabled,
-                options=bulk_options,
-            )
-            await self._sync_done(job, JobStatus.COMPLETED, result, start_time)
-        except asyncio.CancelledError:
-            await self._sync_done(job, JobStatus.SUSPENDED, {}, start_time)
-            logger.info(f"Sync suspended, Job id: {job.id}")
-        except Exception as e:
-            await self._sync_done(job, JobStatus.ERROR, {}, start_time, exception=e)
-            raise
 
 
 IDLE_JOBS_THRESHOLD = 60  # 60 seconds
