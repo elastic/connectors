@@ -126,7 +126,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         ):
             raise Exception("Google Cloud service account json can't be empty.")
         try:
-            _ = json.loads(self.configuration["service_account_credentials"])
+            json.loads(self.configuration["service_account_credentials"])
         except ValueError:
             raise Exception("Google Cloud service account is not a valid JSON.")
 
