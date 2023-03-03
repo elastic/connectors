@@ -15,6 +15,7 @@ from aiohttp import StreamReader
 from connectors.source import DataSourceConfiguration
 from connectors.sources.jira import JiraDataSource
 from connectors.sources.tests.support import create_source
+from connectors.utils import ssl_context
 
 HOST_URL = "http://127.0.0.1:8080"
 MOCK_PROJECT = {
@@ -123,7 +124,7 @@ def side_effect_function(url, ssl):
         url, ssl: Params required for get call
     """
     if url == f"{HOST_URL}/rest/api/2/search?maxResults=100&startAt=0":
-        mocked_issue_response = {"issues": [{"key": "1234"}], "total": 1}
+        mocked_issue_response = {"issues": [{"key": "1234"}], "total": 101}
         return MockResponse(mocked_issue_response, 200)
     elif url == f"{HOST_URL}/rest/api/2/issue/1234":
         mocked_issue_data = {
@@ -153,15 +154,16 @@ async def test_configuration(patch_logger):
     assert config["host_url"] == HOST_URL
 
 
-def test_validate_configuration_for_host_url():
-    """This function test _validate_configuration when host_url is invalid"""
+@pytest.mark.asyncio
+async def test_validate_config_for_host_url(patch_logger):
+    """This function test validate_config when host_url is invalid"""
     # Setup
     source = create_source(JiraDataSource)
     source.configuration.set_field(name="host_url", value="")
 
     # Execute
     with pytest.raises(Exception):
-        source._validate_configuration()
+        await source.validate_config()
 
 
 @pytest.mark.asyncio
@@ -176,7 +178,7 @@ async def test_api_call_negative():
     with patch.object(
         aiohttp.ClientSession, "get", side_effect=Exception("Something went wrong")
     ):
-        source.session = source._generate_session()
+        source._generate_session()
         with pytest.raises(Exception):
             await anext(source._api_call(url_name="ping"))
 
@@ -195,7 +197,7 @@ async def test_api_call_when_server_is_down():
         "get",
         side_effect=aiohttp.ServerDisconnectedError("Something went wrong"),
     ):
-        source.session = source._generate_session()
+        source._generate_session()
         with pytest.raises(aiohttp.ServerDisconnectedError):
             await anext(source._api_call(url_name="ping"))
 
@@ -209,14 +211,14 @@ async def test_ping_with_ssl(mock_get, patch_logger):
     mock_get.return_value.__aenter__.return_value.status = 200
     source = create_source(JiraDataSource)
 
-    source.ssl_disabled = False
+    source.ssl_enabled = True
     source.certificate = (
         "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
     )
 
     # Execute
     with patch.object(ssl, "create_default_context", return_value=mock_ssl()):
-        source.ssl_ctx = source._ssl_context(certificate=source.certificate)
+        source.ssl_ctx = ssl_context(certificate=source.certificate)
         await source.ping()
 
 
@@ -236,15 +238,31 @@ async def test_ping_for_failed_connection_exception(patch_logger):
             await source.ping()
 
 
-def test_validate_configuration_for_ssl_enabled():
-    """This function test _validate_configuration when certification is empty for ssl_disabled is False"""
+@pytest.mark.asyncio
+async def test_validate_config_for_ssl_enabled(patch_logger):
+    """This function test _validate_configuration when certification is empty when ssl is enabled"""
     # Setup
     source = create_source(JiraDataSource)
-    source.ssl_disabled = False
+    source.ssl_enabled = True
 
     # Execute
     with pytest.raises(Exception):
-        source._validate_configuration()
+        await source.validate_config()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_with_invalid_concurrent_downloads(patch_logger):
+    """Test validate_config method of BaseDataSource class with invalid concurrent downloads"""
+
+    # Setup
+    source = create_source(JiraDataSource)
+    source.concurrent_downloads = 1000
+
+    # Execute
+    with pytest.raises(
+        Exception, match="Configured concurrent downloads can't be set more than *"
+    ):
+        await source.validate_config()
 
 
 def test_tweak_bulk_options():
@@ -256,19 +274,6 @@ def test_tweak_bulk_options():
 
     # Execute
     source.tweak_bulk_options(options)
-
-
-def test_tweak_bulk_options_with_invalid():
-    """Test tweak_bulk_options method of BaseDataSource class with invalid concurrent downloads"""
-
-    # Setup
-    source = create_source(JiraDataSource)
-    options = {}
-    source.concurrent_downloads = 1000
-
-    # Execute
-    with pytest.raises(Exception):
-        source.tweak_bulk_options(options)
 
 
 @pytest.mark.asyncio
@@ -298,7 +303,7 @@ async def test_get_projects(patch_logger):
 
     # Execute and Assert
     with patch("aiohttp.ClientSession.get", return_value=async_project_response):
-        source.session = source._generate_session()
+        source._generate_session()
         async for response in source._get_projects():
             del response["_timestamp"]
             assert response == excepted_project_response
@@ -322,7 +327,7 @@ async def test_get_issues(patch_logger):
 
     # Execute and Assert
     with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
-        source.session = source._generate_session()
+        source._generate_session()
         async for issue_data, _ in source._get_issues():
             assert expected_response == issue_data
 
@@ -378,7 +383,7 @@ async def test_get_content(patch_logger):
 
     # Execute and Assert
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-        source.session = source._generate_session()
+        source._generate_session()
         with mock.patch(
             "aiohttp.StreamReader.iter_chunked",
             return_value=AsyncIter(bytes(RESPONSE_CONTENT, "utf-8")),
@@ -392,7 +397,7 @@ async def test_get_content(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_filesize_is_large():
+async def test_get_content_when_filesize_is_large(patch_logger):
     """Tests the get content method for file size greater than max limit."""
     # Setup
     source = create_source(JiraDataSource)
@@ -426,7 +431,7 @@ async def test_get_content_when_filesize_is_large():
 
 
 @pytest.mark.asyncio
-async def test_get_content_for_unsupported_filetype():
+async def test_get_content_for_unsupported_filetype(patch_logger):
     """Tests the get content method for file type is not supported."""
     # Setup
     source = create_source(JiraDataSource)
@@ -476,7 +481,7 @@ async def test_grab_content(patch_logger):
         {"id": "test_1234", "filename": "test_file.txt", "size": 200},
     )
     source._get_attachments = Mock(return_value=AsyncIter(issue_data))
-    source._get_content = Mock(return_value={"id": "123"})
+    source.get_content = Mock(return_value={"id": "123"})
 
     # Execute
     await source._grab_content("TP-1", issue_data[0])
@@ -525,11 +530,12 @@ async def test_get_docs():
             )
         )
     )
-    issue_data = (
+    attachment_data = (
         {
-            "_id": "TP-123-test_1",
+            "_id": "TP-1234-test_1",
             "title": "test_file.txt",
             "type": "Attachment",
+            "issue": "TP-1234",
             "_timestamp": "2023-01-03T09:24:50.633Z",
             "size": 200,
         },
@@ -540,7 +546,7 @@ async def test_get_docs():
             "size": 200,
         },
     )
-    source._get_attachments = Mock(return_value=AsyncIter(issue_data))
+    source._get_attachments = Mock(return_value=AsyncIter(attachment_data))
     source.get_content = Mock(
         return_value={
             "_id": "TP-123-test-1",
@@ -564,6 +570,14 @@ async def test_get_docs():
                 "updated": "2023-02-01:01:02:20",
                 "issuetype": {"name": "Task"},
             },
+        },
+        {
+            "_id": "TP-1234-test_1",
+            "title": "test_file.txt",
+            "type": "Attachment",
+            "issue": "TP-1234",
+            "_timestamp": "2023-01-03T09:24:50.633Z",
+            "size": 200,
         },
     ]
 

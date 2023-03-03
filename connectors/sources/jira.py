@@ -15,22 +15,21 @@ import aiofiles
 import aiohttp
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
+from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
+    CancellableSleeps,
     ConcurrentTasks,
     MemQueue,
     convert_to_b64,
     iso_utc,
+    ssl_context,
 )
 
-IS_CLOUD = True
 RETRY_INTERVAL = 2
-DEFAULT_CONTENT_EXTRACTION = True
-DEFAULT_SSL_DISABLED = True
-RETRIES = 3
 FILE_SIZE_LIMIT = 10485760
 
 FETCH_SIZE = 100
@@ -69,9 +68,10 @@ class JiraDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
+        self._sleeps = CancellableSleeps()
         self.is_cloud = self.configuration["is_cloud"]
         self.host_url = self.configuration["host_url"]
-        self.ssl_disabled = self.configuration["ssl_disabled"]
+        self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.retry_count = self.configuration["retry_count"]
@@ -79,6 +79,7 @@ class JiraDataSource(BaseDataSource):
 
         self.ssl_ctx = False
         self.session = None
+        self.tasks = 0
         self.queue = MemQueue(
             maxsize=QUEUE_SIZE, maxmemsize=QUEUE_MEM_SIZE * 1024 * 1024
         )
@@ -93,7 +94,7 @@ class JiraDataSource(BaseDataSource):
         """
         return {
             "is_cloud": {
-                "value": IS_CLOUD,
+                "value": True,
                 "label": "True if Jira Cloud, False if Jira Server",
                 "type": "bool",
             },
@@ -122,9 +123,9 @@ class JiraDataSource(BaseDataSource):
                 "label": "Jira host url",
                 "type": "str",
             },
-            "ssl_disabled": {
-                "value": DEFAULT_SSL_DISABLED,
-                "label": "Disable SSL verification. True if SSL is disabled else False",
+            "ssl_enabled": {
+                "value": False,
+                "label": "Enable SSL verification (true/false)",
                 "type": "bool",
             },
             "ssl_ca": {
@@ -133,12 +134,12 @@ class JiraDataSource(BaseDataSource):
                 "type": "str",
             },
             "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
+                "value": True,
                 "label": "Enable content extraction (true/false)",
                 "type": "bool",
             },
             "retry_count": {
-                "value": RETRIES,
+                "value": 3,
                 "label": "Maximum retries for failed requests",
                 "type": "int",
             },
@@ -154,42 +155,44 @@ class JiraDataSource(BaseDataSource):
 
         Args:
             options (dictionary): Config bulker options
-
-        Raises:
-            Exception: Invalid configured concurrent_downloads
         """
-        if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
-            raise Exception(
-                f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
-            )
         options["concurrent_downloads"] = self.concurrent_downloads
 
-    def _validate_configuration(self):
+    async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields
 
         Raises:
             Exception: Configured keys can't be empty
         """
-        logger.info("Validating Jira Configuration...")
+        logger.info("Validating Jira Configuration")
         connection_fields = (
             ["host_url", "service_account_id", "api_token"]
             if self.is_cloud
             else ["host_url", "username", "password"]
         )
 
+        default_config = self.get_default_configuration()
+
         if empty_connection_fields := [
-            field for field in connection_fields if self.configuration[field] == ""
+            default_config[field]["label"]
+            for field in connection_fields
+            if self.configuration[field] == ""
         ]:
             raise Exception(
                 f"Configured keys: {empty_connection_fields} can't be empty."
             )
 
-        if not self.ssl_disabled and self.certificate == "":
-            raise Exception("When ssl_disabled is False then ssl_ca can't be empty.")
+        if self.ssl_enabled and self.certificate == "":
+            raise Exception("SSL certificate must be configured.")
+
+        if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
+            raise Exception(
+                f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
+            )
 
     def _generate_session(self):
-        """Generates a new session"""
-        logger.debug("Creating a session...")
+        """Generates an aiohttp Client Session for handling the connections"""
+        logger.debug("Creating an aiohttp Client Session")
         if self.is_cloud:
             auth = (
                 self.configuration["service_account_id"],
@@ -206,8 +209,8 @@ class JiraDataSource(BaseDataSource):
             "accept": "application/json",
             "content-type": "application/json",
         }
-        timeout = aiohttp.ClientTimeout(total=None)
-        return aiohttp.ClientSession(
+        timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
+        self.session = aiohttp.ClientSession(
             auth=basic_auth,
             headers=request_headers,
             timeout=timeout,
@@ -216,16 +219,17 @@ class JiraDataSource(BaseDataSource):
 
     async def close(self):
         """Closes unclosed client session"""
+        self._sleeps.cancel()
         if self.session is None:
             return
         await self.session.close()
+        self.session = None
 
-    async def _api_call(self, url_name, is_pagination=False, **url_kwargs):
-        """Method for adding retries whenever exception raised during an api calls
+    async def _api_call(self, url_name, **url_kwargs):
+        """Make a GET call for Atlassian API using the passed url_name with retry for the failed API calls.
 
         Args:
-            url_name (str): Jira query name to be executed.
-            is_pagination (bool): Flag to check if the pagination is required
+            url_name (str): URL Name to identify the API endpoint to hit
             url_kwargs (dict): Url kwargs to format the query.
 
         Raises:
@@ -235,45 +239,53 @@ class JiraDataSource(BaseDataSource):
             response: Return api response.
         """
         retry = 0
-        start_at = 0
         url = parse.urljoin(self.host_url, URLS[url_name].format(**url_kwargs))
-
         while True:
             try:
-                async with self.session.get(
+                async with self.session.get(  # pyright: ignore
                     url=url,
                     ssl=self.ssl_ctx,
                 ) as response:
-                    if is_pagination:
-                        response_json = await response.json()
-                        total = response_json.get("total")
-                        yield response_json
-                        if start_at + FETCH_SIZE >= total or total <= FETCH_SIZE:
-                            break
-                        start_at += FETCH_SIZE
-                        url = parse.urljoin(
-                            self.host_url,
-                            URLS[url_name].format(
-                                startAt=start_at, maxResults=FETCH_SIZE
-                            ),
-                        )
-                        retry = 0
-                    else:
-                        yield response
-                        break
+                    yield response
+                    break
             except Exception as exception:
                 if isinstance(
-                    exception, aiohttp.client_exceptions.ServerDisconnectedError
+                    exception,
+                    ServerDisconnectedError,
                 ):
                     await self.close()
-                    self.session = self._generate_session()
+                    self._generate_session()
                 retry += 1
                 if retry > self.retry_count:
                     raise exception
                 logger.warning(
                     f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
                 )
-                await asyncio.sleep(RETRY_INTERVAL**retry)
+                await self._sleeps.sleep(RETRY_INTERVAL**retry)
+
+    async def _paginated_api_call(self, url_name):
+        """Make a paginated API call for Jira objects using the passed url_name with retry for the failed API calls.
+
+        Args:
+            url_name (str): URL Name to identify the API endpoint to hit
+
+        Yields:
+            response: Return api response.
+        """
+        start_at = 0
+
+        should_paginate = True
+        while should_paginate:
+            async for response in self._api_call(
+                url_name=url_name, startAt=start_at, maxResults=FETCH_SIZE
+            ):
+                response_json = await response.json()
+                total = response_json.get("total")
+                yield response_json
+                if start_at + FETCH_SIZE > total or total <= FETCH_SIZE:
+                    should_paginate = False
+                    break
+                start_at += FETCH_SIZE
 
     async def get_content(self, issue_key, attachment, timestamp=None, doit=False):
         """Extracts the content for allowed file types.
@@ -318,7 +330,7 @@ class JiraDataSource(BaseDataSource):
             ):
                 async for data in response.content.iter_chunked(CHUNK_SIZE):
                     await async_buffer.write(data)
-                temp_filename = async_buffer.name
+                temp_filename = str(async_buffer.name)
 
         logger.debug(f"Calling convert_to_b64 for file : {attachment_name}")
         await asyncio.to_thread(convert_to_b64, source=temp_filename)
@@ -330,13 +342,14 @@ class JiraDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Jira"""
-        self._validate_configuration()
-        self.session = self._generate_session()
-        if not self.ssl_disabled:
-            self.ssl_ctx = self._ssl_context(certificate=self.certificate)
+        if self.session is None:
+            self._generate_session()
+
+        if self.ssl_enabled:
+            self.ssl_ctx = ssl_context(certificate=self.certificate)
         try:
             await anext(self._api_call(url_name=PING))
-            logger.info("Successfully connected to the Jira")
+            logger.debug("Successfully connected to the Jira")
         except Exception:
             logger.exception("Error while connecting to the Jira")
             raise
@@ -364,9 +377,7 @@ class JiraDataSource(BaseDataSource):
             Dictionary: Jira issue to get indexed
             issue (dict): Issue response to fetch the attachments
         """
-        async for response in self._api_call(
-            url_name=ISSUES, is_pagination=True, maxResults=FETCH_SIZE, startAt=0
-        ):
+        async for response in self._paginated_api_call(url_name=ISSUES):
             for issue in response.get("issues", []):
                 async for response in self._api_call(
                     url_name=ISSUE_DATA, id=issue["key"]
@@ -412,17 +423,17 @@ class JiraDataSource(BaseDataSource):
         async for content, attachment in self._get_attachments(
             attachments=attachments, issue_key=issue_key
         ):
-            if attachment:
-                await self.queue.put(
-                    (
-                        content,
-                        partial(
-                            self.get_content,
-                            issue_key=issue_key,
-                            attachment=copy(attachment),
-                        ),
-                    )
+            await self.queue.put(
+                (  # pyright: ignore
+                    content,
+                    partial(
+                        self.get_content,
+                        issue_key=issue_key,
+                        attachment=copy(attachment),
+                    ),
                 )
+            )
+        await self.queue.put("FINISHED")  # pyright: ignore
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch jira objects in async manner
@@ -433,35 +444,42 @@ class JiraDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the files.
         """
+        if self.session is None:
+            self._generate_session()
+        if self.ssl_enabled:
+            self.ssl_ctx = ssl_context(certificate=self.certificate)
 
         async def _project_task():
             """Coroutine to add projects documents to Queue"""
             async for project_data in self._get_projects():
-                await self.queue.put((project_data, None))
-            await self.queue.put("FINISHED")
+                await self.queue.put((project_data, None))  # pyright: ignore
+            await self.queue.put("FINISHED")  # pyright: ignore
 
         async def _document_task():
             """Coroutine to add issues/attachments to Queue"""
             async for document, issue in self._get_issues():
-                await self.queue.put((document, None))
+                await self.queue.put((document, None))  # pyright: ignore
                 attachments = issue["fields"]["attachment"]
                 if len(attachments) > 0:
                     await self.fetchers.put(
                         partial(self._grab_content, attachments, issue["key"])
                     )
-            await self.queue.put("FINISHED")
+                    self.tasks += 1
+            await self.queue.put("FINISHED")  # pyright: ignore
 
         project_task = asyncio.create_task(_project_task())
-        attachment_task = asyncio.create_task(_document_task())
-        completed_tasks = 0
-        while True:
+        self.tasks += 1
+        document_task = asyncio.create_task(_document_task())
+        self.tasks += 1
+
+        # Consumer block to grab items from queue in a loop and yield one at a time.
+        # Once, all tasks are completed, loop is terminated to stop the consumer.
+        while self.tasks > 0:
             _, item = await self.queue.get()
             if item == "FINISHED":
-                completed_tasks += 1
-                if completed_tasks == 2:
-                    break
+                self.tasks -= 1
             else:
                 yield item
 
         await self.fetchers.join()
-        await asyncio.gather(project_task, attachment_task)
+        await asyncio.gather(project_task, document_task)
