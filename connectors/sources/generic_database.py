@@ -13,7 +13,7 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import iso_utc
 
-ALL_TABLES = "*"
+WILDCARD = "*"
 
 DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
@@ -21,6 +21,15 @@ DEFAULT_WAIT_MULTIPLIER = 2
 
 
 def configured_tables(tables):
+    """Split a string containing a comma-seperated list of tables by comma and strip the table names.
+
+    Filter out `None` and zero-length values from the tables.
+    If `tables` is a list return the list also without `None` and zero-length values.
+
+    Arguments:
+    - `tables`: string containing a comma-seperated list of tables or a list of tables
+    """
+
     def table_filter(table):
         return table is not None and len(table) > 0
 
@@ -34,6 +43,10 @@ def configured_tables(tables):
         if isinstance(tables, str)
         else list(filter(lambda table: table_filter(table), tables))
     )
+
+
+def is_wildcard(tables):
+    return tables in (WILDCARD, [WILDCARD])
 
 
 class GenericBaseDataSource(BaseDataSource):
@@ -97,7 +110,7 @@ class GenericBaseDataSource(BaseDataSource):
                 "type": "str",
             },
             "tables": {
-                "value": ALL_TABLES,
+                "value": WILDCARD,
                 "label": "Comma-separated list of tables",
                 "type": "list",
             },
@@ -406,11 +419,8 @@ class GenericBaseDataSource(BaseDataSource):
 
     async def get_tables_to_fetch(self, schema):
         tables = configured_tables(self.tables)
-        fetch_all_tables = tables == ALL_TABLES or (
-            isinstance(tables, list) and tables == [ALL_TABLES]
-        )
 
-        tables_to_fetch = (
+        return (
             map(
                 lambda table: table[0],
                 await anext(
@@ -422,8 +432,6 @@ class GenericBaseDataSource(BaseDataSource):
                     )
                 ),
             )
-            if fetch_all_tables
+            if is_wildcard(tables)
             else tables
         )
-
-        return tables_to_fetch
