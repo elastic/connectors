@@ -12,7 +12,7 @@ from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import CancellableSleeps, ssl_context
+from connectors.utils import CancellableSleeps, ssl_context, iso_utc
 
 FILE_SIZE_LIMIT = 10485760
 RETRY_INTERVAL = 2
@@ -241,3 +241,7 @@ class ConfluenceDataSource(BaseDataSource):
         except Exception:
             logger.exception("Error while connecting to the Confluence")
             raise
+
+    async def get_docs(self, filtering=None):
+        # yield dummy document to make the chunked PR work, subsequent PR will replace it with actual implementation
+        yield {"_id": "123", "timestamp": iso_utc()}, None
