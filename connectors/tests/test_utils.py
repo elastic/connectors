@@ -10,10 +10,12 @@ import contextlib
 import functools
 import os
 import random
+import ssl
 import tempfile
 import time
 import timeit
-from unittest.mock import Mock
+from datetime import datetime
+from unittest.mock import Mock, patch
 
 import pytest
 from freezegun import freeze_time
@@ -26,10 +28,14 @@ from connectors.utils import (
     MemQueue,
     RetryStrategy,
     convert_to_b64,
+    encode,
     get_base64_value,
+    get_expires_at,
     get_size,
+    is_expired,
     next_run,
     retryable,
+    ssl_context,
     validate_index_name,
 )
 
@@ -336,3 +342,51 @@ async def test_exponential_backoff_retry():
 
     # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
     await does_not_raise()
+
+
+class MockSSL:
+    """This class contains methods which returns dummy ssl context"""
+
+    def load_verify_locations(self, cadata):
+        """This method verify locations"""
+        pass
+
+
+def test_ssl_context():
+    """This function test ssl_context with dummy certificate"""
+    # Setup
+    certificate = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
+
+    # Execute
+    with patch.object(ssl, "create_default_context", return_value=MockSSL()):
+        ssl_context(certificate=certificate)
+
+
+def test_encode():
+    """Test the encode method by passing a string"""
+    # Execute
+    encode_response = encode('''http://ascii.cl?parameter="Click on 'URL Decode'!"''')
+    # Assert
+    assert (
+        encode_response
+        == "http%3A%2F%2Fascii.cl%3Fparameter%3D%22Click%20on%20''URL%20Decode''%21%22"
+    )
+
+
+def test_is_expired():
+    """This method checks whether token expires or not"""
+    # Execute
+    expires_at = datetime.fromisoformat("2023-02-10T09:02:23.629821")
+    actual_response = is_expired(expires_at=expires_at)
+    # Assert
+    assert actual_response is True
+
+
+@freeze_time("2023-02-18 14:25:26.158843", tz_offset=-4)
+def test_get_expires_at():
+    """This method tests adding seconds to the current utc time"""
+    # Execute
+    expected_response = get_expires_at(expires_in=86399)
+
+    # Assert
+    assert expected_response == "2023-02-19T14:25:05.158843"

@@ -7,8 +7,7 @@
 """
 import asyncio
 import os
-import urllib.parse
-from datetime import datetime, timedelta
+from datetime import datetime
 from functools import partial
 from urllib.parse import urljoin
 
@@ -16,21 +15,27 @@ import aiofiles
 import aiohttp
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
+from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
+    CancellableSleeps,
     RetryStrategy,
     convert_to_b64,
-    iso_utc,
+    encode,
+    get_expires_at,
+    is_expired,
     retryable,
+    ssl_context,
 )
 
 RETRY_INTERVAL = 2
 RETRIES = 3
 FILE_SIZE_LIMIT = 10485760
 CHUNK_SIZE = 1024
+TOP = 5000
 PING = "ping"
 SITES = "sites"
 LISTS = "lists"
@@ -86,51 +91,6 @@ SCHEMA = {
 }
 
 
-def encode(original_string):
-    """Performs encoding on the name of objects
-    containing special characters in their url, and
-    replaces single quote with two single quote since quote
-    is treated as an escape character
-
-    Args:
-        original_string(string): String containing special characters
-
-    Returns:
-        encoded_string(string): Parsed string without single quotes
-    """
-    encoded_string = urllib.parse.quote(original_string, safe="'")
-    return encoded_string.replace("'", "''")
-
-
-def get_expires_at(expires_in):
-    """Adds seconds to the current utc time.
-
-    Args:
-        expires_in (int): Seconds after which the token will expire.
-    """
-    expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
-    # account for clock skew
-    expires_at -= timedelta(seconds=20)
-    return iso_utc(when=expires_at)
-
-
-def is_expired(expires_at):
-    """Compares the given time with present time
-
-    Args:
-        expires_at (datetime): Time of token expires.
-    """
-    # Recreate in case there's no expires_at present
-    if expires_at is None:
-        return True
-    if not isinstance(expires_at, datetime):
-        expires_at = datetime.fromisoformat(expires_at)
-    if datetime.utcnow() >= expires_at:
-        return True
-    else:
-        return False
-
-
 class SharepointDataSource(BaseDataSource):
     """Sharepoint"""
 
@@ -146,15 +106,16 @@ class SharepointDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.is_cloud = self.configuration["is_cloud"]
         self.site_collections = self.configuration["site_collections"]
-        self.ssl_disabled = self.configuration["ssl_disabled"]
+        self.ssl_enabled = self.configuration["ssl_enabled"]
         self.host_url = self.configuration["host_url"]
         self.certificate = self.configuration["ssl_ca"]
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.retry_count = self.configuration["retry_count"]
+        self._sleeps = CancellableSleeps()
         self.ssl_ctx = False
         self.session = None
         self.access_token = None
-        self.token_expires_in = None
+        self.token_expires_at = None
 
     @classmethod
     def get_default_configuration(cls):
@@ -209,9 +170,9 @@ class SharepointDataSource(BaseDataSource):
                 "label": "List of Sharepoint site collections to index",
                 "type": "list",
             },
-            "ssl_disabled": {
-                "value": True,
-                "label": "Disable SSL verification",
+            "ssl_enabled": {
+                "value": False,
+                "label": "Enable SSL verification (true/false)",
                 "type": "bool",
             },
             "ssl_ca": {
@@ -231,13 +192,13 @@ class SharepointDataSource(BaseDataSource):
             },
         }
 
-    def _validate_configuration(self):
+    async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields
 
         Raises:
             Exception: Configured keys can't be empty.
         """
-        logger.info("Validating Sharepoint Configuration...")
+        logger.info("Validating Sharepoint Configuration")
 
         connection_fields = (
             [
@@ -252,14 +213,18 @@ class SharepointDataSource(BaseDataSource):
             else ["host_url", "site_collections", "username", "password"]
         )
 
+        default_config = self.get_default_configuration()
+
         if empty_connection_fields := [
-            field for field in connection_fields if self.configuration[field] == ""
+            default_config[field]["label"]
+            for field in connection_fields
+            if self.configuration[field] == ""
         ]:
             raise Exception(
                 f"Configured keys: {empty_connection_fields} can't be empty."
             )
-        if not self.ssl_disabled and self.certificate == "":
-            raise Exception("Configured key ssl_ca can't be empty when SSL is enabled")
+        if self.ssl_enabled and self.certificate == "":
+            raise Exception("SSL certificate must be configured.")
 
     @retryable(
         retries=RETRIES,
@@ -268,11 +233,15 @@ class SharepointDataSource(BaseDataSource):
     )
     async def _set_access_token(self):
         """Set access token using configuration fields"""
-        if not is_expired(expires_at=self.token_expires_in):
+        expires_at = self.token_expires_at
+        if self.token_expires_at and (not isinstance(expires_at, datetime)):
+            expires_at = datetime.fromisoformat(expires_at)  # pyright: ignore
+        if not is_expired(expires_at=expires_at):
             return
         tenant_id = self.configuration["tenant_id"]
-        logger.info("Generating access token...")
+        logger.debug("Generating access token")
         url = f"https://accounts.accesscontrol.windows.net/{tenant_id}/tokens/OAuth/2"
+        # GUID in resource is always a constant used to create access token
         data = {
             "grant_type": "client_credentials",
             "resource": f"00000003-0000-0ff1-ce00-000000000000/{self.configuration['tenant']}.sharepoint.com@{tenant_id}",
@@ -299,7 +268,7 @@ class SharepointDataSource(BaseDataSource):
             "accept": "application/json",
             "content-type": "application/json",
         }
-        timeout = aiohttp.ClientTimeout(total=None)
+        timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
 
         if self.is_cloud:
             basic_auth = None
@@ -309,7 +278,7 @@ class SharepointDataSource(BaseDataSource):
                 login=self.configuration["username"],
                 password=self.configuration["password"],
             )
-        return aiohttp.ClientSession(
+        self.session = aiohttp.ClientSession(
             auth=basic_auth,
             headers=request_headers,
             timeout=timeout,
@@ -318,6 +287,7 @@ class SharepointDataSource(BaseDataSource):
 
     async def close(self):
         """Closes unclosed client session"""
+        logger.debug("Closing aiohttp Client Session...")
         if self.session is None:
             return
         await self.session.close()
@@ -339,14 +309,15 @@ class SharepointDataSource(BaseDataSource):
         # If pagination happens for list and drive items then next pagination url comes in response which will be passed in url field.
         if url == "":
             url = URLS[url_name].format(**url_kwargs)
+        headers = None
+        if self.is_cloud:
+            headers = {"Authorization": f"Bearer {self.access_token}"}
         while True:
             try:
                 async with self.session.get(
                     url=url,
                     ssl=self.ssl_ctx,
-                    headers={"Authorization": f"Bearer {self.access_token}"}
-                    if self.is_cloud
-                    else None,
+                    headers=headers,
                 ) as result:
                     if url_name == ATTACHMENT:
                         yield result
@@ -355,23 +326,26 @@ class SharepointDataSource(BaseDataSource):
                     break
             except Exception as exception:
                 if isinstance(
-                    exception, aiohttp.client_exceptions.ClientResponseError
-                ) and "token has expired" in exception.headers.get(
+                    exception,
+                    ClientResponseError,
+                ) and "token has expired" in exception.headers.get(  # pyright: ignore
                     "x-ms-diagnostics", ""
                 ):
                     await self._set_access_token()
                 elif isinstance(
-                    exception, aiohttp.client_exceptions.ServerDisconnectedError
+                    exception,
+                    ServerDisconnectedError,
                 ):
-                    await self.close()
-                    self.session = await self._generate_session()
-                retry += 1
-                if retry > self.retry_count:
+                    await self.session.close()
+                    await self._generate_session()
+                if retry >= self.retry_count:
                     raise exception
+                retry += 1
+
                 logger.warning(
                     f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
                 )
-                await asyncio.sleep(RETRY_INTERVAL**retry)
+                await self._sleeps.sleep(RETRY_INTERVAL**retry)
 
     def format_document(
         self,
@@ -429,13 +403,12 @@ class SharepointDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Sharepoint"""
+        if self.session is None:
+            await self._generate_session()
 
-        self._validate_configuration()
+        if self.ssl_enabled and (not self.ssl_ctx):
+            self.ssl_ctx = ssl_context(certificate=self.certificate)
 
-        if not self.ssl_disabled:
-            self.ssl_ctx = self._ssl_context(certificate=self.certificate)
-
-        self.session = await self._generate_session()
         try:
             await anext(
                 self._api_call(
@@ -444,13 +417,17 @@ class SharepointDataSource(BaseDataSource):
                     host_url=self.host_url,
                 )
             )
-            logger.info("Successfully connected to the Sharepoint")
+            logger.debug(
+                f"Successfully connected to the Sharepoint via {self.host_url}"
+            )
         except Exception:
-            logger.exception("Error while connecting to the Sharepoint")
+            logger.exception(
+                f"Error while connecting to the Sharepoint via {self.host_url}"
+            )
             raise
 
     async def get_content(
-        self, document, file_relative_url, site_url, timestamp=None, doit=None
+        self, document, file_relative_url, site_url, timestamp=None, doit=False
     ):
         """Get content of list items and drive items
 
@@ -459,7 +436,7 @@ class SharepointDataSource(BaseDataSource):
             file_relative_url (str): Relative url of file
             site_url (str): Site path of sharepoint
             timestamp (timestamp, optional): Timestamp of item last modified. Defaults to None.
-            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to None.
+            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
 
         Returns:
             dictionary: Content document with id, timestamp & text.
@@ -495,7 +472,7 @@ class SharepointDataSource(BaseDataSource):
         async with aiofiles.open(file=source_file_name, mode="r") as target_file:
             # base64 on macOS will add a EOL, so we strip() here
             attachment_content = (await target_file.read()).strip()
-        await remove(source_file_name)
+        await remove(source_file_name)  # pyright: ignore
         return {
             "_id": document.get("id"),
             "_timestamp": document.get("_timestamp"),
@@ -512,7 +489,7 @@ class SharepointDataSource(BaseDataSource):
         Yields:
             Response of the GET call.
         """
-        skip, top = 0, 5000
+        skip = 0
         next_url = ""
         while True:
             if param_name in [SITES, LISTS]:
@@ -521,15 +498,15 @@ class SharepointDataSource(BaseDataSource):
                         url_name=param_name,
                         parent_site_url=site_url,
                         skip=skip,
-                        top=top,
+                        top=TOP,
                         host_url=self.host_url,
                     )
                 )
-                response_result = response.get("value", [])
+                response_result = response.get("value", [])  # pyright: ignore
                 yield response_result
 
-                skip += 5000
-                if len(response_result) < 5000:
+                skip += TOP
+                if len(response_result) < TOP:
                     break
             elif param_name in [
                 DRIVE_ITEM,
@@ -548,14 +525,14 @@ class SharepointDataSource(BaseDataSource):
                             url_name=param_name,
                             parent_site_url=site_url,
                             list_id=list_id,
-                            top=top,
+                            top=TOP,
                             host_url=self.host_url,
                         )
                     )
-                response_result = response.get("value", [])
+                response_result = response.get("value", [])  # pyright: ignore
                 yield response_result
 
-                next_url = response.get("odata.nextLink", "")
+                next_url = response.get("odata.nextLink", "")  # pyright: ignore
                 if next_url == "":
                     break
 
@@ -571,7 +548,7 @@ class SharepointDataSource(BaseDataSource):
             site_url=site_url, param_name=SITES
         ):
             for data in sites_data:
-                async for sub_site in self.get_sites(
+                async for sub_site in self.get_sites(  # pyright: ignore
                     site_url=data["ServerRelativeUrl"]
                 ):
                     yield sub_site
@@ -614,8 +591,8 @@ class SharepointDataSource(BaseDataSource):
                             file_relative_url=file_relative_url,
                         )
                     )
-                    result["size"] = attachment_data.get("Length")
-                    result["_id"] = attachment_data["UniqueId"]
+                    result["size"] = attachment_data.get("Length")  # pyright: ignore
+                    result["_id"] = attachment_data["UniqueId"]  # pyright: ignore
                     result["url"] = urljoin(
                         self.host_url, attachment_file.get("ServerRelativeUrl")
                     )
@@ -674,6 +651,7 @@ class SharepointDataSource(BaseDataSource):
         """
         async for list_data in self.invoke_get_call(site_url=site, param_name=LISTS):
             for result in list_data:
+                # if BaseType value is 1 then it's document library else it's a list item
                 if result.get("BaseType") == 1:
                     server_url = None
                     document_type = DOCUMENT_LIBRARY
@@ -700,10 +678,21 @@ class SharepointDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the Sharepoint objects.
         """
+        if self.session is None:
+            await self._generate_session()
+
+        if self.ssl_enabled and (not self.ssl_ctx):
+            self.ssl_ctx = ssl_context(certificate=self.certificate)
+
+        server_relative_url = []
+
         for collection in self.site_collections:
+            server_relative_url.append(f"/sites/{collection}")
             async for site_document in self.get_sites(site_url=f"/sites/{collection}"):
+                server_relative_url.append(site_document["server_relative_url"])
                 yield site_document, None
-                site_url = site_document["server_relative_url"]
+
+            for site_url in server_relative_url:
                 async for item, file_relative_url in self.get_lists_and_items(
                     site=site_url
                 ):

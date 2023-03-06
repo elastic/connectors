@@ -11,15 +11,9 @@ from unittest.mock import Mock, patch
 import aiohttp
 import pytest
 from aiohttp import StreamReader
-from freezegun import freeze_time
 
 from connectors.source import DataSourceConfiguration
-from connectors.sources.sharepoint import (
-    SharepointDataSource,
-    encode,
-    get_expires_at,
-    is_expired,
-)
+from connectors.sources.sharepoint import SharepointDataSource
 from connectors.sources.tests.support import create_source
 
 EXCEPTION_MESSAGE = "Something went wrong"
@@ -132,26 +126,28 @@ async def test_ping_for_failed_connection_exception(patch_logger):
                 await source.ping()
 
 
-def test_validate_configuration_when_host_url_is_empty():
-    """This function test _validate_configuration when host_url is empty"""
+@pytest.mark.asyncio
+async def test_validate_config_when_host_url_is_empty():
+    """This function test validate_config when host_url is empty"""
     # Setup
     source = create_source(SharepointDataSource)
     source.configuration.set_field(name="host_url", value="")
 
     # Execute
     with pytest.raises(Exception):
-        source._validate_configuration()
+        await source.validate_config()
 
 
-def test_validate_configuration_for_ssl_enabled():
-    """This function test _validate_configuration when ssl is enabled and certificate is missing"""
+@pytest.mark.asyncio
+async def test_validate_config_for_ssl_enabled():
+    """This function test validate_config when ssl is enabled and certificate is missing"""
     # Setup
     source = create_source(SharepointDataSource)
-    source.ssl_disabled = False
+    source.ssl_enabled = True
 
     # Execute
     with pytest.raises(Exception):
-        source._validate_configuration()
+        await source.validate_config()
 
 
 @pytest.mark.asyncio
@@ -577,7 +573,7 @@ async def test_get_docs(patch_logger):
     async for document, _ in source.get_docs():
         actual_response.append(document)
     # Assert
-    assert len(actual_response) == 2
+    assert len(actual_response) == 3
 
 
 @pytest.mark.asyncio
@@ -807,7 +803,7 @@ async def test_api_call_successfully():
     with patch("aiohttp.ClientSession.get", return_value=async_response), patch(
         "aiohttp.request", return_value=async_response_token
     ):
-        source.session = await source._generate_session()
+        await source._generate_session()
         # Execute
         async for response in source._api_call(
             url_name="ping", site_collections="abc", host_url="sharepoint.com"
@@ -832,39 +828,10 @@ async def test_api_call_when_server_is_down():
         side_effect=aiohttp.ServerDisconnectedError("Something went wrong"),
     ):
         with patch("aiohttp.request", return_value=async_response):
-            source.session = await source._generate_session()
+            await source._generate_session()
             with pytest.raises(aiohttp.ServerDisconnectedError):
                 # Execute
                 await anext(source._api_call(url_name="attachment", url="abc.com"))
-
-
-def test_encode():
-    """Test the encode method by passing a string"""
-    # Execute
-    encode_response = encode('''http://ascii.cl?parameter="Click on 'URL Decode'!"''')
-    # Assert
-    assert (
-        encode_response
-        == "http%3A%2F%2Fascii.cl%3Fparameter%3D%22Click%20on%20''URL%20Decode''%21%22"
-    )
-
-
-def test_is_expired():
-    """This method checks whether token expires or not"""
-    # Execute
-    actual_response = is_expired(expires_at="2023-02-10T09:02:23.629821")
-    # Assert
-    assert actual_response is True
-
-
-@freeze_time("2023-02-18 14:25:26.158843", tz_offset=-4)
-def test_get_expires_at():
-    """This method tests adding seconds to the current utc time"""
-    # Execute
-    expected_response = get_expires_at(expires_in=86399)
-
-    # Assert
-    assert expected_response == "2023-02-19T14:25:05.158843"
 
 
 @pytest.mark.asyncio
@@ -880,6 +847,23 @@ async def test_set_access_token():
         await source._set_access_token()
         # Assert
         assert source.access_token == "test2344"
+
+
+@pytest.mark.asyncio
+async def test_set_access_token_when_token_expires_at_is_str():
+    """This method tests set access token  api call when token_expires_at type is str"""
+    # Setup
+    source = create_source(SharepointDataSource)
+    source.token_expires_at = "2023-02-10T09:02:23.629821"
+    mock_token = {"access_token": "test2344", "expires_in": "1234555"}
+    async_response_token = MockResponse(mock_token, 200)
+    actual_response = source._set_access_token()
+
+    # Execute
+    with patch("aiohttp.request", return_value=async_response_token):
+        actual_response = await source._set_access_token()
+        # Assert
+        assert actual_response is None
 
 
 @pytest.mark.asyncio
@@ -907,7 +891,7 @@ async def test_api_call_when_token_is_expired():
         ),
     ):
         with patch("aiohttp.request", return_value=async_response):
-            source.session = await source._generate_session()
+            await source._generate_session()
             with pytest.raises(aiohttp.ClientResponseError):
                 # Execute
                 await anext(source._api_call(url_name="attachment", url="abc.com"))
