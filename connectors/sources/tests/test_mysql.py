@@ -69,7 +69,7 @@ MYSQL = {
 @pytest.fixture
 def patch_fetch_tables():
     with mock.patch.object(
-        MySqlDataSource, "fetch_tables", side_effect=([])
+        MySqlDataSource, "fetch_all_tables", side_effect=([])
     ) as fetch_tables:
         yield fetch_tables
 
@@ -296,7 +296,7 @@ async def test_fetch_documents():
 
 
 @pytest.mark.asyncio
-async def test_fetch_rows_from_all_tables():
+async def test_fetch_rows_from_tables():
     source = await setup_mysql_source()
 
     query = "select * from table"
@@ -310,7 +310,7 @@ async def test_fetch_rows_from_all_tables():
         mock.patch("source._connect", return_value=response)
 
     # Assert
-    async for row in source.fetch_rows_from_all_tables():
+    async for row in source.fetch_rows_from_tables("table"):
         assert "_id" in row
 
 
@@ -330,7 +330,7 @@ async def test_get_docs():
     with mock.patch.object(
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
-        source.fetch_rows_from_all_tables = mock.MagicMock(
+        source.fetch_rows_from_tables = mock.MagicMock(
             return_value=AsyncIterator([{"a": 1, "b": 2}])
         )
 
@@ -510,3 +510,14 @@ async def test_advanced_rules_tables_validation(
     )
 
     assert validation_result == expected_validation_result
+
+
+@pytest.mark.parametrize("tables", ["*", ["*"]])
+@pytest.mark.asyncio
+async def test_get_tables_to_fetch_remote_tables(tables):
+    source = create_source(MySqlDataSource)
+    source.fetch_all_tables = AsyncMock(return_value="table")
+
+    await source.get_tables_to_fetch()
+
+    assert source.fetch_all_tables.call_count == 1
