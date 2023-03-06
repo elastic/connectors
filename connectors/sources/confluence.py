@@ -12,7 +12,7 @@ from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import CancellableSleeps, ssl_context, iso_utc
+from connectors.utils import CancellableSleeps, iso_utc, ssl_context
 
 FILE_SIZE_LIMIT = 10485760
 RETRY_INTERVAL = 2
