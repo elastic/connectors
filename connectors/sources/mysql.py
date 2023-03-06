@@ -168,7 +168,7 @@ class MySqlDataSource(BaseDataSource):
         await self.connection_pool.wait_closed()
         self.connection_pool = None
 
-    def _validate_configuration(self):
+    async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields and validate type for port
 
         Raises:
@@ -213,7 +213,6 @@ class MySqlDataSource(BaseDataSource):
     async def ping(self):
         """Verify the connection with MySQL server"""
         logger.info("Validating MySQL Configuration...")
-        self._validate_configuration()
         connection_string = {
             "host": self.configuration["host"],
             "port": int(self.configuration["port"]),
@@ -250,8 +249,7 @@ class MySqlDataSource(BaseDataSource):
 
         query_kwargs["database"] = self.database
         formatted_query = query.format(**query_kwargs)
-        size = int(self.configuration.get("fetch_size", DEFAULT_FETCH_SIZE))
-
+        size = self.configuration["fetch_size"]
         retry = 1
         yield_once = True
 
@@ -315,7 +313,7 @@ class MySqlDataSource(BaseDataSource):
     async def fetch_all_tables(self):
         return await anext(self._connect(query=QUERIES["ALL_TABLE"]))
 
-    async def fetch_rows_for_table(self, table=None, query=None):
+    async def fetch_rows_for_table(self, table=None, query=QUERIES["TABLE_DATA"]):
         """Fetches all the rows from all the tables of the database.
 
         Args:
@@ -325,8 +323,7 @@ class MySqlDataSource(BaseDataSource):
         Yields:
             Dict: Row document to index
         """
-
-        if table:
+        if table is not None:
             async for row in self.fetch_documents(table=table, query=query):
                 yield row
         else:

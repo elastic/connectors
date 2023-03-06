@@ -104,7 +104,10 @@ async def prepare(service_type, index_name, config, filtering=None):
         )
     except elasticsearch.NotFoundError:
         await es.client.ingest.put_pipeline(
-            id="ent-search-generic-ingestion", body=DEFAULT_PIPELINE
+            id="ent-search-generic-ingestion",
+            version=DEFAULT_PIPELINE["version"],
+            description=DEFAULT_PIPELINE["description"],
+            processors=DEFAULT_PIPELINE["processors"],
         )
 
     try:
@@ -126,7 +129,9 @@ async def prepare(service_type, index_name, config, filtering=None):
         }
 
         await es.client.ingest.put_pipeline(
-            id="ent-search-generic-ingestion", body=pipeline
+            id="ent-search-generic-ingestion",
+            description=pipeline["description"],
+            processors=pipeline["processors"],
         )
 
     try:

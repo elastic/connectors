@@ -1277,37 +1277,6 @@ def test_has_validation_state(
 
 
 @pytest.mark.parametrize(
-    "filtering, expected_filtering_calls",
-    [
-        (None, [Filter()]),
-        (
-            Filter({"advanced_snippet": {}, "rules": []}),
-            [Filter({"advanced_snippet": {}, "rules": []})],
-        ),
-    ],
-)
-@pytest.mark.asyncio
-async def test_prepare_docs(filtering, expected_filtering_calls):
-    doc_source_copy = deepcopy(DOC_SOURCE)
-    index = Mock()
-    connector = Connector(elastic_index=index, doc_source=doc_source_copy)
-
-    docs_generator_fake = AsyncIterator([(doc_source_copy, None)])
-    connector.data_provider = AsyncMock()
-    connector.data_provider.get_docs = docs_generator_fake
-
-    async for yielded_doc in connector.prepare_docs(
-        connector.data_provider, filtering=filtering
-    ):
-        assert yielded_doc is not None
-
-    assert docs_generator_fake.call_kwargs == [
-        {"filtering": expected_filtering}
-        for expected_filtering in expected_filtering_calls
-    ]
-
-
-@pytest.mark.parametrize(
     "key, value, default_value",
     [
         ("name", "foobar", "ent-search-generic-ingestion"),
