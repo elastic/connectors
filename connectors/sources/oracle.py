@@ -21,7 +21,6 @@ QUERIES = {
 }
 DEFAULT_PROTOCOL = "TCP"
 DEFAULT_ORACLE_HOME = ""
-DEFAULT_WALLET_CONFIGURATION_PATH = ""
 
 
 class OracleDataSource(GenericBaseDataSource):
@@ -69,7 +68,7 @@ class OracleDataSource(GenericBaseDataSource):
                     "type": "str",
                 },
                 "wallet_configuration_path": {
-                    "value": DEFAULT_WALLET_CONFIGURATION_PATH,
+                    "value": "",
                     "label": "Path of oracle service configuration files",
                     "type": "str",
                 },
