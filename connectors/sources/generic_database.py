@@ -152,6 +152,9 @@ class GenericBaseDataSource(BaseDataSource):
         Yields:
             list: Column names and query response
         """
+        if self.queries is None:
+            raise NotImplementedError()
+
         query = self.queries[query_name].format(**query_kwargs)
         size = self.configuration["fetch_size"]
 
@@ -216,6 +219,8 @@ class GenericBaseDataSource(BaseDataSource):
         Returns:
             cursor: Asynchronous cursor
         """
+        if self.engine is None:
+            raise NotImplementedError()
         try:
             async with self.engine.connect() as connection:
                 cursor = await connection.execute(text(query))
@@ -241,6 +246,8 @@ class GenericBaseDataSource(BaseDataSource):
         Returns:
             cursor: Synchronous cursor
         """
+        if self.engine is None:
+            raise NotImplementedError()
         try:
             loop = asyncio.get_running_loop()
             self.connection = await loop.run_in_executor(

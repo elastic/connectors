@@ -17,9 +17,10 @@ IS_BOOL_TRUE = re.compile("^(true|t|yes|y|on)$", re.I)
 
 
 def parse(basic_rules_json):
-    """
+    """Parse a basic rules json array to BasicRule objects.
 
-    *basic_rules_json*, an array of dicts or an empty array
+    Arguments:
+    - `basic_rules_json`: an array of dicts or an empty array
 
     The parser works in the following way:
       - Map every raw basic rule in the json array to the corresponding BasicRule object
@@ -94,6 +95,11 @@ def try_coerce(value):
 
 
 class RuleMatchStats:
+    """RuleMatchStats records how many documents a basic rule matched and which policy it used.
+
+    It's an internal class and is not expected to be used outside the module.
+    """
+
     def __init__(self, policy, matches_count):
         self.policy = policy
         self.matches_count = matches_count
@@ -114,6 +120,15 @@ class RuleMatchStats:
 
 
 class BasicRuleEngine:
+    """BasicRuleEngine matches a document against a list of basic rules in order.
+
+    The main concern of the engine is to decide, whether a document should be ingested during a sync or not:
+        - If a document matches a basic rule and the basic rule uses the `INCLUDE` policy the document will be ingested
+        - If a document matches a basic rule and the basic rule uses the `EXCLUDE` policy the document won't be ingested
+
+    It also records stats, which basic rule matched how many documents with a certain policy.
+    """
+
     def __init__(self, rules):
         self.rules = rules
         self.rules_match_stats = {
@@ -121,6 +136,13 @@ class BasicRuleEngine:
         }
 
     def should_ingest(self, document):
+        """Check, whether a document should be ingested or not.
+
+        By default, the document will be ingested, if it doesn't match any rule.
+
+        Arguments:
+        - `document`: document matched against the basic rules
+        """
         if not self.rules:
             self.rules_match_stats[BasicRule.DEFAULT_RULE_ID] += 1
             return True
@@ -220,6 +242,8 @@ class Policy(Enum):
 
 
 class BasicRule:
+    """A BasicRule is used to match documents based on different comparisons (see `matches` method)."""
+
     DEFAULT_RULE_ID = "DEFAULT"
 
     def __init__(self, id_, order, policy, field, rule, value):
@@ -253,6 +277,23 @@ class BasicRule:
         )
 
     def matches(self, document):
+        """Check whether a document matches the basic rule.
+
+        A basic rule matches or doesn't match a document based on the following comparisons:
+            - STARTS_WITH: Does the document's field value start with the basic rule's value?
+            - ENDS_WITH: Does the document's field value end with the basic rule's value?
+            - CONTAINS: Does the document's field value contain the basic rule's value?
+            - REGEX: Does the document's field value match the basic rule's regex?
+            - LESS_THAN: Is the document's field value less than the basic rule's value?
+            - GREATER_THAN: Is the document's field value greater than the basic rule's value?
+            - EQUALS: Is the document's field value equal to the basic rule's value?
+
+        If the basic rule is the default rule it's always a match (the default rule matches every document).
+        If the field is not in the document it's always a no match.
+
+        Arguments:
+        - `document`: document to check, if it matches
+        """
         if self.is_default_rule():
             return True
 
@@ -287,6 +328,14 @@ class BasicRule:
         return self.policy == Policy.INCLUDE
 
     def coerce_rule_value_based_on_document_value(self, doc_value):
+        """Coerce the value inside the basic rule.
+
+        This method tries to coerce the value inside the basic rule to the type used in the document.
+
+        Arguments:
+        - `doc_value`: value of the field in the document to coerce
+
+        """
         try:
             match doc_value:
                 case str():
