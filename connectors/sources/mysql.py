@@ -161,7 +161,7 @@ class MySqlDataSource(BaseDataSource):
         await self.connection_pool.wait_closed()
         self.connection_pool = None
 
-    def _validate_configuration(self):
+    async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields and validate type for port
 
         Raises:
@@ -206,7 +206,6 @@ class MySqlDataSource(BaseDataSource):
     async def ping(self):
         """Verify the connection with MySQL server"""
         logger.info("Validating MySQL Configuration...")
-        self._validate_configuration()
         connection_string = {
             "host": self.configuration["host"],
             "port": int(self.configuration["port"]),
