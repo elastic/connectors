@@ -44,15 +44,31 @@ def test_tweak_bulk_options():
 
 
 @pytest.mark.asyncio
-async def test_close():
-    """Test close method for closing the unclosed session"""
+async def test_close_with_client_session(patch_logger):
+    """Test close method for closing the existing session"""
 
+    # Setup
+    source = create_source(ConfluenceDataSource)
+    source._generate_session()
+
+    # Execute
+    await source.close()
+
+    # Assert
+    assert source.session is None
+
+
+@pytest.mark.asyncio
+async def test_close_without_client_session(patch_logger):
+    """Test close method when the session does not exist"""
     # Setup
     source = create_source(ConfluenceDataSource)
 
     # Execute
-    source.session = None
     await source.close()
+
+    # Assert
+    assert source.session is None
 
 
 class MockSSL:

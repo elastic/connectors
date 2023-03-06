@@ -41,6 +41,8 @@ class ConfluenceDataSource(BaseDataSource):
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.retry_count = self.configuration["retry_count"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
+        if self.is_cloud:
+            self.host_url = os.path.join(self.host_url, "wiki")
 
         self.ssl_ctx = False
         self.session = None
@@ -154,17 +156,16 @@ class ConfluenceDataSource(BaseDataSource):
         """Initializes the configuration parameters"""
         if self.session is None:
             self._generate_session()
-        if self.ssl_enabled:
+        if self.ssl_enabled and (self.certificate == "" or self.certificate is None):
             self.ssl_ctx = ssl_context(certificate=self.certificate)
-
-        if self.is_cloud:
-            self.host_url = os.path.join(self.configuration["host_url"], "wiki")
 
     async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields
 
         Raises:
-            Exception: Configured keys can't be empty
+            Exception: Configured fields can't be empty.
+            Exception: SSL certificate must be configured.
+            Exception: Concurrent downloads can't be set more than maximum allowed value.
         """
         logger.info("Validating Confluence Configuration...")
 
@@ -217,7 +218,7 @@ class ConfluenceDataSource(BaseDataSource):
                     exception,
                     ServerDisconnectedError,
                 ):
-                    await self.close()
+                    await self.session.close()  # pyright: ignore
                     self._generate_session()
                 retry_counter += 1
                 if retry_counter > self.retry_count:
