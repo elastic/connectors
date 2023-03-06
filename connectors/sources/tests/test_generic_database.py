@@ -14,7 +14,11 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
 from connectors.source import DataSourceConfiguration
-from connectors.sources.generic_database import GenericBaseDataSource, configured_tables
+from connectors.sources.generic_database import (
+    GenericBaseDataSource,
+    configured_tables,
+    is_wildcard,
+)
 from connectors.sources.oracle import OracleDataSource
 from connectors.sources.postgresql import PostgreSQLDataSource
 from connectors.sources.tests.support import create_source
@@ -397,3 +401,8 @@ async def test_get_tables_to_fetch_configured_tables():
     source.tables = tables
 
     assert tables == await source.get_tables_to_fetch("schema")
+
+
+@pytest.mark.parametrize("tables", ["*", ["*"]])
+def test_is_wildcard(tables):
+    assert is_wildcard(tables)
