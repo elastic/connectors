@@ -346,7 +346,7 @@ $ make ftest NAME=azure_blob_storage
 
 ## PostgreSQL Connector
 
-The [Elastic PostgreSQL connector](https://github.com/elastic/connectors-python/blob/8.7/connectors/sources/postgresql.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic PostgreSQL connector](../connectors/sources/postgresql.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ### Availability and prerequisites
 
@@ -354,6 +354,14 @@ The [Elastic PostgreSQL connector](https://github.com/elastic/connectors-python/
 Features in beta are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
 
 Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
+
+PostgreSQL versions 11 to 15 are compatible with Elastic connector frameworks.
+
+**Prerequisite**
+
+- PostgreSQL user should hold the ownership of the tables to indexed the data.
+- PostgreSQL user needs superuser privilges to index all the tables of the database.
+- User needs to set `track_commit_timestamp` to `on` using `ALTER SYSTEM SET track_commit_timestamp = on;` query to fetch last updated time.
 
 ### Setup and basic usage
 
@@ -372,8 +380,6 @@ Collect the information that is required to connect to your PostgreSQL server:
 - The password the connector will use to log in to the PostgreSQL.
 - The database name where the connector will query data.
 - SSL certificate if you want to establish secured connections.
-
-ℹ️ User needs to set `track_commit_timestamp` to `on` using `ALTER SYSTEM SET track_commit_timestamp = on;` query to fetch last updated time.
 
 #### Configure PostgreSQL connector
 
@@ -429,7 +435,34 @@ Whether SSL verification will be disabled. Default value is `True`.
 
 ##### `ssl_ca`
 
-Content of SSL certificate. Note: In case of ssl_disabled `True`, keep `ssl_ca` field empty.
+Content of SSL certificate. Note: In case of ssl_disabled `True`, keep `ssl_ca` field empty. Examples:
+
+  - ```
+    -----BEGIN CERTIFICATE-----
+    MIID+jCCAuKgAwIBAgIGAJJMzlxLMA0GCSqGSIb3DQEBCwUAMHoxCzAJBgNVBAYT
+    AlVTMQwwCgYDVQQKEwNJQk0xFjAUBgNVBAsTDURlZmF1bHROb2RlMDExFjAUBgNV
+    BAsTDURlZmF1bHRDZWxsMDExGTAXBgNVBAsTEFJvb3QgQ2VydGlmaWNhdGUxEjAQ
+    BgNVBAMTCWxvY2FsaG9zdDAeFw0yMTEyMTQyMjA3MTZaFw0yMjEyMTQyMjA3MTZa
+    MF8xCzAJBgNVBAYTAlVTMQwwCgYDVQQKEwNJQk0xFjAUBgNVBAsTDURlZmF1bHRO
+    b2RlMDExFjAUBgNVBAsTDURlZmF1bHRDZWxsMDExEjAQBgNVBAMTCWxvY2FsaG9z
+    dDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMv5HCsJZIpI5zCy+jXV
+    z6lmzNc9UcVSEEHn86h6zT6pxuY90TYeAhlZ9hZ+SCKn4OQ4GoDRZhLPTkYDt+wW
+    CV3NTIy9uCGUSJ6xjCKoxClJmgSQdg5m4HzwfY4ofoEZ5iZQ0Zmt62jGRWc0zuxj
+    hegnM+eO2reBJYu6Ypa9RPJdYJsmn1RNnC74IDY8Y95qn+WZj//UALCpYfX41hko
+    i7TWD9GKQO8SBmAxhjCDifOxVBokoxYrNdzESl0LXvnzEadeZTd9BfUtTaBHhx6t
+    njqqCPrbTY+3jAbZFd4RiERPnhLVKMytw5ot506BhPrUtpr2lusbN5svNXjuLeea
+    MMUCAwEAAaOBoDCBnTATBgNVHSMEDDAKgAhOatpLwvJFqjAdBgNVHSUEFjAUBggr
+    BgEFBQcDAQYIKwYBBQUHAwIwVAYDVR0RBE0wS4E+UHJvZmlsZVVVSUQ6QXBwU3J2
+    MDEtQkFTRS05MDkzMzJjMC1iNmFiLTQ2OTMtYWI5NC01Mjc1ZDI1MmFmNDiCCWxv
+    Y2FsaG9zdDARBgNVHQ4ECgQITzqhA5sO8O4wDQYJKoZIhvcNAQELBQADggEBAKR0
+    gY/BM69S6BDyWp5dxcpmZ9FS783FBbdUXjVtTkQno+oYURDrhCdsfTLYtqUlP4J4
+    CHoskP+MwJjRIoKhPVQMv14Q4VC2J9coYXnePhFjE+6MaZbTjq9WaekGrpKkMaQA
+    iQt5b67jo7y63CZKIo9yBvs7sxODQzDn3wZwyux2vPegXSaTHR/rop/s/mPk3YTS
+    hQprs/IVtPoWU4/TsDN3gIlrAYGbcs29CAt5q9MfzkMmKsuDkTZD0ry42VjxjAmk
+    xw23l/k8RoD1wRWaDVbgpjwSzt+kl+vJE/ip2w3h69eEZ9wbo6scRO5lCO2JM4Pr
+    7RhLQyWn2u00L7/9Omw=
+    -----END CERTIFICATE-----
+    ```
 
 ### Connector Limitations
 
