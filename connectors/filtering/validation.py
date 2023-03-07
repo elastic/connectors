@@ -196,6 +196,14 @@ class BasicRulesSetValidator:
 
 
 class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
+    """BasicRulesSetSemanticValidator can be used to validate that a set of filtering rules does not contain semantic duplicates.
+
+    A semantic duplicate is defined as two basic rules having the same values for `field`, `rule` and `value`.
+    Therefore, two basic rules are also seen as semantic duplicates, if their `policy` values differ.
+
+    If a semantic duplicate is detected both rules will be marked as invalid.
+    """
+
     @classmethod
     def validate(cls, rules):
         rules_dict = {}
@@ -255,6 +263,8 @@ class BasicRuleValidator:
 
 
 class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
+    """BasicRuleNoMatchAllRegexValidator can be used to check that a basic rule does not use a match all regex."""
+
     MATCH_ALL_REGEXPS = [".*", "(.*)"]
 
     @classmethod
@@ -279,6 +289,8 @@ class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
 
 
 class BasicRuleAgainstSchemaValidator(BasicRuleValidator):
+    """BasicRuleAgainstSchemaValidator can be used to check if basic rule follows specified json schema."""
+
     SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {

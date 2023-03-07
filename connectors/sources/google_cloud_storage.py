@@ -334,7 +334,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         async with aiofiles.open(file=source_file_name, mode="r") as target_file:
             # base64 on macOS will add a EOL, so we strip() here
             document["_attachment"] = (await target_file.read()).strip()
-        await remove(source_file_name)
+        await remove(str(source_file_name))
         logger.debug(f"Downloaded {blob_name} for {blob_size} bytes ")
         return document
 
