@@ -29,6 +29,7 @@ def get_myself():
         "accountId": "5ff5815e34847e0069fedee3",
         "emailAddress": "test.user@gmail.com",
         "displayName": "Test User",
+        "timeZone": "Asia/Calcutta",
     }
     return myself
 

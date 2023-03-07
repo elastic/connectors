@@ -8,11 +8,13 @@
 import asyncio
 import os
 from copy import copy
+from datetime import datetime
 from functools import partial
 from urllib import parse
 
 import aiofiles
 import aiohttp
+import pytz
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ServerDisconnectedError
@@ -360,12 +362,18 @@ class JiraDataSource(BaseDataSource):
         Yields:
             project: Project document to get indexed
         """
+        async for response in self._api_call(url_name=PING):
+            timezone = await response.json()
+            self.timezone = timezone["timeZone"]
+
         async for response in self._api_call(url_name=PROJECT):
             response = await response.json()
             for project in response:
                 yield {
                     "_id": f"{project['name']}-{project['id']}",
-                    "_timestamp": iso_utc(),
+                    "_timestamp": iso_utc(
+                        when=datetime.now(pytz.timezone(self.timezone))
+                    ),
                     "Type": "Project",
                     "Project": project,
                 }

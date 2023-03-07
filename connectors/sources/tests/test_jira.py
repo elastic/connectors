@@ -301,8 +301,18 @@ async def test_get_projects(patch_logger):
         "Project": {"name": "dummy_project", "id": "test123"},
     }
 
+    mocked_myself_response = {
+        "name": "admin",
+        "emailAddress": "admin@local.com",
+        "displayName": "admin@local.com",
+        "timeZone": "Asia/Kolkata",
+    }
+    myself_mock = MockResponse(mocked_myself_response, 200)
+
     # Execute and Assert
-    with patch("aiohttp.ClientSession.get", return_value=async_project_response):
+    with patch(
+        "aiohttp.ClientSession.get", side_effect=[myself_mock, async_project_response]
+    ):
         source._generate_session()
         async for response in source._get_projects():
             del response["_timestamp"]
