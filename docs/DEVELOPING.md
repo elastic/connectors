@@ -466,7 +466,7 @@ Content of SSL certificate. Note: In case of ssl_disabled `True`, keep `ssl_ca` 
 
 ### Connector Limitations
 
-- To fetch the last updated time in PostgreSQL, `track_commit_timestamp` must be set to `on`. Otherwise, all data will index in every sync.
+- To fetch the last updated time in PostgreSQL, `track_commit_timestamp` must be set to `on`. Otherwise, all data will be indexed in every sync.
 - Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
 - Filtering rules are not available in the present version. Currently, the filtering is controlled via ingest pipelines.
 
