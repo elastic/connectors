@@ -104,7 +104,7 @@ class GenericBaseDataSource(BaseDataSource):
         self.retry_count = self.configuration["retry_count"]
 
         # Connection related configurations
-        self.user = self.configuration["user"]
+        self.user = self.configuration["username"]
         self.password = self.configuration["password"]
         self.host = self.configuration["host"]
         self.port = self.configuration["port"]
@@ -134,7 +134,7 @@ class GenericBaseDataSource(BaseDataSource):
                 "label": "Port",
                 "type": "int",
             },
-            "user": {
+            "username": {
                 "value": "admin",
                 "label": "Username",
                 "type": "str",
@@ -172,7 +172,14 @@ class GenericBaseDataSource(BaseDataSource):
         Raises:
             Exception: Configured keys can't be empty
         """
-        connection_fields = ["host", "port", "user", "password", "database", "tables"]
+        connection_fields = [
+            "host",
+            "port",
+            "username",
+            "password",
+            "database",
+            "tables",
+        ]
 
         if empty_connection_fields := [
             field for field in connection_fields if self.configuration[field] == ""
