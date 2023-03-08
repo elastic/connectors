@@ -111,7 +111,7 @@ class Bulker:
             return [{operation: {"_index": index, "_id": doc_id}}, doc["doc"]]
         if operation == OP_UPSERT:
             return [
-                {"update": {"_index": index, "_id": doc_id}},
+                {operation: {"_index": index, "_id": doc_id}},
                 {"doc": doc["doc"], "doc_as_upsert": True},
             ]
         if operation == OP_DELETE:
