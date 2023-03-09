@@ -42,7 +42,6 @@ class JobSchedulingService(BaseService):
         self.concurrent_syncs = self.service_config.get(
             "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
         )
-        self.bulk_options = self.es_config.get("bulk", {})
         self.source_klass_dict = get_source_klass_dict(config)
         self.connector_index = None
         self.sync_job_index = None
@@ -126,7 +125,6 @@ class JobSchedulingService(BaseService):
             sync_job=sync_job,
             connector=connector,
             es_config=self.es_config,
-            bulk_options=self.bulk_options,
         )
         await self.syncs.put(sync_job_runner.execute)
 
