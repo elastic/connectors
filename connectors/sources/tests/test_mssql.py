@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from connectors.sources.mssql import MSSQLDataSource
+from connectors.sources.mssql import MSSQLDataSource, MSSQLQueries
 from connectors.sources.tests.support import create_source
 from connectors.sources.tests.test_generic_database import ConnectionSync
 
@@ -24,7 +24,7 @@ class MockEngine:
         Returns:
             connection: Instance of ConnectionSync
         """
-        return ConnectionSync()
+        return ConnectionSync(MSSQLQueries())
 
 
 @patch("connectors.sources.mssql.create_engine")
@@ -60,22 +60,22 @@ async def test_get_docs_mssql(patch_logger):
     actual_response = []
     expected_response = [
         {
-            "public_emp_table_ids": 1,
-            "public_emp_table_names": "abcd",
-            "_id": "xe_public_emp_table_1_",
+            "dbo_emp_table_ids": 1,
+            "dbo_emp_table_names": "abcd",
+            "_id": "xe_dbo_emp_table_1_",
             "_timestamp": "2023-02-21T08:37:15+00:00",
             "Database": "xe",
             "Table": "emp_table",
-            "schema": "public",
+            "schema": "dbo",
         },
         {
-            "public_emp_table_ids": 2,
-            "public_emp_table_names": "xyz",
-            "_id": "xe_public_emp_table_2_",
+            "dbo_emp_table_ids": 2,
+            "dbo_emp_table_names": "xyz",
+            "_id": "xe_dbo_emp_table_2_",
             "_timestamp": "2023-02-21T08:37:15+00:00",
             "Database": "xe",
             "Table": "emp_table",
-            "schema": "public",
+            "schema": "dbo",
         },
     ]
 

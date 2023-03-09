@@ -10,20 +10,6 @@ from sqlalchemy.engine import URL
 from connectors.sources.generic_database import GenericBaseDataSource, Queries
 
 SECURED_CONNECTION = False
-# Below schemas are system schemas and the tables of the systems schema's will not get indexed
-SYSTEM_SCHEMA = [
-    "INFORMATION_SCHEMA",
-    "db_owner",
-    "db_accessadmin",
-    "db_securityadmin",
-    "db_ddladmin",
-    "db_backupoperator",
-    "db_datareader",
-    "db_datawriter",
-    "db_denydatareader",
-    "db_denydatawriter",
-    "sys",
-]
 
 
 class MSSQLQueries(Queries):
@@ -55,11 +41,14 @@ class MSSQLQueries(Queries):
 
     def all_schemas(self):
         """Query to get all schemas of database"""
-        return "SELECT s.name from sys.schemas s inner join sys.sysusers u on u.uid = s.principal_id"
+        pass
 
 
 class MSSQLDataSource(GenericBaseDataSource):
     """Microsoft SQL Server"""
+
+    name = "Microsoft SQL Server"
+    service_type = "mssql"
 
     def __init__(self, configuration):
         """Setup connection to the Microsoft SQL database-server configured by user
@@ -72,6 +61,7 @@ class MSSQLDataSource(GenericBaseDataSource):
         self.secured_connection = self.configuration["secured_connection"]
         self.queries = MSSQLQueries()
         self.dialect = "Microsoft SQL"
+        self.schema = self.configuration["schema"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -83,6 +73,7 @@ class MSSQLDataSource(GenericBaseDataSource):
         mssql_configuration = super().get_default_configuration().copy()
         mssql_configuration.update(
             {
+                "schema": {"value": "dbo", "label": "Schema", "type": "str"},
                 "mssql_driver": {
                     "value": "ODBC Driver 18 for SQL Server",
                     "label": "Microsoft SQL Driver Name (ODBC Driver 18 for SQL Server)",
@@ -100,29 +91,23 @@ class MSSQLDataSource(GenericBaseDataSource):
     def _create_engine(self):
         """Create sync engine for mssql"""
         if self.secured_connection:
-            connection_string = URL.create(
-                "mssql+pyodbc",
-                username=self.user,
-                password=self.password,
-                host=self.host,
-                port=self.port,
-                database=self.database,
-                query={
-                    "driver": self.mssql_driver,
-                    "TrustServerCertificate": "no",
-                    "Encrypt": "Yes",
-                },
-            )
+            query = {
+                "driver": self.mssql_driver,
+                "TrustServerCertificate": "no",
+                "Encrypt": "Yes",
+            }
         else:
-            connection_string = URL.create(
-                "mssql+pyodbc",
-                username=self.user,
-                password=self.password,
-                host=self.host,
-                port=self.port,
-                database=self.database,
-                query={"driver": self.mssql_driver, "TrustServerCertificate": "yes"},
-            )
+            query = {"driver": self.mssql_driver, "TrustServerCertificate": "yes"}
+
+        connection_string = URL.create(
+            "mssql+pyodbc",
+            username=self.user,
+            password=self.password,
+            host=self.host,
+            port=self.port,
+            database=self.database,
+            query=query,
+        )
         self.engine = create_engine(connection_string)
 
     async def get_docs(self, filtering=None):
@@ -134,14 +119,5 @@ class MSSQLDataSource(GenericBaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        schema_list = await anext(
-            self.execute_query(
-                query=self.queries.all_schemas(),
-            )
-        )
-        for [schema] in schema_list:
-            if schema not in SYSTEM_SCHEMA:
-                async for row in self.fetch_rows(
-                    schema=schema,
-                ):
-                    yield row, None
+        async for row in self.fetch_rows(schema=self.schema):
+            yield row, None
