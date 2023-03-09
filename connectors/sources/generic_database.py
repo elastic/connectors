@@ -15,7 +15,7 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import iso_utc
 
-ALL_TABLES = "*"
+WILDCARD = "*"
 
 DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
@@ -23,6 +23,15 @@ DEFAULT_WAIT_MULTIPLIER = 2
 
 
 def configured_tables(tables):
+    """Split a string containing a comma-seperated list of tables by comma and strip the table names.
+
+    Filter out `None` and zero-length values from the tables.
+    If `tables` is a list return the list also without `None` and zero-length values.
+
+    Arguments:
+    - `tables`: string containing a comma-seperated list of tables or a list of tables
+    """
+
     def table_filter(table):
         return table is not None and len(table) > 0
 
@@ -36,6 +45,10 @@ def configured_tables(tables):
         if isinstance(tables, str)
         else list(filter(lambda table: table_filter(table), tables))
     )
+
+
+def is_wildcard(tables):
+    return tables in (WILDCARD, [WILDCARD])
 
 
 class Queries(ABC):
@@ -92,7 +105,7 @@ class GenericBaseDataSource(BaseDataSource):
         self.retry_count = self.configuration["retry_count"]
 
         # Connection related configurations
-        self.user = self.configuration["user"]
+        self.user = self.configuration["username"]
         self.password = self.configuration["password"]
         self.host = self.configuration["host"]
         self.port = self.configuration["port"]
@@ -122,7 +135,7 @@ class GenericBaseDataSource(BaseDataSource):
                 "label": "Port",
                 "type": "int",
             },
-            "user": {
+            "username": {
                 "value": "admin",
                 "label": "Username",
                 "type": "str",
@@ -138,7 +151,7 @@ class GenericBaseDataSource(BaseDataSource):
                 "type": "str",
             },
             "tables": {
-                "value": ALL_TABLES,
+                "value": WILDCARD,
                 "label": "Comma-separated list of tables",
                 "type": "list",
             },
@@ -160,7 +173,14 @@ class GenericBaseDataSource(BaseDataSource):
         Raises:
             Exception: Configured keys can't be empty
         """
-        connection_fields = ["host", "port", "user", "password", "database", "tables"]
+        connection_fields = [
+            "host",
+            "port",
+            "username",
+            "password",
+            "database",
+            "tables",
+        ]
 
         if empty_connection_fields := [
             field for field in connection_fields if self.configuration[field] == ""
@@ -257,7 +277,9 @@ class GenericBaseDataSource(BaseDataSource):
             cursor: Asynchronous cursor
         """
         try:
-            async with self.engine.connect() as connection:
+            if self.engine is None:
+                self._create_engine()
+            async with self.engine.connect() as connection:  # pyright: ignore
                 cursor = await connection.execute(text(query))
                 return cursor
         except Exception as exception:
@@ -282,10 +304,12 @@ class GenericBaseDataSource(BaseDataSource):
             cursor: Synchronous cursor
         """
         try:
+            if self.engine is None:
+                self._create_engine()
             loop = asyncio.get_running_loop()
             if self.connection is None:
                 self.connection = await loop.run_in_executor(
-                    executor=None, func=self.engine.connect
+                    executor=None, func=self.engine.connect  # pyright: ignore
                 )
             cursor = await loop.run_in_executor(
                 executor=None,
@@ -306,8 +330,10 @@ class GenericBaseDataSource(BaseDataSource):
         """Verify the connection with the database-server configured by user"""
         logger.info("Validating the Connector Configuration...")
         try:
+            if self.queries is None:
+                raise NotImplementedError
+
             self._validate_configuration()
-            self._create_engine()
             await anext(
                 self.execute_query(
                     query=self.queries.ping(),
@@ -328,6 +354,9 @@ class GenericBaseDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
         try:
+            if self.queries is None:
+                raise NotImplementedError
+
             [[row_count]] = await anext(
                 self.execute_query(
                     query=self.queries.table_data_count(
@@ -446,11 +475,9 @@ class GenericBaseDataSource(BaseDataSource):
 
     async def get_tables_to_fetch(self, schema):
         tables = configured_tables(self.tables)
-        fetch_all_tables = tables == ALL_TABLES or (
-            isinstance(tables, list) and tables == [ALL_TABLES]
-        )
-
-        tables_to_fetch = (
+        if self.queries is None:
+            raise NotImplementedError
+        return (
             map(
                 lambda table: table[0],
                 await anext(
@@ -463,8 +490,6 @@ class GenericBaseDataSource(BaseDataSource):
                     )
                 ),
             )
-            if fetch_all_tables
+            if is_wildcard(tables)
             else tables
         )
-
-        return tables_to_fetch

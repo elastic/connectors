@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
-from connectors.sources.oracle import OracleDataSource
+from connectors.sources.oracle import OracleDataSource, OracleQueries
 from connectors.sources.tests.support import create_source
 from connectors.sources.tests.test_generic_database import ConnectionSync
 
@@ -52,7 +52,8 @@ async def test_create_engine_in_thin_mode(mock_fun):
 async def test_get_docs_oracle(patch_logger):
     # Setup
     source = create_source(OracleDataSource)
-    with patch.object(Engine, "connect", return_value=ConnectionSync()):
+
+    with patch.object(Engine, "connect", return_value=ConnectionSync(OracleQueries())):
         source.engine = create_engine(DSN)
         actual_response = []
         expected_response = [
