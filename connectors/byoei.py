@@ -139,20 +139,54 @@ class Bulker:
                             logger.error(f"operation {op} failed, {data['error']}")
                             raise Exception(data["error"]["reason"])
 
-            for op in operations:
-                if OP_INDEX in op or OP_UPSERT in op:
-                    self.indexed_document_count += 1
-                elif OP_DELETE in op:
-                    self.deleted_document_count += 1
-                elif "doc" in op:  # update payload
-                    self.indexed_document_volume += get_byte_size(op["doc"])
-                else:  # index payload
-                    self.indexed_document_volume += get_byte_size(op)
+            self._populate_stats(operations, res)
 
         finally:
             self.bulk_time += time.time() - start
 
         return res
+
+    def _populate_stats(self, operations, res):
+        operation = doc_id = None
+        # A dictionary of operation -> an object, which is another dictionary of _id -> document size
+        ops_dict = {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}}
+        for op in operations:
+            if OP_INDEX in op:
+                operation = OP_INDEX
+                doc_id = op[OP_INDEX]["_id"]
+                ops_dict[OP_INDEX][doc_id] = 0
+            elif OP_UPSERT in op:
+                operation = OP_UPSERT
+                doc_id = op[OP_UPSERT]["_id"]
+                ops_dict[OP_UPSERT][doc_id] = 0
+            elif OP_DELETE in op:
+                operation = OP_DELETE
+                doc_id = op[OP_DELETE]["_id"]
+                ops_dict[OP_DELETE][doc_id] = 0
+            elif "doc" in op:  # update payload
+                ops_dict[operation][doc_id] = get_byte_size(  # pyright: ignore
+                    op["doc"]
+                )
+            else:  # index payload
+                ops_dict[operation][doc_id] = get_byte_size(op)  # pyright: ignore
+
+        for item in res["items"]:
+            for op, data in item.items():
+                # "result" is only present in successful operations
+                if "result" not in data:
+                    del ops_dict[op][data["_id"]]
+
+        self.indexed_document_count += len(ops_dict[OP_INDEX]) + len(
+            ops_dict[OP_UPSERT]
+        )
+        self.indexed_document_volume += sum(ops_dict[OP_INDEX].values()) + sum(
+            ops_dict[OP_UPSERT].values()
+        )
+        self.deleted_document_count += len(ops_dict[OP_DELETE])
+
+        logger.debug(
+            f"Bulker stats - no. of docs indexed: {self.indexed_document_count}, volume of docs indexed: {round(self.indexed_document_volume)} bytes, no. of docs deleted: {self.deleted_document_count}"
+        )
 
     async def run(self):
         """Creates batches of bulk calls given a queue of items.

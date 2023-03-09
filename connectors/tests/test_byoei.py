@@ -13,6 +13,7 @@ import pytest
 
 from connectors.byoc import Pipeline
 from connectors.byoei import (
+    Bulker,
     ContentIndexNameInvalid,
     ElasticServer,
     Fetcher,
@@ -159,8 +160,22 @@ def set_responses(mock_responses, ts=None):
                         "status": 200,
                     }
                 },
-                {"delete": {"_index": "test", "_id": "3", "status": 200}},
-                {"create": {"_index": "test", "_id": "3", "status": 200}},
+                {
+                    "delete": {
+                        "_index": "test",
+                        "_id": "3",
+                        "result": "deleted",
+                        "status": 200,
+                    }
+                },
+                {
+                    "update": {
+                        "_index": "test",
+                        "_id": "3",
+                        "result": "updated",
+                        "status": 200,
+                    }
+                },
             ],
         },
         headers=headers,
@@ -591,3 +606,106 @@ async def test_get_docs(
         assert fetcher.total_downloads == expected_total_downloads
 
         assert queue_called_with_operations(queue, expected_queue_operations)
+
+
+OPERATIONS = [
+    {"index": {"_index": INDEX, "_id": "1"}},
+    {},
+    {"update": {"_index": INDEX, "_id": "2"}},
+    {"doc": {}, "doc_as_upsert": True},
+    {"delete": {"_index": INDEX, "_id": "3"}},
+]
+
+INDEX_ITEM = {"index": {"_id": "1", "result": "created"}}
+FAILED_INDEX_ITEM = {"index": {"_id": "1"}}
+UPDATE_ITEM = {"update": {"_id": "2", "result": "updated"}}
+FAILED_UPDATE_ITEM = {"update": {"_id": "2"}}
+DELETE_ITEM = {"delete": {"_id": "3", "result": "deleted"}}
+FAILED_DELETE_ITEM = {"delete": {"_id": "3"}}
+
+
+@pytest.mark.parametrize(
+    "res, expected_result",
+    [
+        (
+            {"items": [INDEX_ITEM, UPDATE_ITEM, DELETE_ITEM]},
+            {
+                "indexed_document_count": 2,
+                "indexed_document_volume": 2,
+                "deleted_document_count": 1,
+            },
+        ),
+        (
+            {"items": [FAILED_INDEX_ITEM, UPDATE_ITEM, DELETE_ITEM]},
+            {
+                "indexed_document_count": 1,
+                "indexed_document_volume": 1,
+                "deleted_document_count": 1,
+            },
+        ),
+        (
+            {"items": [INDEX_ITEM, FAILED_UPDATE_ITEM, DELETE_ITEM]},
+            {
+                "indexed_document_count": 1,
+                "indexed_document_volume": 1,
+                "deleted_document_count": 1,
+            },
+        ),
+        (
+            {"items": [INDEX_ITEM, UPDATE_ITEM, FAILED_DELETE_ITEM]},
+            {
+                "indexed_document_count": 2,
+                "indexed_document_volume": 2,
+                "deleted_document_count": 0,
+            },
+        ),
+        (
+            {"items": [INDEX_ITEM, FAILED_UPDATE_ITEM, FAILED_DELETE_ITEM]},
+            {
+                "indexed_document_count": 1,
+                "indexed_document_volume": 1,
+                "deleted_document_count": 0,
+            },
+        ),
+        (
+            {"items": [FAILED_INDEX_ITEM, UPDATE_ITEM, FAILED_DELETE_ITEM]},
+            {
+                "indexed_document_count": 1,
+                "indexed_document_volume": 1,
+                "deleted_document_count": 0,
+            },
+        ),
+        (
+            {"items": [FAILED_INDEX_ITEM, FAILED_UPDATE_ITEM, DELETE_ITEM]},
+            {
+                "indexed_document_count": 0,
+                "indexed_document_volume": 0,
+                "deleted_document_count": 1,
+            },
+        ),
+        (
+            {"items": [FAILED_INDEX_ITEM, FAILED_UPDATE_ITEM, FAILED_DELETE_ITEM]},
+            {
+                "indexed_document_count": 0,
+                "indexed_document_volume": 0,
+                "deleted_document_count": 0,
+            },
+        ),
+    ],
+)
+@mock.patch("connectors.byoei.get_byte_size")
+def test_bulk_populate_stats(get_byte_size, res, expected_result):
+    get_byte_size.return_value = 1
+    bulker = Bulker(
+        client=None,
+        queue=None,
+        chunk_size=0,
+        pipeline=None,
+        chunk_mem_size=0,
+        max_concurrency=0,
+    )
+    bulker._populate_stats(OPERATIONS, res)
+
+    assert bulker.indexed_document_count == expected_result["indexed_document_count"]
+    assert bulker.indexed_document_volume == expected_result["indexed_document_volume"]
+    assert bulker.deleted_document_count == expected_result["deleted_document_count"]
