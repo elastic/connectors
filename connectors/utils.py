@@ -203,13 +203,13 @@ class MemQueue(asyncio.Queue):
         return self._current_memsize
 
     def _get(self):
-        item_size, item = self._queue.popleft()
+        item_size, item = self._queue.popleft()  # pyright: ignore
         self._current_memsize -= item_size
         return item_size, item
 
     def _put(self, item):
-        self._current_memsize += item[0]
-        self._queue.append(item)
+        self._current_memsize += item[0]  # pyright: ignore
+        self._queue.append(item)  # pyright: ignore
 
     def full(self, next_item_size=0):
         full_by_numbers = super().full()
@@ -248,9 +248,11 @@ class MemQueue(asyncio.Queue):
             # will unlock the corresponding put() call here.
             #
             # This mechanism ensures that we serialize put() calls when the queue is full.
-            putter = self._get_loop().create_future()
-            putter_timeout = self._get_loop().create_task(self._putter_timeout(putter))
-            self._putters.append(putter)
+            putter = self._get_loop().create_future()  # pyright: ignore
+            putter_timeout = self._get_loop().create_task(  # pyright: ignore
+                self._putter_timeout(putter)
+            )
+            self._putters.append(putter)  # pyright: ignore
             try:
                 result = await putter
                 if isinstance(result, asyncio.QueueFull):
@@ -259,7 +261,7 @@ class MemQueue(asyncio.Queue):
                 putter.cancel()  # Just in case putter is not done yet.
                 try:
                     # Clean self._putters from canceled putters.
-                    self._putters.remove(putter)
+                    self._putters.remove(putter)  # pyright: ignore
                 except ValueError:
                     # The putter could be removed from self._putters by a
                     # previous get_nowait call.
@@ -267,7 +269,7 @@ class MemQueue(asyncio.Queue):
                 if not self.full() and not putter.cancelled():
                     # We were woken up by get_nowait(), but can't take
                     # the call.  Wake up the next in line.
-                    self._wakeup_next(self._putters)
+                    self._wakeup_next(self._putters)  # pyright: ignore
                 raise
 
             await putter_timeout

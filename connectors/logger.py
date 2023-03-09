@@ -54,7 +54,7 @@ def set_logger(log_level=logging.INFO, filebeat=False):
     logger.setLevel(log_level)
     logger.handlers[0].setLevel(log_level)
     logger.handlers[0].setFormatter(formatter)
-    logger.filebeat = filebeat
+    logger.filebeat = filebeat  # pyright: ignore
     return logger
 
 
