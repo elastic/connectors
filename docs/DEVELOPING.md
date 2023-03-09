@@ -346,7 +346,7 @@ $ make ftest NAME=azure_blob_storage
 
 ## Microsoft SQL Connector
 
-The [Elastic Microsoft SQL connector](https://github.com/elastic/connectors-python/blob/8.7/connectors/sources/mssql.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic Microsoft SQL connector](../connectors/sources/mssql.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ### Availability and prerequisites
 
@@ -355,9 +355,12 @@ Features in beta are subject to change and are not covered by the service level 
 
 Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
 
+Microsoft SQL Server versions 2017, 2019, and Azure SQL, Amazon RDS for Microsoft SQL Server are compatible with Elastic connector frameworks.
+
 **Prerequisite**
 
-The Microsoft SQL connector requires an ODBC driver to execute. To install ODBC driver please refer following [documentation](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-driver-manager).
+The Microsoft SQL connector requires an ODBC driver to execute. Connector supports `Microsoft ODBC Driver 18`. To install ODBC driver please refer following [documentation](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-driver-manager).
+Grant user with `sysadmin` server role.
 
 ### Setup and basic usage
 
@@ -426,17 +429,17 @@ The number of retry attempts after failed request to Microsoft SQL Server. Defau
 
 ##### `mssql_driver`
 
-Name of Microsoft SQL Driver. Default value is `ODBC Driver 18 for SQL Server`.
+Name of Microsoft ODBC Driver for SQL Server. User finds the name of the installed driver in `odbcinst.ini` file. To find the location of the `odbcinst.ini` file execute `odbcinst -j` command. Default value is `ODBC Driver 18 for SQL Server`.
 
 ##### `secured_connection`
 
 Whether the connector should establish a secured connection. Default value is `False`.
 
-ℹ️ For secured connection Microsoft SQL Driver uses the OpenSSL library, which gets a certificate from the Default Certificate Trust Store of OpenSSL.
+ℹ️ For secured connection Microsoft ODBC Driver for SQL Server uses the OpenSSL library, which gets a certificate from the Default Certificate Trust Store of OpenSSL. For more details check out the following [documentation](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/connection-string-keywords-and-data-source-names-dsns?view=sql-server-ver16#using-tlsssl)
 
 ### Connector Limitations
 
-- If the last updated time for a table is not available then all data in that table will be synced.
+- If the `last_user_update` of `sys.dm_db_index_usage_stats` table for specific table and database is not available then all data in that table will be synced.
 - Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
 - Filtering rules are not available in the present version. Currently, the filtering is controlled via ingest pipelines.
 
