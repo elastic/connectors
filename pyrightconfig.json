@@ -1,0 +1,19 @@
+{
+  "pythonVersion": "3.10",
+  "include": [
+    "connectors"
+  ],
+  "reportMissingImports": false,
+  "reportMissingModuleSource": false,
+  "reportOptionalMemberAccess": false,
+  "exclude": [
+    "**/tests",
+    "**/__pycache__"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "./",
+      "venv": "./"
+    }
+  ]
+}

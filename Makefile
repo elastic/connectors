@@ -40,6 +40,7 @@ lint: bin/python bin/black bin/elastic-ingest
 	bin/flake8 setup.py
 	bin/black --check scripts
 	bin/flake8 scripts
+	bin/pyright connectors
 
 autoformat: bin/python bin/black bin/elastic-ingest
 	bin/isort . --sp .isort.cfg
