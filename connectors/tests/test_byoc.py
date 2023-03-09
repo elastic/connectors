@@ -7,7 +7,6 @@ import json
 import os
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
-from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
@@ -178,14 +177,6 @@ ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
     "advanced_snippet": {"db": {"table": "SELECT * FROM db.table"}},
     "rules": RULES,
 }
-
-
-@pytest.fixture(autouse=True)
-def patch_validate_filtering_in_byoc():
-    with mock.patch(
-        "connectors.byoc.SyncJob.validate_filtering", return_value=AsyncMock()
-    ) as validate_filtering_mock:
-        yield validate_filtering_mock
 
 
 def test_utc():
