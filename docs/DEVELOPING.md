@@ -346,7 +346,7 @@ $ make ftest NAME=azure_blob_storage
 
 ## Oracle Database Connector
 
-The [Elastic Oracle Database connector](https://github.com/elastic/connectors-python/blob/8.7/connectors/sources/oracle.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic Oracle Database connector](../connectors/sources/oracle.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ### Availability and prerequisites
 
@@ -354,6 +354,12 @@ The [Elastic Oracle Database connector](https://github.com/elastic/connectors-py
 Features in beta are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
 
 Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
+
+Oracle Database versions 18c, 19c and 21c are compatible with Elastic connector frameworks.
+
+**Prerequisite**
+
+- Grant `CONNECT`, `DBA` privilege to the database user and user should hold the ownership of the tables to indexed the data..
 
 ### Setup and basic usage
 
@@ -370,7 +376,7 @@ Collect the information that is required to connect to your Oracle Database:
 - The port where the Oracle Database is hosted.
 - The username the connector will use to log in to the Oracle Database.
 - The password the connector will use to log in to the Oracle Database.
-- The database name where the connector will query data.
+- The SID of Oracle Database where the connector will query data.
 
 #### Configure Oracle Database connector
 
@@ -390,6 +396,18 @@ The port where the Oracle Database is hosted. Default value is `9090`. Note: For
   - `5432`
   - `9090`
 
+    - ##### `oracle_protocol`
+
+      The protocol which the connector uses to establish a connection. Default value is `TCP`. Note: For a secured connection, a user needs to use `TCPS`.
+
+    - ##### `oracle_home`
+
+      Path of the Oracle home directory to run connector with thick mode for secured connection. By default connector will run on Thin Mode. Note: In case of unsecured connection, keep `oracle_home` field empty.
+
+    - ##### `wallet_configuration_path`
+
+      Path of the oracle configuration files. Only applicable when configuration files are not at the default location. By default files located at `$ORACLE_HOME/network/admin`. Note: If Wallet configuration files are located at default location, keep `wallet_configuration_path` field empty.
+
 ##### `username`
 
 The username of the account for the Oracle Database. Default value is `admin`.
@@ -400,7 +418,7 @@ The password of the account to be used for the Oracle Database. Default value is
 
 ##### `database`
 
-Name of the Oracle database. Default value is `xe`. Examples:
+The SID of Oracle Database. Default value is `xe`. Examples:
 
   - `employee_database`
   - `customer_database`
@@ -419,18 +437,6 @@ Number of rows to fetch on each request to Oracle Database. Default value is `50
 ##### `retry_count`
 
 The number of retry attempts after failed request to Oracle Database. Default value is `3`.
-
-##### `oracle_protocol`
-
-The protocol which the connector uses to establish a connection. Default value is `TCP`. Note: For a secured connection, a user needs to use `TCPS`.
-
-##### `oracle_home`
-
-Path of the Oracle home directory to run connector with thick mode for secured connection. Note: In case of unsecured connection, keep `oracle_home` field empty.
-
-##### `wallet_configuration_path`
-
-Path of the oracle configuration files. Only applicable when configuration files are not at the default location. Note: If Wallet configuration files are located at default location, keep `wallet_configuration_path` field empty.
 
 ### Setup for a secured connection with Oracle
  - User needs to install the Oracle service on the system where the connector is running.
@@ -460,7 +466,7 @@ Replace the file name with your file.
 
 ### Connector Limitations
 
-- If the value of the table's system change number (SCN) is not between the `min(SCN)` and `max(SCN)` values of the `SMON_SCN_TIME` table, the connector will not be able to retrieve the most recently updated time, and data will index in every sync. For more details check out the following [documentation](https://community.oracle.com/tech/apps-infra/discussion/4076446/show-error-about-ora-08181-specified-number-is-not-a-valid-system-change-number-when-using-scn-t).
+- If the value of the table's system change number (SCN) is not between the `min(SCN)` and `max(SCN)` values of the `SMON_SCN_TIME` table, the connector will not be able to retrieve the most recently updated time, and data will be indexed in every sync. For more details check out the following [documentation](https://community.oracle.com/tech/apps-infra/discussion/4076446/show-error-about-ora-08181-specified-number-is-not-a-valid-system-change-number-when-using-scn-t).
 - The Oracle Database connector does not allow the `sys` user as it contains 1000+ system tables which are irrelevant for users. If the user is working with `sys` user, the user needs to pass either `sysdba` or `sysoper` mode.
 - Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
 - Filtering rules are not available in the present version. Currently, the filtering is controlled via ingest pipelines.
