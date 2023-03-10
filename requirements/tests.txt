@@ -11,3 +11,4 @@ git+https://github.com/elastic/perf8#egg=perf8
 freezegun>=0.3.4
 pytest-fail-slow>=0.3.0
 flake8-bugbear>=23.2.13
+pyright>=1.1.295
