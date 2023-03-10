@@ -359,9 +359,9 @@ PostgreSQL versions 11 to 15 are compatible with Elastic connector frameworks.
 
 **Prerequisites**
 
-- PostgreSQL user should hold the ownership of the tables to indexed the data.
+- The Tables which user wants to index should be owned by a PostgreSQL user.
 - PostgreSQL user needs superuser privilges to index all the tables of the database.
-- User needs to set `track_commit_timestamp` to `on` using `ALTER SYSTEM SET track_commit_timestamp = on;` query to fetch last updated time.
+- User needs to set `track_commit_timestamp` to `on`. User will set `track_commit_timestamp` to `on` by executing `ALTER SYSTEM SET track_commit_timestamp = on;` query in PostgreSQL server.
 
 ### Setup and basic usage
 
@@ -463,6 +463,8 @@ Content of SSL certificate. If SSL is disabled, keep the `ssl_ca` field empty. E
     7RhLQyWn2u00L7/9Omw=
     -----END CERTIFICATE-----
     ```
+
+ℹ️ Default values exist for end-to-end testing only.
 
 ### Connector Limitations
 
