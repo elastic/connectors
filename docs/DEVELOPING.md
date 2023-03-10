@@ -438,6 +438,8 @@ Number of rows to fetch on each request to Oracle Database. Default value is `50
 
 The number of retry attempts after failed request to Oracle Database. Default value is `3`.
 
+ℹ️ Default values exist for end-to-end testing only.
+
 ### Setup for a secured connection with Oracle
  - User needs to install the Oracle service on the system where the connector is running.
  - Set the `oracle_home` parameter to the location of your Oracle home directory. If configuration files are not at the default location, set `wallet_configuration_path` parameter.
@@ -461,7 +463,7 @@ $ orapki wallet add -wallet path-to-oracle-home/ssl_wallet -trusted_cert -cert p
 ```
 Replace the file name with your file.
 
-ℹ️ For more information, please refer following [documentation](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Appendix.Oracle.Options.SSL.html)
+ℹ️ For better understanding, please refer following Amazon RDS [documentation](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Appendix.Oracle.Options.SSL.html). It is well documented.
 
 
 ### Connector Limitations
