@@ -437,6 +437,8 @@ Whether the connector should establish a secured connection. Default value is `F
 
 ℹ️ For secured connection Microsoft ODBC Driver for SQL Server uses the OpenSSL library, which gets a certificate from the Default Certificate Trust Store of OpenSSL. For more details check out the following [documentation](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/connection-string-keywords-and-data-source-names-dsns?view=sql-server-ver16#using-tlsssl)
 
+ℹ️ Default values exist for end-to-end testing only.
+
 ### Connector Limitations
 
 - If the `last_user_update` of `sys.dm_db_index_usage_stats` table for specific table and database is not available then all data in that table will be synced.
