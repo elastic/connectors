@@ -357,10 +357,10 @@ Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your d
 
 Microsoft SQL Server versions 2017, 2019, and Azure SQL, Amazon RDS for Microsoft SQL Server are compatible with Elastic connector frameworks.
 
-**Prerequisite**
+**Prerequisites**
 
-The Microsoft SQL connector requires an ODBC driver to execute. Connector supports `Microsoft ODBC Driver 18`. To install ODBC driver please refer following [documentation](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-driver-manager).
-Grant user with `sysadmin` server role.
+- The Microsoft SQL connector requires an ODBC driver to execute. Connector supports `Microsoft ODBC Driver 18`. To install ODBC driver please refer following [documentation](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-driver-manager).
+- Grant user with `sysadmin` server role.
 
 ### Setup and basic usage
 
