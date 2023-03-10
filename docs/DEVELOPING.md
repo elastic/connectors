@@ -357,7 +357,7 @@ Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your d
 
 PostgreSQL versions 11 to 15 are compatible with Elastic connector frameworks.
 
-**Prerequisite**
+**Prerequisites**
 
 - PostgreSQL user should hold the ownership of the tables to indexed the data.
 - PostgreSQL user needs superuser privilges to index all the tables of the database.
@@ -374,11 +374,11 @@ Complete the following steps to deploy the connector:
 
 Collect the information that is required to connect to your PostgreSQL server:
 
-- The server host address where the PostgreSQL is hosted.
-- The port where the PostgreSQL is hosted.
-- The username the connector will use to log in to the PostgreSQL.
-- The password the connector will use to log in to the PostgreSQL.
-- The database name where the connector will query data.
+- The server host address where the PostgreSQL server is hosted.
+- The port where the PostgreSQL server is hosted.
+- The username the connector will use to log in to the PostgreSQL server.
+- The password the connector will use to log in to the PostgreSQL server.
+- The database name the connector will query.
 - SSL certificate if you want to establish secured connections.
 
 #### Configure PostgreSQL connector
@@ -435,7 +435,7 @@ Whether SSL verification will be disabled. Default value is `True`.
 
 ##### `ssl_ca`
 
-Content of SSL certificate. Note: In case of ssl_disabled `True`, keep `ssl_ca` field empty. Examples:
+Content of SSL certificate. If SSL is disabled, keep the `ssl_ca` field empty. Example certificate:
 
   - ```
     -----BEGIN CERTIFICATE-----
