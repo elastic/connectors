@@ -29,11 +29,6 @@ class MockSsl:
         pass
 
 
-@pytest.mark.asyncio
-async def test_ping(patch_logger):
-    source = create_source(PostgreSQLDataSource)
-    source.execute_query = Mock(return_value=AsyncIterator(["table1", "table2"]))
-
 class ConnectionAsync:
     """This class creates dummy connection with database and return dummy cursor"""
 
@@ -44,13 +39,6 @@ class ConnectionAsync:
     async def __aexit__(self, exception_type, exception_value, exception_traceback):
         """Make sure the dummy database connection gets closed"""
         pass
-
-@pytest.mark.asyncio
-async def test_ping_negative(patch_logger):
-    source = create_source(PostgreSQLDataSource)
-    async def execute(self, query):
-        """This method returns dummy cursor"""
-        return CursorAsync(query=query)
 
 
 class CursorAsync:
@@ -113,7 +101,7 @@ class CursorAsync:
         elif self.query == query_object.table_primary_key(schema=SCHEMA, table=TABLE):
             return [("ids",)]
         elif self.query == query_object.table_last_update_time(
-            schema=SCHEMA, table=TABLE
+                schema=SCHEMA, table=TABLE
         ):
             return [("2023-02-21T08:37:15+00:00",)]
 
