@@ -14,6 +14,7 @@ from connectors.sources.generic_database import GenericBaseDataSource, Queries
 DEFAULT_SSL_DISABLED = True
 DEFAULT_SSL_CA = ""
 
+
 class PostgreSQLQueries(Queries):
     """Class contains methods which return query"""
 

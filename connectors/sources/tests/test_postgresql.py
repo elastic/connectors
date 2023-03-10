@@ -101,7 +101,7 @@ class CursorAsync:
         elif self.query == query_object.table_primary_key(schema=SCHEMA, table=TABLE):
             return [("ids",)]
         elif self.query == query_object.table_last_update_time(
-                schema=SCHEMA, table=TABLE
+            schema=SCHEMA, table=TABLE
         ):
             return [("2023-02-21T08:37:15+00:00",)]
 
