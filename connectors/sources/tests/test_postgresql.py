@@ -40,6 +40,10 @@ class ConnectionAsync:
         """Make sure the dummy database connection gets closed"""
         pass
 
+    async def execute(self, query):
+        """This method returns dummy cursor"""
+        return CursorAsync(query=query)
+
 
 class CursorAsync:
     """This class contains methods which returns dummy response"""
