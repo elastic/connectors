@@ -141,22 +141,22 @@ class SharepointDataSource(BaseDataSource):
                 "type": "str",
             },
             "client_id": {
-                "value": "client#123",
+                "value": "",
                 "label": "Sharepoint Online client id",
                 "type": "str",
             },
             "secret_id": {
-                "value": "secret#123",
+                "value": "",
                 "label": "Sharepoint Online secret id",
                 "type": "str",
             },
             "tenant": {
-                "value": "demo_tenant",
+                "value": "",
                 "label": "Sharepoint Online tenant",
                 "type": "str",
             },
             "tenant_id": {
-                "value": "tenant#123",
+                "value": "",
                 "label": "Sharepoint Online tenant id",
                 "type": "str",
             },

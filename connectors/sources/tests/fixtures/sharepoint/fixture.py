@@ -13,7 +13,7 @@ import string
 from flask import Flask, request
 
 app = Flask(__name__)
-start_lists, end_lists = 0, 900
+start_lists, end_lists = 0, 450
 DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
 _SIZES = {"small": 1000000, "medium": 2000000, "large": 6000000}
 FILE_SIZE = _SIZES[DATA_SIZE]
@@ -108,7 +108,7 @@ def get_lists(parent_site_url, site):
             ]
         )
     # Removing the data for the second sync
-    end_lists -= 100
+    end_lists -= 50
     return lists
 
 
