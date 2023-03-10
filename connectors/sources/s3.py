@@ -135,7 +135,7 @@ class S3DataSource(BaseDataSource):
                 }
             except (ClientError, ServerTimeoutError, AioReadTimeoutError) as exception:
                 if (
-                    exception.response.get("Error", {}).get("Code")
+                    getattr(exception, "response", {}).get("Error", {}).get("Code")
                     == "InvalidObjectState"
                 ):
                     logger.warning(
