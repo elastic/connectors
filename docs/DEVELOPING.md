@@ -343,6 +343,138 @@ $ make ftest NAME=azure_blob_storage
 
 ℹ️ The e2e test uses default values defined in [configure Azure Blob Storage connector](#configure-azure-blob-storage-connector)
 
+## Jira Connector
+
+The [Elastic Jira connector](../connectors/sources/jira.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+
+### Availability and prerequisites
+
+⚠️ _Currently, this connector is available in **beta** starting in 8.8_.
+Features in beta are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
+
+Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
+
+### Setup and basic usage
+
+Complete the following steps to deploy the connector:
+
+1. [Gather Jira details](#gather-jira-details)
+2. [Configure Jira connector](#configure-jira-connector)
+
+#### Gather Jira details
+
+Collect the information that is required to connect to your Jira instance:
+
+- The server host url where the Jira is hosted.
+- The username the connector will use to log in to the Jira server or the service account for the Jira cloud.
+- The password the connector will use to log in to the Jira server or the API key for the Jira cloud.
+- SSL certificate if you want to establish secured connections.
+
+#### Configure Jira connector
+
+The following configuration fields need to be provided for setting up the connector:
+
+##### `is_cloud`
+
+Flag to determine the Jira platform type. True if Jira cloud and False if Jira server. Default value is `True`.
+
+##### `username`
+
+The username of the account for Jira server. Default value is `admin`.
+
+##### `password`
+
+The password of the account to be used for the Jira server. Default value is `changeme`.
+
+##### `service_account_id`
+
+The service account for the Jira cloud. Default value is `me@example.com`.
+
+##### `api_token`
+
+The API key to authenticate with Jira cloud. Default value is `abc#123`.
+
+##### `host_url`
+
+The server host url where the Jira is hosted. Default value is `http://127.0.0.1:8080`. Examples:
+
+  - `https://192.158.1.38:8080/`
+  - `https://test_user.atlassian.net/`
+
+##### `ssl_enabled`
+
+Whether SSL verification will be enabled. Default value is `False`.
+
+##### `ssl_ca`
+
+Content of SSL certificate. Note: In case of ssl_enabled is `False`, keep `ssl_ca` field empty. Example certificate:
+
+  - ```
+    -----BEGIN CERTIFICATE-----
+    MIID+jCCAuKgAwIBAgIGAJJMzlxLMA0GCSqGSIb3DQEBCwUAMHoxCzAJBgNVBAYT
+    AlVTMQwwCgYDVQQKEwNJQk0xFjAUBgNVBAsTDURlZmF1bHROb2RlMDExFjAUBgNV
+    BAsTDURlZmF1bHRDZWxsMDExGTAXBgNVBAsTEFJvb3QgQ2VydGlmaWNhdGUxEjAQ
+    BgNVBAMTCWxvY2FsaG9zdDAeFw0yMTEyMTQyMjA3MTZaFw0yMjEyMTQyMjA3MTZa
+    MF8xCzAJBgNVBAYTAlVTMQwwCgYDVQQKEwNJQk0xFjAUBgNVBAsTDURlZmF1bHRO
+    b2RlMDExFjAUBgNVBAsTDURlZmF1bHRDZWxsMDExEjAQBgNVBAMTCWxvY2FsaG9z
+    dDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMv5HCsJZIpI5zCy+jXV
+    z6lmzNc9UcVSEEHn86h6zT6pxuY90TYeAhlZ9hZ+SCKn4OQ4GoDRZhLPTkYDt+wW
+    CV3NTIy9uCGUSJ6xjCKoxClJmgSQdg5m4HzwfY4ofoEZ5iZQ0Zmt62jGRWc0zuxj
+    hegnM+eO2reBJYu6Ypa9RPJdYJsmn1RNnC74IDY8Y95qn+WZj//UALCpYfX41hko
+    i7TWD9GKQO8SBmAxhjCDifOxVBokoxYrNdzESl0LXvnzEadeZTd9BfUtTaBHhx6t
+    njqqCPrbTY+3jAbZFd4RiERPnhLVKMytw5ot506BhPrUtpr2lusbN5svNXjuLeea
+    MMUCAwEAAaOBoDCBnTATBgNVHSMEDDAKgAhOatpLwvJFqjAdBgNVHSUEFjAUBggr
+    BgEFBQcDAQYIKwYBBQUHAwIwVAYDVR0RBE0wS4E+UHJvZmlsZVVVSUQ6QXBwU3J2
+    MDEtQkFTRS05MDkzMzJjMC1iNmFiLTQ2OTMtYWI5NC01Mjc1ZDI1MmFmNDiCCWxv
+    Y2FsaG9zdDARBgNVHQ4ECgQITzqhA5sO8O4wDQYJKoZIhvcNAQELBQADggEBAKR0
+    gY/BM69S6BDyWp5dxcpmZ9FS783FBbdUXjVtTkQno+oYURDrhCdsfTLYtqUlP4J4
+    CHoskP+MwJjRIoKhPVQMv14Q4VC2J9coYXnePhFjE+6MaZbTjq9WaekGrpKkMaQA
+    iQt5b67jo7y63CZKIo9yBvs7sxODQzDn3wZwyux2vPegXSaTHR/rop/s/mPk3YTS
+    hQprs/IVtPoWU4/TsDN3gIlrAYGbcs29CAt5q9MfzkMmKsuDkTZD0ry42VjxjAmk
+    xw23l/k8RoD1wRWaDVbgpjwSzt+kl+vJE/ip2w3h69eEZ9wbo6scRO5lCO2JM4Pr
+    7RhLQyWn2u00L7/9Omw=
+    -----END CERTIFICATE-----
+    ```
+
+##### `enable_content_extraction`
+
+Whether the connector should extract the content from Jira attachment. Default value is `True` i.e. the connector will try to extract file contents.
+
+##### `retry_count`
+
+The number of retry attempts after failed request to the Jira. Default value is `3`.
+
+##### `concurrent_downloads`
+
+The number of concurrent downloads for fetching the attachment content. Defaults to `50`.
+
+ℹ️ Default values exist for end-to-end testing only.
+
+ℹ️ The values for these fields need to be provided in `get_default_configuration` method of [jira.py](../connectors/sources/jira.py) file before running the connector for the first time. Further, these can be changed from UI editor which will appear on the UI once the first successful connection is made.
+
+#### Content Extraction
+
+The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
+
+### Connector Limitations
+
+- Files bigger than 10 MB won't be extracted.
+- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
+- Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
+
+### E2E Tests
+
+The framework provides a way to test ingestion through a connector against a real data source. This is called a functional test. To execute a functional test for the Jira connector, run the following command:
+```shell
+$ make ftest NAME=jira
+```
+
+ℹ️ Users can generate the perf8 report using an argument i.e. `PERF8=True`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
+
+ℹ️ Users do not need to have a running Elasticsearch instance or a Jira source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Jira source using the docker image.
+
+ℹ️ The e2e test uses default values defined in [Configure Jira connector](#configure-jira-connector)
+
 ## General Configuration
 
 The details of Elastic instance and other relevant fields such as `service` and `source` needs to be provided in the [config.yml](https://github.com/elastic/connectors-python/blob/8.6/config.yml) file. For more details check out the following [documentation](https://github.com/elastic/connectors-python/blob/8.6/docs/CONFIG.md).
