@@ -357,9 +357,9 @@ Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your d
 
 Oracle Database versions 18c, 19c and 21c are compatible with Elastic connector frameworks.
 
-**Prerequisite**
+**Prerequisites**
 
-- Grant `CONNECT`, `DBA` privilege to the database user and user should hold the ownership of the tables to indexed the data..
+- The database user requires `CONNECT` and `DBA` privileges and must be the owner of the tables to be indexed.
 
 ### Setup and basic usage
 
