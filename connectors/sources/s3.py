@@ -6,21 +6,22 @@
 import asyncio
 import logging
 import os
-from contextlib import asynccontextmanager
 from functools import partial
 from hashlib import md5
-from io import BytesIO
 
 import aioboto3
+import aiofiles
 from aiobotocore.config import AioConfig
 from aiobotocore.response import AioReadTimeoutError
 from aiobotocore.utils import logger as aws_logger
+from aiofiles.os import remove
+from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ServerTimeoutError
 from botocore.exceptions import ClientError
 
 from connectors.logger import logger, set_extra_logger
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
 
 MAX_CHUNK_SIZE = 1048576
 DEFAULT_MAX_FILE_SIZE = 10485760
@@ -57,17 +58,27 @@ class S3DataSource(BaseDataSource):
             retries={"max_attempts": self.configuration["max_attempts"]},
         )
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
+        self.s3_region_client = {}
 
-    @asynccontextmanager
-    async def client(self, **kwargs):
-        """This method creates client object."""
+    async def client(self, region=None):
+        """This method creates client object.
+        Args:
+            region (str): Name of bucket region. Defaults to None
+        """
+        region_name = region if region else "default"
+
         if AWS_ENDPOINT is not None:
             logger.debug(f"Creating a session against {AWS_ENDPOINT}")
 
-        async with self.session.client(
-            service_name="s3", config=self.config, endpoint_url=AWS_ENDPOINT, **kwargs
-        ) as s3:
-            yield s3
+        if not (region_name in self.s3_region_client):
+            s3_client = await self.session.client(
+                service_name="s3",
+                config=self.config,
+                endpoint_url=AWS_ENDPOINT,
+                region_name=region,
+            ).__aenter__()
+
+            self.s3_region_client[region_name] = s3_client
 
     def _validate_configuration(self):
         """Validates whether user input is empty or not for configuration fields
@@ -83,19 +94,20 @@ class S3DataSource(BaseDataSource):
         logger.info("Validating Amazon S3 Configuration...")
         self._validate_configuration()
         try:
-            async with self.client() as s3:
-                self.bucket_list = await s3.list_buckets()
-                logger.info("Successfully connected to AWS Server.")
+            await self.client()
+            s3 = self.s3_region_client["default"]
+            self.bucket_list = await s3.list_buckets()
+            logger.info("Successfully connected to AWS Server.")
         except Exception:
             logger.exception("Error while connecting to AWS.")
             raise
 
-    async def _get_content(self, doc, region, timestamp=None, doit=None):
+    async def _get_content(self, doc, s3_client, timestamp=None, doit=None):
         """Extracts the content for allowed file types.
 
         Args:
             doc (dict): Dictionary of document
-            region (string): Name of region
+            s3_client (obj): S3 client instance
             timestamp (timestamp): Timestamp of object last modified. Defaults to None.
             doit (boolean, optional): Boolean value for whether to get content or not. Defaults to None.
 
@@ -116,36 +128,39 @@ class S3DataSource(BaseDataSource):
             )
             return
         logger.debug(f"Downloading {filename}")
-        async with self.client(region_name=region) as s3:
-            try:
-                resp = await s3.get_object(Bucket=bucket, Key=filename)
-                await asyncio.sleep(0)
-                file_content, chunk = BytesIO(), True
-                while chunk:
-                    chunk = await resp["Body"].read(MAX_CHUNK_SIZE) or b""
-                    file_content.write(chunk)
-                file_content.seek(0)
-                data = file_content.read()
-                file_content.close()
-                logger.debug(f"Downloaded {filename} for {doc['size_in_bytes']} bytes ")
-                return {
-                    "_timestamp": timestamp,
-                    "_attachment": get_base64_value(content=data),
-                    "_id": doc["id"],
-                }
-            except (ClientError, ServerTimeoutError, AioReadTimeoutError) as exception:
-                if (
-                    getattr(exception, "response", {}).get("Error", {}).get("Code")
-                    == "InvalidObjectState"
-                ):
-                    logger.warning(
-                        f"{filename} of {bucket} is archived and inaccessible until restored. Error: {exception}"
-                    )
-                else:
-                    logger.error(
-                        f"Something went wrong while extracting data from {filename} of {bucket}. Error: {exception}"
-                    )
-                    raise
+        document = {
+            "_id": doc["id"],
+            "_timestamp": doc["_timestamp"],
+        }
+        source_file_name = ""
+        try:
+            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+                await s3_client.download_fileobj(
+                    Bucket=bucket, Key=filename, Fileobj=async_buffer
+                )
+                source_file_name = async_buffer.name
+            await asyncio.to_thread(
+                convert_to_b64,
+                source=source_file_name,
+            )
+            async with aiofiles.open(file=source_file_name, mode="r") as async_buffer:
+                document["_attachment"] = (await async_buffer.read()).strip()
+            await remove(source_file_name)  # pyright: ignore
+            logger.debug(f"Downloaded {filename} for {doc['size_in_bytes']} bytes ")
+            return document
+        except (ClientError, ServerTimeoutError, AioReadTimeoutError) as exception:
+            if getattr(exception, "response", None) and (
+                getattr(exception, "response", {}).get("Error", {}).get("Code")
+                == "InvalidObjectState"
+            ):
+                logger.warning(
+                    f"{filename} of {bucket} is archived and inaccessible until restored. Error: {exception}"
+                )
+            else:
+                logger.error(
+                    f"Something went wrong while extracting data from {filename} of {bucket}. Error: {exception}"
+                )
+                raise
 
     async def get_bucket_region(self, bucket_name):
         """This method return the name of region for a bucket.
@@ -155,11 +170,12 @@ class S3DataSource(BaseDataSource):
         """
         region = None
         try:
-            async with self.client() as s3:
-                response = await s3.get_bucket_location(
-                    Bucket=bucket_name,
-                )
-                region = response.get("LocationConstraint")
+            await self.client()
+            s3 = self.s3_region_client["default"]
+            response = await s3.get_bucket_location(
+                Bucket=bucket_name,
+            )
+            region = response.get("LocationConstraint")
         except ClientError:
             logger.warning("Unable to fetch the region")
 
@@ -184,10 +200,21 @@ class S3DataSource(BaseDataSource):
         Yields:
             dictionary: Document from Amazon S3.
         """
+        if self.bucket_list == []:
+            await self.client()
+            s3 = self.s3_region_client["default"]
+            self.bucket_list = await s3.list_buckets()
         bucket_list = self.buckets if self.buckets != ["*"] else self.get_bucket_list()
         page_size = self.configuration["page_size"]
         for bucket in bucket_list:
             region_name = await self.get_bucket_region(bucket)
+            if region_name is not None:
+                await self.client(region=region_name)
+                s3_client = self.s3_region_client[region_name]
+            else:
+                await self.client()
+                s3_client = self.s3_region_client["default"]
+
             async with self.session.resource(
                 service_name="s3",
                 config=self.config,
@@ -215,12 +242,17 @@ class S3DataSource(BaseDataSource):
                         yield doc, partial(
                             self._get_content,
                             doc=doc,
-                            region=region_name,
+                            s3_client=s3_client,
                         )
                 except Exception as exception:
                     logger.warning(
                         f"Something went wrong while fetching documents from {bucket}. Error: {exception}"
                     )
+
+    async def close(self):
+        """Closes unclosed client session"""
+        for client in self.s3_region_client.values():
+            await client.close()
 
     @classmethod
     def get_default_configuration(cls):

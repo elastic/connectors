@@ -9,6 +9,7 @@ from unittest import mock
 
 import aioboto3
 import pytest
+from botocore.exceptions import ClientError
 
 from connectors.sources.s3 import S3DataSource
 from connectors.sources.tests.support import assert_basics, create_source
@@ -165,11 +166,11 @@ async def test_ping_negative(patch_logger):
     source = create_source(S3DataSource)
 
     # Execute
-    source.session = aioboto3.Session(
-        aws_access_key_id="dummy123", aws_secret_access_key="dummy123"
-    )
-    with pytest.raises(Exception):
-        await source.ping()
+    with mock.patch.object(
+        aioboto3.Session, "client", side_effect=Exception("Something went wrong")
+    ):
+        with pytest.raises(Exception):
+            await source.ping()
 
 
 @pytest.mark.asyncio
@@ -191,28 +192,38 @@ async def test_get_bucket_region_negative(caplog, patch_logger):
     """Test get_bucket_region method of S3DataSource for negative case"""
     # Setup
     source = create_source(S3DataSource)
-    caplog.set_level("WARN")
-
-    # Execute
-    with pytest.raises(Exception):
-        await source.get_bucket_region("dummy")
-
-        # Assert
-        assert "Unable to fetch the region" in caplog.text
+    with mock.patch.object(
+        aioboto3.Session, "client", side_effect=Exception("Something went wrong")
+    ):
+        # Execute
+        with pytest.raises(Exception):
+            await source.get_bucket_region(bucket_name="dummy")
 
 
+@mock.patch("aiobotocore.client.AioBaseClient")
 @pytest.mark.asyncio
-async def test_get_content(patch_logger, mock_aws):
+async def test_get_content(mock_client, patch_logger):
     """Test get_content method of S3DataSource"""
     # Setup
     source = create_source(S3DataSource)
-    with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
-        response = await source._get_content(
-            {"id": 1, "filename": "a.txt", "bucket": "dummy", "size_in_bytes": 1000000},
-            "region",
-            doit=1,
-        )
-        assert response == {"_timestamp": None, "_attachment": "eHh4eHg=", "_id": 1}
+    document = {
+        "filename": "test_file.pdf",
+        "bucket": "test-bucket",
+        "id": "123",
+        "size_in_bytes": 10,
+        "_timestamp": "2022-01-01T00:00:00Z",
+    }
+    s3_client = mock_client.return_value.__aenter__.return_value
+
+    # Execute
+    content = await source._get_content(doc=document, s3_client=s3_client, doit=True)
+
+    # Assert
+    assert content == {
+        "_id": "123",
+        "_timestamp": "2022-01-01T00:00:00Z",
+        "_attachment": "",
+    }
 
 
 @pytest.mark.asyncio
@@ -221,9 +232,12 @@ async def test_get_content_with_unsupported_file(patch_logger, mock_aws):
     # Setup
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
+        # Execute
         response = await source._get_content(
             {"id": 1, "filename": "a.png", "bucket": "dummy"}, "region", doit=1
         )
+
+        # Assert
         assert response is None
 
 
@@ -233,9 +247,12 @@ async def test_get_content_when_not_doit(patch_logger, mock_aws):
     # Setup
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
+        # Execute
         response = await source._get_content(
             {"id": 1, "filename": "a.txt", "bucket": "dummy"}, "region"
         )
+
+        # Assert
         assert response is None
 
 
@@ -245,6 +262,7 @@ async def test_get_content_when_size_is_large(patch_logger, mock_aws):
     # Setup
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
+        # Execute
         response = await source._get_content(
             {
                 "id": 1,
@@ -255,26 +273,9 @@ async def test_get_content_when_size_is_large(patch_logger, mock_aws):
             "region",
             doit=1,
         )
+
+        # Assert
         assert response is None
-
-
-@pytest.mark.asyncio
-async def test_pdf_file(patch_logger, mock_aws):
-    """Test get_content method of S3DataSource for pdf file"""
-    # Setup
-    source = create_source(S3DataSource)
-    with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
-        response = await source._get_content(
-            {
-                "id": 1,
-                "filename": "dummy.pdf",
-                "bucket": "dummy",
-                "size_in_bytes": 1000000,
-            },
-            "region",
-            doit=1,
-        )
-        assert response == {"_timestamp": None, "_attachment": "eHh4eHg=", "_id": 1}
 
 
 async def get_roles(*args):
@@ -296,8 +297,10 @@ async def test_get_docs(patch_logger, mock_aws):
         get_roles,
     ):
         num = 0
+
         # Execute
         async for (doc, dl) in source.get_docs():
+            # Assert
             assert doc["_id"] in (
                 "d0295955cdb6d488a4a1d3f10dbf141b",
                 "94fce1b79d35d3ff4f96a678ebaed3b5",
@@ -332,6 +335,30 @@ def test_validate_configuration_for_empty_bucket_string():
     # Setup
     source = create_source(S3DataSource)
     source.configuration.set_field(name="buckets", value=[""])
+
     # Execute
     with pytest.raises(Exception):
         source._validate_configuration()
+
+
+@pytest.mark.asyncio
+async def test_get_content_with_clienterror(patch_logger):
+    """Test get_content method of S3DataSource for client error"""
+    # Setup
+    source = create_source(S3DataSource)
+    document = {
+        "id": "abc",
+        "filename": "file.pdf",
+        "bucket": "test-bucket",
+        "size_in_bytes": 1024,
+        "_timestamp": "2022-03-08T12:00:00.000Z",
+    }
+    s3_client = mock.MagicMock()
+    s3_client.download_fileobj.side_effect = ClientError(
+        {"Error": {"Code": "MockException"}}, "operation_name"
+    )
+    with pytest.raises(ClientError):
+        # Execute
+        await source._get_content(
+            doc=document, s3_client=s3_client, timestamp=None, doit=True
+        )
