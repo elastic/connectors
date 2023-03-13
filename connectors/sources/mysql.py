@@ -14,6 +14,7 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.source import BaseDataSource
+from connectors.sources.generic_database import WILDCARD, configured_tables, is_wildcard
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
 MAX_POOL_SIZE = 10
@@ -56,7 +57,7 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         tables = set(
             map(
                 lambda table: table[0],
-                await self.source.fetch_tables(),
+                await self.source.fetch_all_tables(),
             )
         )
         tables_to_filter = set(advanced_rules.keys())
@@ -94,6 +95,7 @@ class MySqlDataSource(BaseDataSource):
         self.ssl_disabled = self.configuration["ssl_disabled"]
         self.certificate = self.configuration["ssl_ca"]
         self.database = self.configuration["database"]
+        self.tables = self.configuration["tables"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -127,6 +129,11 @@ class MySqlDataSource(BaseDataSource):
                 "value": "customerinfo",
                 "label": "Database",
                 "type": "str",
+            },
+            "tables": {
+                "value": WILDCARD,
+                "label": "Comma-separated list of tables",
+                "type": "list",
             },
             "fetch_size": {
                 "value": DEFAULT_FETCH_SIZE,
@@ -167,7 +174,7 @@ class MySqlDataSource(BaseDataSource):
         Raises:
             Exception: Configured keys can't be empty
         """
-        connection_fields = ["host", "port", "user", "password", "database"]
+        connection_fields = ["host", "port", "user", "password", "database", "tables"]
         empty_connection_fields = []
         for field in connection_fields:
             if self.configuration[field] == "":
@@ -303,7 +310,7 @@ class MySqlDataSource(BaseDataSource):
                 await self._sleeps.sleep(RETRY_INTERVAL**retry)
                 retry += 1
 
-    async def fetch_tables(self):
+    async def fetch_all_tables(self):
         return await anext(self._connect(query=QUERIES["ALL_TABLE"]))
 
     async def fetch_rows_for_table(self, table=None, query=QUERIES["TABLE_DATA"]):
@@ -324,21 +331,18 @@ class MySqlDataSource(BaseDataSource):
                 f"Fetched 0 rows for the table: {table}. As table has no rows."
             )
 
-    async def fetch_rows_from_all_tables(self):
+    async def fetch_rows_from_tables(self, tables):
         """Fetches all the rows from all the tables of the database.
 
         Yields:
             Dict: Row document to index
         """
-        tables = await self.fetch_tables()
-
         if tables:
             for table in tables:
-                table_name = table[0]
-                logger.debug(f"Found table: {table_name} in database: {self.database}.")
+                logger.debug(f"Found table: {table} in database: {self.database}.")
 
                 async for row in self.fetch_rows_for_table(
-                    table=table_name,
+                    table=table,
                     query=QUERIES["TABLE_DATA"],
                 ):
                     yield row
@@ -421,6 +425,20 @@ class MySqlDataSource(BaseDataSource):
                     yield row, None
                 await self._sleeps.sleep(0)
         else:
-            async for row in self.fetch_rows_from_all_tables():
+            tables_to_fetch = await self.get_tables_to_fetch()
+
+            async for row in self.fetch_rows_from_tables(tables_to_fetch):
                 yield row, None
             await self._sleeps.sleep(0)
+
+    async def get_tables_to_fetch(self):
+        tables = configured_tables(self.tables)
+
+        def table_name(table):
+            return table[0]
+
+        return (
+            map(lambda table: table_name(table), await self.fetch_all_tables())
+            if is_wildcard(tables)
+            else tables
+        )
