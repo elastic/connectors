@@ -37,10 +37,13 @@ def test_tweak_bulk_options():
 
     # Setup
     source = create_source(ConfluenceDataSource)
-    options = {"concurrent_downloads": 10}
+    source.concurrent_downloads = 10
+    options = {"concurrent_downloads": 5}
 
     # Execute
     source.tweak_bulk_options(options)
+
+    assert options["concurrent_downloads"] == 10
 
 
 @pytest.mark.asyncio
@@ -81,9 +84,10 @@ class MockSSL:
 async def test_configuration():
     """Tests the get_default_configurations method of the Confluence source class."""
     # Setup
-    config = DataSourceConfiguration(config=ConfluenceDataSource.get_default_configuration())
+    config = DataSourceConfiguration(
+        config=ConfluenceDataSource.get_default_configuration()
+    )
 
-    # Assert
     assert config["host_url"] == HOST_URL
 
 
