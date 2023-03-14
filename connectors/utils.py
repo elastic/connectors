@@ -420,7 +420,7 @@ def ssl_context(certificate):
     return ctx
 
 
-def encode(original_string):
+def url_encode(original_string):
     """Performs encoding on the objects
     containing special characters in their url, and
     replaces single quote with two single quote since quote
@@ -432,27 +432,27 @@ def encode(original_string):
     Returns:
         encoded_string(string): Parsed string without single quotes
     """
-    encoded_string = urllib.parse.quote(original_string, safe="'")
-    return encoded_string.replace("'", "''")
+    return urllib.parse.quote(original_string, safe="'")
 
 
-def get_expires_at(expires_in):
+def evaluate_timedelta(seconds, time_skew=0):
     """Adds seconds to the current utc time.
 
     Args:
-        expires_in (int): Seconds after which the token will expire.
+        seconds (int): Number of seconds to add in current time
+        time_skew (int): Time of clock skew. Defaults to 0
     """
-    expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+    modified_time = datetime.utcnow() + timedelta(seconds=seconds)
     # account for clock skew
-    expires_at -= timedelta(seconds=20)
-    return iso_utc(when=expires_at)
+    modified_time -= timedelta(seconds=time_skew)
+    return iso_utc(when=modified_time)
 
 
 def is_expired(expires_at):
     """Compares the given time with present time
 
     Args:
-        expires_at (datetime): Time of token expires.
+        expires_at (datetime): Time to check if expired.
     """
     # Recreate in case there's no expires_at present
     if expires_at is None:

@@ -24,11 +24,11 @@ from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     convert_to_b64,
-    encode,
-    get_expires_at,
+    evaluate_timedelta,
     is_expired,
     retryable,
     ssl_context,
+    url_encode,
 )
 
 RETRY_INTERVAL = 2
@@ -255,7 +255,9 @@ class SharepointDataSource(BaseDataSource):
         ) as response:
             json_data = await response.json()
             self.access_token = json_data["access_token"]
-            self.token_expires_in = get_expires_at(int(json_data["expires_in"]))
+            self.token_expires_at = evaluate_timedelta(
+                seconds=int(json_data["expires_in"]), time_skew=20
+            )
 
     async def _generate_session(self):
         """Generate base client session using configuration fields
@@ -287,7 +289,6 @@ class SharepointDataSource(BaseDataSource):
 
     async def close(self):
         """Closes unclosed client session"""
-        logger.debug("Closing aiohttp Client Session...")
         if self.session is None:
             return
         await self.session.close()
@@ -309,7 +310,9 @@ class SharepointDataSource(BaseDataSource):
         # If pagination happens for list and drive items then next pagination url comes in response which will be passed in url field.
         if url == "":
             url = URLS[url_name].format(**url_kwargs)
+
         headers = None
+
         if self.is_cloud:
             headers = {"Authorization": f"Bearer {self.access_token}"}
         while True:
@@ -463,6 +466,7 @@ class SharepointDataSource(BaseDataSource):
             ):
                 async for data in response.content.iter_chunked(CHUNK_SIZE):
                     await async_buffer.write(data)
+
             source_file_name = async_buffer.name
 
         await asyncio.to_thread(
@@ -579,7 +583,7 @@ class SharepointDataSource(BaseDataSource):
                     continue
 
                 for attachment_file in result.get("AttachmentFiles"):
-                    file_relative_url = encode(
+                    file_relative_url = url_encode(
                         original_string=attachment_file.get("ServerRelativeUrl")
                     )
 
@@ -629,7 +633,7 @@ class SharepointDataSource(BaseDataSource):
                 if result.get("File", {}).get("TimeLastModified"):
                     item_type = "File"
                     file_relative_url = (
-                        encode(original_string=result["File"]["ServerRelativeUrl"])
+                        url_encode(original_string=result["File"]["ServerRelativeUrl"])
                         if os.path.splitext(result["File"]["Name"])[-1]
                         in TIKA_SUPPORTED_FILETYPES
                         else None

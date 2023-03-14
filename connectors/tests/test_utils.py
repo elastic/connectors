@@ -28,14 +28,14 @@ from connectors.utils import (
     MemQueue,
     RetryStrategy,
     convert_to_b64,
-    encode,
+    evaluate_timedelta,
     get_base64_value,
-    get_expires_at,
     get_size,
     is_expired,
     next_run,
     retryable,
     ssl_context,
+    url_encode,
     validate_index_name,
 )
 
@@ -362,14 +362,14 @@ def test_ssl_context():
         ssl_context(certificate=certificate)
 
 
-def test_encode():
-    """Test the encode method by passing a string"""
+def test_url_encode():
+    """Test the url_encode method by passing a string"""
     # Execute
-    encode_response = encode('''http://ascii.cl?parameter="Click on 'URL Decode'!"''')
+    encode_response = url_encode("http://ascii.cl?parameter='Click on URL Decode!'")
     # Assert
     assert (
         encode_response
-        == "http%3A%2F%2Fascii.cl%3Fparameter%3D%22Click%20on%20''URL%20Decode''%21%22"
+        == "http%3A%2F%2Fascii.cl%3Fparameter%3D'Click%20on%20URL%20Decode%21'"
     )
 
 
@@ -383,10 +383,10 @@ def test_is_expired():
 
 
 @freeze_time("2023-02-18 14:25:26.158843", tz_offset=-4)
-def test_get_expires_at():
+def test_evaluate_timedelta():
     """This method tests adding seconds to the current utc time"""
     # Execute
-    expected_response = get_expires_at(expires_in=86399)
+    expected_response = evaluate_timedelta(seconds=86399, time_skew=20)
 
     # Assert
     assert expected_response == "2023-02-19T14:25:05.158843"
