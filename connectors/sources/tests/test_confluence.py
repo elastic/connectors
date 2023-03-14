@@ -54,7 +54,6 @@ async def test_close_with_client_session(patch_logger):
     # Execute
     await source.close()
 
-    # Assert
     assert source.session is None
 
 
@@ -67,7 +66,6 @@ async def test_close_without_client_session(patch_logger):
     # Execute
     await source.close()
 
-    # Assert
     assert source.session is None
 
 
@@ -83,10 +81,7 @@ class MockSSL:
 async def test_configuration():
     """Tests the get_default_configurations method of the Confluence source class."""
     # Setup
-    klass = ConfluenceDataSource
-
-    # Execute
-    config = DataSourceConfiguration(config=klass.get_default_configuration())
+    config = DataSourceConfiguration(config=ConfluenceDataSource.get_default_configuration())
 
     # Assert
     assert config["host_url"] == HOST_URL
@@ -94,8 +89,6 @@ async def test_configuration():
 
 @pytest.mark.asyncio
 async def test_validate_configuration_for_host_url(patch_logger):
-    """This function test _validate_configuration when host_url is invalid"""
-    # Setup
     source = create_source(ConfluenceDataSource)
     source.configuration.set_field(name="host_url", value="")
 

@@ -237,9 +237,9 @@ class ConfluenceDataSource(BaseDataSource):
                     url=os.path.join(self.host_url, PING_URL),
                 )
             )
-            logger.info("Successfully connected to the Confluence")
+            logger.info("Successfully connected to Confluence")
         except Exception:
-            logger.exception("Error while connecting to the Confluence")
+            logger.exception("Error while connecting to Confluence")
             raise
 
     async def get_docs(self, filtering=None):
