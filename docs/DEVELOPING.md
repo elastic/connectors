@@ -366,8 +366,9 @@ Complete the following steps to deploy the connector:
 Collect the information that is required to connect to your Jira instance:
 
 - The server host url where Jira is hosted.
-- The username the connector will use to log in to the Jira server or the service account for the Jira cloud.
-- The password the connector will use to log in to the Jira server or the API key for the Jira cloud.
+- Username for the Jira server or service account for the Jira cloud.
+- Password for the Jira server or API key for the Jira cloud.
+- Project Keys to fetch the data from Jira server or cloud.
 - SSL certificate for a secure connection
 
 #### Configure Jira connector
@@ -401,6 +402,12 @@ The server host url where the Jira is hosted. Default value is `http://127.0.0.1
   - `https://192.158.1.38:8080/`
   - `https://test_user.atlassian.net/`
 
+#### `projects`
+
+Comma separated `Project Keys` to fetch the data from Jira server or cloud. Default value is `*` i.e. fetches the data of all projects. Examples:
+
+  - `EC, TP`
+
 ##### `ssl_enabled`
 
 Whether SSL verification will be enabled. Default value is `False`.
@@ -417,17 +424,17 @@ Content of SSL certificate. Note: In case of ssl_enabled is `False`, keep `ssl_c
     -----END CERTIFICATE-----
     ```
 
-##### `enable_content_extraction`
-
-Whether the connector should extract the content from Jira attachment. Default value is `True` i.e. the connector will try to extract file contents.
-
 ##### `retry_count`
 
 The number of retry attempts after failed request to the Jira. Default value is `3`.
 
 ##### `concurrent_downloads`
 
-The number of concurrent downloads for fetching the attachment content. Defaults to `50`.
+The number of concurrent downloads for fetching the attachment content. This speeds up the content extraction of attachments. Defaults to `50`.
+
+##### `enable_content_extraction`
+
+Whether the connector should extract the content from Jira attachment. Default value is `True` i.e. the connector will try to extract file contents.
 
 ℹ️ Default values exist for end-to-end testing only.
 
