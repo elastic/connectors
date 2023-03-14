@@ -9,22 +9,44 @@ from urllib.parse import quote
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from connectors.sources.generic_database import GenericBaseDataSource
+from connectors.sources.generic_database import GenericBaseDataSource, Queries
 
 # Below schemas are system schemas and the tables of the systems schema's will not get indexed
 SYSTEM_SCHEMA = ["pg_toast", "pg_catalog", "information_schema"]
 DEFAULT_SSL_DISABLED = True
 DEFAULT_SSL_CA = ""
 
-QUERIES = {
-    "PING": "SELECT 1+1",
-    "ALL_TABLE": "SELECT table_name FROM information_schema.tables WHERE table_catalog = '{database}' and table_schema = '{schema}'",
-    "TABLE_PRIMARY_KEY": "SELECT c.column_name FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type = 'PRIMARY KEY' and tc.table_name = '{table}' and tc.constraint_schema = '{schema}'",
-    "TABLE_DATA": 'SELECT * FROM {schema}."{table}"',
-    "TABLE_LAST_UPDATE_TIME": 'SELECT MAX(pg_xact_commit_timestamp(xmin)) FROM {schema}."{table}"',
-    "TABLE_DATA_COUNT": 'SELECT COUNT(*) FROM {schema}."{table}"',
-    "ALL_SCHEMAS": "SELECT schema_name FROM information_schema.schemata",
-}
+
+class PostgreSQLQueries(Queries):
+    """Class contains methods which return query"""
+
+    def ping(self):
+        """Query to ping source"""
+        return "SELECT 1+1"
+
+    def all_tables(self, **kwargs):
+        """Query to get all tables"""
+        return f"SELECT table_name FROM information_schema.tables WHERE table_catalog = '{kwargs['database']}' and table_schema = '{kwargs['schema']}'"
+
+    def table_primary_key(self, **kwargs):
+        """Query to get the primary key"""
+        return f"SELECT c.column_name FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type = 'PRIMARY KEY' and tc.table_name = '{kwargs['table']}' and tc.constraint_schema = '{kwargs['schema']}'"
+
+    def table_data(self, **kwargs):
+        """Query to get the table data"""
+        return f'SELECT * FROM {kwargs["schema"]}."{kwargs["table"]}"'
+
+    def table_last_update_time(self, **kwargs):
+        """Query to get the last update time of the table"""
+        return f'SELECT MAX(pg_xact_commit_timestamp(xmin)) FROM {kwargs["schema"]}."{kwargs["table"]}"'
+
+    def table_data_count(self, **kwargs):
+        """Query to get the number of rows in the table"""
+        return f'SELECT COUNT(*) FROM {kwargs["schema"]}."{kwargs["table"]}"'
+
+    def all_schemas(self):
+        """Query to get all schemas of database"""
+        return "SELECT schema_name FROM information_schema.schemata"
 
 
 class PostgreSQLDataSource(GenericBaseDataSource):
@@ -37,13 +59,13 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         """Setup connection to the PostgreSQL database-server configured by user
 
         Args:
-            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
+            configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
         self.ssl_disabled = self.configuration["ssl_disabled"]
         self.ssl_ca = self.configuration["ssl_ca"]
         self.connection_string = f"postgresql+asyncpg://{self.user}:{quote(self.password)}@{self.host}:{self.port}/{self.database}"
-        self.queries = QUERIES
+        self.queries = PostgreSQLQueries()
         self.is_async = True
         self.dialect = "Postgresql"
 
@@ -107,7 +129,7 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        schema_list = await anext(self.execute_query(query_name="ALL_SCHEMAS"))
+        schema_list = await anext(self.execute_query(query=self.queries.all_schemas()))
         for [schema] in schema_list:
             if schema not in SYSTEM_SCHEMA:
                 async for row in self.fetch_rows(schema=schema):
