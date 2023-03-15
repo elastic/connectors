@@ -27,6 +27,7 @@ from connectors.utils import (
     RetryStrategy,
     convert_to_b64,
     get_base64_value,
+    get_pem_format,
     get_size,
     next_run,
     retryable,
@@ -336,3 +337,27 @@ async def test_exponential_backoff_retry():
 
     # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
     await does_not_raise()
+
+
+def test_get_pem_format():
+    """This function tests prepare private key and certificate with dummy values"""
+    # Setup
+    expected_formated_pem_key = """-----BEGIN PRIVATE KEY-----
+PrivateKey
+-----END PRIVATE KEY-----"""
+    private_key = "-----BEGIN PRIVATE KEY----- PrivateKey -----END PRIVATE KEY-----"
+
+    # Execute
+    formated_privat_key = get_pem_format(key=private_key, max_split=2)
+    assert formated_privat_key == expected_formated_pem_key
+
+    # Setup
+    expected_formated_certificate = """-----BEGIN CERTIFICATE-----
+Certificate1
+Certificate2
+-----END CERTIFICATE-----"""
+    certificate = "-----BEGIN CERTIFICATE----- Certificate1 Certificate2 -----END CERTIFICATE-----"
+
+    # Execute
+    formated_certificate = get_pem_format(key=certificate, max_split=1)
+    assert formated_certificate == expected_formated_certificate

@@ -19,7 +19,7 @@ from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64, get_pem_format
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
 CLOUD_STORAGE_BASE_URL = "https://console.cloud.google.com/storage/browser/_details/"
@@ -201,23 +201,12 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 )
                 await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry_counter)
 
-    def get_pem_format(self, private_key, max_split=-1):
-        """Convert key into PEM format.
-
-        Args:
-            private_key (str): Private_key in raw format.
-            max_split (int): Specifies how many splits to do. Defaults to -1.
+    def get_service_account_credentials(self):
+        """Initialize and return the ServiceAccountCreds
 
         Returns:
-            string: PEM format
+            ServiceAccountCreds: An instance of the ServiceAccountCreds.
         """
-        private_key = private_key.replace(" ", "\n")
-        private_key = " ".join(private_key.split("\n", max_split))
-        private_key = " ".join(private_key.rsplit("\n", max_split))
-        return private_key
-
-    def _initialize_configurations(self):
-        """Initialize the ServiceAccountCreds"""
         if self.service_account_credentials is not None:
             return
 
@@ -227,8 +216,8 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             json_credentials.get("private_key")
             and "\n" not in json_credentials["private_key"]
         ):
-            json_credentials["private_key"] = self.get_pem_format(
-                private_key=json_credentials["private_key"].strip(),
+            json_credentials["private_key"] = get_pem_format(
+                key=json_credentials["private_key"].strip(),
                 max_split=2,
             )
 
@@ -237,6 +226,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             **json_credentials,
         )
         self.user_project_id = self.service_account_credentials.project_id
+        return self.service_account_credentials
 
     async def ping(self):
         """Verify the connection with Google Cloud Storage"""
@@ -244,7 +234,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         if RUNNING_FTEST:
             return
 
-        self._initialize_configurations()
+        self.get_service_account_credentials()
         try:
             await anext(
                 self._api_call(
@@ -386,7 +376,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Documents from Google Cloud Storage.
         """
-        self._initialize_configurations()
+        self.get_service_account_credentials()
         async for buckets in self.fetch_buckets():
             if not buckets.get("items"):
                 continue
