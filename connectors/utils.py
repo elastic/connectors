@@ -403,7 +403,12 @@ def retryable(retries=3, interval=1.0, strategy=RetryStrategy.LINEAR_BACKOFF):
 
 
 def ssl_context(certificate):
-    """Convert string to pem format and create a SSL context
+    """Convert string to pem format and create a SSL context.
+
+    Example Original String: -----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----
+    Example Modified String: -----BEGIN CERTIFICATE-----
+                             Certificate
+                             -----END CERTIFICATE-----
 
     Args:
         certificate (str): certificate in string format
