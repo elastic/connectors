@@ -27,7 +27,7 @@ class ConfluenceDataSource(BaseDataSource):
     service_type = "confluence"
 
     def __init__(self, configuration):
-        """Setup the connection to the Confluence
+        """Setup the connection to Confluence
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
@@ -43,6 +43,9 @@ class ConfluenceDataSource(BaseDataSource):
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
         if self.is_cloud:
             self.host_url = os.path.join(self.host_url, "wiki")
+
+        if self.ssl_enabled and self.certificate:
+            self.ssl_ctx = ssl_context(certificate=self.certificate)
 
         self.ssl_ctx = False
         self.session = None
@@ -112,8 +115,10 @@ class ConfluenceDataSource(BaseDataSource):
             },
         }
 
-    def _generate_session(self):
+    def get_session(self):
         """Generate base client session with configuration fields"""
+        if self.session:
+            return
         if self.is_cloud:
             auth = (
                 self.configuration["service_account_id"],
@@ -151,13 +156,6 @@ class ConfluenceDataSource(BaseDataSource):
             options (dictionary): Config bulker options
         """
         options["concurrent_downloads"] = self.concurrent_downloads
-
-    def initialize_config(self):
-        """Initializes the configuration parameters"""
-        if self.session is None:
-            self._generate_session()
-        if self.ssl_enabled and (self.certificate == "" or self.certificate is None):
-            self.ssl_ctx = ssl_context(certificate=self.certificate)
 
     async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields
@@ -219,7 +217,7 @@ class ConfluenceDataSource(BaseDataSource):
                     ServerDisconnectedError,
                 ):
                     await self.session.close()  # pyright: ignore
-                    self._generate_session()
+                    self.get_session()
                 retry_counter += 1
                 if retry_counter > self.retry_count:
                     raise exception
@@ -230,7 +228,7 @@ class ConfluenceDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Confluence"""
-        self.initialize_config()
+        self.get_session()
         try:
             await anext(
                 self._api_call(

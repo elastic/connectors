@@ -52,7 +52,7 @@ async def test_close_with_client_session(patch_logger):
 
     # Setup
     source = create_source(ConfluenceDataSource)
-    source._generate_session()
+    source.get_session()
 
     # Execute
     await source.close()
