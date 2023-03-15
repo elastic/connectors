@@ -624,6 +624,119 @@ $ make ftest NAME=oracle
 
 ℹ️ The e2e test uses default values defined in [Configure Oracle Database connector](#configure-oracle-database-connector)
 
+
+## Microsoft SQL Connector
+
+The [Elastic Microsoft SQL connector](../connectors/sources/mssql.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+
+### Availability and prerequisites
+
+⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
+Features in beta are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
+
+Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
+
+Microsoft SQL Server versions 2017, 2019, and Azure SQL, Amazon RDS for Microsoft SQL Server are compatible with Elastic connector frameworks.
+
+**Prerequisites**
+
+- The Microsoft SQL connector requires an ODBC driver to execute. Connector supports `Microsoft ODBC Driver 18`. To install ODBC driver please refer following [documentation](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-driver-manager).
+- Grant user with `sysadmin` server role.
+
+### Setup and basic usage
+
+Complete the following steps to deploy the connector:
+
+1. [Gather Microsoft SQL details](#gather-microsoft-sql-details)
+2. [Configure Microsoft SQL connector](#configure-microsoft-sql-connector)
+
+#### Gather Microsoft SQL details
+
+Collect the information that is required to connect to your Microsoft SQL Server:
+
+- The server host address where the Microsoft SQL Server is hosted.
+- The port where the Microsoft SQL Server is hosted.
+- The username the connector will use to log in to the Microsoft SQL Server.
+- The password the connector will use to log in to the Microsoft SQL Server.
+- The database name where the connector will query data.
+
+#### Configure Microsoft SQL connector
+
+The following configuration fields need to be provided for setting up the connector:
+
+##### `host`
+
+The server host address where the Microsoft SQL Server is hosted. Default value is `127.0.0.1`. Examples:
+
+  - `192.158.1.38`
+  - `demo.instance.demo-region.demo.service.com`
+
+##### `port`
+
+The port where the Microsoft SQL Server is hosted. Default value is `9090`. Examples:
+
+  - `5432`
+  - `9090`
+
+##### `username`
+
+The username of the account for Microsoft SQL Server. Default value is `admin`.
+
+##### `password`
+
+The password of the account to be used for the Microsoft SQL Server. Default value is `Password_123`.
+
+##### `database`
+
+Name of the Microsoft SQL Server database. Default value is `xe`. Examples:
+
+  - `employee_database`
+  - `customer_database`
+
+##### `tables`
+
+Comma-separated list of tables. The Microsoft SQL connector will fetch data from all tables present in the configured database, if the value is `*` . Default value is `*`. Examples:
+
+  - `table_1, table_2`
+  - `*`
+
+##### `fetch_size`
+
+The number of rows to fetch on each request to Microsoft SQL Server. Default value is `50`.
+
+##### `retry_count`
+
+The number of retry attempts after failed request to Microsoft SQL Server. Default value is `3`.
+
+##### `mssql_driver`
+
+Name of Microsoft ODBC Driver for SQL Server. User finds the name of the installed driver in `odbcinst.ini` file. To find the location of the `odbcinst.ini` file execute `odbcinst -j` command. Default value is `ODBC Driver 18 for SQL Server`.
+
+##### `secured_connection`
+
+Whether the connector should establish a secured connection. Default value is `False`.
+
+ℹ️ For secured connection Microsoft ODBC Driver for SQL Server uses the OpenSSL library, which gets a certificate from the Default Certificate Trust Store of OpenSSL. For more details check out the following [documentation](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/connection-string-keywords-and-data-source-names-dsns?view=sql-server-ver16#using-tlsssl)
+
+ℹ️ Default values exist for end-to-end testing only.
+
+### Connector Limitations
+
+- If the `last_user_update` of `sys.dm_db_index_usage_stats` table for specific table and database is not available then all data in that table will be synced.
+- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
+- Filtering rules are not available in the present version. Currently, the filtering is controlled via ingest pipelines.
+
+### E2E Tests
+
+The framework provides a way to test ingestion through a connector against a real data source. This is called a functional test. To execute a functional test for the Microsoft SQL connector, run the following command:
+```shell
+$ make ftest NAME=mssql
+```
+
+ℹ️ Users do not need to have a running Elasticsearch instance or a mssql source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Microsoft SQL source using the docker image.
+
+ℹ️ The e2e test uses default values defined in [Configure Microsoft SQL connector](#configure-microsoft-sql-connector)
+
 ## General Configuration
 
 The details of Elastic instance and other relevant fields such as `service` and `source` needs to be provided in the [config.yml](https://github.com/elastic/connectors-python/blob/8.6/config.yml) file. For more details check out the following [documentation](https://github.com/elastic/connectors-python/blob/8.6/docs/CONFIG.md).
