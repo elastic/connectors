@@ -29,19 +29,18 @@ class MockEngine:
 
 @patch("connectors.sources.mssql.create_engine")
 @patch("connectors.sources.mssql.URL.create")
-def test_create_engine(mock_url, mock_fun):
+def test_create_engine(mock_create_url, mock_create_engine):
     # Setup
     source = create_source(MSSQLDataSource)
-    mock_fun.return_value = "Mock engine"
-    mock_url.return_value = MSSQL_CONNECTION_STRING
+    mock_create_engine.return_value = "Mock engine"
+    mock_create_url.return_value = MSSQL_CONNECTION_STRING
 
     # Execute
     source._create_engine()
 
     # Assert
-    mock_fun.assert_called_with(MSSQL_CONNECTION_STRING)
+    mock_create_engine.assert_called_with(MSSQL_CONNECTION_STRING)
 
-    # Test with secured_connection = True
     # Setup
     source.secured_connection = True
 
@@ -49,7 +48,7 @@ def test_create_engine(mock_url, mock_fun):
     source._create_engine()
 
     # Assert
-    mock_fun.assert_called_with(MSSQL_CONNECTION_STRING)
+    mock_create_engine.assert_called_with(MSSQL_CONNECTION_STRING)
 
 
 @pytest.mark.asyncio
