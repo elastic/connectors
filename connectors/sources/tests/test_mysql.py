@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-import ssl
 from unittest import mock
 from unittest.mock import AsyncMock
 
@@ -435,17 +434,6 @@ def test_validate_configuration_with_port():
     # Execute
     with pytest.raises(Exception):
         source._validate_configuration()
-
-
-def test_ssl_context():
-    """This function test _ssl_context with dummy certificate"""
-    # Setup
-    certificate = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
-    source = create_source(MySqlDataSource)
-
-    # Execute
-    with mock.patch.object(ssl, "create_default_context", return_value=MockSsl()):
-        source._ssl_context(certificate=certificate)
 
 
 @pytest.mark.parametrize(

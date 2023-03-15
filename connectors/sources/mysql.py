@@ -4,8 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """MySQL source module responsible to fetch documents from MySQL"""
-import ssl
-
 import aiomysql
 
 from connectors.filtering.validation import (
@@ -15,7 +13,7 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.sources.generic_database import WILDCARD, configured_tables, is_wildcard
-from connectors.utils import CancellableSleeps, RetryStrategy, retryable
+from connectors.utils import CancellableSleeps, RetryStrategy, retryable, ssl_context
 
 MAX_POOL_SIZE = 10
 QUERIES = {
@@ -27,8 +25,8 @@ QUERIES = {
 DEFAULT_FETCH_SIZE = 50
 RETRIES = 3
 RETRY_INTERVAL = 2
-DEFAULT_SSL_DISABLED = True
-DEFAULT_SSL_CA = None
+DEFAULT_SSL_ENABLED = False
+DEFAULT_SSL_CA = ""
 
 
 def format_list(list_):
@@ -92,7 +90,7 @@ class MySqlDataSource(BaseDataSource):
         self._sleeps = CancellableSleeps()
         self.retry_count = self.configuration["retry_count"]
         self.connection_pool = None
-        self.ssl_disabled = self.configuration["ssl_disabled"]
+        self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
         self.database = self.configuration["database"]
         self.tables = self.configuration["tables"]
@@ -145,9 +143,9 @@ class MySqlDataSource(BaseDataSource):
                 "label": "Maximum retries per request",
                 "type": "int",
             },
-            "ssl_disabled": {
-                "value": DEFAULT_SSL_DISABLED,
-                "label": "Disable SSL verification",
+            "ssl_enabled": {
+                "value": DEFAULT_SSL_ENABLED,
+                "label": "Enable SSL verification (true/false)",
                 "type": "bool",
             },
             "ssl_ca": {
@@ -191,24 +189,8 @@ class MySqlDataSource(BaseDataSource):
         ):
             raise Exception("Configured port has to be an integer.")
 
-        if not (self.ssl_disabled or self.certificate):
+        if self.ssl_enabled and self.certificate == "":
             raise Exception("SSL certificate must be configured.")
-
-    def _ssl_context(self, certificate):
-        """Convert string to pem format and create a SSL context
-
-        Args:
-            certificate (str): certificate in string format
-
-        Returns:
-            ssl_context: SSL context with certificate
-        """
-        certificate = certificate.replace(" ", "\n")
-        pem_format = " ".join(certificate.split("\n", 1))
-        pem_format = " ".join(pem_format.rsplit("\n", 1))
-        ctx = ssl.create_default_context()
-        ctx.load_verify_locations(cadata=pem_format)
-        return ctx
 
     async def ping(self):
         """Verify the connection with MySQL server"""
@@ -220,8 +202,8 @@ class MySqlDataSource(BaseDataSource):
             "password": self.configuration["password"],
             "db": None,
             "maxsize": MAX_POOL_SIZE,
-            "ssl": self._ssl_context(certificate=self.certificate)
-            if not self.ssl_disabled
+            "ssl": ssl_context(certificate=self.certificate)
+            if self.ssl_enabled
             else None,
         }
         logger.info("Pinging MySQL...")

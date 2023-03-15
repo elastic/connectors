@@ -194,8 +194,10 @@ class GenericBaseDataSource(BaseDataSource):
         ):
             raise Exception("Configured port has to be an integer.")
 
-        if self.dialect == "Postgresql" and not (
-            self.configuration["ssl_disabled"] or self.configuration["ssl_ca"]
+        if (
+            self.dialect == "Postgresql"
+            and self.configuration["ssl_enabled"]
+            and self.configuration["ssl_ca"] == ""
         ):
             raise Exception("SSL certificate must be configured.")
 
