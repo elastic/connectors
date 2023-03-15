@@ -13,7 +13,6 @@ from connectors.sources.generic_database import GenericBaseDataSource, Queries
 
 DEFAULT_PROTOCOL = "TCP"
 DEFAULT_ORACLE_HOME = ""
-DEFAUTL_WALLET_CONFIGURATION_PATH = ""
 
 
 class OracleQueries(Queries):
@@ -93,7 +92,7 @@ class OracleDataSource(GenericBaseDataSource):
                     "type": "str",
                 },
                 "wallet_configuration_path": {
-                    "value": DEFAUTL_WALLET_CONFIGURATION_PATH,
+                    "value": "",
                     "label": "Path of oracle service configuration files",
                     "type": "str",
                 },
