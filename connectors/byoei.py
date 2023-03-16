@@ -165,6 +165,7 @@ class Bulker:
             await self._run()
         except asyncio.CancelledError:
             logger.info("Task is canceled, stop Bulker...")
+            raise
 
     async def _run(self):
         """Creates batches of bulk calls given a queue of items.
@@ -305,6 +306,7 @@ class Fetcher:
             await self.get_docs(generator)
         except asyncio.CancelledError:
             logger.info("Task is canceled, stop Fetcher...")
+            raise
 
     async def get_docs(self, generator):
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Bulker` to consume.
@@ -506,19 +508,17 @@ class ElasticServer(ESClient):
 
     async def cancel(self):
         if self._fetcher_task is not None and not self._fetcher_task.done():
+            self._fetcher_task.cancel()
             try:
-                self._fetcher_task.cancel()
                 await self._fetcher_task
             except asyncio.CancelledError:
-                logger.error(
-                    "asyncio.CancelledError caught when canceling fetcher task"
-                )
+                logger.info("Fetcher is stopped.")
         if self._bulker_task is not None and not self._bulker_task.done():
+            self._bulker_task.cancel()
             try:
-                self._bulker_task.cancel()
                 await self._bulker_task
             except asyncio.CancelledError:
-                logger.info("asyncio.CancelledError caught when canceling bulker task")
+                logger.info("Bulker is stopped.")
 
     def ingestion_stats(self):
         stats = {}

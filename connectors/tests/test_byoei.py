@@ -711,3 +711,36 @@ def test_bulk_populate_stats(res, expected_result):
     assert bulker.indexed_document_count == expected_result["indexed_document_count"]
     assert bulker.indexed_document_volume == expected_result["indexed_document_volume"]
     assert bulker.deleted_document_count == expected_result["deleted_document_count"]
+
+
+@pytest.mark.parametrize(
+    "fetcher_task, fetcher_task_done, bulker_task, bulker_task_done, expected_result",
+    [
+        (None, False, None, False, True),
+        (Mock(), False, None, False, False),
+        (Mock(), True, None, False, True),
+        (None, False, Mock(), False, False),
+        (None, False, Mock(), True, True),
+        (Mock(), False, Mock(), False, False),
+        (Mock(), False, Mock(), True, False),
+        (Mock(), True, Mock(), False, False),
+        (Mock(), True, Mock(), True, True),
+    ],
+)
+@pytest.mark.asyncio
+async def test_elastic_server_done(
+    fetcher_task, fetcher_task_done, bulker_task, bulker_task_done, expected_result
+):
+    if fetcher_task is not None:
+        fetcher_task.done.return_value = fetcher_task_done
+    if bulker_task is not None:
+        bulker_task.done.return_value = bulker_task_done
+
+    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    es = ElasticServer(config)
+    es._fetcher_task = fetcher_task
+    es._bulker_task = bulker_task
+
+    assert es.done() == expected_result
+
+    await es.close()
