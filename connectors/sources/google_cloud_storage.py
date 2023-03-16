@@ -59,6 +59,96 @@ DEFAULT_PEM_FILE = os.path.join(
 )
 
 
+class GoogleCloudStorageClient:
+    """A google client to handle api calls made to Google Cloud Storage."""
+
+    def __init__(self, retry_count, json_credentials):
+        """Initialize the ServiceAccountCreds class using which api calls will be made.
+
+        Args:
+            retry_count (int): Maximum retries for the failed requests.
+            json_credentials (dict): Service account credentials json.
+        """
+        self.retry_count = retry_count
+        self.service_account_credentials = ServiceAccountCreds(
+            scopes=[CLOUD_STORAGE_READ_ONLY_SCOPE],
+            **json_credentials,
+        )
+        self.user_project_id = self.service_account_credentials.project_id
+
+    async def _api_call(
+        self,
+        resource,
+        method,
+        sub_method=None,
+        full_response=False,
+        **kwargs,
+    ):
+        """Make a GET call for Google Cloud Storage with retry for the failed API calls.
+
+        Args:
+            resource (aiogoogle.resource.Resource): Resource name for which api call will be made.
+            method (aiogoogle.resource.Method): Method available for the resource.
+            sub_method (aiogoogle.resource.Method, optional): Sub-method available for the method. Defaults to None.
+            full_response (bool, optional): Specifies whether the response is paginated or not. Defaults to False.
+
+        Raises:
+            exception: A instance of an exception class.
+
+        Yields:
+            Dictionary: Response returned by the resource method.
+        """
+        retry_counter = 0
+        while True:
+            try:
+                async with Aiogoogle(
+                    service_account_creds=self.service_account_credentials
+                ) as google_client:
+                    storage_client = await google_client.discover(
+                        api_name=API_NAME, api_version=API_VERSION
+                    )
+                    if RUNNING_FTEST and not sub_method and STORAGE_EMULATOR_HOST:
+                        logger.debug(
+                            f"Using the storage emulator at {STORAGE_EMULATOR_HOST}"
+                        )
+                        # Redirecting calls to fake Google Cloud Storage server for e2e test.
+                        storage_client.discovery_document["rootUrl"] = (
+                            STORAGE_EMULATOR_HOST + "/"
+                        )
+                    resource_object = getattr(storage_client, resource)
+                    method_object = getattr(resource_object, method)
+                    if full_response:
+                        first_page_with_next_attached = (
+                            await google_client.as_service_account(
+                                method_object(**kwargs),
+                                full_res=True,
+                            )
+                        )
+                        async for page_items in first_page_with_next_attached:
+                            yield page_items
+                            retry_counter = 0
+                    else:
+                        if sub_method:
+                            method_object = getattr(method_object, sub_method)
+                        yield await google_client.as_service_account(
+                            method_object(**kwargs)
+                        )
+                    break
+            except AttributeError as error:
+                logger.error(
+                    f"Error occurred while generating the resource/method object for an API call. Error: {error}"
+                )
+                raise
+            except Exception as exception:
+                retry_counter += 1
+                if retry_counter > self.retry_count:
+                    raise exception
+                logger.warning(
+                    f"Retry count: {retry_counter} out of {self.retry_count}. Exception: {exception}"
+                )
+                await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry_counter)
+
+
 class GoogleCloudStorageDataSource(BaseDataSource):
     """Google Cloud Storage"""
 
@@ -72,11 +162,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self.retry_count = self.configuration["retry_count"]
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
-        self.service_account_credentials = None
-        self.user_project_id = None
+        self.google_storage_client = None
 
     @classmethod
     def get_default_configuration(cls):
@@ -130,85 +218,14 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         except ValueError:
             raise Exception("Google Cloud service account is not a valid JSON.")
 
-    async def _api_call(
-        self,
-        resource,
-        method,
-        sub_method=None,
-        full_response=False,
-        **kwargs,
-    ):
-        """Method for adding retries whenever exception raised during an api calls
-
-        Args:
-            resource (aiogoogle.resource.Resource): Resource name for which api call will be made.
-            method (aiogoogle.resource.Method): Method available for the resource.
-            sub_method (aiogoogle.resource.Method, optional): Sub-method available for the method. Defaults to None.
-            full_response (bool, optional): Specifies whether the response is paginated or not. Defaults to False.
-
-        Raises:
-            exception: A instance of an exception class.
-
-        Yields:
-            Dictionary: Response returned by the resource method.
-        """
-        retry_counter = 0
-        while True:
-            try:
-                async with Aiogoogle(
-                    service_account_creds=self.service_account_credentials
-                ) as google_client:
-                    storage_client = await google_client.discover(
-                        api_name=API_NAME, api_version=API_VERSION
-                    )
-                    if RUNNING_FTEST and not sub_method and STORAGE_EMULATOR_HOST:
-                        logger.debug(
-                            f"Using the storage emulator at {STORAGE_EMULATOR_HOST}"
-                        )
-                        # Redirecting calls to fake Google Cloud Storage server for e2e test.
-                        storage_client.discovery_document["rootUrl"] = (
-                            STORAGE_EMULATOR_HOST + "/"
-                        )
-                    resource_object = getattr(storage_client, resource)
-                    method_object = getattr(resource_object, method)
-                    if full_response:
-                        first_page_with_next_attached = (
-                            await google_client.as_service_account(
-                                method_object(**kwargs),
-                                full_res=True,
-                            )
-                        )
-                        async for page_items in first_page_with_next_attached:
-                            yield page_items
-                    else:
-                        if sub_method:
-                            method_object = getattr(method_object, sub_method)
-                        yield await google_client.as_service_account(
-                            method_object(**kwargs)
-                        )
-                    break
-            except AttributeError as error:
-                logger.error(
-                    f"Error occurred while generating the resource/method object for an API call. Error: {error}"
-                )
-                raise
-            except Exception as exception:
-                retry_counter += 1
-                if retry_counter > self.retry_count:
-                    raise exception
-                logger.warning(
-                    f"Retry count: {retry_counter} out of {self.retry_count}. Exception: {exception}"
-                )
-                await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry_counter)
-
-    def get_service_account_credentials(self):
-        """Initialize and return the ServiceAccountCreds
+    def get_storage_client(self):
+        """Initialize and return the GoogleCloudStorageClient
 
         Returns:
-            ServiceAccountCreds: An instance of the ServiceAccountCreds.
+            GoogleCloudStorageClient: An instance of the GoogleCloudStorageClient.
         """
-        if self.service_account_credentials is not None:
-            return
+        if self.google_storage_client is not None:
+            return self.google_storage_client
 
         json_credentials = json.loads(self.configuration["service_account_credentials"])
 
@@ -221,27 +238,24 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 max_split=2,
             )
 
-        self.service_account_credentials = ServiceAccountCreds(
-            scopes=[CLOUD_STORAGE_READ_ONLY_SCOPE],
-            **json_credentials,
+        self.google_storage_client = GoogleCloudStorageClient(
+            json_credentials=json_credentials,
+            retry_count=self.configuration["retry_count"],
         )
-        self.user_project_id = self.service_account_credentials.project_id
-        return self.service_account_credentials
+        return self.google_storage_client
 
     async def ping(self):
         """Verify the connection with Google Cloud Storage"""
-
         if RUNNING_FTEST:
             return
 
-        self.get_service_account_credentials()
         try:
             await anext(
-                self._api_call(
+                self.get_storage_client()._api_call(
                     resource="projects",
                     method="serviceAccount",
                     sub_method="get",
-                    projectId=self.user_project_id,
+                    projectId=self.google_storage_client.user_project_id,
                 )
             )
             logger.info("Successfully connected to the Google Cloud Storage.")
@@ -255,12 +269,12 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Yields:
             Dictionary: Contains the list of fetched buckets from Google Cloud Storage.
         """
-        async for bucket in self._api_call(
+        async for bucket in self.get_storage_client()._api_call(
             resource="buckets",
             method="list",
             full_response=True,
-            project=self.user_project_id,
-            userProject=self.user_project_id,
+            project=self.google_storage_client.user_project_id,
+            userProject=self.google_storage_client.user_project_id,
         ):
             yield bucket
 
@@ -274,12 +288,12 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             Dictionary: Contains the list of fetched blobs from Google Cloud Storage.
         """
         for bucket in buckets.get("items", []):
-            async for blob in self._api_call(
+            async for blob in self.google_storage_client._api_call(
                 resource="objects",
                 method="list",
                 full_response=True,
                 bucket=bucket["id"],
-                userProject=self.user_project_id,
+                userProject=self.google_storage_client.user_project_id,
             ):
                 yield blob
 
@@ -298,7 +312,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         blob_name = urllib.parse.quote(blob_document["name"], safe="'")
         blob_document[
             "url"
-        ] = f"{CLOUD_STORAGE_BASE_URL}{blob_document['bucket_name']}/{blob_name};tab=live_object?project={self.user_project_id}"
+        ] = f"{CLOUD_STORAGE_BASE_URL}{blob_document['bucket_name']}/{blob_name};tab=live_object?project={self.google_storage_client.user_project_id}"
         return blob_document
 
     def get_blob_document(self, blobs):
@@ -346,13 +360,13 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         source_file_name = ""
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
             await anext(
-                self._api_call(
+                self.google_storage_client._api_call(
                     resource="objects",
                     method="get",
                     bucket=blob["bucket_name"],
                     object=blob_name,
                     alt="media",
-                    userProject=self.user_project_id,
+                    userProject=self.google_storage_client.user_project_id,
                     pipe_to=async_buffer,
                 )
             )
@@ -376,7 +390,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Documents from Google Cloud Storage.
         """
-        self.get_service_account_credentials()
         async for buckets in self.fetch_buckets():
             if not buckets.get("items"):
                 continue
