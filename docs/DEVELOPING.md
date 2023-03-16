@@ -737,6 +737,139 @@ $ make ftest NAME=mssql
 
 ℹ️ The e2e test uses default values defined in [Configure Microsoft SQL connector](#configure-microsoft-sql-connector)
 
+
+## SharePoint Connector
+
+The [Elastic SharePoint connector](../connectors/sources/sharepoint.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+
+### Availability and prerequisites
+
+⚠️ _Currently, this connector is available in **beta** starting in 8.8_.
+Features in beta are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
+
+Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
+
+SharePoint Online permissions required to run the connector:
+     
+   - Refer the document to understand the complete process of setting [SharePoint Permissions](https://documentation.commvault.com/v11/essential/128616_registering_azure_app_for_sharepoint_online.html)
+
+   - To understand how to set DisableCustomAppAuthentication refer the document: [SharePoint Set DisableCustomAppAuthentication](https://learn.microsoft.com/en-us/answers/questions/714147/token-type-is-not-allowed-error-on-sharepoint-rest#:~:text=Install%2DModule%20%2DName,spotenant%20%2DDisableCustomAppAuthentication%20%24false)
+
+
+### Setup and basic usage
+
+Complete the following steps to deploy the connector:
+
+1. [Gather SharePoint details](#gather-sharepoint-details)
+2. [Configure SharePoint connector](#configure-sharepoint-connector)
+
+#### Gather SharePoint details
+
+Collect the information that is required to connect to your SharePoint instance:
+
+- The server host url where the SharePoint is hosted
+- Username for SharePoint Server
+- Password for SharePoint Server
+- Client Id for SharePoint Online
+- Secret Id for SharePoint Online
+- Tenant Name for SharePoint Online
+- Tenant Id for SharePoint Online
+- SSL certificate for a secure connection
+
+#### Configure SharePoint connector
+
+The following configuration fields need to be provided for setting up the connector:
+
+##### `is_cloud`
+
+Flag to determine the SharePoint platform type. `True` if SharePoint cloud and `False` if SharePoint Server. Default value is `False`.
+
+##### `username`
+
+The username of the account for SharePoint Server. Default value is `demo_user`.
+
+##### `password`
+
+The password of the account to be used for the SharePoint Server. Default value is `abc@123`.
+
+##### `client_id`
+
+The client id to authenticate with SharePoint online.
+
+##### `secret_id`
+
+The secret id to authenticate with SharePoint online.
+
+##### `tenant`
+
+The tenant name to authenticate with SharePoint online.
+
+##### `tenant_id`
+
+The tenant id to authenticate with SharePoint online.
+
+##### `host_url`
+
+The server host url where the SharePoint is hosted. Default value is `http://127.0.0.1:8491`. Examples:
+
+  - `https://192.158.1.38:8080`
+  - `https://test_user.sharepoint.com`
+
+##### `site_collections`
+
+The site collection to fetch sites from SharePoint. Default value is `collection1`. Examples:
+  - `collection1`
+  - `collection1, collection2`
+
+##### `ssl_enabled`
+
+Whether SSL verification will be enabled. Default value is `False`.
+
+##### `ssl_ca`
+
+Content of SSL certificate. 
+
+Note: In case of ssl_enabled is `False`, keep `ssl_ca` field empty. Example certificate:
+
+  - ```
+    -----BEGIN CERTIFICATE-----
+    MIID+jCCAuKgAwIBAgIGAJJMzlxLMA0GCSqGSIb3DQEBCwUAMHoxCzAJBgNVBAYT
+    ...
+    AlVTMQwwCgYDVQQKEwNJQk0xFjAUBgNVBAsTDURlZmF1bHROb2RlMDExFjAUBgNV
+    -----END CERTIFICATE-----
+    ```
+
+##### `retry_count`
+
+The number of retry attempts after failed request to the SharePoint. Default value is `3`.
+
+##### `enable_content_extraction`
+
+Whether the connector should extract the content from SharePoint attachment. Default value is `True` i.e. the connector will try to extract file contents.
+
+#### Content Extraction
+
+The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
+
+### Connector Limitations
+
+- Files bigger than 10 MB won't be extracted.
+- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
+- Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
+
+### E2E Tests
+
+The framework provides a way to test ingestion through a connector against a real data source. This is called a functional test. To execute a functional test for the SharePoint connector, run the following command:
+```shell
+$ make ftest NAME=sharepoint
+```
+
+ℹ️ Users can generate the perf8 report using an argument i.e. `PERF8=True`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
+
+ℹ️ Users do not need to have a running Elasticsearch instance or a SharePoint source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock SharePoint source using the docker image.
+
+ℹ️ The e2e test uses default values defined in [Configure SharePoint connector](#configure-sharepoint-connector)
+
 ## General Configuration
 
 The details of Elastic instance and other relevant fields such as `service` and `source` needs to be provided in the [config.yml](https://github.com/elastic/connectors-python/blob/8.6/config.yml) file. For more details check out the following [documentation](https://github.com/elastic/connectors-python/blob/8.6/docs/CONFIG.md).
