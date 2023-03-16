@@ -9,6 +9,7 @@ from functools import partial
 
 from asyncpg.exceptions._base import InternalClientError
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
@@ -255,7 +256,7 @@ class GenericBaseDataSource(BaseDataSource):
                 else:
                     yield cursor.fetchall()
                 break
-            except InternalClientError:
+            except (InternalClientError, ProgrammingError):
                 raise
             except Exception as exception:
                 logger.warning(
@@ -441,7 +442,7 @@ class GenericBaseDataSource(BaseDataSource):
                     )
             else:
                 logger.warning(f"No rows found for {table}.")
-        except InternalClientError as exception:
+        except (InternalClientError, ProgrammingError) as exception:
             logger.warning(
                 f"Something went wrong while fetching document for table {table}. Error: {exception}"
             )
