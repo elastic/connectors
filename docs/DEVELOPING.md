@@ -798,7 +798,7 @@ The server host url where the Jira is hosted. Default value is `http://127.0.0.1
   - `https://192.158.1.38:8080/`
   - `https://test_user.atlassian.net/`
 
-#### `projects`
+##### `projects`
 
 Comma separated `Project Keys` to fetch the data from Jira server or cloud. Default value is `*` i.e. fetches the data of all projects. Examples:
 
