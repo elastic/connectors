@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from connectors.source import DataSourceConfiguration
-from connectors.sources.confluence import ConfluenceDataSource
+from connectors.sources.confluence import ConfluenceClient, ConfluenceDataSource
 from connectors.sources.tests.support import create_source
 from connectors.utils import ssl_context
 
@@ -52,12 +52,12 @@ async def test_close_with_client_session(patch_logger):
 
     # Setup
     source = create_source(ConfluenceDataSource)
-    source.get_session()
+    source.confluence_client.get_session()
 
     # Execute
     await source.close()
 
-    assert source.session is None
+    assert source.confluence_client.session is None
 
 
 @pytest.mark.asyncio
@@ -69,7 +69,7 @@ async def test_close_without_client_session(patch_logger):
     # Execute
     await source.close()
 
-    assert source.session is None
+    assert source.confluence_client.session is None
 
 
 class MockSSL:
@@ -91,10 +91,21 @@ async def test_configuration():
     assert config["host_url"] == HOST_URL
 
 
+@pytest.mark.parametrize(
+    "field, is_cloud",
+    [
+        ("host_url", True),
+        ("service_account_id", True),
+        ("api_token", True),
+        ("username", False),
+        ("password", False),
+    ],
+)
 @pytest.mark.asyncio
-async def test_validate_configuration_for_host_url(patch_logger):
+async def test_validate_configuration_for_empty_fields(field, is_cloud):
     source = create_source(ConfluenceDataSource)
-    source.configuration.set_field(name="host_url", value="")
+    source.confluence_client.is_cloud = is_cloud
+    source.confluence_client.configuration.set_field(name=field, value="")
 
     # Execute
     with pytest.raises(Exception):
@@ -103,27 +114,30 @@ async def test_validate_configuration_for_host_url(patch_logger):
 
 @pytest.mark.asyncio
 @patch("aiohttp.ClientSession.get")
-async def test_ping_with_ssl(mock_get, patch_logger):
+async def test_ping_with_ssl(mock_get):
     """Test ping method of ConfluenceDataSource class with SSL"""
 
     # Execute
     mock_get.return_value.__aenter__.return_value.status = 200
     source = create_source(ConfluenceDataSource)
+    source.confluence_client.get_session()
 
-    source.ssl_enabled = True
-    source.certificate = (
+    source.confluence_client.ssl_enabled = True
+    source.confluence_client.certificate = (
         "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
     )
 
     # Execute
     with patch.object(ssl, "create_default_context", return_value=MockSSL()):
-        source.ssl_ctx = ssl_context(certificate=source.certificate)
+        source.confluence_client.ssl_ctx = ssl_context(
+            certificate=source.confluence_client.certificate
+        )
         await source.ping()
 
 
 @pytest.mark.asyncio
 @patch("aiohttp.ClientSession.get")
-async def test_ping_for_failed_connection_exception(mock_get, patch_logger):
+async def test_ping_for_failed_connection_exception(mock_get):
     """Tests the ping functionality when connection can not be established to Confluence."""
 
     # Setup
@@ -131,7 +145,7 @@ async def test_ping_for_failed_connection_exception(mock_get, patch_logger):
 
     # Execute
     with patch.object(
-        ConfluenceDataSource, "_api_call", side_effect=Exception("Something went wrong")
+        ConfluenceClient, "_api_call", side_effect=Exception("Something went wrong")
     ):
         with pytest.raises(Exception):
             await source.ping()

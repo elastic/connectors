@@ -20,6 +20,100 @@ PING_URL = "rest/api/space?limit=1"
 MAX_CONCURRENT_DOWNLOADS = 50  # Max concurrent download supported by confluence
 
 
+class ConfluenceClient:
+    """Confluence client to handle API calls made to Confluence"""
+
+    def __init__(self, configuration):
+        self._sleeps = CancellableSleeps()
+        self.configuration = configuration
+        self.is_cloud = self.configuration["is_cloud"]
+        self.host_url = self.configuration["host_url"]
+        self.ssl_enabled = self.configuration["ssl_enabled"]
+        self.certificate = self.configuration["ssl_ca"]
+        self.retry_count = self.configuration["retry_count"]
+        if self.is_cloud:
+            self.host_url = os.path.join(self.host_url, "wiki")
+
+        if self.ssl_enabled and self.certificate:
+            self.ssl_ctx = ssl_context(certificate=self.certificate)
+        else:
+            self.ssl_ctx = False
+        self.session = None
+
+    def get_session(self):
+        """Generate and return base client session with configuration fields
+
+        Returns:
+            aiohttp.ClientSession: An instance of Client Session
+        """
+        if self.session:
+            return self.session
+        if self.is_cloud:
+            auth = (
+                self.configuration["service_account_id"],
+                self.configuration["api_token"],
+            )
+        else:
+            auth = self.configuration["username"], self.configuration["password"]
+
+        basic_auth = aiohttp.BasicAuth(login=auth[0], password=auth[1])
+        timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
+        self.session = aiohttp.ClientSession(
+            auth=basic_auth,
+            headers={
+                "accept": "application/json",
+                "content-type": "application/json",
+            },
+            timeout=timeout,
+            raise_for_status=True,
+        )
+        return self.session
+
+    async def close_session(self):
+        """Closes unclosed client session"""
+        self._sleeps.cancel()
+        if self.session is None:
+            return
+        await self.session.close()
+        self.session = None
+
+    async def _api_call(self, url):
+        """Make a GET call for Atlassian API using the passed url with retry for the failed API calls.
+
+        Args:
+            url: Request URL to hit the get call
+
+        Raises:
+            exception: An instance of an exception class.
+
+        Yields:
+            response: Client response
+        """
+        retry_counter = 0
+        while True:
+            try:
+                async with self.session.get(
+                    url=url,
+                    ssl=self.ssl_ctx,
+                ) as response:
+                    yield response
+                    break
+            except Exception as exception:
+                if isinstance(
+                    exception,
+                    ServerDisconnectedError,
+                ):
+                    await self.session.close()  # pyright: ignore
+                    self.get_session()
+                retry_counter += 1
+                if retry_counter > self.retry_count:
+                    raise exception
+                logger.warning(
+                    f"Retry count: {retry_counter} out of {self.retry_count}. Exception: {exception}"
+                )
+                await self._sleeps.sleep(RETRY_INTERVAL**retry_counter)
+
+
 class ConfluenceDataSource(BaseDataSource):
     """Confluence"""
 
@@ -33,22 +127,10 @@ class ConfluenceDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self._sleeps = CancellableSleeps()
-        self.is_cloud = self.configuration["is_cloud"]
-        self.host_url = self.configuration["host_url"]
-        self.ssl_enabled = self.configuration["ssl_enabled"]
-        self.certificate = self.configuration["ssl_ca"]
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.retry_count = self.configuration["retry_count"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
-        if self.is_cloud:
-            self.host_url = os.path.join(self.host_url, "wiki")
-
-        if self.ssl_enabled and self.certificate:
-            self.ssl_ctx = ssl_context(certificate=self.certificate)
-
-        self.ssl_ctx = False
-        self.session = None
+        self.confluence_client = ConfluenceClient(configuration)
 
     @classmethod
     def get_default_configuration(cls):
@@ -115,39 +197,9 @@ class ConfluenceDataSource(BaseDataSource):
             },
         }
 
-    def get_session(self):
-        """Generate base client session with configuration fields"""
-        if self.session:
-            return
-        if self.is_cloud:
-            auth = (
-                self.configuration["service_account_id"],
-                self.configuration["api_token"],
-            )
-        else:
-            auth = self.configuration["username"], self.configuration["password"]
-
-        basic_auth = aiohttp.BasicAuth(login=auth[0], password=auth[1])
-        request_headers = {
-            "accept": "application/json",
-            "content-type": "application/json",
-        }
-        timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
-
-        self.session = aiohttp.ClientSession(
-            auth=basic_auth,
-            headers=request_headers,
-            timeout=timeout,
-            raise_for_status=True,
-        )
-
     async def close(self):
         """Closes unclosed client session"""
-        self._sleeps.cancel()
-        if self.session is None:
-            return
-        await self.session.close()
-        self.session = None
+        await self.confluence_client.close_session()
 
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by Confluence
@@ -169,7 +221,7 @@ class ConfluenceDataSource(BaseDataSource):
 
         connection_fields = (
             ["host_url", "service_account_id", "api_token"]
-            if self.is_cloud
+            if self.confluence_client.is_cloud
             else ["host_url", "username", "password"]
         )
         default_config = self.get_default_configuration()
@@ -182,7 +234,10 @@ class ConfluenceDataSource(BaseDataSource):
             raise Exception(
                 f"Configured keys: {empty_connection_fields} can't be empty."
             )
-        if self.ssl_enabled and self.certificate == "":
+        if self.confluence_client.ssl_enabled and (
+            self.confluence_client.certificate == ""
+            or self.confluence_client.certificate is None
+        ):
             raise Exception("SSL certificate must be configured.")
 
         if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
@@ -190,49 +245,13 @@ class ConfluenceDataSource(BaseDataSource):
                 f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
             )
 
-    async def _api_call(self, url):
-        """Make a GET call for Atlassian API using the passed url with retry for the failed API calls.
-
-        Args:
-            url: Request URL to hit the get call
-
-        Raises:
-            exception: An instance of an exception class.
-
-        Yields:
-            response: Client response
-        """
-        retry_counter = 0
-        while True:
-            try:
-                async with self.session.get(
-                    url=url,
-                    ssl=self.ssl_ctx,
-                ) as response:
-                    yield response
-                    break
-            except Exception as exception:
-                if isinstance(
-                    exception,
-                    ServerDisconnectedError,
-                ):
-                    await self.session.close()  # pyright: ignore
-                    self.get_session()
-                retry_counter += 1
-                if retry_counter > self.retry_count:
-                    raise exception
-                logger.warning(
-                    f"Retry count: {retry_counter} out of {self.retry_count}. Exception: {exception}"
-                )
-                await self._sleeps.sleep(RETRY_INTERVAL**retry_counter)
-
     async def ping(self):
         """Verify the connection with Confluence"""
-        self.get_session()
+        self.confluence_client.get_session()
         try:
             await anext(
-                self._api_call(
-                    url=os.path.join(self.host_url, PING_URL),
+                self.confluence_client._api_call(
+                    url=os.path.join(self.confluence_client.host_url, PING_URL),
                 )
             )
             logger.info("Successfully connected to Confluence")
