@@ -525,4 +525,4 @@ def test_get_storage_client():
     first_instance = mocked_gcs_object.get_storage_client()
     second_instance = mocked_gcs_object.get_storage_client()
 
-    assert first_instance == second_instance
+    assert first_instance is second_instance
