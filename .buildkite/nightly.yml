@@ -47,3 +47,8 @@ steps:
       - ".buildkite/run_nigthly.sh oracle"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Microsoft SQL"
+    command:
+      - ".buildkite/run_nigthly.sh mssql"
+    artifact_paths:
+      - "perf8-report-*/**/*"
