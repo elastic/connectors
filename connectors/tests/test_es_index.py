@@ -3,14 +3,10 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from unittest.mock import Mock, AsyncMock
-
 import pytest
-
-from connectors.es.index import ESIndex
-
 from elasticsearch import ApiError
 
+from connectors.es.index import ESIndex
 
 headers = {"X-Elastic-Product": "Elasticsearch"}
 config = {
@@ -60,7 +56,7 @@ async def test_fetch_by_id(mock_responses):
         f"http://nowhere.com:9200/{index_name}/_doc/{doc_id}",
         headers=headers,
         status=200,
-        payload={"_index": index_name, "_id": doc_id, "_source": {}}
+        payload={"_index": index_name, "_id": doc_id, "_source": {}},
     )
 
     result = await index.fetch_by_id(doc_id)
@@ -140,9 +136,60 @@ async def test_update(mock_responses):
         status=200,
     )
 
-    try:
-        await index.update(doc_id, {})
-    except Exception as e:
-        assert False, f"'update' raised an exception {e}"
+    # the test will fail if any error is raised
+    await index.update(doc_id, {})
+
+    await index.close()
+
+
+@pytest.mark.asyncio
+async def test_get_all_docs_with_error(mock_responses):
+    index_name = "fake_index"
+    index = FakeIndex(index_name, config)
+    mock_responses.post(
+        f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
+    )
+
+    mock_responses.post(
+        f"http://nowhere.com:9200/{index_name}/_search?expand_wildcards=hidden",
+        headers=headers,
+        status=500,
+    )
+
+    docs = [doc async for doc in index.get_all_docs()]
+    assert len(docs) == 0
+
+    await index.close()
+
+
+@pytest.mark.asyncio
+async def test_get_all_docs(mock_responses):
+    index_name = "fake_index"
+    index = FakeIndex(index_name, config)
+    total = 3
+    mock_responses.post(
+        f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
+    )
+
+    mock_responses.post(
+        f"http://nowhere.com:9200/{index_name}/_search?expand_wildcards=hidden",
+        headers=headers,
+        status=200,
+        payload={
+            "hits": {"total": {"value": total}, "hits": [{"_id": "1"}, {"_id": "2"}]}
+        },
+    )
+    mock_responses.post(
+        f"http://nowhere.com:9200/{index_name}/_search?expand_wildcards=hidden",
+        headers=headers,
+        status=200,
+        payload={"hits": {"total": {"value": total}, "hits": [{"_id": "3"}]}},
+    )
+
+    doc_count = 0
+    async for doc in index.get_all_docs(page_size=2):
+        assert isinstance(doc, FakeDocument)
+        doc_count += 1
+    assert doc_count == total
 
     await index.close()
