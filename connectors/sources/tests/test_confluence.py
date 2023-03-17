@@ -160,3 +160,11 @@ def test_validate_configuration_for_ssl_enabled(patch_logger):
     # Execute
     with pytest.raises(Exception):
         source._validate_configuration()
+
+
+def test_get_storage_client():
+    """Test that the instance of session returned is always the same for the datasource class."""
+    source = create_source(ConfluenceDataSource)
+    first_instance = source.confluence_client.get_session()
+    second_instance = source.confluence_client.get_session()
+    assert first_instance is second_instance
