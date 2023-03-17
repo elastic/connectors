@@ -273,8 +273,8 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             resource="buckets",
             method="list",
             full_response=True,
-            project=self.google_storage_client.user_project_id,
-            userProject=self.google_storage_client.user_project_id,
+            project=self.get_storage_client().user_project_id,
+            userProject=self.get_storage_client().user_project_id,
         ):
             yield bucket
 
@@ -293,7 +293,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 method="list",
                 full_response=True,
                 bucket=bucket["id"],
-                userProject=self.google_storage_client.user_project_id,
+                userProject=self.get_storage_client().user_project_id,
             ):
                 yield blob
 
@@ -366,7 +366,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                     bucket=blob["bucket_name"],
                     object=blob_name,
                     alt="media",
-                    userProject=self.google_storage_client.user_project_id,
+                    userProject=self.get_storage_client().user_project_id,
                     pipe_to=async_buffer,
                 )
             )

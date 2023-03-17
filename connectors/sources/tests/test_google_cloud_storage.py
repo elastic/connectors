@@ -32,7 +32,6 @@ def get_mocked_source_object():
         {"service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS, "retry_count": 0}
     )
     mocked_gcs_object = GoogleCloudStorageDataSource(configuration=configuration)
-    mocked_gcs_object.get_storage_client()
     return mocked_gcs_object
 
 
@@ -399,7 +398,7 @@ async def test_get_content():
         Aiogoogle, "as_service_account", return_value=blob_content_response
     ):
         google_client = Aiogoogle(
-            service_account_creds=mocked_gcs_object.google_storage_client.service_account_credentials
+            service_account_creds=mocked_gcs_object.get_storage_client().service_account_credentials
         )
         storage_client = await google_client.discover(
             api_name=API_NAME, api_version=API_VERSION
@@ -438,7 +437,7 @@ async def test_get_content_when_type_not_supported():
 
     # Execute and Assert
     google_client = Aiogoogle(
-        service_account_creds=mocked_gcs_object.google_storage_client.service_account_credentials
+        service_account_creds=mocked_gcs_object.get_storage_client().service_account_credentials
     )
     storage_client = await google_client.discover(
         api_name=API_NAME, api_version=API_VERSION
@@ -482,7 +481,7 @@ async def test_get_content_when_file_size_is_large(catch_stdout, patch_logger):
 
     # Execute and Assert
     google_client = Aiogoogle(
-        service_account_creds=mocked_gcs_object.google_storage_client.service_account_credentials
+        service_account_creds=mocked_gcs_object.get_storage_client().service_account_credentials
     )
     storage_client = await google_client.discover(
         api_name=API_NAME, api_version=API_VERSION
@@ -510,11 +509,20 @@ async def test_api_call_for_attribute_error(catch_stdout, patch_logger):
 
     # Execute
     with pytest.raises(AttributeError):
-        async for _ in mocked_gcs_object._api_call(
+        async for _ in mocked_gcs_object.get_storage_client()._api_call(
             resource="buckets_dummy",
             method="list",
             full_response=True,
-            project=mocked_gcs_object.user_project_id,
-            userProject=mocked_gcs_object.user_project_id,
+            project=mocked_gcs_object.get_storage_client().user_project_id,
+            userProject=mocked_gcs_object.get_storage_client().user_project_id,
         ):
             print("Method called successfully....")
+
+
+def test_get_storage_client():
+    """Test that the instance returned is always the same for the same datasource class."""
+    mocked_gcs_object = get_mocked_source_object()
+    first_instance = mocked_gcs_object.get_storage_client()
+    second_instance = mocked_gcs_object.get_storage_client()
+
+    assert first_instance == second_instance
