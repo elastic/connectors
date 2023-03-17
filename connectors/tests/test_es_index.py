@@ -14,20 +14,21 @@ config = {
     "password": "changeme",
     "host": "http://nowhere.com:9200",
 }
+index_name = "fake_index"
 
 
 @pytest.mark.asyncio
 async def test_es_index_create_object_error(mock_responses, patch_logger):
-    index = ESIndex("index", config)
+    index = ESIndex(index_name, config)
     mock_responses.post(
-        "http://nowhere.com:9200/index/_refresh", headers=headers, status=200
+        f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
     )
 
     mock_responses.post(
-        "http://nowhere.com:9200/index/_search?expand_wildcards=hidden",
+        f"http://nowhere.com:9200/{index_name}/_search?expand_wildcards=hidden",
         headers=headers,
         status=200,
-        payload={"hits": {"total": {"value": 1}, "hits": [{"id": 1}]}},
+        payload={"hits": {"total": {"value": 1}, "hits": [{"_id": 1}]}},
     )
     with pytest.raises(NotImplementedError) as _:
         async for doc_ in index.get_all_docs():
@@ -45,7 +46,6 @@ class FakeIndex(ESIndex):
 
 @pytest.mark.asyncio
 async def test_fetch_by_id(mock_responses):
-    index_name = "fake_index"
     doc_id = "1"
     index = FakeIndex(index_name, config)
     mock_responses.post(
@@ -67,7 +67,6 @@ async def test_fetch_by_id(mock_responses):
 
 @pytest.mark.asyncio
 async def test_fetch_by_id_not_found(mock_responses):
-    index_name = "fake_index"
     doc_id = "1"
     index = FakeIndex(index_name, config)
     mock_responses.post(
@@ -88,7 +87,6 @@ async def test_fetch_by_id_not_found(mock_responses):
 
 @pytest.mark.asyncio
 async def test_fetch_by_id_api_error(mock_responses):
-    index_name = "fake_index"
     doc_id = "1"
     index = FakeIndex(index_name, config)
     mock_responses.post(
@@ -109,7 +107,6 @@ async def test_fetch_by_id_api_error(mock_responses):
 
 @pytest.mark.asyncio
 async def test_index(mock_responses):
-    index_name = "fake_index"
     doc_id = "1"
     index = ESIndex(index_name, config)
     mock_responses.post(
@@ -127,7 +124,6 @@ async def test_index(mock_responses):
 
 @pytest.mark.asyncio
 async def test_update(mock_responses):
-    index_name = "fake_index"
     doc_id = "1"
     index = ESIndex(index_name, config)
     mock_responses.post(
@@ -144,7 +140,6 @@ async def test_update(mock_responses):
 
 @pytest.mark.asyncio
 async def test_get_all_docs_with_error(mock_responses):
-    index_name = "fake_index"
     index = FakeIndex(index_name, config)
     mock_responses.post(
         f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
@@ -164,7 +159,6 @@ async def test_get_all_docs_with_error(mock_responses):
 
 @pytest.mark.asyncio
 async def test_get_all_docs(mock_responses):
-    index_name = "fake_index"
     index = FakeIndex(index_name, config)
     total = 3
     mock_responses.post(
