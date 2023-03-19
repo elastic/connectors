@@ -63,6 +63,17 @@ def test_run(mock_responses, patch_logger, set_env):
         assert "Bye" in output
 
 
+def test_run_snowflake(mock_responses, patch_logger, set_env):
+    args = mock.MagicMock()
+    args.log_level = "DEBUG"
+    args.config_file = CONFIG
+    args.action = ["list", "poll"]
+    with patch("sys.stdout", new=StringIO()) as patched_stdout:
+        assert run(args) == -1
+        output = patched_stdout.getvalue().strip()
+        assert "Cannot use the `list` action with other actions" in output
+
+
 @patch("connectors.cli.set_logger")
 @patch("connectors.cli.load_config", side_effect=Exception("something went wrong"))
 def test_main_with_invalid_configuration(load_config, set_logger, patch_logger):
