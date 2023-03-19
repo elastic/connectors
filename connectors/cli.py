@@ -35,8 +35,8 @@ def _parser():
     parser.add_argument(
         "--action",
         type=str,
-        default=["poll"],
-        choices=["poll", "list"],
+        default=["poll", "cleanup"],
+        choices=["poll", "list", "cleanup"],
         nargs="+",
         help="What elastic-ingest should do",
     )
