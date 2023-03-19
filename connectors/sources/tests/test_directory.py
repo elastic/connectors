@@ -3,6 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import os
+
 import pytest
 
 from connectors.sources.directory import DEFAULT_DIR, DirectoryDataSource
@@ -17,6 +19,9 @@ async def test_basics():
 @pytest.mark.asyncio
 async def test_get_docs(patch_logger, catch_stdout):
     source = create_source(DirectoryDataSource)
+    source.directory = os.path.dirname(__file__)
+    source.pattern = '*.py'
+
     num = 0
     async for (doc, dl) in source.get_docs():
         num += 1
