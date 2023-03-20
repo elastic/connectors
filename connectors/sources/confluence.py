@@ -92,7 +92,7 @@ class ConfluenceClient:
         retry_counter = 0
         while True:
             try:
-                async with self.session.get(
+                async with self.get_session().get(
                     url=url,
                     ssl=self.ssl_ctx,
                 ) as response:
@@ -247,7 +247,6 @@ class ConfluenceDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Confluence"""
-        self.confluence_client.get_session()
         try:
             await anext(
                 self.confluence_client._api_call(

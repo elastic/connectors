@@ -52,7 +52,6 @@ async def test_close_with_client_session(patch_logger):
 
     # Setup
     source = create_source(ConfluenceDataSource)
-    source.confluence_client.get_session()
 
     # Execute
     await source.close()
@@ -120,7 +119,6 @@ async def test_ping_with_ssl(mock_get):
     # Execute
     mock_get.return_value.__aenter__.return_value.status = 200
     source = create_source(ConfluenceDataSource)
-    source.confluence_client.get_session()
 
     source.confluence_client.ssl_enabled = True
     source.confluence_client.certificate = (
