@@ -104,7 +104,6 @@ class ConfluenceClient:
                     ServerDisconnectedError,
                 ):
                     await self.session.close()  # pyright: ignore
-                    self.get_session()
                 retry_counter += 1
                 if retry_counter > self.retry_count:
                     raise exception
@@ -128,7 +127,6 @@ class ConfluenceDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
-        self.retry_count = self.configuration["retry_count"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
         self.confluence_client = ConfluenceClient(configuration)
 
