@@ -25,7 +25,7 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
     Validate advanced rules for MongoDB, so that they're adhering to the motor asyncio API (see: https://motor.readthedocs.io/en/stable/api-asyncio/asyncio_motor_collection.html)
     """
 
-    # see: https://motor.readthedocs.io/en/stable/api-asyncio/asyncio_motor_collection.html
+    # see: https://motor.readthedocs.io/en/stable/api-asyncio/asyncio_motor_collection.html#motor.motor_asyncio.AsyncIOMotorCollection.aggregate
     AGGREGATE_SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {
