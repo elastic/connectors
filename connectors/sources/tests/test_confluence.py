@@ -52,7 +52,7 @@ async def test_close_with_client_session(patch_logger):
 
     # Setup
     source = create_source(ConfluenceDataSource)
-    source.confluence_client.get_session()
+    source.confluence_client._get_session()
 
     # Execute
     await source.close()
@@ -144,7 +144,7 @@ async def test_ping_for_failed_connection_exception(mock_get):
 
     # Execute
     with patch.object(
-        ConfluenceClient, "_api_call", side_effect=Exception("Something went wrong")
+        ConfluenceClient, "api_call", side_effect=Exception("Something went wrong")
     ):
         with pytest.raises(Exception):
             await source.ping()
@@ -164,6 +164,6 @@ def test_validate_configuration_for_ssl_enabled(patch_logger):
 def test_get_storage_client():
     """Test that the instance of session returned is always the same for the datasource class."""
     source = create_source(ConfluenceDataSource)
-    first_instance = source.confluence_client.get_session()
-    second_instance = source.confluence_client.get_session()
+    first_instance = source.confluence_client._get_session()
+    second_instance = source.confluence_client._get_session()
     assert first_instance is second_instance

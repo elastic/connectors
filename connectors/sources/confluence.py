@@ -40,7 +40,7 @@ class ConfluenceClient:
             self.ssl_ctx = False
         self.session = None
 
-    def get_session(self):
+    def _get_session(self):
         """Generate and return base client session with configuration fields
 
         Returns:
@@ -77,7 +77,7 @@ class ConfluenceClient:
         await self.session.close()
         self.session = None
 
-    async def _api_call(self, url):
+    async def api_call(self, url):
         """Make a GET call for Atlassian API using the passed url with retry for the failed API calls.
 
         Args:
@@ -92,7 +92,7 @@ class ConfluenceClient:
         retry_counter = 0
         while True:
             try:
-                async with self.get_session().get(
+                async with self._get_session().get(
                     url=url,
                     ssl=self.ssl_ctx,
                 ) as response:
@@ -247,7 +247,7 @@ class ConfluenceDataSource(BaseDataSource):
         """Verify the connection with Confluence"""
         try:
             await anext(
-                self.confluence_client._api_call(
+                self.confluence_client.api_call(
                     url=os.path.join(self.confluence_client.host_url, PING_URL),
                 )
             )
