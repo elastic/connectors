@@ -6,7 +6,7 @@
 import asyncio
 import ssl
 from unittest import mock
-from unittest.mock import AsyncMock, Mock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import aiomysql
 import pytest
