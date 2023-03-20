@@ -315,7 +315,7 @@ async def test_fetch_rows_from_tables():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_empty():
+async def test_raise_on_get_docs_with_empty_db_field():
     source = await setup_mysql_source("")
 
     with pytest.raises(NoDatabaseConfiguredError):
