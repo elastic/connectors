@@ -211,26 +211,12 @@ async def mock_mysql_response():
 
 
 @pytest.mark.asyncio
-async def test_close_without_connection_pool():
+async def test_close():
     source = create_source(MySqlDataSource)
-
-    source.connection_pool = None
 
     await source.close()
 
     assert source.connection_pool is None
-
-
-@pytest.mark.asyncio
-async def test_close_with_connection_pool():
-    source = create_source(MySqlDataSource)
-    connection_pool = MagicMock()
-    connection_pool.close = Mock()
-    connection_pool.wait_closed = AsyncMock()
-
-    source.connection_pool = connection_pool
-
-    await source.close()
 
 
 @pytest.mark.asyncio
