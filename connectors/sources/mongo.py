@@ -57,7 +57,7 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
         "additionalProperties": False,
     }
 
-    ADVANCED_RULES_SCHEMA_DEFINITION = {
+    SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {
             "aggregate": AGGREGATE_SCHEMA_DEFINITION,
@@ -69,7 +69,7 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
         "maxProperties": 1,
     }
 
-    SCHEMA = fastjsonschema.compile(definition=ADVANCED_RULES_SCHEMA_DEFINITION)
+    SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
     def validate(self, advanced_rules):
         try:
