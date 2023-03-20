@@ -261,8 +261,8 @@ async def test_connect_with_retry(patch_logger, patch_default_wait_multiplier):
         )
 
         with pytest.raises(Exception):
-            async for response in streamer:
-                response
+            async for _ in streamer:
+                pass
 
 
 @pytest.mark.asyncio
