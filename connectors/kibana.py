@@ -153,6 +153,7 @@ async def prepare(service_type, index_name, config, filtering=None):
             # Last sync
             "last_sync_status": None,
             "last_sync_error": None,
+            "last_sync_scheduled_at": None,
             "last_synced": None,
             # Written by connector on each operation,
             # used by Kibana to hint to user about status of connector
