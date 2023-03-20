@@ -76,7 +76,7 @@ class GoogleCloudStorageClient:
         )
         self.user_project_id = self.service_account_credentials.project_id
 
-    async def _api_call(
+    async def api_call(
         self,
         resource,
         method,
@@ -251,7 +251,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
 
         try:
             await anext(
-                self.get_storage_client()._api_call(
+                self.get_storage_client().api_call(
                     resource="projects",
                     method="serviceAccount",
                     sub_method="get",
@@ -269,7 +269,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Yields:
             Dictionary: Contains the list of fetched buckets from Google Cloud Storage.
         """
-        async for bucket in self.get_storage_client()._api_call(
+        async for bucket in self.get_storage_client().api_call(
             resource="buckets",
             method="list",
             full_response=True,
@@ -288,7 +288,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             Dictionary: Contains the list of fetched blobs from Google Cloud Storage.
         """
         for bucket in buckets.get("items", []):
-            async for blob in self.get_storage_client()._api_call(
+            async for blob in self.get_storage_client().api_call(
                 resource="objects",
                 method="list",
                 full_response=True,
@@ -360,7 +360,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         source_file_name = ""
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
             await anext(
-                self.get_storage_client()._api_call(
+                self.get_storage_client().api_call(
                     resource="objects",
                     method="get",
                     bucket=blob["bucket_name"],

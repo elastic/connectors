@@ -22,7 +22,7 @@ API_NAME = "storage"
 API_VERSION = "v1"
 
 
-def get_mocked_source_object():
+def get_gcs_source_object():
     """Creates the mocked Google cloud storage object.
 
     Returns:
@@ -96,7 +96,7 @@ async def test_ping_for_successful_connection(catch_stdout, patch_logger):
         "kind": "storage#serviceAccount",
         "email_address": "serviceaccount@email.com",
     }
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     as_service_account_response = asyncio.Future()
     as_service_account_response.set_result(expected_response)
 
@@ -114,7 +114,7 @@ async def test_ping_for_failed_connection(catch_stdout, patch_logger):
 
     # Setup
 
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
 
     # Execute
     with mock.patch.object(
@@ -173,7 +173,7 @@ def test_get_blob_document(previous_documents_list, updated_documents_list):
     """
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
 
     # Execute and Assert
     assert updated_documents_list == list(
@@ -186,7 +186,7 @@ async def test_fetch_buckets():
     """Tests the method which lists the storage buckets available in Google Cloud Storage."""
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     expected_response = {
         "kind": "storage#objects",
         "items": [
@@ -238,7 +238,7 @@ async def test_fetch_blobs():
     """Tests the method responsible to yield blobs from Google Cloud Storage bucket."""
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     expected_bucket_response = {
         "kind": "storage#objects",
         "items": [
@@ -287,7 +287,7 @@ async def test_get_docs():
     """Tests the module responsible to fetch and yield blobs documents from Google Cloud Storage."""
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     expected_response = {
         "kind": "storage#objects",
         "items": [
@@ -341,7 +341,7 @@ async def test_get_docs_when_no_buckets_present():
     """
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     expected_response = {
         "kind": "storage#objects",
     }
@@ -368,7 +368,7 @@ async def test_get_content():
     """Test the module responsible for fetching the content of the file if it is extractable."""
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     blob_document = {
         "id": "bucket_1/blob_1/123123123",
         "component_count": None,
@@ -416,7 +416,7 @@ async def test_get_content_when_type_not_supported():
     """Test the module responsible for fetching the content of the file if it is not extractable or doit is not true."""
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     blob_document = {
         "_id": "bucket_1/blob_1/123123123",
         "component_count": None,
@@ -460,7 +460,7 @@ async def test_get_content_when_file_size_is_large(catch_stdout, patch_logger):
     """Test the module responsible for fetching the content of the file if it is not extractable or doit is not true."""
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     blob_document = {
         "_id": "bucket_1/blob_1/123123123",
         "component_count": None,
@@ -501,15 +501,15 @@ async def test_get_content_when_file_size_is_large(catch_stdout, patch_logger):
 
 @pytest.mark.asyncio
 async def test_api_call_for_attribute_error(catch_stdout, patch_logger):
-    """Tests the _api_call method when resource attribute is not present in the getattr."""
+    """Tests the api_call method when resource attribute is not present in the getattr."""
 
     # Setup
 
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
 
     # Execute
     with pytest.raises(AttributeError):
-        async for _ in mocked_gcs_object.get_storage_client()._api_call(
+        async for _ in mocked_gcs_object.get_storage_client().api_call(
             resource="buckets_dummy",
             method="list",
             full_response=True,
@@ -521,7 +521,7 @@ async def test_api_call_for_attribute_error(catch_stdout, patch_logger):
 
 def test_get_storage_client():
     """Test that the instance returned is always the same for the same datasource class."""
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     first_instance = mocked_gcs_object.get_storage_client()
     second_instance = mocked_gcs_object.get_storage_client()
 
