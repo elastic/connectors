@@ -6,7 +6,7 @@
 import asyncio
 import ssl
 from unittest import mock
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import aiomysql
 import pytest
@@ -173,14 +173,6 @@ class Connection:
         pass
 
 
-class ConnectionPool:
-    def close(self):
-        pass
-
-    async def wait_closed(self):
-        pass
-
-
 class MockSsl:
     """This class contains methods which returns dummy ssl context"""
 
@@ -209,15 +201,23 @@ async def test_close_without_connection_pool():
 
     await source.close()
 
+    assert source.connection_pool is None
+
 
 @pytest.mark.asyncio
 async def test_close_with_connection_pool():
     source = create_source(MySqlDataSource)
-    source.connection_pool = ConnectionPool()
-    source.connection_pool.acquire = Connection
+    connection_pool = MagicMock()
+    connection_pool.close = Mock()
+    connection_pool.wait_closed = AsyncMock()
 
-    # Execute
+    source.connection_pool = connection_pool
+
     await source.close()
+
+    connection_pool.close.assert_called()
+    connection_pool.wait_closed.assert_awaited()
+    assert source.connection_pool is None
 
 
 @pytest.mark.asyncio
