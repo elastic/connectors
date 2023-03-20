@@ -23,7 +23,7 @@ from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
 from connectors.services.base import MultiService
 from connectors.services.job_cleanup import JobCleanUpService
-from connectors.services.sync import SyncService
+from connectors.services.job_scheduling import JobSchedulingService
 from connectors.source import get_source_klasses
 from connectors.utils import get_event_loop
 
@@ -107,7 +107,7 @@ async def _start_service(config, loop):
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.remove_signal_handler(sig)
 
-    multiservice = MultiService(SyncService(config), JobCleanUpService(config))
+    multiservice = MultiService(JobSchedulingService(config), JobCleanUpService(config))
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(multiservice.shutdown, sig.name))
 
