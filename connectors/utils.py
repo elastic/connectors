@@ -9,11 +9,9 @@ import functools
 import os
 import platform
 import shutil
-import ssl
 import subprocess
 import time
-import urllib.parse
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from enum import Enum
 
 from base64io import Base64IO
@@ -401,74 +399,3 @@ def retryable(retries=3, interval=1.0, strategy=RetryStrategy.LINEAR_BACKOFF):
         return func_to_execute
 
     return wrapper
-
-
-def ssl_context(certificate):
-    """Convert string to pem format and create a SSL context
-
-    Args:
-        certificate (str): certificate in string format
-
-    Returns:
-        ssl_context: SSL context with certificate
-    """
-    certificate = get_pem_format(key=certificate, max_split=1)
-    ctx = ssl.create_default_context()
-    ctx.load_verify_locations(cadata=certificate)
-    return ctx
-
-
-def url_encode(original_string):
-    """Performs encoding on the objects
-    containing special characters in their url, and
-    replaces single quote with two single quote since quote
-    is treated as an escape character
-
-    Args:
-        original_string(string): String containing special characters
-
-    Returns:
-        encoded_string(string): Parsed string without single quotes
-    """
-    return urllib.parse.quote(original_string, safe="'")
-
-
-def evaluate_timedelta(seconds, time_skew=0):
-    """Adds seconds to the current utc time.
-
-    Args:
-        seconds (int): Number of seconds to add in current time
-        time_skew (int): Time of clock skew. Defaults to 0
-    """
-    modified_time = datetime.utcnow() + timedelta(seconds=seconds)
-    # account for clock skew
-    modified_time -= timedelta(seconds=time_skew)
-    return iso_utc(when=modified_time)
-
-
-def is_expired(expires_at):
-    """Compares the given time with present time
-
-    Args:
-        expires_at (datetime): Time to check if expired.
-    """
-    # Recreate in case there's no expires_at present
-    if expires_at is None:
-        return True
-    return datetime.utcnow() >= expires_at
-
-
-def get_pem_format(key, max_split=-1):
-    """Convert key into PEM format.
-
-    Args:
-        key (str): Key in raw format.
-        max_split (int): Specifies how many splits to do. Defaults to -1.
-
-    Returns:
-        string: PEM format
-    """
-    key = key.replace(" ", "\n")
-    key = " ".join(key.split("\n", max_split))
-    key = " ".join(key.rsplit("\n", max_split))
-    return key
