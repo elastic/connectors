@@ -186,10 +186,10 @@ async def test_validate_config_when_collection_name_invalid_then_raises_exceptio
     with mock.patch(
         "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
         return_value=future_with_result(server_database_names),
-    ) as _list_database_names_patch, mock.patch(
+    ), mock.patch(
         "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
         return_value=future_with_result(server_collection_names),
-    ) as _list_collection_names_patch:
+    ):
         source = create_source(
             MongoDataSource,
             database=configured_database_name,
@@ -214,10 +214,10 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise():
     with mock.patch(
         "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
         return_value=future_with_result(server_database_names),
-    ) as _list_database_names_patch, mock.patch(
+    ), mock.patch(
         "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
         return_value=future_with_result(server_collection_names),
-    ) as _list_collection_names_patch:
+    ):
         source = create_source(
             MongoDataSource,
             database=configured_database_name,
