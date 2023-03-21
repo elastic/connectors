@@ -97,7 +97,8 @@ from connectors.sources.tests.support import assert_basics, create_source
     ],
 )
 async def test_advanced_rules_validator(advanced_rules, is_valid):
-    assert MongoAdvancedRulesValidator().validate(advanced_rules).is_valid == is_valid
+    validation_result = await MongoAdvancedRulesValidator().validate(advanced_rules)
+    assert validation_result.is_valid == is_valid
 
 
 @pytest.mark.asyncio
