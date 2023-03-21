@@ -9,7 +9,7 @@ import asyncio
 import json
 import os
 import urllib.parse
-from functools import partial
+from functools import cached_property, partial
 
 import aiofiles
 from aiofiles.os import remove
@@ -164,8 +164,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
-        self.google_storage_client = None
-
     @classmethod
     def get_default_configuration(cls):
         """Get the default configuration for Google Cloud Storage.
@@ -218,15 +216,13 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         except ValueError:
             raise Exception("Google Cloud service account is not a valid JSON.")
 
-    def get_storage_client(self):
+    @cached_property
+    def _google_storage_client(self):
         """Initialize and return the GoogleCloudStorageClient
 
         Returns:
             GoogleCloudStorageClient: An instance of the GoogleCloudStorageClient.
         """
-        if self.google_storage_client is not None:
-            return self.google_storage_client
-
         json_credentials = json.loads(self.configuration["service_account_credentials"])
 
         if (
@@ -238,11 +234,10 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 max_split=2,
             )
 
-        self.google_storage_client = GoogleCloudStorageClient(
+        return GoogleCloudStorageClient(
             json_credentials=json_credentials,
             retry_count=self.configuration["retry_count"],
         )
-        return self.google_storage_client
 
     async def ping(self):
         """Verify the connection with Google Cloud Storage"""
@@ -251,11 +246,11 @@ class GoogleCloudStorageDataSource(BaseDataSource):
 
         try:
             await anext(
-                self.get_storage_client().api_call(
+                self._google_storage_client.api_call(
                     resource="projects",
                     method="serviceAccount",
                     sub_method="get",
-                    projectId=self.get_storage_client().user_project_id,
+                    projectId=self._google_storage_client.user_project_id,
                 )
             )
             logger.info("Successfully connected to the Google Cloud Storage.")
@@ -269,12 +264,12 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Yields:
             Dictionary: Contains the list of fetched buckets from Google Cloud Storage.
         """
-        async for bucket in self.get_storage_client().api_call(
+        async for bucket in self._google_storage_client.api_call(
             resource="buckets",
             method="list",
             full_response=True,
-            project=self.get_storage_client().user_project_id,
-            userProject=self.get_storage_client().user_project_id,
+            project=self._google_storage_client.user_project_id,
+            userProject=self._google_storage_client.user_project_id,
         ):
             yield bucket
 
@@ -288,12 +283,12 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             Dictionary: Contains the list of fetched blobs from Google Cloud Storage.
         """
         for bucket in buckets.get("items", []):
-            async for blob in self.get_storage_client().api_call(
+            async for blob in self._google_storage_client.api_call(
                 resource="objects",
                 method="list",
                 full_response=True,
                 bucket=bucket["id"],
-                userProject=self.get_storage_client().user_project_id,
+                userProject=self._google_storage_client.user_project_id,
             ):
                 yield blob
 
@@ -312,7 +307,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         blob_name = urllib.parse.quote(blob_document["name"], safe="'")
         blob_document[
             "url"
-        ] = f"{CLOUD_STORAGE_BASE_URL}{blob_document['bucket_name']}/{blob_name};tab=live_object?project={self.get_storage_client().user_project_id}"
+        ] = f"{CLOUD_STORAGE_BASE_URL}{blob_document['bucket_name']}/{blob_name};tab=live_object?project={self._google_storage_client.user_project_id}"
         return blob_document
 
     def get_blob_document(self, blobs):
@@ -360,13 +355,13 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         source_file_name = ""
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
             await anext(
-                self.get_storage_client().api_call(
+                self._google_storage_client.api_call(
                     resource="objects",
                     method="get",
                     bucket=blob["bucket_name"],
                     object=blob_name,
                     alt="media",
-                    userProject=self.get_storage_client().user_project_id,
+                    userProject=self._google_storage_client.user_project_id,
                     pipe_to=async_buffer,
                 )
             )
