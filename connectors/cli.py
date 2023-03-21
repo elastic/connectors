@@ -21,9 +21,7 @@ from connectors import __version__
 from connectors.config import load_config
 from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
-from connectors.services.base import MultiService
-from connectors.services.job_cleanup import JobCleanUpService
-from connectors.services.job_scheduling import JobSchedulingService
+from connectors.services import get_services
 from connectors.source import get_source_klasses
 from connectors.utils import get_event_loop
 
@@ -37,8 +35,9 @@ def _parser():
     parser.add_argument(
         "--action",
         type=str,
-        default="poll",
-        choices=["poll", "list"],
+        default=["poll", "cleanup"],
+        choices=["poll", "list", "cleanup"],
+        nargs="+",
         help="What elastic-ingest should do",
     )
 
@@ -90,7 +89,7 @@ def _parser():
     return parser
 
 
-async def _start_service(config, loop):
+async def _start_service(actions, config, loop):
     """Starts the service.
 
     Steps:
@@ -107,7 +106,7 @@ async def _start_service(config, loop):
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.remove_signal_handler(sig)
 
-    multiservice = MultiService(JobSchedulingService(config), JobCleanUpService(config))
+    multiservice = get_services(actions, config)
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(multiservice.shutdown, sig.name))
 
@@ -147,15 +146,19 @@ def run(args):
     )
 
     # just display the list of connectors
-    if args.action == "list":
+    if args.action == ["list"]:
         print("Registered connectors:")
         for source in get_source_klasses(config):
             print(f"- {source.name}")
         print("Bye")
         return 0
 
+    if "list" in args.action:
+        print("Cannot use the `list` action with other actions")
+        return -1
+
     loop = get_event_loop(args.uvloop)
-    coro = _start_service(config, loop)
+    coro = _start_service(args.action, config, loop)
 
     try:
         return loop.run_until_complete(coro)
