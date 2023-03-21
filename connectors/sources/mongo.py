@@ -62,7 +62,7 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
             "find": FIND_SCHEMA_DEFINITION,
         },
         "additionalProperties": False,
-        # max one property -> only "aggregate" OR "find" allowed
+        # at most one property -> only "aggregate" OR "find" allowed
         "maxProperties": 1,
     }
 
