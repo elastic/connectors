@@ -817,7 +817,7 @@ The server host url where the SharePoint is hosted. Default value is `http://127
 
 ##### `site_collections`
 
-The site collection to fetch sites from SharePoint. Default value is `collection1`. Examples:
+The site collections to fetch sites from SharePoint. Default value is `collection1`. Examples:
   - `collection1`
   - `collection1, collection2`
 
@@ -829,7 +829,8 @@ Whether SSL verification will be enabled. Default value is `False`.
 
 Content of SSL certificate. 
 
-Note: In case of ssl_enabled is `False`, keep `ssl_ca` field empty. Example certificate:
+Note: Keep `ssl_ca` field empty, if `ssl_enabled` is `False`. Example certificate:
+
 
   - ```
     -----BEGIN CERTIFICATE-----
@@ -845,7 +846,7 @@ The number of retry attempts after failed request to the SharePoint. Default val
 
 ##### `enable_content_extraction`
 
-Whether the connector should extract the content from SharePoint attachment. Default value is `True` i.e. the connector will try to extract file contents.
+Whether the connector should extract the content from SharePoint attachments. Default value is `True` i.e. the connector will try to extract file contents.
 
 #### Content Extraction
 
