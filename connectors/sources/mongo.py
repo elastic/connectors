@@ -17,8 +17,6 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 
-#
-
 
 class MongoAdvancedRulesValidator(AdvancedRulesValidator):
     """
@@ -65,7 +63,6 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
         },
         "additionalProperties": False,
         # exactly one property -> only "aggregate" OR "find" allowed
-        "minProperties": 1,
         "maxProperties": 1,
     }
 

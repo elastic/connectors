@@ -18,6 +18,11 @@ from connectors.sources.tests.support import assert_basics, create_source
     "advanced_rules, is_valid",
     [
         (
+            # empty advanced rules
+            {},
+            True,
+        ),
+        (
             # valid aggregate
             {
                 "aggregate": {
