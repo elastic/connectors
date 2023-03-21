@@ -429,9 +429,9 @@ The number of rows to fetch on each request to the PostgreSQL. Default value is 
 
 The number of retry attempts after failed request to the PostgreSQL. Default value is `3`.
 
-##### `ssl_disabled`
+##### `ssl_enabled`
 
-Whether SSL verification will be disabled. Default value is `True`.
+SSL verification should be enabled or not. Default value is `False`.
 
 ##### `ssl_ca`
 
