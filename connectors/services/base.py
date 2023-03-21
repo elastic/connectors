@@ -59,7 +59,7 @@ class _Registry(type):
 class BaseService(metaclass=_Registry):
     """Base class for creating a service.
 
-    Any class deriving from this class will get added in the registry,
+    Any class deriving from this class will get added to the registry,
     given its `name` class attribute (unless it's not set).
 
     A concrete service class needs to implement `_run`.
