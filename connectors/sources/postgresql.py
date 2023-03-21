@@ -13,7 +13,7 @@ from connectors.sources.generic_database import GenericBaseDataSource, Queries
 
 # Below schemas are system schemas and the tables of the systems schema's will not get indexed
 SYSTEM_SCHEMA = ["pg_toast", "pg_catalog", "information_schema"]
-DEFAULT_SSL_DISABLED = True
+DEFAULT_SSL_ENABLED = False
 DEFAULT_SSL_CA = ""
 
 
@@ -62,7 +62,7 @@ class PostgreSQLDataSource(GenericBaseDataSource):
             configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self.ssl_disabled = self.configuration["ssl_disabled"]
+        self.ssl_enabled = self.configuration["ssl_enabled"]
         self.ssl_ca = self.configuration["ssl_ca"]
         self.connection_string = f"postgresql+asyncpg://{self.user}:{quote(self.password)}@{self.host}:{self.port}/{self.database}"
         self.queries = PostgreSQLQueries()
@@ -79,9 +79,9 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         postgresql_configuration = super().get_default_configuration().copy()
         postgresql_configuration.update(
             {
-                "ssl_disabled": {
-                    "value": DEFAULT_SSL_DISABLED,
-                    "label": "SSL verification will be disabled or not",
+                "ssl_enabled": {
+                    "value": DEFAULT_SSL_ENABLED,
+                    "label": "Enable SSL verification (true/false)",
                     "type": "bool",
                 },
                 "ssl_ca": {
@@ -97,7 +97,7 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         """Create async engine for postgresql"""
         self.engine = create_async_engine(
             self.connection_string,
-            connect_args=self.get_connect_args() if not self.ssl_disabled else {},
+            connect_args=self.get_connect_args() if self.ssl_enabled else {},
         )
 
     def get_pem_format(self):

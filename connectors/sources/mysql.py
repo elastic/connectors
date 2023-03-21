@@ -27,8 +27,8 @@ QUERIES = {
 DEFAULT_FETCH_SIZE = 50
 RETRIES = 3
 RETRY_INTERVAL = 2
-DEFAULT_SSL_DISABLED = True
-DEFAULT_SSL_CA = None
+DEFAULT_SSL_ENABLED = False
+DEFAULT_SSL_CA = ""
 
 
 def format_list(list_):
@@ -92,7 +92,7 @@ class MySqlDataSource(BaseDataSource):
         self._sleeps = CancellableSleeps()
         self.retry_count = self.configuration["retry_count"]
         self.connection_pool = None
-        self.ssl_disabled = self.configuration["ssl_disabled"]
+        self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
         self.database = self.configuration["database"]
         self.tables = self.configuration["tables"]
@@ -145,9 +145,9 @@ class MySqlDataSource(BaseDataSource):
                 "label": "Maximum retries per request",
                 "type": "int",
             },
-            "ssl_disabled": {
-                "value": DEFAULT_SSL_DISABLED,
-                "label": "Disable SSL verification",
+            "ssl_enabled": {
+                "value": DEFAULT_SSL_ENABLED,
+                "label": "Enable SSL verification (true/false)",
                 "type": "bool",
             },
             "ssl_ca": {
@@ -191,7 +191,7 @@ class MySqlDataSource(BaseDataSource):
         ):
             raise Exception("Configured port has to be an integer.")
 
-        if not (self.ssl_disabled or self.certificate):
+        if self.ssl_enabled and (self.certificate == "" or self.certificate is None):
             raise Exception("SSL certificate must be configured.")
 
     def _ssl_context(self, certificate):
@@ -221,7 +221,7 @@ class MySqlDataSource(BaseDataSource):
             "db": None,
             "maxsize": MAX_POOL_SIZE,
             "ssl": self._ssl_context(certificate=self.certificate)
-            if not self.ssl_disabled
+            if self.ssl_enabled
             else None,
         }
         logger.info("Pinging MySQL...")
