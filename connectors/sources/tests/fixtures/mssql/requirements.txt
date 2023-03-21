@@ -1,0 +1,1 @@
+pyodbc==4.0.34 # Latest version is v4.0.35. However it is not compatible with MAC M1 chip so pining this version
