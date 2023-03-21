@@ -51,7 +51,7 @@ def test_run(mock_responses, patch_logger, set_env):
     args = mock.MagicMock()
     args.log_level = "DEBUG"
     args.config_file = CONFIG
-    args.action = "list"
+    args.action = ["list"]
     with patch("sys.stdout", new=StringIO()) as patched_stdout:
         assert run(args) == 0
 
@@ -61,6 +61,17 @@ def test_run(mock_responses, patch_logger, set_env):
         assert "- Fakey" in output
         assert "- Phatey" in output
         assert "Bye" in output
+
+
+def test_run_snowflake(mock_responses, patch_logger, set_env):
+    args = mock.MagicMock()
+    args.log_level = "DEBUG"
+    args.config_file = CONFIG
+    args.action = ["list", "poll"]
+    with patch("sys.stdout", new=StringIO()) as patched_stdout:
+        assert run(args) == -1
+        output = patched_stdout.getvalue().strip()
+        assert "Cannot use the `list` action with other actions" in output
 
 
 @patch("connectors.cli.set_logger")
