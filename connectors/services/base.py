@@ -33,7 +33,7 @@ _SERVICES = {}
 
 
 def get_services(names, config):
-    """Instanciates a list of services given their names and a config.
+    """Instantiates a list of services given their names and a config.
 
     returns a `MultiService` instance.
     """
