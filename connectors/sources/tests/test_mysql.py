@@ -145,7 +145,7 @@ class Cursor:
     def execute(self, query):
         """This method returns future object"""
         futures_object = asyncio.Future()
-        futures_object.set_result(mock.MagicMock())
+        futures_object.set_result(MagicMock())
         return futures_object
 
     async def __aexit__(self, exception_type, exception_value, exception_traceback):
@@ -205,7 +205,7 @@ async def mock_mysql_response():
         Mock Object: Mock response
     """
     mock_response = asyncio.Future()
-    mock_response.set_result(mock.MagicMock())
+    mock_response.set_result(MagicMock())
 
     return mock_response
 
@@ -234,7 +234,7 @@ async def test_ping_negative(patch_logger):
     source = create_source(MySqlDataSource)
 
     mock_response = asyncio.Future()
-    mock_response.set_result(mock.Mock())
+    mock_response.set_result(Mock())
 
     source.connection_pool = await mock_response
 
@@ -323,7 +323,7 @@ async def test_get_docs():
     with mock.patch.object(
         source, "with_connection_pool", return_value=ConnectionPool()
     ):
-        source.fetch_rows_from_tables = mock.MagicMock(
+        source.fetch_rows_from_tables = MagicMock(
             return_value=AsyncIterator([{"a": 1, "b": 2}])
         )
 

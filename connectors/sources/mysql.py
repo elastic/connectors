@@ -92,7 +92,6 @@ class MySqlDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self._sleeps = CancellableSleeps()
         self.retry_count = self.configuration["retry_count"]
-        self.connection_pool = None
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
         self.database = self.configuration["database"]
