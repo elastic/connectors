@@ -20,7 +20,7 @@ async def test_basics():
 async def test_get_docs(patch_logger, catch_stdout):
     source = create_source(DirectoryDataSource)
     source.directory = os.path.dirname(__file__)
-    source.pattern = '*.py'
+    source.pattern = "*.py"
 
     num = 0
     async for (doc, dl) in source.get_docs():
