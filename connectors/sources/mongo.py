@@ -82,6 +82,7 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
+
 class MongoDataSource(BaseDataSource):
     """MongoDB"""
 
@@ -137,7 +138,7 @@ class MongoDataSource(BaseDataSource):
         return [MongoAdvancedRulesValidator()]
 
     async def ping(self):
-        await self.client.admin.command('ping')
+        await self.client.admin.command("ping")
 
     # TODO: That's a lot of work. Find a better way
     def serialize(self, doc):
@@ -171,7 +172,6 @@ class MongoDataSource(BaseDataSource):
 
         self._dirty = False
 
-
     async def validate_config(self):
         client = self.client
         configured_database_name = self.configuration["database"]
@@ -182,12 +182,18 @@ class MongoDataSource(BaseDataSource):
         logger.debug(f"Existing databases: {existing_database_names}")
 
         if configured_database_name not in existing_database_names:
-            raise Exception(f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}")
+            raise Exception(
+                f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}"
+            )
 
         database = client[configured_database_name]
 
         existing_collection_names = await database.list_collection_names()
-        logger.debug(f"Existing collections in {configured_database_name}: {existing_collection_names}")
+        logger.debug(
+            f"Existing collections in {configured_database_name}: {existing_collection_names}"
+        )
 
         if configured_collection_name not in existing_collection_names:
-            raise Exception(f"Collection ({configured_collection_name}) does not exist within database {configured_database_name}. Existing collections: {', '.join(existing_collection_names)}")
+            raise Exception(
+                f"Collection ({configured_collection_name}) does not exist within database {configured_database_name}. Existing collections: {', '.join(existing_collection_names)}"
+            )
