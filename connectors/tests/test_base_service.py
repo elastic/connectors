@@ -5,10 +5,11 @@
 #
 import asyncio
 import functools
+from collections import defaultdict
 
 import pytest
 
-from connectors.services.base import MultiService
+from connectors.services.base import BaseService, MultiService, get_services
 
 
 class StubService:
@@ -115,3 +116,27 @@ async def test_multiservice_run_stops_all_services_when_shutdown_happens_and_som
     assert service_2.cancelled
     # We assert False for service_3 - it does not handle cancellation gracefully
     assert not service_3.cancelled
+
+
+@pytest.mark.asyncio
+async def test_registry():
+    ran = []
+
+    # creating a class using the BaseService as its base
+    # will register the class using its name
+    class TestService(BaseService):
+        async def run(self):
+            nonlocal ran
+            ran.append(self.name)
+
+    class SomeService(TestService):
+        name = "kool"
+
+    class SomeOtherService(TestService):
+        name = "beans"
+
+    # and make it available when we call get_services()
+    multiservice = get_services(["kool", "beans"], config=defaultdict(dict))
+
+    await multiservice.run()
+    assert ran == ["kool", "beans"]

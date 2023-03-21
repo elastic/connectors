@@ -14,7 +14,29 @@ class ServiceAlreadyRunningError(Exception):
     pass
 
 
-class BaseService:
+_SERVICES = {}
+
+
+def get_services(names, config):
+    return MultiService(*[get_service(name, config) for name in names])
+
+
+def get_service(name, config):
+    return _SERVICES[name](config)
+
+
+class _Registry(type):
+    def __new__(cls, name, bases, dct):
+        service_name = dct.get("name")
+        class_instance = super().__new__(cls, name, bases, dct)
+        if service_name is not None:
+            _SERVICES[service_name] = class_instance
+        return class_instance
+
+
+class BaseService(metaclass=_Registry):
+    name = None
+
     def __init__(self, config):
         self.config = config
         self.service_config = self.config["service"]
