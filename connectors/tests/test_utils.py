@@ -30,6 +30,7 @@ from connectors.utils import (
     convert_to_b64,
     evaluate_timedelta,
     get_base64_value,
+    get_pem_format,
     get_size,
     is_expired,
     next_run,
@@ -390,3 +391,27 @@ def test_evaluate_timedelta():
 
     # Assert
     assert expected_response == "2023-02-19T14:25:05.158843"
+
+    
+def test_get_pem_format():
+    """This function tests prepare private key and certificate with dummy values"""
+    # Setup
+    expected_formated_pem_key = """-----BEGIN PRIVATE KEY-----
+PrivateKey
+-----END PRIVATE KEY-----"""
+    private_key = "-----BEGIN PRIVATE KEY----- PrivateKey -----END PRIVATE KEY-----"
+
+    # Execute
+    formated_privat_key = get_pem_format(key=private_key, max_split=2)
+    assert formated_privat_key == expected_formated_pem_key
+
+    # Setup
+    expected_formated_certificate = """-----BEGIN CERTIFICATE-----
+Certificate1
+Certificate2
+-----END CERTIFICATE-----"""
+    certificate = "-----BEGIN CERTIFICATE----- Certificate1 Certificate2 -----END CERTIFICATE-----"
+
+    # Execute
+    formated_certificate = get_pem_format(key=certificate, max_split=1)
+    assert formated_certificate == expected_formated_certificate

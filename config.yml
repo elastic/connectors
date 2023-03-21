@@ -37,6 +37,7 @@ native_service_types:
   - oracle
   - dir
   - sharepoint
+  - mssql
 
 
 # Connector client settings
@@ -54,3 +55,4 @@ sources:
   postgresql: connectors.sources.postgresql:PostgreSQLDataSource
   oracle: connectors.sources.oracle:OracleDataSource
   sharepoint: connectors.sources.sharepoint:SharepointDataSource
+  mssql: connectors.sources.mssql:MSSQLDataSource

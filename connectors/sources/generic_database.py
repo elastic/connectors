@@ -9,6 +9,7 @@ from functools import partial
 
 from asyncpg.exceptions._base import InternalClientError
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
@@ -166,7 +167,7 @@ class GenericBaseDataSource(BaseDataSource):
             },
         }
 
-    def _validate_configuration(self):
+    async def validate_config(self):
         """Validates the configuration parameters
 
         Raises:
@@ -194,8 +195,13 @@ class GenericBaseDataSource(BaseDataSource):
         ):
             raise Exception("Configured port has to be an integer.")
 
-        if self.dialect == "Postgresql" and not (
-            self.configuration["ssl_disabled"] or self.configuration["ssl_ca"]
+        if (
+            self.dialect == "Postgresql"
+            and self.configuration["ssl_enabled"]
+            and (
+                self.configuration["ssl_ca"] == ""
+                or self.configuration["ssl_ca"] is None
+            )
         ):
             raise Exception("SSL certificate must be configured.")
 
@@ -255,7 +261,7 @@ class GenericBaseDataSource(BaseDataSource):
                 else:
                     yield cursor.fetchall()
                 break
-            except InternalClientError:
+            except (InternalClientError, ProgrammingError):
                 raise
             except Exception as exception:
                 logger.warning(
@@ -332,7 +338,6 @@ class GenericBaseDataSource(BaseDataSource):
             if self.queries is None:
                 raise NotImplementedError
 
-            self._validate_configuration()
             await anext(
                 self.execute_query(
                     query=self.queries.ping(),
@@ -441,7 +446,7 @@ class GenericBaseDataSource(BaseDataSource):
                     )
             else:
                 logger.warning(f"No rows found for {table}.")
-        except InternalClientError as exception:
+        except (InternalClientError, ProgrammingError) as exception:
             logger.warning(
                 f"Something went wrong while fetching document for table {table}. Error: {exception}"
             )
