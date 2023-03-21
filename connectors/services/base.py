@@ -41,7 +41,7 @@ def get_services(names, config):
 
 
 def get_service(name, config):
-    """Instanciates a service object given a name and a config"""
+    """Instantiates a service object given a name and a config"""
     return _SERVICES[name](config)
 
 
