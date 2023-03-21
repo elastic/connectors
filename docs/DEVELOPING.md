@@ -769,7 +769,7 @@ Collect the information that is required to connect to your Jira instance:
 
 #### Configure Jira connector
 
-The following configuration fields need to be provided for setting up the connector:
+The following configuration fields need to be provided to set up the connector:
 
 ##### `is_cloud`
 
@@ -830,7 +830,7 @@ The number of concurrent downloads for fetching the attachment content. This spe
 
 ##### `enable_content_extraction`
 
-Whether the connector should extract the content from Jira attachment. Default value is `True` i.e. the connector will try to extract file contents.
+Whether the connector should extract content from a Jira attachment. Default value is `True` i.e. the connector will try to extract file contents.
 
 ℹ️ Default values exist for end-to-end testing only.
 
