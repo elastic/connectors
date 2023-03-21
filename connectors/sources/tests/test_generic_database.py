@@ -130,37 +130,54 @@ def test_get_configuration(patch_logger):
     assert config["host"] == "127.0.0.1"
 
 
-def test_validate_configuration_missing_fields(patch_logger):
-    """Test _validate_configuration method check missing fields"""
+@pytest.mark.asyncio
+async def test_validate_config_valid_fields(patch_logger):
+    # Setup
+    source = create_source(GenericBaseDataSource)
+
+    # Execute
+    try:
+        await source.validate_config()
+    except Exception:
+        raise AssertionError("Method raised an exception")
+
+
+@pytest.mark.parametrize(
+    "field", ["host", "port", "username", "password", "database", "tables"]
+)
+@pytest.mark.asyncio
+async def test_validate_config_missing_fields(field, patch_logger):
     # Setup
     source = create_source(GenericBaseDataSource)
     with pytest.raises(Exception):
-        source.configuration.set_field(name="host", value="")
+        source.configuration.set_field(name=field, value="")
 
         # Execute
-        source._validate_configuration()
+        await source.validate_config()
 
 
-def test_validate_configuration_port(patch_logger):
-    """Test _validate_configuration method check port"""
+@pytest.mark.asyncio
+async def test_validate_config_port(patch_logger):
+    """Test validate_config method check port"""
     # Setup
     source = create_source(GenericBaseDataSource)
     with pytest.raises(Exception):
         source.configuration.set_field(name="port", value="abcd")
 
         # Execute
-        source._validate_configuration()
+        await source.validate_config()
 
 
-def test_validate_configuration_ssl(patch_logger):
-    """Test _validate_configuration method check port"""
+@pytest.mark.asyncio
+async def test_validate_config_ssl(patch_logger):
+    """Test validate_config method check ssl"""
     # Setup
     source = create_source(PostgreSQLDataSource)
     source.configuration.set_field(name="ssl_enabled", value=True)
 
     with pytest.raises(Exception):
         # Execute
-        source._validate_configuration()
+        await source.validate_config()
 
 
 @pytest.mark.asyncio

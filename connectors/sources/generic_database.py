@@ -167,7 +167,7 @@ class GenericBaseDataSource(BaseDataSource):
             },
         }
 
-    def _validate_configuration(self):
+    async def validate_config(self):
         """Validates the configuration parameters
 
         Raises:
@@ -338,7 +338,6 @@ class GenericBaseDataSource(BaseDataSource):
             if self.queries is None:
                 raise NotImplementedError
 
-            self._validate_configuration()
             await anext(
                 self.execute_query(
                     query=self.queries.ping(),
