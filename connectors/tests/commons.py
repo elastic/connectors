@@ -41,7 +41,13 @@ class AsyncIterator:
         return self
 
 
-def create_service(name, config_file, env):
-    os.environ.update(env)
+def create_service(name, config_file, env=None):
+    defaults = {
+        "root_attachments": "/tmp/attachements",
+        "elasticsearch.password": "changeme",
+    }
+    if env is not None:
+        defaults.update(env)
+    os.environ.update(defaults)
     config = load_config(config_file)
     return get_service(name, config)
