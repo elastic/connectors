@@ -8,7 +8,7 @@
 - `BaseService`: a base class for running a service in the CLI
 - `MultiService`: a meta-service that runs several services against the same
   config
-- `get_service` and `get_service`: factories
+- `get_services` and `get_service`: factories
 """
 import asyncio
 import time
