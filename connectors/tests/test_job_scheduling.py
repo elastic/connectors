@@ -19,7 +19,7 @@ from connectors.byoc import (
     Status,
 )
 from connectors.config import load_config
-from connectors.services.sync import SyncService
+from connectors.services.job_scheduling import JobSchedulingService
 from connectors.source import DataSourceConfiguration
 from connectors.tests.commons import AsyncIterator
 
@@ -28,7 +28,7 @@ CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yml")
 
 def create_service(config_file):
     config = load_config(config_file)
-    service = SyncService(config)
+    service = JobSchedulingService(config)
     service.idling = 0.05
 
     return service
@@ -61,7 +61,9 @@ async def create_and_run_service(config_file=CONFIG_FILE, stop_after=0):
 
 @pytest.fixture(autouse=True)
 def connector_index_mock():
-    with patch("connectors.services.sync.ConnectorIndex") as connector_index_klass_mock:
+    with patch(
+        "connectors.services.job_scheduling.ConnectorIndex"
+    ) as connector_index_klass_mock:
         connector_index_mock = Mock()
         connector_index_mock.stop_waiting = Mock()
         connector_index_mock.close = AsyncMock()
@@ -72,7 +74,9 @@ def connector_index_mock():
 
 @pytest.fixture(autouse=True)
 def sync_job_index_mock():
-    with patch("connectors.services.sync.SyncJobIndex") as sync_job_index_klass_mock:
+    with patch(
+        "connectors.services.job_scheduling.SyncJobIndex"
+    ) as sync_job_index_klass_mock:
         sync_job_index_mock = Mock()
         sync_job_index_mock.create = AsyncMock(return_value="1")
         sync_job_index_mock.fetch_by_id = AsyncMock(return_value=Mock())
@@ -86,7 +90,7 @@ def sync_job_index_mock():
 @pytest.fixture(autouse=True)
 def concurrent_tasks_mock():
     with patch(
-        "connectors.services.sync.ConcurrentTasks"
+        "connectors.services.job_scheduling.ConcurrentTasks"
     ) as concurrent_tasks_klass_mock:
         concurrent_tasks_mock = Mock()
         concurrent_tasks_mock.put = AsyncMock()
@@ -99,7 +103,9 @@ def concurrent_tasks_mock():
 
 @pytest.fixture(autouse=True)
 def sync_job_runner_mock():
-    with patch("connectors.services.sync.SyncJobRunner") as sync_job_runner_klass_mock:
+    with patch(
+        "connectors.services.job_scheduling.SyncJobRunner"
+    ) as sync_job_runner_klass_mock:
         sync_job_runner_mock = Mock()
         sync_job_runner_mock.execute = AsyncMock()
         sync_job_runner_klass_mock.return_value = sync_job_runner_mock
