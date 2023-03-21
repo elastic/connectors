@@ -71,7 +71,7 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def validate(self, advanced_rules):
+    async def validate(self, advanced_rules):
         try:
             MongoAdvancedRulesValidator.SCHEMA(advanced_rules)
 
@@ -140,7 +140,7 @@ class MongoDataSource(BaseDataSource):
         }
 
     def advanced_rules_validators(self):
-        return MongoAdvancedRulesValidator()
+        return [MongoAdvancedRulesValidator()]
 
     async def ping(self):
         await self.client.admin.command("ping")
