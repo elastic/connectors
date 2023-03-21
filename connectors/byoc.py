@@ -547,12 +547,12 @@ class Connector(ESDocument):
 
         try:
             await self.index.update(doc_id=self.id, doc=doc)
-            await self.reload()
         except Exception as e:
             logger.critical(e, exc_info=True)
             raise ConnectorUpdateError(
                 f"Could not update service type/configuration for connector {self.id}"
             )
+        await self.reload()
 
     async def validate_filtering(self, validator):
         draft_filter = self.filtering.get_draft_filter()

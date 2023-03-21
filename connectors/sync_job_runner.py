@@ -8,6 +8,7 @@ import time
 
 from connectors.byoc import JobStatus
 from connectors.es import Mappings
+from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 
 
@@ -146,7 +147,7 @@ class SyncJobRunner:
 
         try:
             await self.sync_job.reload()
-        except Exception as e:
+        except DocumentNotFoundError as e:
             logger.error(f"Failed to reload sync job {self.job_id}. Error: {e}")
             self.sync_job = None
         await self.connector.sync_done(self.sync_job)

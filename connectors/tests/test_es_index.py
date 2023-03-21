@@ -6,7 +6,7 @@
 import pytest
 from elasticsearch import ApiError, ConflictError
 
-from connectors.es.index import ESIndex
+from connectors.es.index import DocumentNotFoundError, ESIndex
 
 headers = {"X-Elastic-Product": "Elasticsearch"}
 config = {
@@ -66,46 +66,6 @@ async def test_fetch_by_id(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_fetch_by_id_not_found(mock_responses):
-    doc_id = "1"
-    index = FakeIndex(index_name, config)
-    mock_responses.post(
-        f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
-    )
-
-    mock_responses.get(
-        f"http://nowhere.com:9200/{index_name}/_doc/{doc_id}",
-        headers=headers,
-        status=404,
-    )
-
-    result = await index.fetch_by_id(doc_id)
-    assert result is None
-
-    await index.close()
-
-
-@pytest.mark.asyncio
-async def test_fetch_by_id_api_error(mock_responses):
-    doc_id = "1"
-    index = FakeIndex(index_name, config)
-    mock_responses.post(
-        f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
-    )
-
-    mock_responses.get(
-        f"http://nowhere.com:9200/{index_name}/_doc/{doc_id}",
-        headers=headers,
-        status=500,
-    )
-
-    with pytest.raises(ApiError):
-        await index.fetch_by_id(doc_id)
-
-    await index.close()
-
-
-@pytest.mark.asyncio
 async def test_fetch_response_by_id(mock_responses):
     doc_id = "1"
     index = ESIndex(index_name, config)
@@ -129,6 +89,46 @@ async def test_fetch_response_by_id(mock_responses):
 
     result = await index.fetch_response_by_id(doc_id)
     assert result == doc_source
+
+    await index.close()
+
+
+@pytest.mark.asyncio
+async def test_fetch_response_by_id_not_found(mock_responses):
+    doc_id = "1"
+    index = FakeIndex(index_name, config)
+    mock_responses.post(
+        f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
+    )
+
+    mock_responses.get(
+        f"http://nowhere.com:9200/{index_name}/_doc/{doc_id}",
+        headers=headers,
+        status=404,
+    )
+
+    with pytest.raises(DocumentNotFoundError):
+        await index.fetch_response_by_id(doc_id)
+
+    await index.close()
+
+
+@pytest.mark.asyncio
+async def test_fetch_response_by_id_api_error(mock_responses):
+    doc_id = "1"
+    index = FakeIndex(index_name, config)
+    mock_responses.post(
+        f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
+    )
+
+    mock_responses.get(
+        f"http://nowhere.com:9200/{index_name}/_doc/{doc_id}",
+        headers=headers,
+        status=500,
+    )
+
+    with pytest.raises(ApiError):
+        await index.fetch_response_by_id(doc_id)
 
     await index.close()
 
