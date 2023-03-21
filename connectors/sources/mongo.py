@@ -82,9 +82,6 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
-class InvalidMongoConfiguration(Exception):
-    pass
-
 class MongoDataSource(BaseDataSource):
     """MongoDB"""
 
@@ -140,7 +137,7 @@ class MongoDataSource(BaseDataSource):
         return [MongoAdvancedRulesValidator()]
 
     async def ping(self):
-        await self._validate_configuration()
+        await self.client.admin.command('ping')
 
     # TODO: That's a lot of work. Find a better way
     def serialize(self, doc):
@@ -164,8 +161,6 @@ class MongoDataSource(BaseDataSource):
         return doc
 
     async def get_docs(self, filtering=None):
-        await self._validate_configuration()
-
         db = self.client[self.configuration["database"]]
 
         logger.debug("Grabbing collection info")
@@ -176,7 +171,8 @@ class MongoDataSource(BaseDataSource):
 
         self._dirty = False
 
-    async def _validate_configuration(self):
+
+    async def validate_config(self):
         client = self.client
         configured_database_name = self.configuration["database"]
         configured_collection_name = self.configuration["collection"]
@@ -186,7 +182,7 @@ class MongoDataSource(BaseDataSource):
         logger.debug(f"Existing databases: {existing_database_names}")
 
         if configured_database_name not in existing_database_names:
-            raise InvalidMongoConfiguration(f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}")
+            raise Exception(f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}")
 
         database = client[configured_database_name]
 
@@ -194,4 +190,4 @@ class MongoDataSource(BaseDataSource):
         logger.debug(f"Existing collections in {configured_database_name}: {existing_collection_names}")
 
         if configured_collection_name not in existing_collection_names:
-            raise InvalidMongoConfiguration(f"Collection ({configured_collection_name}) does not exist within database {configured_database_name}. Existing collections: {', '.join(existing_collection_names)}")
+            raise Exception(f"Collection ({configured_collection_name}) does not exist within database {configured_database_name}. Existing collections: {', '.join(existing_collection_names)}")
