@@ -3,11 +3,26 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+"""Provides:
+
+- `BaseService`: a base class for running a service in the CLI
+- `MultiService`: a meta-service that runs several services against the same
+  config
+- `get_services` and `get_service`: factories
+"""
 import asyncio
 import time
 
 from connectors.logger import logger
 from connectors.utils import CancellableSleeps
+
+__all__ = [
+    "MultiService",
+    "ServiceAlreadyRunningError",
+    "get_service",
+    "get_services",
+    "BaseService",
+]
 
 
 class ServiceAlreadyRunningError(Exception):
@@ -18,14 +33,21 @@ _SERVICES = {}
 
 
 def get_services(names, config):
+    """Instantiates a list of services given their names and a config.
+
+    returns a `MultiService` instance.
+    """
     return MultiService(*[get_service(name, config) for name in names])
 
 
 def get_service(name, config):
+    """Instantiates a service object given a name and a config"""
     return _SERVICES[name](config)
 
 
 class _Registry(type):
+    """Metaclass used to register a service class in an internal registry."""
+
     def __new__(cls, name, bases, dct):
         service_name = dct.get("name")
         class_instance = super().__new__(cls, name, bases, dct)
@@ -35,7 +57,15 @@ class _Registry(type):
 
 
 class BaseService(metaclass=_Registry):
-    name = None
+    """Base class for creating a service.
+
+    Any class deriving from this class will get added to the registry,
+    given its `name` class attribute (unless it's not set).
+
+    A concrete service class needs to implement `_run`.
+    """
+
+    name = None  # using None here avoids registring this class
 
     def __init__(self, config):
         self.config = config
@@ -53,6 +83,7 @@ class BaseService(metaclass=_Registry):
         raise NotImplementedError()
 
     async def run(self):
+        """Runs the service"""
         if self.running:
             raise ServiceAlreadyRunningError(
                 f"{self.__class__.__name__} is already running."
@@ -85,10 +116,13 @@ class BaseService(metaclass=_Registry):
 
 
 class MultiService:
+    """Wrapper class to run multiple services against the same config."""
+
     def __init__(self, *services):
         self._services = services
 
     async def run(self):
+        """Runs every service in a task and wait for all tasks."""
         tasks = [asyncio.create_task(service.run()) for service in self._services]
 
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
