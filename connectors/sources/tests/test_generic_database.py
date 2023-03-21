@@ -131,12 +131,27 @@ def test_get_configuration(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_validate_config_missing_fields(patch_logger):
-    """Test validate_config method check missing fields"""
+async def test_validate_config_valid_fields(patch_logger):
+    # Setup
+    source = create_source(GenericBaseDataSource)
+
+    # Execute
+    try:
+        await source.validate_config()
+        assert True
+    except Exception:
+        raise AssertionError("Method raised an exception")
+
+
+@pytest.mark.parametrize(
+    "field", ["host", "port", "username", "password", "database", "tables"]
+)
+@pytest.mark.asyncio
+async def test_validate_config_missing_fields(field, patch_logger):
     # Setup
     source = create_source(GenericBaseDataSource)
     with pytest.raises(Exception):
-        source.configuration.set_field(name="host", value="")
+        source.configuration.set_field(name=field, value="")
 
         # Execute
         await source.validate_config()
