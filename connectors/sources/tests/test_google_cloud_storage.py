@@ -22,7 +22,7 @@ API_NAME = "storage"
 API_VERSION = "v1"
 
 
-def get_mocked_source_object():
+def get_gcs_source_object():
     """Creates the mocked Google cloud storage object.
 
     Returns:
@@ -62,10 +62,28 @@ async def test_empty_configuration():
 
     # Setup
     configuration = DataSourceConfiguration({"service_account_credentials": ""})
+    gcs_object = GoogleCloudStorageDataSource(configuration=configuration)
 
     # Execute
-    with pytest.raises(Exception, match="service_account_credentials can't be empty."):
-        _ = GoogleCloudStorageDataSource(configuration=configuration)
+    with pytest.raises(
+        Exception, match="Google Cloud service account json can't be empty."
+    ):
+        await gcs_object.validate_config()
+
+
+@pytest.mark.asyncio
+async def test_raise_on_invalid_configuration():
+    # Setup
+    configuration = DataSourceConfiguration(
+        {"service_account_credentials": "{'abc':'bcd','cd'}"}
+    )
+    gcs_object = GoogleCloudStorageDataSource(configuration=configuration)
+
+    # Execute
+    with pytest.raises(
+        Exception, match="Google Cloud service account is not a valid JSON"
+    ):
+        await gcs_object.validate_config()
 
 
 @pytest.mark.asyncio
@@ -78,7 +96,7 @@ async def test_ping_for_successful_connection(catch_stdout, patch_logger):
         "kind": "storage#serviceAccount",
         "email_address": "serviceaccount@email.com",
     }
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     as_service_account_response = asyncio.Future()
     as_service_account_response.set_result(expected_response)
 
@@ -96,7 +114,7 @@ async def test_ping_for_failed_connection(catch_stdout, patch_logger):
 
     # Setup
 
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
 
     # Execute
     with mock.patch.object(
@@ -155,7 +173,7 @@ def test_get_blob_document(previous_documents_list, updated_documents_list):
     """
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
 
     # Execute and Assert
     assert updated_documents_list == list(
@@ -168,7 +186,7 @@ async def test_fetch_buckets():
     """Tests the method which lists the storage buckets available in Google Cloud Storage."""
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     expected_response = {
         "kind": "storage#objects",
         "items": [
@@ -220,7 +238,7 @@ async def test_fetch_blobs():
     """Tests the method responsible to yield blobs from Google Cloud Storage bucket."""
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     expected_bucket_response = {
         "kind": "storage#objects",
         "items": [
@@ -269,7 +287,7 @@ async def test_get_docs():
     """Tests the module responsible to fetch and yield blobs documents from Google Cloud Storage."""
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     expected_response = {
         "kind": "storage#objects",
         "items": [
@@ -323,7 +341,7 @@ async def test_get_docs_when_no_buckets_present():
     """
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     expected_response = {
         "kind": "storage#objects",
     }
@@ -350,7 +368,7 @@ async def test_get_content():
     """Test the module responsible for fetching the content of the file if it is extractable."""
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     blob_document = {
         "id": "bucket_1/blob_1/123123123",
         "component_count": None,
@@ -380,7 +398,7 @@ async def test_get_content():
         Aiogoogle, "as_service_account", return_value=blob_content_response
     ):
         google_client = Aiogoogle(
-            service_account_creds=mocked_gcs_object.service_account_credentials
+            service_account_creds=mocked_gcs_object._google_storage_client.service_account_credentials
         )
         storage_client = await google_client.discover(
             api_name=API_NAME, api_version=API_VERSION
@@ -398,7 +416,7 @@ async def test_get_content_when_type_not_supported():
     """Test the module responsible for fetching the content of the file if it is not extractable or doit is not true."""
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     blob_document = {
         "_id": "bucket_1/blob_1/123123123",
         "component_count": None,
@@ -419,7 +437,7 @@ async def test_get_content_when_type_not_supported():
 
     # Execute and Assert
     google_client = Aiogoogle(
-        service_account_creds=mocked_gcs_object.service_account_credentials
+        service_account_creds=mocked_gcs_object._google_storage_client.service_account_credentials
     )
     storage_client = await google_client.discover(
         api_name=API_NAME, api_version=API_VERSION
@@ -442,7 +460,7 @@ async def test_get_content_when_file_size_is_large(catch_stdout, patch_logger):
     """Test the module responsible for fetching the content of the file if it is not extractable or doit is not true."""
 
     # Setup
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
     blob_document = {
         "_id": "bucket_1/blob_1/123123123",
         "component_count": None,
@@ -463,7 +481,7 @@ async def test_get_content_when_file_size_is_large(catch_stdout, patch_logger):
 
     # Execute and Assert
     google_client = Aiogoogle(
-        service_account_creds=mocked_gcs_object.service_account_credentials
+        service_account_creds=mocked_gcs_object._google_storage_client.service_account_credentials
     )
     storage_client = await google_client.discover(
         api_name=API_NAME, api_version=API_VERSION
@@ -483,19 +501,19 @@ async def test_get_content_when_file_size_is_large(catch_stdout, patch_logger):
 
 @pytest.mark.asyncio
 async def test_api_call_for_attribute_error(catch_stdout, patch_logger):
-    """Tests the _api_call method when resource attribute is not present in the getattr."""
+    """Tests the api_call method when resource attribute is not present in the getattr."""
 
     # Setup
 
-    mocked_gcs_object = get_mocked_source_object()
+    mocked_gcs_object = get_gcs_source_object()
 
     # Execute
     with pytest.raises(AttributeError):
-        async for _ in mocked_gcs_object._api_call(
+        async for _ in mocked_gcs_object._google_storage_client.api_call(
             resource="buckets_dummy",
             method="list",
             full_response=True,
-            project=mocked_gcs_object.user_project_id,
-            userProject=mocked_gcs_object.user_project_id,
+            project=mocked_gcs_object._google_storage_client.user_project_id,
+            userProject=mocked_gcs_object._google_storage_client.user_project_id,
         ):
             print("Method called successfully....")
