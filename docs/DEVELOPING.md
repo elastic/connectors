@@ -817,7 +817,7 @@ The server host url where the SharePoint is hosted. Default value is `http://127
 
 ##### `site_collections`
 
-The site collection to fetch sites from SharePoint. Default value is `collection1`. Examples:
+The site collections to fetch sites from SharePoint. Default value is `collection1`. Examples:
   - `collection1`
   - `collection1, collection2`
 
