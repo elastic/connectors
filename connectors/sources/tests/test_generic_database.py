@@ -138,7 +138,6 @@ async def test_validate_config_valid_fields(patch_logger):
     # Execute
     try:
         await source.validate_config()
-        assert True
     except Exception:
         raise AssertionError("Method raised an exception")
 
