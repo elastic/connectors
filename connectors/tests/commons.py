@@ -1,3 +1,14 @@
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
+import os
+
+from connectors.config import load_config
+from connectors.services.base import get_service
+
+
 class AsyncIterator:
     """
     Async documents generator fake class, which records the args and kwargs it was called with.
@@ -28,3 +39,9 @@ class AsyncIterator:
             self.call_kwargs.append(kwargs)
 
         return self
+
+
+def create_service(name, config_file, env):
+    os.environ.update(env)
+    config = load_config(config_file)
+    return get_service(name, config)

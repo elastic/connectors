@@ -18,20 +18,11 @@ from connectors.byoc import (
     ServiceTypeNotSupportedError,
     Status,
 )
-from connectors.config import load_config
 from connectors.services.job_scheduling import JobSchedulingService
 from connectors.source import DataSourceConfiguration
-from connectors.tests.commons import AsyncIterator
+from connectors.tests.commons import AsyncIterator, create_service
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yml")
-
-
-def create_service(config_file):
-    config = load_config(config_file)
-    service = JobSchedulingService(config)
-    service.idling = 0.05
-
-    return service
 
 
 async def run_service_with_stop_after(service, stop_after=0):
@@ -55,7 +46,7 @@ async def run_service_with_stop_after(service, stop_after=0):
 
 
 async def create_and_run_service(config_file=CONFIG_FILE, stop_after=0):
-    service = create_service(config_file)
+    service = create_service("poll", config_file)
     await run_service_with_stop_after(service, stop_after)
 
 
