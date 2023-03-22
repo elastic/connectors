@@ -37,7 +37,7 @@ FILE_SIZE_LIMIT = 10485760
 FETCH_SIZE = 100
 CHUNK_SIZE = 1024
 QUEUE_SIZE = 1024
-QUEUE_MEM_SIZE = 5  # Size in Megabytes
+QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
 MAX_CONCURRENCY = 5
 MAX_CONCURRENT_DOWNLOADS = 50  # Max concurrent download supported by jira
 
@@ -50,7 +50,7 @@ ATTACHMENT_SERVER = "attachment_server"
 URLS = {
     PING: "/rest/api/2/myself",
     PROJECT: "/rest/api/2/project?expand=description,lead,url",
-    ISSUES: "/rest/api/2/search?maxResults={maxResults}&startAt={startAt}",
+    ISSUES: "/rest/api/2/search?maxResults={max_results}&startAt={start_at}",
     ISSUE_DATA: "/rest/api/2/issue/{id}",
     ATTACHMENT_CLOUD: "/rest/api/2/attachment/content/{attachment_id}",
     ATTACHMENT_SERVER: "/secure/attachment/{attachment_id}/{attachment_name}",
@@ -82,9 +82,7 @@ class JiraDataSource(BaseDataSource):
         self.ssl_ctx = False
         self.session = None
         self.tasks = 0
-        self.queue = MemQueue(
-            maxsize=QUEUE_SIZE, maxmemsize=QUEUE_MEM_SIZE * 1024 * 1024
-        )
+        self.queue = MemQueue(maxsize=QUEUE_SIZE, maxmemsize=QUEUE_MEM_SIZE)
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
 
     @classmethod
@@ -279,7 +277,7 @@ class JiraDataSource(BaseDataSource):
         should_paginate = True
         while should_paginate:
             async for response in self._api_call(
-                url_name=url_name, startAt=start_at, maxResults=FETCH_SIZE
+                url_name=url_name, start_at=start_at, max_results=FETCH_SIZE
             ):
                 response_json = await response.json()
                 total = response_json.get("total")
@@ -307,7 +305,7 @@ class JiraDataSource(BaseDataSource):
 
         attachment_name = attachment["filename"]
         if os.path.splitext(attachment_name)[-1] not in TIKA_SUPPORTED_FILETYPES:
-            logger.debug(f"{attachment_name} is not supported by TIKA, skipping")
+            logger.warning(f"{attachment_name} is not supported by TIKA, skipping")
             return
 
         if attachment_size > FILE_SIZE_LIMIT:
@@ -339,7 +337,12 @@ class JiraDataSource(BaseDataSource):
         async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
             # base64 on macOS will add a EOL, so we strip() here
             document["_attachment"] = (await async_buffer.read()).strip()
-        await remove(temp_filename)
+        try:
+            await remove(temp_filename)
+        except Exception as exception:
+            logger.warning(
+                f"Could not remove file: {temp_filename}. Error: {exception}"
+            )
         return document
 
     async def ping(self):
