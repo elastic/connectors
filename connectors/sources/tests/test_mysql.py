@@ -94,13 +94,10 @@ def patch_default_wait_multiplier():
 
 def test_get_configuration():
     """Test get_configuration method of MySQL"""
-    # Setup
     klass = MySqlDataSource
 
-    # Execute
     config = DataSourceConfiguration(klass.get_default_configuration())
 
-    # Assert
     assert config["host"] == "127.0.0.1"
     assert config["port"] == 3306
 
@@ -211,7 +208,7 @@ async def mock_mysql_response():
 
 
 @pytest.mark.asyncio
-async def test_close():
+async def test_close_when_source_setup_correctly_does_not_raise_errors():
     source = create_source(MySqlDataSource)
 
     await source.close()
@@ -265,7 +262,6 @@ async def test_fetch_documents():
 
     query = "select * from table"
 
-    # Execute
     with mock.patch.object(
         source, "with_connection_pool", return_value=ConnectionPool()
     ):
@@ -273,7 +269,6 @@ async def test_fetch_documents():
 
         mock.patch("source._connect", return_value=response)
 
-        # Assert
         document_list = []
         async for document in source.fetch_documents(table="table_name"):
             document_list.append(document)
@@ -293,7 +288,6 @@ async def test_fetch_rows_from_tables():
 
     query = "select * from table"
 
-    # Execute
     with mock.patch.object(
         source, "with_connection_pool", return_value=ConnectionPool()
     ):
@@ -301,7 +295,6 @@ async def test_fetch_rows_from_tables():
 
         mock.patch("source._connect", return_value=response)
 
-        # Assert
         async for row in source.fetch_rows_from_tables("table"):
             assert "_id" in row
 
@@ -319,7 +312,6 @@ async def test_get_docs_with_empty_db_fields_raises_error():
 async def test_get_docs():
     source = await setup_mysql_source(DATABASE)
 
-    # Execute
     with mock.patch.object(
         source, "with_connection_pool", return_value=ConnectionPool()
     ):
@@ -413,33 +405,27 @@ async def test_get_docs_with_advanced_rules(
 
 def test_validate_configuration():
     """This function test _validate_configuration method of MySQL"""
-    # Setup
     source = create_source(MySqlDataSource)
     source.configuration.set_field(name="host", value="")
 
-    # Execute
     with pytest.raises(Exception):
         source._validate_configuration()
 
 
 def test_validate_configuration_with_port():
     """This function test _validate_configuration method with port str input of MySQL"""
-    # Setup
     source = create_source(MySqlDataSource)
     source.configuration.set_field(name="port", value="port")
 
-    # Execute
     with pytest.raises(Exception):
         source._validate_configuration()
 
 
 def test_ssl_context():
     """This function test _ssl_context with dummy certificate"""
-    # Setup
     certificate = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
     source = create_source(MySqlDataSource)
 
-    # Execute
     with mock.patch.object(ssl, "create_default_context", return_value=MockSsl()):
         source._ssl_context(certificate=certificate)
 
