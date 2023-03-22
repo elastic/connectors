@@ -5,9 +5,13 @@
 #
 """Tests the Confluence database source class methods"""
 import ssl
+from copy import copy
+from unittest import mock
 from unittest.mock import patch
 
 import pytest
+from aiohttp import StreamReader
+from freezegun import freeze_time
 
 from connectors.source import DataSourceConfiguration
 from connectors.sources.confluence import ConfluenceClient, ConfluenceDataSource
@@ -15,6 +19,174 @@ from connectors.sources.tests.support import create_source
 from connectors.utils import ssl_context
 
 HOST_URL = "http://127.0.0.1:5000"
+CONTENT_QUERY = "limit=1&expand=children.attachment,history.lastUpdated,body.storage"
+RESPONSE_SPACE = {
+    "results": [
+        {
+            "id": 4554779,
+            "name": "DEMO",
+            "_links": {
+                "webui": "/spaces/DM",
+            },
+        }
+    ],
+    "start": 0,
+    "limit": 1,
+    "size": 1,
+    "_links": {},
+}
+
+RESPONSE_PAGE = {
+    "results": [
+        {
+            "id": 4779,
+            "title": "ES-scrum",
+            "type": "page",
+            "history": {"lastUpdated": {"when": "2023-01-24T04:07:19.672Z"}},
+            "children": {"attachment": {"size": 2}},
+            "body": {"storage": {"value": "This is a test page"}},
+            "space": {"name": "DEMO"},
+            "_links": {
+                "webui": "/spaces/~1234abc/pages/4779/ES-scrum",
+            },
+        }
+    ],
+    "start": 0,
+    "limit": 1,
+    "size": 1,
+    "_links": {},
+}
+
+EXPECTED_PAGE = {
+    "_id": 4779,
+    "type": "page",
+    "_timestamp": "2023-01-24T04:07:19.672Z",
+    "title": "ES-scrum",
+    "body": "This is a test page",
+    "space": "DEMO",
+    "url": f"{HOST_URL}/spaces/~1234abc/pages/4779/ES-scrum",
+}
+
+EXPECTED_SPACE = {
+    "_id": 4554779,
+    "type": "Space",
+    "title": "DEMO",
+    "_timestamp": "2023-01-24T04:07:19+00:00",
+    "url": f"{HOST_URL}/spaces/DM",
+}
+
+RESPONSE_ATTACHMENT = {
+    "results": [
+        {
+            "id": "att3637249",
+            "title": "demo.py",
+            "type": "attachment",
+            "version": {"when": "2023-01-03T09:24:50.633Z"},
+            "extensions": {"fileSize": 230},
+            "_links": {
+                "download": "/download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
+                "webui": "/pages/viewpageattachments.action?pageId=1113&preview=demo.py",
+            },
+        }
+    ],
+    "start": 0,
+    "limit": 1,
+    "size": 1,
+    "_links": {},
+}
+
+EXPECTED_ATTACHMENT = {
+    "_id": "att3637249",
+    "type": "attachment",
+    "_timestamp": "2023-01-03T09:24:50.633Z",
+    "title": "demo.py",
+    "size": 230,
+    "space": "DEMO",
+    "page": "ES-scrum",
+    "url": f"{HOST_URL}/pages/viewpageattachments.action?pageId=1113&preview=demo.py",
+}
+
+RESPONSE_CONTENT = "# This is the dummy file"
+
+EXPECTED_CONTENT = {
+    "_id": "att3637249",
+    "_timestamp": "2023-01-03T09:24:50.633Z",
+    "_attachment": "IyBUaGlzIGlzIHRoZSBkdW1teSBmaWxl",
+}
+
+EXPECTED_BLOG = {
+    "_id": 4779,
+    "type": "blogpost",
+    "_timestamp": "2023-01-24T04:07:19.672Z",
+    "title": "demo-blog",
+    "body": "This is a test blog",
+    "space": "DEMO",
+    "url": f"{HOST_URL}/spaces/~1234abc/blogposts/4779/demo-blog",
+}
+
+EXPECTED_BLOG_ATTACHMENT = {
+    "_id": "att3637249",
+    "type": "attachment",
+    "_timestamp": "2023-01-03T09:24:50.633Z",
+    "title": "demo.py",
+    "size": 230,
+    "space": "DEMO",
+    "blog": "demo-blog",
+    "url": f"{HOST_URL}/pages/viewpageattachments.action?pageId=1113&preview=demo.py",
+}
+
+
+class MockJsonResponse:
+    """Class to mock json response of aiohttp session.get method"""
+
+    def __init__(self, json, status):
+        """Setup a json response"""
+        self._json = json
+        self.status = status
+
+    async def json(self):
+        """Method to return a JSON content of the result"""
+        return self._json
+
+    async def __aexit__(self, exc_type, exc, tb):
+        """Closes an async with block"""
+        pass
+
+    async def __aenter__(self):
+        """Enters an async with block"""
+        return self
+
+
+class MockObjectResponse:
+    """Class to mock object response of aiohttp session.get method"""
+
+    def __init__(self):
+        """Setup a streamReader object"""
+        self.content = StreamReader
+
+    async def __aexit__(self, exc_type, exc, tb):
+        """Closes an async with block"""
+        pass
+
+    async def __aenter__(self):
+        """Enters an async with block"""
+        return self
+
+
+class AsyncIter:
+    """This Class is use to return async generator"""
+
+    def __init__(self, *args):
+        """Setup list of dictionary"""
+
+        self.result = args
+
+    async def __aiter__(self):
+        """This Method is used to return async generator"""
+        if len(self.result) == 1:
+            yield self.result[0]
+        else:
+            yield (*self.result,)
 
 
 @pytest.mark.asyncio
@@ -161,7 +333,165 @@ def test_validate_configuration_for_ssl_enabled(patch_logger):
         source._validate_configuration()
 
 
-def test_get_storage_client():
+@freeze_time("2023-01-24T04:07:19")
+@pytest.mark.asyncio
+async def test_get_spaces():
+    # Setup
+    source = create_source(ConfluenceDataSource)
+
+    async_response = MockJsonResponse(RESPONSE_SPACE, 200)
+
+    # Execute
+    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+        async for response in source.get_spaces():
+            assert response == EXPECTED_SPACE
+
+
+@pytest.mark.asyncio
+async def test_fetch_documents():
+    # Setup
+    source = create_source(ConfluenceDataSource)
+    async_response = MockJsonResponse(RESPONSE_PAGE, 200)
+
+    # Execute
+    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+        async for response, _ in source.fetch_documents(api_query=""):
+            assert response == EXPECTED_PAGE
+
+
+@pytest.mark.asyncio
+async def test_fetch_attachments():
+    # Setup
+    source = create_source(ConfluenceDataSource)
+    async_response = MockJsonResponse(RESPONSE_ATTACHMENT, 200)
+
+    # Execute
+    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+        async for response, _ in source.fetch_attachments(
+            content_id=1113,
+            parent_name="ES-scrum",
+            parent_space="DEMO",
+            parent_type="page",
+        ):
+            assert response == EXPECTED_ATTACHMENT
+
+
+@pytest.mark.asyncio
+async def test_download_attachment():
+    # Setup
+    source = create_source(ConfluenceDataSource)
+
+    async_response = MockObjectResponse()
+
+    # Execute
+    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+        with mock.patch(
+            "aiohttp.StreamReader.iter_chunked",
+            return_value=AsyncIter(bytes(RESPONSE_CONTENT, "utf-8")),
+        ):
+            response = await source.download_attachment(
+                url="download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
+                attachment=EXPECTED_ATTACHMENT,
+                doit=True,
+            )
+            assert response == EXPECTED_CONTENT
+
+
+@pytest.mark.asyncio
+async def test_download_attachment_when_filesize_is_large():
+    """Tests the download attachments method for file size greater than max limit."""
+    # Setup
+    source = create_source(ConfluenceDataSource)
+
+    async_response = MockObjectResponse()
+
+    # Execute
+
+    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+        with mock.patch(
+            "aiohttp.StreamReader.iter_chunked",
+            return_value=AsyncIter(bytes(RESPONSE_CONTENT, "utf-8")),
+        ):
+            attachment = copy(EXPECTED_ATTACHMENT)
+            attachment["size"] = 23000000
+
+            response = await source.download_attachment(
+                url="download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
+                attachment=attachment,
+                doit=True,
+            )
+            assert response is None
+
+
+@pytest.mark.asyncio
+async def test_download_attachment_for_unsupported_filetype():
+    """Tests the download attachments method for file type is not supported"""
+    # Setup
+    source = create_source(ConfluenceDataSource)
+
+    async_response = MockObjectResponse()
+
+    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+        with mock.patch(
+            "aiohttp.StreamReader.iter_chunked",
+            return_value=AsyncIter(bytes(RESPONSE_CONTENT, "utf-8")),
+        ):
+            attachment = copy(EXPECTED_ATTACHMENT)
+
+            attachment["title"] = "batch.mysy"
+
+            response = await source.download_attachment(
+                url="download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
+                attachment=attachment,
+                doit=True,
+            )
+            assert response is None
+
+
+@pytest.mark.asyncio
+@mock.patch.object(
+    ConfluenceDataSource, "get_spaces", return_value=AsyncIter(EXPECTED_SPACE)
+)
+@mock.patch.object(
+    ConfluenceDataSource,
+    "fetch_documents",
+    side_effect=[(AsyncIter(EXPECTED_PAGE, 1)), (AsyncIter(EXPECTED_BLOG, 1))],
+)
+@mock.patch.object(
+    ConfluenceDataSource,
+    "fetch_attachments",
+    side_effect=[
+        (AsyncIter(EXPECTED_ATTACHMENT, "download-url")),
+        (AsyncIter(EXPECTED_BLOG_ATTACHMENT, "download-url")),
+    ],
+)
+@mock.patch.object(
+    ConfluenceDataSource,
+    "download_attachment",
+    return_value=AsyncIter(EXPECTED_CONTENT),
+)
+async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_patch):
+    """Tests the get_docs method"""
+
+    # Setup
+    source = create_source(ConfluenceDataSource)
+    expected_responses = [
+        EXPECTED_SPACE,
+        EXPECTED_PAGE,
+        EXPECTED_BLOG,
+        EXPECTED_ATTACHMENT,
+        EXPECTED_BLOG_ATTACHMENT,
+    ]
+
+    # Execute
+    documents = []
+    async for item, _ in source.get_docs():
+        documents.append(item)
+
+    assert documents == expected_responses
+
+
+def test_get_session():
     """Test that the instance of session returned is always the same for the datasource class."""
     source = create_source(ConfluenceDataSource)
     first_instance = source.confluence_client._get_session()
