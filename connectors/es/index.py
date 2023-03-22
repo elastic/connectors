@@ -87,6 +87,7 @@ class ESIndex(ESClient):
                     from_=offset,
                     size=page_size,
                     expand_wildcards="hidden",
+                    seq_no_primary_term=True,
                 )
             except ApiError as e:
                 logger.critical(f"The server returned {e.status_code}")
