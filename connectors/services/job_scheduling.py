@@ -26,7 +26,7 @@ from connectors.source import get_source_klass_dict
 
 
 class JobSchedulingService(BaseService):
-    name = "poll"
+    name = "schedule"
 
     def __init__(self, config):
         super().__init__(config)

@@ -15,6 +15,8 @@ DEFAULT_MAX_CONCURRENT_SYNCS = 1
 
 
 class JobExecutionService(BaseService):
+    name = "execute"
+
     def __init__(self, config):
         super().__init__(config)
         self.idling = self.service_config["idling"]
