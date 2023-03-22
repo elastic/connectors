@@ -39,9 +39,6 @@ class BaseService:
         self.running = True
         try:
             await self._run()
-        except Exception as e:
-            logger.critical(e, exc_info=True)
-            self.raise_if_spurious(e)
         finally:
             self.stop()
 
@@ -69,7 +66,7 @@ class MultiService:
     async def run(self):
         tasks = [asyncio.create_task(service.run()) for service in self._services]
 
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
 
         for task in pending:
             task.cancel()
