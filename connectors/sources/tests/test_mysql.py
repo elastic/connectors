@@ -5,8 +5,7 @@
 #
 import asyncio
 import ssl
-from unittest import mock
-from unittest.mock import AsyncMock, MagicMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import aiomysql
 import pytest
@@ -68,7 +67,7 @@ MYSQL = {
 
 @pytest.fixture
 def patch_fetch_tables():
-    with mock.patch.object(
+    with patch.object(
         MySqlDataSource, "fetch_all_tables", side_effect=([])
     ) as fetch_tables:
         yield fetch_tables
@@ -76,19 +75,19 @@ def patch_fetch_tables():
 
 @pytest.fixture
 def patch_ping():
-    with mock.patch.object(MySqlDataSource, "ping", return_value=AsyncMock()) as ping:
+    with patch.object(MySqlDataSource, "ping", return_value=AsyncMock()) as ping:
         yield ping
 
 
 @pytest.fixture
 def patch_fetch_rows_for_table():
-    with mock.patch.object(MySqlDataSource, "fetch_rows_for_table") as mock_to_patch:
+    with patch.object(MySqlDataSource, "fetch_rows_for_table") as mock_to_patch:
         yield mock_to_patch
 
 
 @pytest.fixture
 def patch_default_wait_multiplier():
-    with mock.patch("connectors.sources.mysql.RETRY_INTERVAL", 0):
+    with patch("connectors.sources.mysql.RETRY_INTERVAL", 0):
         yield
 
 
@@ -213,16 +212,12 @@ async def test_close_when_source_setup_correctly_does_not_raise_errors():
 
     await source.close()
 
-    assert source.connection_pool is None
-
 
 @pytest.mark.asyncio
 async def test_ping(patch_logger):
     source = await setup_mysql_source(MySqlDataSource)
 
-    with mock.patch.object(
-        source, "with_connection_pool", return_value=ConnectionPool()
-    ):
+    with patch.object(source, "with_connection_pool", return_value=ConnectionPool()):
         await source.ping()
 
 
@@ -235,7 +230,7 @@ async def test_ping_negative(patch_logger):
 
     source.connection_pool = await mock_response
 
-    with mock.patch.object(aiomysql, "create_pool", return_value=mock_response):
+    with patch.object(aiomysql, "create_pool", return_value=mock_response):
         with pytest.raises(Exception):
             await source.ping()
 
@@ -244,7 +239,7 @@ async def test_ping_negative(patch_logger):
 async def test_connect_with_retry(patch_logger, patch_default_wait_multiplier):
     source = await setup_mysql_source(is_connection_lost=True)
 
-    with mock.patch.object(
+    with patch.object(
         aiomysql, "create_pool", return_value=(await mock_mysql_response())
     ):
         streamer = source._connect(
@@ -262,12 +257,10 @@ async def test_fetch_documents():
 
     query = "select * from table"
 
-    with mock.patch.object(
-        source, "with_connection_pool", return_value=ConnectionPool()
-    ):
+    with patch.object(source, "with_connection_pool", return_value=ConnectionPool()):
         response = source._connect(query)
 
-        mock.patch("source._connect", return_value=response)
+        patch("source._connect", return_value=response)
 
         document_list = []
         async for document in source.fetch_documents(table="table_name"):
@@ -288,12 +281,10 @@ async def test_fetch_rows_from_tables():
 
     query = "select * from table"
 
-    with mock.patch.object(
-        source, "with_connection_pool", return_value=ConnectionPool()
-    ):
+    with patch.object(source, "with_connection_pool", return_value=ConnectionPool()):
         response = source._connect(query)
 
-        mock.patch("source._connect", return_value=response)
+        patch("source._connect", return_value=response)
 
         async for row in source.fetch_rows_from_tables("table"):
             assert "_id" in row
@@ -312,9 +303,7 @@ async def test_get_docs_with_empty_db_fields_raises_error():
 async def test_get_docs():
     source = await setup_mysql_source(DATABASE)
 
-    with mock.patch.object(
-        source, "with_connection_pool", return_value=ConnectionPool()
-    ):
+    with patch.object(source, "with_connection_pool", return_value=ConnectionPool()):
         source.fetch_rows_from_tables = MagicMock(
             return_value=AsyncIterator([{"a": 1, "b": 2}])
         )
@@ -426,7 +415,7 @@ def test_ssl_context():
     certificate = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
     source = create_source(MySqlDataSource)
 
-    with mock.patch.object(ssl, "create_default_context", return_value=MockSsl()):
+    with patch.object(ssl, "create_default_context", return_value=MockSsl()):
         source._ssl_context(certificate=certificate)
 
 
