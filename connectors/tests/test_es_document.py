@@ -32,6 +32,8 @@ def test_es_document_ok(patch_logger):
 def test_es_document_get():
     source = {
         "_id": "test",
+        "_seq_no": 1,
+        "_primary_term": 2,
         "_source": {
             "string": "string_value",
             "none_value": None,
@@ -42,6 +44,8 @@ def test_es_document_get():
     default_value = "default"
     es_doc = ESDocument(elastic_index=None, doc_source=source)
     assert es_doc.id == "test"
+    assert es_doc._seq_no == 1
+    assert es_doc._primary_term == 2
     assert es_doc.get("string", default=default_value) == "string_value"
     assert es_doc.get("non_existing") is None
     assert es_doc.get("non_existing", default=default_value) == default_value
