@@ -273,18 +273,21 @@ async def test_run_when_sync_fails_then_continues_service_execution(
     connector_index_mock, concurrent_tasks_mock, set_env
 ):
     connector = mock_connector(sync_now=True, next_sync=0)
-    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    another_connector = mock_connector(sync_now=True, next_sync=0)
+    connector_index_mock.supported_connectors.return_value = AsyncIterator(
+        [connector, another_connector]
+    )
 
-    # seems easier to mock this
-    concurrent_tasks_mock.put.side_effect = Exception("Something went wrong!")
+    connector.heartbeat.side_effect = Exception("Something went wrong!")
 
     # 0.15 is a bit arbitrary here
     # It should be enough to make the loop execute a couple times
     # but is there a better way to tell service to execute loop a couple times?
     await create_and_run_service(stop_after=0.15)
 
-    # assert that service tried to put the job to sync
-    concurrent_tasks_mock.put.assert_called()
+    # assert that service tried to call connector heartbeat for all connectors
+    connector.heartbeat.assert_called()
+    another_connector.heartbeat.assert_called()
 
     # assert that service did not crash and kept asking index for connectors
     # we don't have a good criteria of what a "crashed service is"
