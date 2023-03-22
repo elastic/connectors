@@ -37,6 +37,7 @@ class MongoDataSource(BaseDataSource):
         self.client = AsyncIOMotorClient(host, **client_params)
 
         self.db = self.client[self.configuration["database"]]
+        self.collection = self.db[self.configuration["collection"]]
 
     @classmethod
     def get_default_configuration(cls):
@@ -90,10 +91,14 @@ class MongoDataSource(BaseDataSource):
         return doc
 
     async def get_docs(self, filtering=None):
-        logger.debug("Grabbing collection info")
-        collection = self.db[self.configuration["collection"]]
+        if filtering is not None and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
 
-        async for doc in collection.find():
-            yield self.serialize(doc), None
+            if "find" in advanced_rules:
+                async for doc in self.collection.find(**advanced_rules["find"]):
+                    yield self.serialize(doc), None
+        else:
+            async for doc in self.collection.find():
+                yield self.serialize(doc), None
 
         self._dirty = False
