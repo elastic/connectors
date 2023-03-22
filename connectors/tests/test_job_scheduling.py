@@ -287,7 +287,7 @@ async def test_run_when_sync_fails_then_continues_service_execution(
 
     # assert that service tried to call connector heartbeat for all connectors
     connector.heartbeat.assert_called()
-    another_connector.heartbeat.assert_called()
+    another_connector.heartbeat.assert_awaited()
 
     # assert that service did not crash and kept asking index for connectors
     # we don't have a good criteria of what a "crashed service is"
