@@ -8,7 +8,6 @@ from datetime import datetime
 from bson import Decimal128, ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from connectors.logger import logger
 from connectors.source import BaseDataSource
 
 
