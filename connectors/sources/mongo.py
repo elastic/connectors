@@ -107,8 +107,6 @@ class MongoDataSource(BaseDataSource):
 
         self.client = AsyncIOMotorClient(host, **client_params)
 
-        self.db = self.client[self.configuration["database"]]
-
     @classmethod
     def get_default_configuration(cls):
         return {
@@ -164,10 +162,38 @@ class MongoDataSource(BaseDataSource):
         return doc
 
     async def get_docs(self, filtering=None):
+        db = self.client[self.configuration["database"]]
+
         logger.debug("Grabbing collection info")
-        collection = self.db[self.configuration["collection"]]
+        collection = db[self.configuration["collection"]]
 
         async for doc in collection.find():
             yield self.serialize(doc), None
 
         self._dirty = False
+
+    async def validate_config(self):
+        client = self.client
+        configured_database_name = self.configuration["database"]
+        configured_collection_name = self.configuration["collection"]
+
+        existing_database_names = await client.list_database_names()
+
+        logger.debug(f"Existing databases: {existing_database_names}")
+
+        if configured_database_name not in existing_database_names:
+            raise Exception(
+                f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}"
+            )
+
+        database = client[configured_database_name]
+
+        existing_collection_names = await database.list_collection_names()
+        logger.debug(
+            f"Existing collections in {configured_database_name}: {existing_collection_names}"
+        )
+
+        if configured_collection_name not in existing_collection_names:
+            raise Exception(
+                f"Collection ({configured_collection_name}) does not exist within database {configured_database_name}. Existing collections: {', '.join(existing_collection_names)}"
+            )

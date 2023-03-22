@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import asyncio
 from datetime import datetime
 from unittest import mock
 
@@ -147,3 +148,80 @@ async def test_get_docs(patch_logger, *args):
         num += 1
 
     assert num == 2
+
+
+def future_with_result(result):
+    future = asyncio.Future()
+    future.set_result(result)
+
+    return future
+
+
+@pytest.mark.asyncio
+async def test_validate_config_when_database_name_invalid_then_raises_exception():
+    server_database_names = ["hello", "world"]
+    configured_database_name = "something"
+
+    with mock.patch(
+        "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
+        return_value=future_with_result(server_database_names),
+    ):
+        source = create_source(MongoDataSource, database=configured_database_name)
+        with pytest.raises(Exception) as e:
+            await source.validate_config()
+        # assert that message contains database name from config
+        assert e.match(configured_database_name)
+        # assert that message contains database names from the server too
+        for database_name in server_database_names:
+            assert e.match(database_name)
+
+
+@pytest.mark.asyncio
+async def test_validate_config_when_collection_name_invalid_then_raises_exception():
+    server_database_names = ["hello"]
+    server_collection_names = ["first", "second"]
+    configured_database_name = "hello"
+    configured_collection_name = "third"
+
+    with mock.patch(
+        "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
+        return_value=future_with_result(server_database_names),
+    ), mock.patch(
+        "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
+        return_value=future_with_result(server_collection_names),
+    ):
+        source = create_source(
+            MongoDataSource,
+            database=configured_database_name,
+            collection=configured_collection_name,
+        )
+        with pytest.raises(Exception) as e:
+            await source.validate_config()
+        # assert that message contains database name from config
+        assert e.match(configured_collection_name)
+        # assert that message contains database names from the server too
+        for collection_name in server_collection_names:
+            assert e.match(collection_name)
+
+
+@pytest.mark.asyncio
+async def test_validate_config_when_configuration_valid_then_does_not_raise():
+    server_database_names = ["hello"]
+    server_collection_names = ["first", "second"]
+    configured_database_name = "hello"
+    configured_collection_name = "second"
+
+    with mock.patch(
+        "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
+        return_value=future_with_result(server_database_names),
+    ), mock.patch(
+        "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
+        return_value=future_with_result(server_collection_names),
+    ):
+        source = create_source(
+            MongoDataSource,
+            database=configured_database_name,
+            collection=configured_collection_name,
+        )
+
+        await source.validate_config()

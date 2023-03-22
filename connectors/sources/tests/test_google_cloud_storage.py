@@ -397,18 +397,18 @@ async def test_get_content():
     with mock.patch.object(
         Aiogoogle, "as_service_account", return_value=blob_content_response
     ):
-        google_client = Aiogoogle(
+        async with Aiogoogle(
             service_account_creds=mocked_gcs_object._google_storage_client.service_account_credentials
-        )
-        storage_client = await google_client.discover(
-            api_name=API_NAME, api_version=API_VERSION
-        )
-        storage_client.objects = mock.MagicMock()
-        content = await mocked_gcs_object.get_content(
-            blob=blob_document,
-            doit=True,
-        )
-        assert content == expected_blob_document
+        ) as google_client:
+            storage_client = await google_client.discover(
+                api_name=API_NAME, api_version=API_VERSION
+            )
+            storage_client.objects = mock.MagicMock()
+            content = await mocked_gcs_object.get_content(
+                blob=blob_document,
+                doit=True,
+            )
+            assert content == expected_blob_document
 
 
 @pytest.mark.asyncio
@@ -436,23 +436,23 @@ async def test_get_content_when_type_not_supported():
     }
 
     # Execute and Assert
-    google_client = Aiogoogle(
+    async with Aiogoogle(
         service_account_creds=mocked_gcs_object._google_storage_client.service_account_credentials
-    )
-    storage_client = await google_client.discover(
-        api_name=API_NAME, api_version=API_VERSION
-    )
-    storage_client.objects = mock.MagicMock()
-    content = await mocked_gcs_object.get_content(
-        blob=blob_document,
-        doit=True,
-    )
-    assert content is None
+    ) as google_client:
+        storage_client = await google_client.discover(
+            api_name=API_NAME, api_version=API_VERSION
+        )
+        storage_client.objects = mock.MagicMock()
+        content = await mocked_gcs_object.get_content(
+            blob=blob_document,
+            doit=True,
+        )
+        assert content is None
 
-    content = await mocked_gcs_object.get_content(
-        blob=blob_document,
-    )
-    assert content is None
+        content = await mocked_gcs_object.get_content(
+            blob=blob_document,
+        )
+        assert content is None
 
 
 @pytest.mark.asyncio
@@ -480,23 +480,23 @@ async def test_get_content_when_file_size_is_large(catch_stdout, patch_logger):
     }
 
     # Execute and Assert
-    google_client = Aiogoogle(
+    async with Aiogoogle(
         service_account_creds=mocked_gcs_object._google_storage_client.service_account_credentials
-    )
-    storage_client = await google_client.discover(
-        api_name=API_NAME, api_version=API_VERSION
-    )
-    storage_client.objects = mock.MagicMock()
-    content = await mocked_gcs_object.get_content(
-        blob=blob_document,
-        doit=True,
-    )
-    assert content is None
+    ) as google_client:
+        storage_client = await google_client.discover(
+            api_name=API_NAME, api_version=API_VERSION
+        )
+        storage_client.objects = mock.MagicMock()
+        content = await mocked_gcs_object.get_content(
+            blob=blob_document,
+            doit=True,
+        )
+        assert content is None
 
-    content = await mocked_gcs_object.get_content(
-        blob=blob_document,
-    )
-    assert content is None
+        content = await mocked_gcs_object.get_content(
+            blob=blob_document,
+        )
+        assert content is None
 
 
 @pytest.mark.asyncio
