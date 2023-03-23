@@ -9,6 +9,7 @@ import functools
 import os
 import platform
 import shutil
+import ssl
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -399,3 +400,25 @@ def retryable(retries=3, interval=1.0, strategy=RetryStrategy.LINEAR_BACKOFF):
         return func_to_execute
 
     return wrapper
+
+
+def ssl_context(certificate):
+    """Convert string to pem format and create a SSL context.
+
+    Example Original String: -----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----
+    Example Modified String: -----BEGIN CERTIFICATE-----
+                             Certificate
+                             -----END CERTIFICATE-----
+
+    Args:
+        certificate (str): certificate in string format
+
+    Returns:
+        ssl_context: SSL context with certificate
+    """
+    certificate = certificate.replace(" ", "\n")
+    certificate = " ".join(certificate.split("\n", 1))
+    certificate = " ".join(certificate.rsplit("\n", 1))
+    ctx = ssl.create_default_context()
+    ctx.load_verify_locations(cadata=certificate)
+    return ctx

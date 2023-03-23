@@ -10,10 +10,11 @@ import contextlib
 import functools
 import os
 import random
+import ssl
 import tempfile
 import time
 import timeit
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 from freezegun import freeze_time
@@ -30,6 +31,7 @@ from connectors.utils import (
     get_size,
     next_run,
     retryable,
+    ssl_context,
     validate_index_name,
 )
 
@@ -336,3 +338,21 @@ async def test_exponential_backoff_retry():
 
     # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
     await does_not_raise()
+
+
+class MockSSL:
+    """This class contains methods which returns dummy ssl context"""
+
+    def load_verify_locations(self, cadata):
+        """This method verify locations"""
+        pass
+
+
+def test_ssl_context():
+    """This function test ssl_context with dummy certificate"""
+    # Setup
+    certificate = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
+
+    # Execute
+    with patch.object(ssl, "create_default_context", return_value=MockSSL()):
+        ssl_context(certificate=certificate)
