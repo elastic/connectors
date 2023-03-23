@@ -392,7 +392,7 @@ def test_evaluate_timedelta():
     # Assert
     assert expected_response == "2023-02-19T14:25:05.158843"
 
-    
+
 def test_get_pem_format():
     """This function tests prepare private key and certificate with dummy values"""
     # Setup
