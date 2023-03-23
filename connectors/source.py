@@ -149,7 +149,7 @@ class BaseDataSource:
 
             for field_property, value in fields.items():
                 if field_property == "label":
-                    entry[field_property] = value if not value else config_name.upper()
+                    entry[field_property] = value if value else config_name.upper()
                 else:
                     entry[field_property] = value
 
