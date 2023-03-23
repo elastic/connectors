@@ -44,7 +44,6 @@ class AzureBlobStorageDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-
         self.connection_string = None
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.retry_count = self.configuration["retry_count"]
