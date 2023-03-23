@@ -114,6 +114,7 @@ class DataSource(BaseDataSource):
             "host": {
                 "value": "127.0.0.1",
                 "label": "Host",
+                "type": "str",
             },
             "port": {
                 "display": "numeric",
@@ -130,6 +131,7 @@ class DataSource(BaseDataSource):
             "user": {
                 "value": "root",
                 "label": "Username",
+                "type": "str",
             },
         }
 
