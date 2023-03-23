@@ -82,7 +82,12 @@ class OracleDataSource(GenericBaseDataSource):
         oracle_configuration.update(
             {
                 "oracle_protocol": {
-                    "label": "Oracle connection protocol (TCP/TCPS)",
+                    "display": "dropdown",
+                    "label": "Oracle connection protocol",
+                    "options": [
+                        {"label": "TCP", "value": "TCP"},
+                        {"label": "TCPS", "value": "TCPS"}
+                    ],
                     "order": 9,
                     "type": "str",
                     "value": DEFAULT_PROTOCOL,
