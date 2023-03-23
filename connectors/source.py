@@ -130,22 +130,23 @@ class BaseDataSource:
     def get_simple_configuration(cls):
         """Used to return the default config to Kibana"""
         res = {}
+        default_configuration = {
+            "default_value": None,
+            "depends_on": [],
+            "display": "text",
+            "label": "",
+            "options": [],
+            "order": 1,
+            "required": True,
+            "sensitive": False,
+            "tooltip": None,
+            "type": "str",
+            "validations": [],
+            "value": "",
+        }
 
         for config_name, fields in cls.get_default_configuration().items():
-            entry = {
-                "default_value": None,
-                "depends_on": [],
-                "display": "text",
-                "label": "",
-                "options": [],
-                "order": 1,
-                "required": True,
-                "sensitive": False,
-                "tooltip": None,
-                "type": "str",
-                "validations": [],
-                "value": "",
-            }
+            entry = default_configuration
 
             for field_property, value in fields.items():
                 if field_property == "label":
