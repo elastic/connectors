@@ -105,40 +105,39 @@ class TestMultiservice:
         )  # we're not supposed to cancel it as it's already stopping
 
 
-class TestGetServices:
-    @pytest.mark.asyncio
-    async def test_when_services_with_called_with_invalid_names_then_raises(
-        self,
-    ):
-        class SomeService(BaseService):
-            name = "existing"
+@pytest.mark.asyncio
+async def test_get_service_when_services_with_called_with_invalid_names_then_raises(
+    self,
+):
+    class SomeService(BaseService):
+        name = "existing"
 
-        with pytest.raises(KeyError) as e:
-            _ = get_services(["existing", "nonexisting"], config=defaultdict(dict))
+    with pytest.raises(KeyError) as e:
+        _ = get_services(["existing", "nonexisting"], config=defaultdict(dict))
 
-        assert e.match("nonexisting")
+    assert e.match("nonexisting")
 
-    @pytest.mark.asyncio
-    async def test_when_services_with_called_with_valid_names_then_returns_multiservice_wrapping_these_services(
-        self,
-    ):
-        ran = []
+@pytest.mark.asyncio
+async def test_get_service_when_services_with_called_with_valid_names_then_returns_multiservice_wrapping_these_services(
+    self,
+):
+    ran = []
 
-        # creating a class using the BaseService as its base
-        # will register the class using its name
-        class TestService(BaseService):
-            async def run(self):
-                nonlocal ran
-                ran.append(self.name)
+    # creating a class using the BaseService as its base
+    # will register the class using its name
+    class TestService(BaseService):
+        async def run(self):
+            nonlocal ran
+            ran.append(self.name)
 
-        class SomeService(TestService):
-            name = "kool"
+    class SomeService(TestService):
+        name = "kool"
 
-        class SomeOtherService(TestService):
-            name = "beans"
+    class SomeOtherService(TestService):
+        name = "beans"
 
-        # and make it available when we call get_services()
-        multiservice = get_services(["kool", "beans"], config=defaultdict(dict))
+    # and make it available when we call get_services()
+    multiservice = get_services(["kool", "beans"], config=defaultdict(dict))
 
-        await multiservice.run()
-        assert ran == ["kool", "beans"]
+    await multiservice.run()
+    assert ran == ["kool", "beans"]
