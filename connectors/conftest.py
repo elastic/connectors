@@ -145,3 +145,20 @@ def assert_re(expr, items):
             return
 
     raise AssertionError(f"{expr} not found in {items}")
+
+
+def pytest_itemcollected(item):
+    def _collect_recursively(n):
+        from _pytest.python import Module
+
+        if isinstance(n, Module):
+            return n.obj.__doc__.strip() if n.obj.__doc__ else n.obj.__class__.__name__
+
+        parent = n.parent
+
+        parent_description = _collect_recursively(parent) if parent else ""
+        node_description = n.obj.__doc__.strip() if n.obj.__doc__ else n.obj.__name__
+
+        return ".".join((parent_description, node_description))
+
+    item._nodeid = _collect_recursively(item)
