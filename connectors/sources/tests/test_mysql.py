@@ -65,6 +65,13 @@ MYSQL = {
 }
 
 
+def future_with_result(result):
+    future = asyncio.Future()
+    future.set_result(result)
+
+    return future
+
+
 @pytest.fixture
 def patch_fetch_tables():
     with patch.object(
@@ -89,6 +96,22 @@ def patch_fetch_rows_for_table():
 def patch_default_wait_multiplier():
     with patch("connectors.sources.mysql.RETRY_INTERVAL", 0):
         yield
+
+
+@pytest.fixture
+def patch_connection_pool():
+    connection_pool = Mock()
+    connection_pool.close = Mock()
+    connection_pool.wait_closed = AsyncMock()
+    connection_pool.acquire = Mock(return_value=Connection())
+    connection_pool.acquire.__aenter__ = AsyncMock()
+    connection_pool.acquire.__aexit__ = AsyncMock()
+
+    with patch(
+        "aiomysql.create_pool",
+        return_value=future_with_result(connection_pool),
+    ):
+        yield connection_pool
 
 
 def test_get_configuration():
@@ -169,23 +192,6 @@ class Connection:
         pass
 
 
-class ConnectionPool:
-    def close(self):
-        pass
-
-    async def wait_closed(self):
-        pass
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exception_type, exception_value, exception_traceback):
-        pass
-
-    def acquire(self):
-        return Connection()
-
-
 class MockSsl:
     """This class contains methods which returns dummy ssl context"""
 
@@ -214,11 +220,10 @@ async def test_close_when_source_setup_correctly_does_not_raise_errors():
 
 
 @pytest.mark.asyncio
-async def test_ping(patch_logger):
+async def test_ping(patch_logger, patch_connection_pool):
     source = await setup_mysql_source(MySqlDataSource)
 
-    with patch.object(source, "with_connection_pool", return_value=ConnectionPool()):
-        await source.ping()
+    await source.ping()
 
 
 @pytest.mark.asyncio
@@ -236,58 +241,53 @@ async def test_ping_negative(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_connect_with_retry(patch_logger, patch_default_wait_multiplier):
+async def test_connect_with_retry(
+    patch_logger, patch_connection_pool, patch_default_wait_multiplier
+):
     source = await setup_mysql_source(is_connection_lost=True)
 
-    with patch.object(
-        aiomysql, "create_pool", return_value=(await mock_mysql_response())
-    ):
-        streamer = source._connect(
-            query="select * from database.table", fetch_many=True
-        )
+    streamer = source._connect(query="select * from database.table", fetch_many=True)
 
-        with pytest.raises(Exception):
-            async for _ in streamer:
-                pass
+    with pytest.raises(Exception):
+        async for _ in streamer:
+            pass
 
 
 @pytest.mark.asyncio
-async def test_fetch_documents():
+async def test_fetch_documents(patch_connection_pool):
     source = await setup_mysql_source(DATABASE)
 
     query = "select * from table"
 
-    with patch.object(source, "with_connection_pool", return_value=ConnectionPool()):
-        response = source._connect(query)
+    response = source._connect(query)
 
-        patch("source._connect", return_value=response)
+    patch("source._connect", return_value=response)
 
-        document_list = []
-        async for document in source.fetch_documents(table="table_name"):
-            document_list.append(document)
+    document_list = []
+    async for document in source.fetch_documents(table="table_name"):
+        document_list.append(document)
 
-        assert {
-            "Database": f"{DATABASE}",
-            "Table": "table_name",
-            "_id": f"{DATABASE}_table_name_",
-            "_timestamp": "table1",
-            f"{DATABASE}_table_name_Database": "table1",
-        } in document_list
+    assert {
+        "Database": f"{DATABASE}",
+        "Table": "table_name",
+        "_id": f"{DATABASE}_table_name_",
+        "_timestamp": "table1",
+        f"{DATABASE}_table_name_Database": "table1",
+    } in document_list
 
 
 @pytest.mark.asyncio
-async def test_fetch_rows_from_tables():
+async def test_fetch_rows_from_tables(patch_connection_pool):
     source = await setup_mysql_source()
 
     query = "select * from table"
 
-    with patch.object(source, "with_connection_pool", return_value=ConnectionPool()):
-        response = source._connect(query)
+    response = source._connect(query)
 
-        patch("source._connect", return_value=response)
+    patch("source._connect", return_value=response)
 
-        async for row in source.fetch_rows_from_tables("table"):
-            assert "_id" in row
+    async for row in source.fetch_rows_from_tables("table"):
+        assert "_id" in row
 
 
 @pytest.mark.asyncio
@@ -300,16 +300,15 @@ async def test_get_docs_with_empty_db_fields_raises_error():
 
 
 @pytest.mark.asyncio
-async def test_get_docs():
+async def test_get_docs(patch_connection_pool):
     source = await setup_mysql_source(DATABASE)
 
-    with patch.object(source, "with_connection_pool", return_value=ConnectionPool()):
-        source.fetch_rows_from_tables = MagicMock(
-            return_value=AsyncIterator([{"a": 1, "b": 2}])
-        )
+    source.fetch_rows_from_tables = MagicMock(
+        return_value=AsyncIterator([{"a": 1, "b": 2}])
+    )
 
-        async for doc, _ in source.get_docs():
-            assert doc == {"a": 1, "b": 2}
+    async for doc, _ in source.get_docs():
+        assert doc == {"a": 1, "b": 2}
 
 
 async def setup_mysql_source(database="", is_connection_lost=False):

@@ -219,6 +219,8 @@ class MySqlDataSource(BaseDataSource):
             else None,
         }
 
+        connection_pool = None
+
         try:
             connection_pool = await aiomysql.create_pool(**connection_string)
             yield connection_pool
