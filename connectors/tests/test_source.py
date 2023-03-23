@@ -114,14 +114,15 @@ class DataSource(BaseDataSource):
             "host": {
                 "value": "127.0.0.1",
                 "label": "Host",
-                "type": "str",
             },
             "port": {
+                "display": "numeric",
                 "value": 3306,
                 "label": "Port",
                 "type": "int",
             },
             "direct": {
+                "display": "toggle",
                 "value": True,
                 "label": "Direct connect",
                 "type": "bool",
@@ -129,7 +130,6 @@ class DataSource(BaseDataSource):
             "user": {
                 "value": "root",
                 "label": "Username",
-                "type": "str",
             },
         }
 
@@ -173,12 +173,28 @@ async def test_base_class():
     assert options == {"a": "1"}
 
     # data we send back to kibana
-    # we want to make sure we only send back label+value
+    # we want to make sure all default values are included in the configuration
+    # any specified values should override the defaults
+    default_configuration = {
+        "default_value": None,
+        "depends_on": [],
+        "display": "text",
+        "label": "",
+        "options": [],
+        "order": 1,
+        "required": True,
+        "sensitive": False,
+        "tooltip": None,
+        "type": "str",
+        "validations": [],
+        "value": "",
+    }
+
     expected = {
-        "host": {"label": "Host", "value": "127.0.0.1"},
-        "port": {"label": "Port", "value": "3306"},
-        "direct": {"label": "Direct connect", "value": "true"},
-        "user": {"label": "Username", "value": "root"},
+        "host": default_configuration | {"label": "Host", "value": "127.0.0.1"},
+        "port": default_configuration | {"label": "Port", "value": 3306, "display": "numeric", "type": "int"},
+        "direct": default_configuration | {"label": "Direct connect", "value": True, "display": "toggle", "type": "bool"},
+        "user": default_configuration | {"label": "Username", "value": "root"},
     }
     assert ds.get_simple_configuration() == expected
 
