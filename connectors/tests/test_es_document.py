@@ -3,6 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from unittest.mock import AsyncMock, Mock
+
 import pytest
 
 from connectors.es import ESDocument, InvalidDocumentSourceError
@@ -57,3 +59,36 @@ def test_es_document_get():
         es_doc.get("nested_dict", "non_existing", default=default_value)
         == default_value
     )
+
+
+@pytest.mark.asyncio
+async def test_reload():
+    source = {
+        "_id": "test",
+        "_seq_no": 1,
+        "_primary_term": 1,
+        "_source": {
+            "status": "pending",
+        },
+    }
+    updated_source = {
+        "_id": "test",
+        "_seq_no": 2,
+        "_primary_term": 2,
+        "_source": {
+            "status": "in_progress",
+        },
+    }
+
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=updated_source)
+    doc = ESDocument(index, source)
+    assert doc.id == "test"
+    assert doc._seq_no == 1
+    assert doc._primary_term == 1
+    assert doc.get("status") == "pending"
+    await doc.reload()
+    assert doc.id == "test"
+    assert doc._seq_no == 2
+    assert doc._primary_term == 2
+    assert doc.get("status") == "in_progress"

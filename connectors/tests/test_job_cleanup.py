@@ -45,6 +45,7 @@ def mock_sync_job(id="1", connector_id="1", index_name="index_name"):
     job.connector_id = connector_id
     job.index_name = index_name
     job.fail = AsyncMock()
+    job.reload = AsyncMock()
     return job
 
 
@@ -57,7 +58,6 @@ async def run_service_with_stop_after(service, stop_after):
 
 
 @pytest.mark.asyncio
-@patch("connectors.byoc.SyncJobIndex.fetch_by_id")
 @patch("connectors.byoc.SyncJobIndex.delete_jobs")
 @patch("connectors.byoc.SyncJobIndex.delete_indices")
 @patch("connectors.byoc.SyncJobIndex.idle_jobs")
@@ -73,7 +73,6 @@ async def test_cleanup_jobs(
     idle_jobs,
     delete_indices,
     delete_jobs,
-    sync_job_fetch_by_id,
     patch_logger,
 ):
     existing_index_name = "foo"
@@ -88,7 +87,6 @@ async def test_cleanup_jobs(
     orphaned_jobs.return_value = AsyncIterator([sync_job, another_sync_job])
     idle_jobs.return_value = AsyncIterator([sync_job])
     delete_jobs.return_value = {"deleted": 1, "failures": [], "total": 1}
-    sync_job_fetch_by_id.return_value = sync_job
 
     service = create_service()
     await run_service_with_stop_after(service, 0.1)
