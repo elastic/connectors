@@ -117,6 +117,7 @@ async def test_get_service_when_services_with_called_with_invalid_names_then_rai
 
     assert e.match("nonexisting")
 
+
 @pytest.mark.asyncio
 async def test_get_service_when_services_with_called_with_valid_names_then_returns_multiservice_wrapping_these_services(
     self,
