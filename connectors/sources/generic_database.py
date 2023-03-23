@@ -167,7 +167,7 @@ class GenericBaseDataSource(BaseDataSource):
             },
         }
 
-    def _validate_configuration(self):
+    async def validate_config(self):
         """Validates the configuration parameters
 
         Raises:
@@ -195,8 +195,13 @@ class GenericBaseDataSource(BaseDataSource):
         ):
             raise Exception("Configured port has to be an integer.")
 
-        if self.dialect == "Postgresql" and not (
-            self.configuration["ssl_disabled"] or self.configuration["ssl_ca"]
+        if (
+            self.dialect == "Postgresql"
+            and self.configuration["ssl_enabled"]
+            and (
+                self.configuration["ssl_ca"] == ""
+                or self.configuration["ssl_ca"] is None
+            )
         ):
             raise Exception("SSL certificate must be configured.")
 
@@ -333,7 +338,6 @@ class GenericBaseDataSource(BaseDataSource):
             if self.queries is None:
                 raise NotImplementedError
 
-            self._validate_configuration()
             await anext(
                 self.execute_query(
                     query=self.queries.ping(),

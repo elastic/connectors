@@ -399,3 +399,19 @@ def retryable(retries=3, interval=1.0, strategy=RetryStrategy.LINEAR_BACKOFF):
         return func_to_execute
 
     return wrapper
+
+
+def get_pem_format(key, max_split=-1):
+    """Convert key into PEM format.
+
+    Args:
+        key (str): Key in raw format.
+        max_split (int): Specifies how many splits to do. Defaults to -1.
+
+    Returns:
+        string: PEM format
+    """
+    key = key.replace(" ", "\n")
+    key = " ".join(key.split("\n", max_split))
+    key = " ".join(key.rsplit("\n", max_split))
+    return key

@@ -100,6 +100,7 @@ This is our main communication index, used to communicate the connector's config
   last_sync_error: string;   -> Optional last job error message
   last_sync_status: string;  -> Status of the last job, or null if no job has been executed
   last_synced: date;    -> Date/time of last job (UTC)
+  last_sync_scheduled_at: date;    -> Date/time when the last job is scheduled (UTC)
   name: string; -> the name to use for the connector
   pipeline: {
     extract_binary_content: boolean; -> Whether the `request_pipeline` should handle binary data
@@ -228,6 +229,7 @@ This is our main communication index, used to communicate the connector's config
     "last_indexed_document_count" : { "type" : "long" },
     "last_seen" : { "type" : "date" },
     "last_sync_error" : { "type" : "keyword" },
+    "last_sync_scheduled_at" : { "type" : "date" },
     "last_sync_status" : { "type" : "keyword" },
     "last_synced" : { "type" : "date" },
     "name" : { "type" : "keyword" },
