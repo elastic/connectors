@@ -100,7 +100,7 @@ class MSSQLDataSource(GenericBaseDataSource):
             query = {"driver": self.mssql_driver, "TrustServerCertificate": "yes"}
 
         connection_string = URL.create(
-            "mssql+pyodbc",
+            "mssql+pytds",
             username=self.user,
             password=self.password,
             host=self.host,
