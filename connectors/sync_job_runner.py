@@ -209,7 +209,10 @@ class SyncJobRunner:
             yield doc, lazy_download
 
     async def check_job(self):
-        if time.time() - self._reporting_cycle_start_time < JOB_REPORTING_INTERVAL:
+        if (
+            time.time() - self._reporting_cycle_start_time  # pyright: ignore
+            < JOB_REPORTING_INTERVAL
+        ):
             return
 
         result = (
