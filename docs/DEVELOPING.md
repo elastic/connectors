@@ -612,7 +612,6 @@ $ make ftest NAME=oracle
 
 ℹ️ The e2e test uses default values defined in [Configure Oracle Database connector](#configure-oracle-database-connector)
 
-
 ## Microsoft SQL Connector
 
 The [Elastic Microsoft SQL connector](../connectors/sources/mssql.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
