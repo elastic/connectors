@@ -323,7 +323,7 @@ class ConfluenceDataSource(BaseDataSource):
             logger.exception("Error while connecting to Confluence")
             raise
 
-    async def get_spaces(self):
+    async def fetch_spaces(self):
         """Get spaces with the help of REST APIs
 
         Yields:
@@ -334,14 +334,15 @@ class ConfluenceDataSource(BaseDataSource):
             api_query=SPACE_QUERY,
         ):
             for space in response.get("results", []):
+                space_url = os.path.join(
+                    self.confluence_client.host_url, space["_links"]["webui"][1:]
+                )
                 yield {
                     "_id": space["id"],
                     "type": "Space",
                     "title": space["name"],
                     "_timestamp": iso_utc(),
-                    "url": os.path.join(
-                        self.confluence_client.host_url, space["_links"]["webui"][1:]
-                    ),
+                    "url": space_url,
                 }
 
     async def fetch_documents(self, api_query):
@@ -364,6 +365,9 @@ class ConfluenceDataSource(BaseDataSource):
                 updated_time = document["history"]["lastUpdated"]["when"]
                 if document.get("children").get("attachment"):
                     attachment_count = document["children"]["attachment"]["size"]
+                document_url = os.path.join(
+                    self.confluence_client.host_url, document["_links"]["webui"][1:]
+                )
                 yield {
                     "_id": document["id"],
                     "type": document["type"],
@@ -371,9 +375,7 @@ class ConfluenceDataSource(BaseDataSource):
                     "title": document["title"],
                     "space": document["space"]["name"],
                     "body": document["body"]["storage"]["value"],
-                    "url": os.path.join(
-                        self.confluence_client.host_url, document["_links"]["webui"][1:]
-                    ),
+                    "url": document_url,
                 }, attachment_count
 
     async def fetch_attachments(
@@ -398,6 +400,10 @@ class ConfluenceDataSource(BaseDataSource):
         ):
             attachments = response.get("results", [])
             for attachment in attachments:
+                attachment_url = os.path.join(
+                    self.confluence_client.host_url,
+                    attachment["_links"]["webui"][1:],
+                )
                 yield {
                     "type": attachment["type"],
                     "title": attachment["title"],
@@ -406,10 +412,7 @@ class ConfluenceDataSource(BaseDataSource):
                     parent_type: parent_name,
                     "_timestamp": attachment["version"]["when"],
                     "size": attachment["extensions"]["fileSize"],
-                    "url": os.path.join(
-                        self.confluence_client.host_url,
-                        attachment["_links"]["webui"][1:],
-                    ),
+                    "url": attachment_url,
                 }, attachment["_links"]["download"]
 
     async def download_attachment(self, url, attachment, timestamp=None, doit=False):
@@ -437,7 +440,7 @@ class ConfluenceDataSource(BaseDataSource):
                 f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
             )
             return
-        logger.debug(f"Downloading {attachment_name}")
+        logger.debug(f"Downloading {attachment_name} of size {attachment_size} bytes")
         document = {"_id": attachment["_id"], "_timestamp": attachment["_timestamp"]}
         source_file_name = ""
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
@@ -448,7 +451,9 @@ class ConfluenceDataSource(BaseDataSource):
                     await async_buffer.write(data)
             source_file_name = str(async_buffer.name)
 
-        logger.debug(f"Calling convert_to_b64 for file : {attachment_name}")
+        logger.debug(
+            f"Download completed for file: {attachment_name}. Calling convert_to_b64"
+        )
         await asyncio.to_thread(
             convert_to_b64,
             source=source_file_name,
@@ -486,7 +491,7 @@ class ConfluenceDataSource(BaseDataSource):
 
     async def _space_coro(self):
         """Coroutine to add spaces documents to Queue"""
-        async for space in self.get_spaces():
+        async for space in self.fetch_spaces():
             await self.queue.put((space, None))  # pyright: ignore
         await self.queue.put("FINISHED_TASK")  # pyright: ignore
 

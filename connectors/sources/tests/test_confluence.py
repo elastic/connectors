@@ -16,6 +16,7 @@ from freezegun import freeze_time
 from connectors.source import DataSourceConfiguration
 from connectors.sources.confluence import ConfluenceClient, ConfluenceDataSource
 from connectors.sources.tests.support import create_source
+from connectors.tests.commons import AsyncIterator
 from connectors.utils import ssl_context
 
 HOST_URL = "http://127.0.0.1:5000"
@@ -173,22 +174,6 @@ class MockObjectResponse:
         return self
 
 
-class AsyncIter:
-    """This Class is use to return async generator"""
-
-    def __init__(self, *args):
-        """Setup list of dictionary"""
-
-        self.result = args
-
-    async def __aiter__(self):
-        """This Method is used to return async generator"""
-        if len(self.result) == 1:
-            yield self.result[0]
-        else:
-            yield (*self.result,)
-
-
 @pytest.mark.asyncio
 async def test_validate_configuration_with_invalid_concurrent_downloads():
     """Test validate configuration method of BaseDataSource class with invalid concurrent downloads"""
@@ -335,7 +320,7 @@ def test_validate_configuration_for_ssl_enabled(patch_logger):
 
 @freeze_time("2023-01-24T04:07:19")
 @pytest.mark.asyncio
-async def test_get_spaces():
+async def test_fetch_spaces():
     # Setup
     source = create_source(ConfluenceDataSource)
 
@@ -343,7 +328,7 @@ async def test_get_spaces():
 
     # Execute
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-        async for response in source.get_spaces():
+        async for response in source.fetch_spaces():
             assert response == EXPECTED_SPACE
 
 
@@ -387,7 +372,7 @@ async def test_download_attachment():
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
         with mock.patch(
             "aiohttp.StreamReader.iter_chunked",
-            return_value=AsyncIter(bytes(RESPONSE_CONTENT, "utf-8")),
+            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
         ):
             response = await source.download_attachment(
                 url="download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
@@ -410,7 +395,7 @@ async def test_download_attachment_when_filesize_is_large():
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
         with mock.patch(
             "aiohttp.StreamReader.iter_chunked",
-            return_value=AsyncIter(bytes(RESPONSE_CONTENT, "utf-8")),
+            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
         ):
             attachment = copy(EXPECTED_ATTACHMENT)
             attachment["size"] = 23000000
@@ -434,7 +419,7 @@ async def test_download_attachment_for_unsupported_filetype():
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
         with mock.patch(
             "aiohttp.StreamReader.iter_chunked",
-            return_value=AsyncIter(bytes(RESPONSE_CONTENT, "utf-8")),
+            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
         ):
             attachment = copy(EXPECTED_ATTACHMENT)
 
@@ -450,25 +435,28 @@ async def test_download_attachment_for_unsupported_filetype():
 
 @pytest.mark.asyncio
 @mock.patch.object(
-    ConfluenceDataSource, "get_spaces", return_value=AsyncIter(EXPECTED_SPACE)
+    ConfluenceDataSource, "fetch_spaces", return_value=AsyncIterator([EXPECTED_SPACE])
 )
 @mock.patch.object(
     ConfluenceDataSource,
     "fetch_documents",
-    side_effect=[(AsyncIter(EXPECTED_PAGE, 1)), (AsyncIter(EXPECTED_BLOG, 1))],
+    side_effect=[
+        (AsyncIterator([[EXPECTED_PAGE, 1]])),
+        (AsyncIterator([[EXPECTED_BLOG, 1]])),
+    ],
 )
 @mock.patch.object(
     ConfluenceDataSource,
     "fetch_attachments",
     side_effect=[
-        (AsyncIter(EXPECTED_ATTACHMENT, "download-url")),
-        (AsyncIter(EXPECTED_BLOG_ATTACHMENT, "download-url")),
+        (AsyncIterator([[EXPECTED_ATTACHMENT, "download-url"]])),
+        (AsyncIterator([[EXPECTED_BLOG_ATTACHMENT, "download-url"]])),
     ],
 )
 @mock.patch.object(
     ConfluenceDataSource,
     "download_attachment",
-    return_value=AsyncIter(EXPECTED_CONTENT),
+    return_value=AsyncIterator([[EXPECTED_CONTENT]]),
 )
 async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_patch):
     """Tests the get_docs method"""
