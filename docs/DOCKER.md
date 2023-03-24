@@ -22,7 +22,7 @@ Download can be done manually, or just using the line below - make sure to updat
 curl https://raw.githubusercontent.com/elastic/connectors-python/main/config.yml --output ~/connectors-python-config/config.yml
 ```
 
-3. Update the configuration downloaded to make it work for your setup.
+3. Update the configuration downloaded to make it work for your [on-prem connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html#build-connector-usage)
 
 In case you're running Connector Service against a dockerised version of Elasticsearch and Kibana, your config file might look the following:
 
@@ -54,7 +54,62 @@ service:
   max_concurrent_syncs: 1
   job_cleanup_interval: 300
   log_level: INFO
+  
+# connector information
+connector_id: <CONNECTOR_ID_FROM_KIBANA>
+service_type: '<DESIRED_SERVICE_TYPE>'
 
+sources:
+  mongodb: connectors.sources.mongo:MongoDataSource
+  s3: connectors.sources.s3:S3DataSource
+  dir: connectors.sources.directory:DirectoryDataSource
+  mysql: connectors.sources.mysql:MySqlDataSource
+  network_drive: connectors.sources.network_drive:NASDataSource
+  google_cloud_storage: connectors.sources.google_cloud_storage:GoogleCloudStorageDataSource
+  azure_blob_storage: connectors.sources.azure_blob_storage:AzureBlobStorageDataSource
+  postgresql: connectors.sources.postgresql:PostgreSQLDataSource
+  oracle: connectors.sources.oracle:OracleDataSource
+  mssql: connectors.sources.mssql:MSSQLDataSource
+```
+
+Notice, that the config file you downloaded might contain more config entries, so you will need to manually copy/change the settings that apply to you. It should be sufficient to only update `elasticsearch.host` and `elasticsearch.password` to make Connectors Service run properly for you.
+
+### Running connector service in [native mode](https://www.elastic.co/guide/en/enterprise-search/current/native-connectors.html) in Docker
+
+In case you want to run connector service in native mode, you will need slightly different configuration file, having `native_service_types` config option populated instead of `connector_id` and `service_type`. Normally when you download a sample configuration file in step 2 you'll be able to run connector service in native mode (as long as elasticsearch host and credentials are correct).
+
+Example of configuration file for connectors service running in native mode:
+
+```
+elasticsearch:
+  host: http://host.docker.internal:9200
+  username: elastic
+  password: <YOUR_PASSWORD>
+  ssl: true
+  bulk:
+    queue_max_size: 1024
+    queue_max_mem_size: 25
+    display_every: 100
+    chunk_size: 1000
+    max_concurrency: 5
+    chunk_max_mem_size: 5
+    concurrent_downloads: 10
+  request_timeout: 120
+  max_wait_duration: 120
+  initial_backoff_duration: 1
+  backoff_multiplier: 2
+  log_level: info
+
+service:
+  idling: 30
+  heartbeat: 300
+  max_errors: 20
+  max_errors_span: 600
+  max_concurrent_syncs: 1
+  job_cleanup_interval: 300
+  log_level: INFO
+  
+# remove entries from this list to not run these connectors in this instance of the service
 native_service_types:
   - mongodb
   - mysql
@@ -78,17 +133,6 @@ sources:
   postgresql: connectors.sources.postgresql:PostgreSQLDataSource
   oracle: connectors.sources.oracle:OracleDataSource
   mssql: connectors.sources.mssql:MSSQLDataSource
-```
-
-Notice, that the config file you downloaded might contain more config entries, so you will need to manually copy/change the settings that apply to you. It should be sufficient to only update `elasticsearch.host` and `elasticsearch.password` to make Connectors Service run properly for you.
-
-### Running a [Build-a-connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html#build-connector-usage) connector in Docker
-
-In case you want to run your own custom connector in the docker image, you can add the following lines into the configuration file to make the service run in bring-your-own-connector mode:
-
-```
-connector_id: <CONNECTOR_ID_FROM_KIBANA>
-service_type: '<DESIRED_SERVICE_TYPE>'
 ```
 
 After that, you can build your own docker image to run:
