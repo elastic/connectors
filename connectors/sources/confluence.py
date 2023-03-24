@@ -153,9 +153,8 @@ class ConfluenceClient:
         Yields:
             response: JSON response.
         """
-        should_paginate = True
         url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
-        while should_paginate:
+        while True:
             try:
                 async for response in self.api_call(
                     url=url,
@@ -164,8 +163,7 @@ class ConfluenceClient:
                     links = json_response.get("_links")
                     yield json_response
                     if links.get("next") is None:
-                        should_paginate = False
-                        break
+                        return
                     url = os.path.join(
                         self.host_url,
                         links.get("next")[1:],

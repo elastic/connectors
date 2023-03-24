@@ -7,7 +7,7 @@
 import ssl
 from copy import copy
 from unittest import mock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from aiohttp import StreamReader
@@ -137,41 +137,19 @@ EXPECTED_BLOG_ATTACHMENT = {
 }
 
 
-class MockJsonResponse:
-    """Class to mock json response of aiohttp session.get method"""
-
-    def __init__(self, json, status):
-        """Setup a json response"""
+class JSONAsyncMock(AsyncMock):
+    def __init__(self, json, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._json = json
-        self.status = status
 
     async def json(self):
-        """Method to return a JSON content of the result"""
         return self._json
 
-    async def __aexit__(self, exc_type, exc, tb):
-        """Closes an async with block"""
-        pass
 
-    async def __aenter__(self):
-        """Enters an async with block"""
-        return self
-
-
-class MockObjectResponse:
-    """Class to mock object response of aiohttp session.get method"""
-
-    def __init__(self):
-        """Setup a streamReader object"""
+class StreamReaderAsyncMock(AsyncMock):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.content = StreamReader
-
-    async def __aexit__(self, exc_type, exc, tb):
-        """Closes an async with block"""
-        pass
-
-    async def __aenter__(self):
-        """Enters an async with block"""
-        return self
 
 
 @pytest.mark.asyncio
@@ -324,9 +302,9 @@ async def test_fetch_spaces():
     # Setup
     source = create_source(ConfluenceDataSource)
 
-    async_response = MockJsonResponse(RESPONSE_SPACE, 200)
+    async_response = AsyncMock()
+    async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(RESPONSE_SPACE))
 
-    # Execute
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
         async for response in source.fetch_spaces():
             assert response == EXPECTED_SPACE
@@ -336,7 +314,8 @@ async def test_fetch_spaces():
 async def test_fetch_documents():
     # Setup
     source = create_source(ConfluenceDataSource)
-    async_response = MockJsonResponse(RESPONSE_PAGE, 200)
+    async_response = AsyncMock()
+    async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(RESPONSE_PAGE))
 
     # Execute
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
@@ -348,7 +327,10 @@ async def test_fetch_documents():
 async def test_fetch_attachments():
     # Setup
     source = create_source(ConfluenceDataSource)
-    async_response = MockJsonResponse(RESPONSE_ATTACHMENT, 200)
+    async_response = AsyncMock()
+    async_response.__aenter__ = AsyncMock(
+        return_value=JSONAsyncMock(RESPONSE_ATTACHMENT)
+    )
 
     # Execute
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
@@ -366,7 +348,8 @@ async def test_download_attachment():
     # Setup
     source = create_source(ConfluenceDataSource)
 
-    async_response = MockObjectResponse()
+    async_response = AsyncMock()
+    async_response.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
 
     # Execute
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
@@ -388,7 +371,8 @@ async def test_download_attachment_when_filesize_is_large_then_download_skips():
     # Setup
     source = create_source(ConfluenceDataSource)
 
-    async_response = MockObjectResponse()
+    async_response = AsyncMock()
+    async_response.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
 
     # Execute
 
@@ -414,7 +398,8 @@ async def test_download_attachment_when_unsupported_filetype_used_then_fail_down
     # Setup
     source = create_source(ConfluenceDataSource)
 
-    async_response = MockObjectResponse()
+    async_response = AsyncMock()
+    async_response.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
 
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
         with mock.patch(
