@@ -417,9 +417,9 @@ The number of rows to fetch on each request to the PostgreSQL. Default value is 
 
 The number of retry attempts after failed request to the PostgreSQL. Default value is `3`.
 
-##### `ssl_disabled`
+##### `ssl_enabled`
 
-Whether SSL verification will be disabled. Default value is `True`.
+SSL verification should be enabled or not. Default value is `False`.
 
 ##### `ssl_ca`
 
@@ -470,6 +470,260 @@ $ make ftest NAME=postgresql
 ℹ️ Users do not need to have a running Elasticsearch instance or a PostgreSQL source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock PostgreSQL source using the docker image.
 
 ℹ️ The e2e test uses default values defined in [Configure PostgreSQL connector](#configure-postgresql-connector)
+
+
+## Oracle Database Connector
+
+The [Elastic Oracle Database connector](../connectors/sources/oracle.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+
+### Availability and prerequisites
+
+⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
+Features in beta are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
+
+Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
+
+Oracle Database versions 18c, 19c and 21c are compatible with Elastic connector frameworks.
+
+**Prerequisites**
+
+- The database user requires `CONNECT` and `DBA` privileges and must be the owner of the tables to be indexed.
+
+### Setup and basic usage
+
+Complete the following steps to deploy the connector:
+
+1. [Gather Oracle Database details](#gather-oracle-database-details)
+2. [Configure Oracle Database connector](#configure-oracle-database-connector)
+
+#### Gather Oracle Database details
+
+Collect the information that is required to connect to your Oracle Database:
+
+- The server host address where the Oracle Database is hosted.
+- The port where the Oracle Database is hosted.
+- The username the connector will use to log in to the Oracle Database.
+- The password the connector will use to log in to the Oracle Database.
+- The SID of Oracle Database where the connector will query data.
+
+#### Configure Oracle Database connector
+
+The following configuration fields need to be provided for setting up the connector:
+
+##### `host`
+
+The server host address where the Oracle Database is hosted. Default value is `127.0.0.1`. Examples:
+
+  - `192.158.1.38`
+  - `demo.instance.demo-region.demo.service.com`
+
+##### `port`
+
+The port where the Oracle Database is hosted. Default value is `9090`. Note: For a secured connection, a user needs to configure a SSL port.
+
+  - `5432`
+  - `9090`
+
+    - ##### `oracle_protocol`
+
+      The protocol which the connector uses to establish a connection. Default value is `TCP`. Note: For a secured connection, a user needs to use `TCPS`.
+
+    - ##### `oracle_home`
+
+      Path of the Oracle home directory to run connector with thick mode for secured connection. By default connector will run on Thin Mode. Note: In case of unsecured connection, keep `oracle_home` field empty.
+
+    - ##### `wallet_configuration_path`
+
+      Path of the oracle configuration files. Only applicable when configuration files are not at the default location. By default files located at `$ORACLE_HOME/network/admin`. Note: If Wallet configuration files are located at default location, keep `wallet_configuration_path` field empty.
+
+##### `username`
+
+The username of the account for the Oracle Database. Default value is `admin`.
+
+##### `password`
+
+The password of the account to be used for the Oracle Database. Default value is `Password_123`.
+
+##### `database`
+
+The SID of Oracle Database. Default value is `xe`. Examples:
+
+  - `employee_database`
+  - `customer_database`
+
+##### `tables`
+
+Comma-separated list of tables. The Oracle Database connector will fetch data from all tables present in the configured database, if the value is `*`. Default value is `*`. Examples:
+
+  - `table_1, table_2`
+  - `*`
+
+##### `fetch_size`
+
+Number of rows to fetch on each request to Oracle Database. Default value is `50`.
+
+##### `retry_count`
+
+The number of retry attempts after failed request to Oracle Database. Default value is `3`.
+
+ℹ️ Default values exist for end-to-end testing only.
+
+### Setup for a secured connection with Oracle
+ - User needs to install the Oracle service on the system where the connector is running.
+ - Set the `oracle_home` parameter to the location of your Oracle home directory. If configuration files are not at the default location, set `wallet_configuration_path` parameter.
+  - Now create a directory to store the wallet.
+```shell
+$ mkdir $ORACLE_HOME/ssl_wallet
+```
+  - User needs to create `sqlnet.ora` at `$ORACLE_HOME/network/admin` location and add the following content.
+```
+WALLET_LOCATION = (SOURCE = (METHOD = FILE) (METHOD_DATA = (DIRECTORY = $ORACLE_HOME/ssl_wallet))) 
+SSL_CLIENT_AUTHENTICATION = FALSE 
+SSL_VERSION = 1.0 
+SSL_CIPHER_SUITES = (SSL_RSA_WITH_AES_256_CBC_SHA) 
+SSL_SERVER_DN_MATCH = ON
+```
+  - Then execute the following commands to create a wallet and attach an SSL certificate.
+```shell
+$ orapki wallet create -wallet path-to-oracle-home/ssl_wallet -auto_login_only
+
+$ orapki wallet add -wallet path-to-oracle-home/ssl_wallet -trusted_cert -cert path-to-oracle-home/ssl_wallet/root_ca.pem -auto_login_only
+```
+Replace the file name with your file.
+
+ℹ️ For better understanding, please refer following Amazon RDS [documentation](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Appendix.Oracle.Options.SSL.html). It is well documented.
+
+
+### Connector Limitations
+
+- If the value of the table's system change number (SCN) is not between the `min(SCN)` and `max(SCN)` values of the `SMON_SCN_TIME` table, the connector will not be able to retrieve the most recently updated time, and data will be indexed in every sync. For more details check out the following [documentation](https://community.oracle.com/tech/apps-infra/discussion/4076446/show-error-about-ora-08181-specified-number-is-not-a-valid-system-change-number-when-using-scn-t).
+- The Oracle Database connector does not allow the `sys` user as it contains 1000+ system tables which are irrelevant for users. If the user is working with `sys` user, the user needs to pass either `sysdba` or `sysoper` mode.
+- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
+- Filtering rules are not available in the present version. Currently, the filtering is controlled via ingest pipelines.
+
+### E2E Tests
+
+The framework provides a way to test ingestion through a connector against a real data source. This is called a functional test. To execute a functional test for the Oracle connector, run the following command:
+```shell
+$ make ftest NAME=oracle
+```
+
+ℹ️ Users do not need to have a running Elasticsearch instance or an Oracle source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Oracle source using the docker image.
+
+ℹ️ The e2e test uses default values defined in [Configure Oracle Database connector](#configure-oracle-database-connector)
+
+
+## Microsoft SQL Connector
+
+The [Elastic Microsoft SQL connector](../connectors/sources/mssql.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+
+### Availability and prerequisites
+
+⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
+Features in beta are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
+
+Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
+
+Microsoft SQL Server versions 2017, 2019, and Azure SQL, Amazon RDS for Microsoft SQL Server are compatible with Elastic connector frameworks.
+
+**Prerequisites**
+
+- The Microsoft SQL connector requires an ODBC driver to execute. Connector supports `Microsoft ODBC Driver 18`. To install ODBC driver please refer following [documentation](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-driver-manager).
+- Grant user with `sysadmin` server role.
+
+### Setup and basic usage
+
+Complete the following steps to deploy the connector:
+
+1. [Gather Microsoft SQL details](#gather-microsoft-sql-details)
+2. [Configure Microsoft SQL connector](#configure-microsoft-sql-connector)
+
+#### Gather Microsoft SQL details
+
+Collect the information that is required to connect to your Microsoft SQL Server:
+
+- The server host address where the Microsoft SQL Server is hosted.
+- The port where the Microsoft SQL Server is hosted.
+- The username the connector will use to log in to the Microsoft SQL Server.
+- The password the connector will use to log in to the Microsoft SQL Server.
+- The database name where the connector will query data.
+
+#### Configure Microsoft SQL connector
+
+The following configuration fields need to be provided for setting up the connector:
+
+##### `host`
+
+The server host address where the Microsoft SQL Server is hosted. Default value is `127.0.0.1`. Examples:
+
+  - `192.158.1.38`
+  - `demo.instance.demo-region.demo.service.com`
+
+##### `port`
+
+The port where the Microsoft SQL Server is hosted. Default value is `9090`. Examples:
+
+  - `5432`
+  - `9090`
+
+##### `username`
+
+The username of the account for Microsoft SQL Server. Default value is `admin`.
+
+##### `password`
+
+The password of the account to be used for the Microsoft SQL Server. Default value is `Password_123`.
+
+##### `database`
+
+Name of the Microsoft SQL Server database. Default value is `xe`. Examples:
+
+  - `employee_database`
+  - `customer_database`
+
+##### `tables`
+
+Comma-separated list of tables. The Microsoft SQL connector will fetch data from all tables present in the configured database, if the value is `*` . Default value is `*`. Examples:
+
+  - `table_1, table_2`
+  - `*`
+
+##### `fetch_size`
+
+The number of rows to fetch on each request to Microsoft SQL Server. Default value is `50`.
+
+##### `retry_count`
+
+The number of retry attempts after failed request to Microsoft SQL Server. Default value is `3`.
+
+##### `mssql_driver`
+
+Name of Microsoft ODBC Driver for SQL Server. User finds the name of the installed driver in `odbcinst.ini` file. To find the location of the `odbcinst.ini` file execute `odbcinst -j` command. Default value is `ODBC Driver 18 for SQL Server`.
+
+##### `secured_connection`
+
+Whether the connector should establish a secured connection. Default value is `False`.
+
+ℹ️ For secured connection Microsoft ODBC Driver for SQL Server uses the OpenSSL library, which gets a certificate from the Default Certificate Trust Store of OpenSSL. For more details check out the following [documentation](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/connection-string-keywords-and-data-source-names-dsns?view=sql-server-ver16#using-tlsssl)
+
+ℹ️ Default values exist for end-to-end testing only.
+
+### Connector Limitations
+
+- If the `last_user_update` of `sys.dm_db_index_usage_stats` table for specific table and database is not available then all data in that table will be synced.
+- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
+- Filtering rules are not available in the present version. Currently, the filtering is controlled via ingest pipelines.
+
+### E2E Tests
+
+The framework provides a way to test ingestion through a connector against a real data source. This is called a functional test. To execute a functional test for the Microsoft SQL connector, run the following command:
+```shell
+$ make ftest NAME=mssql
+```
+
+ℹ️ Users do not need to have a running Elasticsearch instance or a mssql source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Microsoft SQL source using the docker image.
+
+ℹ️ The e2e test uses default values defined in [Configure Microsoft SQL connector](#configure-microsoft-sql-connector)
 
 ## General Configuration
 
