@@ -17,7 +17,7 @@ from connectors.utils import iso_utc
 
 WILDCARD = "*"
 
-DEFAULT_FETCH_SIZE = 50
+DEFAULT_FETCH_SIZE = 30
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
 
