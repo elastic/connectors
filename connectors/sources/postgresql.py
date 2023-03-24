@@ -80,17 +80,14 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         postgresql_configuration.update(
             {
                 "ssl_enabled": {
-                    "display": "toggle",
-                    "label": "Enable SSL verification (true/false)",
-                    "order": 9,
-                    "type": "bool",
                     "value": DEFAULT_SSL_ENABLED,
+                    "label": "Enable SSL verification (true/false)",
+                    "type": "bool",
                 },
                 "ssl_ca": {
-                    "label": "SSL certificate",
-                    "order": 10,
-                    "type": "str",
                     "value": DEFAULT_SSL_CA,
+                    "label": "SSL certificate",
+                    "type": "str",
                 },
             }
         )
