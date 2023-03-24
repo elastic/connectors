@@ -383,7 +383,7 @@ async def test_download_attachment():
 
 
 @pytest.mark.asyncio
-async def test_download_attachment_when_filesize_is_large():
+async def test_download_attachment_when_filesize_is_large_then_download_skips():
     """Tests the download attachments method for file size greater than max limit."""
     # Setup
     source = create_source(ConfluenceDataSource)
@@ -409,7 +409,7 @@ async def test_download_attachment_when_filesize_is_large():
 
 
 @pytest.mark.asyncio
-async def test_download_attachment_for_unsupported_filetype():
+async def test_download_attachment_when_unsupported_filetype_used_then_fail_download_skips():
     """Tests the download attachments method for file type is not supported"""
     # Setup
     source = create_source(ConfluenceDataSource)

@@ -51,6 +51,7 @@ CHUNK_SIZE = 1024
 MAX_CONCURRENCY = 50
 QUEUE_SIZE = 1024
 QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
+END_SIGNAL = "FINISHED_TASK"
 
 
 class ConfluenceClient:
@@ -431,7 +432,8 @@ class ConfluenceDataSource(BaseDataSource):
         if not (self.enable_content_extraction and doit and attachment_size):
             return
         attachment_name = attachment["title"]
-        if os.path.splitext(attachment_name)[-1] not in TIKA_SUPPORTED_FILETYPES:
+        file_extension = os.path.splitext(attachment_name)[-1]
+        if file_extension not in TIKA_SUPPORTED_FILETYPES:
             logger.warning(f"{attachment_name} can't be extracted")
             return
 
@@ -487,13 +489,13 @@ class ConfluenceDataSource(BaseDataSource):
                     ),
                 )
             )
-        await self.queue.put("FINISHED_TASK")  # pyright: ignore
+        await self.queue.put(END_SIGNAL)  # pyright: ignore
 
     async def _space_coro(self):
         """Coroutine to add spaces documents to Queue"""
         async for space in self.fetch_spaces():
             await self.queue.put((space, None))  # pyright: ignore
-        await self.queue.put("FINISHED_TASK")  # pyright: ignore
+        await self.queue.put(END_SIGNAL)  # pyright: ignore
 
     async def _page_blog_coro(self, api_query):
         """Coroutine to add pages/blogposts to Queue
@@ -506,7 +508,7 @@ class ConfluenceDataSource(BaseDataSource):
             if attachment_count > 0:
                 await self.fetchers.put(partial(self._attachment_coro, copy(document)))
                 self.fetcher_count += 1
-        await self.queue.put("FINISHED_TASK")  # pyright: ignore
+        await self.queue.put(END_SIGNAL)  # pyright: ignore
 
     async def _consumer(self):
         """Async generator to process entries of the queue
@@ -516,7 +518,7 @@ class ConfluenceDataSource(BaseDataSource):
         """
         while self.fetcher_count > 0:
             _, item = await self.queue.get()
-            if item == "FINISHED_TASK":
+            if item == END_SIGNAL:
                 self.fetcher_count -= 1
             else:
                 yield item
