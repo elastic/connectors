@@ -36,7 +36,6 @@ FILE_SIZE_LIMIT = 10485760
 
 FETCH_SIZE = 100
 CHUNK_SIZE = 1024
-QUEUE_SIZE = 1024
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
 MAX_CONCURRENCY = 5
 MAX_CONCURRENT_DOWNLOADS = 50  # Max concurrent download supported by jira
@@ -82,7 +81,7 @@ class JiraDataSource(BaseDataSource):
         self.ssl_ctx = False
         self.session = None
         self.tasks = 0
-        self.queue = MemQueue(maxsize=QUEUE_SIZE, maxmemsize=QUEUE_MEM_SIZE)
+        self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
 
     @classmethod
@@ -280,7 +279,7 @@ class JiraDataSource(BaseDataSource):
                 url_name=url_name, start_at=start_at, max_results=FETCH_SIZE
             ):
                 response_json = await response.json()
-                total = response_json.get("total")
+                total = response_json["total"]
                 yield response_json
                 if start_at + FETCH_SIZE > total or total <= FETCH_SIZE:
                     should_paginate = False
