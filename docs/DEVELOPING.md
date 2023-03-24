@@ -640,7 +640,6 @@ Microsoft SQL Server versions 2017, 2019, and Azure SQL, Amazon RDS for Microsof
 
 **Prerequisites**
 
-- The Microsoft SQL connector requires an ODBC driver to execute. Connector supports `Microsoft ODBC Driver 18`. To install ODBC driver please refer following [documentation](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-driver-manager).
 - Grant user with `sysadmin` server role.
 
 ### Setup and basic usage
