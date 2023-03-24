@@ -73,16 +73,24 @@ class MSSQLDataSource(GenericBaseDataSource):
         mssql_configuration = super().get_default_configuration().copy()
         mssql_configuration.update(
             {
-                "schema": {"value": "dbo", "label": "Schema", "type": "str"},
-                "mssql_driver": {
-                    "value": "ODBC Driver 18 for SQL Server",
-                    "label": "Microsoft SQL Driver Name (ODBC Driver 18 for SQL Server)",
+                "schema": {
+                    "label": "Schema",
+                    "order": 9,
                     "type": "str",
+                    "value": "dbo",
+                },
+                "mssql_driver": {
+                    "label": "Microsoft SQL Driver Name (ODBC Driver 18 for SQL Server)",
+                    "order": 10,
+                    "type": "str",
+                    "value": "ODBC Driver 18 for SQL Server",
                 },
                 "secured_connection": {
-                    "value": SECURED_CONNECTION,
+                    "display": "toggle",
                     "label": "Connection will be secured or not",
+                    "order": 11,
                     "type": "bool",
+                    "value": SECURED_CONNECTION,
                 },
             }
         )
