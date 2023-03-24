@@ -4,18 +4,90 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+from abc import ABC, abstractmethod
 from functools import partial
 
 from asyncpg.exceptions._base import InternalClientError
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import iso_utc
 
+WILDCARD = "*"
+
 DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
+
+
+def configured_tables(tables):
+    """Split a string containing a comma-seperated list of tables by comma and strip the table names.
+
+    Filter out `None` and zero-length values from the tables.
+    If `tables` is a list return the list also without `None` and zero-length values.
+
+    Arguments:
+    - `tables`: string containing a comma-seperated list of tables or a list of tables
+    """
+
+    def table_filter(table):
+        return table is not None and len(table) > 0
+
+    return (
+        list(
+            filter(
+                lambda table: table_filter(table),
+                map(lambda table: table.strip(), tables.split(",")),
+            )
+        )
+        if isinstance(tables, str)
+        else list(filter(lambda table: table_filter(table), tables))
+    )
+
+
+def is_wildcard(tables):
+    return tables in (WILDCARD, [WILDCARD])
+
+
+class Queries(ABC):
+    """Class contains abstract methods for queries"""
+
+    @abstractmethod
+    def ping(self):
+        """Query to ping source"""
+        pass
+
+    @abstractmethod
+    def all_tables(self, **kwargs):
+        """Query to get all tables"""
+        pass
+
+    @abstractmethod
+    def table_primary_key(self, **kwargs):
+        """Query to get the primary key"""
+        pass
+
+    @abstractmethod
+    def table_data(self, **kwargs):
+        """Query to get the table data"""
+        pass
+
+    @abstractmethod
+    def table_last_update_time(self, **kwargs):
+        """Query to get the last update time of the table"""
+        pass
+
+    @abstractmethod
+    def table_data_count(self, **kwargs):
+        """Query to get the number of rows in the table"""
+        pass
+
+    @abstractmethod
+    def all_schemas(self):
+        """Query to get all schemas of database"""
+        pass
 
 
 class GenericBaseDataSource(BaseDataSource):
@@ -33,11 +105,12 @@ class GenericBaseDataSource(BaseDataSource):
         self.retry_count = self.configuration["retry_count"]
 
         # Connection related configurations
-        self.user = self.configuration["user"]
+        self.user = self.configuration["username"]
         self.password = self.configuration["password"]
         self.host = self.configuration["host"]
         self.port = self.configuration["port"]
         self.database = self.configuration["database"]
+        self.tables = self.configuration["tables"]
         self.is_async = False
         self.engine = None
         self.dialect = ""
@@ -53,43 +126,67 @@ class GenericBaseDataSource(BaseDataSource):
         """
         return {
             "host": {
-                "value": "127.0.0.1",
                 "label": "Host",
+                "order": 1,
                 "type": "str",
+                "value": "127.0.0.1",
             },
             "port": {
-                "value": 9090,
+                "display": "numeric",
                 "label": "Port",
+                "order": 2,
                 "type": "int",
+                "value": 9090,
             },
-            "user": {
-                "value": "admin",
+            "username": {
                 "label": "Username",
+                "order": 3,
                 "type": "str",
+                "value": "admin",
             },
             "password": {
-                "value": "Password_123",
                 "label": "Password",
+                "order": 4,
+                "sensitive": True,
                 "type": "str",
+                "value": "Password_123",
             },
             "database": {
-                "value": "xe",
-                "label": "Databases",
+                "label": "Database",
+                "order": 5,
                 "type": "str",
+                "validations": [],
+                "value": "xe",
+            },
+            "tables": {
+                "display": "textarea",
+                "label": "Comma-separated list of tables",
+                "options": [],
+                "order": 6,
+                "type": "list",
+                "value": WILDCARD,
             },
             "fetch_size": {
-                "value": DEFAULT_FETCH_SIZE,
+                "default_value": DEFAULT_FETCH_SIZE,
+                "display": "numeric",
                 "label": "Rows fetched per request",
+                "order": 7,
+                "required": False,
                 "type": "int",
+                "value": DEFAULT_FETCH_SIZE,
             },
             "retry_count": {
-                "value": DEFAULT_RETRY_COUNT,
+                "default_value": DEFAULT_RETRY_COUNT,
+                "display": "numeric",
                 "label": "Retries per request",
+                "order": 8,
+                "required": False,
                 "type": "int",
+                "value": DEFAULT_RETRY_COUNT,
             },
         }
 
-    def _validate_configuration(self):
+    async def validate_config(self):
         """Validates the configuration parameters
 
         Raises:
@@ -98,9 +195,10 @@ class GenericBaseDataSource(BaseDataSource):
         connection_fields = [
             "host",
             "port",
-            "user",
+            "username",
             "password",
             "database",
+            "tables",
         ]
 
         if empty_connection_fields := [
@@ -116,16 +214,21 @@ class GenericBaseDataSource(BaseDataSource):
         ):
             raise Exception("Configured port has to be an integer.")
 
-        if self.dialect == "Postgresql" and not (
-            self.configuration["ssl_disabled"] or self.configuration["ssl_ca"]
+        if (
+            self.dialect == "Postgresql"
+            and self.configuration["ssl_enabled"]
+            and (
+                self.configuration["ssl_ca"] == ""
+                or self.configuration["ssl_ca"] is None
+            )
         ):
             raise Exception("SSL certificate must be configured.")
 
-    async def execute_query(self, query_name, fetch_many=False, **query_kwargs):
+    async def execute_query(self, query, fetch_many=False, **kwargs):
         """Executes a query and yield rows
 
         Args:
-            query_name (str): Name of query.
+            query (str): Query.
             fetch_many (bool): Flag to use fetchmany method. Defaults to False.
 
         Raises:
@@ -134,7 +237,6 @@ class GenericBaseDataSource(BaseDataSource):
         Yields:
             list: Column names and query response
         """
-        query = self.queries[query_name].format(**query_kwargs)
         size = self.configuration["fetch_size"]
 
         retry = 1
@@ -151,14 +253,14 @@ class GenericBaseDataSource(BaseDataSource):
                 if fetch_many:
                     # sending back column names only once
                     if yield_once:
-                        if query_kwargs["schema"]:
+                        if kwargs["schema"] is not None:
                             yield [
-                                f"{query_kwargs['schema']}_{query_kwargs['table']}_{column}".lower()
+                                f"{kwargs['schema']}_{kwargs['table']}_{column}".lower()
                                 for column in cursor.keys()
                             ]
                         else:
                             yield [
-                                f"{query_kwargs['table']}_{column}".lower()
+                                f"{kwargs['table']}_{column}".lower()
                                 for column in cursor.keys()
                             ]
                         yield_once = False
@@ -178,7 +280,7 @@ class GenericBaseDataSource(BaseDataSource):
                 else:
                     yield cursor.fetchall()
                 break
-            except InternalClientError:
+            except (InternalClientError, ProgrammingError):
                 raise
             except Exception as exception:
                 logger.warning(
@@ -199,7 +301,9 @@ class GenericBaseDataSource(BaseDataSource):
             cursor: Asynchronous cursor
         """
         try:
-            async with self.engine.connect() as connection:
+            if self.engine is None:
+                self._create_engine()
+            async with self.engine.connect() as connection:  # pyright: ignore
                 cursor = await connection.execute(text(query))
                 return cursor
         except Exception as exception:
@@ -224,10 +328,13 @@ class GenericBaseDataSource(BaseDataSource):
             cursor: Synchronous cursor
         """
         try:
+            if self.engine is None:
+                self._create_engine()
             loop = asyncio.get_running_loop()
-            self.connection = await loop.run_in_executor(
-                executor=None, func=self.engine.connect
-            )
+            if self.connection is None:
+                self.connection = await loop.run_in_executor(
+                    executor=None, func=self.engine.connect  # pyright: ignore
+                )
             cursor = await loop.run_in_executor(
                 executor=None,
                 func=partial(self.connection.execute, statement=text(query)),
@@ -247,11 +354,12 @@ class GenericBaseDataSource(BaseDataSource):
         """Verify the connection with the database-server configured by user"""
         logger.info("Validating the Connector Configuration...")
         try:
-            self._validate_configuration()
-            self._create_engine()
+            if self.queries is None:
+                raise NotImplementedError
+
             await anext(
                 self.execute_query(
-                    query_name="PING",
+                    query=self.queries.ping(),
                 )
             )
             logger.info(f"Successfully connected to {self.dialect}.")
@@ -269,22 +377,27 @@ class GenericBaseDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
         try:
+            if self.queries is None:
+                raise NotImplementedError
+
             [[row_count]] = await anext(
                 self.execute_query(
-                    query_name="TABLE_DATA_COUNT",
-                    schema=schema,
-                    table=table,
+                    query=self.queries.table_data_count(
+                        schema=schema,
+                        table=table,
+                    ),
                 )
             )
             if row_count > 0:
                 # Query to get the table's primary key
                 columns = await anext(
                     self.execute_query(
-                        query_name="TABLE_PRIMARY_KEY",
-                        user=self.user.upper(),
-                        database=self.database,
-                        schema=schema,
-                        table=table,
+                        query=self.queries.table_primary_key(
+                            user=self.user.upper(),
+                            database=self.database,
+                            schema=schema,
+                            table=table,
+                        ),
                     )
                 )
                 if schema:
@@ -303,10 +416,11 @@ class GenericBaseDataSource(BaseDataSource):
                     try:
                         last_update_time = await anext(
                             self.execute_query(
-                                query_name="TABLE_LAST_UPDATE_TIME",
-                                database=self.database,
-                                schema=schema,
-                                table=table,
+                                query=self.queries.table_last_update_time(
+                                    database=self.database,
+                                    schema=schema,
+                                    table=table,
+                                ),
                             )
                         )
                         last_update_time = last_update_time[0][0]
@@ -314,7 +428,10 @@ class GenericBaseDataSource(BaseDataSource):
                         logger.warning(f"Unable to fetch last_updated_time for {table}")
                         last_update_time = None
                     streamer = self.execute_query(
-                        query_name="TABLE_DATA",
+                        query=self.queries.table_data(
+                            schema=schema,
+                            table=table,
+                        ),
                         fetch_many=True,
                         schema=schema,
                         table=table,
@@ -348,7 +465,7 @@ class GenericBaseDataSource(BaseDataSource):
                     )
             else:
                 logger.warning(f"No rows found for {table}.")
-        except InternalClientError as exception:
+        except (InternalClientError, ProgrammingError) as exception:
             logger.warning(
                 f"Something went wrong while fetching document for table {table}. Error: {exception}"
             )
@@ -362,23 +479,15 @@ class GenericBaseDataSource(BaseDataSource):
         Yields:
             Dict: Row document to index
         """
-        # Query to get all table names from a database
-        list_of_tables = await anext(
-            self.execute_query(
-                query_name="ALL_TABLE",
-                user=self.user.upper(),
-                database=self.database,
+        tables_to_fetch = await self.get_tables_to_fetch(schema)
+
+        for table in tables_to_fetch:
+            logger.debug(f"Found table: {table} in database: {self.database}.")
+            async for row in self.fetch_documents(
+                table=table,
                 schema=schema,
-            )
-        )
-        if len(list_of_tables) > 0:
-            for [table_name] in list_of_tables:
-                logger.debug(f"Found table: {table_name} in database: {self.database}.")
-                async for row in self.fetch_documents(
-                    table=table_name,
-                    schema=schema,
-                ):
-                    yield row
+            ):
+                yield row
         else:
             if schema:
                 logger.warning(
@@ -386,3 +495,24 @@ class GenericBaseDataSource(BaseDataSource):
                 )
             else:
                 logger.warning(f"Fetched 0 tables for the database: {self.database}")
+
+    async def get_tables_to_fetch(self, schema):
+        tables = configured_tables(self.tables)
+        if self.queries is None:
+            raise NotImplementedError
+        return (
+            map(
+                lambda table: table[0],
+                await anext(
+                    self.execute_query(
+                        query=self.queries.all_tables(
+                            user=self.user.upper(),
+                            database=self.database,
+                            schema=schema,
+                        )
+                    )
+                ),
+            )
+            if is_wildcard(tables)
+            else tables
+        )
