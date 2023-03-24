@@ -148,6 +148,22 @@ def assert_re(expr, items):
 
 
 def pytest_itemcollected(item):
+    """
+    This code is here to format the output of verbose run of pytest.
+
+    What it does is - it receives a object representing a test that will be ran in {item} argument.
+    Test can be located either just in the module, or inside of the class,
+    or inside of the class inside of the class inside of the class, etc.
+
+    So the idea of the code inside is to collect the name/docstring of current node
+    and then repeat it recursively until an instance of _pytest.python.Module is met.
+
+    It gives the following results:
+    <module>.<class>.<test> or <module>.<test> or <module>.<class>.<class>.<test>
+
+    It tries to use node's docstring if there's one, otherwise its name (or class name for modules)
+    """
+
     def _collect_recursively(n):
         from _pytest.python import Module
 
