@@ -38,6 +38,7 @@ native_service_types:
   - dir
   - sharepoint
   - mssql
+  - jira
 
 
 # Connector client settings
@@ -56,3 +57,4 @@ sources:
   oracle: connectors.sources.oracle:OracleDataSource
   sharepoint: connectors.sources.sharepoint:SharepointDataSource
   mssql: connectors.sources.mssql:MSSQLDataSource
+  jira: connectors.sources.jira:JiraDataSource
