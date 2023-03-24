@@ -26,6 +26,9 @@ MAX_CHUNK_SIZE = 1048576
 DEFAULT_MAX_FILE_SIZE = 10485760
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_CONTENT_EXTRACTION = True
+DEFAULT_MAX_RETRY_ATTEMPS = 5
+DEFAULT_CONNECTION_TIMEOUT = 90
+DEFAULT_READ_TIMEOUT = 90
 
 if "AWS_ENDPOINT_URL" in os.environ:
     AWS_ENDPOINT = f"{os.environ['AWS_ENDPOINT_URL']}:{os.environ['AWS_PORT']}"
@@ -231,33 +234,53 @@ class S3DataSource(BaseDataSource):
         """
         return {
             "buckets": {
-                "value": "ent-search-ingest-dev",
+                "display": "textarea",
                 "label": "AWS Buckets",
+                "order": 1,
                 "type": "list",
+                "value": "ent-search-ingest-dev",
             },
             "read_timeout": {
-                "value": 90,
+                "default_value": DEFAULT_READ_TIMEOUT,
+                "display": "numeric",
                 "label": "Read timeout",
+                "order": 2,
+                "required": False,
                 "type": "int",
+                "value": DEFAULT_READ_TIMEOUT,
             },
             "connect_timeout": {
-                "value": 90,
+                "default_value": DEFAULT_CONNECTION_TIMEOUT,
+                "display": "numeric",
                 "label": "Connection timeout",
+                "order": 3,
+                "required": False,
                 "type": "int",
+                "value": DEFAULT_CONNECTION_TIMEOUT,
             },
             "max_attempts": {
-                "value": 5,
+                "default_value": DEFAULT_MAX_RETRY_ATTEMPS,
+                "display": "numeric",
                 "label": "Maximum retry attempts",
+                "order": 4,
+                "required": False,
                 "type": "int",
+                "value": DEFAULT_MAX_RETRY_ATTEMPS,
             },
             "page_size": {
-                "value": DEFAULT_PAGE_SIZE,
+                "default_value": DEFAULT_PAGE_SIZE,
+                "display": "numeric",
                 "label": "Maximum size of page",
+                "order": 5,
+                "required": False,
                 "type": "int",
+                "value": DEFAULT_PAGE_SIZE,
             },
             "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Enable content extraction (true/false)",
+                "display": "toggle",
+                "label": "Enable content extraction",
+                "order": 6,
                 "type": "bool",
+                "value": DEFAULT_CONTENT_EXTRACTION,
             },
         }
