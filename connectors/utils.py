@@ -412,9 +412,7 @@ def ssl_context(certificate):
     Returns:
         ssl_context: SSL context with certificate
     """
-    certificate = certificate.replace(" ", "\n")
-    certificate = " ".join(certificate.split("\n", 1))
-    certificate = " ".join(certificate.rsplit("\n", 1))
+    certificate = get_pem_format(certificate, max_split=1)
     ctx = ssl.create_default_context()
     ctx.load_verify_locations(cadata=certificate)
     return ctx
