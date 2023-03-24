@@ -183,19 +183,27 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         }
         return {
             "service_account_credentials": {
-                "value": json.dumps(default_credentials),
+                "display": "textarea",
                 "label": "Google Cloud service account json",
+                "order": 1,
                 "type": "str",
+                "value": json.dumps(default_credentials),
             },
             "retry_count": {
-                "value": DEFAULT_RETRY_COUNT,
+                "default_value": DEFAULT_RETRY_COUNT,
+                "display": "numeric",
                 "label": "Maximum retries for failed requests",
+                "order": 2,
+                "required": False,
                 "type": "int",
+                "value": DEFAULT_RETRY_COUNT,
             },
             "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Enable content extraction (true/false)",
+                "display": "toggle",
+                "label": "Enable content extraction",
+                "order": 3,
                 "type": "bool",
+                "value": DEFAULT_CONTENT_EXTRACTION,
             },
         }
 
