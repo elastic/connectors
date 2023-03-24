@@ -17,8 +17,6 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 
-#
-
 
 class MongoAdvancedRulesValidator(AdvancedRulesValidator):
     """
@@ -64,14 +62,13 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
             "find": FIND_SCHEMA_DEFINITION,
         },
         "additionalProperties": False,
-        # exactly one property -> only "aggregate" OR "find" allowed
-        "minProperties": 1,
+        # at most one property -> only "aggregate" OR "find" allowed
         "maxProperties": 1,
     }
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def validate(self, advanced_rules):
+    async def validate(self, advanced_rules):
         try:
             MongoAdvancedRulesValidator.SCHEMA(advanced_rules)
 
@@ -110,37 +107,51 @@ class MongoDataSource(BaseDataSource):
 
         self.client = AsyncIOMotorClient(host, **client_params)
 
-        self.db = self.client[self.configuration["database"]]
-
     @classmethod
     def get_default_configuration(cls):
         return {
-            "host": {
-                "value": "mongodb://127.0.0.1:27021",
-                "label": "Server Hostname",
+            "collection": {
+                "label": "Collection",
+                "order": 1,
                 "type": "str",
+                "value": "sample_collection",
             },
             "database": {
-                "value": "sample_database",
                 "label": "Database",
+                "order": 2,
                 "type": "str",
+                "value": "sample_database",
             },
-            "collection": {
-                "value": "sample_collection",
-                "label": "Collection",
-                "type": "str",
-            },
-            "user": {"label": "Username", "type": "str", "value": ""},
-            "password": {"label": "Password", "type": "str", "value": ""},
             "direct_connection": {
-                "label": "Direct connection? (true/false)",
+                "display": "toggle",
+                "label": "Direct connection?",
+                "order": 3,
                 "type": "bool",
                 "value": True,
+            },
+            "host": {
+                "label": "Server Hostname",
+                "order": 4,
+                "type": "str",
+                "value": "mongodb://127.0.0.1:27021",
+            },
+            "user": {
+                "label": "Username",
+                "order": 5,
+                "type": "str",
+                "value": "",
+            },
+            "password": {
+                "label": "Password",
+                "order": 6,
+                "sensitive": True,
+                "type": "str",
+                "value": "",
             },
         }
 
     def advanced_rules_validators(self):
-        return MongoAdvancedRulesValidator()
+        return [MongoAdvancedRulesValidator()]
 
     async def ping(self):
         await self.client.admin.command("ping")
@@ -167,10 +178,38 @@ class MongoDataSource(BaseDataSource):
         return doc
 
     async def get_docs(self, filtering=None):
+        db = self.client[self.configuration["database"]]
+
         logger.debug("Grabbing collection info")
-        collection = self.db[self.configuration["collection"]]
+        collection = db[self.configuration["collection"]]
 
         async for doc in collection.find():
             yield self.serialize(doc), None
 
         self._dirty = False
+
+    async def validate_config(self):
+        client = self.client
+        configured_database_name = self.configuration["database"]
+        configured_collection_name = self.configuration["collection"]
+
+        existing_database_names = await client.list_database_names()
+
+        logger.debug(f"Existing databases: {existing_database_names}")
+
+        if configured_database_name not in existing_database_names:
+            raise Exception(
+                f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}"
+            )
+
+        database = client[configured_database_name]
+
+        existing_collection_names = await database.list_collection_names()
+        logger.debug(
+            f"Existing collections in {configured_database_name}: {existing_collection_names}"
+        )
+
+        if configured_collection_name not in existing_collection_names:
+            raise Exception(
+                f"Collection ({configured_collection_name}) does not exist within database {configured_database_name}. Existing collections: {', '.join(existing_collection_names)}"
+            )

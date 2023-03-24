@@ -14,6 +14,7 @@ import ssl
 import tempfile
 import time
 import timeit
+from datetime import datetime
 from unittest.mock import Mock, patch
 
 import pytest
@@ -27,12 +28,15 @@ from connectors.utils import (
     MemQueue,
     RetryStrategy,
     convert_to_b64,
+    evaluate_timedelta,
     get_base64_value,
     get_pem_format,
     get_size,
+    is_expired,
     next_run,
     retryable,
     ssl_context,
+    url_encode,
     validate_index_name,
 )
 
@@ -357,6 +361,36 @@ def test_ssl_context():
     # Execute
     with patch.object(ssl, "create_default_context", return_value=MockSSL()):
         ssl_context(certificate=certificate)
+
+
+def test_url_encode():
+    """Test the url_encode method by passing a string"""
+    # Execute
+    encode_response = url_encode("http://ascii.cl?parameter='Click on URL Decode!'")
+    # Assert
+    assert (
+        encode_response
+        == "http%3A%2F%2Fascii.cl%3Fparameter%3D'Click%20on%20URL%20Decode%21'"
+    )
+
+
+def test_is_expired():
+    """This method checks whether token expires or not"""
+    # Execute
+    expires_at = datetime.fromisoformat("2023-02-10T09:02:23.629821")
+    actual_response = is_expired(expires_at=expires_at)
+    # Assert
+    assert actual_response is True
+
+
+@freeze_time("2023-02-18 14:25:26.158843", tz_offset=-4)
+def test_evaluate_timedelta():
+    """This method tests adding seconds to the current utc time"""
+    # Execute
+    expected_response = evaluate_timedelta(seconds=86399, time_skew=20)
+
+    # Assert
+    assert expected_response == "2023-02-19T14:25:05.158843"
 
 
 def test_get_pem_format():
