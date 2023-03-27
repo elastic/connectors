@@ -21,7 +21,6 @@ from connectors.byoc import (
     Status,
     SyncJobIndex,
 )
-from connectors.byoei import ElasticServer
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.services.base import BaseService
