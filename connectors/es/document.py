@@ -42,4 +42,7 @@ class ESDocument:
         return value
 
     async def reload(self):
-        return await self.index.fetch_by_id(self.id)
+        doc_source = await self.index.fetch_response_by_id(self.id)
+        self._seq_no = doc_source.get("_seq_no")
+        self._primary_term = doc_source.get("_primary_term")
+        self._source = doc_source.get("_source", {})
