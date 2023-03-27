@@ -87,9 +87,16 @@ class JobSchedulingService(BaseService):
         logger.debug(f"Connector status is {connector.status}")
 
         # we trigger a sync
-        if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
-            # we can't sync in that state
-            logger.info(f"Can't sync with status `{connector.status.value}`")
+        if connector.status == Status.CREATED:
+            logger.info(
+                f'Connector for {connector.service_type}(id: "{connector.id}") has just been created and cannot sync. Wait for Kibana to initialise connector correctly before proceeding.'
+            )
+            return
+
+        if connector.status == Status.NEEDS_CONFIGURATION:
+            logger.info(
+                f'Connector for {connector.service_type}(id: "{connector.id}") is not configured yet. Finish connector configuration in Kibana to make it possible to run a sync.'
+            )
             return
 
         if connector.service_type not in self.source_klass_dict:
