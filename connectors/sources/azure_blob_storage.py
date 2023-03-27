@@ -58,10 +58,6 @@ class AzureBlobStorageDataSource(BaseDataSource):
         Raises:
             Exception: Invalid configured concurrent_downloads
         """
-        if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
-            raise Exception(
-                f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
-            )
         options["concurrent_downloads"] = self.concurrent_downloads
 
     @classmethod
@@ -117,15 +113,12 @@ class AzureBlobStorageDataSource(BaseDataSource):
             },
         }
 
-    def _configure_connection_string(self):
-        """Validates whether user input is empty or not for configuration fields and generate connection string
+    async def validate_config(self):
+        if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
+            raise Exception(
+                f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
+            )
 
-        Raises:
-            Exception: Configured keys can't be empty
-
-        Returns:
-            str: Connection string with user input configuration fields
-        """
         keys = ["account_name", "account_key", "blob_endpoint"]
         empty_configuration_fields = list(
             filter(lambda field: self.configuration[field] == "", keys)
@@ -136,11 +129,18 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 f"Configured keys: {empty_configuration_fields} can't be empty."
             )
 
+    def _configure_connection_string(self):
+        """Generates connection string for ABS
+
+        Returns:
+            str: Connection string with user input configuration fields
+        """
+
         return f'AccountName={self.configuration["account_name"]};AccountKey={self.configuration["account_key"]};BlobEndpoint={self.configuration["blob_endpoint"]}'
 
     async def ping(self):
         """Verify the connection with Azure Blob Storage"""
-        logger.info("Validating configurations & Generating connection string...")
+        logger.info("Generating connection string...")
         self.connection_string = self._configure_connection_string()
         try:
             async with BlobServiceClient.from_connection_string(

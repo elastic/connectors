@@ -5,6 +5,7 @@
 #
 """MySQL source module responsible to fetch documents from MySQL"""
 import ssl
+from contextlib import asynccontextmanager
 
 import aiomysql
 
@@ -91,7 +92,6 @@ class MySqlDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self._sleeps = CancellableSleeps()
         self.retry_count = self.configuration["retry_count"]
-        self.connection_pool = None
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
         self.database = self.configuration["database"]
@@ -182,11 +182,6 @@ class MySqlDataSource(BaseDataSource):
 
     async def close(self):
         self._sleeps.cancel()
-        if self.connection_pool is None:
-            return
-        self.connection_pool.close()
-        await self.connection_pool.wait_closed()
-        self.connection_pool = None
 
     async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields and validate type for port
@@ -230,9 +225,8 @@ class MySqlDataSource(BaseDataSource):
         ctx.load_verify_locations(cadata=pem_format)
         return ctx
 
-    async def ping(self):
-        """Verify the connection with MySQL server"""
-        logger.info("Validating MySQL Configuration...")
+    @asynccontextmanager
+    async def with_connection_pool(self):
         connection_string = {
             "host": self.configuration["host"],
             "port": int(self.configuration["port"]),
@@ -244,16 +238,33 @@ class MySqlDataSource(BaseDataSource):
             if self.ssl_enabled
             else None,
         }
-        logger.info("Pinging MySQL...")
-        if self.connection_pool is None:
-            self.connection_pool = await aiomysql.create_pool(**connection_string)
+
+        connection_pool = None
+
         try:
-            async with self.connection_pool.acquire() as connection:
-                await connection.ping()
-                logger.info("Successfully connected to the MySQL Server.")
+            connection_pool = await aiomysql.create_pool(**connection_string)
         except Exception:
-            logger.exception("Error while connecting to the MySQL Server.")
+            logger.error("Failed to create connection pool.")
             raise
+
+        try:
+            yield connection_pool
+        finally:
+            connection_pool.close()
+            await connection_pool.wait_closed()
+
+    async def ping(self):
+        """Verify the connection with MySQL server"""
+
+        logger.info("Pinging MySQL...")
+        async with self.with_connection_pool() as connection_pool:
+            try:
+                async with connection_pool.acquire() as connection:
+                    await connection.ping()
+                    logger.info("Successfully connected to the MySQL Server.")
+            except Exception:
+                logger.exception("Error while connecting to the MySQL Server.")
+                raise
 
     async def _connect(self, query, fetch_many=False, **query_kwargs):
         """Executes the passed query on the MySQL server.
@@ -276,59 +287,64 @@ class MySqlDataSource(BaseDataSource):
         rows_fetched = 0
         cursor_position = 0
 
-        while retry <= self.retry_count:
-            try:
-                async with self.connection_pool.acquire() as connection:
-                    async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
-                        await cursor.execute(formatted_query)
+        async with self.with_connection_pool() as connection_pool:
+            while retry <= self.retry_count:
+                try:
+                    async with connection_pool.acquire() as connection:
+                        async with connection.cursor(
+                            aiomysql.cursors.SSCursor
+                        ) as cursor:
+                            await cursor.execute(formatted_query)
 
-                        if fetch_many:
-                            # sending back column names only once
-                            if yield_once:
-                                yield [
-                                    f"{query_kwargs['database']}_{query_kwargs['table']}_{column[0]}"
-                                    for column in cursor.description
-                                ]
-                                yield_once = False
+                            if fetch_many:
+                                # sending back column names only once
+                                if yield_once:
+                                    yield [
+                                        f"{query_kwargs['database']}_{query_kwargs['table']}_{column[0]}"
+                                        for column in cursor.description
+                                    ]
+                                    yield_once = False
 
-                            # setting cursor position where it was failed
-                            if cursor_position:
-                                await cursor.scroll(cursor_position, mode="absolute")
-
-                            while True:
-                                rows = await cursor.fetchmany(size=size)
-                                rows_length = len(rows)
-
-                                # resetting cursor position & retry to 0 for next batch
+                                # setting cursor position where it was failed
                                 if cursor_position:
-                                    cursor_position = retry = 0
+                                    await cursor.scroll(
+                                        cursor_position, mode="absolute"
+                                    )
 
-                                if not rows_length:
-                                    break
+                                while True:
+                                    rows = await cursor.fetchmany(size=size)
+                                    rows_length = len(rows)
 
-                                for row in rows:
-                                    yield row
+                                    # resetting cursor position & retry to 0 for next batch
+                                    if cursor_position:
+                                        cursor_position = retry = 0
 
-                                rows_fetched += rows_length
-                                await self._sleeps.sleep(0)
-                        else:
-                            yield await cursor.fetchall()
-                        break
+                                    if not rows_length:
+                                        break
 
-            except IndexError as exception:
-                logger.exception(
-                    f"None of responses fetched from {rows_fetched} rows. Exception: {exception}"
-                )
-                break
-            except Exception as exception:
-                logger.warning(
-                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
-                )
-                if retry == self.retry_count:
-                    raise exception
-                cursor_position = rows_fetched
-                await self._sleeps.sleep(RETRY_INTERVAL**retry)
-                retry += 1
+                                    for row in rows:
+                                        yield row
+
+                                    rows_fetched += rows_length
+                                    await self._sleeps.sleep(0)
+                            else:
+                                yield await cursor.fetchall()
+                            break
+
+                except IndexError as exception:
+                    logger.exception(
+                        f"None of responses fetched from {rows_fetched} rows. Exception: {exception}"
+                    )
+                    break
+                except Exception as exception:
+                    logger.warning(
+                        f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
+                    )
+                    if retry == self.retry_count:
+                        raise exception
+                    cursor_position = rows_fetched
+                    await self._sleeps.sleep(RETRY_INTERVAL**retry)
+                    retry += 1
 
     async def fetch_all_tables(self):
         return await anext(self._connect(query=QUERIES["ALL_TABLE"]))
