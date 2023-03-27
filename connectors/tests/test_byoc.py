@@ -702,11 +702,8 @@ async def test_prepare(mock_responses):
         async def update(self, doc_id, doc):
             pass
 
-        async def fetch_by_id(self, doc_id):
-            return Connector(
-                self,
-                connector_doc_after_prepare,
-            )
+        async def fetch_response_by_id(self, doc_id):
+            return connector_doc_after_prepare
 
     # generic empty doc created by the user through the Kibana UI
     # when it's created that way, the service type is None,
@@ -761,6 +758,7 @@ async def test_connector_validate_filtering_not_edited(patch_logger):
 async def test_connector_validate_filtering_invalid(patch_logger):
     index = Mock()
     index.update = AsyncMock()
+    index.fetch_response_by_id = AsyncMock()
     validation_result = FilteringValidationResult(
         state=FilteringValidationState.INVALID,
         errors=[FilterValidationError(ids=[1], messages="something wrong")],
@@ -788,12 +786,14 @@ async def test_connector_validate_filtering_invalid(patch_logger):
     index.update.assert_awaited_with(
         doc_id=CONNECTOR_ID, doc=expected_validation_update_doc
     )
+    index.fetch_response_by_id.assert_awaited()
 
 
 @pytest.mark.asyncio
 async def test_connector_validate_filtering_valid(patch_logger):
     index = Mock()
     index.update = AsyncMock()
+    index.fetch_response_by_id = AsyncMock()
     validation_result = FilteringValidationResult()
     validator = Mock()
     validator.validate_filtering = AsyncMock(return_value=validation_result)
@@ -820,6 +820,7 @@ async def test_connector_validate_filtering_valid(patch_logger):
     index.update.assert_awaited_with(
         doc_id=CONNECTOR_ID, doc=expected_validation_update_doc
     )
+    index.fetch_response_by_id.assert_awaited()
 
 
 @pytest.mark.parametrize(
