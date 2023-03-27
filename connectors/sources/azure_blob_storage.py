@@ -73,34 +73,47 @@ class AzureBlobStorageDataSource(BaseDataSource):
         """
         return {
             "account_name": {
-                "value": "devstoreaccount1",
                 "label": "Azure Blob Storage account name",
+                "order": 1,
                 "type": "str",
+                "value": "devstoreaccount1",
             },
             "account_key": {
-                "value": "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==",
                 "label": "Azure Blob Storage account key",
+                "order": 2,
                 "type": "str",
+                "value": "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==",
             },
             "blob_endpoint": {
-                "value": "http://127.0.0.1:10000/devstoreaccount1",
                 "label": "Azure Blob Storage blob endpoint",
+                "order": 3,
                 "type": "str",
+                "value": "http://127.0.0.1:10000/devstoreaccount1",
             },
             "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Enable content extraction (true/false)",
+                "display": "toggle",
+                "label": "Enable content extraction",
+                "order": 4,
                 "type": "bool",
+                "value": DEFAULT_CONTENT_EXTRACTION,
             },
             "retry_count": {
-                "value": DEFAULT_RETRY_COUNT,
+                "default_value": DEFAULT_RETRY_COUNT,
+                "display": "numeric",
                 "label": "Retries per request",
+                "order": 5,
+                "required": False,
                 "type": "int",
+                "value": DEFAULT_RETRY_COUNT,
             },
             "concurrent_downloads": {
-                "value": MAX_CONCURRENT_DOWNLOADS,
+                "default_value": MAX_CONCURRENT_DOWNLOADS,
+                "display": "numeric",
                 "label": "Maximum concurrent downloads",
+                "order": 6,
+                "required": False,
                 "type": "int",
+                "value": MAX_CONCURRENT_DOWNLOADS,
             },
         }
 

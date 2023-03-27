@@ -23,6 +23,8 @@ class ESDocument:
             raise InvalidDocumentSourceError(
                 f"Invalid type found for id: {type(self.id).__name__}, expected: {str.__name__}"
             )
+        self._seq_no = doc_source.get("_seq_no")
+        self._primary_term = doc_source.get("_primary_term")
         self._source = doc_source.get("_source", {})
         if not isinstance(self._source, dict):
             raise InvalidDocumentSourceError(
