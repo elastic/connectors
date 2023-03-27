@@ -8,6 +8,7 @@ import time
 
 from connectors.byoc import JobStatus
 from connectors.es import Mappings
+from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 
 
@@ -144,7 +145,11 @@ class SyncJobRunner:
         else:
             await self.sync_job.done(ingestion_stats=ingestion_stats)
 
-        self.sync_job = await self.sync_job.reload()
+        try:
+            await self.sync_job.reload()
+        except DocumentNotFoundError as e:
+            logger.error(f"Failed to reload sync job {self.job_id}. Error: {e}")
+            self.sync_job = None
         await self.connector.sync_done(self.sync_job)
         logger.info(
             f"[{self.job_id}] Sync done: {indexed_count} indexed, {doc_deleted} "

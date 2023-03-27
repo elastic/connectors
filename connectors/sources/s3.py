@@ -72,7 +72,7 @@ class S3DataSource(BaseDataSource):
         ) as s3:
             yield s3
 
-    def _validate_configuration(self):
+    def validate_config(self):
         """Validates whether user input is empty or not for configuration fields
 
         Raises:
@@ -83,8 +83,6 @@ class S3DataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with AWS"""
-        logger.info("Validating Amazon S3 Configuration...")
-        self._validate_configuration()
         try:
             async with self.client() as s3:
                 self.bucket_list = await s3.list_buckets()
