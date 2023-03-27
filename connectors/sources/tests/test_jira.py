@@ -131,58 +131,6 @@ class StreamReaderAsyncMock(AsyncMock):
         self.content = StreamReader
 
 
-# class MockResponse:
-#     """Mock class for ClientResponse"""
-
-#     def __init__(self, json, status):
-#         self._json = json
-#         self.status = status
-
-#     async def json(self):
-#         """This Method is used to return a json response"""
-#         return self._json
-
-#     async def __aexit__(self, exc_type, exc, tb):
-#         """Closes an async with block"""
-#         pass
-
-#     async def __aenter__(self):
-#         """Enters an async with block"""
-#         return self
-
-
-# class MockObjectResponse:
-#     """Class to mock object response of aiohttp session.get method"""
-
-#     def __init__(self):
-#         """Setup a streamReader object"""
-#         self.content = StreamReader
-
-#     async def __aexit__(self, exc_type, exc, tb):
-#         """Closes an async with block"""
-#         pass
-
-#     async def __aenter__(self):
-#         """Enters an async with block"""
-#         return self
-
-
-# class AsyncIter:
-#     """This Class is use to return async generator"""
-
-#     def __init__(self, item):
-#         """Setup list of dictionary"""
-#         self.item = item
-
-#     async def __aiter__(self):
-#         """This Method is used to return async generator"""
-#         yield self.item
-
-#     async def __anext__(self):
-#         """This Method is used to return one document"""
-#         return self.item[0]
-
-
 def get_json_mock(mock_response):
     async_mock = AsyncMock()
     async_mock.__aenter__ = AsyncMock(return_value=JSONAsyncMock(mock_response))
