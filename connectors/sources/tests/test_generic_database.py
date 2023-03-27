@@ -22,6 +22,7 @@ from connectors.sources.generic_database import (
 from connectors.sources.postgresql import PostgreSQLDataSource
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
+from connectors.utils import ConfigurableFieldValueError
 
 POSTGRESQL_CONNECTION_STRING = (
     "postgresql+asyncpg://admin:changme@127.0.0.1:5432/testdb"
@@ -138,7 +139,7 @@ async def test_validate_config_valid_fields(patch_logger):
     # Execute
     try:
         await source.validate_config()
-    except Exception:
+    except ConfigurableFieldValueError:
         raise AssertionError("Method raised an exception")
 
 
@@ -149,7 +150,7 @@ async def test_validate_config_valid_fields(patch_logger):
 async def test_validate_config_missing_fields(field, patch_logger):
     # Setup
     source = create_source(GenericBaseDataSource)
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         source.configuration.set_field(name=field, value="")
 
         # Execute
@@ -161,7 +162,7 @@ async def test_validate_config_port(patch_logger):
     """Test validate_config method check port"""
     # Setup
     source = create_source(GenericBaseDataSource)
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         source.configuration.set_field(name="port", value="abcd")
 
         # Execute
@@ -175,7 +176,7 @@ async def test_validate_config_ssl(patch_logger):
     source = create_source(PostgreSQLDataSource)
     source.configuration.set_field(name="ssl_enabled", value=True)
 
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         # Execute
         await source.validate_config()
 

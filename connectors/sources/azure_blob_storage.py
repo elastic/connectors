@@ -15,7 +15,11 @@ from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClien
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
+from connectors.utils import (
+    TIKA_SUPPORTED_FILETYPES,
+    ConfigurableFieldValueError,
+    convert_to_b64,
+)
 
 BLOB_SCHEMA = {
     "title": "name",
@@ -115,7 +119,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
 
     async def validate_config(self):
         if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
             )
 
@@ -125,7 +129,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
         )
 
         if empty_configuration_fields:
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"Configured keys: {empty_configuration_fields} can't be empty."
             )
 

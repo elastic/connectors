@@ -12,6 +12,7 @@ import pytest
 
 from connectors.sources.s3 import S3DataSource
 from connectors.sources.tests.support import assert_basics, create_source
+from connectors.utils import ConfigurableFieldValueError
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -328,12 +329,12 @@ def test_get_bucket_list():
 
 
 def test_validate_config_for_empty_bucket_string():
-    """This function test _validate_configuration  when buckets string is empty"""
+    """This function test validate_configwhen buckets string is empty"""
     # Setup
     source = create_source(S3DataSource)
     source.configuration.set_field(name="buckets", value=[""])
     # Execute
-    with pytest.raises(Exception) as e:
+    with pytest.raises(ConfigurableFieldValueError) as e:
         source.validate_config()
 
     assert e.match("buckets")

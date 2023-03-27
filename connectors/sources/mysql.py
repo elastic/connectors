@@ -16,7 +16,12 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.sources.generic_database import WILDCARD, configured_tables, is_wildcard
-from connectors.utils import CancellableSleeps, RetryStrategy, retryable
+from connectors.utils import (
+    CancellableSleeps,
+    ConfigurableFieldValueError,
+    RetryStrategy,
+    retryable,
+)
 
 MAX_POOL_SIZE = 10
 QUERIES = {
@@ -196,7 +201,7 @@ class MySqlDataSource(BaseDataSource):
                 empty_connection_fields.append(field)
 
         if empty_connection_fields:
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"Configured keys: {empty_connection_fields} can't be empty."
             )
 
@@ -204,10 +209,10 @@ class MySqlDataSource(BaseDataSource):
             isinstance(self.configuration["port"], str)
             and not self.configuration["port"].isnumeric()
         ):
-            raise Exception("Configured port has to be an integer.")
+            raise ConfigurableFieldValueError("Configured port has to be an integer.")
 
         if self.ssl_enabled and (self.certificate == "" or self.certificate is None):
-            raise Exception("SSL certificate must be configured.")
+            raise ConfigurableFieldValueError("SSL certificate must be configured.")
 
     def _ssl_context(self, certificate):
         """Convert string to pem format and create a SSL context

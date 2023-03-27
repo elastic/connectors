@@ -16,6 +16,7 @@ from connectors.source import DataSourceConfiguration
 from connectors.sources.azure_blob_storage import AzureBlobStorageDataSource
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
+from connectors.utils import ConfigurableFieldValueError
 
 
 def test_get_configuration():
@@ -423,7 +424,7 @@ async def test_validate_config_no_account_name():
     source = create_source(AzureBlobStorageDataSource)
     source.configuration.set_field(name="account_name", value="")
 
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         # Execute
         await source.validate_config()
 
@@ -445,13 +446,11 @@ async def test_validate_config_invalid_concurrent_downloads():
     """Test tweak_bulk_options method of BaseDataSource class with invalid concurrent downloads"""
 
     # Setup
-    source = create_source(AzureBlobStorageDataSource)
-    options = {}
-    source.concurrent_downloads = 1000
+    source = create_source(AzureBlobStorageDataSource, concurrent_downloads=1000)
 
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         # Execute
-        await source.validate_config(options)
+        await source.validate_config()
 
 
 @pytest.mark.asyncio

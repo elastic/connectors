@@ -20,6 +20,7 @@ from connectors.sources.mysql import (
 )
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
+from connectors.utils import ConfigurableFieldValueError
 
 
 def immutable_doc(**kwargs):
@@ -391,22 +392,13 @@ async def test_get_docs_with_advanced_rules(
     assert yielded_docs == expected_docs
 
 
-def test_validate_configuration():
-    """This function test _validate_configuration method of MySQL"""
-    source = create_source(MySqlDataSource)
-    source.configuration.set_field(name="host", value="")
+@pytest.mark.asyncio
+async def test_validate_config():
+    """This function test validate_config method of MySQL"""
+    source = create_source(MySqlDataSource, host="")
 
-    with pytest.raises(Exception):
-        source._validate_configuration()
-
-
-def test_validate_configuration_with_port():
-    """This function test _validate_configuration method with port str input of MySQL"""
-    source = create_source(MySqlDataSource)
-    source.configuration.set_field(name="port", value="port")
-
-    with pytest.raises(Exception):
-        source._validate_configuration()
+    with pytest.raises(ConfigurableFieldValueError):
+        await source.validate_config()
 
 
 def test_ssl_context():
