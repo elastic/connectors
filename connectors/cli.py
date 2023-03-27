@@ -96,8 +96,6 @@ async def _start_service(actions, config, loop):
     - performs a preflight check using `PreflightCheck`
     - instantiates a `MultiService` instance and runs its `run` async function
     """
-    logger.info(f"Running connector service version {__version__}")
-
     preflight = PreflightCheck(config)
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(preflight.shutdown, sig))
@@ -128,6 +126,7 @@ def run(args):
     - list: prints out a list of all connectors and exits
     - poll: starts the event loop and run forever (default)
     """
+    logger.info(f"Running connector service version {__version__}")
 
     # load config
     config = {}
