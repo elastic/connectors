@@ -82,19 +82,27 @@ class OracleDataSource(GenericBaseDataSource):
         oracle_configuration.update(
             {
                 "oracle_protocol": {
-                    "value": DEFAULT_PROTOCOL,
-                    "label": "Oracle connection protocol (TCP/TCPS)",
+                    "display": "dropdown",
+                    "label": "Oracle connection protocol",
+                    "options": [
+                        {"label": "TCP", "value": "TCP"},
+                        {"label": "TCPS", "value": "TCPS"},
+                    ],
+                    "order": 9,
                     "type": "str",
+                    "value": DEFAULT_PROTOCOL,
                 },
                 "oracle_home": {
-                    "value": DEFAULT_ORACLE_HOME,
                     "label": "Path of Oracle Service",
+                    "order": 10,
                     "type": "str",
+                    "value": DEFAULT_ORACLE_HOME,
                 },
                 "wallet_configuration_path": {
-                    "value": "",
                     "label": "Path of oracle service configuration files",
+                    "order": 11,
                     "type": "str",
+                    "value": "",
                 },
             }
         )

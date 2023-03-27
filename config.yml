@@ -36,7 +36,9 @@ native_service_types:
   - postgresql
   - oracle
   - dir
+  - sharepoint
   - mssql
+  - jira
 
 
 # Connector client settings
@@ -53,4 +55,6 @@ sources:
   azure_blob_storage: connectors.sources.azure_blob_storage:AzureBlobStorageDataSource
   postgresql: connectors.sources.postgresql:PostgreSQLDataSource
   oracle: connectors.sources.oracle:OracleDataSource
+  sharepoint: connectors.sources.sharepoint:SharepointDataSource
   mssql: connectors.sources.mssql:MSSQLDataSource
+  jira: connectors.sources.jira:JiraDataSource
