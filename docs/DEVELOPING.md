@@ -749,12 +749,53 @@ Features in beta are subject to change and are not covered by the service level 
 
 Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
 
-SharePoint Online permissions required to run the connector:
-     
-   - Refer the document to understand the complete process of setting [SharePoint Permissions](https://documentation.commvault.com/v11/essential/128616_registering_azure_app_for_sharepoint_online.html)
+### Compatibility
 
-   - To understand how to set DisableCustomAppAuthentication refer the document: [SharePoint Set DisableCustomAppAuthentication](https://learn.microsoft.com/en-us/answers/questions/714147/token-type-is-not-allowed-error-on-sharepoint-rest#:~:text=Install%2DModule%20%2DName,spotenant%20%2DDisableCustomAppAuthentication%20%24false)
+  Sharepoint Connector supports below Sharepoint Server versions:
+  - Sharepoint 2013
+  - Sharepoint 2016
+  - Sharepoint 2019
 
+
+### Create an Administrator Account For SharePoint Online:
+  - To create an administrator account, join the Microsoft 365 Developer Program and get the Microsoft 365 developer subscription with a new administrator account for 90 days. Use this administrator account for signing into SharePoint Online and Azure AD to fetch more details.
+  - Register your app with Microsoft Azure AD
+  - To use the Microsoft identity platform endpoint, you must register your app using the Azure app registration portal. You can use either a Microsoft account or a work or school account to register an app.
+  - To configure an app to use the OAuth 2.0 authorization code grant flow, you'll need to save the following values when registering the app:
+    - Client Id: `Application(client) ID` which you can find inside App registrations from azure portal
+    - Client Secret: It is a `Value` which you need to create  form `Certificates and secrets` from azure portal
+    - Tenant Id: Dedicated instance of azure AD  which you can find inside App registrations from azure portal
+    - Tenant name: Name of domain
+
+
+### SharePoint Online permissions required to run the connector:
+
+   Refer to the following documentation for setting [SharePoint Permissions](https://learn.microsoft.com/en-us/sharepoint/dev/solution-guidance/security-apponly-azureacs)
+
+   - To set `DisableCustomAppAuthentication` to false we need to connect to SharePoint using Windows PowerShell and then run set-spotenant -DisableCustomAppAuthentication $false
+
+   - In azure portal > Azure Active Directory > App registrations > API permission
+        - Click Add a permission
+        - Click Microsoft Graph and complete the following steps:
+            - Click Application permissions.
+            - Select the User.Read permission.
+        - After adding permission Grant admin consent for tenant_name    
+   - To assign full permissions to the tenant in SharePoint Online, in your browser, go to the tenant URL. For example, go to `https://<office_365_tenant_URL>/_layouts/15/appinv.aspx`. The SharePoint admin center page appears.
+       - In the App ID box, enter the application ID that you recorded earlier, and then click Lookup.In the Title box, the name of the application appears.
+       - In the App Domain box, type tenantname.onmicrosoft.com
+       - In the App's Permission Request XML box, type the following XML string:
+           ```
+            <AppPermissionRequests AllowAppOnlyPolicy="true">
+              <AppPermissionRequest Scope="http://sharepoint/content/tenant" Right="FullControl" />
+              <AppPermissionRequest Scope="http://sharepoint/social/tenant" Right="Read" />
+            </AppPermissionRequests>
+            ```
+
+### Objects to be indexed
+  - Sites and Subsites
+  - Lists
+  - List Items and its attachment content
+  - Document Libraries and its attachment content(include Web Pages HTML content)
 
 ### Setup and basic usage
 
@@ -771,7 +812,7 @@ Collect the information that is required to connect to your SharePoint instance:
 - Username for SharePoint Server
 - Password for SharePoint Server
 - Client Id for SharePoint Online
-- Secret Id for SharePoint Online
+- Client Secret for SharePoint Online
 - Tenant Name for SharePoint Online
 - Tenant Id for SharePoint Online
 - SSL certificate for a secure connection
@@ -779,6 +820,9 @@ Collect the information that is required to connect to your SharePoint instance:
 #### Configure SharePoint connector
 
 The following configuration fields need to be provided for setting up the connector:
+
+Note: The given defaults are  for [E2E](https://github.com/elastic/connectors-python/tree/main/connectors/sources/tests/fixtures/sharepoint) testing purposes only
+
 
 ##### `is_cloud`
 
@@ -788,25 +832,29 @@ Flag to determine the SharePoint platform type. `True` if SharePoint cloud and `
 
 The username of the account for SharePoint Server. Default value is `demo_user`.
 
+Note: `username` is not needed for SharePoint Online.
+
 ##### `password`
 
 The password of the account to be used for the SharePoint Server. Default value is `abc@123`.
 
+Note: `password` is not needed for SharePoint Online.
+
 ##### `client_id`
 
-The client id to authenticate with SharePoint online.
+The client id to authenticate with SharePoint Online.
 
-##### `secret_id`
+##### `client_secret`
 
-The secret id to authenticate with SharePoint online.
+The secret id to authenticate with SharePoint Online.
 
 ##### `tenant`
 
-The tenant name to authenticate with SharePoint online.
+The tenant name to authenticate with SharePoint Online.
 
 ##### `tenant_id`
 
-The tenant id to authenticate with SharePoint online.
+The tenant id to authenticate with SharePoint Online.
 
 ##### `host_url`
 
@@ -817,7 +865,7 @@ The server host url where the SharePoint is hosted. Default value is `http://127
 
 ##### `site_collections`
 
-The site collections to fetch sites from SharePoint. Default value is `collection1`. Examples:
+The site collections to fetch sites from SharePoint(allow comma seprated collections also). Default value is `collection1`. Examples:
   - `collection1`
   - `collection1, collection2`
 
@@ -827,9 +875,9 @@ Whether SSL verification will be enabled. Default value is `False`.
 
 ##### `ssl_ca`
 
-Content of SSL certificate. 
+Content of SSL certificate needed for SharePoint Online. 
 
-Note: Keep `ssl_ca` field empty, if `ssl_enabled` is `False`. Example certificate:
+Note: Keep this field empty, if `ssl_enabled` is set to `False`. Example certificate:
 
 
   - ```
@@ -865,7 +913,7 @@ The framework provides a way to test ingestion through a connector against a rea
 $ make ftest NAME=sharepoint
 ```
 
-ℹ️ Users can generate the perf8 report using an argument i.e. `PERF8=True`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
+ℹ️ Users can generate the [perf8](https://github.com/elastic/perf8) report using an argument i.e. `PERF8=True`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
 
 ℹ️ Users do not need to have a running Elasticsearch instance or a SharePoint source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock SharePoint source using the docker image.
 
