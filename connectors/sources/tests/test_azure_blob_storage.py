@@ -415,7 +415,8 @@ async def test_get_content_when_type_not_supported():
     assert actual_response is None
 
 
-def test_configure_connection_string():
+@pytest.mark.asyncio
+async def test_validate_config_no_account_name():
     """Test configure connection string method of AzureBlobStorageDataSource class"""
 
     # Setup
@@ -424,7 +425,7 @@ def test_configure_connection_string():
 
     with pytest.raises(Exception):
         # Execute
-        source._configure_connection_string()
+        await source.validate_config()
 
 
 def test_tweak_bulk_options():
@@ -439,7 +440,8 @@ def test_tweak_bulk_options():
     source.tweak_bulk_options(options)
 
 
-def test_tweak_bulk_options_with_invalid():
+@pytest.mark.asyncio
+async def test_validate_config_invalid_concurrent_downloads():
     """Test tweak_bulk_options method of BaseDataSource class with invalid concurrent downloads"""
 
     # Setup
@@ -449,7 +451,7 @@ def test_tweak_bulk_options_with_invalid():
 
     with pytest.raises(Exception):
         # Execute
-        source.tweak_bulk_options(options)
+        await source.validate_config(options)
 
 
 @pytest.mark.asyncio
