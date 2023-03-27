@@ -327,11 +327,13 @@ def test_get_bucket_list():
     assert expected_response == actual_response
 
 
-def test_validate_configuration_for_empty_bucket_string():
+def test_validate_config_for_empty_bucket_string():
     """This function test _validate_configuration  when buckets string is empty"""
     # Setup
     source = create_source(S3DataSource)
     source.configuration.set_field(name="buckets", value=[""])
     # Execute
-    with pytest.raises(Exception):
-        source._validate_configuration()
+    with pytest.raises(Exception) as e:
+        source.validate_config()
+
+    assert e.match("buckets")
