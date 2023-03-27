@@ -94,7 +94,9 @@ class MongoDataSource(BaseDataSource):
             advanced_rules = filtering.get_advanced_rules()
 
             if "find" in advanced_rules:
-                async for doc in self.collection.find(**advanced_rules["find"]):
+                find_kwargs = advanced_rules.get("find", {})
+
+                async for doc in self.collection.find(**find_kwargs):
                     yield self.serialize(doc), None
         else:
             async for doc in self.collection.find():
