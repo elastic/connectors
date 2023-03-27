@@ -51,34 +51,43 @@ class NASDataSource(BaseDataSource):
         """
         return {
             "username": {
-                "value": "admin",
                 "label": "SMB username",
+                "order": 1,
                 "type": "str",
+                "value": "admin",
             },
             "password": {
-                "value": "abc@123",
                 "label": "SMB password",
+                "order": 2,
+                "sensitive": True,
                 "type": "str",
+                "value": "abc@123",
             },
             "server_ip": {
-                "value": "127.0.0.1",
                 "label": "SMB IP",
+                "order": 3,
                 "type": "str",
+                "value": "127.0.0.1",
             },
             "server_port": {
-                "value": 445,
+                "display": "numeric",
                 "label": "SMB port",
+                "order": 4,
                 "type": "int",
+                "value": 445,
             },
             "drive_path": {
-                "value": "Folder1",
                 "label": "SMB shared folder/directory",
+                "order": 5,
                 "type": "str",
+                "value": "Folder1",
             },
             "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Enable content extraction (true/false)",
+                "display": "toggle",
+                "label": "Enable content extraction",
+                "order": 6,
                 "type": "bool",
+                "value": DEFAULT_CONTENT_EXTRACTION,
             },
         }
 
