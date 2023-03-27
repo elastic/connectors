@@ -57,7 +57,6 @@ class MSSQLDataSource(GenericBaseDataSource):
             configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self.mssql_driver = self.configuration["mssql_driver"]
         self.secured_connection = self.configuration["secured_connection"]
         self.queries = MSSQLQueries()
         self.dialect = "Microsoft SQL"
@@ -79,12 +78,6 @@ class MSSQLDataSource(GenericBaseDataSource):
                     "type": "str",
                     "value": "dbo",
                 },
-                "mssql_driver": {
-                    "label": "Microsoft SQL Driver Name (ODBC Driver 18 for SQL Server)",
-                    "order": 10,
-                    "type": "str",
-                    "value": "ODBC Driver 18 for SQL Server",
-                },
                 "secured_connection": {
                     "display": "toggle",
                     "label": "Connection will be secured or not",
@@ -100,12 +93,11 @@ class MSSQLDataSource(GenericBaseDataSource):
         """Create sync engine for mssql"""
         if self.secured_connection:
             query = {
-                "driver": self.mssql_driver,
                 "TrustServerCertificate": "no",
                 "Encrypt": "Yes",
             }
         else:
-            query = {"driver": self.mssql_driver, "TrustServerCertificate": "yes"}
+            query = {"TrustServerCertificate": "yes"}
 
         connection_string = URL.create(
             "mssql+pytds",
