@@ -401,6 +401,16 @@ async def test_validate_config():
         await source.validate_config()
 
 
+@pytest.mark.asyncio
+async def test_validate_configuration_with_port():
+    """This function test _validate_configuration method with port str input of MySQL"""
+    source = create_source(MySqlDataSource)
+    source.configuration.set_field(name="port", value="port")
+
+    with pytest.raises(ConfigurableFieldValueError):
+        await source.validate_config()
+
+
 def test_ssl_context():
     """This function test _ssl_context with dummy certificate"""
     certificate = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
