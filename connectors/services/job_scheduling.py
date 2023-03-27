@@ -22,6 +22,7 @@ from connectors.byoc import (
     SyncJobIndex,
 )
 from connectors.byoei import ElasticServer
+from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass_dict
@@ -108,7 +109,11 @@ class JobSchedulingService(BaseService):
         job_id = await self.sync_job_index.create(connector)
         if connector.sync_now:
             await connector.reset_sync_now_flag()
-        sync_job = await self.sync_job_index.fetch_by_id(job_id)
+        try:
+            sync_job = await self.sync_job_index.fetch_by_id(job_id)
+        except DocumentNotFoundError:
+            logger.error(f"Couldn't load sync job by id {job_id}")
+            return
         sync_job_runner = SyncJobRunner(
             source_klass=source_klass,
             sync_job=sync_job,
