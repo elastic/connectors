@@ -130,17 +130,30 @@ class BaseDataSource:
     def get_simple_configuration(cls):
         """Used to return the default config to Kibana"""
         res = {}
-        for name, item in cls.get_default_configuration().items():
-            entry = {"label": item.get("label", name.upper())}
-            if item["value"] is None:
-                entry["value"] = ""
-            else:
-                if isinstance(item["value"], bool):
-                    entry["value"] = item["value"] and "true" or "false"
-                else:
-                    entry["value"] = str(item["value"])
 
-            res[name] = entry
+        for config_name, fields in cls.get_default_configuration().items():
+            entry = {
+                "default_value": None,
+                "depends_on": [],
+                "display": "text",
+                "label": "",
+                "options": [],
+                "order": 1,
+                "required": True,
+                "sensitive": False,
+                "tooltip": None,
+                "type": "str",
+                "validations": [],
+                "value": "",
+            }
+
+            for field_property, value in fields.items():
+                if field_property == "label":
+                    entry[field_property] = value if value else config_name.upper()
+                else:
+                    entry[field_property] = value
+
+            res[config_name] = entry
         return res
 
     @classmethod

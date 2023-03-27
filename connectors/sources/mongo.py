@@ -110,27 +110,43 @@ class MongoDataSource(BaseDataSource):
     @classmethod
     def get_default_configuration(cls):
         return {
-            "host": {
-                "value": "mongodb://127.0.0.1:27021",
-                "label": "Server Hostname",
+            "collection": {
+                "label": "Collection",
+                "order": 1,
                 "type": "str",
+                "value": "sample_collection",
             },
             "database": {
-                "value": "sample_database",
                 "label": "Database",
+                "order": 2,
                 "type": "str",
+                "value": "sample_database",
             },
-            "collection": {
-                "value": "sample_collection",
-                "label": "Collection",
-                "type": "str",
-            },
-            "user": {"label": "Username", "type": "str", "value": ""},
-            "password": {"label": "Password", "type": "str", "value": ""},
             "direct_connection": {
-                "label": "Direct connection? (true/false)",
+                "display": "toggle",
+                "label": "Direct connection?",
+                "order": 3,
                 "type": "bool",
                 "value": True,
+            },
+            "host": {
+                "label": "Server Hostname",
+                "order": 4,
+                "type": "str",
+                "value": "mongodb://127.0.0.1:27021",
+            },
+            "user": {
+                "label": "Username",
+                "order": 5,
+                "type": "str",
+                "value": "",
+            },
+            "password": {
+                "label": "Password",
+                "order": 6,
+                "sensitive": True,
+                "type": "str",
+                "value": "",
             },
         }
 
