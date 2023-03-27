@@ -11,6 +11,10 @@ from connectors.logger import logger
 DEFAULT_PAGE_SIZE = 100
 
 
+class DocumentNotFoundError(Exception):
+    pass
+
+
 class ESIndex(ESClient):
     """
     Encapsulates the work with Elasticsearch index.
@@ -41,6 +45,10 @@ class ESIndex(ESClient):
         raise NotImplementedError
 
     async def fetch_by_id(self, doc_id):
+        resp_body = await self.fetch_response_by_id(doc_id)
+        return self._create_object(resp_body)
+
+    async def fetch_response_by_id(self, doc_id):
         await self.client.indices.refresh(index=self.index_name)
 
         try:
@@ -49,17 +57,25 @@ class ESIndex(ESClient):
             logger.critical(f"The server returned {e.status_code}")
             logger.critical(e.body, exc_info=True)
             if e.status_code == 404:
-                return None
+                raise DocumentNotFoundError(
+                    f"Couldn't find document in {self.index_name} by id {doc_id}"
+                )
             raise
 
-        return self._create_object(resp.body)
+        return resp.body
 
     async def index(self, doc):
         resp = await self.client.index(index=self.index_name, document=doc)
         return resp["_id"]
 
-    async def update(self, doc_id, doc):
-        await self.client.update(index=self.index_name, id=doc_id, doc=doc)
+    async def update(self, doc_id, doc, if_seq_no=None, if_primary_term=None):
+        await self.client.update(
+            index=self.index_name,
+            id=doc_id,
+            doc=doc,
+            if_seq_no=if_seq_no,
+            if_primary_term=if_primary_term,
+        )
 
     async def get_all_docs(self, query=None, page_size=DEFAULT_PAGE_SIZE):
         """
