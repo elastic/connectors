@@ -8,6 +8,7 @@ A task periodically clean up orphaned and idle jobs.
 """
 
 from connectors.byoc import ConnectorIndex, SyncJobIndex
+from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.services.base import BaseService
 
@@ -106,15 +107,21 @@ class JobCleanUpService(BaseService):
                     await job.fail(message=IDLE_JOB_ERROR)
                     marked_count += 1
 
-                    connector = await self.connector_index.fetch_by_id(
-                        doc_id=connector_id
-                    )
-                    if connector is None:
+                    try:
+                        connector = await self.connector_index.fetch_by_id(
+                            doc_id=connector_id
+                        )
+                    except DocumentNotFoundError:
                         logger.warning(
                             f"Could not found connector by id #{connector_id}"
                         )
                         continue
-                    job = await self.sync_job_index.fetch_by_id(doc_id=job_id)
+
+                    try:
+                        await job.reload()
+                    except DocumentNotFoundError:
+                        logger.warning(f"Could not reload sync job #{job_id}")
+                        job = None
                     await connector.sync_done(job=job)
                 except Exception as e:
                     logger.error(f"Failed to mark idle job #{job_id} as error: {e}")
