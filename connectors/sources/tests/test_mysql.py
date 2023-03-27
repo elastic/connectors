@@ -12,7 +12,7 @@ import pytest
 
 from connectors.byoc import Filter
 from connectors.filtering.validation import SyncRuleValidationResult
-from connectors.source import DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.mysql import (
     MySQLAdvancedRulesValidator,
     MySqlDataSource,
@@ -20,7 +20,6 @@ from connectors.sources.mysql import (
 )
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
-from connectors.utils import ConfigurableFieldValueError
 
 
 def immutable_doc(**kwargs):

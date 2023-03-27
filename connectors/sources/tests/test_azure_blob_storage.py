@@ -12,11 +12,10 @@ from unittest.mock import Mock, patch
 import pytest
 from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClient
 
-from connectors.source import DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.azure_blob_storage import AzureBlobStorageDataSource
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
-from connectors.utils import ConfigurableFieldValueError
 
 
 def test_get_configuration():

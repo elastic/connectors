@@ -14,9 +14,8 @@ from aiogoogle import Aiogoogle
 from aiogoogle.auth.managers import ServiceAccountManager
 from aiogoogle.models import Request, Response
 
-from connectors.source import DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.google_cloud_storage import GoogleCloudStorageDataSource
-from connectors.utils import ConfigurableFieldValueError
 
 SERVICE_ACCOUNT_CREDENTIALS = '{"project_id": "dummy123"}'
 API_NAME = "storage"

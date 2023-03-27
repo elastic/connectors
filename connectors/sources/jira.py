@@ -20,12 +20,11 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
     ConcurrentTasks,
-    ConfigurableFieldValueError,
     MemQueue,
     convert_to_b64,
     iso_utc,

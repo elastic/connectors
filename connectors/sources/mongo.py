@@ -15,8 +15,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource
-from connectors.utils import ConfigurableFieldValueError
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 
 
 class MongoAdvancedRulesValidator(AdvancedRulesValidator):

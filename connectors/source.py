@@ -314,3 +314,7 @@ def get_source_klasses(config):
 def get_source_klass_dict(config):
     """Returns a service type - source klass dictionary"""
     return {name: get_source_klass(fqn) for name, fqn in config["sources"].items()}
+
+
+class ConfigurableFieldValueError(Exception):
+    pass

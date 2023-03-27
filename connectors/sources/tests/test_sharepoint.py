@@ -12,10 +12,9 @@ import aiohttp
 import pytest
 from aiohttp import StreamReader
 
-from connectors.source import DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.sharepoint import SharepointDataSource
 from connectors.sources.tests.support import create_source
-from connectors.utils import ConfigurableFieldValueError
 
 EXCEPTION_MESSAGE = "Something went wrong"
 HOST_URL = "http://127.0.0.1:8491"

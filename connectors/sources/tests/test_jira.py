@@ -12,10 +12,10 @@ import aiohttp
 import pytest
 from aiohttp import StreamReader
 
-from connectors.source import DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.jira import JiraDataSource
 from connectors.sources.tests.support import create_source
-from connectors.utils import ConfigurableFieldValueError, ssl_context
+from connectors.utils import ssl_context
 
 HOST_URL = "http://127.0.0.1:8080"
 MOCK_PROJECT = {

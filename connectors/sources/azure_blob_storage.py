@@ -14,12 +14,8 @@ from aiofiles.tempfile import NamedTemporaryFile
 from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClient
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
-from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
-    ConfigurableFieldValueError,
-    convert_to_b64,
-)
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
 
 BLOB_SCHEMA = {
     "title": "name",

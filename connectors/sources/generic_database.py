@@ -12,8 +12,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
-from connectors.utils import ConfigurableFieldValueError, iso_utc
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.utils import iso_utc
 
 WILDCARD = "*"
 

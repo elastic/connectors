@@ -19,12 +19,8 @@ from aiohttp.client_exceptions import ServerTimeoutError
 from botocore.exceptions import ClientError
 
 from connectors.logger import logger, set_extra_logger
-from connectors.source import BaseDataSource
-from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
-    ConfigurableFieldValueError,
-    get_base64_value,
-)
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
 MAX_CHUNK_SIZE = 1048576
 DEFAULT_MAX_FILE_SIZE = 10485760

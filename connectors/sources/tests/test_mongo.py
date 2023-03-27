@@ -10,9 +10,9 @@ from unittest import mock
 import pytest
 from bson.decimal128 import Decimal128
 
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.mongo import MongoAdvancedRulesValidator, MongoDataSource
 from connectors.sources.tests.support import assert_basics, create_source
-from connectors.utils import ConfigurableFieldValueError
 
 
 @pytest.mark.asyncio

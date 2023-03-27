@@ -18,13 +18,8 @@ from aiogoogle import Aiogoogle
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
-from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
-    ConfigurableFieldValueError,
-    convert_to_b64,
-    get_pem_format,
-)
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64, get_pem_format
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
 CLOUD_STORAGE_BASE_URL = "https://console.cloud.google.com/storage/browser/_details/"
