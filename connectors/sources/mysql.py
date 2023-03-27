@@ -245,7 +245,7 @@ class MySqlDataSource(BaseDataSource):
         if len(non_accessible_tables) > 0:
             # TODO: replace with future ValidationError
             raise Exception(
-                f"The {'tables'} '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['user']}'."
+                f"The tables '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['user']}'."
             )
 
     def _ssl_context(self, certificate):
