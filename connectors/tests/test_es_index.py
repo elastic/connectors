@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import pytest
-from elasticsearch import ApiError
+from elasticsearch import ApiError, ConflictError
 
 from connectors.es.index import ESIndex
 
@@ -134,6 +134,22 @@ async def test_update(mock_responses):
 
     # the test will fail if any error is raised
     await index.update(doc_id, {})
+
+    await index.close()
+
+
+@pytest.mark.asyncio
+async def test_update_with_concurrency_control(mock_responses):
+    doc_id = "1"
+    index = ESIndex(index_name, config)
+    mock_responses.post(
+        f"http://nowhere.com:9200/{index_name}/_update/{doc_id}?if_seq_no=1&if_primary_term=1",
+        headers=headers,
+        status=409,
+    )
+
+    with pytest.raises(ConflictError):
+        await index.update(doc_id, {}, if_seq_no=1, if_primary_term=1)
 
     await index.close()
 
