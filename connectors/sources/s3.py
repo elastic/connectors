@@ -21,13 +21,16 @@ from aiohttp.client_exceptions import ServerTimeoutError
 from botocore.exceptions import ClientError
 
 from connectors.logger import logger, set_extra_logger
-from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
 MAX_CHUNK_SIZE = 1048576
 DEFAULT_MAX_FILE_SIZE = 10485760
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_CONTENT_EXTRACTION = True
+DEFAULT_MAX_RETRY_ATTEMPS = 5
+DEFAULT_CONNECTION_TIMEOUT = 90
+DEFAULT_READ_TIMEOUT = 90
 
 if "AWS_ENDPOINT_URL" in os.environ:
     AWS_ENDPOINT = f"{os.environ['AWS_ENDPOINT_URL']}:{os.environ['AWS_PORT']}"
@@ -88,19 +91,19 @@ class S3DataSource(BaseDataSource):
 
         self.s3_region_client[region_name] = s3_client
 
-    def _validate_configuration(self):
+    def validate_config(self):
         """Validates whether user input is empty or not for configuration fields
 
         Raises:
             Exception: Configured keys can't be empty
         """
         if self.configuration["buckets"] == [""]:
-            raise Exception("Configured keys: buckets can't be empty.")
+            raise ConfigurableFieldValueError(
+                "Configured keys: buckets can't be empty."
+            )
 
     async def ping(self):
         """Verify the connection with AWS"""
-        logger.info("Validating Amazon S3 Configuration...")
-        self._validate_configuration()
         try:
             await self.client()
             s3 = self.s3_region_client["default"]
@@ -271,33 +274,53 @@ class S3DataSource(BaseDataSource):
         """
         return {
             "buckets": {
-                "value": "ent-search-ingest-dev",
+                "display": "textarea",
                 "label": "AWS Buckets",
+                "order": 1,
                 "type": "list",
+                "value": "ent-search-ingest-dev",
             },
             "read_timeout": {
-                "value": 90,
+                "default_value": DEFAULT_READ_TIMEOUT,
+                "display": "numeric",
                 "label": "Read timeout",
+                "order": 2,
+                "required": False,
                 "type": "int",
+                "value": DEFAULT_READ_TIMEOUT,
             },
             "connect_timeout": {
-                "value": 90,
+                "default_value": DEFAULT_CONNECTION_TIMEOUT,
+                "display": "numeric",
                 "label": "Connection timeout",
+                "order": 3,
+                "required": False,
                 "type": "int",
+                "value": DEFAULT_CONNECTION_TIMEOUT,
             },
             "max_attempts": {
-                "value": 5,
+                "default_value": DEFAULT_MAX_RETRY_ATTEMPS,
+                "display": "numeric",
                 "label": "Maximum retry attempts",
+                "order": 4,
+                "required": False,
                 "type": "int",
+                "value": DEFAULT_MAX_RETRY_ATTEMPS,
             },
             "page_size": {
-                "value": DEFAULT_PAGE_SIZE,
+                "default_value": DEFAULT_PAGE_SIZE,
+                "display": "numeric",
                 "label": "Maximum size of page",
+                "order": 5,
+                "required": False,
                 "type": "int",
+                "value": DEFAULT_PAGE_SIZE,
             },
             "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Enable content extraction (true/false)",
+                "display": "toggle",
+                "label": "Enable content extraction",
+                "order": 6,
                 "type": "bool",
+                "value": DEFAULT_CONTENT_EXTRACTION,
             },
         }

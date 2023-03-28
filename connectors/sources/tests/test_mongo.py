@@ -6,12 +6,16 @@
 import asyncio
 from datetime import datetime
 from unittest import mock
+from unittest.mock import Mock
 
 import pytest
 from bson.decimal128 import Decimal128
 
+from connectors.byoc import Filter
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.mongo import MongoAdvancedRulesValidator, MongoDataSource
 from connectors.sources.tests.support import assert_basics, create_source
+from connectors.tests.commons import AsyncIterator
 
 
 @pytest.mark.asyncio
@@ -150,6 +154,43 @@ async def test_get_docs(patch_logger, *args):
     assert num == 2
 
 
+@pytest.mark.asyncio
+async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
+    source = create_source(MongoDataSource)
+
+    collection_mock = Mock()
+    collection_mock.find = AsyncIterator(items=[{"_id": 1}])
+    source.collection = collection_mock
+
+    filtering = Filter(
+        {
+            "advanced_snippet": {
+                "value": {
+                    "find": {
+                        "filter": {"key": "value"},
+                        "projection": ["field"],
+                        "skip": 1,
+                        "limit": 10,
+                        "no_cursor_timeout": True,
+                        "allow_partial_results": True,
+                        "batch_size": 5,
+                        "return_key": True,
+                        "show_record_id": False,
+                        "max_time_ms": 10,
+                        "allow_disk_use": True,
+                    }
+                }
+            }
+        }
+    )
+
+    async for _ in source.get_docs(filtering):
+        pass
+
+    find_call_kwargs = collection_mock.find.call_kwargs
+    assert find_call_kwargs[0] == filtering.get_advanced_rules().get("find")
+
+
 def future_with_result(result):
     future = asyncio.Future()
     future.set_result(result)
@@ -167,7 +208,7 @@ async def test_validate_config_when_database_name_invalid_then_raises_exception(
         return_value=future_with_result(server_database_names),
     ):
         source = create_source(MongoDataSource, database=configured_database_name)
-        with pytest.raises(Exception) as e:
+        with pytest.raises(ConfigurableFieldValueError) as e:
             await source.validate_config()
         # assert that message contains database name from config
         assert e.match(configured_database_name)
@@ -195,7 +236,7 @@ async def test_validate_config_when_collection_name_invalid_then_raises_exceptio
             database=configured_database_name,
             collection=configured_collection_name,
         )
-        with pytest.raises(Exception) as e:
+        with pytest.raises(ConfigurableFieldValueError) as e:
             await source.validate_config()
         # assert that message contains database name from config
         assert e.match(configured_collection_name)

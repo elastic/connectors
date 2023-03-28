@@ -11,6 +11,7 @@ import aioboto3
 import pytest
 from botocore.exceptions import ClientError, HTTPClientError
 
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.s3 import S3DataSource
 from connectors.sources.tests.support import assert_basics, create_source
 
@@ -330,15 +331,16 @@ def test_get_bucket_list():
     assert expected_response == actual_response
 
 
-def test_validate_configuration_for_empty_bucket_string():
-    """This function test _validate_configuration  when buckets string is empty"""
+def test_validate_config_for_empty_bucket_string():
+    """This function test validate_configwhen buckets string is empty"""
     # Setup
     source = create_source(S3DataSource)
     source.configuration.set_field(name="buckets", value=[""])
-
     # Execute
-    with pytest.raises(Exception):
-        source._validate_configuration()
+    with pytest.raises(ConfigurableFieldValueError) as e:
+        source.validate_config()
+
+    assert e.match("buckets")
 
 
 @pytest.mark.asyncio

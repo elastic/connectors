@@ -126,6 +126,7 @@ def run(args):
     - list: prints out a list of all connectors and exits
     - poll: starts the event loop and run forever (default)
     """
+    logger.info(f"Running connector service version {__version__}")
 
     # load config
     config = {}

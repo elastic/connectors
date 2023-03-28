@@ -36,19 +36,25 @@ class DirectoryDataSource(BaseDataSource):
     def get_default_configuration(cls):
         return {
             "directory": {
-                "value": DEFAULT_DIR,
                 "label": "Directory path",
+                "order": 1,
                 "type": "str",
+                "validations": [],
+                "value": DEFAULT_DIR,
             },
             "pattern": {
-                "value": "**/*.*",
+                "display": "text",
                 "label": "File glob-like pattern",
+                "order": 2,
                 "type": "str",
+                "value": "**/*.*",
             },
             "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Enable content extraction (true/false)",
+                "display": "toggle",
+                "label": "Enable content extraction",
+                "order": 3,
                 "type": "bool",
+                "value": DEFAULT_CONTENT_EXTRACTION,
             },
         }
 
@@ -69,7 +75,7 @@ class DirectoryDataSource(BaseDataSource):
         ):
             return
 
-        print(f"Reading {path}")
+        logger.info(f"Reading {path}")
         with open(file=path, mode="rb") as f:
             return {
                 "_id": self.get_id(path),
