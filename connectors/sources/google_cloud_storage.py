@@ -196,6 +196,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 "order": 2,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_RETRY_COUNT,
             },
             "enable_content_extraction": {
