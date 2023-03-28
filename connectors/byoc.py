@@ -29,6 +29,13 @@ SYNC_DISABLED = -1
 JOB_NOT_FOUND_ERROR = "Couldn't find the job"
 UNKNOWN_ERROR = "unknown error"
 
+ALLOWED_INGESTION_STATS_KEYS = (
+    "indexed_document_count",
+    "indexed_document_volume",
+    "deleted_document_count",
+    "total_document_count",
+)
+
 
 class Status(Enum):
     CREATED = "created"
@@ -210,6 +217,12 @@ class SyncJob(ESDocument):
         if connector_metadata is None:
             connector_metadata = {}
 
+        ingestion_stats = {
+            k: v
+            for (k, v) in ingestion_stats.items()
+            if k in ALLOWED_INGESTION_STATS_KEYS
+        }
+
         doc = {
             "last_seen": iso_utc(),
         }
@@ -245,6 +258,13 @@ class SyncJob(ESDocument):
             ingestion_stats = {}
         if connector_metadata is None:
             connector_metadata = {}
+
+        ingestion_stats = {
+            k: v
+            for (k, v) in ingestion_stats.items()
+            if k in ALLOWED_INGESTION_STATS_KEYS
+        }
+
         doc = {
             "last_seen": iso_utc(),
             "status": status.value,
