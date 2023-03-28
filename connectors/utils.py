@@ -479,3 +479,19 @@ def get_pem_format(key, max_split=-1):
     key = " ".join(key.split("\n", max_split))
     key = " ".join(key.rsplit("\n", max_split))
     return key
+
+
+class PeriodicalChecker:
+    def __init__(self, interval):
+        self._interval = interval
+        self._start = None
+
+    def should_check(self):
+        if self._start is None:
+            self._start = time.time()
+
+        if time.time() - self._start < self._interval:
+            return False
+        else:
+            self._start = time.time()
+            return True
