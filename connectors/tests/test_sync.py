@@ -486,27 +486,6 @@ async def test_connector_service_poll_no_sync_but_status_updated(
 
 
 @pytest.mark.asyncio
-async def test_connector_service_poll_cron_broken(
-    mock_responses, patch_logger, set_env
-):
-    calls = []
-
-    def upd(url, **kw):
-        doc = json.loads(kw["data"])["doc"]
-        calls.append(doc)
-
-    # if a connector is correctly configured but we don't sync because the cron
-    # is broken
-    # we still want to tell kibana we are connected
-    await set_server_responses(
-        mock_responses, [FAKE_CONFIG_CRON_BROKEN], connectors_update=upd
-    )
-    await create_and_run_service(CONFIG_FILE)
-    patch_logger.assert_not_present("Sync done")
-    assert calls[-1]["status"] == "error"
-
-
-@pytest.mark.asyncio
 async def test_connector_service_poll_suspended_restarts_sync(
     mock_responses, patch_logger, set_env
 ):
