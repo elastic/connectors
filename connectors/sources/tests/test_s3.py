@@ -9,7 +9,7 @@ from unittest import mock
 
 import aioboto3
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, HTTPClientError
 
 from connectors.sources.s3 import S3DataSource
 from connectors.sources.tests.support import assert_basics, create_source
@@ -362,3 +362,18 @@ async def test_get_content_with_clienterror(patch_logger):
         await source._get_content(
             doc=document, s3_client=s3_client, timestamp=None, doit=True
         )
+
+
+@pytest.mark.asyncio
+async def test_close_with_client_session(patch_logger):
+    """Test close method of S3DataSource with client session"""
+
+    # Setup
+    source = create_source(S3DataSource)
+    source.session = aioboto3.Session()
+    await source.client()
+
+    # Execute
+    await source.close()
+    with pytest.raises(HTTPClientError):
+        await source.ping()

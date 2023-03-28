@@ -6,6 +6,7 @@
 import asyncio
 import logging
 import os
+from contextlib import AsyncExitStack
 from functools import partial
 from hashlib import md5
 
@@ -59,26 +60,33 @@ class S3DataSource(BaseDataSource):
         )
         self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.s3_region_client = {}
+        self.s3_context_stacks = []
 
     async def client(self, region=None):
-        """This method creates client object.
+        """This method creates context manager and client session object for s3.
         Args:
             region (str): Name of bucket region. Defaults to None
         """
         region_name = region if region else "default"
 
+        if region_name in self.s3_region_client:
+            return
+
         if AWS_ENDPOINT is not None:
             logger.debug(f"Creating a session against {AWS_ENDPOINT}")
 
-        if not (region_name in self.s3_region_client):
-            s3_client = await self.session.client(
+        s3_context_stack = AsyncExitStack()
+        s3_client = await s3_context_stack.enter_async_context(
+            self.session.client(
                 service_name="s3",
                 config=self.config,
                 endpoint_url=AWS_ENDPOINT,
                 region_name=region,
-            ).__aenter__()
+            )
+        )
+        self.s3_context_stacks.append(s3_context_stack)
 
-            self.s3_region_client[region_name] = s3_client
+        self.s3_region_client[region_name] = s3_client
 
     def _validate_configuration(self):
         """Validates whether user input is empty or not for configuration fields
@@ -251,8 +259,8 @@ class S3DataSource(BaseDataSource):
 
     async def close(self):
         """Closes unclosed client session"""
-        for client in self.s3_region_client.values():
-            await client.close()
+        for context in self.s3_context_stacks:
+            await context.aclose()
 
     @classmethod
     def get_default_configuration(cls):
