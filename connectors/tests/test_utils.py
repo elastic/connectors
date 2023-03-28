@@ -26,6 +26,7 @@ from connectors.utils import (
     ConcurrentTasks,
     InvalidIndexNameError,
     MemQueue,
+    PeriodicalChecker,
     RetryStrategy,
     convert_to_b64,
     evaluate_timedelta,
@@ -424,3 +425,11 @@ Certificate2
     # Execute
     formated_certificate = get_pem_format(key=certificate, max_split=1)
     assert formated_certificate == expected_formated_certificate
+
+
+def test_periodical_checker():
+    checker = PeriodicalChecker(0.1)
+    assert not checker.should_check()
+
+    time.sleep(0.1)
+    assert checker.should_check()
