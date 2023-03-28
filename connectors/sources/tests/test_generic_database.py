@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Generic Database source class methods"""
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from asyncpg.exceptions._base import InternalClientError
@@ -14,90 +14,30 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
 from connectors.source import DataSourceConfiguration
-from connectors.sources.generic_database import GenericBaseDataSource
-from connectors.sources.oracle import OracleDataSource
+from connectors.sources.generic_database import (
+    GenericBaseDataSource,
+    configured_tables,
+    is_wildcard,
+)
 from connectors.sources.postgresql import PostgreSQLDataSource
 from connectors.sources.tests.support import create_source
+from connectors.tests.commons import AsyncIterator
 
 POSTGRESQL_CONNECTION_STRING = (
     "postgresql+asyncpg://admin:changme@127.0.0.1:5432/testdb"
 )
 ORACLE_CONNECTION_STRING = "oracle+oracledb://admin:changme@127.0.0.1:1521/testdb"
-
-
-class ConnectionAsync:
-    """This class creates dummy connection with database and return dummy cursor"""
-
-    async def __aenter__(self):
-        """Make a dummy database connection and return it"""
-        return self
-
-    async def __aexit__(self, exception_type, exception_value, exception_traceback):
-        """Make sure the dummy database connection gets closed"""
-        pass
-
-    async def execute(self, query):
-        """This method returns dummy cursor"""
-        return CursorAsync()
-
-
-class CursorAsync:
-    """This class contains methods which returns dummy response"""
-
-    async def __aenter__(self):
-        """Make a dummy database connection and return it"""
-        return self
-
-    def __init__(self, *args, **kw):
-        self.first_call = True
-
-    def keys(self):
-        """Return Columns of table
-
-        Returns:
-            list: List of columns
-        """
-        return ["ids", "names"]
-
-    def fetchmany(self, size):
-        """This method returns response of fetchmany
-
-        Args:
-            size (int): Number of rows
-
-        Returns:
-            list: List of rows
-        """
-        if self.first_call:
-            self.first_call = False
-            return [
-                (
-                    1,
-                    "abcd",
-                ),
-                (
-                    2,
-                    "xyz",
-                ),
-            ]
-        return []
-
-    def fetchall(self):
-        """This method returns object of Return class
-
-
-        Returns:
-            list: List of rows
-        """
-        return [(10,)]
-
-    async def __aexit__(self, exception_type, exception_value, exception_traceback):
-        """Make sure the dummy database connection gets closed"""
-        pass
+SCHEMA = "dbo"
+TABLE = "emp_table"
+USER = "ADMIN"
 
 
 class ConnectionSync:
     """This Class create dummy connection with database and return dummy cursor"""
+
+    def __init__(self, query_object):
+        """Setup dummy connection"""
+        self.query_object = query_object
 
     def __enter__(self):
         """Make a dummy database connection and return it"""
@@ -109,7 +49,7 @@ class ConnectionSync:
 
     def execute(self, statement):
         """This method returns dummy cursor"""
-        return CursorSync()
+        return CursorSync(query_object=self.query_object, statement=statement)
 
 
 class CursorSync:
@@ -119,8 +59,11 @@ class CursorSync:
         """Make a dummy database connection and return it"""
         return self
 
-    def __init__(self, *args, **kw):
+    def __init__(self, query_object, *args, **kwargs):
+        """Setup dummy cursor"""
         self.first_call = True
+        self.query = kwargs["statement"]
+        self.query_object = query_object
 
     def keys(self):
         """Return Columns of table
@@ -154,8 +97,24 @@ class CursorSync:
         return []
 
     def fetchall(self):
-        """This method returns object of Return class"""
-        return [(10,)]
+        """This method returns results of query"""
+        self.query = str(self.query)
+        if self.query == self.query_object.all_schemas():
+            return [(SCHEMA,)]
+        elif self.query == self.query_object.all_tables(schema=SCHEMA, user=USER):
+            return [(TABLE,)]
+        elif self.query == self.query_object.table_data_count(
+            schema=SCHEMA, table=TABLE
+        ):
+            return [(10,)]
+        elif self.query == self.query_object.table_primary_key(
+            schema=SCHEMA, table=TABLE, user=USER
+        ):
+            return [("ids",)]
+        elif self.query == self.query_object.table_last_update_time(
+            schema=SCHEMA, table=TABLE
+        ):
+            return [("2023-02-21T08:37:15+00:00",)]
 
 
 def test_get_configuration(patch_logger):
@@ -171,111 +130,54 @@ def test_get_configuration(patch_logger):
     assert config["host"] == "127.0.0.1"
 
 
-def test_validate_configuration_missing_fields(patch_logger):
-    """Test _validate_configuration method check missing fields"""
+@pytest.mark.asyncio
+async def test_validate_config_valid_fields(patch_logger):
+    # Setup
+    source = create_source(GenericBaseDataSource)
+
+    # Execute
+    try:
+        await source.validate_config()
+    except Exception:
+        raise AssertionError("Method raised an exception")
+
+
+@pytest.mark.parametrize(
+    "field", ["host", "port", "username", "password", "database", "tables"]
+)
+@pytest.mark.asyncio
+async def test_validate_config_missing_fields(field, patch_logger):
     # Setup
     source = create_source(GenericBaseDataSource)
     with pytest.raises(Exception):
-        source.configuration.set_field(name="host", value="")
+        source.configuration.set_field(name=field, value="")
 
         # Execute
-        source._validate_configuration()
+        await source.validate_config()
 
 
-def test_validate_configuration_port(patch_logger):
-    """Test _validate_configuration method check port"""
+@pytest.mark.asyncio
+async def test_validate_config_port(patch_logger):
+    """Test validate_config method check port"""
     # Setup
     source = create_source(GenericBaseDataSource)
     with pytest.raises(Exception):
         source.configuration.set_field(name="port", value="abcd")
 
         # Execute
-        source._validate_configuration()
+        await source.validate_config()
 
 
-def test_validate_configuration_ssl(patch_logger):
-    """Test _validate_configuration method check port"""
+@pytest.mark.asyncio
+async def test_validate_config_ssl(patch_logger):
+    """Test validate_config method check ssl"""
     # Setup
     source = create_source(PostgreSQLDataSource)
-    source.configuration.set_field(name="ssl_disabled", value=False)
+    source.configuration.set_field(name="ssl_enabled", value=True)
 
     with pytest.raises(Exception):
         # Execute
-        source._validate_configuration()
-
-
-@pytest.mark.asyncio
-async def test_get_docs_postgresql(patch_logger):
-    """Test get_docs method"""
-    # Setup
-    source = create_source(PostgreSQLDataSource)
-    with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
-        source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
-        actual_response = []
-        expected_response = [
-            {
-                "10_10_ids": 1,
-                "10_10_names": "abcd",
-                "_id": "xe_10_10_",
-                "_timestamp": "",
-                "Database": "xe",
-                "Table": 10,
-                "schema": 10,
-            },
-            {
-                "10_10_ids": 2,
-                "10_10_names": "xyz",
-                "_id": "xe_10_10_",
-                "_timestamp": "",
-                "Database": "xe",
-                "Table": 10,
-                "schema": 10,
-            },
-        ]
-
-        # Execute
-        async for i in source.get_docs():
-            i[0]["_timestamp"] = ""
-            actual_response.append(i[0])
-
-        # Assert
-        assert actual_response == expected_response
-
-
-@pytest.mark.asyncio
-async def test_get_docs_oracle(patch_logger):
-    """Test get_docs method"""
-    # Setup
-    source = create_source(OracleDataSource)
-    with patch.object(Engine, "connect", return_value=ConnectionSync()):
-        source.engine = create_engine(ORACLE_CONNECTION_STRING)
-        actual_response = []
-        expected_response = [
-            {
-                "10_ids": 1,
-                "10_names": "abcd",
-                "_id": "xe_10_",
-                "_timestamp": "",
-                "Database": "xe",
-                "Table": 10,
-            },
-            {
-                "10_ids": 2,
-                "10_names": "xyz",
-                "_id": "xe_10_",
-                "_timestamp": "",
-                "Database": "xe",
-                "Table": 10,
-            },
-        ]
-
-        # Execute
-        async for i in source.get_docs():
-            i[0]["_timestamp"] = ""
-            actual_response.append(i[0])
-
-        # Assert
-        assert actual_response == expected_response
+        await source.validate_config()
 
 
 @pytest.mark.asyncio
@@ -314,9 +216,9 @@ async def test_sync_connect_negative(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_execute_query_negative_for_internalclienterror(patch_logger):
+async def test_execute_query_negative_for_internal_client_error(patch_logger):
     """Test _execute_query method with negative case"""
-    source = create_source(PostgreSQLDataSource)
+    source = create_source(GenericBaseDataSource)
     with patch.object(
         AsyncEngine, "connect", side_effect=InternalClientError("Something went wrong")
     ):
@@ -327,7 +229,7 @@ async def test_execute_query_negative_for_internalclienterror(patch_logger):
 
         # Execute
         with pytest.raises(InternalClientError):
-            await anext(source.execute_query("PING"))
+            await anext(source.execute_query("select 1+1"))
 
 
 @pytest.mark.asyncio
@@ -346,17 +248,103 @@ async def test_fetch_documents_negative(patch_logger):
             await anext(source.fetch_documents("table1"))
 
 
+@pytest.fixture
+def patch_default_wait_multiplier():
+    """Patch wait multiplier to 0"""
+    with patch("connectors.sources.generic_database.DEFAULT_WAIT_MULTIPLIER", 0):
+        yield
+
+
 @pytest.mark.asyncio
-async def test_execute_query_negative():
-    """Test execute_query method with negative case"""
-    source = create_source(OracleDataSource)
+async def test_execute_query_negative(patch_default_wait_multiplier):
+    """Test execute_query method when server is unavailable"""
+    source = create_source(GenericBaseDataSource)
     with patch.object(
-        OracleDataSource,
+        GenericBaseDataSource,
         "_sync_connect",
         side_effect=Exception("Something went wrong"),
     ):
-        source.retry_count = 1
-
         # Execute
+        with pytest.raises(Exception, match="Something went wrong"):
+            await anext(source.execute_query("select 1+1 from dual"))
+
+
+@pytest.mark.asyncio
+async def test_ping(patch_logger):
+    # Setup
+    source = create_source(GenericBaseDataSource)
+    source._create_engine = Mock()
+    source.queries = Mock()
+    source.execute_query = Mock(return_value=AsyncIterator(["table1", "table2"]))
+
+    # Execute
+    await source.ping()
+
+
+@pytest.mark.asyncio
+async def test_ping_negative(patch_logger):
+    """Test ping method of GenericBaseDataSource class when connection is not established"""
+    # Setup
+    source = create_source(GenericBaseDataSource)
+
+    with patch.object(
+        GenericBaseDataSource,
+        "execute_query",
+        side_effect=Exception("Something went wrong"),
+    ):
+        source.dialect = "Oracle"
+        # Execute
+        with pytest.raises(Exception, match="Can't connect to Oracle on 127.0.0.1"):
+            await source.ping()
+
+
+@pytest.mark.asyncio
+async def test_fetch_rows_with_zero_table():
+    """Test fetch_rows method when no tables found in schema/database"""
+    # Setup
+    source = create_source(GenericBaseDataSource)
+    source._create_engine = Mock()
+    source.queries = Mock()
+    source.execute_query = Mock(return_value=AsyncIterator([[]]))
+
+    # Execute
+    async for doc in source.fetch_rows():
+        assert doc == []
+
+    source.execute_query = Mock(return_value=AsyncIterator([[]]))
+    # Execute
+    async for doc in source.fetch_rows(schema="public"):
+        assert doc == []
         with pytest.raises(Exception):
-            await anext(source.execute_query("PING"))
+            await anext(source.execute_query("select 1+1"))
+
+
+@pytest.mark.parametrize(
+    "tables, expected_tables",
+    [
+        ("", []),
+        ("table", ["table"]),
+        ("table_1, table_2", ["table_1", "table_2"]),
+        (["table_1", "table_2"], ["table_1", "table_2"]),
+        (["table_1", "table_2", ""], ["table_1", "table_2"]),
+    ],
+)
+def test_configured_tables(tables, expected_tables):
+    actual_tables = configured_tables(tables)
+
+    assert actual_tables == expected_tables
+
+
+@pytest.mark.asyncio
+async def test_get_tables_to_fetch_configured_tables():
+    source = create_source(GenericBaseDataSource)
+    tables = ["table_1", "table_2"]
+    source.queries = Mock()
+    source.tables = tables
+
+    assert tables == await source.get_tables_to_fetch("schema")
+
+
+@pytest.mark.parametrize("tables", ["*", ["*"]])
+def test_is_wildcard(tables):
+    assert is_wildcard(tables)
