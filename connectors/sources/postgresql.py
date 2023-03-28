@@ -81,7 +81,7 @@ class PostgreSQLDataSource(GenericBaseDataSource):
             {
                 "ssl_enabled": {
                     "display": "toggle",
-                    "label": "Enable SSL verification (true/false)",
+                    "label": "Enable SSL verification",
                     "order": 9,
                     "type": "bool",
                     "value": DEFAULT_SSL_ENABLED,

@@ -173,6 +173,7 @@ class GenericBaseDataSource(BaseDataSource):
                 "order": 7,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_FETCH_SIZE,
             },
             "retry_count": {
@@ -182,6 +183,7 @@ class GenericBaseDataSource(BaseDataSource):
                 "order": 8,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_RETRY_COUNT,
             },
         }
