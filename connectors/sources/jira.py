@@ -396,7 +396,7 @@ class JiraDataSource(BaseDataSource):
                     yield {
                         "_id": f"{project['name']}-{project['id']}",
                         "_timestamp": iso_utc(
-                            when=datetime.now(pytz.timezone(timezone))
+                            when=datetime.now(pytz.timezone(timezone))  # pyright: ignore
                         ),
                         "Type": "Project",
                         "Project": project,
