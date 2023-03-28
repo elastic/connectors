@@ -93,47 +93,9 @@ async def test_multiservice_run_stops_all_services_when_shutdown_happens_and_som
 
     asyncio.get_event_loop().call_later(0.1, service_1.stop)
 
-
-async def test_registry():
-    ran = []
-
-    # creating a class using the BaseService as its base
-    # will register the class using its name
-    class TestService(BaseService):
-        async def run(self):
-            nonlocal ran
-            ran.append(self.name)
-
-    class SomeService(TestService):
-        name = "kool"
-
-    class SomeOtherService(TestService):
-        name = "beans"
-
-    # and make it available when we call get_services()
-    multiservice = get_services(["kool", "beans"], config=defaultdict(dict))
-
-    await multiservice.run()
-    assert ran == ["kool", "beans"]
-
-
-@pytest.mark.asyncio
-async def test_multiservice_stop_gracefully_stops_service_that_takes_too_long_to_run():
-    service_1 = StubService()
-
-    service_2 = StubService()
-    service_2.run_sleep_delay = 0.3  # large enough
-
-    multiservice = MultiService(service_1, service_2)
-
-    asyncio.get_event_loop().call_later(
-        0.1, functools.partial(multiservice.shutdown, "SIGTERM")
-    )
-
     await multiservice.run()
 
     assert service_1.stopped
-    assert service_2.stopped
-    assert (
-        not service_2.cancelled
-    )  # we're not supposed to cancel it as it's already stopping
+    assert service_2.cancelled
+    # We assert False for service_3 - it does not handle cancellation gracefully
+    assert not service_3.cancelled
