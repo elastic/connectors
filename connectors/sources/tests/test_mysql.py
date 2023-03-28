@@ -513,7 +513,7 @@ async def test_validate_database_accessible_when_not_accessible_then_error_raise
     cursor = AsyncMock()
     cursor.execute.side_effect = aiomysql.Error("Error")
 
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         await source._validate_database_accessible(cursor)
 
 
@@ -535,5 +535,5 @@ async def test_validate_tables_accessible_when_not_accessible_then_error_raised(
     cursor = AsyncMock()
     cursor.execute.side_effect = aiomysql.Error("Error")
 
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         await source._validate_tables_accessible(cursor)
