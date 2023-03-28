@@ -375,6 +375,13 @@ class JiraDataSource(BaseDataSource):
             logger.exception("Error while connecting to the Jira")
             raise
 
+    async def _get_timezone(self):
+        """Returns the timezone of the Jira deployment
+        """
+        async for response in self.jira_client.api_call(url_name=PING):
+            timezone = await response.json()
+            return timezone["timeZone"]
+
     async def _get_projects(self):
         """Get projects with the help of REST APIs
 
@@ -382,9 +389,7 @@ class JiraDataSource(BaseDataSource):
             project: Project document to get indexed
         """
         try:
-            async for response in self.jira_client.api_call(url_name=PING):
-                timezone = await response.json()
-                self.timezone = timezone["timeZone"]
+            timezone = await self._get_timezone()
 
             async for response in self.jira_client.api_call(url_name=PROJECT):
                 response = await response.json()
@@ -392,7 +397,7 @@ class JiraDataSource(BaseDataSource):
                     yield {
                         "_id": f"{project['name']}-{project['id']}",
                         "_timestamp": iso_utc(
-                            when=datetime.now(pytz.timezone(self.timezone))
+                            when=datetime.now(pytz.timezone(timezone))
                         ),
                         "Type": "Project",
                         "Project": project,

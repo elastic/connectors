@@ -331,6 +331,17 @@ async def test_close_without_client_session(patch_logger):
     assert source.jira_client.session is None
 
 
+@pytest.mark.asyncio
+async def test_get_timezone(patch_logger):
+    # Setup
+    source = create_source(JiraDataSource)
+
+    # Execute and Assert
+    with patch.object(aiohttp.ClientSession, "get", side_effect=side_effect_function):
+        timezone = await source._get_timezone()
+        assert timezone == "Asia/Kolkata"
+
+
 @freeze_time("2023-01-24T04:07:19")
 @pytest.mark.asyncio
 async def test_get_projects(patch_logger):
