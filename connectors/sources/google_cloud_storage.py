@@ -18,7 +18,7 @@ from aiogoogle import Aiogoogle
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64, get_pem_format
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
@@ -218,11 +218,15 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             self.configuration["service_account_credentials"] == ""
             or self.configuration["service_account_credentials"] is None
         ):
-            raise Exception("Google Cloud service account json can't be empty.")
+            raise ConfigurableFieldValueError(
+                "Google Cloud service account json can't be empty."
+            )
         try:
             json.loads(self.configuration["service_account_credentials"])
         except ValueError:
-            raise Exception("Google Cloud service account is not a valid JSON.")
+            raise ConfigurableFieldValueError(
+                "Google Cloud service account is not a valid JSON."
+            )
 
     @cached_property
     def _google_storage_client(self):

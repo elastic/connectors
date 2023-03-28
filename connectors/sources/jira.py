@@ -20,7 +20,7 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -177,15 +177,15 @@ class JiraDataSource(BaseDataSource):
             for field in connection_fields
             if self.configuration[field] == ""
         ]:
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"Configured keys: {empty_connection_fields} can't be empty."
             )
 
         if self.ssl_enabled and self.certificate == "":
-            raise Exception("SSL certificate must be configured.")
+            raise ConfigurableFieldValueError("SSL certificate must be configured.")
 
         if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
             )
 

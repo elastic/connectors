@@ -19,7 +19,7 @@ from aiohttp.client_exceptions import ServerTimeoutError
 from botocore.exceptions import ClientError
 
 from connectors.logger import logger, set_extra_logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
 MAX_CHUNK_SIZE = 1048576
@@ -79,7 +79,9 @@ class S3DataSource(BaseDataSource):
             Exception: Configured keys can't be empty
         """
         if self.configuration["buckets"] == [""]:
-            raise Exception("Configured keys: buckets can't be empty.")
+            raise ConfigurableFieldValueError(
+                "Configured keys: buckets can't be empty."
+            )
 
     async def ping(self):
         """Verify the connection with AWS"""
