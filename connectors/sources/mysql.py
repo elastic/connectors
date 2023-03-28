@@ -184,7 +184,8 @@ class MySqlDataSource(BaseDataSource):
         self._sleeps.cancel()
 
     async def validate_config(self):
-        """Validates whether user input is empty or not for configuration fields and validate type for port
+        """Validates whether user input is empty or not for configuration fields and validate type for port.
+        Also validate, if the configured database and the configured tables are present and accessible by the configured user.
 
         Raises:
             Exception: Configured keys can't be empty
@@ -208,6 +209,44 @@ class MySqlDataSource(BaseDataSource):
 
         if self.ssl_enabled and (self.certificate == "" or self.certificate is None):
             raise Exception("SSL certificate must be configured.")
+
+        await self._remote_validation()
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def _remote_validation(self):
+        async with self.with_connection_pool() as connection_pool:
+            async with connection_pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await self._validate_database_accessible(cursor)
+                    await self._validate_tables_accessible(cursor)
+
+    async def _validate_database_accessible(self, cursor):
+        try:
+            await cursor.execute(f"USE {self.database};")
+        except aiomysql.Error:
+            # TODO: replace with future ValidationError
+            raise Exception(
+                f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['user']}'."
+            )
+
+    async def _validate_tables_accessible(self, cursor):
+        non_accessible_tables = []
+
+        for table in self.tables:
+            try:
+                await cursor.execute(f"SELECT 1 FROM {table} LIMIT 1;")
+            except aiomysql.Error:
+                non_accessible_tables.append(table)
+
+        if len(non_accessible_tables) > 0:
+            # TODO: replace with future ValidationError
+            raise Exception(
+                f"The tables '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['user']}'."
+            )
 
     def _ssl_context(self, certificate):
         """Convert string to pem format and create a SSL context

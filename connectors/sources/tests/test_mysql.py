@@ -491,3 +491,48 @@ async def test_get_tables_to_fetch_remote_tables(tables):
     await source.get_tables_to_fetch()
 
     assert source.fetch_all_tables.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_validate_database_accessible_when_accessible_then_no_error_raised():
+    source = create_source(MySqlDataSource)
+    source.database = "test_database"
+
+    cursor = AsyncMock()
+    cursor.execute.return_value = None
+
+    await source._validate_database_accessible(cursor)
+    cursor.execute.assert_called_with(f"USE {source.database};")
+
+
+@pytest.mark.asyncio
+async def test_validate_database_accessible_when_not_accessible_then_error_raised():
+    source = create_source(MySqlDataSource)
+
+    cursor = AsyncMock()
+    cursor.execute.side_effect = aiomysql.Error("Error")
+
+    with pytest.raises(Exception):
+        await source._validate_database_accessible(cursor)
+
+
+@pytest.mark.asyncio
+async def test_validate_tables_accessible_when_accessible_then_no_error_raised():
+    source = create_source(MySqlDataSource)
+    source.tables = ["table_1", "table_2", "table_3"]
+
+    cursor = AsyncMock()
+    cursor.execute.return_value = None
+
+    await source._validate_tables_accessible(cursor)
+
+
+@pytest.mark.asyncio
+async def test_validate_tables_accessible_when_not_accessible_then_error_raised():
+    source = create_source(MySqlDataSource)
+
+    cursor = AsyncMock()
+    cursor.execute.side_effect = aiomysql.Error("Error")
+
+    with pytest.raises(Exception):
+        await source._validate_tables_accessible(cursor)
