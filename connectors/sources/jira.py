@@ -200,7 +200,6 @@ class JiraDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
         self.jira_client = JiraClient(configuration=configuration)
 
@@ -217,64 +216,81 @@ class JiraDataSource(BaseDataSource):
         """
         return {
             "is_cloud": {
-                "value": True,
+                "display": "toggle",
                 "label": "True if Jira Cloud, False if Jira Server",
+                "order": 1,
                 "type": "bool",
+                "value": True,
             },
             "username": {
-                "value": "admin",
                 "label": "Jira Server username",
+                "order": 2,
                 "type": "str",
+                "value": "admin",
             },
             "password": {
-                "value": "changeme",
                 "label": "Jira Server password",
+                "sensitive": True,
+                "order": 3,
                 "type": "str",
+                "value": "changeme",
             },
             "service_account_id": {
-                "value": "me@example.com",
                 "label": "Jira Cloud service account id",
+                "order": 4,
                 "type": "str",
+                "value": "me@example.com",
             },
             "api_token": {
-                "value": "abc#123",
                 "label": "Jira Cloud API token",
+                "order": 5,
                 "type": "str",
+                "value": "abc#123",
             },
             "host_url": {
-                "value": "http://127.0.0.1:8080",
                 "label": "Jira host url",
+                "order": 6,
                 "type": "str",
+                "value": "http://127.0.0.1:8080",
             },
             "projects": {
-                "value": "*",
+                "display": "textarea",
                 "label": "Jira Project Keys",
                 "type": "list",
+                "value": "*",
             },
             "ssl_enabled": {
-                "value": False,
-                "label": "Enable SSL verification (true/false)",
+                "display": "toggle",
+                "label": "Enable SSL verification",
+                "order": 7,
                 "type": "bool",
+                "value": False,
             },
             "ssl_ca": {
-                "value": "",
                 "label": "SSL certificate",
+                "order": 8,
                 "type": "str",
-            },
-            "enable_content_extraction": {
-                "value": True,
-                "label": "Enable content extraction (true/false)",
-                "type": "bool",
+                "value": "",
             },
             "retry_count": {
-                "value": 3,
+                "default_value": 3,
+                "display": "numeric",
                 "label": "Maximum retries for failed requests",
+                "order": 9,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": 3,
             },
             "concurrent_downloads": {
-                "value": 50,
+                "default_value": 50,
+                "display": "numeric",
                 "label": "Number of concurrent downloads for fetching attachment content",
+                "order": 10,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": 50,
             },
         }
 
@@ -335,7 +351,7 @@ class JiraDataSource(BaseDataSource):
             dictionary: Content document with _id, _timestamp and attachment content
         """
         attachment_size = int(attachment["size"])
-        if not (self.enable_content_extraction and doit and attachment_size > 0):
+        if not (doit and attachment_size > 0):
             return
 
         attachment_name = attachment["filename"]
