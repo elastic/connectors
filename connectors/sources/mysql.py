@@ -228,8 +228,7 @@ class MySqlDataSource(BaseDataSource):
         try:
             await cursor.execute(f"USE {self.database};")
         except aiomysql.Error:
-            # TODO: replace with future ValidationError
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['user']}'."
             )
 
@@ -243,8 +242,7 @@ class MySqlDataSource(BaseDataSource):
                 non_accessible_tables.append(table)
 
         if len(non_accessible_tables) > 0:
-            # TODO: replace with future ValidationError
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"The tables '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['user']}'."
             )
 
