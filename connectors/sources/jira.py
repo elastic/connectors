@@ -376,8 +376,7 @@ class JiraDataSource(BaseDataSource):
             raise
 
     async def _get_timezone(self):
-        """Returns the timezone of the Jira deployment
-        """
+        """Returns the timezone of the Jira deployment"""
         async for response in self.jira_client.api_call(url_name=PING):
             timezone = await response.json()
             return timezone["timeZone"]
