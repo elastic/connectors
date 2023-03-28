@@ -142,11 +142,10 @@ async def test_mem_queue(patch_logger):
     assert queue.qmemsize() == asizeof.asizeof("small stuff")
 
     # let's pile up until it can't accept anymore stuff
-    while True:
-        try:
+
+    with pytest.raises(asyncio.QueueFull):
+        while True:
             await queue.put("x" * 100)
-        except asyncio.QueueFull:
-            break
 
     when = []
 
@@ -166,6 +165,16 @@ async def test_mem_queue(patch_logger):
 
     await asyncio.gather(remove_data(), add_data())
     assert when[1] - when[0] > 0.1
+
+
+@pytest.mark.asyncio
+async def test_mem_queue_too_large_item(patch_logger):
+    queue = MemQueue(maxmemsize=10, refresh_interval=0, refresh_timeout=1)
+
+    with pytest.raises(asyncio.QueueFull) as e:
+        await queue.put_nowait("lala" * 1000)
+
+    assert e.match("Queue is full")
 
 
 def test_get_base64_value():
