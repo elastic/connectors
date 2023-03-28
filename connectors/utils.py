@@ -227,7 +227,7 @@ class MemQueue(asyncio.Queue):
             if elapsed_time >= self.refresh_timeout:
                 putter.set_result(
                     asyncio.QueueFull(
-                        f"MemQueue has been full for {elapsed_time}s. while timeout is {self.refresh_timeout}s."
+                        f"MemQueue has been full for {round(elapsed_time, 4)}s. while timeout is {self.refresh_timeout}s."
                     )
                 )
                 return
@@ -287,7 +287,7 @@ class MemQueue(asyncio.Queue):
         item_size = get_size(item)
         if self.full(item_size):
             raise asyncio.QueueFull(
-                f"Queue is full: attempting to add item of size {item_size} bytes to queue with {self.maxmemsize - self._current_memsize} bytes capacity left."
+                f"Queue is full: attempting to add item of size {item_size} bytes while {self.maxmemsize - self._current_memsize} free bytes left."
             )
         super().put_nowait((item_size, item))
 
