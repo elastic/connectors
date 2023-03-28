@@ -18,7 +18,6 @@ from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value, iso_utc
 
 MAX_CHUNK_SIZE = 65536
-DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_FILE_SIZE_LIMIT = 10485760
 
 
@@ -40,7 +39,6 @@ class NASDataSource(BaseDataSource):
         self.server_ip = self.configuration["server_ip"]
         self.port = self.configuration["server_port"]
         self.drive_path = self.configuration["drive_path"]
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -81,13 +79,6 @@ class NASDataSource(BaseDataSource):
                 "order": 5,
                 "type": "str",
                 "value": "Folder1",
-            },
-            "enable_content_extraction": {
-                "display": "toggle",
-                "label": "Enable content extraction",
-                "order": 6,
-                "type": "bool",
-                "value": DEFAULT_CONTENT_EXTRACTION,
             },
         }
 
@@ -174,8 +165,7 @@ class NASDataSource(BaseDataSource):
             dictionary: Content document with id, timestamp & text
         """
         if not (
-            self.enable_content_extraction
-            and doit
+            doit
             and os.path.splitext(file["title"])[-1] in TIKA_SUPPORTED_FILETYPES
             and file["size"]
         ):

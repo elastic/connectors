@@ -42,8 +42,8 @@ native_service_types:
 
 
 # Connector client settings
-#connector_id: 'changeme'
-#service_type: 'changeme'
+connector_id: '3QIuFIcBlwF95UPtWM7Y'
+service_type: 'mongodb'
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
