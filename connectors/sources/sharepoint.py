@@ -238,8 +238,11 @@ class SharepointDataSource(BaseDataSource):
             expires_at = datetime.fromisoformat(expires_at)  # pyright: ignore
         if not is_expired(expires_at=expires_at):
             return
+
+        tenant = self.configuration['tenant']
         tenant_id = self.configuration["tenant_id"]
-        logger.debug("Generating access token")
+        logger.debug(f"Generating access token for tenant {tenant}, id {tenant_id}")
+
         url = f"https://accounts.accesscontrol.windows.net/{tenant_id}/tokens/OAuth/2"
         # GUID in resource is always a constant used to create access token
         data = {
@@ -249,11 +252,14 @@ class SharepointDataSource(BaseDataSource):
             "client_secret": self.configuration["secret_id"],
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        logger.debug(f"Calling POST {url}")
+        logger.debug(f"Payload: {data}")
 
         async with aiohttp.request(
             method="POST", url=url, data=data, headers=headers
         ) as response:
             json_data = await response.json()
+            logger.debug(f"Server response: {json_data}")
             self.access_token = json_data["access_token"]
             self.token_expires_at = evaluate_timedelta(
                 seconds=int(json_data["expires_in"]), time_skew=20
