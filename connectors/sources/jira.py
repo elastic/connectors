@@ -397,8 +397,8 @@ class JiraDataSource(BaseDataSource):
                         "_id": f"{project['name']}-{project['id']}",
                         "_timestamp": iso_utc(
                             when=datetime.now(
-                                pytz.timezone(timezone)
-                            )  # pyright: ignore
+                                pytz.timezone(timezone)  # pyright: ignore
+                            )
                         ),
                         "Type": "Project",
                         "Project": project,
