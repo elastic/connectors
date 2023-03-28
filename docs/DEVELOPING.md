@@ -737,6 +737,121 @@ $ make ftest NAME=mssql
 
 ℹ️ The e2e test uses default values defined in [Configure Microsoft SQL connector](#configure-microsoft-sql-connector)
 
+## Confluence Connector
+
+The [Elastic Confluence connector](../connectors/sources/confluence.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+
+### Availability and prerequisites
+
+⚠️ _Currently, this connector is available in **beta** starting in 8.8_.
+Features in beta are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
+
+Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
+
+Confluence versions 7 or later are compatible with Elastic connector frameworks.
+
+### Setup and basic usage
+
+Complete the following steps to deploy the connector:
+
+1. [Gather Confluence details](#gather-confluence-details)
+2. [Configure Confluence connector](#configure-confluence-connector)
+
+#### Gather Confluence details
+
+Collect the information that is required to connect to your Confluence instance:
+
+- The server host url where Confluence is hosted.
+- Username for the Confluence server or service account for the Confluence cloud.
+- Password for the Confluence server or API token for the Confluence cloud.
+- SSL certificate for a secure connection
+
+#### Configure Confluence connector
+
+The following configuration fields need to be provided for setting up the connector:
+
+##### `is_cloud`
+
+Flag to determine the Confluence platform type. `True` if Confluence cloud and `False` if Confluence server. Default value is `False`.
+
+##### `username`
+
+The username of the account for Confluence server. Default value is `admin`.
+
+##### `password`
+
+The password of the account to be used for the Confluence server. Default value is `abc@123`.
+
+##### `service_account_id`
+
+The service account for the Confluence cloud. Default value is `me@example.com`.
+
+##### `api_token`
+
+The API token to authenticate with Confluence cloud. Default value is `abc#123`.
+
+##### `host_url`
+
+The server host url where the Confluence is hosted. Default value is `http://127.0.0.1:5000`. Examples:
+
+  - `https://192.158.1.38:8080/`
+  - `https://test_user.atlassian.net/`
+
+##### `ssl_enabled`
+
+Whether SSL verification will be enabled. Default value is `False`.
+
+##### `ssl_ca`
+
+Content of SSL certificate. Note: In case of ssl_enabled is `False`, keep `ssl_ca` field empty. Example certificate:
+
+  - ```
+    -----BEGIN CERTIFICATE-----
+    MIID+jCCAuKgAwIBAgIGAJJMzlxLMA0GCSqGSIb3DQEBCwUAMHoxCzAJBgNVBAYT
+    ...
+    7RhLQyWn2u00L7/9Omw=
+    -----END CERTIFICATE-----
+    ```
+
+##### `retry_count`
+
+The number of retry attempts after failed request to Confluence. Default value is `3`.
+
+##### `concurrent_downloads`
+
+The number of concurrent downloads for fetching the attachment content. This speeds up the content extraction of attachments. Defaults to `50`.
+
+##### `enable_content_extraction`
+
+Whether the connector should extract the content from Confluence attachment. Default value is `True` i.e. the connector will try to extract file contents.
+
+ℹ️ Default values exist for end-to-end testing only.
+
+ℹ️ The values for these fields need to be provided in `get_default_configuration` method of [confluence.py](../connectors/sources/confluence.py) file before running the connector for the first time. Further, these can be changed from UI editor which will appear on the UI once the first successful connection is made.
+
+#### Content Extraction
+
+The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
+
+### Connector Limitations
+
+- Content of files bigger than 10 MB won't be extracted.
+- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
+- Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
+
+### E2E Tests
+
+The framework provides a way to test ingestion through a connector against a real data source. This is called a functional test. To execute a functional test for the Confluence connector, run the following command:
+```shell
+$ make ftest NAME=confluence
+```
+
+ℹ️ Users can generate the perf8 report using an argument i.e. `PERF8=True`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
+
+ℹ️ Users do not need to have a running Elasticsearch instance or a Confluence source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Confluence source using the docker image.
+
+ℹ️ The e2e test uses default values defined in [Configure Confluence connector](#configure-confluence-connector)
+
 ## General Configuration
 
 The details of Elastic instance and other relevant fields such as `service` and `source` needs to be provided in the [config.yml](https://github.com/elastic/connectors-python/blob/8.6/config.yml) file. For more details check out the following [documentation](https://github.com/elastic/connectors-python/blob/8.6/docs/CONFIG.md).
