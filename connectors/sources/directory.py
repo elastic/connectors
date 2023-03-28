@@ -75,7 +75,7 @@ class DirectoryDataSource(BaseDataSource):
         ):
             return
 
-        print(f"Reading {path}")
+        logger.info(f"Reading {path}")
         with open(file=path, mode="rb") as f:
             return {
                 "_id": self.get_id(path),

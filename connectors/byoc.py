@@ -389,22 +389,9 @@ class Connector(ESDocument):
     def status(self):
         return Status(self.get("status"))
 
-    @status.setter
-    def status(self, value):
-        if isinstance(value, str):
-            value = Status(value)
-        if not isinstance(value, Status):
-            raise TypeError(value)
-
-        self._source["status"] = value
-
     @property
     def service_type(self):
         return self.get("service_type")
-
-    @service_type.setter
-    def service_type(self, value):
-        self._source["service_type"] = value
 
     @property
     def last_seen(self):
@@ -429,10 +416,6 @@ class Connector(ESDocument):
     def configuration(self):
         return DataSourceConfiguration(self.get("configuration"))
 
-    @configuration.setter
-    def configuration(self, value):
-        self._source["configuration"] = value
-
     @property
     def index_name(self):
         return self.get("index_name")
@@ -444,10 +427,6 @@ class Connector(ESDocument):
     @property
     def filtering(self):
         return Filtering(self.get("filtering"))
-
-    @filtering.setter
-    def filtering(self, value):
-        self._source["filtering"] = value
 
     @property
     def pipeline(self):
@@ -544,7 +523,7 @@ class Connector(ESDocument):
                     f"Service type is not configured for connector {configured_connector_id}"
                 )
                 raise ServiceTypeNotConfiguredError("Service type is not configured.")
-            self.service_type = doc["service_type"] = configured_service_type
+            doc["service_type"] = configured_service_type
             logger.debug(
                 f"Populated service type {configured_service_type} for connector {self.id}"
             )
@@ -557,10 +536,8 @@ class Connector(ESDocument):
                 source_klass = get_source_klass(fqn)
 
                 # sets the defaults and the flag to NEEDS_CONFIGURATION
-                self.configuration = doc[
-                    "configuration"
-                ] = source_klass.get_simple_configuration()
-                self.status = doc["status"] = Status.NEEDS_CONFIGURATION.value
+                doc["configuration"] = source_klass.get_simple_configuration()
+                doc["status"] = Status.NEEDS_CONFIGURATION.value
                 logger.debug(f"Populated configuration for connector {self.id}")
             except Exception as e:
                 logger.critical(e, exc_info=True)
@@ -575,6 +552,7 @@ class Connector(ESDocument):
             raise ConnectorUpdateError(
                 f"Could not update service type/configuration for connector {self.id}"
             )
+        await self.reload()
 
     async def validate_filtering(self, validator):
         draft_filter = self.filtering.get_draft_filter()
@@ -601,8 +579,8 @@ class Connector(ESDocument):
                 if validation_result.state == FilteringValidationState.VALID:
                     filter_["active"] = filter_.get("draft")
 
-        self.filtering = filtering
         await self.index.update(doc_id=self.id, doc={"filtering": filtering})
+        await self.reload()
 
     async def document_count(self):
         await self.index.client.indices.refresh(

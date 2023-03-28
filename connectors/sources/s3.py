@@ -19,7 +19,7 @@ from aiohttp.client_exceptions import ServerTimeoutError
 from botocore.exceptions import ClientError
 
 from connectors.logger import logger, set_extra_logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
 MAX_CHUNK_SIZE = 1048576
@@ -72,19 +72,19 @@ class S3DataSource(BaseDataSource):
         ) as s3:
             yield s3
 
-    def _validate_configuration(self):
+    def validate_config(self):
         """Validates whether user input is empty or not for configuration fields
 
         Raises:
             Exception: Configured keys can't be empty
         """
         if self.configuration["buckets"] == [""]:
-            raise Exception("Configured keys: buckets can't be empty.")
+            raise ConfigurableFieldValueError(
+                "Configured keys: buckets can't be empty."
+            )
 
     async def ping(self):
         """Verify the connection with AWS"""
-        logger.info("Validating Amazon S3 Configuration...")
-        self._validate_configuration()
         try:
             async with self.client() as s3:
                 self.bucket_list = await s3.list_buckets()
@@ -247,6 +247,7 @@ class S3DataSource(BaseDataSource):
                 "order": 2,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_READ_TIMEOUT,
             },
             "connect_timeout": {
@@ -256,6 +257,7 @@ class S3DataSource(BaseDataSource):
                 "order": 3,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_CONNECTION_TIMEOUT,
             },
             "max_attempts": {
@@ -265,6 +267,7 @@ class S3DataSource(BaseDataSource):
                 "order": 4,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_MAX_RETRY_ATTEMPS,
             },
             "page_size": {
@@ -274,6 +277,7 @@ class S3DataSource(BaseDataSource):
                 "order": 5,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_PAGE_SIZE,
             },
             "enable_content_extraction": {

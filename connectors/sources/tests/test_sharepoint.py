@@ -12,7 +12,7 @@ import aiohttp
 import pytest
 from aiohttp import StreamReader
 
-from connectors.source import DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.sharepoint import SharepointDataSource
 from connectors.sources.tests.support import create_source
 
@@ -134,7 +134,7 @@ async def test_validate_config_when_host_url_is_empty():
     source.configuration.set_field(name="host_url", value="")
 
     # Execute
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         await source.validate_config()
 
 
@@ -146,7 +146,7 @@ async def test_validate_config_for_ssl_enabled():
     source.ssl_enabled = True
 
     # Execute
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         await source.validate_config()
 
 

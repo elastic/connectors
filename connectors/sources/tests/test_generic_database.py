@@ -13,7 +13,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
-from connectors.source import DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.generic_database import (
     GenericBaseDataSource,
     configured_tables,
@@ -138,7 +138,7 @@ async def test_validate_config_valid_fields(patch_logger):
     # Execute
     try:
         await source.validate_config()
-    except Exception:
+    except ConfigurableFieldValueError:
         raise AssertionError("Method raised an exception")
 
 
@@ -149,7 +149,7 @@ async def test_validate_config_valid_fields(patch_logger):
 async def test_validate_config_missing_fields(field, patch_logger):
     # Setup
     source = create_source(GenericBaseDataSource)
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         source.configuration.set_field(name=field, value="")
 
         # Execute
@@ -161,7 +161,7 @@ async def test_validate_config_port(patch_logger):
     """Test validate_config method check port"""
     # Setup
     source = create_source(GenericBaseDataSource)
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         source.configuration.set_field(name="port", value="abcd")
 
         # Execute
@@ -175,7 +175,7 @@ async def test_validate_config_ssl(patch_logger):
     source = create_source(PostgreSQLDataSource)
     source.configuration.set_field(name="ssl_enabled", value=True)
 
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         # Execute
         await source.validate_config()
 

@@ -18,7 +18,7 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -220,11 +220,11 @@ class SharepointDataSource(BaseDataSource):
             for field in connection_fields
             if self.configuration[field] == ""
         ]:
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"Configured keys: {empty_connection_fields} can't be empty."
             )
         if self.ssl_enabled and self.certificate == "":
-            raise Exception("SSL certificate must be configured.")
+            raise ConfigurableFieldValueError("SSL certificate must be configured.")
 
     @retryable(
         retries=RETRIES,

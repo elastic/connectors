@@ -14,7 +14,7 @@ from aiofiles.tempfile import NamedTemporaryFile
 from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClient
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
 
 BLOB_SCHEMA = {
@@ -58,10 +58,6 @@ class AzureBlobStorageDataSource(BaseDataSource):
         Raises:
             Exception: Invalid configured concurrent_downloads
         """
-        if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
-            raise Exception(
-                f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
-            )
         options["concurrent_downloads"] = self.concurrent_downloads
 
     @classmethod
@@ -101,46 +97,52 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "default_value": DEFAULT_RETRY_COUNT,
                 "display": "numeric",
                 "label": "Retries per request",
-                "order": 5,
+                "order": 4,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_RETRY_COUNT,
             },
             "concurrent_downloads": {
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
-                "order": 6,
+                "order": 5,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": MAX_CONCURRENT_DOWNLOADS,
             },
         }
 
-    def _configure_connection_string(self):
-        """Validates whether user input is empty or not for configuration fields and generate connection string
+    async def validate_config(self):
+        if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
+            raise ConfigurableFieldValueError(
+                f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
+            )
 
-        Raises:
-            Exception: Configured keys can't be empty
-
-        Returns:
-            str: Connection string with user input configuration fields
-        """
         keys = ["account_name", "account_key", "blob_endpoint"]
         empty_configuration_fields = list(
             filter(lambda field: self.configuration[field] == "", keys)
         )
 
         if empty_configuration_fields:
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"Configured keys: {empty_configuration_fields} can't be empty."
             )
+
+    def _configure_connection_string(self):
+        """Generates connection string for ABS
+
+        Returns:
+            str: Connection string with user input configuration fields
+        """
 
         return f'AccountName={self.configuration["account_name"]};AccountKey={self.configuration["account_key"]};BlobEndpoint={self.configuration["blob_endpoint"]}'
 
     async def ping(self):
         """Verify the connection with Azure Blob Storage"""
-        logger.info("Validating configurations & Generating connection string...")
+        logger.info("Generating connection string...")
         self.connection_string = self._configure_connection_string()
         try:
             async with BlobServiceClient.from_connection_string(
