@@ -400,7 +400,7 @@ async def test_validate_config_when_host_empty_then_raise_error():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_when_port_wrong_type_then_raise_error():
+async def test_validate_config_when_port_has_wrong_type_then_raise_error():
     source = create_source(MySqlDataSource)
     source.configuration.set_field(name="port", value="port")
 
