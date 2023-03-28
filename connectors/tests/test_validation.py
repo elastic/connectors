@@ -63,7 +63,7 @@ RULE_TWO = {
 FILTERING_ONE_BASIC_RULE_WITH_ADVANCED_RULE = Filter(
     {
         "rules": [RULE_ONE],
-        "advanced_snippet": {"query": {}},
+        "advanced_snippet": {"value": {"query": {}}},
     }
 )
 
@@ -699,6 +699,28 @@ async def test_filtering_validator(
         advanced_rule_validators,
         FILTERING_ONE_BASIC_RULE_WITH_ADVANCED_RULE["advanced_snippet"],
     )
+
+
+@pytest.mark.asyncio
+async def test_filtering_validator_validate_when_advanced_rules_empty_then_skip_validation():
+    invalid_validation_result = SyncRuleValidationResult(
+        rule_id=RULE_TWO_ID,
+        is_valid=False,
+        validation_message=RULE_TWO_VALIDATION_MESSAGE,
+    )
+
+    advanced_rule_validators = validator_fakes(
+        [invalid_validation_result],
+        is_basic_rule_validator=False,
+    )
+
+    filtering_validator = FilteringValidator([], advanced_rule_validators)
+
+    validation_result = await filtering_validator.validate(
+        Filter({"basic_rules": [], "advanced_snippet": {"value": {}}})
+    )
+
+    assert validation_result.state == FilteringValidationState.VALID
 
 
 def validator_fakes(results, is_basic_rule_validator=True):

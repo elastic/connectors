@@ -22,6 +22,7 @@ from connectors.byoc import (
     SyncJobIndex,
 )
 from connectors.byoei import ElasticServer
+from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass_dict
@@ -32,6 +33,8 @@ DEFAULT_MAX_CONCURRENT_SYNCS = 1
 
 
 class JobSchedulingService(BaseService):
+    name = "poll"
+
     def __init__(self, config):
         super().__init__(config)
         self.idling = self.service_config["idling"]
@@ -84,9 +87,16 @@ class JobSchedulingService(BaseService):
         logger.debug(f"Connector status is {connector.status}")
 
         # we trigger a sync
-        if connector.status in (Status.CREATED, Status.NEEDS_CONFIGURATION):
-            # we can't sync in that state
-            logger.info(f"Can't sync with status `{connector.status.value}`")
+        if connector.status == Status.CREATED:
+            logger.info(
+                f'Connector for {connector.service_type}(id: "{connector.id}") has just been created and cannot sync. Wait for Kibana to initialise connector correctly before proceeding.'
+            )
+            return
+
+        if connector.status == Status.NEEDS_CONFIGURATION:
+            logger.info(
+                f'Connector for {connector.service_type}(id: "{connector.id}") is not configured yet. Finish connector configuration in Kibana to make it possible to run a sync.'
+            )
             return
 
         if connector.service_type not in self.source_klass_dict:
@@ -106,7 +116,11 @@ class JobSchedulingService(BaseService):
         job_id = await self.sync_job_index.create(connector)
         if connector.sync_now:
             await connector.reset_sync_now_flag()
-        sync_job = await self.sync_job_index.fetch_by_id(job_id)
+        try:
+            sync_job = await self.sync_job_index.fetch_by_id(job_id)
+        except DocumentNotFoundError:
+            logger.error(f"Couldn't load sync job by id {job_id}")
+            return
         sync_job_runner = SyncJobRunner(
             source_klass=source_klass,
             sync_job=sync_job,
