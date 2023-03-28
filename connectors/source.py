@@ -143,7 +143,6 @@ class BaseDataSource:
                 "sensitive": False,
                 "tooltip": None,
                 "type": "str",
-                "ui_restrictions": [],
                 "validations": [],
                 "value": "",
             }
