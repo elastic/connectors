@@ -14,7 +14,7 @@ import pytest
 from aiohttp import StreamReader
 from freezegun import freeze_time
 
-from connectors.source import DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.jira import JiraClient, JiraDataSource
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
@@ -183,7 +183,7 @@ async def test_validate_config_for_host_url(patch_logger):
     source.configuration.set_field(name="host_url", value="")
 
     # Execute
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         await source.validate_config()
 
 
@@ -274,7 +274,7 @@ async def test_validate_config_for_ssl_enabled(patch_logger):
     source.jira_client.ssl_enabled = True
 
     # Execute
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         await source.validate_config()
 
 
@@ -288,7 +288,8 @@ async def test_validate_config_with_invalid_concurrent_downloads(patch_logger):
 
     # Execute
     with pytest.raises(
-        Exception, match="Configured concurrent downloads can't be set more than *"
+        ConfigurableFieldValueError,
+        match="Configured concurrent downloads can't be set more than *",
     ):
         await source.validate_config()
 

@@ -12,7 +12,7 @@ import pytest
 
 from connectors.byoc import Filter
 from connectors.filtering.validation import SyncRuleValidationResult
-from connectors.source import DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.mysql import (
     MySQLAdvancedRulesValidator,
     MySqlDataSource,
@@ -391,22 +391,23 @@ async def test_get_docs_with_advanced_rules(
     assert yielded_docs == expected_docs
 
 
-def test_validate_configuration():
-    """This function test _validate_configuration method of MySQL"""
-    source = create_source(MySqlDataSource)
-    source.configuration.set_field(name="host", value="")
+@pytest.mark.asyncio
+async def test_validate_config():
+    """This function test validate_config method of MySQL"""
+    source = create_source(MySqlDataSource, host="")
 
-    with pytest.raises(Exception):
-        source._validate_configuration()
+    with pytest.raises(ConfigurableFieldValueError):
+        await source.validate_config()
 
 
-def test_validate_configuration_with_port():
+@pytest.mark.asyncio
+async def test_validate_configuration_with_port():
     """This function test _validate_configuration method with port str input of MySQL"""
     source = create_source(MySqlDataSource)
     source.configuration.set_field(name="port", value="port")
 
-    with pytest.raises(Exception):
-        source._validate_configuration()
+    with pytest.raises(ConfigurableFieldValueError):
+        await source.validate_config()
 
 
 def test_ssl_context():
@@ -491,3 +492,48 @@ async def test_get_tables_to_fetch_remote_tables(tables):
     await source.get_tables_to_fetch()
 
     assert source.fetch_all_tables.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_validate_database_accessible_when_accessible_then_no_error_raised():
+    source = create_source(MySqlDataSource)
+    source.database = "test_database"
+
+    cursor = AsyncMock()
+    cursor.execute.return_value = None
+
+    await source._validate_database_accessible(cursor)
+    cursor.execute.assert_called_with(f"USE {source.database};")
+
+
+@pytest.mark.asyncio
+async def test_validate_database_accessible_when_not_accessible_then_error_raised():
+    source = create_source(MySqlDataSource)
+
+    cursor = AsyncMock()
+    cursor.execute.side_effect = aiomysql.Error("Error")
+
+    with pytest.raises(Exception):
+        await source._validate_database_accessible(cursor)
+
+
+@pytest.mark.asyncio
+async def test_validate_tables_accessible_when_accessible_then_no_error_raised():
+    source = create_source(MySqlDataSource)
+    source.tables = ["table_1", "table_2", "table_3"]
+
+    cursor = AsyncMock()
+    cursor.execute.return_value = None
+
+    await source._validate_tables_accessible(cursor)
+
+
+@pytest.mark.asyncio
+async def test_validate_tables_accessible_when_not_accessible_then_error_raised():
+    source = create_source(MySqlDataSource)
+
+    cursor = AsyncMock()
+    cursor.execute.side_effect = aiomysql.Error("Error")
+
+    with pytest.raises(Exception):
+        await source._validate_tables_accessible(cursor)
