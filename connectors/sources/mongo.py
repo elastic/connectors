@@ -15,7 +15,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 
 
 class MongoAdvancedRulesValidator(AdvancedRulesValidator):
@@ -198,7 +198,7 @@ class MongoDataSource(BaseDataSource):
         logger.debug(f"Existing databases: {existing_database_names}")
 
         if configured_database_name not in existing_database_names:
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}"
             )
 
@@ -210,6 +210,6 @@ class MongoDataSource(BaseDataSource):
         )
 
         if configured_collection_name not in existing_collection_names:
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"Collection ({configured_collection_name}) does not exist within database {configured_database_name}. Existing collections: {', '.join(existing_collection_names)}"
             )

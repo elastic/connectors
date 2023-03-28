@@ -10,6 +10,7 @@ from unittest import mock
 import pytest
 from bson.decimal128 import Decimal128
 
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.mongo import MongoAdvancedRulesValidator, MongoDataSource
 from connectors.sources.tests.support import assert_basics, create_source
 
@@ -167,7 +168,7 @@ async def test_validate_config_when_database_name_invalid_then_raises_exception(
         return_value=future_with_result(server_database_names),
     ):
         source = create_source(MongoDataSource, database=configured_database_name)
-        with pytest.raises(Exception) as e:
+        with pytest.raises(ConfigurableFieldValueError) as e:
             await source.validate_config()
         # assert that message contains database name from config
         assert e.match(configured_database_name)
@@ -195,7 +196,7 @@ async def test_validate_config_when_collection_name_invalid_then_raises_exceptio
             database=configured_database_name,
             collection=configured_collection_name,
         )
-        with pytest.raises(Exception) as e:
+        with pytest.raises(ConfigurableFieldValueError) as e:
             await source.validate_config()
         # assert that message contains database name from config
         assert e.match(configured_collection_name)

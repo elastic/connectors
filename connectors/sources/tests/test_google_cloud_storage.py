@@ -14,7 +14,7 @@ from aiogoogle import Aiogoogle
 from aiogoogle.auth.managers import ServiceAccountManager
 from aiogoogle.models import Request, Response
 
-from connectors.source import DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.google_cloud_storage import GoogleCloudStorageDataSource
 
 SERVICE_ACCOUNT_CREDENTIALS = '{"project_id": "dummy123"}'
@@ -66,7 +66,8 @@ async def test_empty_configuration():
 
     # Execute
     with pytest.raises(
-        Exception, match="Google Cloud service account json can't be empty."
+        ConfigurableFieldValueError,
+        match="Google Cloud service account json can't be empty.",
     ):
         await gcs_object.validate_config()
 
@@ -81,7 +82,8 @@ async def test_raise_on_invalid_configuration():
 
     # Execute
     with pytest.raises(
-        Exception, match="Google Cloud service account is not a valid JSON"
+        ConfigurableFieldValueError,
+        match="Google Cloud service account is not a valid JSON",
     ):
         await gcs_object.validate_config()
 
