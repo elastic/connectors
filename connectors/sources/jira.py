@@ -189,13 +189,7 @@ class JiraDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self._sleeps = CancellableSleeps()
-        self.is_cloud = self.configuration["is_cloud"]
-        self.host_url = self.configuration["host_url"]
-        self.ssl_enabled = self.configuration["ssl_enabled"]
-        self.certificate = self.configuration["ssl_ca"]
-        self.retry_count = self.configuration["retry_count"]
-
+        self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
         self.jira_client = JiraClient(configuration=configuration)
 
@@ -250,6 +244,11 @@ class JiraDataSource(BaseDataSource):
                 "value": "",
                 "label": "SSL certificate",
                 "type": "str",
+            },
+            "enable_content_extraction": {
+                "value": True,
+                "label": "Enable content extraction (true/false)",
+                "type": "bool",
             },
             "retry_count": {
                 "value": 3,
@@ -320,7 +319,7 @@ class JiraDataSource(BaseDataSource):
             dictionary: Content document with _id, _timestamp and attachment content
         """
         attachment_size = int(attachment["size"])
-        if not (doit and attachment_size > 0):
+        if not (self.enable_content_extraction and doit and attachment_size > 0):
             return
 
         attachment_name = attachment["filename"]
