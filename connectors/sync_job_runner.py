@@ -66,7 +66,7 @@ class SyncJobRunner:
             raise JobClaimError
 
         try:
-            self.data_provider = self.source_klass(self.sync_job.configuration, self.sync_job.pipeline)
+            self.data_provider = self.source_klass(self.sync_job.configuration)
             if not await self.data_provider.changed():
                 logger.debug(
                     f"No change in {self.sync_job.service_type} data provider, skipping..."
