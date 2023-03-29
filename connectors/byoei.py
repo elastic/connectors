@@ -59,11 +59,6 @@ def get_mb_size(ob):
     return round(get_size(ob) / (1024 * 1024), 2)
 
 
-def get_byte_size(ob):
-    """Returns the size of ob in bytes"""
-    return round(get_size(ob) / 1024, 2)
-
-
 class Bulker:
     """Send bulk operations in batches by consuming a queue.
 
@@ -119,7 +114,7 @@ class Bulker:
 
         raise TypeError(operation)
 
-    async def _batch_bulk(self, operations):
+    async def _batch_bulk(self, operations, stats):
         # TODO: treat result to retry errors like in async_streaming_bulk
         task_num = len(self.bulk_tasks)
 
@@ -139,50 +134,25 @@ class Bulker:
                             logger.error(f"operation {op} failed, {data['error']}")
                             raise Exception(data["error"]["reason"])
 
-            self._populate_stats(operations, res)
+            self._populate_stats(stats, res)
 
         finally:
             self.bulk_time += time.time() - start
 
         return res
 
-    def _populate_stats(self, operations, res):
-        operation = doc_id = None
-        # A dictionary of operation -> an object, which is another dictionary of _id -> document size
-        ops_dict = {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}}
-        for op in operations:
-            if OP_INDEX in op:
-                operation = OP_INDEX
-                doc_id = op[OP_INDEX]["_id"]
-                ops_dict[OP_INDEX][doc_id] = 0
-            elif OP_UPSERT in op:
-                operation = OP_UPSERT
-                doc_id = op[OP_UPSERT]["_id"]
-                ops_dict[OP_UPSERT][doc_id] = 0
-            elif OP_DELETE in op:
-                operation = OP_DELETE
-                doc_id = op[OP_DELETE]["_id"]
-                ops_dict[OP_DELETE][doc_id] = 0
-            elif "doc" in op:  # update payload
-                ops_dict[operation][doc_id] = get_byte_size(  # pyright: ignore
-                    op["doc"]
-                )
-            else:  # index payload
-                ops_dict[operation][doc_id] = get_byte_size(op)  # pyright: ignore
-
+    def _populate_stats(self, stats, res):
         for item in res["items"]:
             for op, data in item.items():
                 # "result" is only present in successful operations
                 if "result" not in data:
-                    del ops_dict[op][data["_id"]]
+                    del stats[op][data["_id"]]
 
-        self.indexed_document_count += len(ops_dict[OP_INDEX]) + len(
-            ops_dict[OP_UPSERT]
+        self.indexed_document_count += len(stats[OP_INDEX]) + len(stats[OP_UPSERT])
+        self.indexed_document_volume += sum(stats[OP_INDEX].values()) + sum(
+            stats[OP_UPSERT].values()
         )
-        self.indexed_document_volume += sum(ops_dict[OP_INDEX].values()) + sum(
-            ops_dict[OP_UPSERT].values()
-        )
-        self.deleted_document_count += len(ops_dict[OP_DELETE])
+        self.deleted_document_count += len(stats[OP_DELETE])
 
         logger.debug(
             f"Bulker stats - no. of docs indexed: {self.indexed_document_count}, volume of docs indexed: {round(self.indexed_document_volume)} bytes, no. of docs deleted: {self.deleted_document_count}"
@@ -198,6 +168,8 @@ class Bulker:
         requests.
         """
         batch = []
+        # stats is a dictionary containing stats for 3 operations. In each sub-dictionary, it is a doc id to size map.
+        stats = {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}}
         self.bulk_time = 0
         self.bulking = True
         bulk_size = 0
@@ -207,6 +179,12 @@ class Bulker:
             if doc in ("END_DOCS", "FETCH_ERROR"):
                 break
             operation = doc["_op_type"]
+            doc_id = doc["_id"]
+            if operation == OP_DELETE:
+                stats[operation][doc_id] = 0
+            else:
+                # 584 is the rough size of the doc overhead.
+                stats[operation][doc_id] = max(doc_size - 584, 0)
             self.ops[operation] += 1
             batch.extend(self._bulk_op(doc, operation))
 
@@ -216,16 +194,18 @@ class Bulker:
                     functools.partial(
                         self._batch_bulk,
                         copy.copy(batch),
+                        copy.copy(stats),
                     )
                 )
                 batch.clear()
+                stats = {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}}
                 bulk_size = 0
 
             await asyncio.sleep(0)
 
         await self.bulk_tasks.join()
         if len(batch) > 0:
-            await self._batch_bulk(batch)
+            await self._batch_bulk(batch, stats)
 
 
 class Fetcher:

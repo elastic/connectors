@@ -608,13 +608,11 @@ async def test_get_docs(
         assert queue_called_with_operations(queue, expected_queue_operations)
 
 
-OPERATIONS = [
-    {"index": {"_index": INDEX, "_id": "1"}},
-    {},
-    {"update": {"_index": INDEX, "_id": "2"}},
-    {"doc": {}, "doc_as_upsert": True},
-    {"delete": {"_index": INDEX, "_id": "3"}},
-]
+STATS = {
+    "index": {"1": 1},
+    "update": {"2": 1},
+    "delete": {"3": 0},
+}
 
 INDEX_ITEM = {"index": {"_id": "1", "result": "created"}}
 FAILED_INDEX_ITEM = {"index": {"_id": "1"}}
@@ -693,9 +691,7 @@ FAILED_DELETE_ITEM = {"delete": {"_id": "3"}}
         ),
     ],
 )
-@mock.patch("connectors.byoei.get_byte_size")
-def test_bulk_populate_stats(get_byte_size, res, expected_result):
-    get_byte_size.return_value = 1
+def test_bulk_populate_stats(res, expected_result):
     bulker = Bulker(
         client=None,
         queue=None,
@@ -704,7 +700,7 @@ def test_bulk_populate_stats(get_byte_size, res, expected_result):
         chunk_mem_size=0,
         max_concurrency=0,
     )
-    bulker._populate_stats(OPERATIONS, res)
+    bulker._populate_stats(deepcopy(STATS), res)
 
     assert bulker.indexed_document_count == expected_result["indexed_document_count"]
     assert bulker.indexed_document_volume == expected_result["indexed_document_volume"]
