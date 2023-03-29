@@ -335,6 +335,6 @@ def test_validate_config_for_empty_bucket_string():
     source.configuration.set_field(name="buckets", value=[""])
     # Execute
     with pytest.raises(ConfigurableFieldValueError) as e:
-        source.validate_config()
+        await source.validate_config()
 
     assert e.match("buckets")
