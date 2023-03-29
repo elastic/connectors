@@ -182,7 +182,7 @@ class JiraClient:
                     start_at += FETCH_SIZE
             except Exception as exception:
                 logger.warning(
-                    f"Skipping data for type: {url_name}. Error: {exception}."
+                    f"Skipping data for type: {url_name}, query params: jql={jql}, startAt={start_at}, maxResults={FETCH_SIZE}. Error: {exception}."
                 )
                 break
 
@@ -430,14 +430,16 @@ class JiraDataSource(BaseDataSource):
         try:
             timezone = await self._get_timezone()
 
-            _timestamp = iso_utc(when=datetime.now(pytz.timezone(timezone)))
+            timestamp = iso_utc(
+                when=datetime.now(pytz.timezone(timezone))  # pyright: ignore
+            )
             if self.jira_client.projects == ["*"]:
                 async for response in self.jira_client.api_call(url_name=PROJECT):
                     response = await response.json()
                     for project in response:
                         yield {
                             "_id": f"{project['name']}-{project['id']}",
-                            "_timestamp": _timestamp,
+                            "_timestamp": timestamp,
                             "Type": "Project",
                             "Project": project,
                         }
@@ -449,7 +451,7 @@ class JiraDataSource(BaseDataSource):
                         project = await response.json()
                         yield {
                             "_id": f"{project['name']}-{project['id']}",
-                            "_timestamp": _timestamp,
+                            "_timestamp": timestamp,
                             "Type": "Project",
                             "Project": project,
                         }

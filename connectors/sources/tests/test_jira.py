@@ -398,7 +398,7 @@ async def test_verify_projects_with_unavailable_project_keys(patch_logger):
     source.jira_client.projects = ["TP", "AP"]
 
     with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
-        with pytest.raises(Exception, match="Configured unavailable projects*"):
+        with pytest.raises(Exception, match="Configured unavailable projects: AP"):
             await source._verify_projects()
 
 
