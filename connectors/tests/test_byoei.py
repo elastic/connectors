@@ -558,7 +558,8 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
             total_downloads(0),
         ),
         (
-            # content_extraction_enabled is false, so no downloads should occur
+            # content_extraction_enabled is false,
+            # indexing should still work, but nothing should be downloaded
             [],
             [(DOC_ONE, None)],
             NO_FILTERING,

@@ -186,7 +186,7 @@ class Fetcher:
     - existing_ids: a list of existing Elasticsearch document ids found in the index
     - filter_: an instance of `Filter` to apply on the fetched document -- default: `None`
     - sync_rules_enabled: if `True`, we apply rules -- default: `False`
-    - content_extraction_enabled: if `True`, download content
+    - content_extraction_enabled: if `True`, download content -- default `True`
     - display_every -- display a log every `display_every` doc -- default: `DEFAULT_DISPLAY_EVERY`
     - concurrent_downloads: -- concurrency level for downloads -- default: `DEFAULT_CONCURRENT_DOWNLOADS`
     """
@@ -198,7 +198,7 @@ class Fetcher:
         existing_ids,
         filter_=None,
         sync_rules_enabled=False,
-        content_extraction_enabled=False,
+        content_extraction_enabled=True,
         display_every=DEFAULT_DISPLAY_EVERY,
         concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
     ):
