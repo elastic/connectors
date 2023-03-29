@@ -14,6 +14,9 @@ and other team members can understand the reasoning behind the pull request.-->
 items that may help during the review.-->
 
 #### Pre-Review Checklist
+- [ ] this PR has a meaningful title
+- [ ] this PR links to all relevant github issues that it fixes or partially addresses
+- [ ] this PR has a thorough description
 - [ ] Covered the changes with automated tests
 - [ ] Tested the changes locally
 - [ ] Added a label for each target release version (example: `v7.13.2`, `v7.14.0`, `v8.0.0`)
