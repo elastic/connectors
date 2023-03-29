@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from copy import deepcopy
 from datetime import datetime
 
 import fastjsonschema
@@ -107,6 +108,9 @@ class MongoDataSource(BaseDataSource):
 
         self.client = AsyncIOMotorClient(host, **client_params)
 
+        self.db = self.client[self.configuration["database"]]
+        self.collection = self.db[self.configuration["collection"]]
+
     @classmethod
     def get_default_configuration(cls):
         return {
@@ -178,13 +182,26 @@ class MongoDataSource(BaseDataSource):
         return doc
 
     async def get_docs(self, filtering=None):
-        db = self.client[self.configuration["database"]]
+        if filtering is not None and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
 
-        logger.debug("Grabbing collection info")
-        collection = db[self.configuration["collection"]]
+            if "find" in advanced_rules:
+                find_kwargs = advanced_rules.get("find", {})
 
-        async for doc in collection.find():
-            yield self.serialize(doc), None
+                async for doc in self.collection.find(**find_kwargs):
+                    yield self.serialize(doc), None
+
+            elif "aggregate" in advanced_rules:
+                aggregate_kwargs = deepcopy(advanced_rules.get("aggregate", {}))
+                pipeline = aggregate_kwargs.pop("pipeline", [])
+
+                async for doc in self.collection.aggregate(
+                    pipeline=pipeline, **aggregate_kwargs
+                ):
+                    yield self.serialize(doc), None
+        else:
+            async for doc in self.collection.find():
+                yield self.serialize(doc), None
 
         self._dirty = False
 

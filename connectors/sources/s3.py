@@ -245,6 +245,7 @@ class S3DataSource(BaseDataSource):
                 "order": 2,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_READ_TIMEOUT,
             },
             "connect_timeout": {
@@ -254,6 +255,7 @@ class S3DataSource(BaseDataSource):
                 "order": 3,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_CONNECTION_TIMEOUT,
             },
             "max_attempts": {
@@ -263,6 +265,7 @@ class S3DataSource(BaseDataSource):
                 "order": 4,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_MAX_RETRY_ATTEMPS,
             },
             "page_size": {
@@ -272,6 +275,7 @@ class S3DataSource(BaseDataSource):
                 "order": 5,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_PAGE_SIZE,
             },
         }

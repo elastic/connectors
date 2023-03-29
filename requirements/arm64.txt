@@ -1,3 +1,5 @@
 # Apple M1
 
 -r aarch64.txt
+
+SQLAlchemy[asyncio]==2.0.1
