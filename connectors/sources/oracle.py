@@ -83,7 +83,7 @@ class OracleDataSource(GenericBaseDataSource):
             {
                 "oracle_protocol": {
                     "display": "dropdown",
-                    "label": "Oracle connection protocol",
+                    "label": "Oracle connection protocol (TCP/TCPS)",
                     "options": [
                         {"label": "TCP", "value": "TCP"},
                         {"label": "TCPS", "value": "TCPS"},

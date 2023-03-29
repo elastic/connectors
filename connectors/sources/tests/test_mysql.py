@@ -392,8 +392,7 @@ async def test_get_docs_with_advanced_rules(
 
 
 @pytest.mark.asyncio
-async def test_validate_config():
-    """This function test validate_config method of MySQL"""
+async def test_validate_config_when_host_empty_then_raise_error():
     source = create_source(MySqlDataSource, host="")
 
     with pytest.raises(ConfigurableFieldValueError):
@@ -401,8 +400,7 @@ async def test_validate_config():
 
 
 @pytest.mark.asyncio
-async def test_validate_configuration_with_port():
-    """This function test _validate_configuration method with port str input of MySQL"""
+async def test_validate_config_when_port_has_wrong_type_then_raise_error():
     source = create_source(MySqlDataSource)
     source.configuration.set_field(name="port", value="port")
 
@@ -485,7 +483,7 @@ async def test_advanced_rules_tables_validation(
 
 @pytest.mark.parametrize("tables", ["*", ["*"]])
 @pytest.mark.asyncio
-async def test_get_tables_to_fetch_remote_tables(tables):
+async def test_get_tables_when_wildcard_configured_then_fetch_all_tables(tables):
     source = create_source(MySqlDataSource)
     source.fetch_all_tables = AsyncMock(return_value="table")
 
