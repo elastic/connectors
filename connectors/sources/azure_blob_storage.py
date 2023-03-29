@@ -36,7 +36,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
     name = "Azure Blob Storage"
     service_type = "azure_blob_storage"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, pipeline):
         """Set up the connection to the azure base client
 
         Args:
@@ -46,6 +46,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
         self.connection_string = None
         self.retry_count = self.configuration["retry_count"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
+        self.content_extraction_enabled = self.pipeline["extract_binary_content"]
 
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by azure blob storage
@@ -178,7 +179,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             dictionary: Content document with id, timestamp & text
         """
         blob_size = int(blob["size"])
-        if not (doit and blob_size > 0):
+        if not (self.content_extraction_enabled and doit and blob_size > 0):
             return
 
         blob_name = blob["title"]
