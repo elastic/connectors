@@ -173,6 +173,7 @@ class Bulker:
         self.bulk_time = 0
         self.bulking = True
         bulk_size = 0
+        overhead_size = None
 
         while True:
             doc_size, doc = await self.queue.get()
@@ -183,8 +184,16 @@ class Bulker:
             if operation == OP_DELETE:
                 stats[operation][doc_id] = 0
             else:
-                # 584 is the rough size of the doc overhead.
-                stats[operation][doc_id] = max(doc_size - 584, 0)
+                # the doc_size also includes _op_type, _index and _id,
+                # which we want to exclude when calculating the size.
+                if overhead_size is None:
+                    overhead = {
+                        "_op_type": operation,
+                        "_index": doc["_index"],
+                        "_id": doc_id,
+                    }
+                    overhead_size = get_size(overhead)
+                stats[operation][doc_id] = max(doc_size - overhead_size, 0)
             self.ops[operation] += 1
             batch.extend(self._bulk_op(doc, operation))
 
