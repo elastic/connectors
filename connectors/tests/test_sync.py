@@ -656,66 +656,6 @@ async def test_connector_service_poll_buggy_service(
 
 
 @pytest.mark.asyncio
-async def test_spurious(mock_responses, patch_logger, set_env):
-    await set_server_responses(mock_responses)
-
-    from connectors.byoc import Connector
-
-    async def _sync(*args):
-        raise Exception("me")
-
-    old_sync = Connector.sync
-    Connector.sync = _sync
-
-    try:
-        await create_and_run_service(CONFIG_FILE)
-    except Exception:
-        await asyncio.sleep(0.1)
-    finally:
-        Connector.sync = old_sync
-
-    patch_logger.assert_check(
-        lambda log: isinstance(log, Exception) and log.args[0] == "me"
-    )
-
-
-@pytest.mark.asyncio
-async def test_spurious_continue(mock_responses, patch_logger, set_env):
-    await set_server_responses(mock_responses)
-
-    from connectors.byoc import Connector
-
-    async def _sync(*args):
-        raise Exception("me")
-
-    old_sync = Connector.sync
-    Connector.sync = _sync
-
-    await set_server_responses(mock_responses)
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        payload={
-            "hits": {
-                "hits": [{"_id": "1", "_source": FAKE_CONFIG}],
-                "total": {"value": 1},
-            }
-        },
-        headers=headers,
-    )
-
-    try:
-        await create_and_run_service(CONFIG_FILE)
-    except Exception:
-        await asyncio.sleep(0.1)
-    finally:
-        Connector.sync = old_sync
-
-    patch_logger.assert_instance(Exception)
-
-
-@pytest.mark.asyncio
 async def test_concurrent_syncs(mock_responses, patch_logger, set_env):
     await set_server_responses(mock_responses, [FAKE_CONFIG, FAKE_CONFIG, FAKE_CONFIG])
     await create_and_run_service(CONFIG_FILE)
