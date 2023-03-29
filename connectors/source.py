@@ -7,6 +7,7 @@
 """
 
 import importlib
+import re
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -18,6 +19,7 @@ from connectors.filtering.validation import (
     BasicRulesSetSemanticValidator,
     FilteringValidator,
 )
+
 
 
 class Field:
@@ -52,6 +54,61 @@ class Field:
         elif type_ == "list":
             return [item.strip() for item in value.split(",")]
         return value
+
+    def _is_valid(self, validations):
+        valid = True
+        validation_errors = []
+
+        for validation in validations:
+            type = validation["type"]
+            constraint = validation["constraint"]
+
+            match type:
+                case "less_than":
+                    if self.value < constraint:
+                        next
+                    else:
+                        valid = False
+                        validation_errors.append(
+                            f"{self.name} value {self.value} should be less than {constraint}."
+                        )
+                case "greater_than":
+                    if self.value > constraint:
+                        next
+                    else:
+                        valid = False
+                        validation_errors.append(
+                            f"{self.name} value {self.value} should be greater than {constraint}."
+                        )
+                case "list_type":
+                    for item in self.value:
+                        if not isInstance(item, constraint):
+                            valid = False
+                            validation_errors.append(
+                                f"{self.name} list value {item} should be of type {constraint}."
+                            )
+                case "included_in":
+                    if self.type == "list":
+                        # if not all(item in self.value for item in constraint):
+                        for item in self.value:
+                            if item not in constraint:
+                                valid = False
+                                validation_errors.append(
+                                    f"{self.name} list value {item} should be one of {constraint.join(', ')}."
+                                )
+                    else:
+                        if self.value not in constraint:
+                            valid = False
+                            validation_errors.append(
+                                f"{self.name} list value {item} should be one of {constraint.join(', ')}."
+                            )
+                case "regex":
+                    if not re.fullmatch(constraint, self.value):
+                        valid = False
+                        validation_errors.append(
+                            f"{self.name} value {self.value} failed regex check {constraint}."
+                        )
+
 
 
 class DataSourceConfiguration:
