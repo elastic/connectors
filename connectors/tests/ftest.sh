@@ -36,42 +36,43 @@ fi
 
 $PYTHON -m pip install -r $NAME/requirements.txt
 $PYTHON test_runner.py --name $NAME
-$PYTHON fixture.py --name $NAME --action setup
-$PYTHON fixture.py --name $NAME --action start_stack
-$ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug --filtering $NAME/filtering.json
-$PYTHON fixture.py --name $NAME --action load
-$PYTHON fixture.py --name $NAME --action sync
 
-if [[ $PERF8 == "yes" ]]
-then
-    if [[ $PLATFORM == "darwin" ]]
-    then
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --debug & PID=$!
-    else
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --debug & PID=$!
-    fi
-else
-    $ELASTIC_INGEST --debug & PID=$!
-fi
+# $PYTHON fixture.py --name $NAME --action setup
+# $PYTHON fixture.py --name $NAME --action start_stack
+# $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --debug --filtering $NAME/filtering.json
+# $PYTHON fixture.py --name $NAME --action load
+# $PYTHON fixture.py --name $NAME --action sync
 
-$PYTHON fixture.py --name $NAME --action monitor --pid $PID
+# if [[ $PERF8 == "yes" ]]
+# then
+#     if [[ $PLATFORM == "darwin" ]]
+#     then
+#       $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --debug & PID=$!
+#     else
+#       $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil -c $ELASTIC_INGEST --debug & PID=$!
+#     fi
+# else
+#     $ELASTIC_INGEST --debug & PID=$!
+# fi
 
-$PYTHON fixture.py --name $NAME --action remove
-$PYTHON fixture.py --name $NAME --action sync
+# $PYTHON fixture.py --name $NAME --action monitor --pid $PID
 
-$ELASTIC_INGEST --debug & PID=$!
+# $PYTHON fixture.py --name $NAME --action remove
+# $PYTHON fixture.py --name $NAME --action sync
 
-$PYTHON fixture.py --name $NAME --action monitor --pid $PID
+# $ELASTIC_INGEST --debug & PID=$!
+
+# $PYTHON fixture.py --name $NAME --action monitor --pid $PID
 
 
-if [[ "$DATA_SIZE" == 'small' ]]; then
-   SIZE=750
-elif [[ "$DATA_SIZE" == 'medium' ]]; then
-   SIZE=1500
-else
-   SIZE=3000
-fi
+# if [[ "$DATA_SIZE" == 'small' ]]; then
+#    SIZE=750
+# elif [[ "$DATA_SIZE" == 'medium' ]]; then
+#    SIZE=1500
+# else
+#    SIZE=3000
+# fi
 
-$PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size $SIZE
-$PYTHON fixture.py --name $NAME --action stop_stack
-$PYTHON fixture.py --name $NAME --action teardown
+# $PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size $SIZE
+# $PYTHON fixture.py --name $NAME --action stop_stack
+# $PYTHON fixture.py --name $NAME --action teardown

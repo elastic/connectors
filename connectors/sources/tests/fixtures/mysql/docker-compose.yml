@@ -1,6 +1,16 @@
 version: '3.9'
 
 services:
+  connectors:
+    image: connectors
+    container_name: connectors
+    depends_on:
+      - elasticsearch
+      - kibana
+      - enterprise_search
+    networks:
+      - esnet
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:${VERSION}
     container_name: elasticsearch
@@ -45,7 +55,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-        - "elasticsearch"
+        - elasticsearch
     profiles:
       - "enterprise-search"
     environment:
@@ -62,7 +72,7 @@ services:
     profiles:
       - "enterprise-search"
     depends_on:
-      - "elasticsearch"
+      - elasticsearch
     environment:
       - ENT_SEARCH_DEFAULT_PASSWORD=changeme
       - elasticsearch.username=elastic

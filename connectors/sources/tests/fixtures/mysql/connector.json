@@ -2,12 +2,38 @@
             "api_key_id": "",
             "status": "configured",
             "language": "en",
-            "last_sync_status": "null",
+            "last_sync_status": "canceled",
             "last_sync_error": "",
             "last_synced": "",
             "last_seen": "",
             "created_at": "",
             "updated_at": "",
+            "configuration": {
+              "host": {
+                "value": "host.docker.internal",
+                "label": "Host"
+              },
+              "port": {
+                  "value": 3306,
+                  "label": "Port"
+              },
+              "user": {
+                  "value": "root",
+                  "label": "Username"
+              },
+              "password": {
+                  "value": "changeme",
+                  "label": "Password"
+              },
+              "database": {
+                  "value": "customerinfo",
+                  "label": "Databases"
+              },
+              "connector_name": {
+                  "value": "MySQL Connector",
+                  "label": "Friendly name for the connector"
+              }
+          },
             "filtering": [
               {
                   "domain": "DEFAULT",
@@ -61,5 +87,8 @@
                 "run_ml_inference": true
             },
             "sync_now": true,
-            "is_native": true
+            "is_native": true,
+            "index_name": "search-mysql",
+            "name": "mysql",
+            "service_type": "mysql"
 }

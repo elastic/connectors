@@ -4,89 +4,15 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-import json
-import logging
-import os
-import sys
-from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 import elasticsearch
-from envyaml import EnvYAML
 
 from connectors.byoei import ElasticServer
 from connectors.es.settings import DEFAULT_LANGUAGE, Mappings, Settings
-from connectors.logger import logger, set_logger
-from connectors.source import get_source_klass
-from connectors.utils import validate_index_name
+from connectors.logger import logger
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
-DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
-DEFAULT_CONNECTOR_CONFIG = {
-    "api_key_id": "",
-    "status": "configured",
-    "language": "en",
-    "last_sync_status": "null",
-    "last_sync_error": "",
-    "last_synced": "",
-    "last_seen": "",
-    "created_at": "",
-    "updated_at": "",
-    "filtering": [
-        {
-            "domain": "DEFAULT",
-            "draft": {
-                "advanced_snippet": {
-                    "updated_at": "2023-01-31T16:41:27.341Z",
-                    "created_at": "2023-01-31T16:38:49.244Z",
-                    "value": {},
-                },
-                "rules": [
-                    {
-                        "field": "_",
-                        "updated_at": "2023-01-31T16:41:27.341Z",
-                        "created_at": "2023-01-31T16:38:49.244Z",
-                        "rule": "regex",
-                        "id": "DEFAULT",
-                        "value": ".*",
-                        "order": 1,
-                        "policy": "include",
-                    }
-                ],
-                "validation": {"state": "valid", "errors": []},
-            },
-            "active": {
-                "advanced_snippet": {
-                    "updated_at": "2023-01-31T16:41:27.341Z",
-                    "created_at": "2023-01-31T16:38:49.244Z",
-                    "value": {},
-                },
-                "rules": [
-                    {
-                        "field": "_",
-                        "updated_at": "2023-01-31T16:41:27.341Z",
-                        "created_at": "2023-01-31T16:38:49.244Z",
-                        "rule": "regex",
-                        "id": "DEFAULT",
-                        "value": ".*",
-                        "order": 1,
-                        "policy": "include",
-                    }
-                ],
-                "validation": {"state": "valid", "errors": []},
-            },
-        }
-    ],
-    "scheduling": {"enabled": True, "interval": "1 * * * * *"},
-    "pipeline": {
-        "extract_binary_content": True,
-        "name": "ent-search-generic-ingestion",
-        "reduce_whitespace": True,
-        "run_ml_inference": True,
-    },
-    "sync_now": True,
-    "is_native": True,
-}
 DEFAULT_PIPELINE = {
     "version": 1,
     "description": "For testing",
@@ -110,203 +36,154 @@ DEFAULT_PIPELINE = {
 }
 
 
-# XXX simulating Kibana click-arounds
-async def prepare(service_type, index_name, config, connector_config):
-    klass = get_source_klass(config["sources"][service_type])
-    es = ElasticServer(config["elasticsearch"])
+class KibanaFake:
+    def __init__(self, config, index_name):
+        self.config = config
+        self.index_name = index_name
+        self.es = ElasticServer(config["elasticsearch"])
 
-    # add a dummy pipeline
-    try:
-        pipeline = await es.client.ingest.get_pipeline(
-            id="ent-search-generic-ingestion"
-        )
-    except elasticsearch.NotFoundError:
-        await es.client.ingest.put_pipeline(
-            id="ent-search-generic-ingestion", body=DEFAULT_PIPELINE
-        )
+    async def setup(self):
+        logger.debug("Preparing initial indices...")
 
-    try:
-        pipeline = await es.client.ingest.get_pipeline(
-            id="ent-search-generic-ingestion"
-        )
-    except elasticsearch.NotFoundError:
-        pipeline = {
-            "description": "My optional pipeline description",
-            "processors": [
-                {
-                    "set": {
-                        "description": "My optional processor description",
-                        "field": "my-keyword-field",
-                        "value": "foo",
+        try:
+            await asyncio.gather(
+                self.create_pipeline(),
+                self.create_connectors_index(),
+                self.create_sync_jobs_index()
+            )
+
+            logger.info("Finished creating initial indices.")
+        finally:
+            await self.es.close()
+
+    async def connectors_index_state(self):
+        return await self.es.client.search(index=CONNECTORS_INDEX, query={"match_all": {}})
+
+    async def sync_now(self, connector_id):
+        logger.debug(f"Setting sync_now to true for connector with id '{connector_id}'...")
+
+        connector_doc = await self.es.client.get(index=CONNECTORS_INDEX, id=connector_id)
+        # TODO: remove
+        logger.info(f"HELLO: {str(connector_doc)}")
+        connector_doc["_source"]["sync_now"] = True
+
+        # TODO: raise here?
+        await self.es.client.update(index=CONNECTORS_INDEX, id=connector_id, doc=connector_doc["_source"], retry_on_conflict=3)
+
+        logger.info(f"Set sync_now to true for connector with id '{connector_id}'.")
+
+        await asyncio.sleep(10)
+
+    async def create_pipeline(self):
+        logger.debug("Creating an ingestion pipeline...")
+
+        try:
+            await self.es.client.ingest.get_pipeline(
+                id="ent-search-generic-ingestion"
+            )
+        except elasticsearch.NotFoundError:
+            await self.es.client.ingest.put_pipeline(
+                id="ent-search-generic-ingestion", body=DEFAULT_PIPELINE
+            )
+
+        try:
+            await self.es.client.ingest.get_pipeline(
+                id="ent-search-generic-ingestion"
+            )
+        except elasticsearch.NotFoundError:
+            pipeline = {
+                "description": "My optional pipeline description",
+                "processors": [
+                    {
+                        "set": {
+                            "description": "My optional processor description",
+                            "field": "my-keyword-field",
+                            "value": "foo",
+                        }
                     }
-                }
-            ],
-        }
+                ],
+            }
 
-        await es.client.ingest.put_pipeline(
-            id="ent-search-generic-ingestion", body=pipeline
-        )
+            await self.es.client.ingest.put_pipeline(
+                id="ent-search-generic-ingestion", body=pipeline
+            )
 
-    try:
-        dynamic_fields = {
-            "configuration": klass.get_default_configuration(),
-            "index_name": index_name,
-            "service_type": service_type,
-        }
+        logger.info("Created ingestion pipeline.")
 
-        connector_doc = connector_config | dynamic_fields
+    async def create_index_to_ingest_in(self, index_name):
+        logger.debug(f"Creating {index_name} index...")
 
-        logger.info(f"Prepare {CONNECTORS_INDEX}")
-        await upsert_index(es, CONNECTORS_INDEX, docs=[connector_doc])
-
-        logger.info(f"Prepare {JOBS_INDEX}")
-        await upsert_index(es, JOBS_INDEX, docs=[])
-
-        logger.info(f"Prepare {index_name}")
         mappings = Mappings.default_text_fields_mappings(
             is_connectors_index=True,
         )
         settings = Settings(
             language_code=DEFAULT_LANGUAGE, analysis_icu=False
         ).to_hash()
-        await upsert_index(es, index_name, mappings=mappings, settings=settings)
-        logger.info("Done")
-    finally:
-        await es.close()
 
+        await self.upsert_index(index_name, mappings=mappings, settings=settings)
 
-async def sync_now():
-    logger.info("Sync now")
+        logger.info(f"Created {index_name} index.")
 
+    async def create_connectors_index(self):
+        logger.debug(f"Creating {CONNECTORS_INDEX} index...")
 
-async def upsert_index(es, index, docs=None, mappings=None, settings=None):
-    """Override the index with new mappings and settings.
+        await self.upsert_index(CONNECTORS_INDEX)
 
-    If the index with such name exists, it's deleted and then created again
-    with provided mappings and settings. Otherwise index is just created.
+        logger.info(f"Created {CONNECTORS_INDEX} index.")
 
-    After that, provided docs are inserted into the index.
+    async def add_connector(self, config):
+        if config is None:
+            pass
+            # TODO: raise something
 
-    This method is supposed to be used only for testing - framework is not
-    supposed to create/delete indices at all, Kibana is responsible for
-    this logic.
-    """
+        index_name = config["index_name"]
+        name = config["name"]
+        service_type = config["service_type"]
 
-    if index.startswith("."):
-        expand_wildcards = "hidden"
-    else:
-        expand_wildcards = "open"
+        logger.debug(f"Creating connector with name '{name}' and service type '{service_type}'...")
 
-    exists = await es.client.indices.exists(
-        index=index, expand_wildcards=expand_wildcards
-    )
+        await self.create_index_to_ingest_in(index_name)
 
-    if exists:
-        logger.debug(f"{index} exists, deleting...")
-        logger.debug("Deleting it first")
-        await es.client.indices.delete(index=index, expand_wildcards=expand_wildcards)
+        response = await self.es.client.index(index=CONNECTORS_INDEX, document=config)
+        connector_doc_id = response["_id"]
 
-    logger.debug(f"Creating index {index}")
-    await es.client.indices.create(index=index, mappings=mappings, settings=settings)
+        logger.info(f"Created connector (id: '{connector_doc_id}') with name '{name}' and service type '{service_type}'.")
 
-    if docs is None:
-        return
-    # XXX bulk
-    doc_id = 1
-    for doc in docs:
-        await es.client.index(index=index, id=doc_id, document=doc)
-        doc_id += 1
+        return connector_doc_id
 
+    async def create_sync_jobs_index(self):
+        logger.debug(f"Creating {JOBS_INDEX} index...")
 
-def _parser():
-    parser = ArgumentParser(
-        prog="fake-kibana", formatter_class=ArgumentDefaultsHelpFormatter
-    )
+        await self.upsert_index(JOBS_INDEX)
 
-    parser.add_argument(
-        "--config-file", type=str, help="Configuration file", default=DEFAULT_CONFIG
-    )
-    parser.add_argument(
-        "--service-type", type=str, help="Service type", default="mongodb"
-    )
-    parser.add_argument(
-        "--index-name",
-        type=validate_index_name,
-        help="Elasticsearch index",
-        default="search-mongo",
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        default=False,
-        help="Run the event loop in debug mode.",
-    )
-    parser.add_argument(
-        "--connector-config",
-        type=nullable,
-        help="Path to a json file containing the state of the connector (represents a document in the .elastic-connectors index)",
-    )
+        logger.info(f"Created {JOBS_INDEX} index.")
 
-    return parser
+    async def upsert_index(self, index, mappings=None, settings=None):
+        """Override the index with new mappings and settings.
 
+        If the index with such name exists, it's deleted and then created again
+        with provided mappings and settings. Otherwise index is just created.
 
-def nullable(value):
-    if not value:
-        return None
-    return value
+        After that, provided docs are inserted into the index.
 
+        This method is supposed to be used only for testing - framework is not
+        supposed to create/delete indices at all, Kibana is responsible for
+        this logic.
+        """
 
-def _load_connector_config(connector_config_file_path):
-    if not connector_config_file_path or not os.path.exists(connector_config_file_path):
-        connector_config_file = (
-            ("at" + connector_config_file_path) if connector_config_file_path else ""
+        if index.startswith("."):
+            expand_wildcards = "hidden"
+        else:
+            expand_wildcards = "open"
+
+        exists = await self.es.client.indices.exists(
+            index=index, expand_wildcards=expand_wildcards
         )
 
-        logger.warn(
-            f"connector config file {connector_config_file} does not exist. Fallback to default connector config."
-        )
+        if exists:
+            logger.debug(f"{index} exists, deleting...")
+            logger.debug("Deleting it first")
+            await self.es.client.indices.delete(index=index, expand_wildcards=expand_wildcards)
 
-        connector_config = DEFAULT_CONNECTOR_CONFIG
-    else:
-        connector_config_file = open(
-            os.path.join(
-                os.path.dirname(__file__),
-                "sources",
-                "tests",
-                "fixtures",
-                connector_config_file_path,
-            )
-        )
-        connector_config = json.load(connector_config_file)
-        logger.info(
-            f"Successfully loaded connector config file from '{connector_config_file_path}'."
-        )
-
-    return connector_config
-
-
-def main(args=None):
-    parser = _parser()
-    args = parser.parse_args(args=args)
-    config_file = args.config_file
-    connector_config_file = args.connector_config
-
-    if not os.path.exists(config_file):
-        raise IOError(f"config file at '{config_file}' does not exist")
-
-    connector_config = _load_connector_config(connector_config_file)
-
-    set_logger(args.debug and logging.DEBUG or logging.INFO)
-    config = EnvYAML(config_file)
-    try:
-        asyncio.run(
-            prepare(args.service_type, args.index_name, config, connector_config)
-        )
-    except (asyncio.CancelledError, KeyboardInterrupt):
-        logger.info("Bye")
-
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+        logger.debug(f"Creating index {index}")
+        await self.es.client.indices.create(index=index, mappings=mappings, settings=settings)
