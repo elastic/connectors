@@ -39,6 +39,7 @@ SYNC_RULES_DISABLED = False
 CONTENT_EXTRACTION_ENABLED = True
 CONTENT_EXTRACTION_DISABLED = False
 
+
 @pytest.mark.asyncio
 async def test_prepare_content_index_raise_error_when_index_name_invalid():
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
@@ -351,13 +352,25 @@ async def lazy_downloads_mock():
     return lazy_downloads
 
 
-async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enabled, content_extraction_enabled):
+async def setup_fetcher(
+    basic_rule_engine,
+    existing_docs,
+    queue,
+    sync_rules_enabled,
+    content_extraction_enabled,
+):
     existing_ids = {doc["_id"]: doc["_timestamp"] for doc in existing_docs}
 
     # filtering content doesn't matter as the BasicRuleEngine behavior is mocked
     filter_mock = Mock()
     filter_mock.get_active_filter = Mock(return_value={})
-    fetcher = Fetcher(queue, INDEX, existing_ids, filter_=filter_mock, content_extraction_enabled=content_extraction_enabled)
+    fetcher = Fetcher(
+        queue,
+        INDEX,
+        existing_ids,
+        filter_=filter_mock,
+        content_extraction_enabled=content_extraction_enabled,
+    )
     fetcher.basic_rule_engine = basic_rule_engine if sync_rules_enabled else None
     return fetcher
 
@@ -597,7 +610,11 @@ async def test_get_docs(
         doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
 
         fetcher = await setup_fetcher(
-            basic_rule_engine, existing_docs, queue, sync_rules_enabled, content_extraction_enabled
+            basic_rule_engine,
+            existing_docs,
+            queue,
+            sync_rules_enabled,
+            content_extraction_enabled,
         )
 
         await fetcher.run(doc_generator)

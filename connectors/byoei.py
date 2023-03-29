@@ -285,7 +285,10 @@ class Fetcher:
                     # For these, we update the docs in any case.
                     if TIMESTAMP_FIELD in doc and ts == doc[TIMESTAMP_FIELD]:
                         # cancel the download
-                        if self.content_extraction_enabled and lazy_download is not None:
+                        if (
+                            self.content_extraction_enabled
+                            and lazy_download is not None
+                        ):
                             await lazy_download(doit=False)
                         continue
 
