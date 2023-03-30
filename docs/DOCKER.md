@@ -164,7 +164,7 @@ docker.elastic.co/enterprise-search/elastic-connectors:8.7.0.0-SNAPSHOT \
 -c /config/config.yml
 ```
 
-You might need to adjust several things here:
+You might need to adjust some details here:
 - `-v ~/connectors-python-config:/config \` - replace `~/connectors-python-config` with the directory that you've created in step 1 if you've chosen a different name for it.
 - `docker.elastic.co/enterprise-search/elastic-connectors:8.7.0.0-SNAPSHOT` - adjust the version for the connectors to match your Elasticsearch deployment version. 
   - For Elasticsearch of version 8.7 you can use `elastic-connectors:8.7.0.0`for a stable revision of the connectors, or `elastic-connectors:8.7.0.0-SNAPSHOT` if you want the latest nightly build of the connectors (not recommended).
