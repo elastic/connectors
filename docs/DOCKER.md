@@ -2,7 +2,9 @@
 
 To run the Connector Service in Docker, you need to have Docker installed locally.
 
-This guide uses generally-available unix commands to demonstrate how to run the Connectors Service in Docker, for Windows you might have to run them in [Unix Subsystem](https://learn.microsoft.com/en-us/windows/wsl/about), rewrite the commands in PowerShell or do the steps in the guide using good old mouse and keyboard :)
+This guide uses generally-available unix commands to demonstrate how to run the Connector Service in Docker.
+
+Windows users might have to run them in [Unix Subsystem](https://learn.microsoft.com/en-us/windows/wsl/about), rewrite the commands in PowerShell, or execute them manually.
 
 ## Steps to properly run Connector Service in Docker
 
