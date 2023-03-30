@@ -135,7 +135,7 @@ sources:
   mssql: connectors.sources.mssql:MSSQLDataSource
 ```
 
-After that, you can build your own docker image to run:
+After that, you can build your own Docker image to run:
 
 ```
 docker build -t <TAG_OF_THE_IMAGE> .
