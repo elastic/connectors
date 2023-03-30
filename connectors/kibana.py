@@ -278,7 +278,11 @@ def main(args=None):
     set_logger(args.debug and logging.DEBUG or logging.INFO)
     config = EnvYAML(config_file)
     connector_definition = None
-    if connector_definition_file and os.path.exists(connector_definition_file) and os.path.isfile(connector_definition_file):
+    if (
+        connector_definition_file
+        and os.path.exists(connector_definition_file)
+        and os.path.isfile(connector_definition_file)
+    ):
         with open(connector_definition_file) as f:
             connector_definition = json.load(f)
 
