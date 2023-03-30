@@ -153,7 +153,7 @@ You can later use `<TAG_OF_THE_IMAGE>` instead of `docker.elastic.co/enterprise-
 
 4. Run the docker image.
 
-Now you can run the docker image with Connector Service by using a command like the following:
+Now you can run the Docker image with the Connector Service. Here's an example command:
 
 ```sh
 docker run \
