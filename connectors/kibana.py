@@ -159,7 +159,51 @@ async def prepare(service_type, index_name, config, connector_definition=None):
             "created_at": None,
             # Date the connector was updated
             "updated_at": None,
-            "filtering": None,
+            "filtering": [
+                {
+                    "domain": "DEFAULT",
+                    "draft": {
+                        "advanced_snippet": {
+                            "updated_at": "2023-01-31T16:41:27.341Z",
+                            "created_at": "2023-01-31T16:38:49.244Z",
+                            "value": {},
+                        },
+                        "rules": [
+                            {
+                                "field": "_",
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "rule": "regex",
+                                "id": "DEFAULT",
+                                "value": ".*",
+                                "order": 1,
+                                "policy": "include",
+                            }
+                        ],
+                        "validation": {"state": "valid", "errors": []},
+                    },
+                    "active": {
+                        "advanced_snippet": {
+                            "updated_at": "2023-01-31T16:41:27.341Z",
+                            "created_at": "2023-01-31T16:38:49.244Z",
+                            "value": {},
+                        },
+                        "rules": [
+                            {
+                                "field": "_",
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "rule": "regex",
+                                "id": "DEFAULT",
+                                "value": ".*",
+                                "order": 1,
+                                "policy": "include",
+                            }
+                        ],
+                        "validation": {"state": "valid", "errors": []},
+                    },
+                }
+            ],
             # Scheduling intervals
             "scheduling": {
                 "enabled": False,
