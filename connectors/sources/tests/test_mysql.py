@@ -529,7 +529,9 @@ async def test_validate_tables_accessible_when_accessible_then_no_error_raised()
 
 @pytest.mark.parametrize("tables", ["*", ["*"]])
 @pytest.mark.asyncio
-async def test_validate_tables_accessible_when_accessible_and_wildcard_then_no_error_raised(tables):
+async def test_validate_tables_accessible_when_accessible_and_wildcard_then_no_error_raised(
+    tables,
+):
     source = create_source(MySqlDataSource)
     source.tables = tables
     source.fetch_all_tables = AsyncMock(return_value=["table_1", "table_2", "table_3"])
