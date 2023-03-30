@@ -343,20 +343,22 @@ async def test_sync_job_runner_reporting_metadata(elastic_server_mock, patch_log
         "deleted_document_count": 10,
     }
     elastic_server_mock.ingestion_stats.return_value = ingestion_stats
-    elastic_server_mock.done.side_effect = [False, True, True]
-    service = create_runner()
-    await service.execute()
+    elastic_server_mock.done.return_value = False
+    sync_job_runner = create_runner()
+    task = asyncio.create_task(sync_job_runner.execute())
+    asyncio.get_event_loop().call_later(0.1, task.cancel)
+    await task
 
-    service.sync_job.claim.assert_awaited()
-    service.connector.sync_starts.assert_awaited()
-    service.elastic_server.async_bulk.assert_awaited()
-    service.sync_job.update_metadata.assert_awaited_with(
+    sync_job_runner.sync_job.claim.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.elastic_server.async_bulk.assert_awaited()
+    sync_job_runner.sync_job.update_metadata.assert_awaited_with(
         ingestion_stats=ingestion_stats
     )
-    service.sync_job.done.assert_awaited_with(
+    sync_job_runner.sync_job.done.assert_not_awaited()
+    sync_job_runner.sync_job.fail.assert_not_awaited()
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_awaited_with(
         ingestion_stats=ingestion_stats | {"total_document_count": total_document_count}
     )
-    service.sync_job.fail.assert_not_awaited
-    service.sync_job.cancel.assert_not_awaited()
-    service.sync_job.suspend.assert_not_awaited()
-    service.connector.sync_done.assert_awaited_with(service.sync_job)
+    sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
