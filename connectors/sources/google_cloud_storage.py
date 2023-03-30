@@ -18,7 +18,7 @@ from aiogoogle import Aiogoogle
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64, get_pem_format
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
@@ -44,7 +44,6 @@ BLOB_ADAPTER = {
 }
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
-DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_FILE_SIZE_LIMIT = 10485760
 STORAGE_EMULATOR_HOST = os.environ.get("STORAGE_EMULATOR_HOST")
 RUNNING_FTEST = (
@@ -162,7 +161,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -183,19 +181,21 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         }
         return {
             "service_account_credentials": {
-                "value": json.dumps(default_credentials),
+                "display": "textarea",
                 "label": "Google Cloud service account json",
+                "order": 1,
                 "type": "str",
+                "value": json.dumps(default_credentials),
             },
             "retry_count": {
-                "value": DEFAULT_RETRY_COUNT,
+                "default_value": DEFAULT_RETRY_COUNT,
+                "display": "numeric",
                 "label": "Maximum retries for failed requests",
+                "order": 2,
+                "required": False,
                 "type": "int",
-            },
-            "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Enable content extraction (true/false)",
-                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": DEFAULT_RETRY_COUNT,
             },
         }
 
@@ -210,11 +210,15 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             self.configuration["service_account_credentials"] == ""
             or self.configuration["service_account_credentials"] is None
         ):
-            raise Exception("Google Cloud service account json can't be empty.")
+            raise ConfigurableFieldValueError(
+                "Google Cloud service account json can't be empty."
+            )
         try:
             json.loads(self.configuration["service_account_credentials"])
         except ValueError:
-            raise Exception("Google Cloud service account is not a valid JSON.")
+            raise ConfigurableFieldValueError(
+                "Google Cloud service account is not a valid JSON."
+            )
 
     @cached_property
     def _google_storage_client(self):
@@ -334,7 +338,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             dictionary: Content document with id, timestamp & text
         """
         blob_size = int(blob["size"])
-        if not (self.enable_content_extraction and doit and blob_size):
+        if not (doit and blob_size):
             return
 
         blob_name = blob["name"]

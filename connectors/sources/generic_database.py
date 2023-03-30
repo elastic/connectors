@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import iso_utc
 
 WILDCARD = "*"
@@ -126,44 +126,65 @@ class GenericBaseDataSource(BaseDataSource):
         """
         return {
             "host": {
-                "value": "127.0.0.1",
                 "label": "Host",
+                "order": 1,
                 "type": "str",
+                "value": "127.0.0.1",
             },
             "port": {
-                "value": 9090,
+                "display": "numeric",
                 "label": "Port",
+                "order": 2,
                 "type": "int",
+                "value": 9090,
             },
             "username": {
-                "value": "admin",
                 "label": "Username",
+                "order": 3,
                 "type": "str",
+                "value": "admin",
             },
             "password": {
-                "value": "Password_123",
                 "label": "Password",
+                "order": 4,
+                "sensitive": True,
                 "type": "str",
+                "value": "Password_123",
             },
             "database": {
-                "value": "xe",
                 "label": "Database",
+                "order": 5,
                 "type": "str",
+                "validations": [],
+                "value": "xe",
             },
             "tables": {
-                "value": WILDCARD,
+                "display": "textarea",
                 "label": "Comma-separated list of tables",
+                "options": [],
+                "order": 6,
                 "type": "list",
+                "value": WILDCARD,
             },
             "fetch_size": {
-                "value": DEFAULT_FETCH_SIZE,
+                "default_value": DEFAULT_FETCH_SIZE,
+                "display": "numeric",
                 "label": "Rows fetched per request",
+                "order": 7,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": DEFAULT_FETCH_SIZE,
             },
             "retry_count": {
-                "value": DEFAULT_RETRY_COUNT,
+                "default_value": DEFAULT_RETRY_COUNT,
+                "display": "numeric",
                 "label": "Retries per request",
+                "order": 8,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": DEFAULT_RETRY_COUNT,
             },
         }
 
@@ -185,7 +206,7 @@ class GenericBaseDataSource(BaseDataSource):
         if empty_connection_fields := [
             field for field in connection_fields if self.configuration[field] == ""
         ]:
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"Configured keys: {empty_connection_fields} can't be empty."
             )
 
@@ -193,7 +214,7 @@ class GenericBaseDataSource(BaseDataSource):
             isinstance(self.configuration["port"], str)
             and not self.configuration["port"].isnumeric()
         ):
-            raise Exception("Configured port has to be an integer.")
+            raise ConfigurableFieldValueError("Configured port has to be an integer.")
 
         if (
             self.dialect == "Postgresql"
@@ -203,7 +224,7 @@ class GenericBaseDataSource(BaseDataSource):
                 or self.configuration["ssl_ca"] is None
             )
         ):
-            raise Exception("SSL certificate must be configured.")
+            raise ConfigurableFieldValueError("SSL certificate must be configured.")
 
     async def execute_query(self, query, fetch_many=False, **kwargs):
         """Executes a query and yield rows

@@ -22,6 +22,7 @@ Elasticsearch <== Bulker <== queue <== Fetcher <== generator
 import asyncio
 import copy
 import functools
+import logging
 import time
 from collections import defaultdict
 
@@ -115,9 +116,10 @@ class Bulker:
         # TODO: treat result to retry errors like in async_streaming_bulk
         task_num = len(self.bulk_tasks)
 
-        logger.debug(
-            f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
+            )
         start = time.time()
         try:
             res = await self.client.bulk(
@@ -186,6 +188,7 @@ class Fetcher:
     - existing_ids: a list of existing Elasticsearch document ids found in the index
     - filter_: an instance of `Filter` to apply on the fetched document -- default: `None`
     - sync_rules_enabled: if `True`, we apply rules -- default: `False`
+    - content_extraction_enabled: if `True`, download content -- default `True`
     - display_every -- display a log every `display_every` doc -- default: `DEFAULT_DISPLAY_EVERY`
     - concurrent_downloads: -- concurrency level for downloads -- default: `DEFAULT_CONCURRENT_DOWNLOADS`
     """
@@ -197,6 +200,7 @@ class Fetcher:
         existing_ids,
         filter_=None,
         sync_rules_enabled=False,
+        content_extraction_enabled=True,
         display_every=DEFAULT_DISPLAY_EVERY,
         concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
     ):
@@ -218,6 +222,7 @@ class Fetcher:
         self.basic_rule_engine = (
             BasicRuleEngine(parse(filter_.basic_rules)) if sync_rules_enabled else None
         )
+        self.content_extraction_enabled = content_extraction_enabled
         self.display_every = display_every
         self.concurrent_downloads = concurrent_downloads
 
@@ -282,7 +287,10 @@ class Fetcher:
                     # For these, we update the docs in any case.
                     if TIMESTAMP_FIELD in doc and ts == doc[TIMESTAMP_FIELD]:
                         # cancel the download
-                        if lazy_download is not None:
+                        if (
+                            self.content_extraction_enabled
+                            and lazy_download is not None
+                        ):
                             await lazy_download(doit=False)
                         continue
 
@@ -296,7 +304,7 @@ class Fetcher:
                         doc[TIMESTAMP_FIELD] = iso_utc()
 
                 # if we need to call lazy_download we push it in lazy_downloads
-                if lazy_download is not None:
+                if self.content_extraction_enabled and lazy_download is not None:
                     await lazy_downloads.put(
                         functools.partial(
                             self._deferred_index, lazy_download, doc_id, doc, operation
@@ -434,6 +442,7 @@ class ElasticServer(ESClient):
         pipeline,
         filter_=None,
         sync_rules_enabled=False,
+        content_extraction_enabled=True,
         options=None,
     ):
         """Performs a batch of `_bulk` calls, given a generator of documents
@@ -444,6 +453,7 @@ class ElasticServer(ESClient):
         - pipeline: ingest pipeline settings to pass to the bulk API
         - filter_: an instance of `Filter` to apply on the fetched document  -- default: `None`
         - sync_rules_enabled: if enabled, applies rules -- default: `False`
+        - content_extraction_enabled: if enabled, will download content -- default: `True`
         - options: dict of options (from `elasticsearch.bulk` in the config file)
         """
         if filter_ is None:
@@ -467,7 +477,8 @@ class ElasticServer(ESClient):
             f"Found {len(existing_ids)} docs in {index} (duration "
             f"{int(time.time() - start)} seconds) "
         )
-        logger.debug(f"Size of ids in memory is {get_mb_size(existing_ids)}MiB")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Size of ids in memory is {get_mb_size(existing_ids)}MiB")
 
         # start the fetcher
         fetcher = Fetcher(
@@ -476,6 +487,7 @@ class ElasticServer(ESClient):
             existing_ids,
             filter_=filter_,
             sync_rules_enabled=sync_rules_enabled,
+            content_extraction_enabled=content_extraction_enabled,
             display_every=display_every,
             concurrent_downloads=concurrent_downloads,
         )

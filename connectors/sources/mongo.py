@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from copy import deepcopy
 from datetime import datetime
 
 import fastjsonschema
@@ -15,7 +16,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 
 
 class MongoAdvancedRulesValidator(AdvancedRulesValidator):
@@ -107,30 +108,49 @@ class MongoDataSource(BaseDataSource):
 
         self.client = AsyncIOMotorClient(host, **client_params)
 
+        self.db = self.client[self.configuration["database"]]
+        self.collection = self.db[self.configuration["collection"]]
+
     @classmethod
     def get_default_configuration(cls):
         return {
-            "host": {
-                "value": "mongodb://127.0.0.1:27021",
-                "label": "Server Hostname",
+            "collection": {
+                "label": "Collection",
+                "order": 1,
                 "type": "str",
+                "value": "sample_collection",
             },
             "database": {
-                "value": "sample_database",
                 "label": "Database",
+                "order": 2,
                 "type": "str",
+                "value": "sample_database",
             },
-            "collection": {
-                "value": "sample_collection",
-                "label": "Collection",
-                "type": "str",
-            },
-            "user": {"label": "Username", "type": "str", "value": ""},
-            "password": {"label": "Password", "type": "str", "value": ""},
             "direct_connection": {
-                "label": "Direct connection? (true/false)",
+                "display": "toggle",
+                "label": "Direct connection?",
+                "order": 3,
                 "type": "bool",
                 "value": True,
+            },
+            "host": {
+                "label": "Server Hostname",
+                "order": 4,
+                "type": "str",
+                "value": "mongodb://127.0.0.1:27021",
+            },
+            "user": {
+                "label": "Username",
+                "order": 5,
+                "type": "str",
+                "value": "",
+            },
+            "password": {
+                "label": "Password",
+                "order": 6,
+                "sensitive": True,
+                "type": "str",
+                "value": "",
             },
         }
 
@@ -162,13 +182,26 @@ class MongoDataSource(BaseDataSource):
         return doc
 
     async def get_docs(self, filtering=None):
-        db = self.client[self.configuration["database"]]
+        if filtering is not None and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
 
-        logger.debug("Grabbing collection info")
-        collection = db[self.configuration["collection"]]
+            if "find" in advanced_rules:
+                find_kwargs = advanced_rules.get("find", {})
 
-        async for doc in collection.find():
-            yield self.serialize(doc), None
+                async for doc in self.collection.find(**find_kwargs):
+                    yield self.serialize(doc), None
+
+            elif "aggregate" in advanced_rules:
+                aggregate_kwargs = deepcopy(advanced_rules.get("aggregate", {}))
+                pipeline = aggregate_kwargs.pop("pipeline", [])
+
+                async for doc in self.collection.aggregate(
+                    pipeline=pipeline, **aggregate_kwargs
+                ):
+                    yield self.serialize(doc), None
+        else:
+            async for doc in self.collection.find():
+                yield self.serialize(doc), None
 
         self._dirty = False
 
@@ -182,7 +215,7 @@ class MongoDataSource(BaseDataSource):
         logger.debug(f"Existing databases: {existing_database_names}")
 
         if configured_database_name not in existing_database_names:
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}"
             )
 
@@ -194,6 +227,6 @@ class MongoDataSource(BaseDataSource):
         )
 
         if configured_collection_name not in existing_collection_names:
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"Collection ({configured_collection_name}) does not exist within database {configured_database_name}. Existing collections: {', '.join(existing_collection_names)}"
             )
