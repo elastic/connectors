@@ -525,6 +525,18 @@ async def test_validate_tables_accessible_when_accessible_then_no_error_raised()
 
     await source._validate_tables_accessible(cursor)
 
+@pytest.mark.asyncio
+async def test_validate_tables_accessible_when_accessible_and_wildcard_then_no_error_raised():
+    source = create_source(MySqlDataSource)
+    source.tables = ["*"]
+    source.fetch_all_tables = AsyncMock(return_value=["table_1", "table_2", "table_3"])
+
+    cursor = AsyncMock()
+    cursor.execute.return_value = None
+
+    await source._validate_tables_accessible(cursor)
+
+    assert source.fetch_all_tables.call_count == 1
 
 @pytest.mark.asyncio
 async def test_validate_tables_accessible_when_not_accessible_then_error_raised():
