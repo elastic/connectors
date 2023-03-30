@@ -114,7 +114,7 @@ async def test_ping_for_failed_connection_exception(patch_logger):
 
     # Setup
     source = create_source(SharepointDataSource)
-    source.retry_count = 0
+    source.retry_count = 1
     mock_response = {"access_token": "test2344", "expires_in": "1234555"}
     async_response = MockResponse(mock_response, 200)
     with patch.object(
@@ -783,7 +783,7 @@ async def test_api_call_negative():
     with patch.object(
         aiohttp.ClientSession, "get", side_effect=Exception(EXCEPTION_MESSAGE)
     ):
-        source.session = source._generate_session()
+        source.session = await source._generate_session()
         with pytest.raises(Exception):
             # Execute
             await anext(source._api_call(url_name="ping"))
@@ -813,28 +813,6 @@ async def test_api_call_successfully():
 
 
 @pytest.mark.asyncio
-async def test_api_call_when_server_is_down():
-    """Tests the _api_call function while server gets disconnected."""
-
-    # Setup
-    source = create_source(SharepointDataSource)
-    source.retry_count = 0
-    mock_response = {"access_token": "test2344", "expires_in": "1234555"}
-    async_response = MockResponse(mock_response, 200)
-
-    with patch.object(
-        aiohttp.ClientSession,
-        "get",
-        side_effect=aiohttp.ServerDisconnectedError("Something went wrong"),
-    ):
-        with patch("aiohttp.request", return_value=async_response):
-            await source._generate_session()
-            with pytest.raises(aiohttp.ServerDisconnectedError):
-                # Execute
-                await anext(source._api_call(url_name="attachment", url="abc.com"))
-
-
-@pytest.mark.asyncio
 async def test_set_access_token():
     """This method tests set access token  api call"""
     # Setup
@@ -857,7 +835,6 @@ async def test_set_access_token_when_token_expires_at_is_str():
     source.token_expires_at = "2023-02-10T09:02:23.629821"
     mock_token = {"access_token": "test2344", "expires_in": "1234555"}
     async_response_token = MockResponse(mock_token, 200)
-    actual_response = source._set_access_token()
 
     # Execute
     with patch("aiohttp.request", return_value=async_response_token):
@@ -866,13 +843,19 @@ async def test_set_access_token_when_token_expires_at_is_str():
         assert actual_response is None
 
 
+@pytest.fixture
+def patch_default_wait_multiplier():
+    with mock.patch("connectors.sources.sharepoint.RETRY_INTERVAL", 0):
+        yield
+
+
 @pytest.mark.asyncio
-async def test_api_call_when_token_is_expired():
+async def test_api_call_when_token_is_expired(patch_default_wait_multiplier):
     """Tests the _api_call function while token expire."""
 
     # Setup
     source = create_source(SharepointDataSource)
-    source.retry_count = 0
+    source.retry_count = 1
     mock_response = {"access_token": "test2344", "expires_in": "1234555"}
     async_response = MockResponse(mock_response, 401)
 
@@ -882,8 +865,8 @@ async def test_api_call_when_token_is_expired():
     with patch.object(
         aiohttp.ClientSession,
         "get",
-        side_effect=aiohttp.ClientResponseError(
-            request_info=None,
+        side_effect=aiohttp.client_exceptions.ClientResponseError(
+            request_info=aiohttp.client_reqrep.RequestInfo,
             history=None,
             status=401,
             message="Unauthorized",
@@ -891,7 +874,53 @@ async def test_api_call_when_token_is_expired():
         ),
     ):
         with patch("aiohttp.request", return_value=async_response):
+            with pytest.raises(aiohttp.client_exceptions.ClientResponseError):
+                await source._generate_session()
+                # Execute
+                await anext(source._api_call(url_name="attachment", url="abc.com"))
+            await source.close()
+
+
+class TooManyRequestException(Exception):
+    code = 429
+    headers = {"Retry-After": 0}
+
+
+@pytest.mark.asyncio
+async def test_api_call_when_status_429_exception():
+    # Setup
+    source = create_source(SharepointDataSource)
+    mock_response = {"access_token": "test2344", "expires_in": "1234555"}
+    async_response = MockResponse(mock_response, 429)
+    source.retry_count = 1
+    async_response.headers = {}
+    with patch.object(
+        aiohttp.ClientSession,
+        "get",
+        side_effect=TooManyRequestException("Something Went Wrong"),
+    ):
+        with patch("aiohttp.request", return_value=async_response):
             await source._generate_session()
-            with pytest.raises(aiohttp.ClientResponseError):
+            with pytest.raises(TooManyRequestException):
+                # Execute
+                await anext(source._api_call(url_name="attachment", url="abc.com"))
+            await source.close()
+
+
+@pytest.mark.asyncio
+async def test_api_call_when_server_is_down(patch_default_wait_multiplier):
+    """Tests the _api_call function while server gets disconnected."""
+    # Setup
+    source = create_source(SharepointDataSource)
+    mock_response = {"access_token": "test2344", "expires_in": "1234555"}
+    async_response = MockResponse(mock_response, 200)
+    with patch.object(
+        aiohttp.ClientSession,
+        "get",
+        side_effect=aiohttp.ServerDisconnectedError("Something went wrong"),
+    ):
+        with patch("aiohttp.request", return_value=async_response):
+            await source._generate_session()
+            with pytest.raises(aiohttp.ServerDisconnectedError):
                 # Execute
                 await anext(source._api_call(url_name="attachment", url="abc.com"))

@@ -16,6 +16,7 @@ import aiohttp
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
+from aiolimiter import AsyncLimiter
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
@@ -116,6 +117,9 @@ class SharepointDataSource(BaseDataSource):
         self.session = None
         self.access_token = None
         self.token_expires_at = None
+        self.limiter = AsyncLimiter(
+            max_rate=1000, time_period=60
+        )  # Limit api call for throttling
 
     @classmethod
     def get_default_configuration(cls):
@@ -271,6 +275,7 @@ class SharepointDataSource(BaseDataSource):
             "content-type": "application/json",
         }
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
+        connector = aiohttp.TCPConnector(force_close=True)
 
         if self.is_cloud:
             basic_auth = None
@@ -281,6 +286,7 @@ class SharepointDataSource(BaseDataSource):
                 password=self.configuration["password"],
             )
         self.session = aiohttp.ClientSession(
+            connector=connector,
             auth=basic_auth,
             headers=request_headers,
             timeout=timeout,
@@ -306,49 +312,57 @@ class SharepointDataSource(BaseDataSource):
         Yields:
             data: API response.
         """
-        retry = 0
-        # If pagination happens for list and drive items then next pagination url comes in response which will be passed in url field.
-        if url == "":
-            url = URLS[url_name].format(**url_kwargs)
+        async with self.limiter:
+            retry = 1
+            # If pagination happens for list and drive items then next pagination url comes in response which will be passed in url field.
+            if url == "":
+                url = URLS[url_name].format(**url_kwargs)
 
-        headers = None
+            headers = None
 
-        if self.is_cloud:
-            headers = {"Authorization": f"Bearer {self.access_token}"}
-        while True:
-            try:
-                async with self.session.get(
-                    url=url,
-                    ssl=self.ssl_ctx,
-                    headers=headers,
-                ) as result:
-                    if url_name == ATTACHMENT:
-                        yield result
-                    else:
-                        yield await result.json()
-                    break
-            except Exception as exception:
-                if isinstance(
-                    exception,
-                    ClientResponseError,
-                ) and "token has expired" in exception.headers.get(  # pyright: ignore
-                    "x-ms-diagnostics", ""
-                ):
-                    await self._set_access_token()
-                elif isinstance(
-                    exception,
-                    ServerDisconnectedError,
-                ):
-                    await self.session.close()
-                    await self._generate_session()
-                if retry >= self.retry_count:
-                    raise exception
-                retry += 1
+            if self.is_cloud:
+                headers = {"Authorization": f"Bearer {self.access_token}"}
+            while True:
+                try:
+                    async with self.session.get(
+                        url=url,
+                        ssl=self.ssl_ctx,
+                        headers=headers,
+                    ) as result:
+                        if url_name == ATTACHMENT:
+                            yield result
+                        else:
+                            yield await result.json()
+                        break
+                except Exception as exception:
+                    if retry > self.retry_count:
+                        raise exception
+                    logger.warning(
+                        f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
+                    )
+                    retry += 1
 
-                logger.warning(
-                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
-                )
-                await self._sleeps.sleep(RETRY_INTERVAL**retry)
+                    retry_after = RETRY_INTERVAL**retry
+
+                    if getattr(exception, "code", None) == 429:
+                        retry_after = int(
+                            exception.headers.get("Retry-After", 0)  # pyright: ignore
+                        )
+                    elif isinstance(
+                        exception,
+                        ClientResponseError,
+                    ) and "token has expired" in exception.headers.get(  # pyright: ignore
+                        "x-ms-diagnostics", ""
+                    ):
+                        await self._set_access_token()
+                    elif isinstance(
+                        exception,
+                        ServerDisconnectedError,
+                    ):
+                        await self.session.close()
+                        await self._generate_session()
+
+                    await self._sleeps.sleep(retry_after)
 
     def format_document(
         self,
@@ -429,6 +443,11 @@ class SharepointDataSource(BaseDataSource):
             )
             raise
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
     async def get_content(
         self, document, file_relative_url, site_url, timestamp=None, doit=False
     ):
