@@ -571,10 +571,24 @@ async def setup_fetcher(
             total_downloads(0),
         ),
         (
-            # content_extraction_enabled is false,
+            # content_extraction_enabled is false and no download is provided,
             # indexing should still work, but nothing should be downloaded
             [],
             [(DOC_ONE, None)],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_DISABLED,
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            # content_extraction_enabled is false but a download is also provided,
+            # indexing should still work, but nothing should be downloaded
+            [],
+            [(DOC_ONE, lazy_download_fake(DOC_ONE))],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_DISABLED,
