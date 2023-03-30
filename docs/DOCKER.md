@@ -6,7 +6,14 @@ This guide uses generally-available unix commands to demonstrate how to run the 
 
 Windows users might have to run them in [Unix Subsystem](https://learn.microsoft.com/en-us/windows/wsl/about), rewrite the commands in PowerShell, or execute them manually.
 
-## Create a directory to be mounted into the Docker image.
+Follow these steps:
+
+1. [Create directory](#1-create-a-directory-to-be-mounted-into-the-docker-image)
+2. [Download config file](#2-download-sample-configuration-file-from-this-repository-into-newly-created-directory)
+3. [Update config file](#3-update-the-configuration-file-for-your-on-prem-connector)
+4. [Run the docker image](#4-run-the-docker-image)
+
+## 1. Create a directory to be mounted into the Docker image.
 
 This directory will contain the configuration file used to run the Connector Service. The examples in this guide will use the user's home directory (`~`).
 
@@ -14,7 +21,7 @@ This directory will contain the configuration file used to run the Connector Ser
 cd ~ && mkdir connectors-python-config
 ```
 
-## Download sample configuration file from this repository into newly created directory.
+## 2. Download sample configuration file from this repository into newly created directory.
 
 You can download the file manually, or simply run the command below. Make sure to update the `--output` argument value if your directory name is different,  or you want to use a different config file name.
 
@@ -22,7 +29,7 @@ You can download the file manually, or simply run the command below. Make sure t
 curl https://raw.githubusercontent.com/elastic/connectors-python/main/config.yml --output ~/connectors-python-config/config.yml
 ```
 
-## Update the configuration file for your [on-prem connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html#build-connector-usage)
+## 3. Update the configuration file for your [on-prem connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html#build-connector-usage)
 
 If you're running the Connector Service against a dockerised version of Elasticsearch and Kibana, your config file will look like this:
 
@@ -149,7 +156,7 @@ docker build -t connector/custom-mongodb:1.0 .
 
 You can later use `<TAG_OF_THE_IMAGE>` instead of `docker.elastic.co/enterprise-search/elastic-connectors:8.7.0.0-SNAPSHOT` in the next step to run the Docker image.
 
-## Run the Docker image.
+## 4. Run the Docker image.
 
 Now you can run the Docker image with the Connector Service. Here's an example command:
 
