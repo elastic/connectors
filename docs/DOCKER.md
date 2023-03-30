@@ -6,9 +6,7 @@ This guide uses generally-available unix commands to demonstrate how to run the 
 
 Windows users might have to run them in [Unix Subsystem](https://learn.microsoft.com/en-us/windows/wsl/about), rewrite the commands in PowerShell, or execute them manually.
 
-## Steps to properly run Connector Service in Docker
-
-1. Create a directory that will be mounted into the Docker image.
+## Create a directory that will be mounted into the Docker image.
 
 This directory will contain the configuration file used to run the Connector Service. The examples in this guide will use the user's home directory (`~`).
 
@@ -16,7 +14,7 @@ This directory will contain the configuration file used to run the Connector Ser
 cd ~ && mkdir connectors-python-config
 ```
 
-2. Download a sample configuration file from this repository into newly created directory.
+## Download a sample configuration file from this repository into newly created directory.
 
 Download can be done manually, or just using the line below - make sure to update `--output` argument value if your directory name is different or you want to use a different config file name.
 
@@ -24,7 +22,7 @@ Download can be done manually, or just using the line below - make sure to updat
 curl https://raw.githubusercontent.com/elastic/connectors-python/main/config.yml --output ~/connectors-python-config/config.yml
 ```
 
-3. Update the configuration downloaded to make it work for your [on-prem connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html#build-connector-usage)
+## Update the configuration downloaded to make it work for your [on-prem connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html#build-connector-usage)
 
 In case you're running Connector Service against a dockerised version of Elasticsearch and Kibana, your config file might look the following:
 
@@ -59,7 +57,7 @@ service:
   
 # connector information
 connector_id: <CONNECTOR_ID_FROM_KIBANA>
-service_type: '<DESIRED_SERVICE_TYPE>'
+service_type: <DESIRED_SERVICE_TYPE>
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
@@ -74,11 +72,11 @@ sources:
   mssql: connectors.sources.mssql:MSSQLDataSource
 ```
 
-Notice, that the config file you downloaded might contain more config entries, so you will need to manually copy/change the settings that apply to you. It should be sufficient to only update `elasticsearch.host` and `elasticsearch.password` to make Connectors Service run properly for you.
+Notice, that the config file you downloaded might contain more config entries, so you will need to manually copy/change the settings that apply to you. It should be sufficient to only update `elasticsearch.host`, `elasticsearch.password`, `connector_id` and `service_type` to make Connectors Service run properly for you.
 
 ### Running connector service in [native mode](https://www.elastic.co/guide/en/enterprise-search/current/native-connectors.html) in Docker
 
-To run the connector service in native mode, you will need a slightly different configuration file. The `native_service_types` config option needs to be populated instead of `connector_id` and `service_type`. Normally, when you download a sample configuration file per step 2, you'll be able to run the Connector Service in native mode (as long as the Elasticsearch host and credentials are correct).
+To run the connector service in native mode, you will need a slightly different configuration file. The `native_service_types` config option needs to be populated while `connector_id` and `service_type` settings should be removed or commented out. Normally, when you download a sample configuration file per step 2, you'll be able to run the Connector Service in native mode (as long as the Elasticsearch host and credentials are correct).
 
 Example of configuration file for connectors service running in native mode:
 
@@ -151,7 +149,7 @@ docker build -t connector/custom-mongodb:1.0 .
 
 You can later use `<TAG_OF_THE_IMAGE>` instead of `docker.elastic.co/enterprise-search/elastic-connectors:8.7.0.0-SNAPSHOT` in the next step to run the docker image
 
-4. Run the docker image.
+## Run the docker image.
 
 Now you can run the Docker image with the Connector Service. Here's an example command:
 
