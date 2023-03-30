@@ -16,7 +16,6 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
-DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_DIR = os.environ.get("SYSTEM_DIR", os.path.dirname(__file__))
 
 
@@ -30,7 +29,6 @@ class DirectoryDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.directory = os.path.abspath(self.configuration["directory"])
         self.pattern = self.configuration["pattern"]
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -49,13 +47,6 @@ class DirectoryDataSource(BaseDataSource):
                 "type": "str",
                 "value": "**/*.*",
             },
-            "enable_content_extraction": {
-                "display": "toggle",
-                "label": "Enable content extraction",
-                "order": 3,
-                "type": "bool",
-                "value": DEFAULT_CONTENT_EXTRACTION,
-            },
         }
 
     async def ping(self):
@@ -68,11 +59,7 @@ class DirectoryDataSource(BaseDataSource):
         return hashlib.md5(str(path).encode("utf8")).hexdigest()
 
     async def _download(self, path, timestamp=None, doit=None):
-        if not (
-            self.enable_content_extraction
-            and doit
-            and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES
-        ):
+        if not (doit and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES):
             return
 
         logger.info(f"Reading {path}")

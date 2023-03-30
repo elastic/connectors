@@ -144,36 +144,38 @@ class MySqlDataSource(BaseDataSource):
                 "type": "list",
                 "value": WILDCARD,
             },
+            "ssl_enabled": {
+                "display": "toggle",
+                "label": "Enable SSL verification",
+                "order": 7,
+                "type": "bool",
+                "value": DEFAULT_SSL_ENABLED,
+            },
+            "ssl_ca": {
+                "label": "SSL certificate",
+                "order": 8,
+                "type": "str",
+                "value": DEFAULT_SSL_CA,
+            },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
                 "display": "numeric",
                 "label": "Number of rows fetched per request",
-                "order": 7,
+                "order": 9,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_FETCH_SIZE,
             },
             "retry_count": {
                 "default_value": RETRIES,
                 "display": "numeric",
                 "label": "Maximum retries per request",
-                "order": 8,
+                "order": 10,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": RETRIES,
-            },
-            "ssl_enabled": {
-                "display": "toggle",
-                "label": "Enable SSL verification",
-                "order": 9,
-                "type": "bool",
-                "value": DEFAULT_SSL_ENABLED,
-            },
-            "ssl_ca": {
-                "label": "SSL certificate",
-                "order": 10,
-                "type": "str",
-                "value": DEFAULT_SSL_CA,
             },
         }
 
@@ -234,8 +236,9 @@ class MySqlDataSource(BaseDataSource):
 
     async def _validate_tables_accessible(self, cursor):
         non_accessible_tables = []
+        tables_to_validate = await self.get_tables_to_fetch()
 
-        for table in self.tables:
+        for table in tables_to_validate:
             try:
                 await cursor.execute(f"SELECT 1 FROM {table} LIMIT 1;")
             except aiomysql.Error:
