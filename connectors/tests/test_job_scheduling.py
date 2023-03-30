@@ -216,7 +216,7 @@ async def test_connector_prepare_failed(
 
 @pytest.mark.asyncio
 async def test_run_when_sync_fails_then_continues_service_execution(
-    connector_index_mock, concurrent_tasks_mock, set_env
+    connector_index_mock, set_env
 ):
     connector = mock_connector(sync_now=True, next_sync=0)
     another_connector = mock_connector(sync_now=True, next_sync=0)

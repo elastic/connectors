@@ -5,6 +5,7 @@
 #
 from connectors.byoc import ConnectorIndex, DataSourceError, SyncJobIndex
 from connectors.byoei import ElasticServer
+from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass_dict
@@ -41,7 +42,11 @@ class JobExecutionService(BaseService):
             )
         source_klass = self.source_klass_dict[sync_job.service_type]
 
-        connector = await self.connector_index.fetch_by_id(sync_job.connector_id)
+        try:
+            connector = await self.connector_index.fetch_by_id(sync_job.connector_id)
+        except DocumentNotFoundError:
+            logger.error(f"Couldn't find connector by id {sync_job.connector_id}")
+            return
         sync_job_runner = SyncJobRunner(
             source_klass=source_klass,
             sync_job=sync_job,

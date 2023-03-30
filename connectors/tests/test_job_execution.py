@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from connectors.config import load_config
+from connectors.es.index import DocumentNotFoundError
 from connectors.services.job_execution import JobExecutionService
 from connectors.tests.commons import AsyncIterator
 
@@ -158,7 +159,7 @@ async def test_job_execution(
 
 
 @pytest.mark.asyncio
-async def test_job_execution_with_supported_source(
+async def test_job_execution_with_unsupported_source(
     connector_index_mock,
     sync_job_index_mock,
     concurrent_tasks_mock,
@@ -167,6 +168,24 @@ async def test_job_execution_with_supported_source(
     connector = mock_connector()
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     sync_job = mock_sync_job(service_type="mysql")
+    sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
+    await create_and_run_service()
+
+    concurrent_tasks_mock.put.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_job_execution_with_connector_not_found(
+    connector_index_mock,
+    sync_job_index_mock,
+    concurrent_tasks_mock,
+    sync_job_runner_mock,
+    set_env,
+):
+    connector = mock_connector()
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    connector_index_mock.fetch_by_id = AsyncMock(side_effect=DocumentNotFoundError())
+    sync_job = mock_sync_job()
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service()
 
