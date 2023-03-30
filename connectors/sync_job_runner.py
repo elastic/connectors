@@ -130,6 +130,8 @@ class SyncJobRunner:
             await self._sync_done(sync_status=JobStatus.ERROR, sync_error=e)
         finally:
             self.running = False
+            if self.elastic_server is not None:
+                await self.elastic_server.close()
             if self.data_provider is not None:
                 await self.data_provider.close()
 

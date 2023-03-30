@@ -74,6 +74,7 @@ def elastic_server_mock():
         elastic_server_mock.fetch_error = Mock(return_value=None)
         elastic_server_mock.cancel = AsyncMock()
         elastic_server_mock.ingestion_stats = Mock()
+        elastic_server_mock.close = AsyncMock()
         elastic_server_klass_mock.return_value = elastic_server_mock
 
         yield elastic_server_mock
