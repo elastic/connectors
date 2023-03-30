@@ -1,4 +1,4 @@
-# Running Connectors Service in Docker
+# Run Connector Service in Docker
 
 Running Connectors Service in Docker is really easy. All it requires is having Docker installed on a local system, and nothing more!
 
