@@ -23,7 +23,6 @@ BLOB_SCHEMA = {
     "size": "size",
     "container": "container",
 }
-DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_FILE_SIZE_LIMIT = 10485760
 DEFAULT_RETRY_COUNT = 3
 MAX_CONCURRENT_DOWNLOADS = (
@@ -45,7 +44,6 @@ class AzureBlobStorageDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
         self.connection_string = None
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.retry_count = self.configuration["retry_count"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
 
@@ -85,13 +83,6 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "order": 3,
                 "type": "str",
                 "value": "http://127.0.0.1:10000/devstoreaccount1",
-            },
-            "enable_content_extraction": {
-                "display": "toggle",
-                "label": "Enable content extraction",
-                "order": 4,
-                "type": "bool",
-                "value": DEFAULT_CONTENT_EXTRACTION,
             },
             "retry_count": {
                 "default_value": DEFAULT_RETRY_COUNT,
@@ -189,7 +180,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             dictionary: Content document with id, timestamp & text
         """
         blob_size = int(blob["size"])
-        if not (self.enable_content_extraction and doit and blob_size > 0):
+        if not (doit and blob_size > 0):
             return
 
         blob_name = blob["title"]
