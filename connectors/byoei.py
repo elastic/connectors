@@ -95,6 +95,9 @@ class Bulker:
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.max_concurrent_bulks = max_concurrency
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
+        self.indexed_document_count = 0
+        self.indexed_document_volume = 0
+        self.deleted_document_count = 0
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -104,7 +107,7 @@ class Bulker:
             return [{operation: {"_index": index, "_id": doc_id}}, doc["doc"]]
         if operation == OP_UPSERT:
             return [
-                {"update": {"_index": index, "_id": doc_id}},
+                {operation: {"_index": index, "_id": doc_id}},
                 {"doc": doc["doc"], "doc_as_upsert": True},
             ]
         if operation == OP_DELETE:
@@ -112,7 +115,7 @@ class Bulker:
 
         raise TypeError(operation)
 
-    async def _batch_bulk(self, operations):
+    async def _batch_bulk(self, operations, stats):
         # TODO: treat result to retry errors like in async_streaming_bulk
         task_num = len(self.bulk_tasks)
 
@@ -132,10 +135,30 @@ class Bulker:
                         if "error" in data:
                             logger.error(f"operation {op} failed, {data['error']}")
                             raise Exception(data["error"]["reason"])
+
+            self._populate_stats(stats, res)
+
         finally:
             self.bulk_time += time.time() - start
 
         return res
+
+    def _populate_stats(self, stats, res):
+        for item in res["items"]:
+            for op, data in item.items():
+                # "result" is only present in successful operations
+                if "result" not in data:
+                    del stats[op][data["_id"]]
+
+        self.indexed_document_count += len(stats[OP_INDEX]) + len(stats[OP_UPSERT])
+        self.indexed_document_volume += sum(stats[OP_INDEX].values()) + sum(
+            stats[OP_UPSERT].values()
+        )
+        self.deleted_document_count += len(stats[OP_DELETE])
+
+        logger.debug(
+            f"Bulker stats - no. of docs indexed: {self.indexed_document_count}, volume of docs indexed: {round(self.indexed_document_volume)} bytes, no. of docs deleted: {self.deleted_document_count}"
+        )
 
     async def run(self):
         """Creates batches of bulk calls given a queue of items.
@@ -147,15 +170,32 @@ class Bulker:
         requests.
         """
         batch = []
+        # stats is a dictionary containing stats for 3 operations. In each sub-dictionary, it is a doc id to size map.
+        stats = {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}}
         self.bulk_time = 0
         self.bulking = True
         bulk_size = 0
+        overhead_size = None
 
         while True:
             doc_size, doc = await self.queue.get()
             if doc in ("END_DOCS", "FETCH_ERROR"):
                 break
             operation = doc["_op_type"]
+            doc_id = doc["_id"]
+            if operation == OP_DELETE:
+                stats[operation][doc_id] = 0
+            else:
+                # the doc_size also includes _op_type, _index and _id,
+                # which we want to exclude when calculating the size.
+                if overhead_size is None:
+                    overhead = {
+                        "_op_type": operation,
+                        "_index": doc["_index"],
+                        "_id": doc_id,
+                    }
+                    overhead_size = get_size(overhead)
+                stats[operation][doc_id] = max(doc_size - overhead_size, 0)
             self.ops[operation] += 1
             batch.extend(self._bulk_op(doc, operation))
 
@@ -165,16 +205,18 @@ class Bulker:
                     functools.partial(
                         self._batch_bulk,
                         copy.copy(batch),
+                        copy.copy(stats),
                     )
                 )
                 batch.clear()
+                stats = {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}}
                 bulk_size = 0
 
             await asyncio.sleep(0)
 
         await self.bulk_tasks.join()
         if len(batch) > 0:
-            await self._batch_bulk(batch)
+            await self._batch_bulk(batch, stats)
 
 
 class Fetcher:
@@ -514,4 +556,7 @@ class ElasticServer(ESClient):
             "doc_updated": fetcher.total_docs_updated,
             "doc_deleted": fetcher.total_docs_deleted,
             "fetch_error": fetcher.fetch_error,
+            "indexed_document_count": bulker.indexed_document_count,
+            "indexed_document_volume": bulker.indexed_document_volume,
+            "deleted_document_count": bulker.deleted_document_count,
         }
