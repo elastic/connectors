@@ -236,8 +236,9 @@ class MySqlDataSource(BaseDataSource):
 
     async def _validate_tables_accessible(self, cursor):
         non_accessible_tables = []
+        tables_to_validate = await self.get_tables_to_fetch()
 
-        for table in self.tables:
+        for table in tables_to_validate:
             try:
                 await cursor.execute(f"SELECT 1 FROM {table} LIMIT 1;")
             except aiomysql.Error:

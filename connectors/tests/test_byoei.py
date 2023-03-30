@@ -37,6 +37,8 @@ DOC_TWO = {"_id": 2, "_timestamp": TIMESTAMP}
 
 SYNC_RULES_ENABLED = True
 SYNC_RULES_DISABLED = False
+CONTENT_EXTRACTION_ENABLED = True
+CONTENT_EXTRACTION_DISABLED = False
 
 
 @pytest.mark.asyncio
@@ -377,20 +379,32 @@ async def lazy_downloads_mock():
     return lazy_downloads
 
 
-async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enabled):
+async def setup_fetcher(
+    basic_rule_engine,
+    existing_docs,
+    queue,
+    sync_rules_enabled,
+    content_extraction_enabled,
+):
     existing_ids = {doc["_id"]: doc["_timestamp"] for doc in existing_docs}
 
     # filtering content doesn't matter as the BasicRuleEngine behavior is mocked
     filter_mock = Mock()
     filter_mock.get_active_filter = Mock(return_value={})
-    fetcher = Fetcher(queue, INDEX, existing_ids, filter_=filter_mock)
+    fetcher = Fetcher(
+        queue,
+        INDEX,
+        existing_ids,
+        filter_=filter_mock,
+        content_extraction_enabled=content_extraction_enabled,
+    )
     fetcher.basic_rule_engine = basic_rule_engine if sync_rules_enabled else None
     return fetcher
 
 
 @pytest.mark.parametrize(
-    "existing_docs, docs_from_source, doc_should_ingest, sync_rules_enabled, expected_queue_operations, expected_total_docs_updated, "
-    "expected_total_docs_created, expected_total_docs_deleted, expected_total_downloads",
+    "existing_docs, docs_from_source, doc_should_ingest, sync_rules_enabled, content_extraction_enabled, expected_queue_operations, "
+    "expected_total_docs_updated, expected_total_docs_created, expected_total_docs_deleted, expected_total_downloads",
     [
         (
             # no docs exist, data source has doc 1 -> ingest doc 1
@@ -398,6 +412,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
             [(DOC_ONE, None)],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
             [index_operation(DOC_ONE), end_docs_operation()],
             updated(0),
             created(1),
@@ -410,6 +425,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
             [],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
             [delete_operation(DOC_ONE), end_docs_operation()],
             updated(0),
             created(0),
@@ -422,6 +438,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
             [(DOC_ONE, None)],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
             [index_operation(DOC_ONE), delete_operation(DOC_TWO), end_docs_operation()],
             updated(0),
             created(1),
@@ -434,6 +451,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
             [(DOC_ONE, None)],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
             [end_docs_operation()],
             updated(0),
             created(0),
@@ -446,6 +464,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
             [(DOC_ONE_DIFFERENT_TIMESTAMP, None)],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
             [
                 # update happens through overwriting
                 index_operation(DOC_ONE_DIFFERENT_TIMESTAMP),
@@ -462,6 +481,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
             # filter out doc 1
             (False,),
             SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
             [
                 # should not ingest doc 1
                 end_docs_operation()
@@ -478,6 +498,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
             # filter out doc 1
             (False,),
             SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
             [
                 delete_operation(DOC_ONE),
                 end_docs_operation(),
@@ -494,6 +515,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
             # still filter out doc 1
             (False,),
             SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
             [delete_operation(DOC_ONE), end_docs_operation()],
             updated(0),
             created(0),
@@ -506,6 +528,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
             # filtering throws exception
             [Exception()],
             SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
             ["FETCH_ERROR"],
             updated(0),
             created(0),
@@ -518,6 +541,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
             [(DOC_ONE, lazy_download_fake(DOC_ONE))],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
             [index_operation(DOC_ONE), end_docs_operation()],
             updated(0),
             created(1),
@@ -530,6 +554,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
             [(DOC_ONE, lazy_download_fake(DOC_ONE))],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
             [end_docs_operation()],
             updated(0),
             created(0),
@@ -548,6 +573,7 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
             ],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
             [index_operation(DOC_ONE_DIFFERENT_TIMESTAMP), end_docs_operation()],
             updated(1),
             created(0),
@@ -560,11 +586,40 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
             # filter out doc 1
             (False,),
             SYNC_RULES_DISABLED,
+            CONTENT_EXTRACTION_ENABLED,
             [
                 # should ingest doc 1 as sync rules are disabled
                 index_operation(DOC_ONE),
                 end_docs_operation(),
             ],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            # content_extraction_enabled is false and no download is provided,
+            # indexing should still work, but nothing should be downloaded
+            [],
+            [(DOC_ONE, None)],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_DISABLED,
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            # content_extraction_enabled is false but a download is also provided,
+            # indexing should still work, but nothing should be downloaded
+            [],
+            [(DOC_ONE, lazy_download_fake(DOC_ONE))],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_DISABLED,
+            [index_operation(DOC_ONE), end_docs_operation()],
             updated(0),
             created(1),
             deleted(0),
@@ -578,6 +633,7 @@ async def test_get_docs(
     docs_from_source,
     doc_should_ingest,
     sync_rules_enabled,
+    content_extraction_enabled,
     expected_queue_operations,
     expected_total_docs_updated,
     expected_total_docs_created,
@@ -595,7 +651,11 @@ async def test_get_docs(
         doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
 
         fetcher = await setup_fetcher(
-            basic_rule_engine, existing_docs, queue, sync_rules_enabled
+            basic_rule_engine,
+            existing_docs,
+            queue,
+            sync_rules_enabled,
+            content_extraction_enabled,
         )
 
         await fetcher.run(doc_generator)
