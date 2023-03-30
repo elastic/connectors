@@ -78,7 +78,7 @@ Notice, that the config file you downloaded might contain more config entries, s
 
 ### Running connector service in [native mode](https://www.elastic.co/guide/en/enterprise-search/current/native-connectors.html) in Docker
 
-In case you want to run connector service in native mode, you will need slightly different configuration file, having `native_service_types` config option populated instead of `connector_id` and `service_type`. Normally when you download a sample configuration file in step 2 you'll be able to run connector service in native mode (as long as elasticsearch host and credentials are correct).
+To run the connector service in native mode, you will need a slightly different configuration file. The `native_service_types` config option needs to be populated instead of `connector_id` and `service_type`. Normally, when you download a sample configuration file per step 2, you'll be able to run the Connector Service in native mode (as long as the Elasticsearch host and credentials are correct).
 
 Example of configuration file for connectors service running in native mode:
 
