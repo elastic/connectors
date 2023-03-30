@@ -34,13 +34,13 @@ MOCK_PROJECT = [
 ]
 EXPECTED_PROJECT = [
     {
-        "_id": "dummy_project-1",
+        "_id": "project-1",
         "Type": "Project",
         "_timestamp": "2023-01-24T09:37:19+05:30",
         "Project": {"id": "1", "name": "dummy_project", "key": "DP"},
     },
     {
-        "_id": "test_project-2",
+        "_id": "project-2",
         "Type": "Project",
         "_timestamp": "2023-01-24T09:37:19+05:30",
         "Project": {"id": "2", "name": "test_project", "key": "TP"},

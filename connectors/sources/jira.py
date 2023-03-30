@@ -438,7 +438,7 @@ class JiraDataSource(BaseDataSource):
                     response = await response.json()
                     for project in response:
                         yield {
-                            "_id": f"{project['name']}-{project['id']}",
+                            "_id": f"project-{project['id']}",
                             "_timestamp": timestamp,
                             "Type": "Project",
                             "Project": project,
@@ -450,7 +450,7 @@ class JiraDataSource(BaseDataSource):
                     ):
                         project = await response.json()
                         yield {
-                            "_id": f"{project['name']}-{project['id']}",
+                            "_id": f"project-{project['id']}",
                             "_timestamp": timestamp,
                             "Type": "Project",
                             "Project": project,
