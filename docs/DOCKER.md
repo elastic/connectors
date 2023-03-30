@@ -14,7 +14,7 @@ This directory will contain the configuration file used to run the Connector Ser
 cd ~ && mkdir connectors-python-config
 ```
 
-## Download a sample configuration file from this repository into newly created directory.
+## Download sample configuration file from this repository into newly created directory.
 
 Download can be done manually, or just using the line below - make sure to update `--output` argument value if your directory name is different or you want to use a different config file name.
 
@@ -22,7 +22,7 @@ Download can be done manually, or just using the line below - make sure to updat
 curl https://raw.githubusercontent.com/elastic/connectors-python/main/config.yml --output ~/connectors-python-config/config.yml
 ```
 
-## Update the configuration downloaded to make it work for your [on-prem connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html#build-connector-usage)
+## Update the configuration file for your [on-prem connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html#build-connector-usage)
 
 In case you're running Connector Service against a dockerised version of Elasticsearch and Kibana, your config file might look the following:
 
