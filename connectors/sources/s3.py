@@ -72,7 +72,7 @@ class S3DataSource(BaseDataSource):
         ) as s3:
             yield s3
 
-    def validate_config(self):
+    async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields
 
         Raises:
