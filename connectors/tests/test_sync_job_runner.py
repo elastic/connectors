@@ -9,6 +9,7 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 import pytest
 
 from connectors.byoc import Filter, JobStatus, Pipeline
+from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import InvalidFilteringError
 from connectors.sync_job_runner import JobClaimError, SyncJobRunner
 from connectors.tests.commons import AsyncIterator
@@ -23,7 +24,7 @@ def mock_connector():
     connector.document_count = AsyncMock(return_value=total_document_count)
     connector.sync_starts = AsyncMock()
     connector.sync_done = AsyncMock()
-    connector.reload = AsyncMock(return_value=connector)
+    connector.reload = AsyncMock()
 
     return connector
 
@@ -42,7 +43,7 @@ def mock_sync_job():
     sync_job.fail = AsyncMock()
     sync_job.cancel = AsyncMock()
     sync_job.suspend = AsyncMock()
-    sync_job.reload = AsyncMock(return_value=sync_job)
+    sync_job.reload = AsyncMock()
     sync_job.validate_filtering = AsyncMock()
     sync_job.update_metadata = AsyncMock()
 
@@ -388,7 +389,7 @@ async def test_sync_job_runner_connector_not_found(elastic_server_mock, patch_lo
     elastic_server_mock.ingestion_stats.return_value = ingestion_stats
     elastic_server_mock.done.return_value = False
     sync_job_runner = create_runner()
-    sync_job_runner.connector.reload.return_value = None
+    sync_job_runner.connector.reload.side_effect = DocumentNotFoundError()
     await sync_job_runner.execute()
 
     assert sync_job_runner.connector is None
@@ -414,7 +415,7 @@ async def test_sync_job_runner_sync_job_not_found(elastic_server_mock, patch_log
     elastic_server_mock.ingestion_stats.return_value = ingestion_stats
     elastic_server_mock.done.return_value = False
     sync_job_runner = create_runner()
-    sync_job_runner.sync_job.reload.return_value = None
+    sync_job_runner.sync_job.reload.side_effect = DocumentNotFoundError()
     await sync_job_runner.execute()
 
     assert sync_job_runner.sync_job is None
@@ -434,13 +435,14 @@ async def test_sync_job_runner_canceled(elastic_server_mock, patch_logger):
     elastic_server_mock.ingestion_stats.return_value = ingestion_stats
     elastic_server_mock.done.return_value = False
     sync_job_runner = create_runner()
-    original_sync_job = sync_job_runner.sync_job
-    new_sync_job = mock_sync_job()
-    new_sync_job.status = JobStatus.CANCELING
-    sync_job_runner.sync_job.reload.return_value = new_sync_job
+
+    def _update_job_status():
+        sync_job_runner.sync_job.status = JobStatus.CANCELING
+
+    sync_job_runner.sync_job.reload.side_effect = _update_job_status
     await sync_job_runner.execute()
 
-    original_sync_job.claim.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
@@ -464,13 +466,14 @@ async def test_sync_job_runner_not_running(elastic_server_mock, patch_logger):
     elastic_server_mock.ingestion_stats.return_value = ingestion_stats
     elastic_server_mock.done.return_value = False
     sync_job_runner = create_runner()
-    original_sync_job = sync_job_runner.sync_job
-    new_sync_job = mock_sync_job()
-    new_sync_job.status = JobStatus.COMPLETED
-    sync_job_runner.sync_job.reload.return_value = new_sync_job
+
+    def _update_job_status():
+        sync_job_runner.sync_job.status = JobStatus.COMPLETED
+
+    sync_job_runner.sync_job.reload.side_effect = _update_job_status
     await sync_job_runner.execute()
 
-    original_sync_job.claim.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
