@@ -328,13 +328,14 @@ def test_get_bucket_list():
     assert expected_response == actual_response
 
 
-def test_validate_config_for_empty_bucket_string():
+@pytest.mark.asyncio
+async def test_validate_config_for_empty_bucket_string():
     """This function test validate_configwhen buckets string is empty"""
     # Setup
     source = create_source(S3DataSource)
     source.configuration.set_field(name="buckets", value=[""])
     # Execute
     with pytest.raises(ConfigurableFieldValueError) as e:
-        source.validate_config()
+        await source.validate_config()
 
     assert e.match("buckets")

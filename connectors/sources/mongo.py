@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from copy import deepcopy
 from datetime import datetime
 
 import fastjsonschema
@@ -188,6 +189,15 @@ class MongoDataSource(BaseDataSource):
                 find_kwargs = advanced_rules.get("find", {})
 
                 async for doc in self.collection.find(**find_kwargs):
+                    yield self.serialize(doc), None
+
+            elif "aggregate" in advanced_rules:
+                aggregate_kwargs = deepcopy(advanced_rules.get("aggregate", {}))
+                pipeline = aggregate_kwargs.pop("pipeline", [])
+
+                async for doc in self.collection.aggregate(
+                    pipeline=pipeline, **aggregate_kwargs
+                ):
                     yield self.serialize(doc), None
         else:
             async for doc in self.collection.find():

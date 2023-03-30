@@ -191,6 +191,40 @@ async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
     assert find_call_kwargs[0] == filtering.get_advanced_rules().get("find")
 
 
+@pytest.mark.asyncio
+async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present():
+    source = create_source(MongoDataSource)
+
+    collection_mock = Mock()
+    collection_mock.aggregate = AsyncIterator(items=[{"_id": 1}])
+    source.collection = collection_mock
+
+    filtering = Filter(
+        {
+            "advanced_snippet": {
+                "value": {
+                    "aggregate": {
+                        "allowDiskUse": True,
+                        "maxTimeMS": 10,
+                        "batchSize": 1,
+                        "let": {"key": "value"},
+                        "pipeline": [
+                            {"$match": {"field1": "value1"}},
+                            {"$group": {"_id": "$field2", "count": {"$sum": 1}}},
+                        ],
+                    }
+                }
+            }
+        }
+    )
+
+    async for _ in source.get_docs(filtering):
+        pass
+
+    aggregate_call_kwargs = collection_mock.aggregate.call_kwargs
+    assert aggregate_call_kwargs[0] == filtering.get_advanced_rules().get("aggregate")
+
+
 def future_with_result(result):
     future = asyncio.Future()
     future.set_result(result)
