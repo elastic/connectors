@@ -78,7 +78,7 @@ Notice, that the config file you downloaded might contain more config entries, s
 
 To run the connector service in native mode, you will need a slightly different configuration file. The `native_service_types` config option needs to be populated while `connector_id` and `service_type` settings should be removed or commented out. Normally, when you download a sample configuration file per step 2, you'll be able to run the Connector Service in native mode (as long as the Elasticsearch host and credentials are correct).
 
-Example of configuration file for connectors service running in native mode:
+Here is an example configuration file for a Connector Service running in native mode:
 
 ```
 elasticsearch:
