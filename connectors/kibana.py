@@ -328,7 +328,12 @@ def main(args=None):
         and os.path.isfile(connector_definition_file)
     ):
         with open(connector_definition_file) as f:
+            logger.info(f"Loaded connector definition from {connector_definition_file}")
             connector_definition = json.load(f)
+    else:
+        logger.info(
+            "No connector definition file provided, using default connector definition"
+        )
 
     try:
         asyncio.run(
