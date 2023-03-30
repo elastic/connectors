@@ -16,7 +16,7 @@ cd ~ && mkdir connectors-python-config
 
 ## Download sample configuration file from this repository into newly created directory.
 
-Download can be done manually, or just using the line below - make sure to update `--output` argument value if your directory name is different or you want to use a different config file name.
+You can download the file manually, or simply run the command below. Make sure to update the `--output` argument value if your directory name is different,  or you want to use a different config file name.
 
 ```sh
 curl https://raw.githubusercontent.com/elastic/connectors-python/main/config.yml --output ~/connectors-python-config/config.yml
@@ -24,7 +24,7 @@ curl https://raw.githubusercontent.com/elastic/connectors-python/main/config.yml
 
 ## Update the configuration file for your [on-prem connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html#build-connector-usage)
 
-In case you're running Connector Service against a dockerised version of Elasticsearch and Kibana, your config file might look the following:
+If you're running the Connector Service against a dockerised version of Elasticsearch and Kibana, your config file will look like this:
 
 ```
 elasticsearch:
@@ -147,7 +147,7 @@ For example, if you've created a custom version of MongoDB connector, you can ta
 docker build -t connector/custom-mongodb:1.0 .
 ```
 
-You can later use `<TAG_OF_THE_IMAGE>` instead of `docker.elastic.co/enterprise-search/elastic-connectors:8.7.0.0-SNAPSHOT` in the next step to run the docker image
+You can later use `<TAG_OF_THE_IMAGE>` instead of `docker.elastic.co/enterprise-search/elastic-connectors:8.7.0.0-SNAPSHOT` in the next step to run the Docker image.
 
 ## Run the Docker image.
 
