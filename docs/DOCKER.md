@@ -10,7 +10,7 @@ Windows users might have to run them in [Unix Subsystem](https://learn.microsoft
 
 1. Create a directory that will be mounted into the Docker image.
 
-This directory will contain the configuration file that will be used to run the Connectors Service. As an example in this guide I will use home directory of the user I'm logged in as.
+This directory will contain the configuration file used to run the Connector Service. The examples in this guide will use the user's home directory (`~`).
 
 ```sh
 cd ~ && mkdir connectors-python-config
