@@ -22,6 +22,7 @@ Elasticsearch <== Bulker <== queue <== Fetcher <== generator
 import asyncio
 import copy
 import functools
+import logging
 import time
 from collections import defaultdict
 
@@ -115,9 +116,10 @@ class Bulker:
         # TODO: treat result to retry errors like in async_streaming_bulk
         task_num = len(self.bulk_tasks)
 
-        logger.debug(
-            f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
+            )
         start = time.time()
         try:
             res = await self.client.bulk(
@@ -467,7 +469,8 @@ class ElasticServer(ESClient):
             f"Found {len(existing_ids)} docs in {index} (duration "
             f"{int(time.time() - start)} seconds) "
         )
-        logger.debug(f"Size of ids in memory is {get_mb_size(existing_ids)}MiB")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Size of ids in memory is {get_mb_size(existing_ids)}MiB")
 
         # start the fetcher
         fetcher = Fetcher(
