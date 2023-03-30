@@ -109,7 +109,6 @@ class SharepointDataSource(BaseDataSource):
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.host_url = self.configuration["host_url"]
         self.certificate = self.configuration["ssl_ca"]
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.retry_count = self.configuration["retry_count"]
         self._sleeps = CancellableSleeps()
         self.ssl_ctx = False
@@ -179,11 +178,6 @@ class SharepointDataSource(BaseDataSource):
                 "value": "",
                 "label": "SSL certificate",
                 "type": "str",
-            },
-            "enable_content_extraction": {
-                "value": True,
-                "label": "Enable content extraction (true/false)",
-                "type": "bool",
             },
             "retry_count": {
                 "value": RETRIES,
@@ -445,7 +439,7 @@ class SharepointDataSource(BaseDataSource):
             dictionary: Content document with id, timestamp & text.
         """
 
-        if not (self.enable_content_extraction and doit and document["size"]):
+        if not (doit and document["size"]):
             return
 
         document_size = int(document["size"])
