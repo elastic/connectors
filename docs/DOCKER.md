@@ -6,7 +6,7 @@ This guide uses generally-available unix commands to demonstrate how to run the 
 
 Windows users might have to run them in [Unix Subsystem](https://learn.microsoft.com/en-us/windows/wsl/about), rewrite the commands in PowerShell, or execute them manually.
 
-## Create a directory that will be mounted into the Docker image.
+## Create a directory to be mounted into the Docker image.
 
 This directory will contain the configuration file used to run the Connector Service. The examples in this guide will use the user's home directory (`~`).
 
@@ -149,7 +149,7 @@ docker build -t connector/custom-mongodb:1.0 .
 
 You can later use `<TAG_OF_THE_IMAGE>` instead of `docker.elastic.co/enterprise-search/elastic-connectors:8.7.0.0-SNAPSHOT` in the next step to run the docker image
 
-## Run the docker image.
+## Run the Docker image.
 
 Now you can run the Docker image with the Connector Service. Here's an example command:
 
