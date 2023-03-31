@@ -611,6 +611,33 @@ async def test_sync_job_claim(patch_logger):
 
 
 @pytest.mark.asyncio
+async def test_sync_job_update_metadata(patch_logger):
+    source = {"_id": "1"}
+    index = Mock()
+    index.update = AsyncMock(return_value=1)
+    ingestion_stats = {
+        "indexed_document_count": 1,
+        "indexed_document_volume": 13,
+        "deleted_document_count": 0,
+    }
+    connector_metadata = {"foo": "bar"}
+    expected_doc_source_update = (
+        {
+            "last_seen": ANY,
+        }
+        | ingestion_stats
+        | {"metadata": connector_metadata}
+    )
+
+    sync_job = SyncJob(elastic_index=index, doc_source=source)
+    await sync_job.update_metadata(
+        ingestion_stats=ingestion_stats, connector_metadata=connector_metadata
+    )
+
+    index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
 async def test_sync_job_done(patch_logger):
     source = {"_id": "1"}
     index = Mock()

@@ -12,6 +12,7 @@ from connectors.es import Mappings
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 
+JOB_REPORTING_INTERVAL = 10
 JOB_CHECK_INTERVAL = 1
 ES_ID_SIZE_LIMIT = 512
 
@@ -53,6 +54,7 @@ class SyncJobRunner:
         self.connector_id = self.connector.id
         self.es_config = es_config
         self.elastic_server = None
+        self.job_reporting_task = None
         self.bulk_options = self.es_config.get("bulk", {})
         self._start_time = None
         self.running = False
@@ -117,6 +119,9 @@ class SyncJobRunner:
                 options=bulk_options,
             )
 
+            self.job_reporting_task = asyncio.create_task(
+                self.update_ingestion_stats(JOB_REPORTING_INTERVAL)
+            )
             while not self.elastic_server.done():
                 await asyncio.sleep(JOB_CHECK_INTERVAL)
             fetch_error = self.elastic_server.fetch_error()
@@ -138,6 +143,12 @@ class SyncJobRunner:
     async def _sync_done(self, sync_status, sync_error=None):
         if self.elastic_server is not None and not self.elastic_server.done():
             await self.elastic_server.cancel()
+        if self.job_reporting_task is not None and not self.job_reporting_task.done():
+            self.job_reporting_task.cancel()
+            try:
+                await self.job_reporting_task
+            except asyncio.CancelledError:
+                logger.info("Job reporting task is stopped.")
 
         result = (
             {} if self.elastic_server is None else self.elastic_server.ingestion_stats()
@@ -203,3 +214,28 @@ class SyncJobRunner:
             doc["_reduce_whitespace"] = self.sync_job.pipeline["reduce_whitespace"]
             doc["_run_ml_inference"] = self.sync_job.pipeline["run_ml_inference"]
             yield doc, lazy_download
+
+    async def update_ingestion_stats(self, interval):
+        while True:
+            await asyncio.sleep(interval)
+
+            if not await self.reload_sync_job():
+                break
+
+            result = self.elastic_server.ingestion_stats()
+            ingestion_stats = {
+                "indexed_document_count": result.get("indexed_document_count", 0),
+                "indexed_document_volume": result.get("indexed_document_volume", 0),
+                "deleted_document_count": result.get("deleted_document_count", 0),
+            }
+            await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
+
+    async def reload_sync_job(self):
+        if self.sync_job is None:
+            return False
+        try:
+            await self.sync_job.reload()
+        except DocumentNotFoundError:
+            logger.error(f"Couldn't find sync job by id {self.job_id}")
+            self.sync_job = None
+        return self.sync_job is not None
