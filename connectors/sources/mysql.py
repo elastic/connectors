@@ -15,16 +15,15 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
-from connectors.sources.generic_database import WILDCARD, configured_tables, is_wildcard
+from connectors.sources.generic_database import (
+    WILDCARD,
+    Queries,
+    configured_tables,
+    is_wildcard,
+)
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
 MAX_POOL_SIZE = 10
-QUERIES = {
-    "ALL_TABLE": "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}'",
-    "TABLE_DATA": "SELECT * FROM {database}.{table}",
-    "TABLE_PRIMARY_KEY": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'",
-    "TABLE_LAST_UPDATE_TIME": "SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}'",
-}
 DEFAULT_FETCH_SIZE = 50
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -38,6 +37,32 @@ def format_list(list_):
 
 class NoDatabaseConfiguredError(Exception):
     pass
+
+
+class MySQLQueries(Queries):
+    def __init__(self, database):
+        self.database = database
+
+    def all_tables(self, **kwargs):
+        return f"SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}'"
+
+    def table_primary_key(self, table):
+        return f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'"
+
+    def table_data(self, table):
+        return f"SELECT * FROM {self.database}.{table}"
+
+    def table_last_update_time(self, table):
+        return f"SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
+
+    def ping(self):
+        pass
+
+    def table_data_count(self, **kwargs):
+        pass
+
+    def all_schemas(self):
+        pass
 
 
 class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
@@ -96,6 +121,7 @@ class MySqlDataSource(BaseDataSource):
         self.certificate = self.configuration["ssl_ca"]
         self.database = self.configuration["database"]
         self.tables = self.configuration["tables"]
+        self.queries = MySQLQueries(self.database)
 
     @classmethod
     def get_default_configuration(cls):
@@ -386,9 +412,9 @@ class MySqlDataSource(BaseDataSource):
                     retry += 1
 
     async def fetch_all_tables(self):
-        return await anext(self._connect(query=QUERIES["ALL_TABLE"]))
+        return await anext(self._connect(query=self.queries.all_tables()))
 
-    async def fetch_rows_for_table(self, table=None, query=QUERIES["TABLE_DATA"]):
+    async def fetch_rows_for_table(self, table=None, query=None):
         """Fetches all the rows from all the tables of the database.
 
         Args:
@@ -418,7 +444,7 @@ class MySqlDataSource(BaseDataSource):
 
                 async for row in self.fetch_rows_for_table(
                     table=table,
-                    query=QUERIES["TABLE_DATA"],
+                    query=self.queries.table_data(table),
                 ):
                     yield row
         else:
@@ -426,7 +452,7 @@ class MySqlDataSource(BaseDataSource):
                 f"Fetched 0 tables for database: {self.database}. As database has no tables."
             )
 
-    async def fetch_documents(self, table, query=QUERIES["TABLE_DATA"]):
+    async def fetch_documents(self, table, query=None):
         """Fetches all the table entries and format them in Elasticsearch documents
 
         Args:
@@ -438,7 +464,7 @@ class MySqlDataSource(BaseDataSource):
         """
 
         primary_key = await anext(
-            self._connect(query=QUERIES["TABLE_PRIMARY_KEY"], table=table)
+            self._connect(query=self.queries.table_primary_key(table), table=table)
         )
 
         keys = []
@@ -448,7 +474,7 @@ class MySqlDataSource(BaseDataSource):
         if keys:
             last_update_time = await anext(
                 self._connect(
-                    query=QUERIES["TABLE_LAST_UPDATE_TIME"],
+                    query=self.queries.table_last_update_time(table),
                     table=table,
                 )
             )
