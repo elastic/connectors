@@ -145,6 +145,10 @@ class SyncJobRunner:
             await self.elastic_server.cancel()
         if self.job_reporting_task is not None and not self.job_reporting_task.done():
             self.job_reporting_task.cancel()
+            try:
+                await self.job_reporting_task
+            except asyncio.CancelledError:
+                logger.info("Job reporting task is stopped.")
 
         result = (
             {} if self.elastic_server is None else self.elastic_server.ingestion_stats()
@@ -224,7 +228,6 @@ class SyncJobRunner:
                 "indexed_document_volume": result.get("indexed_document_volume", 0),
                 "deleted_document_count": result.get("deleted_document_count", 0),
             }
-            logger.info(f"update ingestion stats: {ingestion_stats}")
             await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
 
     async def reload_sync_job(self):
