@@ -296,7 +296,6 @@ class MySqlDataSource(BaseDataSource):
     async def ping(self):
         """Verify the connection with MySQL server"""
 
-        logger.info("Pinging MySQL...")
         async with self.with_connection_pool() as connection_pool:
             try:
                 async with connection_pool.acquire() as connection:
