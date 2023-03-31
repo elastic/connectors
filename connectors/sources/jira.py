@@ -57,10 +57,10 @@ URLS = {
     ATTACHMENT_SERVER: "/secure/attachment/{attachment_id}/{attachment_name}",
 }
 
-JIRA_ONLINE = 'jira_online'
-JIRA_ONLINE_LABEL = 'Jira Online'
-JIRA_SERVER = 'jira_server'
-JIRA_SERVER_LABEL = 'Jira Server'
+JIRA_ONLINE = "jira_online"
+JIRA_ONLINE_LABEL = "Jira Online"
+JIRA_SERVER = "jira_server"
+JIRA_SERVER_LABEL = "Jira Server"
 
 
 class JiraClient:
@@ -90,7 +90,7 @@ class JiraClient:
         """
         if self.session:
             return self.session
-        if self.data_source == JIRA_ONLINE:
+        if self.is_cloud:
             login, password = (
                 self.configuration["service_account_id"],
                 self.configuration["api_token"],
@@ -232,18 +232,14 @@ class JiraDataSource(BaseDataSource):
                 "value": JIRA_ONLINE,
             },
             "username": {
-                "depends_on": [
-                    {"field": "data_source", "value": JIRA_SERVER}
-                ],
+                "depends_on": [{"field": "data_source", "value": JIRA_SERVER}],
                 "label": "Jira Server username",
                 "order": 2,
                 "type": "str",
                 "value": "admin",
             },
             "password": {
-                "depends_on": [
-                    {"field": "data_source", "value": JIRA_SERVER}
-                ],
+                "depends_on": [{"field": "data_source", "value": JIRA_SERVER}],
                 "label": "Jira Server password",
                 "sensitive": True,
                 "order": 3,
@@ -251,18 +247,14 @@ class JiraDataSource(BaseDataSource):
                 "value": "changeme",
             },
             "service_account_id": {
-                "depends_on": [
-                    {"field": "data_source", "value": JIRA_ONLINE}
-                ],
+                "depends_on": [{"field": "data_source", "value": JIRA_ONLINE}],
                 "label": "Jira Cloud service account id",
                 "order": 4,
                 "type": "str",
                 "value": "me@example.com",
             },
             "api_token": {
-                "depends_on": [
-                    {"field": "data_source", "value": JIRA_ONLINE}
-                ],
+                "depends_on": [{"field": "data_source", "value": JIRA_ONLINE}],
                 "label": "Jira Cloud API token",
                 "order": 5,
                 "sensitive": True,
@@ -289,9 +281,7 @@ class JiraDataSource(BaseDataSource):
                 "value": False,
             },
             "ssl_ca": {
-                "depends_on": [
-                    {"field": "ssl_enabled", "value": True}
-                ],
+                "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
                 "order": 8,
                 "type": "str",
