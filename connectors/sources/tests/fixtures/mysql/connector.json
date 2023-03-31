@@ -1,0 +1,149 @@
+{
+        "name": "mysql",
+        "index_name": "search-mysql",
+        "service_type": "mysql",
+        "sync_now": true,
+        "is_native": true,
+        "api_key_id": null,
+        "status": "configured",
+        "language": "en",
+        "last_sync_status": "canceled",
+        "last_sync_error": null,
+        "last_synced": null,
+        "last_seen": null,
+        "created_at": null,
+        "updated_at": null,
+        "configuration": {
+                "host": {
+                        "label": "Host",
+                        "order": 1,
+                        "type": "str",
+                        "value": "127.0.0.1"
+                },
+                "port": {
+                        "display": "numeric",
+                        "label": "Port",
+                        "order": 2,
+                        "type": "int",
+                        "value": 3306
+                },
+                "user": {
+                        "label": "Username",
+                        "order": 3,
+                        "type": "str",
+                        "value": "root"
+                },
+                "password": {
+                        "label": "Password",
+                        "order": 4,
+                        "sensitive": true,
+                        "type": "str",
+                        "value": "changeme"
+                },
+                "database": {
+                        "label": "Database",
+                        "order": 5,
+                        "type": "str",
+                        "value": "customerinfo"
+                },
+                "tables": {
+                        "display": "textarea",
+                        "label": "Comma-separated list of tables",
+                        "order": 6,
+                        "type": "list",
+                        "value": "*"
+                },
+                "ssl_enabled": {
+                        "display": "toggle",
+                        "label": "Enable SSL verification",
+                        "order": 7,
+                        "type": "bool",
+                        "value": false
+                },
+                "ssl_ca": {
+                        "label": "SSL certificate",
+                        "order": 8,
+                        "type": "str",
+                        "value": "" 
+                },
+                "fetch_size": {
+                        "default_value": 50,
+                        "display": "numeric",
+                        "label": "Number of rows fetched per request",
+                        "order": 9,
+                        "required": false,
+                        "type": "int",
+                        "ui_restrictions": ["advanced"],
+                        "value": 50 
+                },
+                "retry_count": {
+                        "default_value": 3,
+                        "display": "numeric",
+                        "label": "Maximum retries per request",
+                        "order": 10,
+                        "required": false,
+                        "type": "int",
+                        "ui_restrictions": ["advanced"],
+                        "value": 3
+                }
+        },
+        "filtering": [
+                {
+                        "domain": "DEFAULT",
+                        "draft": {
+                            "advanced_snippet": {
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "value": {}
+                            },
+                            "rules": [
+                                {
+                                    "field": "_",
+                                    "updated_at": "2023-01-31T16:41:27.341Z",
+                                    "created_at": "2023-01-31T16:38:49.244Z",
+                                    "rule": "regex",
+                                    "id": "DEFAULT",
+                                    "value": ".*",
+                                    "order": 1,
+                                    "policy": "include"
+                                }
+                            ],
+                            "validation": {
+                                "state": "valid",
+                                "errors": []
+                            }
+                        },
+                        "active": {
+                            "advanced_snippet": {
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "value": {}
+                            },
+                            "rules": [
+                                {
+                                    "field": "_",
+                                    "updated_at": "2023-01-31T16:41:27.341Z",
+                                    "created_at": "2023-01-31T16:38:49.244Z",
+                                    "rule": "regex",
+                                    "id": "DEFAULT",
+                                    "value": ".*",
+                                    "order": 1,
+                                    "policy": "include"
+                                }
+                            ],
+                            "validation": {
+                                "state": "valid",
+                                "errors": []
+                            }
+                        }
+                }
+
+        ],
+        "scheduling": {"enabled": true, "interval": "1 * * * * *"},
+        "pipeline": {
+                "extract_binary_content": true,
+                "name": "ent-search-generic-ingestion",
+                "reduce_whitespace": true,
+                "run_ml_inference": true
+        }
+}
