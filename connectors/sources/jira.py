@@ -57,6 +57,11 @@ URLS = {
     ATTACHMENT_SERVER: "/secure/attachment/{attachment_id}/{attachment_name}",
 }
 
+JIRA_ONLINE = 'jira_online'
+JIRA_ONLINE_LABEL = 'Jira Online'
+JIRA_SERVER = 'jira_server'
+JIRA_SERVER_LABEL = 'Jira Server'
+
 
 class JiraClient:
     """Jira client to handle API calls made to Jira"""
@@ -64,7 +69,7 @@ class JiraClient:
     def __init__(self, configuration):
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
-        self.is_cloud = self.configuration["is_cloud"]
+        self.is_cloud = self.configuration["data_source"] == JIRA_ONLINE
         self.host_url = self.configuration["host_url"]
         self.projects = self.configuration["projects"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
@@ -85,7 +90,7 @@ class JiraClient:
         """
         if self.session:
             return self.session
-        if self.is_cloud:
+        if self.data_source == JIRA_ONLINE:
             login, password = (
                 self.configuration["service_account_id"],
                 self.configuration["api_token"],
@@ -215,20 +220,30 @@ class JiraDataSource(BaseDataSource):
             dictionary: Default configuration.
         """
         return {
-            "is_cloud": {
-                "display": "toggle",
-                "label": "True if Jira Cloud, False if Jira Server",
+            "data_source": {
+                "display": "dropdown",
+                "label": "Jira data source",
+                "options": [
+                    {"label": JIRA_ONLINE_LABEL, "value": JIRA_ONLINE},
+                    {"label": JIRA_SERVER_LABEL, "value": JIRA_SERVER},
+                ],
                 "order": 1,
-                "type": "bool",
-                "value": True,
+                "type": "str",
+                "value": JIRA_ONLINE,
             },
             "username": {
+                "depends_on": [
+                    {"field": "data_source", "value": JIRA_SERVER}
+                ],
                 "label": "Jira Server username",
                 "order": 2,
                 "type": "str",
                 "value": "admin",
             },
             "password": {
+                "depends_on": [
+                    {"field": "data_source", "value": JIRA_SERVER}
+                ],
                 "label": "Jira Server password",
                 "sensitive": True,
                 "order": 3,
@@ -236,14 +251,21 @@ class JiraDataSource(BaseDataSource):
                 "value": "changeme",
             },
             "service_account_id": {
+                "depends_on": [
+                    {"field": "data_source", "value": JIRA_ONLINE}
+                ],
                 "label": "Jira Cloud service account id",
                 "order": 4,
                 "type": "str",
                 "value": "me@example.com",
             },
             "api_token": {
+                "depends_on": [
+                    {"field": "data_source", "value": JIRA_ONLINE}
+                ],
                 "label": "Jira Cloud API token",
                 "order": 5,
+                "sensitive": True,
                 "type": "str",
                 "value": "abc#123",
             },
@@ -267,6 +289,9 @@ class JiraDataSource(BaseDataSource):
                 "value": False,
             },
             "ssl_ca": {
+                "depends_on": [
+                    {"field": "ssl_enabled", "value": True}
+                ],
                 "label": "SSL certificate",
                 "order": 8,
                 "type": "str",
