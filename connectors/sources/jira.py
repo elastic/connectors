@@ -58,9 +58,7 @@ URLS = {
 }
 
 JIRA_ONLINE = "jira_online"
-JIRA_ONLINE_LABEL = "Jira Online"
 JIRA_SERVER = "jira_server"
-JIRA_SERVER_LABEL = "Jira Server"
 
 
 class JiraClient:
@@ -224,8 +222,8 @@ class JiraDataSource(BaseDataSource):
                 "display": "dropdown",
                 "label": "Jira data source",
                 "options": [
-                    {"label": JIRA_ONLINE_LABEL, "value": JIRA_ONLINE},
-                    {"label": JIRA_SERVER_LABEL, "value": JIRA_SERVER},
+                    {"label": "Jira Online", "value": JIRA_ONLINE},
+                    {"label": "Jira Server", "value": JIRA_SERVER},
                 ],
                 "order": 1,
                 "type": "str",
