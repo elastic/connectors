@@ -192,7 +192,14 @@ class MySqlDataSource(BaseDataSource):
         Raises:
             Exception: Configured keys can't be empty
         """
-        connection_fields = ["host", "port", "username", "password", "database", "tables"]
+        connection_fields = [
+            "host",
+            "port",
+            "username",
+            "password",
+            "database",
+            "tables",
+        ]
         empty_connection_fields = []
         for field in connection_fields:
             if self.configuration[field] == "":
