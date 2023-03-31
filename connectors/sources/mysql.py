@@ -343,7 +343,6 @@ class MySqlDataSource(BaseDataSource):
             list: Column names and query response
         """
 
-        query_kwargs["database"] = self.database
         formatted_query = query.format(**query_kwargs)
         size = self.configuration["fetch_size"]
         retry = 1
@@ -365,7 +364,7 @@ class MySqlDataSource(BaseDataSource):
                                 # sending back column names only once
                                 if yield_once:
                                     yield [
-                                        f"{query_kwargs['database']}_{query_kwargs['table']}_{column[0]}"
+                                        f"{self.database}_{query_kwargs['table']}_{column[0]}"
                                         for column in cursor.description
                                     ]
                                     yield_once = False
