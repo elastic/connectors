@@ -16,4 +16,6 @@ azure-storage-blob==12.13.0
 SQLAlchemy==2.0.1
 oracledb==1.2.2
 asyncpg==0.27.0
-pyodbc==4.0.34 # Latest version is v4.0.35. However it is not compatible with MAC M1 chip so pining this version
+python-tds==1.12.0
+sqlalchemy-pytds==0.3.5
+pyOpenSSL==23.1.1
