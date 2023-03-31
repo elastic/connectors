@@ -96,14 +96,14 @@ class MongoDataSource(BaseDataSource):
         client_params = {}
 
         host = self.configuration["host"]
-        user = self.configuration["user"]
+        username = self.configuration["username"]
         password = self.configuration["password"]
 
         if self.configuration["direct_connection"]:
             client_params["directConnection"] = True
 
-        if len(user) > 0 or len(password) > 0:
-            client_params["username"] = user
+        if len(username) > 0 or len(password) > 0:
+            client_params["username"] = username
             client_params["password"] = password
 
         self.client = AsyncIOMotorClient(host, **client_params)
@@ -139,7 +139,7 @@ class MongoDataSource(BaseDataSource):
                 "type": "str",
                 "value": "mongodb://127.0.0.1:27021",
             },
-            "user": {
+            "username": {
                 "label": "Username",
                 "order": 5,
                 "type": "str",
