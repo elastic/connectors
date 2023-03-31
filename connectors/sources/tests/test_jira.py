@@ -34,13 +34,13 @@ MOCK_PROJECT = [
 ]
 EXPECTED_PROJECT = [
     {
-        "_id": "dummy_project-1",
+        "_id": "project-1",
         "Type": "Project",
         "_timestamp": "2023-01-24T09:37:19+05:30",
         "Project": {"id": "1", "name": "dummy_project", "key": "DP"},
     },
     {
-        "_id": "test_project-2",
+        "_id": "project-2",
         "Type": "Project",
         "_timestamp": "2023-01-24T09:37:19+05:30",
         "Project": {"id": "2", "name": "test_project", "key": "TP"},
@@ -148,12 +148,12 @@ def side_effect_function(url, ssl):
     Args:
         url, ssl: Params required for get call
     """
-    if url == f"{HOST_URL}/rest/api/2/search?maxResults=100&startAt=0":
+    if url == f"{HOST_URL}/rest/api/2/search?jql=&maxResults=100&startAt=0":
         mocked_issue_response = {"issues": [MOCK_ISSUE], "total": 101}
         return get_json_mock(mock_response=mocked_issue_response)
     elif url == f"{HOST_URL}/rest/api/2/issue/TP-1":
         return get_json_mock(mock_response=MOCK_ISSUE)
-    elif url == f"{HOST_URL}/rest/api/2/search?maxResults=100&startAt=100":
+    elif url == f"{HOST_URL}/rest/api/2/search?jql=&maxResults=100&startAt=100":
         mocked_issue_data = {"issues": [MOCK_ISSUE], "total": 1}
         return get_json_mock(mock_response=mocked_issue_data)
     elif url == f"{HOST_URL}/rest/api/2/myself":
@@ -356,6 +356,50 @@ async def test_get_projects(patch_logger):
         async for project in source._get_projects():
             source_projects.append(project)
         assert source_projects == EXPECTED_PROJECT
+
+
+@freeze_time("2023-01-24T04:07:19")
+@pytest.mark.asyncio
+async def test_get_projects_for_specific_project(patch_logger):
+    """Test _get_projects method for specific project key"""
+    # Setup
+    source = create_source(JiraDataSource)
+    source.jira_client.projects = ["DP"]
+    async_project_response = AsyncMock()
+    async_project_response.__aenter__ = AsyncMock(
+        return_value=JSONAsyncMock(MOCK_PROJECT[0])
+    )
+
+    myself_mock = AsyncMock()
+    myself_mock.__aenter__ = AsyncMock(return_value=JSONAsyncMock(MOCK_MYSELF))
+
+    # Execute and Assert
+    with patch(
+        "aiohttp.ClientSession.get", side_effect=[myself_mock, async_project_response]
+    ):
+        async for project in source._get_projects():
+            assert project == EXPECTED_PROJECT[0]
+
+
+@pytest.mark.asyncio
+async def test_verify_projects(patch_logger):
+    """Test _verify_projects method"""
+    source = create_source(JiraDataSource)
+    source.jira_client.projects = ["TP", "DP"]
+
+    with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
+        await source._verify_projects()
+
+
+@pytest.mark.asyncio
+async def test_verify_projects_with_unavailable_project_keys(patch_logger):
+    """Test _verify_projects method with unavaiable project keys"""
+    source = create_source(JiraDataSource)
+    source.jira_client.projects = ["TP", "AP"]
+
+    with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
+        with pytest.raises(Exception, match="Configured unavailable projects: AP"):
+            await source._verify_projects()
 
 
 @pytest.mark.asyncio

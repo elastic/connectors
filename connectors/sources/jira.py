@@ -42,6 +42,7 @@ MAX_CONCURRENT_DOWNLOADS = 50  # Max concurrent download supported by jira
 
 PING = "ping"
 PROJECT = "project"
+PROJECT_BY_KEY = "project_by_key"
 ISSUES = "all_issues"
 ISSUE_DATA = "issue_data"
 ATTACHMENT_CLOUD = "attachment_cloud"
@@ -49,7 +50,8 @@ ATTACHMENT_SERVER = "attachment_server"
 URLS = {
     PING: "/rest/api/2/myself",
     PROJECT: "/rest/api/2/project?expand=description,lead,url",
-    ISSUES: "/rest/api/2/search?maxResults={max_results}&startAt={start_at}",
+    PROJECT_BY_KEY: "/rest/api/2/project/{key}",
+    ISSUES: "/rest/api/2/search?jql={jql}&maxResults={max_results}&startAt={start_at}",
     ISSUE_DATA: "/rest/api/2/issue/{id}",
     ATTACHMENT_CLOUD: "/rest/api/2/attachment/content/{attachment_id}",
     ATTACHMENT_SERVER: "/secure/attachment/{attachment_id}/{attachment_name}",
@@ -64,6 +66,7 @@ class JiraClient:
         self.configuration = configuration
         self.is_cloud = self.configuration["is_cloud"]
         self.host_url = self.configuration["host_url"]
+        self.projects = self.configuration["projects"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
         self.retry_count = self.configuration["retry_count"]
@@ -151,29 +154,37 @@ class JiraClient:
                 )
                 await self._sleeps.sleep(RETRY_INTERVAL**retry)
 
-    async def paginated_api_call(self, url_name):
+    async def paginated_api_call(self, url_name, jql=None):
         """Make a paginated API call for Jira objects using the passed url_name with retry for the failed API calls.
 
         Args:
             url_name (str): URL Name to identify the API endpoint to hit
+            jql (str, None): Jira Query Language to filter the issues.
 
         Yields:
             response: Return api response.
         """
         start_at = 0
 
-        should_paginate = True
-        while should_paginate:
-            async for response in self.api_call(
-                url_name=url_name, start_at=start_at, max_results=FETCH_SIZE
-            ):
-                response_json = await response.json()
-                total = response_json["total"]
-                yield response_json
-                if start_at + FETCH_SIZE > total or total <= FETCH_SIZE:
-                    should_paginate = False
-                    break
-                start_at += FETCH_SIZE
+        while True:
+            try:
+                async for response in self.api_call(
+                    url_name=url_name,
+                    start_at=start_at,
+                    max_results=FETCH_SIZE,
+                    jql=jql,
+                ):
+                    response_json = await response.json()
+                    total = response_json["total"]
+                    yield response_json
+                    if start_at + FETCH_SIZE > total or total <= FETCH_SIZE:
+                        return
+                    start_at += FETCH_SIZE
+            except Exception as exception:
+                logger.warning(
+                    f"Skipping data for type: {url_name}, query params: jql={jql}, startAt={start_at}, maxResults={FETCH_SIZE}. Error: {exception}."
+                )
+                break
 
 
 class JiraDataSource(BaseDataSource):
@@ -235,6 +246,11 @@ class JiraDataSource(BaseDataSource):
                 "label": "Jira host url",
                 "type": "str",
             },
+            "projects": {
+                "value": "*",
+                "label": "Jira Project Keys",
+                "type": "list",
+            },
             "ssl_enabled": {
                 "value": False,
                 "label": "Enable SSL verification (true/false)",
@@ -278,9 +294,9 @@ class JiraDataSource(BaseDataSource):
         """
         logger.info("Validating Jira Configuration")
         connection_fields = (
-            ["host_url", "service_account_id", "api_token"]
+            ["host_url", "service_account_id", "api_token", "projects"]
             if self.jira_client.is_cloud
-            else ["host_url", "username", "password"]
+            else ["host_url", "username", "password", "projects"]
         )
 
         default_config = self.get_default_configuration()
@@ -375,6 +391,30 @@ class JiraDataSource(BaseDataSource):
             logger.exception("Error while connecting to the Jira")
             raise
 
+    async def _verify_projects(self):
+        """Checks if user configured projects are available in jira
+
+        Raises:
+            Exception: Configured unavailable projects: <unavailable_project_keys>
+        """
+        if self.jira_client.projects == ["*"]:
+            return
+        project_keys = []
+        try:
+            async for response in self.jira_client.api_call(url_name=PROJECT):
+                response = await response.json()
+                project_keys = [project["key"] for project in response]
+            if unavailable_projects := set(self.jira_client.projects) - set(
+                project_keys
+            ):
+                raise Exception(
+                    f"Configured unavailable projects: {', '.join(unavailable_projects)}"
+                )
+        except Exception as exception:
+            raise Exception(
+                f"Unable to verify projects: {self.jira_client.projects}. Error: {exception}"
+            )
+
     async def _get_timezone(self):
         """Returns the timezone of the Jira deployment"""
         async for response in self.jira_client.api_call(url_name=PING):
@@ -390,19 +430,31 @@ class JiraDataSource(BaseDataSource):
         try:
             timezone = await self._get_timezone()
 
-            async for response in self.jira_client.api_call(url_name=PROJECT):
-                response = await response.json()
-                for project in response:
-                    yield {
-                        "_id": f"{project['name']}-{project['id']}",
-                        "_timestamp": iso_utc(
-                            when=datetime.now(
-                                pytz.timezone(timezone)  # pyright: ignore
-                            )
-                        ),
-                        "Type": "Project",
-                        "Project": project,
-                    }
+            timestamp = iso_utc(
+                when=datetime.now(pytz.timezone(timezone))  # pyright: ignore
+            )
+            if self.jira_client.projects == ["*"]:
+                async for response in self.jira_client.api_call(url_name=PROJECT):
+                    response = await response.json()
+                    for project in response:
+                        yield {
+                            "_id": f"project-{project['id']}",
+                            "_timestamp": timestamp,
+                            "Type": "Project",
+                            "Project": project,
+                        }
+            else:
+                for project_key in self.jira_client.projects:
+                    async for response in self.jira_client.api_call(
+                        url_name=PROJECT_BY_KEY, key=project_key
+                    ):
+                        project = await response.json()
+                        yield {
+                            "_id": f"project-{project['id']}",
+                            "_timestamp": timestamp,
+                            "Type": "Project",
+                            "Project": project,
+                        }
         except Exception as exception:
             logger.warning(f"Skipping data for type: {PROJECT}. Error: {exception}")
 
@@ -413,7 +465,11 @@ class JiraDataSource(BaseDataSource):
             Dictionary: Jira issue to get indexed
             issue (dict): Issue response to fetch the attachments
         """
-        async for response in self.jira_client.paginated_api_call(url_name=ISSUES):
+        query = f"project in ({','.join(self.jira_client.projects)})"
+        jql = "" if self.jira_client.projects == ["*"] else query
+        async for response in self.jira_client.paginated_api_call(
+            url_name=ISSUES, jql=jql
+        ):
             for issue in response.get("issues", []):
                 try:
                     async for response in self.jira_client.api_call(
@@ -485,6 +541,7 @@ class JiraDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the files.
         """
+        await self._verify_projects()
 
         async def _project_task():
             """Coroutine to add projects documents to Queue"""
@@ -504,10 +561,9 @@ class JiraDataSource(BaseDataSource):
                     self.tasks += 1
             await self.queue.put("FINISHED")  # pyright: ignore
 
-        project_task = asyncio.create_task(_project_task())
-        self.tasks += 1
-        document_task = asyncio.create_task(_document_task())
-        self.tasks += 1
+        await self.fetchers.put(_project_task)
+        await self.fetchers.put(_document_task)
+        self.tasks += 2
 
         # Consumer block to grab items from queue in a loop and yield one at a time.
         # Once, all tasks are completed, loop is terminated to stop the consumer.
@@ -519,4 +575,3 @@ class JiraDataSource(BaseDataSource):
                 yield item
 
         await self.fetchers.join()
-        await asyncio.gather(project_task, document_task)

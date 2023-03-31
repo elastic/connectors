@@ -22,6 +22,7 @@ Elasticsearch <== Bulker <== queue <== Fetcher <== generator
 import asyncio
 import copy
 import functools
+import logging
 import time
 from collections import defaultdict
 
@@ -94,6 +95,9 @@ class Bulker:
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.max_concurrent_bulks = max_concurrency
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
+        self.indexed_document_count = 0
+        self.indexed_document_volume = 0
+        self.deleted_document_count = 0
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -103,7 +107,7 @@ class Bulker:
             return [{operation: {"_index": index, "_id": doc_id}}, doc["doc"]]
         if operation == OP_UPSERT:
             return [
-                {"update": {"_index": index, "_id": doc_id}},
+                {operation: {"_index": index, "_id": doc_id}},
                 {"doc": doc["doc"], "doc_as_upsert": True},
             ]
         if operation == OP_DELETE:
@@ -111,13 +115,14 @@ class Bulker:
 
         raise TypeError(operation)
 
-    async def _batch_bulk(self, operations):
+    async def _batch_bulk(self, operations, stats):
         # TODO: treat result to retry errors like in async_streaming_bulk
         task_num = len(self.bulk_tasks)
 
-        logger.debug(
-            f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
+            )
         start = time.time()
         try:
             res = await self.client.bulk(
@@ -130,10 +135,30 @@ class Bulker:
                         if "error" in data:
                             logger.error(f"operation {op} failed, {data['error']}")
                             raise Exception(data["error"]["reason"])
+
+            self._populate_stats(stats, res)
+
         finally:
             self.bulk_time += time.time() - start
 
         return res
+
+    def _populate_stats(self, stats, res):
+        for item in res["items"]:
+            for op, data in item.items():
+                # "result" is only present in successful operations
+                if "result" not in data:
+                    del stats[op][data["_id"]]
+
+        self.indexed_document_count += len(stats[OP_INDEX]) + len(stats[OP_UPSERT])
+        self.indexed_document_volume += sum(stats[OP_INDEX].values()) + sum(
+            stats[OP_UPSERT].values()
+        )
+        self.deleted_document_count += len(stats[OP_DELETE])
+
+        logger.debug(
+            f"Bulker stats - no. of docs indexed: {self.indexed_document_count}, volume of docs indexed: {round(self.indexed_document_volume)} bytes, no. of docs deleted: {self.deleted_document_count}"
+        )
 
     async def run(self):
         """Creates batches of bulk calls given a queue of items.
@@ -145,15 +170,32 @@ class Bulker:
         requests.
         """
         batch = []
+        # stats is a dictionary containing stats for 3 operations. In each sub-dictionary, it is a doc id to size map.
+        stats = {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}}
         self.bulk_time = 0
         self.bulking = True
         bulk_size = 0
+        overhead_size = None
 
         while True:
             doc_size, doc = await self.queue.get()
             if doc in ("END_DOCS", "FETCH_ERROR"):
                 break
             operation = doc["_op_type"]
+            doc_id = doc["_id"]
+            if operation == OP_DELETE:
+                stats[operation][doc_id] = 0
+            else:
+                # the doc_size also includes _op_type, _index and _id,
+                # which we want to exclude when calculating the size.
+                if overhead_size is None:
+                    overhead = {
+                        "_op_type": operation,
+                        "_index": doc["_index"],
+                        "_id": doc_id,
+                    }
+                    overhead_size = get_size(overhead)
+                stats[operation][doc_id] = max(doc_size - overhead_size, 0)
             self.ops[operation] += 1
             batch.extend(self._bulk_op(doc, operation))
 
@@ -163,16 +205,18 @@ class Bulker:
                     functools.partial(
                         self._batch_bulk,
                         copy.copy(batch),
+                        copy.copy(stats),
                     )
                 )
                 batch.clear()
+                stats = {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}}
                 bulk_size = 0
 
             await asyncio.sleep(0)
 
         await self.bulk_tasks.join()
         if len(batch) > 0:
-            await self._batch_bulk(batch)
+            await self._batch_bulk(batch, stats)
 
 
 class Fetcher:
@@ -186,6 +230,7 @@ class Fetcher:
     - existing_ids: a list of existing Elasticsearch document ids found in the index
     - filter_: an instance of `Filter` to apply on the fetched document -- default: `None`
     - sync_rules_enabled: if `True`, we apply rules -- default: `False`
+    - content_extraction_enabled: if `True`, download content -- default `True`
     - display_every -- display a log every `display_every` doc -- default: `DEFAULT_DISPLAY_EVERY`
     - concurrent_downloads: -- concurrency level for downloads -- default: `DEFAULT_CONCURRENT_DOWNLOADS`
     """
@@ -197,6 +242,7 @@ class Fetcher:
         existing_ids,
         filter_=None,
         sync_rules_enabled=False,
+        content_extraction_enabled=True,
         display_every=DEFAULT_DISPLAY_EVERY,
         concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
     ):
@@ -218,6 +264,7 @@ class Fetcher:
         self.basic_rule_engine = (
             BasicRuleEngine(parse(filter_.basic_rules)) if sync_rules_enabled else None
         )
+        self.content_extraction_enabled = content_extraction_enabled
         self.display_every = display_every
         self.concurrent_downloads = concurrent_downloads
 
@@ -282,7 +329,10 @@ class Fetcher:
                     # For these, we update the docs in any case.
                     if TIMESTAMP_FIELD in doc and ts == doc[TIMESTAMP_FIELD]:
                         # cancel the download
-                        if lazy_download is not None:
+                        if (
+                            self.content_extraction_enabled
+                            and lazy_download is not None
+                        ):
                             await lazy_download(doit=False)
                         continue
 
@@ -296,7 +346,7 @@ class Fetcher:
                         doc[TIMESTAMP_FIELD] = iso_utc()
 
                 # if we need to call lazy_download we push it in lazy_downloads
-                if lazy_download is not None:
+                if self.content_extraction_enabled and lazy_download is not None:
                     await lazy_downloads.put(
                         functools.partial(
                             self._deferred_index, lazy_download, doc_id, doc, operation
@@ -434,6 +484,7 @@ class ElasticServer(ESClient):
         pipeline,
         filter_=None,
         sync_rules_enabled=False,
+        content_extraction_enabled=True,
         options=None,
     ):
         """Performs a batch of `_bulk` calls, given a generator of documents
@@ -444,6 +495,7 @@ class ElasticServer(ESClient):
         - pipeline: ingest pipeline settings to pass to the bulk API
         - filter_: an instance of `Filter` to apply on the fetched document  -- default: `None`
         - sync_rules_enabled: if enabled, applies rules -- default: `False`
+        - content_extraction_enabled: if enabled, will download content -- default: `True`
         - options: dict of options (from `elasticsearch.bulk` in the config file)
         """
         if filter_ is None:
@@ -467,7 +519,8 @@ class ElasticServer(ESClient):
             f"Found {len(existing_ids)} docs in {index} (duration "
             f"{int(time.time() - start)} seconds) "
         )
-        logger.debug(f"Size of ids in memory is {get_mb_size(existing_ids)}MiB")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Size of ids in memory is {get_mb_size(existing_ids)}MiB")
 
         # start the fetcher
         fetcher = Fetcher(
@@ -476,6 +529,7 @@ class ElasticServer(ESClient):
             existing_ids,
             filter_=filter_,
             sync_rules_enabled=sync_rules_enabled,
+            content_extraction_enabled=content_extraction_enabled,
             display_every=display_every,
             concurrent_downloads=concurrent_downloads,
         )
@@ -502,4 +556,7 @@ class ElasticServer(ESClient):
             "doc_updated": fetcher.total_docs_updated,
             "doc_deleted": fetcher.total_docs_deleted,
             "fetch_error": fetcher.fetch_error,
+            "indexed_document_count": bulker.indexed_document_count,
+            "indexed_document_volume": bulker.indexed_document_volume,
+            "deleted_document_count": bulker.deleted_document_count,
         }

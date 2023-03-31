@@ -4,13 +4,14 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-from unittest.mock import ANY, AsyncMock, Mock
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 
 from connectors.byoc import Filter, Pipeline
 from connectors.filtering.validation import InvalidFilteringError
 from connectors.sync_job_runner import JobClaimError, SyncJobRunner
+from connectors.tests.commons import AsyncIterator
 
 total_document_count = 100
 
@@ -67,6 +68,20 @@ def create_runner(
         elastic_server=elastic_server,
         bulk_options=bulk_options,
     )
+
+
+def create_runner_yielding_docs(docs=None):
+    if docs is None:
+        docs = []
+
+    sync_job_runner = create_runner()
+
+    # initialize explicitly to not rely on a call to `execute`
+    data_provider = Mock()
+    data_provider.get_docs.return_value = AsyncIterator(docs)
+    sync_job_runner.data_provider = data_provider
+
+    return sync_job_runner
 
 
 @pytest.mark.asyncio
@@ -284,3 +299,34 @@ async def test_sync_job_runner_suspend(patch_logger):
         ingestion_stats=ingestion_stats
     )
     sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
+
+
+@patch("connectors.sync_job_runner.ES_ID_SIZE_LIMIT", 1)
+@pytest.mark.asyncio
+async def test_prepare_docs_when_id_too_long_then_skip_doc():
+    _id_too_long = "ab"
+
+    sync_job_runner = create_runner_yielding_docs(docs=[({"_id": _id_too_long}, None)])
+
+    docs = []
+    async for doc, _ in sync_job_runner.prepare_docs():
+        docs.append(doc)
+
+    assert len(docs) == 0
+
+
+@patch("connectors.sync_job_runner.ES_ID_SIZE_LIMIT", 2)
+@pytest.mark.asyncio
+async def test_prepare_docs_when_id_below_limit_then_yield_doc():
+    _id_within_limit = "ab"
+
+    sync_job_runner = create_runner_yielding_docs(
+        docs=[({"_id": _id_within_limit}, None)]
+    )
+
+    docs = []
+    async for doc, _ in sync_job_runner.prepare_docs():
+        docs.append(doc)
+
+    assert len(docs) == 1
+    assert docs[0]["_id"] == _id_within_limit
