@@ -20,7 +20,6 @@ def create_runner(
     source_changed=True,
     source_available=True,
     validate_config_exception=None,
-    async_bulk_result=None,
 ):
     source_klass = Mock()
     data_provider = Mock()
@@ -55,19 +54,30 @@ def create_runner(
     connector.sync_starts = AsyncMock()
     connector.sync_done = AsyncMock()
 
-    elastic_server = Mock()
-    elastic_server.prepare_content_index = AsyncMock()
-    elastic_server.async_bulk = AsyncMock(return_value=async_bulk_result)
-
-    bulk_options = {}
+    es_config = {}
 
     return SyncJobRunner(
         source_klass=source_klass,
         sync_job=sync_job,
         connector=connector,
-        elastic_server=elastic_server,
-        bulk_options=bulk_options,
+        es_config=es_config,
     )
+
+
+@pytest.fixture(autouse=True)
+def elastic_server_mock():
+    with patch("connectors.sync_job_runner.ElasticServer") as elastic_server_klass_mock:
+        elastic_server_mock = Mock()
+        elastic_server_mock.prepare_content_index = AsyncMock()
+        elastic_server_mock.async_bulk = AsyncMock()
+        elastic_server_mock.done = Mock(return_value=True)
+        elastic_server_mock.fetch_error = Mock(return_value=None)
+        elastic_server_mock.cancel = AsyncMock()
+        elastic_server_mock.ingestion_stats = Mock()
+        elastic_server_mock.close = AsyncMock()
+        elastic_server_klass_mock.return_value = elastic_server_mock
+
+        yield elastic_server_mock
 
 
 def create_runner_yielding_docs(docs=None):
@@ -91,9 +101,9 @@ async def test_job_claim_fail(patch_logger):
     with pytest.raises(JobClaimError):
         await sync_job_runner.execute()
 
+    assert sync_job_runner.elastic_server is None
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_not_awaited()
-    sync_job_runner.elastic_server.async_bulk.assert_not_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
     sync_job_runner.sync_job.fail.assert_not_awaited()
     sync_job_runner.sync_job.cancel.assert_not_awaited()
@@ -108,9 +118,9 @@ async def test_connector_starts_fail(patch_logger):
     with pytest.raises(JobClaimError):
         await sync_job_runner.execute()
 
+    assert sync_job_runner.elastic_server is None
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
-    sync_job_runner.elastic_server.async_bulk.assert_not_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
     sync_job_runner.sync_job.fail.assert_not_awaited()
     sync_job_runner.sync_job.cancel.assert_not_awaited()
@@ -130,9 +140,9 @@ async def test_source_not_changed(patch_logger):
         "total_document_count": total_document_count,
     }
 
+    assert sync_job_runner.elastic_server is None
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
-    sync_job_runner.elastic_server.async_bulk.assert_not_awaited()
     sync_job_runner.sync_job.done.assert_awaited_with(ingestion_stats=ingestion_stats)
     sync_job_runner.sync_job.fail.assert_not_awaited()
     sync_job_runner.sync_job.cancel.assert_not_awaited()
@@ -152,9 +162,9 @@ async def test_source_invalid_config(patch_logger):
         "total_document_count": total_document_count,
     }
 
+    assert sync_job_runner.elastic_server is None
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
-    sync_job_runner.elastic_server.async_bulk.assert_not_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited
     sync_job_runner.sync_job.fail.assert_awaited_with(
         ANY, ingestion_stats=ingestion_stats
@@ -176,9 +186,9 @@ async def test_source_not_available(patch_logger):
         "total_document_count": total_document_count,
     }
 
+    assert sync_job_runner.elastic_server is None
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
-    sync_job_runner.elastic_server.async_bulk.assert_not_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited
     sync_job_runner.sync_job.fail.assert_awaited_with(
         ANY, ingestion_stats=ingestion_stats
@@ -201,9 +211,9 @@ async def test_invalid_filtering(patch_logger):
         "total_document_count": total_document_count,
     }
 
+    assert sync_job_runner.elastic_server is None
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
-    sync_job_runner.elastic_server.async_bulk.assert_not_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited
     sync_job_runner.sync_job.fail.assert_awaited_with(
         ANY, ingestion_stats=ingestion_stats
@@ -214,18 +224,19 @@ async def test_invalid_filtering(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_async_bulk_error(patch_logger):
+async def test_async_bulk_error(elastic_server_mock, patch_logger):
     error = "something wrong"
-    async_bulk_result = {"fetch_error": error}
-    sync_job_runner = create_runner(async_bulk_result=async_bulk_result)
-    await sync_job_runner.execute()
-
     ingestion_stats = {
         "indexed_document_count": 0,
         "indexed_document_volume": 0,
         "deleted_document_count": 0,
-        "total_document_count": total_document_count,
     }
+    elastic_server_mock.fetch_error.return_value = error
+    elastic_server_mock.ingestion_stats.return_value = ingestion_stats
+    sync_job_runner = create_runner()
+    await sync_job_runner.execute()
+
+    ingestion_stats["total_document_count"] = total_document_count
 
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
@@ -240,24 +251,17 @@ async def test_async_bulk_error(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_runner(patch_logger):
-    doc_updated = 10
-    doc_created = 15
-    doc_deleted = 20
-    async_bulk_result = {
-        "doc_updated": doc_updated,
-        "doc_created": doc_created,
-        "doc_deleted": doc_deleted,
+async def test_sync_job_runner(elastic_server_mock, patch_logger):
+    ingestion_stats = {
+        "indexed_document_count": 25,
+        "indexed_document_volume": 30,
+        "deleted_document_count": 20,
     }
-    sync_job_runner = create_runner(async_bulk_result=async_bulk_result)
+    elastic_server_mock.ingestion_stats.return_value = ingestion_stats
+    sync_job_runner = create_runner()
     await sync_job_runner.execute()
 
-    ingestion_stats = {
-        "indexed_document_count": doc_updated + doc_created,
-        "indexed_document_volume": 0,
-        "deleted_document_count": doc_deleted,
-        "total_document_count": total_document_count,
-    }
+    ingestion_stats["total_document_count"] = total_document_count
 
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
@@ -270,24 +274,20 @@ async def test_sync_job_runner(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_runner_suspend(patch_logger):
+async def test_sync_job_runner_suspend(elastic_server_mock, patch_logger):
+    ingestion_stats = {
+        "indexed_document_count": 25,
+        "indexed_document_volume": 30,
+        "deleted_document_count": 20,
+    }
+    elastic_server_mock.done.return_value = False
+    elastic_server_mock.ingestion_stats.return_value = ingestion_stats
     sync_job_runner = create_runner()
-
-    async def _simulate_sync(*args, **kwargs):
-        await asyncio.sleep(0.3)
-        return {}
-
-    sync_job_runner.elastic_server.async_bulk.side_effect = _simulate_sync
     task = asyncio.create_task(sync_job_runner.execute())
     asyncio.get_event_loop().call_later(0.1, task.cancel)
     await task
 
-    ingestion_stats = {
-        "indexed_document_count": 0,
-        "indexed_document_volume": 0,
-        "deleted_document_count": 0,
-        "total_document_count": total_document_count,
-    }
+    ingestion_stats["total_document_count"] = total_document_count
 
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
