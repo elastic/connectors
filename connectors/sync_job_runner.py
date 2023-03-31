@@ -11,6 +11,8 @@ from connectors.es import Mappings
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 
+ES_ID_SIZE_LIMIT = 512
+
 
 class SyncJobRunningError(Exception):
     pass
@@ -175,6 +177,16 @@ class SyncJobRunner:
         async for doc, lazy_download in self.data_provider.get_docs(
             filtering=self.sync_job.filtering
         ):
+            doc_id = doc.get("_id", "")
+            doc_id_size = len(doc_id.encode("utf-8"))
+
+            if doc_id_size > ES_ID_SIZE_LIMIT:
+                logger.error(
+                    f"Document with id '{doc_id}' with a size of '{doc_id_size}' bytes could not be ingested. "
+                    f"Elasticsearch has an upper limit of '{ES_ID_SIZE_LIMIT}' bytes for the '_id' field."
+                )
+                continue
+
             # adapt doc for pipeline settings
             doc["_extract_binary_content"] = self.sync_job.pipeline[
                 "extract_binary_content"
