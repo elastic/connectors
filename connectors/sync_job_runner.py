@@ -106,6 +106,9 @@ class SyncJobRunner:
                 self.sync_job.pipeline,
                 filter_=self.sync_job.filtering,
                 sync_rules_enabled=sync_rules_enabled,
+                content_extraction_enabled=self.sync_job.pipeline[
+                    "extract_binary_content"
+                ],
                 options=bulk_options,
             )
             sync_error = result.get("fetch_error")
