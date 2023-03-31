@@ -13,14 +13,13 @@ from decimal import Decimal
 
 from bson import Decimal128
 
-from connectors.logger import logger
 from connectors.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
     BasicRuleNoMatchAllRegexValidator,
     BasicRulesSetSemanticValidator,
     FilteringValidator,
 )
-
+from connectors.logger import logger
 
 
 class Field:
@@ -55,6 +54,7 @@ class Field:
         elif type_ == "list":
             return [item.strip() for item in value.split(",")]
         return value
+
 
 class DataSourceConfiguration:
     """Holds the configuration needed by the source class"""
@@ -124,19 +124,20 @@ class DataSourceConfiguration:
         return config_valid
 
     def dependencies_satisfied(self, field):
-        if len(field['depends_on']) <= 0:
+        if len(field["depends_on"]) <= 0:
             return True
 
         satisfied = False
 
-        for dependency in field['depends_on']:
-            if dependency['field'] not in self._config:
+        for dependency in field["depends_on"]:
+            if dependency["field"] not in self._config:
                 satisfied = True
 
-            if self._config[dependency['field']].value == dependency["value"]:
+            if self._config[dependency["field"]].value == dependency["value"]:
                 satisfied = True
 
         return satisfied
+
     def validate_field(self, field):
         value = field["value"]
         label = field["label"]
