@@ -25,7 +25,6 @@ from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 MAX_CHUNK_SIZE = 1048576
 DEFAULT_MAX_FILE_SIZE = 10485760
 DEFAULT_PAGE_SIZE = 100
-DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_MAX_RETRY_ATTEMPS = 5
 DEFAULT_CONNECTION_TIMEOUT = 90
 DEFAULT_READ_TIMEOUT = 90
@@ -59,7 +58,6 @@ class S3DataSource(BaseDataSource):
             connect_timeout=self.configuration["connect_timeout"],
             retries={"max_attempts": self.configuration["max_attempts"]},
         )
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
     @asynccontextmanager
     async def client(self, **kwargs):
@@ -106,7 +104,7 @@ class S3DataSource(BaseDataSource):
             dictionary: Document of file content
         """
         # Reuse the same for all files
-        if not (doit and self.enable_content_extraction):
+        if not (doit):
             return
         filename = doc["filename"]
         bucket = doc["bucket"]
@@ -279,12 +277,5 @@ class S3DataSource(BaseDataSource):
                 "type": "int",
                 "ui_restrictions": ["advanced"],
                 "value": DEFAULT_PAGE_SIZE,
-            },
-            "enable_content_extraction": {
-                "display": "toggle",
-                "label": "Enable content extraction",
-                "order": 6,
-                "type": "bool",
-                "value": DEFAULT_CONTENT_EXTRACTION,
             },
         }
