@@ -13,6 +13,7 @@ from decimal import Decimal
 
 from bson import Decimal128
 
+from connectors.logger import logger
 from connectors.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
     BasicRuleNoMatchAllRegexValidator,
@@ -54,62 +55,6 @@ class Field:
         elif type_ == "list":
             return [item.strip() for item in value.split(",")]
         return value
-
-    def _is_valid(self, validations):
-        valid = True
-        validation_errors = []
-
-        for validation in validations:
-            type = validation["type"]
-            constraint = validation["constraint"]
-
-            match type:
-                case "less_than":
-                    if self.value < constraint:
-                        next
-                    else:
-                        valid = False
-                        validation_errors.append(
-                            f"{self.name} value {self.value} should be less than {constraint}."
-                        )
-                case "greater_than":
-                    if self.value > constraint:
-                        next
-                    else:
-                        valid = False
-                        validation_errors.append(
-                            f"{self.name} value {self.value} should be greater than {constraint}."
-                        )
-                case "list_type":
-                    for item in self.value:
-                        if not isInstance(item, constraint):
-                            valid = False
-                            validation_errors.append(
-                                f"{self.name} list value {item} should be of type {constraint}."
-                            )
-                case "included_in":
-                    if self.type == "list":
-                        # if not all(item in self.value for item in constraint):
-                        for item in self.value:
-                            if item not in constraint:
-                                valid = False
-                                validation_errors.append(
-                                    f"{self.name} list value {item} should be one of {constraint.join(', ')}."
-                                )
-                    else:
-                        if self.value not in constraint:
-                            valid = False
-                            validation_errors.append(
-                                f"{self.name} list value {item} should be one of {constraint.join(', ')}."
-                            )
-                case "regex":
-                    if not re.fullmatch(constraint, self.value):
-                        valid = False
-                        validation_errors.append(
-                            f"{self.name} value {self.value} failed regex check {constraint}."
-                        )
-
-
 
 class DataSourceConfiguration:
     """Holds the configuration needed by the source class"""
@@ -163,6 +108,94 @@ class DataSourceConfiguration:
 
     def to_dict(self):
         return dict(self._raw_config)
+
+    def is_valid(self):
+        config_valid = True
+
+        for field in self._config:
+            if not dependencies_satisfied(field):
+                # we don't validate a field if its dependencies are not met
+                next
+
+            field_valid = validate_field(field)
+            if field_valid == False:
+                config_valid = False
+
+        return config_valid
+
+    def dependencies_satisfied(self, field):
+        if len(field['depends_on']) <= 0:
+            return True
+
+        satisfied = False
+
+        for dependency in field['depends_on']:
+            if dependency['field'] not in self._config:
+                satisfied = True
+
+            if self._config[dependency['field']].value == dependency["value"]:
+                satisfied = True
+
+        return satisfied
+    def validate_field(self, field):
+        value = field["value"]
+        label = field["label"]
+        validations = field["validations"]
+
+        valid = True
+        validation_errors = []
+
+        for validation in validations:
+            validation_type = validation["type"]
+            constraint = validation["constraint"]
+
+            match validation_type:
+                case "less_than":
+                    if value < constraint:
+                        next
+                    else:
+                        valid = False
+                        logger.warning(
+                            f"{label} value {value} should be less than {constraint}."
+                        )
+                case "greater_than":
+                    if value > constraint:
+                        next
+                    else:
+                        valid = False
+                        logger.warning(
+                            f"{label} value {value} should be greater than {constraint}."
+                        )
+                case "list_type":
+                    for item in value:
+                        if not isInstance(item, constraint):
+                            valid = False
+                            logger.warning(
+                                f"{label} list value {item} should be of type {constraint}."
+                            )
+                case "included_in":
+                    if field.type == "list":
+                        # if not all(item in self.value for item in constraint):
+                        for item in value:
+                            if item not in constraint:
+                                valid = False
+                                logger.warning(
+                                    f"{label} list value {item} should be one of {constraint.join(', ')}."
+                                )
+                    else:
+                        if value not in constraint:
+                            valid = False
+                            logger.warning(
+                                f"{label} list value {item} should be one of {constraint.join(', ')}."
+                            )
+                case "regex":
+                    if not re.fullmatch(constraint, value):
+                        valid = False
+                        logger.warning(
+                            f"{label} value {value} failed regex check {constraint}."
+                        )
+
+            return valid, validation_errors
 
 
 class BaseDataSource:
@@ -264,7 +297,7 @@ class BaseDataSource:
         with human-friendly and actionable description
         """
         # TODO: when validate_config is implemented everywhere, we should make this method raise NotImplementedError
-        pass
+        return self.configuration.is_valid
 
     async def ping(self):
         """When called, pings the backend
