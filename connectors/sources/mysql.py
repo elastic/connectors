@@ -36,10 +36,6 @@ def format_list(list_):
     return ", ".join(list_)
 
 
-class NoDatabaseConfiguredError(Exception):
-    pass
-
-
 class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
     def __init__(self, source):
         self.source = source
@@ -482,9 +478,6 @@ class MySqlDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        if self.database is None or not len(self.database):
-            raise NoDatabaseConfiguredError
-
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
 
