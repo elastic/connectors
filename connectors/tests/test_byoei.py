@@ -13,6 +13,7 @@ import pytest
 
 from connectors.byoc import Pipeline
 from connectors.byoei import (
+    AsyncBulkRunningError,
     Bulker,
     ContentIndexNameInvalid,
     ElasticServer,
@@ -74,6 +75,8 @@ async def test_prepare_content_index_raise_error_when_index_does_not_exist(
 
     with pytest.raises(IndexMissing):
         await es.prepare_content_index("search-new-index")
+
+    await es.close()
 
 
 @pytest.mark.asyncio
@@ -218,84 +221,27 @@ async def test_async_bulk(mock_responses, patch_logger):
         yield {"_id": "1", "_timestamp": datetime.datetime.now().isoformat()}, _dl
         yield {"_id": "3"}, _dl_none
 
-    res = await es.async_bulk("search-some-index", get_docs(), pipeline)
+    await es.async_bulk("search-some-index", get_docs(), pipeline)
+    while not es.done():
+        await asyncio.sleep(0.1)
 
-    assert res == {
-        "bulk_operations": {"index": 2, "delete": 1},
+    ingestion_stats = es.ingestion_stats()
+
+    assert ingestion_stats == {
         "doc_created": 1,
-        "doc_deleted": 1,
         "attachment_extracted": 1,
         "doc_updated": 1,
-        "fetch_error": None,
+        "doc_deleted": 1,
+        "bulk_operations": {"index": 2, "delete": 1},
         "indexed_document_count": 2,
         "indexed_document_volume": ANY,
         "deleted_document_count": 1,
     }
 
-    # two syncs
+    # 2nd sync
     set_responses(mock_responses)
-    res = await es.async_bulk("search-some-index", get_docs(), pipeline)
-
-    assert res == {
-        "bulk_operations": {"index": 2, "delete": 1},
-        "doc_created": 1,
-        "doc_deleted": 1,
-        "attachment_extracted": 1,
-        "doc_updated": 1,
-        "fetch_error": None,
-        "indexed_document_count": 2,
-        "indexed_document_volume": ANY,
-        "deleted_document_count": 1,
-    }
-
-    await es.close()
-
-
-@pytest.mark.asyncio
-async def test_async_bulk_same_ts(mock_responses, patch_logger):
-    ts = datetime.datetime.now().isoformat()
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    set_responses(mock_responses, ts)
-    es = ElasticServer(config)
-    pipeline = Pipeline({})
-
-    async def get_docs():
-        async def _dl(doit=True, timestamp=None):
-            if not doit:
-                return  # Canceled
-            return {"TEXT": "DATA", "_timestamp": timestamp, "_id": "1"}
-
-        yield {"_id": "1", "_timestamp": ts}, _dl
-        yield {"_id": "3", "_timestamp": ts}, None
-
-    res = await es.async_bulk("search-some-index", get_docs(), pipeline)
-
-    assert res == {
-        "bulk_operations": {"index": 1, "delete": 1},
-        "doc_created": 1,
-        "doc_deleted": 1,
-        "attachment_extracted": 0,
-        "doc_updated": 0,
-        "fetch_error": None,
-        "indexed_document_count": 1,
-        "indexed_document_volume": ANY,
-        "deleted_document_count": 1,
-    }
-
-    set_responses(mock_responses, ts)
-    res = await es.async_bulk("search-some-index", get_docs(), pipeline)
-
-    assert res == {
-        "bulk_operations": {"index": 1, "delete": 1},
-        "doc_created": 1,
-        "doc_deleted": 1,
-        "attachment_extracted": 0,
-        "doc_updated": 0,
-        "fetch_error": None,
-        "indexed_document_count": 1,
-        "indexed_document_volume": ANY,
-        "deleted_document_count": 1,
-    }
+    with pytest.raises(AsyncBulkRunningError):
+        await es.async_bulk("search-some-index", get_docs(), pipeline)
 
     await es.close()
 
@@ -765,3 +711,36 @@ def test_bulk_populate_stats(res, expected_result):
     assert bulker.indexed_document_count == expected_result["indexed_document_count"]
     assert bulker.indexed_document_volume == expected_result["indexed_document_volume"]
     assert bulker.deleted_document_count == expected_result["deleted_document_count"]
+
+
+@pytest.mark.parametrize(
+    "fetcher_task, fetcher_task_done, bulker_task, bulker_task_done, expected_result",
+    [
+        (None, False, None, False, True),
+        (Mock(), False, None, False, False),
+        (Mock(), True, None, False, True),
+        (None, False, Mock(), False, False),
+        (None, False, Mock(), True, True),
+        (Mock(), False, Mock(), False, False),
+        (Mock(), False, Mock(), True, False),
+        (Mock(), True, Mock(), False, False),
+        (Mock(), True, Mock(), True, True),
+    ],
+)
+@pytest.mark.asyncio
+async def test_elastic_server_done(
+    fetcher_task, fetcher_task_done, bulker_task, bulker_task_done, expected_result
+):
+    if fetcher_task is not None:
+        fetcher_task.done.return_value = fetcher_task_done
+    if bulker_task is not None:
+        bulker_task.done.return_value = bulker_task_done
+
+    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    es = ElasticServer(config)
+    es._fetcher_task = fetcher_task
+    es._bulker_task = bulker_task
+
+    assert es.done() == expected_result
+
+    await es.close()
