@@ -91,9 +91,7 @@ SCHEMA = {
 }
 
 SHAREPOINT_ONLINE = "sharepoint_online"
-SHAREPOINT_ONLINE_LABEL = "SharePoint Online"
 SHAREPOINT_SERVER = "sharepoint_server"
-SHAREPOINT_SERVER_LABEL = "SharePoint Server"
 
 
 class SharepointDataSource(BaseDataSource):
@@ -133,8 +131,8 @@ class SharepointDataSource(BaseDataSource):
                 "display": "dropdown",
                 "label": "SharePoint data source",
                 "options": [
-                    {"label": SHAREPOINT_ONLINE_LABEL, "value": SHAREPOINT_ONLINE},
-                    {"label": SHAREPOINT_SERVER_LABEL, "value": SHAREPOINT_SERVER},
+                    {"label": "SharePoint Online", "value": SHAREPOINT_ONLINE},
+                    {"label": "SharePoint Server", "value": SHAREPOINT_SERVER},
                 ],
                 "order": 1,
                 "type": "str",
