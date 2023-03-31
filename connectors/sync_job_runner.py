@@ -272,17 +272,6 @@ class SyncJobRunner:
         if self.sync_job.status != JobStatus.IN_PROGRESS:
             raise ConnectorJobNotRunningError(self.job_id, self.sync_job.status)
 
-    async def update_ingestion_stats(self):
-        result = (
-            {} if self.elastic_server is None else self.elastic_server.ingestion_stats()
-        )
-        ingestion_stats = {
-            "indexed_document_count": result.get("indexed_document_count", 0),
-            "indexed_document_volume": result.get("indexed_document_volume", 0),
-            "deleted_document_count": result.get("deleted_document_count", 0),
-        }
-        await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
-
     async def reload_sync_job(self):
         if self.sync_job is None:
             return False
