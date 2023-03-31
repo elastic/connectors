@@ -136,7 +136,7 @@ class SharepointDataSource(BaseDataSource):
                 ],
                 "order": 1,
                 "type": "str",
-                "value": SHAREPOINT_ONLINE,
+                "value": SHAREPOINT_SERVER,
             },
             "username": {
                 "depends_on": [{"field": "data_source", "value": SHAREPOINT_SERVER}],
