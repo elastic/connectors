@@ -14,7 +14,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.generic_database import WILDCARD, configured_tables, is_wildcard
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
@@ -144,36 +144,38 @@ class MySqlDataSource(BaseDataSource):
                 "type": "list",
                 "value": WILDCARD,
             },
+            "ssl_enabled": {
+                "display": "toggle",
+                "label": "Enable SSL verification",
+                "order": 7,
+                "type": "bool",
+                "value": DEFAULT_SSL_ENABLED,
+            },
+            "ssl_ca": {
+                "label": "SSL certificate",
+                "order": 8,
+                "type": "str",
+                "value": DEFAULT_SSL_CA,
+            },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
                 "display": "numeric",
                 "label": "Number of rows fetched per request",
-                "order": 7,
+                "order": 9,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_FETCH_SIZE,
             },
             "retry_count": {
                 "default_value": RETRIES,
                 "display": "numeric",
                 "label": "Maximum retries per request",
-                "order": 8,
+                "order": 10,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": RETRIES,
-            },
-            "ssl_enabled": {
-                "display": "toggle",
-                "label": "Enable SSL verification",
-                "order": 9,
-                "type": "bool",
-                "value": DEFAULT_SSL_ENABLED,
-            },
-            "ssl_ca": {
-                "label": "SSL certificate",
-                "order": 10,
-                "type": "str",
-                "value": DEFAULT_SSL_CA,
             },
         }
 
@@ -197,7 +199,7 @@ class MySqlDataSource(BaseDataSource):
                 empty_connection_fields.append(field)
 
         if empty_connection_fields:
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"Configured keys: {empty_connection_fields} can't be empty."
             )
 
@@ -205,10 +207,10 @@ class MySqlDataSource(BaseDataSource):
             isinstance(self.configuration["port"], str)
             and not self.configuration["port"].isnumeric()
         ):
-            raise Exception("Configured port has to be an integer.")
+            raise ConfigurableFieldValueError("Configured port has to be an integer.")
 
         if self.ssl_enabled and (self.certificate == "" or self.certificate is None):
-            raise Exception("SSL certificate must be configured.")
+            raise ConfigurableFieldValueError("SSL certificate must be configured.")
 
         await self._remote_validation()
 
@@ -228,23 +230,22 @@ class MySqlDataSource(BaseDataSource):
         try:
             await cursor.execute(f"USE {self.database};")
         except aiomysql.Error:
-            # TODO: replace with future ValidationError
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['user']}'."
             )
 
     async def _validate_tables_accessible(self, cursor):
         non_accessible_tables = []
+        tables_to_validate = await self.get_tables_to_fetch()
 
-        for table in self.tables:
+        for table in tables_to_validate:
             try:
                 await cursor.execute(f"SELECT 1 FROM {table} LIMIT 1;")
             except aiomysql.Error:
                 non_accessible_tables.append(table)
 
         if len(non_accessible_tables) > 0:
-            # TODO: replace with future ValidationError
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"The tables '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['user']}'."
             )
 

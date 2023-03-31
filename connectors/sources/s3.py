@@ -19,13 +19,12 @@ from aiohttp.client_exceptions import ServerTimeoutError
 from botocore.exceptions import ClientError
 
 from connectors.logger import logger, set_extra_logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
 MAX_CHUNK_SIZE = 1048576
 DEFAULT_MAX_FILE_SIZE = 10485760
 DEFAULT_PAGE_SIZE = 100
-DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_MAX_RETRY_ATTEMPS = 5
 DEFAULT_CONNECTION_TIMEOUT = 90
 DEFAULT_READ_TIMEOUT = 90
@@ -59,7 +58,6 @@ class S3DataSource(BaseDataSource):
             connect_timeout=self.configuration["connect_timeout"],
             retries={"max_attempts": self.configuration["max_attempts"]},
         )
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
     @asynccontextmanager
     async def client(self, **kwargs):
@@ -72,14 +70,16 @@ class S3DataSource(BaseDataSource):
         ) as s3:
             yield s3
 
-    def validate_config(self):
+    async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields
 
         Raises:
             Exception: Configured keys can't be empty
         """
         if self.configuration["buckets"] == [""]:
-            raise Exception("Configured keys: buckets can't be empty.")
+            raise ConfigurableFieldValueError(
+                "Configured keys: buckets can't be empty."
+            )
 
     async def ping(self):
         """Verify the connection with AWS"""
@@ -104,7 +104,7 @@ class S3DataSource(BaseDataSource):
             dictionary: Document of file content
         """
         # Reuse the same for all files
-        if not (doit and self.enable_content_extraction):
+        if not (doit):
             return
         filename = doc["filename"]
         bucket = doc["bucket"]
@@ -245,6 +245,7 @@ class S3DataSource(BaseDataSource):
                 "order": 2,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_READ_TIMEOUT,
             },
             "connect_timeout": {
@@ -254,6 +255,7 @@ class S3DataSource(BaseDataSource):
                 "order": 3,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_CONNECTION_TIMEOUT,
             },
             "max_attempts": {
@@ -263,6 +265,7 @@ class S3DataSource(BaseDataSource):
                 "order": 4,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_MAX_RETRY_ATTEMPS,
             },
             "page_size": {
@@ -272,13 +275,7 @@ class S3DataSource(BaseDataSource):
                 "order": 5,
                 "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
                 "value": DEFAULT_PAGE_SIZE,
-            },
-            "enable_content_extraction": {
-                "display": "toggle",
-                "label": "Enable content extraction",
-                "order": 6,
-                "type": "bool",
-                "value": DEFAULT_CONTENT_EXTRACTION,
             },
         }

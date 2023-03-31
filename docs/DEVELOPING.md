@@ -66,12 +66,6 @@ The network drive path the connector will crawl to fetch files. Examples:
 
 ℹ️ The drive path should have forward slashes as path separators.
 
-##### `enable_content_extraction`
-
-Whether the connector should extract file content from network drive. Default value is `True` i.e. the connector will try to extract file contents.
-
-ℹ️ The values for these fields need to be provided [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/network_drive.py#L67) before running the connector for the first time. Further, these can be changed from UI editor which will appear on the UI once the first successful connection is made.
-
 #### Content extraction
 
 The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/network_drive.py#L19).
@@ -168,12 +162,6 @@ The page_size for iterating bucket objects in Amazon S3. Default value is `100`.
   - `50`
   - `150`
 
-##### `enable_content_extraction`
-
-Whether the connector should extract file content from Amazon S3. Default value is `True` i.e. the connector will try to extract file contents.
-
-ℹ️ The values for these fields need to be provided [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/s3.py#L241) before running the connector for the first time. Further, these can be changed from UI editor which will appear on the UI once the first successful connection is made.
-
 #### Content extraction
 
 The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/s3.py#L25).
@@ -241,10 +229,6 @@ The service account credentials generated from Google Cloud Storage.  Default va
 ##### `retry_count`
 
 The number of retry attempts after failed call to Google Cloud Storage. Default value is `3`.
-
-##### `enable_content_extraction`
-
-Whether the connector should extract file content from Google Cloud Storage. Default value is `True` i.e. the connector will try to extract file contents.
 
 #### Content extraction
 
@@ -316,10 +300,6 @@ The number of retry attempts after failed call to Azure Blob Storage. Default va
 ##### `concurrent_downloads`
 
 The number of concurrent downloads for fetching content of Azure Blob Storage. Default value is `100`.
-
-##### `enable_content_extraction`
-
-Whether the connector should extract file content from Azure Blob Storage. Default value is `True` i.e. the connector will try to extract file contents.
 
 #### Content extraction
 

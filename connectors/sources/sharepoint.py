@@ -18,7 +18,7 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -109,7 +109,6 @@ class SharepointDataSource(BaseDataSource):
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.host_url = self.configuration["host_url"]
         self.certificate = self.configuration["ssl_ca"]
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.retry_count = self.configuration["retry_count"]
         self._sleeps = CancellableSleeps()
         self.ssl_ctx = False
@@ -180,11 +179,6 @@ class SharepointDataSource(BaseDataSource):
                 "label": "SSL certificate",
                 "type": "str",
             },
-            "enable_content_extraction": {
-                "value": True,
-                "label": "Enable content extraction (true/false)",
-                "type": "bool",
-            },
             "retry_count": {
                 "value": RETRIES,
                 "label": "Maximum retries per request",
@@ -220,11 +214,11 @@ class SharepointDataSource(BaseDataSource):
             for field in connection_fields
             if self.configuration[field] == ""
         ]:
-            raise Exception(
+            raise ConfigurableFieldValueError(
                 f"Configured keys: {empty_connection_fields} can't be empty."
             )
         if self.ssl_enabled and self.certificate == "":
-            raise Exception("SSL certificate must be configured.")
+            raise ConfigurableFieldValueError("SSL certificate must be configured.")
 
     @retryable(
         retries=RETRIES,
@@ -445,7 +439,7 @@ class SharepointDataSource(BaseDataSource):
             dictionary: Content document with id, timestamp & text.
         """
 
-        if not (self.enable_content_extraction and doit and document["size"]):
+        if not (doit and document["size"]):
             return
 
         document_size = int(document["size"])
