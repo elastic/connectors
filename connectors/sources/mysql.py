@@ -19,7 +19,7 @@ from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.generic_database import WILDCARD, configured_tables, is_wildcard
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
-SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN = r"`(?:[^`]|``)+`|\w+"
+SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN = re.compile(r"`(?:[^`]|``)+`|\w+")
 
 MAX_POOL_SIZE = 10
 QUERIES = {
@@ -39,7 +39,7 @@ def parse_tables_string_to_list_of_tables(tables_string):
     if tables_string is None or len(tables_string) == 0:
         return []
 
-    return re.findall(SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN, tables_string)
+    return SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN.findall(tables_string)
 
 
 def format_list(list_):
