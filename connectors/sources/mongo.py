@@ -118,39 +118,33 @@ class MongoDataSource(BaseDataSource):
                 "label": "Collection",
                 "order": 1,
                 "type": "str",
-                "value": "sample_collection",
             },
             "database": {
                 "label": "Database",
                 "order": 2,
                 "type": "str",
-                "value": "sample_database",
             },
             "direct_connection": {
                 "display": "toggle",
                 "label": "Direct connection?",
                 "order": 3,
                 "type": "bool",
-                "value": True,
             },
             "host": {
                 "label": "Server Hostname",
                 "order": 4,
                 "type": "str",
-                "value": "mongodb://127.0.0.1:27021",
             },
             "user": {
                 "label": "Username",
                 "order": 5,
                 "type": "str",
-                "value": "",
             },
             "password": {
                 "label": "Password",
                 "order": 6,
                 "sensitive": True,
                 "type": "str",
-                "value": "",
             },
         }
 
