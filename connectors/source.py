@@ -19,7 +19,6 @@ from connectors.filtering.validation import (
     BasicRulesSetSemanticValidator,
     FilteringValidator,
 )
-from connectors.logger import logger
 
 
 class Field:

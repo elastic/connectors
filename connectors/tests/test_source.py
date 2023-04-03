@@ -225,6 +225,7 @@ async def test_is_valid_when_validations_succeed_returns_true(config):
     c = DataSourceConfiguration(config)
     assert c.is_valid() == True
 
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "config",
