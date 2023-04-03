@@ -223,14 +223,14 @@ async def test_configuration():
         config=ConfluenceDataSource.get_default_configuration()
     )
 
-    assert config["host_url"] == HOST_URL
+    assert config["confluence_url"] == HOST_URL
 
 
 @pytest.mark.parametrize(
     "field, is_cloud",
     [
-        ("host_url", True),
-        ("service_account_id", True),
+        ("confluence_url", True),
+        ("account_email", True),
         ("api_token", True),
         ("username", False),
         ("password", False),
