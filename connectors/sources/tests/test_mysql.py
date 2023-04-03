@@ -321,8 +321,7 @@ async def setup_mysql_source(database=""):
     )
 
     source.database = database
-
-    source._mysql_client = setup_mysql_client()
+    source._mysql_client = Mock()
 
     return source
 
