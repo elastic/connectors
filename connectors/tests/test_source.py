@@ -17,9 +17,11 @@ from connectors.filtering.validation import (
 )
 from connectors.source import (
     BaseDataSource,
+    ConfigurableFieldDependencyError,
     ConfigurableFieldValueError,
     DataSourceConfiguration,
     Field,
+    ValidationTypes,
     get_source_klass,
     get_source_klass_dict,
     get_source_klasses,
@@ -117,7 +119,9 @@ def test_get_source_klass_dict():
                 "port": {
                     "type": "int",
                     "value": 9,
-                    "validations": [{"type": "less_than", "constraint": 10}],
+                    "validations": [
+                        {"type": ValidationTypes.LESS_THAN.value, "constraint": 10}
+                    ],
                 }
             }
         ),
@@ -127,7 +131,9 @@ def test_get_source_klass_dict():
                 "port": {
                     "type": "int",
                     "value": 11,
-                    "validations": [{"type": "greater_than", "constraint": 10}],
+                    "validations": [
+                        {"type": ValidationTypes.GREATER_THAN.value, "constraint": 10}
+                    ],
                 }
             }
         ),
@@ -138,8 +144,8 @@ def test_get_source_klass_dict():
                     "type": "int",
                     "value": 5,
                     "validations": [
-                        {"type": "greater_than", "constraint": 0},
-                        {"type": "less_than", "constraint": 10},
+                        {"type": ValidationTypes.GREATER_THAN.value, "constraint": 0},
+                        {"type": ValidationTypes.LESS_THAN.value, "constraint": 10},
                     ],
                 }
             }
@@ -151,7 +157,7 @@ def test_get_source_klass_dict():
                     "type": "list",
                     "value": ["option1", "option2", "option3"],
                     "validations": [
-                        {"type": "list_type", "constraint": "str"},
+                        {"type": ValidationTypes.LIST_TYPE.value, "constraint": "str"},
                     ],
                 }
             }
@@ -163,7 +169,7 @@ def test_get_source_klass_dict():
                     "type": "int",
                     "value": [1, 2, 3],
                     "validations": [
-                        {"type": "list_type", "constraint": "int"},
+                        {"type": ValidationTypes.LIST_TYPE.value, "constraint": "int"},
                     ],
                 }
             }
@@ -175,7 +181,10 @@ def test_get_source_klass_dict():
                     "type": "list",
                     "value": ["option1", "option2"],
                     "validations": [
-                        {"type": "included_in", "constraint": ["option1", "option2"]},
+                        {
+                            "type": ValidationTypes.INCLUDED_IN.value,
+                            "constraint": ["option1", "option2"],
+                        },
                     ],
                 }
             }
@@ -187,7 +196,10 @@ def test_get_source_klass_dict():
                     "type": "str",
                     "value": "option2",
                     "validations": [
-                        {"type": "included_in", "constraint": ["option1", "option2"]},
+                        {
+                            "type": ValidationTypes.INCLUDED_IN.value,
+                            "constraint": ["option1", "option2"],
+                        },
                     ],
                 }
             }
@@ -199,7 +211,10 @@ def test_get_source_klass_dict():
                     "type": "int",
                     "value": 2,
                     "validations": [
-                        {"type": "included_in", "constraint": [1, 2]},
+                        {
+                            "type": ValidationTypes.INCLUDED_IN.value,
+                            "constraint": [1, 2],
+                        },
                     ],
                 }
             }
@@ -212,11 +227,49 @@ def test_get_source_klass_dict():
                     "value": "real@email.com",
                     "validations": [
                         {
-                            "type": "regex",
+                            "type": ValidationTypes.REGEX.value,
                             "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\\.[A-Z|a-z]{2,})+",
                         },
                     ],
                 }
+            }
+        ),
+        (
+            # with dependencies met should attempt validation
+            {
+                "email": {
+                    "type": "str",
+                    "value": "real@email.com",
+                    "validations": [
+                        {
+                            "type": ValidationTypes.REGEX.value,
+                            "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\\.[A-Z|a-z]{2,})+",
+                        },
+                    ],
+                    "depends_on": [{"field": "foo", "value": "bar"}],
+                },
+                "foo": {
+                    "value": "bar",
+                },
+            }
+        ),
+        (
+            # if dependencies are not met it should skip validation (is_valid == True)
+            {
+                "email": {
+                    "type": "str",
+                    "value": "invalid_email.com",
+                    "validations": [
+                        {
+                            "type": ValidationTypes.REGEX.value,
+                            "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\\.[A-Z|a-z]{2,})+",
+                        },
+                    ],
+                    "depends_on": [{"field": "foo", "value": "bar"}],
+                },
+                "foo": {
+                    "value": "not_bar",
+                },
             }
         ),
     ],
@@ -236,7 +289,9 @@ async def test_is_valid_when_validations_succeed_returns_true(config):
                 "port": {
                     "type": "int",
                     "value": 11,
-                    "validations": [{"type": "less_than", "constraint": 10}],
+                    "validations": [
+                        {"type": ValidationTypes.LESS_THAN.value, "constraint": 10}
+                    ],
                 }
             }
         ),
@@ -246,7 +301,9 @@ async def test_is_valid_when_validations_succeed_returns_true(config):
                 "port": {
                     "type": "int",
                     "value": 9,
-                    "validations": [{"type": "greater_than", "constraint": 10}],
+                    "validations": [
+                        {"type": ValidationTypes.GREATER_THAN.value, "constraint": 10}
+                    ],
                 }
             }
         ),
@@ -257,8 +314,8 @@ async def test_is_valid_when_validations_succeed_returns_true(config):
                     "type": "int",
                     "value": 10,
                     "validations": [
-                        {"type": "greater_than", "constraint": 0},
-                        {"type": "less_than", "constraint": 10},
+                        {"type": ValidationTypes.GREATER_THAN.value, "constraint": 0},
+                        {"type": ValidationTypes.LESS_THAN.value, "constraint": 10},
                     ],
                 }
             }
@@ -270,7 +327,7 @@ async def test_is_valid_when_validations_succeed_returns_true(config):
                     "type": "list",
                     "value": ["option1", "option2", 3],
                     "validations": [
-                        {"type": "list_type", "constraint": "str"},
+                        {"type": ValidationTypes.LIST_TYPE.value, "constraint": "str"},
                     ],
                 }
             }
@@ -282,7 +339,7 @@ async def test_is_valid_when_validations_succeed_returns_true(config):
                     "type": "list",
                     "value": [1, 2, "option3"],
                     "validations": [
-                        {"type": "list_type", "constraint": "int"},
+                        {"type": ValidationTypes.LIST_TYPE.value, "constraint": "int"},
                     ],
                 }
             }
@@ -294,7 +351,10 @@ async def test_is_valid_when_validations_succeed_returns_true(config):
                     "type": "list",
                     "value": ["option1", "option2"],
                     "validations": [
-                        {"type": "included_in", "constraint": ["option1", "option3"]},
+                        {
+                            "type": ValidationTypes.INCLUDED_IN.value,
+                            "constraint": ["option1", "option3"],
+                        },
                     ],
                 }
             }
@@ -306,7 +366,10 @@ async def test_is_valid_when_validations_succeed_returns_true(config):
                     "type": "str",
                     "value": "option2",
                     "validations": [
-                        {"type": "included_in", "constraint": ["option1", "option3"]},
+                        {
+                            "type": ValidationTypes.INCLUDED_IN.value,
+                            "constraint": ["option1", "option3"],
+                        },
                     ],
                 }
             }
@@ -318,7 +381,10 @@ async def test_is_valid_when_validations_succeed_returns_true(config):
                     "type": "int",
                     "value": 2,
                     "validations": [
-                        {"type": "included_in", "constraint": [1, 3]},
+                        {
+                            "type": ValidationTypes.INCLUDED_IN.value,
+                            "constraint": [1, 3],
+                        },
                     ],
                 }
             }
@@ -331,11 +397,30 @@ async def test_is_valid_when_validations_succeed_returns_true(config):
                     "value": "not_an_email.com",
                     "validations": [
                         {
-                            "type": "regex",
+                            "type": ValidationTypes.REGEX.value,
                             "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\\.[A-Z|a-z]{2,})+",
                         },
                     ],
                 }
+            }
+        ),
+        (
+            # with dependencies met should attempt validation
+            {
+                "email": {
+                    "type": "str",
+                    "value": "not_an_email.com",
+                    "validations": [
+                        {
+                            "type": ValidationTypes.REGEX.value,
+                            "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\\.[A-Z|a-z]{2,})+",
+                        },
+                    ],
+                    "depends_on": [{"field": "foo", "value": "bar"}],
+                },
+                "foo": {
+                    "value": "bar",
+                },
             }
         ),
     ],
@@ -343,6 +428,24 @@ async def test_is_valid_when_validations_succeed_returns_true(config):
 async def test_is_valid_when_validations_fail_raises_error(config):
     c = DataSourceConfiguration(config)
     with pytest.raises(ConfigurableFieldValueError):
+        c.is_valid()
+
+
+@pytest.mark.asyncio
+async def test_is_valid_when_dependencies_are_invalid_raises_error():
+    config = {
+        "port": {
+            "type": "int",
+            "value": 9,
+            "validations": [
+                {"type": ValidationTypes.LESS_THAN.value, "constraint": 10}
+            ],
+            "depends_on": [{"field": "missing_field", "value": "foo"}],
+        }
+    }
+
+    c = DataSourceConfiguration(config)
+    with pytest.raises(ConfigurableFieldDependencyError):
         c.is_valid()
 
 

@@ -10,6 +10,7 @@ import importlib
 import re
 from datetime import date, datetime
 from decimal import Decimal
+from enum import Enum
 
 from bson import Decimal128
 
@@ -20,6 +21,15 @@ from connectors.filtering.validation import (
     FilteringValidator,
 )
 from connectors.logger import logger
+
+
+class ValidationTypes(Enum):
+    LESS_THAN = "less_than"
+    GREATER_THAN = "greater_than"
+    LIST_TYPE = "list_type"
+    INCLUDED_IN = "included_in"
+    REGEX = "regex"
+    UNSET = None
 
 
 class Field:
@@ -133,7 +143,10 @@ class DataSourceConfiguration:
         for _, field in self._config.items():
             if not self.dependencies_satisfied(field):
                 # we don't validate a field if its dependencies are not met
-                next
+                logger.info(
+                    f"Field {field.label} was not validated because its dependencies were not met."
+                )
+                continue
 
             validation_errors = validation_errors + self.validate_field(field)
 
@@ -158,10 +171,9 @@ class DataSourceConfiguration:
         for dependency in field.depends_on:
             if dependency["field"] not in self._config:
                 # cannot check dependency if field does not exist
-                logger.warn(
+                raise ConfigurableFieldDependencyError(
                     f'Configuration `{field.label}` depends on configuration `{dependency["field"]}`, but it does not exist.'
                 )
-                next
 
             if self._config[dependency["field"]].value != dependency["value"]:
                 satisfied = False
@@ -184,21 +196,23 @@ class DataSourceConfiguration:
             constraint = validation["constraint"]
 
             match validation_type:
-                case "less_than":
+                case ValidationTypes.LESS_THAN.value:
                     if value < constraint:
-                        next
+                        # valid
+                        continue
                     else:
                         validation_errors.append(
                             f"`{label}` value `{value}` should be less than {constraint}."
                         )
-                case "greater_than":
+                case ValidationTypes.GREATER_THAN.value:
                     if value > constraint:
-                        next
+                        # valid
+                        continue
                     else:
                         validation_errors.append(
                             f"`{label}` value `{value}` should be greater than {constraint}."
                         )
-                case "list_type":
+                case ValidationTypes.LIST_TYPE.value:
                     for item in value:
                         if (constraint == "str" and not isinstance(item, str)) or (
                             constraint == "int" and not isinstance(item, int)
@@ -206,7 +220,7 @@ class DataSourceConfiguration:
                             validation_errors.append(
                                 f"`{label}` list value `{item}` should be of type {constraint}."
                             )
-                case "included_in":
+                case ValidationTypes.INCLUDED_IN.value:
                     if field.type == "list":
                         for item in value:
                             if item not in constraint:
@@ -218,9 +232,8 @@ class DataSourceConfiguration:
                             validation_errors.append(
                                 f"`{label}` list value `{value}` should be one of {', '.join(str(x) for x in constraint)}."
                             )
-                case "regex":
-                    regex = re.compile(constraint)
-                    if not re.fullmatch(regex, value):
+                case ValidationTypes.REGEX.value:
+                    if not re.fullmatch(constraint, value):
                         validation_errors.append(
                             f"`{label}` value `{value}` failed regex check {constraint}."
                         )
@@ -438,4 +451,8 @@ def get_source_klass_dict(config):
 
 
 class ConfigurableFieldValueError(Exception):
+    pass
+
+
+class ConfigurableFieldDependencyError(Exception):
     pass
