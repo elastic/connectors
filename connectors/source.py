@@ -19,6 +19,7 @@ from connectors.filtering.validation import (
     BasicRulesSetSemanticValidator,
     FilteringValidator,
 )
+from connectors.logger import logger
 
 
 class Field:
@@ -117,41 +118,60 @@ class DataSourceConfiguration:
         return dict(self._raw_config)
 
     def is_valid(self):
-        config_valid = True
+        """Validates every Field against its `validations`.
+
+        Raises ConfigurableFieldValueError if any validation errors are found,
+        otherwise returns True.
+        """
+        validation_errors = []
 
         for _, field in self._config.items():
             if not self.dependencies_satisfied(field):
                 # we don't validate a field if its dependencies are not met
                 next
 
-            field_valid, validation_errors = self.validate_field(field)
-            if field_valid == False:
-                raise ConfigurableFieldValueError(
-                    f"Field validations: a{'; '.join(validation_errors)}"
-                )
+            validation_errors = validation_errors + self.validate_field(field)
 
-        return config_valid
+        if len(validation_errors) > 0:
+            raise ConfigurableFieldValueError(
+                f"Field validations: a{'; '.join(validation_errors)}"
+            )
+
+        return True
 
     def dependencies_satisfied(self, field):
+        """Used to check if a Field has its dependencies validated.
+
+        Returns True if all dependencies are satisfied, or no dependencies exist.
+        Retruns False if one or more dependencies are not satisfied.
+        """
         if len(field.depends_on) <= 0:
             return True
 
-        satisfied = False
+        satisfied = True
 
         for dependency in field.depends_on:
             if dependency["field"] not in self._config:
-                satisfied = True
+                # cannot check dependency if field does not exist
+                logger.warn(
+                    f'Configuration `{field.label}` depends on configuration `{dependency["field"]}`, but it does not exist.'
+                )
+                next
 
-            if self._config[dependency["field"]].value == dependency["value"]:
-                satisfied = True
+            if self._config[dependency["field"]].value != dependency["value"]:
+                satisfied = False
 
         return satisfied
 
     def validate_field(self, field):
+        """Used to validate the `value` of a Field using its `validations`.
+
+        Returns a list of errors as strings.
+        If the list is empty, then the Field `value` is valid.
+        """
         value = field.value
         label = field.label
 
-        valid = True
         validation_errors = []
 
         for validation in field.validations:
@@ -163,7 +183,6 @@ class DataSourceConfiguration:
                     if value < constraint:
                         next
                     else:
-                        valid = False
                         validation_errors.append(
                             f"`{label}` value `{value}` should be less than {constraint}."
                         )
@@ -171,7 +190,6 @@ class DataSourceConfiguration:
                     if value > constraint:
                         next
                     else:
-                        valid = False
                         validation_errors.append(
                             f"`{label}` value `{value}` should be greater than {constraint}."
                         )
@@ -180,7 +198,6 @@ class DataSourceConfiguration:
                         if (constraint == "str" and not isinstance(item, str)) or (
                             constraint == "int" and not isinstance(item, int)
                         ):
-                            valid = False
                             validation_errors.append(
                                 f"`{label}` list value `{item}` should be of type {constraint}."
                             )
@@ -188,25 +205,22 @@ class DataSourceConfiguration:
                     if field.type == "list":
                         for item in value:
                             if item not in constraint:
-                                valid = False
                                 validation_errors.append(
                                     f"`{label}` list value `{item}` should be one of {', '.join(str(x) for x in constraint)}."
                                 )
                     else:
                         if value not in constraint:
-                            valid = False
                             validation_errors.append(
                                 f"`{label}` list value `{value}` should be one of {', '.join(str(x) for x in constraint)}."
                             )
                 case "regex":
                     regex = re.compile(constraint)
                     if not re.fullmatch(regex, value):
-                        valid = False
                         validation_errors.append(
                             f"`{label}` value `{value}` failed regex check {constraint}."
                         )
 
-        return valid, validation_errors
+        return validation_errors
 
 
 class BaseDataSource:
