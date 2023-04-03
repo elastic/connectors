@@ -268,11 +268,10 @@ async def test_fetch_documents(patch_connection_pool):
         document_list.append(document)
 
     assert {
-        "Database": f"{DATABASE}",
         "Table": "table_name",
-        "_id": f"{DATABASE}_table_name_",
+        "_id": "table_name_",
         "_timestamp": "table1",
-        f"{DATABASE}_table_name_Database": "table1",
+        "table_name_Database": "table1",
     } in document_list
 
 
@@ -570,13 +569,13 @@ def test_parse_tables_string_to_list(tables_string, expected_tables_list):
     "primary_key_tuples, expected_primary_key_columns",
     [
         ([], []),
-        ([("id",)], [f"{DATABASE}_{TABLE_ONE}_id"]),
+        ([("id",)], [f"{TABLE_ONE}_id"]),
         (
             [("group",), ("class",), ("name",)],
             [
-                f"{DATABASE}_{TABLE_ONE}_group",
-                f"{DATABASE}_{TABLE_ONE}_class",
-                f"{DATABASE}_{TABLE_ONE}_name",
+                f"{TABLE_ONE}_group",
+                f"{TABLE_ONE}_class",
+                f"{TABLE_ONE}_name",
             ],
         ),
     ],
@@ -586,8 +585,6 @@ async def test_get_primary_key_columns(
     primary_key_tuples, expected_primary_key_columns
 ):
     source = create_source(MySqlDataSource)
-
-    source.database = DATABASE
     source._connect = AsyncIterator([primary_key_tuples])
 
     primary_key_columns = await source._get_primary_key_columns(TABLE_ONE)
@@ -598,14 +595,13 @@ async def test_get_primary_key_columns(
 @pytest.mark.parametrize(
     "row, primary_key_columns, expected_id",
     [
-        ({"key_1": 1, "key_2": 2}, ["key_1"], f"{DATABASE}_{TABLE_ONE}_1_"),
-        ({"key_1": 1, "key_2": 2}, ["key_1", "key_2"], f"{DATABASE}_{TABLE_ONE}_1_2_"),
-        ({"key_1": 1, "key_2": 2}, ["key_1", "key_3"], f"{DATABASE}_{TABLE_ONE}_1_"),
+        ({"key_1": 1, "key_2": 2}, ["key_1"], f"{TABLE_ONE}_1_"),
+        ({"key_1": 1, "key_2": 2}, ["key_1", "key_2"], f"{TABLE_ONE}_1_2_"),
+        ({"key_1": 1, "key_2": 2}, ["key_1", "key_3"], f"{TABLE_ONE}_1_"),
     ],
 )
 def test_generate_id(row, primary_key_columns, expected_id):
     source = create_source(MySqlDataSource)
-    source.database = DATABASE
 
     row_id = source._generate_id(TABLE_ONE, row, primary_key_columns)
 
