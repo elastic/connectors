@@ -144,7 +144,7 @@ def build_resp():
 @mock.patch(
     "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
 )
-async def test_get_docs(patch_logger, *args):
+async def test_get_docs(*args):
     source = create_source(MongoDataSource)
     num = 0
     async for (doc, dl) in source.get_docs():
