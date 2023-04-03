@@ -44,7 +44,6 @@ BLOB_ADAPTER = {
 }
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
-DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_FILE_SIZE_LIMIT = 10485760
 STORAGE_EMULATOR_HOST = os.environ.get("STORAGE_EMULATOR_HOST")
 RUNNING_FTEST = (
@@ -162,7 +161,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -198,13 +196,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 "type": "int",
                 "ui_restrictions": ["advanced"],
                 "value": DEFAULT_RETRY_COUNT,
-            },
-            "enable_content_extraction": {
-                "display": "toggle",
-                "label": "Enable content extraction",
-                "order": 3,
-                "type": "bool",
-                "value": DEFAULT_CONTENT_EXTRACTION,
             },
         }
 
@@ -347,7 +338,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             dictionary: Content document with id, timestamp & text
         """
         blob_size = int(blob["size"])
-        if not (self.enable_content_extraction and doit and blob_size):
+        if not (doit and blob_size):
             return
 
         blob_name = blob["name"]

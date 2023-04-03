@@ -264,7 +264,7 @@ async def test_fetch_documents(patch_connection_pool):
     patch("source._connect", return_value=response)
 
     document_list = []
-    async for document in source.fetch_documents(table="table_name"):
+    async for document in source.fetch_documents(table="table_name", query=query):
         document_list.append(document)
 
     assert {
