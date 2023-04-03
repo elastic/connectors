@@ -5,8 +5,8 @@
 #
 """MySQL source module responsible to fetch documents from MySQL"""
 import re
-import ssl
 from contextlib import asynccontextmanager
+from functools import cached_property
 
 import aiomysql
 
@@ -22,7 +22,7 @@ from connectors.sources.generic_database import (
     configured_tables,
     is_wildcard,
 )
-from connectors.utils import CancellableSleeps, RetryStrategy, retryable
+from connectors.utils import CancellableSleeps, RetryStrategy, retryable, ssl_context
 
 SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN = re.compile(r"`(?:[^`]|``)+`|\w+")
 
@@ -106,6 +106,54 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         return SyncRuleValidationResult.valid_result(
             SyncRuleValidationResult.ADVANCED_RULES
         )
+
+
+class MySQLClient:
+    def __init__(
+        self,
+        host,
+        port,
+        user,
+        password,
+        ssl_enabled,
+        ssl_certificate,
+        db=None,
+        max_pool_size=MAX_POOL_SIZE,
+    ):
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.db = db
+        self.max_pool_size = max_pool_size
+        self.ssl_enabled = ssl_enabled
+        self.ssl_certificate = ssl_certificate
+
+    @asynccontextmanager
+    async def with_connection_pool(self):
+        connection_string = {
+            "host": self.host,
+            "port": int(self.port),
+            "user": self.user,
+            "password": self.password,
+            "db": self.db,
+            "maxsize": self.max_pool_size,
+            "ssl": ssl_context(certificate=self.ssl_certificate)
+            if self.ssl_enabled
+            else None,
+        }
+
+        connection_pool = None
+
+        try:
+            connection_pool = await aiomysql.create_pool(**connection_string)
+            yield connection_pool
+        except Exception:
+            logger.error("Failed to create connection pool for MySQL.")
+            raise
+        finally:
+            connection_pool.close()
+            await connection_pool.wait_closed()
 
 
 class MySqlDataSource(BaseDataSource):
@@ -211,6 +259,17 @@ class MySqlDataSource(BaseDataSource):
             },
         }
 
+    @cached_property
+    def _mysql_client(self):
+        return MySQLClient(
+            host=self.configuration["host"],
+            port=self.configuration["port"],
+            user=self.configuration["user"],
+            password=self.configuration["password"],
+            ssl_enabled=self.configuration["ssl_enabled"],
+            ssl_certificate=self.configuration["ssl_ca"],
+        )
+
     def advanced_rules_validators(self):
         return [MySQLAdvancedRulesValidator(self)]
 
@@ -252,7 +311,7 @@ class MySqlDataSource(BaseDataSource):
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def _remote_validation(self):
-        async with self.with_connection_pool() as connection_pool:
+        async with self._mysql_client.with_connection_pool() as connection_pool:
             async with connection_pool.acquire() as conn:
                 async with conn.cursor() as cursor:
                     await self._validate_database_accessible(cursor)
@@ -281,54 +340,10 @@ class MySqlDataSource(BaseDataSource):
                 f"The tables '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['user']}'."
             )
 
-    def _ssl_context(self, certificate):
-        """Convert string to pem format and create a SSL context
-
-        Args:
-            certificate (str): certificate in string format
-
-        Returns:
-            ssl_context: SSL context with certificate
-        """
-        certificate = certificate.replace(" ", "\n")
-        pem_format = " ".join(certificate.split("\n", 1))
-        pem_format = " ".join(pem_format.rsplit("\n", 1))
-        ctx = ssl.create_default_context()
-        ctx.load_verify_locations(cadata=pem_format)
-        return ctx
-
-    @asynccontextmanager
-    async def with_connection_pool(self):
-        connection_string = {
-            "host": self.configuration["host"],
-            "port": int(self.configuration["port"]),
-            "user": self.configuration["user"],
-            "password": self.configuration["password"],
-            "db": None,
-            "maxsize": MAX_POOL_SIZE,
-            "ssl": self._ssl_context(certificate=self.certificate)
-            if self.ssl_enabled
-            else None,
-        }
-
-        connection_pool = None
-
-        try:
-            connection_pool = await aiomysql.create_pool(**connection_string)
-        except Exception:
-            logger.error("Failed to create connection pool.")
-            raise
-
-        try:
-            yield connection_pool
-        finally:
-            connection_pool.close()
-            await connection_pool.wait_closed()
-
     async def ping(self):
         """Verify the connection with MySQL server"""
 
-        async with self.with_connection_pool() as connection_pool:
+        async with self._mysql_client.with_connection_pool() as connection_pool:
             try:
                 async with connection_pool.acquire() as connection:
                     await connection.ping()
@@ -357,7 +372,7 @@ class MySqlDataSource(BaseDataSource):
         rows_fetched = 0
         cursor_position = 0
 
-        async with self.with_connection_pool() as connection_pool:
+        async with self._mysql_client.with_connection_pool() as connection_pool:
             while retry <= self.retry_count:
                 try:
                     async with connection_pool.acquire() as connection:
