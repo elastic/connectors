@@ -489,18 +489,22 @@ class MySqlDataSource(BaseDataSource):
 
         async for row in table_rows:
             row = dict(zip(column_names, row))
-            keys_value = ""
-            for key in primary_key_columns:
-                keys_value += f"{row.get(key)}_" if row.get(key) else ""
             row.update(
                 {
-                    "_id": f"{self.database}_{table}_{keys_value}",
+                    "_id": self._generate_id(table, row, primary_key_columns),
                     "_timestamp": last_update_time,
                     "Database": self.database,
                     "Table": table,
                 }
             )
             yield self.serialize(doc=row)
+
+    def _generate_id(self, table, row, primary_key_columns):
+        keys_value = ""
+        for key in primary_key_columns:
+            keys_value += f"{row.get(key)}_" if row.get(key) else ""
+
+        return f"{self.database}_{table}_{keys_value}"
 
     async def _get_primary_key_columns(self, table):
         primary_key = await anext(
