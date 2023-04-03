@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-import ssl
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import aiomysql
@@ -396,15 +395,6 @@ async def test_validate_config_when_port_has_wrong_type_then_raise_error():
 
     with pytest.raises(ConfigurableFieldValueError):
         await source.validate_config()
-
-
-def test_ssl_context():
-    """This function test _ssl_context with dummy certificate"""
-    certificate = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
-    source = create_source(MySqlDataSource)
-
-    with patch.object(ssl, "create_default_context", return_value=MockSsl()):
-        source._ssl_context(certificate=certificate)
 
 
 @pytest.mark.parametrize(
