@@ -431,6 +431,7 @@ class BaseDataSource:
 def get_source_klass(fqn):
     """Converts a Fully Qualified Name into a class instance."""
     module_name, klass_name = fqn.split(":")
+    logger.debug(f"Importing module {module_name}")
     module = importlib.import_module(module_name)
     return getattr(module, klass_name)
 
@@ -441,9 +442,14 @@ def get_source_klasses(config):
         yield get_source_klass(fqn)
 
 
-def get_source_klass_dict(config):
+def get_source_names(config):
+    """Returns the list of source names"""
+    return config["sources"].keys()
+
+
+def get_source_list(config):
     """Returns a service type - source klass dictionary"""
-    return {name: get_source_klass(fqn) for name, fqn in config["sources"].items()}
+    return config["sources"]
 
 
 class ConfigurableFieldValueError(Exception):
