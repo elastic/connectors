@@ -163,7 +163,7 @@ def side_effect_function(url, ssl):
 
 
 @pytest.mark.asyncio
-async def test_configuration(patch_logger):
+async def test_configuration():
     """Tests the get configurations method of the Jira source class."""
     # Setup
     klass = JiraDataSource
@@ -221,7 +221,7 @@ async def test_api_call_negative():
 
 
 @pytest.mark.asyncio
-async def test_api_call_when_server_is_down(patch_logger):
+async def test_api_call_when_server_is_down():
     """Tests the api_call function while server gets disconnected."""
 
     # Setup
@@ -240,7 +240,9 @@ async def test_api_call_when_server_is_down(patch_logger):
 
 @pytest.mark.asyncio
 @patch("aiohttp.ClientSession.get")
-async def test_ping_with_ssl(mock_get, patch_logger):
+async def test_ping_with_ssl(
+    mock_get,
+):
     """Test ping method of JiraDataSource class with SSL"""
 
     # Execute
@@ -262,7 +264,7 @@ async def test_ping_with_ssl(mock_get, patch_logger):
 
 @pytest.mark.asyncio
 @patch("aiohttp.ClientSession.get")
-async def test_ping_for_failed_connection_exception(patch_logger):
+async def test_ping_for_failed_connection_exception(client_session_get):
     """Tests the ping functionality when connection can not be established to Jira."""
 
     # Setup
@@ -277,7 +279,7 @@ async def test_ping_for_failed_connection_exception(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_validate_config_for_ssl_enabled(patch_logger):
+async def test_validate_config_for_ssl_enabled():
     """This function test _validate_configuration when certification is empty when ssl is enabled"""
     # Setup
     source = create_source(JiraDataSource)
@@ -289,7 +291,7 @@ async def test_validate_config_for_ssl_enabled(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_validate_config_with_invalid_concurrent_downloads(patch_logger):
+async def test_validate_config_with_invalid_concurrent_downloads():
     """Test validate_config method of BaseDataSource class with invalid concurrent downloads"""
 
     # Setup
@@ -327,7 +329,7 @@ def test_get_session():
 
 
 @pytest.mark.asyncio
-async def test_close_with_client_session(patch_logger):
+async def test_close_with_client_session():
     # Setup
     source = create_source(JiraDataSource)
     source.jira_client._get_session()
@@ -339,7 +341,7 @@ async def test_close_with_client_session(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_close_without_client_session(patch_logger):
+async def test_close_without_client_session():
     """Test close method when the session does not exist"""
     # Setup
     source = create_source(JiraDataSource)
@@ -351,7 +353,7 @@ async def test_close_without_client_session(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_timezone(patch_logger):
+async def test_get_timezone():
     # Setup
     source = create_source(JiraDataSource)
 
@@ -363,7 +365,7 @@ async def test_get_timezone(patch_logger):
 
 @freeze_time("2023-01-24T04:07:19")
 @pytest.mark.asyncio
-async def test_get_projects(patch_logger):
+async def test_get_projects():
     """Test _get_projects method"""
     # Setup
     source = create_source(JiraDataSource)
@@ -384,7 +386,7 @@ async def test_get_projects(patch_logger):
 
 @freeze_time("2023-01-24T04:07:19")
 @pytest.mark.asyncio
-async def test_get_projects_for_specific_project(patch_logger):
+async def test_get_projects_for_specific_project():
     """Test _get_projects method for specific project key"""
     # Setup
     source = create_source(JiraDataSource)
@@ -407,7 +409,7 @@ async def test_get_projects_for_specific_project(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_verify_projects(patch_logger):
+async def test_verify_projects():
     """Test _verify_projects method"""
     source = create_source(JiraDataSource)
     source.jira_client.projects = ["TP", "DP"]
@@ -417,7 +419,7 @@ async def test_verify_projects(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_verify_projects_with_unavailable_project_keys(patch_logger):
+async def test_verify_projects_with_unavailable_project_keys():
     """Test _verify_projects method with unavaiable project keys"""
     source = create_source(JiraDataSource)
     source.jira_client.projects = ["TP", "AP"]
@@ -459,7 +461,7 @@ async def test_put_attachment_positive(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_content(patch_logger):
+async def test_get_content():
     """Tests the get content method."""
     # Setup
     source = create_source(JiraDataSource)
@@ -479,7 +481,7 @@ async def test_get_content(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_filesize_is_large(patch_logger):
+async def test_get_content_when_filesize_is_large():
     """Tests the get content method for file size greater than max limit."""
     # Setup
     source = create_source(JiraDataSource)
@@ -504,7 +506,7 @@ async def test_get_content_when_filesize_is_large(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_content_for_unsupported_filetype(patch_logger):
+async def test_get_content_for_unsupported_filetype():
     """Tests the get content method for file type is not supported."""
     # Setup
     source = create_source(JiraDataSource)

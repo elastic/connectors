@@ -20,12 +20,12 @@ from connectors.es import ESDocument, InvalidDocumentSourceError
         {"_id": "1", "_source": "hahaha"},
     ],
 )
-def test_es_document_raise(doc_source, patch_logger):
+def test_es_document_raise(doc_source):
     with pytest.raises(InvalidDocumentSourceError):
         ESDocument(elastic_index=None, doc_source=doc_source)
 
 
-def test_es_document_ok(patch_logger):
+def test_es_document_ok():
     doc_source = {"_id": "1", "_source": {}}
     es_document = ESDocument(elastic_index=None, doc_source=doc_source)
     assert isinstance(es_document, ESDocument)

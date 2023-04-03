@@ -24,7 +24,7 @@ def execute_before_all_tests():
 
 
 @pytest.mark.asyncio
-async def test_basics(patch_logger):
+async def test_basics():
     """Test get_default_configuration method of S3DataSource"""
     with mock.patch(
         "aioboto3.resources.collection.AIOResourceCollection", AIOResourceCollection
@@ -147,7 +147,7 @@ async def create_fake_coroutine(data):
 
 
 @pytest.mark.asyncio
-async def test_ping(patch_logger):
+async def test_ping():
     """Test ping method of S3DataSource class"""
     # Setup
     source = create_source(S3DataSource)
@@ -160,7 +160,7 @@ async def test_ping(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_ping_negative(patch_logger):
+async def test_ping_negative():
     """Test ping method of S3DataSource class with negative case"""
     # Setup
     source = create_source(S3DataSource)
@@ -188,7 +188,7 @@ async def test_get_bucket_region():
 
 
 @pytest.mark.asyncio
-async def test_get_bucket_region_negative(caplog, patch_logger):
+async def test_get_bucket_region_negative(caplog):
     """Test get_bucket_region method of S3DataSource for negative case"""
     # Setup
     source = create_source(S3DataSource)
@@ -203,7 +203,7 @@ async def test_get_bucket_region_negative(caplog, patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_content(patch_logger, mock_aws):
+async def test_get_content(mock_aws):
     """Test get_content method of S3DataSource"""
     # Setup
     source = create_source(S3DataSource)
@@ -217,7 +217,7 @@ async def test_get_content(patch_logger, mock_aws):
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_unsupported_file(patch_logger, mock_aws):
+async def test_get_content_with_unsupported_file(mock_aws):
     """Test get_content method of S3DataSource for unsupported file"""
     # Setup
     source = create_source(S3DataSource)
@@ -229,7 +229,7 @@ async def test_get_content_with_unsupported_file(patch_logger, mock_aws):
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_not_doit(patch_logger, mock_aws):
+async def test_get_content_when_not_doit(mock_aws):
     """Test get_content method of S3DataSource when doit is none"""
     # Setup
     source = create_source(S3DataSource)
@@ -241,7 +241,7 @@ async def test_get_content_when_not_doit(patch_logger, mock_aws):
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_size_is_large(patch_logger, mock_aws):
+async def test_get_content_when_size_is_large(mock_aws):
     """Test get_content method of S3DataSource when size is greater than max size"""
     # Setup
     source = create_source(S3DataSource)
@@ -260,7 +260,7 @@ async def test_get_content_when_size_is_large(patch_logger, mock_aws):
 
 
 @pytest.mark.asyncio
-async def test_pdf_file(patch_logger, mock_aws):
+async def test_pdf_file(mock_aws):
     """Test get_content method of S3DataSource for pdf file"""
     # Setup
     source = create_source(S3DataSource)
@@ -283,7 +283,7 @@ async def get_roles(*args):
 
 
 @pytest.mark.asyncio
-async def test_get_docs(patch_logger, mock_aws):
+async def test_get_docs(mock_aws):
     """Test get_docs method of S3DataSource"""
     # Setup
     source = create_source(S3DataSource)

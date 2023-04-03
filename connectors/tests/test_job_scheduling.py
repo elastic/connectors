@@ -142,9 +142,7 @@ def mock_connector(
 
 
 @pytest.mark.asyncio
-async def test_no_connector(
-    connector_index_mock, concurrent_tasks_mock, patch_logger, set_env
-):
+async def test_no_connector(connector_index_mock, concurrent_tasks_mock, set_env):
     connector_index_mock.supported_connectors.return_value = AsyncIterator([])
     await create_and_run_service()
 
@@ -156,7 +154,6 @@ async def test_connector_sync_now(
     connector_index_mock,
     concurrent_tasks_mock,
     sync_job_runner_mock,
-    patch_logger,
     set_env,
 ):
     connector = mock_connector(sync_now=True, next_sync=0)
@@ -174,7 +171,6 @@ async def test_connector_with_suspended_job(
     connector_index_mock,
     concurrent_tasks_mock,
     sync_job_runner_mock,
-    patch_logger,
     set_env,
 ):
     connector = mock_connector(next_sync=100, last_sync_status=JobStatus.SUSPENDED)
@@ -192,7 +188,6 @@ async def test_connector_ready_to_sync(
     connector_index_mock,
     concurrent_tasks_mock,
     sync_job_runner_mock,
-    patch_logger,
     set_env,
 ):
     connector = mock_connector(next_sync=0.01)
@@ -207,7 +202,7 @@ async def test_connector_ready_to_sync(
 
 @pytest.mark.asyncio
 async def test_connector_sync_disabled(
-    connector_index_mock, concurrent_tasks_mock, patch_logger, set_env
+    connector_index_mock, concurrent_tasks_mock, set_env
 ):
     connector = mock_connector()
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
@@ -228,7 +223,6 @@ async def test_connector_not_configured(
     connector_status,
     connector_index_mock,
     concurrent_tasks_mock,
-    patch_logger,
     set_env,
 ):
     connector = mock_connector(status=connector_status)
@@ -255,7 +249,6 @@ async def test_connector_prepare_failed(
     prepare_exception,
     connector_index_mock,
     concurrent_tasks_mock,
-    patch_logger,
     set_env,
 ):
     connector = mock_connector(prepare_exception=prepare_exception())

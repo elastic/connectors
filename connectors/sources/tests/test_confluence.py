@@ -182,7 +182,7 @@ def test_tweak_bulk_options():
 
 
 @pytest.mark.asyncio
-async def test_close_with_client_session(patch_logger):
+async def test_close_with_client_session():
     """Test close method for closing the existing session"""
 
     # Setup
@@ -196,7 +196,7 @@ async def test_close_with_client_session(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_close_without_client_session(patch_logger):
+async def test_close_without_client_session():
     """Test close method when the session does not exist"""
     # Setup
     source = create_source(ConfluenceDataSource)
@@ -223,14 +223,14 @@ async def test_configuration():
         config=ConfluenceDataSource.get_default_configuration()
     )
 
-    assert config["host_url"] == HOST_URL
+    assert config["confluence_url"] == HOST_URL
 
 
 @pytest.mark.parametrize(
     "field, is_cloud",
     [
-        ("host_url", True),
-        ("service_account_id", True),
+        ("confluence_url", True),
+        ("account_email", True),
         ("api_token", True),
         ("username", False),
         ("password", False),
@@ -285,7 +285,7 @@ async def test_ping_for_failed_connection_exception(mock_get):
             await source.ping()
 
 
-def test_validate_configuration_for_ssl_enabled(patch_logger):
+def test_validate_configuration_for_ssl_enabled():
     """This function tests _validate_configuration when certification is empty and ssl is enabled"""
     # Setup
     source = create_source(ConfluenceDataSource)

@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-import ssl
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import aiomysql
@@ -16,7 +15,6 @@ from connectors.source import ConfigurableFieldValueError, DataSourceConfigurati
 from connectors.sources.mysql import (
     MySQLAdvancedRulesValidator,
     MySqlDataSource,
-    NoDatabaseConfiguredError,
     parse_tables_string_to_list_of_tables,
 )
 from connectors.sources.tests.support import create_source
@@ -221,14 +219,14 @@ async def test_close_when_source_setup_correctly_does_not_raise_errors():
 
 
 @pytest.mark.asyncio
-async def test_ping(patch_logger, patch_connection_pool):
+async def test_ping(patch_connection_pool):
     source = await setup_mysql_source(MySqlDataSource)
 
     await source.ping()
 
 
 @pytest.mark.asyncio
-async def test_ping_negative(patch_logger):
+async def test_ping_negative():
     source = create_source(MySqlDataSource)
 
     mock_response = asyncio.Future()
@@ -242,9 +240,7 @@ async def test_ping_negative(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_connect_with_retry(
-    patch_logger, patch_connection_pool, patch_default_wait_multiplier
-):
+async def test_connect_with_retry(patch_connection_pool, patch_default_wait_multiplier):
     source = await setup_mysql_source(is_connection_lost=True)
 
     streamer = source._connect(query="select * from database.table", fetch_many=True)
@@ -269,11 +265,10 @@ async def test_fetch_documents(patch_connection_pool):
         document_list.append(document)
 
     assert {
-        "Database": f"{DATABASE}",
         "Table": "table_name",
-        "_id": f"{DATABASE}_table_name_",
+        "_id": "table_name_",
         "_timestamp": "table1",
-        f"{DATABASE}_table_name_Database": "table1",
+        "table_name_Database": "table1",
     } in document_list
 
 
@@ -289,15 +284,6 @@ async def test_fetch_rows_from_tables(patch_connection_pool):
 
     async for row in source.fetch_rows_from_tables("table"):
         assert "_id" in row
-
-
-@pytest.mark.asyncio
-async def test_get_docs_with_empty_db_fields_raises_error():
-    source = await setup_mysql_source("")
-
-    with pytest.raises(NoDatabaseConfiguredError):
-        async for doc, _ in source.get_docs():
-            pass
 
 
 @pytest.mark.asyncio
@@ -407,15 +393,6 @@ async def test_validate_config_when_port_has_wrong_type_then_raise_error():
 
     with pytest.raises(ConfigurableFieldValueError):
         await source.validate_config()
-
-
-def test_ssl_context():
-    """This function test _ssl_context with dummy certificate"""
-    certificate = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
-    source = create_source(MySqlDataSource)
-
-    with patch.object(ssl, "create_default_context", return_value=MockSsl()):
-        source._ssl_context(certificate=certificate)
 
 
 @pytest.mark.parametrize(
@@ -574,3 +551,46 @@ async def test_validate_tables_accessible_when_not_accessible_then_error_raised(
 )
 def test_parse_tables_string_to_list(tables_string, expected_tables_list):
     assert parse_tables_string_to_list_of_tables(tables_string) == expected_tables_list
+
+
+@pytest.mark.parametrize(
+    "primary_key_tuples, expected_primary_key_columns",
+    [
+        ([], []),
+        ([("id",)], [f"{TABLE_ONE}_id"]),
+        (
+            [("group",), ("class",), ("name",)],
+            [
+                f"{TABLE_ONE}_group",
+                f"{TABLE_ONE}_class",
+                f"{TABLE_ONE}_name",
+            ],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_primary_key_columns(
+    primary_key_tuples, expected_primary_key_columns
+):
+    source = create_source(MySqlDataSource)
+    source._connect = AsyncIterator([primary_key_tuples])
+
+    primary_key_columns = await source._get_primary_key_columns(TABLE_ONE)
+
+    assert primary_key_columns == expected_primary_key_columns
+
+
+@pytest.mark.parametrize(
+    "row, primary_key_columns, expected_id",
+    [
+        ({"key_1": 1, "key_2": 2}, ["key_1"], f"{TABLE_ONE}_1_"),
+        ({"key_1": 1, "key_2": 2}, ["key_1", "key_2"], f"{TABLE_ONE}_1_2_"),
+        ({"key_1": 1, "key_2": 2}, ["key_1", "key_3"], f"{TABLE_ONE}_1_"),
+    ],
+)
+def test_generate_id(row, primary_key_columns, expected_id):
+    source = create_source(MySqlDataSource)
+
+    row_id = source._generate_id(TABLE_ONE, row, primary_key_columns)
+
+    assert row_id == expected_id
