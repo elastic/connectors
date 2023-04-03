@@ -5,7 +5,6 @@
 #
 """MySQL source module responsible to fetch documents from MySQL"""
 import re
-import ssl
 from contextlib import asynccontextmanager
 from functools import cached_property
 
@@ -23,7 +22,7 @@ from connectors.sources.generic_database import (
     configured_tables,
     is_wildcard,
 )
-from connectors.utils import CancellableSleeps, RetryStrategy, retryable
+from connectors.utils import CancellableSleeps, RetryStrategy, retryable, ssl_context
 
 SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN = re.compile(r"`(?:[^`]|``)+`|\w+")
 
@@ -139,7 +138,7 @@ class MySQLClient:
             "password": self.password,
             "db": self.db,
             "maxsize": self.max_pool_size,
-            "ssl": _ssl_context(certificate=self.ssl_certificate)
+            "ssl": ssl_context(certificate=self.ssl_certificate)
             if self.ssl_enabled
             else None,
         }
@@ -155,23 +154,6 @@ class MySQLClient:
         finally:
             connection_pool.close()
             await connection_pool.wait_closed()
-
-
-def _ssl_context(certificate):
-    """Convert string to pem format and create a SSL context
-
-    Args:
-        certificate (str): certificate in string format
-
-    Returns:
-        ssl_context: SSL context with certificate
-    """
-    certificate = certificate.replace(" ", "\n")
-    pem_format = " ".join(certificate.split("\n", 1))
-    pem_format = " ".join(pem_format.rsplit("\n", 1))
-    ctx = ssl.create_default_context()
-    ctx.load_verify_locations(cadata=pem_format)
-    return ctx
 
 
 class MySqlDataSource(BaseDataSource):
