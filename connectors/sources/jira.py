@@ -493,8 +493,8 @@ class JiraDataSource(BaseDataSource):
         except Exception as exception:
             logger.warning(f"Skipping data for type: {PROJECT}. Error: {exception}")
 
-    async def _get_specific_issue(self, issue):
-        """Get specific issue as per the given issue_key
+    async def _put_issue(self, issue):
+        """Put specific issue as per the given issue_key in a queue
 
         Args:
             issue (str): Issue key to fetch an issue
@@ -514,7 +514,7 @@ class JiraDataSource(BaseDataSource):
                 await self.queue.put((document, None))  # pyright: ignore
                 attachments = issue["fields"]["attachment"]
                 if len(attachments) > 0:
-                    await self._get_attachments(
+                    await self._put_attachment(
                         attachments=attachments, issue_key=issue["key"]
                     )
             await self.queue.put("FINISHED")  # pyright: ignore
@@ -534,12 +534,12 @@ class JiraDataSource(BaseDataSource):
             url_name=ISSUES, jql=jql
         ):
             for issue in response.get("issues", []):
-                await self.fetchers.put(partial(self._get_specific_issue, issue))
+                await self.fetchers.put(partial(self._put_issue, issue))
                 self.tasks += 1
         await self.queue.put("FINISHED")  # pyright: ignore
 
-    async def _get_attachments(self, attachments, issue_key):
-        """Get attachments of a specific issue
+    async def _put_attachment(self, attachments, issue_key):
+        """Put attachments of a specific issue in a queue
 
         Args:
             attachments (list): List of attachments for an issue

@@ -428,8 +428,8 @@ async def test_verify_projects_with_unavailable_project_keys(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_specific_issue(patch_logger):
-    """Test _get_specific_issue method"""
+async def test_put_issue(patch_logger):
+    """Test _put_issue method"""
     # Setup
     source = create_source(JiraDataSource)
 
@@ -437,13 +437,13 @@ async def test_get_specific_issue(patch_logger):
     source.get_content = Mock(return_value=EXPECTED_CONTENT)
 
     with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
-        await source._get_specific_issue(issue=MOCK_ISSUE)
+        await source._put_issue(issue=MOCK_ISSUE)
         assert source.queue.qsize() == 3
 
 
 @pytest.mark.asyncio
-async def test_get_attachments_positive(patch_logger):
-    """Test _get_attachments method"""
+async def test_put_attachment_positive(patch_logger):
+    """Test _put_attachment method"""
     # Setup
     source = create_source(JiraDataSource)
 
@@ -454,7 +454,7 @@ async def test_get_attachments_positive(patch_logger):
             "_attachment": "IyBUaGlzIGlzIHRoZSBkdW1teSBmaWxl",
         }
     )
-    await source._get_attachments(attachments=MOCK_ATTACHMENT, issue_key="TP-1")
+    await source._put_attachment(attachments=MOCK_ATTACHMENT, issue_key="TP-1")
     assert source.queue.qsize() == 1
 
 
