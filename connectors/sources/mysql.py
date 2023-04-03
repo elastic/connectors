@@ -370,7 +370,7 @@ class MySqlDataSource(BaseDataSource):
                                 # sending back column names only once
                                 if yield_once:
                                     yield [
-                                        f"{self.database}_{query_kwargs['table']}_{column[0]}"
+                                        f"{query_kwargs['table']}_{column[0]}"
                                         for column in cursor.description
                                     ]
                                     yield_once = False
@@ -489,18 +489,21 @@ class MySqlDataSource(BaseDataSource):
 
         async for row in table_rows:
             row = dict(zip(column_names, row))
-            keys_value = ""
-            for key in primary_key_columns:
-                keys_value += f"{row.get(key)}_" if row.get(key) else ""
             row.update(
                 {
-                    "_id": f"{self.database}_{table}_{keys_value}",
+                    "_id": self._generate_id(table, row, primary_key_columns),
                     "_timestamp": last_update_time,
-                    "Database": self.database,
                     "Table": table,
                 }
             )
             yield self.serialize(doc=row)
+
+    def _generate_id(self, table, row, primary_key_columns):
+        keys_value = ""
+        for key in primary_key_columns:
+            keys_value += f"{row.get(key)}_" if row.get(key) else ""
+
+        return f"{table}_{keys_value}"
 
     async def _get_primary_key_columns(self, table):
         primary_key = await anext(
@@ -509,7 +512,7 @@ class MySqlDataSource(BaseDataSource):
 
         columns = []
         for column_name in primary_key:
-            columns.append(f"{self.database}_{table}_{column_name[0]}")
+            columns.append(f"{table}_{column_name[0]}")
 
         return columns
 
