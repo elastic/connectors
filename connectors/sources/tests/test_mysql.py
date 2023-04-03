@@ -593,3 +593,20 @@ async def test_get_primary_key_columns(
     primary_key_columns = await source._get_primary_key_columns(TABLE_ONE)
 
     assert primary_key_columns == expected_primary_key_columns
+
+
+@pytest.mark.parametrize(
+    "row, primary_key_columns, expected_id",
+    [
+        ({"key_1": 1, "key_2": 2}, ["key_1"], f"{DATABASE}_{TABLE_ONE}_1_"),
+        ({"key_1": 1, "key_2": 2}, ["key_1", "key_2"], f"{DATABASE}_{TABLE_ONE}_1_2_"),
+        ({"key_1": 1, "key_2": 2}, ["key_1", "key_3"], f"{DATABASE}_{TABLE_ONE}_1_"),
+    ],
+)
+def test_generate_id(row, primary_key_columns, expected_id):
+    source = create_source(MySqlDataSource)
+    source.database = DATABASE
+
+    row_id = source._generate_id(TABLE_ONE, row, primary_key_columns)
+
+    assert row_id == expected_id
