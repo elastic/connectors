@@ -1,7 +1,7 @@
 #!/bin/bash
 set -exuo pipefail
 
-# XXX convert all this install in a docker image we can just use
+# TODO: convert all this install in a docker image we can just use
 sudo apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get install ca-certificates curl gnupg lsb-release -y
 sudo mkdir -p /etc/apt/keyrings
