@@ -17,6 +17,7 @@ from connectors.filtering.validation import (
 )
 from connectors.source import (
     BaseDataSource,
+    ConfigurableFieldValueError,
     DataSourceConfiguration,
     Field,
     get_source_klass,
@@ -104,6 +105,244 @@ def test_get_source_klass_dict():
     source_klass_dict = get_source_klass_dict(settings)
     assert source_klass_dict["yea"] == MyConnector
     assert source_klass_dict["yea2"] == MyConnector
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "config",
+    [
+        (
+            # less_than
+            {
+                "port": {
+                    "type": "int",
+                    "value": 9,
+                    "validations": [{"type": "less_than", "constraint": 10}],
+                }
+            }
+        ),
+        (
+            # greater_than
+            {
+                "port": {
+                    "type": "int",
+                    "value": 11,
+                    "validations": [{"type": "greater_than", "constraint": 10}],
+                }
+            }
+        ),
+        (
+            # less_than and greater_than with both valid
+            {
+                "port": {
+                    "type": "int",
+                    "value": 5,
+                    "validations": [
+                        {"type": "greater_than", "constraint": 0},
+                        {"type": "less_than", "constraint": 10},
+                    ],
+                }
+            }
+        ),
+        (
+            # list_type str
+            {
+                "option_list": {
+                    "type": "list",
+                    "value": ["option1", "option2", "option3"],
+                    "validations": [
+                        {"type": "list_type", "constraint": "str"},
+                    ],
+                }
+            }
+        ),
+        (
+            # list_type int
+            {
+                "option_list": {
+                    "type": "int",
+                    "value": [1, 2, 3],
+                    "validations": [
+                        {"type": "list_type", "constraint": "int"},
+                    ],
+                }
+            }
+        ),
+        (
+            # included_in when list
+            {
+                "option_list": {
+                    "type": "list",
+                    "value": ["option1", "option2"],
+                    "validations": [
+                        {"type": "included_in", "constraint": ["option1", "option2"]},
+                    ],
+                }
+            }
+        ),
+        (
+            # included_in when str
+            {
+                "option_str": {
+                    "type": "str",
+                    "value": "option2",
+                    "validations": [
+                        {"type": "included_in", "constraint": ["option1", "option2"]},
+                    ],
+                }
+            }
+        ),
+        (
+            # included_in when int
+            {
+                "option_int": {
+                    "type": "int",
+                    "value": 2,
+                    "validations": [
+                        {"type": "included_in", "constraint": [1, 2]},
+                    ],
+                }
+            }
+        ),
+        (
+            # regex
+            {
+                "email": {
+                    "type": "str",
+                    "value": "real@email.com",
+                    "validations": [
+                        {
+                            "type": "regex",
+                            "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\.[A-Z|a-z]{2,})+",
+                        },
+                    ],
+                }
+            }
+        ),
+    ],
+)
+async def test_is_valid_when_validations_succeed_returns_true(config):
+    c = DataSourceConfiguration(config)
+    assert c.is_valid() == True
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "config",
+    [
+        (
+            # less_than
+            {
+                "port": {
+                    "type": "int",
+                    "value": 11,
+                    "validations": [{"type": "less_than", "constraint": 10}],
+                }
+            }
+        ),
+        (
+            # greater_than
+            {
+                "port": {
+                    "type": "int",
+                    "value": 9,
+                    "validations": [{"type": "greater_than", "constraint": 10}],
+                }
+            }
+        ),
+        (
+            # less_than and greater_than with one invalid
+            {
+                "port": {
+                    "type": "int",
+                    "value": 10,
+                    "validations": [
+                        {"type": "greater_than", "constraint": 0},
+                        {"type": "less_than", "constraint": 10},
+                    ],
+                }
+            }
+        ),
+        (
+            # list_type str
+            {
+                "option_list": {
+                    "type": "list",
+                    "value": ["option1", "option2", 3],
+                    "validations": [
+                        {"type": "list_type", "constraint": "str"},
+                    ],
+                }
+            }
+        ),
+        (
+            # list_type int
+            {
+                "option_list": {
+                    "type": "list",
+                    "value": [1, 2, "option3"],
+                    "validations": [
+                        {"type": "list_type", "constraint": "int"},
+                    ],
+                }
+            }
+        ),
+        (
+            # included_in when list
+            {
+                "option_list": {
+                    "type": "list",
+                    "value": ["option1", "option2"],
+                    "validations": [
+                        {"type": "included_in", "constraint": ["option1", "option3"]},
+                    ],
+                }
+            }
+        ),
+        (
+            # included_in when str
+            {
+                "option_str": {
+                    "type": "str",
+                    "value": "option2",
+                    "validations": [
+                        {"type": "included_in", "constraint": ["option1", "option3"]},
+                    ],
+                }
+            }
+        ),
+        (
+            # included_in when int
+            {
+                "option_int": {
+                    "type": "int",
+                    "value": 2,
+                    "validations": [
+                        {"type": "included_in", "constraint": [1, 3]},
+                    ],
+                }
+            }
+        ),
+        (
+            # regex
+            {
+                "email": {
+                    "type": "str",
+                    "value": "not_an_email.com",
+                    "validations": [
+                        {
+                            "type": "regex",
+                            "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\.[A-Z|a-z]{2,})+",
+                        },
+                    ],
+                }
+            }
+        ),
+    ],
+)
+async def test_is_valid_when_validations_fail_raises_error(config):
+    c = DataSourceConfiguration(config)
+    with pytest.raises(ConfigurableFieldValueError) as e:
+        c.is_valid()
 
 
 # ABCs
