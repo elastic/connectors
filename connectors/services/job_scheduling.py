@@ -36,7 +36,7 @@ class JobSchedulingService(BaseService):
         self.connector_index = None
         self.sync_job_index = None
 
-    async def _sync(self, connector):
+    async def _schedule(self, connector):
         if self.running is False:
             logger.debug(
                 f"Skipping run for {connector.id} because service is terminating"
@@ -128,7 +128,7 @@ class JobSchedulingService(BaseService):
                         native_service_types=native_service_types,
                         connector_ids=connector_ids,
                     ):
-                        await self._sync(connector)
+                        await self._schedule(connector)
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
