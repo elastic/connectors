@@ -16,7 +16,6 @@ from connectors.source import ConfigurableFieldValueError, DataSourceConfigurati
 from connectors.sources.mysql import (
     MySQLAdvancedRulesValidator,
     MySqlDataSource,
-    NoDatabaseConfiguredError,
     parse_tables_string_to_list_of_tables,
 )
 from connectors.sources.tests.support import create_source
@@ -289,15 +288,6 @@ async def test_fetch_rows_from_tables(patch_connection_pool):
 
     async for row in source.fetch_rows_from_tables("table"):
         assert "_id" in row
-
-
-@pytest.mark.asyncio
-async def test_get_docs_with_empty_db_fields_raises_error():
-    source = await setup_mysql_source("")
-
-    with pytest.raises(NoDatabaseConfiguredError):
-        async for doc, _ in source.get_docs():
-            pass
 
 
 @pytest.mark.asyncio
