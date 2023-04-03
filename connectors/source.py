@@ -158,10 +158,10 @@ class DataSourceConfiguration:
         return True
 
     def dependencies_satisfied(self, field):
-        """Used to check if a Field has its dependencies validated.
+        """Used to check if a Field has its dependencies satisfied.
 
         Returns True if all dependencies are satisfied, or no dependencies exist.
-        Retruns False if one or more dependencies are not satisfied.
+        Returns False if one or more dependencies are not satisfied.
         """
         if len(field.depends_on) <= 0:
             return True
