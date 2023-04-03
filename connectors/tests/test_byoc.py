@@ -631,7 +631,8 @@ async def test_sync_job_update_metadata(patch_logger):
 
     sync_job = SyncJob(elastic_index=index, doc_source=source)
     await sync_job.update_metadata(
-        ingestion_stats=ingestion_stats, connector_metadata=connector_metadata
+        ingestion_stats=ingestion_stats | {"blah": 0},
+        connector_metadata=connector_metadata,
     )
 
     index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
