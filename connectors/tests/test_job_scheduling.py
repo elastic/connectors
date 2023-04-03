@@ -112,9 +112,7 @@ def mock_connector(
 
 
 @pytest.mark.asyncio
-async def test_no_connector(
-    connector_index_mock, sync_job_index_mock, set_env
-):
+async def test_no_connector(connector_index_mock, sync_job_index_mock, set_env):
     connector_index_mock.supported_connectors.return_value = AsyncIterator([])
     await create_and_run_service()
 
