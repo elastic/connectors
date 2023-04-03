@@ -564,3 +564,32 @@ async def test_validate_tables_accessible_when_not_accessible_then_error_raised(
 )
 def test_parse_tables_string_to_list(tables_string, expected_tables_list):
     assert parse_tables_string_to_list_of_tables(tables_string) == expected_tables_list
+
+
+@pytest.mark.parametrize(
+    "primary_key_tuples, expected_primary_key_columns",
+    [
+        ([], []),
+        ([("id",)], [f"{DATABASE}_{TABLE_ONE}_id"]),
+        (
+            [("group",), ("class",), ("name",)],
+            [
+                f"{DATABASE}_{TABLE_ONE}_group",
+                f"{DATABASE}_{TABLE_ONE}_class",
+                f"{DATABASE}_{TABLE_ONE}_name",
+            ],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_primary_key_columns(
+    primary_key_tuples, expected_primary_key_columns
+):
+    source = create_source(MySqlDataSource)
+
+    source.database = DATABASE
+    source._connect = AsyncIterator([primary_key_tuples])
+
+    primary_key_columns = await source._get_primary_key_columns(TABLE_ONE)
+
+    assert primary_key_columns == expected_primary_key_columns
