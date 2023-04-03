@@ -16,6 +16,7 @@ from connectors.source import ConfigurableFieldValueError, DataSourceConfigurati
 from connectors.sources.mysql import (
     MySQLAdvancedRulesValidator,
     MySqlDataSource,
+    _ssl_context,
     parse_tables_string_to_list_of_tables,
 )
 from connectors.sources.tests.support import create_source
@@ -401,10 +402,9 @@ async def test_validate_config_when_port_has_wrong_type_then_raise_error():
 def test_ssl_context():
     """This function test _ssl_context with dummy certificate"""
     certificate = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
-    source = create_source(MySqlDataSource)
 
     with patch.object(ssl, "create_default_context", return_value=MockSsl()):
-        source._ssl_context(certificate=certificate)
+        _ssl_context(certificate=certificate)
 
 
 @pytest.mark.parametrize(
