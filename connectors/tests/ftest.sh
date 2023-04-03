@@ -55,7 +55,11 @@ else
     $ELASTIC_INGEST --debug & PID=$!
 fi
 
+
 $PYTHON fixture.py --name $NAME --action monitor --pid $PID
+
+# breathe for 2 minutes
+sleep 120
 
 $PYTHON fixture.py --name $NAME --action remove
 $PYTHON fixture.py --name $NAME --action sync
