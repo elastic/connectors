@@ -21,7 +21,6 @@ from connectors.byoc import (
     Status,
     SyncJobIndex,
 )
-from connectors.byoei import ElasticServer
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.services.base import BaseService
@@ -42,7 +41,6 @@ class JobSchedulingService(BaseService):
         self.concurrent_syncs = self.service_config.get(
             "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
         )
-        self.bulk_options = self.es_config.get("bulk", {})
         self.source_klass_dict = get_source_klass_dict(config)
         self.connector_index = None
         self.sync_job_index = None
@@ -53,7 +51,7 @@ class JobSchedulingService(BaseService):
         if self.syncs is not None:
             self.syncs.cancel()
 
-    async def _sync(self, connector, es):
+    async def _sync(self, connector):
         if self.running is False:
             logger.debug(
                 f"Skipping run for {connector.id} because service is terminating"
@@ -125,8 +123,7 @@ class JobSchedulingService(BaseService):
             source_klass=source_klass,
             sync_job=sync_job,
             connector=connector,
-            elastic_server=es,
-            bulk_options=self.bulk_options,
+            es_config=self.es_config,
         )
         await self.syncs.put(sync_job_runner.execute)
 
@@ -150,7 +147,6 @@ class JobSchedulingService(BaseService):
             f"Service started, listening to events from {self.es_config['host']}"
         )
 
-        es = ElasticServer(self.es_config)
         try:
             while self.running:
                 # creating a pool of task for every round
@@ -162,7 +158,7 @@ class JobSchedulingService(BaseService):
                         native_service_types=native_service_types,
                         connector_ids=connector_ids,
                     ):
-                        await self._sync(connector, es)
+                        await self._sync(connector)
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
@@ -181,7 +177,6 @@ class JobSchedulingService(BaseService):
             if self.sync_job_index is not None:
                 self.sync_job_index.stop_waiting()
                 await self.sync_job_index.close()
-            await es.close()
         return 0
 
     async def _should_sync(self, connector):

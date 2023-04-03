@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """MySQL source module responsible to fetch documents from MySQL"""
+import re
 import ssl
 from contextlib import asynccontextmanager
 
@@ -23,6 +24,8 @@ from connectors.sources.generic_database import (
 )
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
+SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN = re.compile(r"`(?:[^`]|``)+`|\w+")
+
 MAX_POOL_SIZE = 10
 DEFAULT_FETCH_SIZE = 50
 RETRIES = 3
@@ -31,12 +34,15 @@ DEFAULT_SSL_ENABLED = False
 DEFAULT_SSL_CA = ""
 
 
+def parse_tables_string_to_list_of_tables(tables_string):
+    if tables_string is None or len(tables_string) == 0:
+        return []
+
+    return SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN.findall(tables_string)
+
+
 def format_list(list_):
     return ", ".join(list_)
-
-
-class NoDatabaseConfiguredError(Exception):
-    pass
 
 
 class MySQLQueries(Queries):
@@ -343,7 +349,6 @@ class MySqlDataSource(BaseDataSource):
             list: Column names and query response
         """
 
-        query_kwargs["database"] = self.database
         formatted_query = query.format(**query_kwargs)
         size = self.configuration["fetch_size"]
         retry = 1
@@ -365,7 +370,7 @@ class MySqlDataSource(BaseDataSource):
                                 # sending back column names only once
                                 if yield_once:
                                     yield [
-                                        f"{query_kwargs['database']}_{query_kwargs['table']}_{column[0]}"
+                                        f"{self.database}_{query_kwargs['table']}_{column[0]}"
                                         for column in cursor.description
                                     ]
                                     yield_once = False
@@ -463,44 +468,54 @@ class MySqlDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
 
+        primary_key_columns = await self._get_primary_key_columns(table)
+
+        if not primary_key_columns:
+            logger.warning(
+                f"Skipping {table} table from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
+            )
+            return
+
+        last_update_time = await anext(
+            self._connect(
+                query=self.queries.table_last_update_time(table),
+                table=table,
+            )
+        )
+        last_update_time = last_update_time[0][0]
+
+        table_rows = self._connect(query=query, fetch_many=True, table=table)
+        column_names = await anext(table_rows)
+
+        async for row in table_rows:
+            row = dict(zip(column_names, row))
+            row.update(
+                {
+                    "_id": self._generate_id(table, row, primary_key_columns),
+                    "_timestamp": last_update_time,
+                    "Database": self.database,
+                    "Table": table,
+                }
+            )
+            yield self.serialize(doc=row)
+
+    def _generate_id(self, table, row, primary_key_columns):
+        keys_value = ""
+        for key in primary_key_columns:
+            keys_value += f"{row.get(key)}_" if row.get(key) else ""
+
+        return f"{self.database}_{table}_{keys_value}"
+
+    async def _get_primary_key_columns(self, table):
         primary_key = await anext(
             self._connect(query=self.queries.table_primary_key(table), table=table)
         )
 
-        keys = []
+        columns = []
         for column_name in primary_key:
-            keys.append(f"{self.database}_{table}_{column_name[0]}")
+            columns.append(f"{self.database}_{table}_{column_name[0]}")
 
-        if keys:
-            last_update_time = await anext(
-                self._connect(
-                    query=self.queries.table_last_update_time(table),
-                    table=table,
-                )
-            )
-            last_update_time = last_update_time[0][0]
-
-            table_rows = self._connect(query=query, fetch_many=True, table=table)
-            column_names = await anext(table_rows)
-
-            async for row in table_rows:
-                row = dict(zip(column_names, row))
-                keys_value = ""
-                for key in keys:
-                    keys_value += f"{row.get(key)}_" if row.get(key) else ""
-                row.update(
-                    {
-                        "_id": f"{self.database}_{table}_{keys_value}",
-                        "_timestamp": last_update_time,
-                        "Database": self.database,
-                        "Table": table,
-                    }
-                )
-                yield self.serialize(doc=row)
-        else:
-            logger.warning(
-                f"Skipping {table} table from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
-            )
+        return columns
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch tables and rows in async manner.
@@ -508,9 +523,6 @@ class MySqlDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        if self.database is None or not len(self.database):
-            raise NoDatabaseConfiguredError
-
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
 
