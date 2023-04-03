@@ -19,7 +19,7 @@ from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedErr
 from aiolimiter import AsyncLimiter
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import BaseDataSource
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -92,6 +92,227 @@ SCHEMA = {
 }
 
 
+class SharepointClient:
+    """Sharepoint client to handle API calls made to Sharepoint"""
+
+    def __init__(self, configuration):
+        self._sleeps = CancellableSleeps()
+        self.configuration = configuration
+        self.is_cloud = self.configuration["is_cloud"]
+        self.host_url = self.configuration["host_url"]
+        self.certificate = self.configuration["ssl_ca"]
+        self.ssl_enabled = self.configuration["ssl_enabled"]
+        self.retry_count = self.configuration["retry_count"]
+        self.site_collections = self.configuration["site_collections"]
+
+        self.session = None
+        self.access_token = None
+        self.token_expires_at = None
+
+        self.limiter = AsyncLimiter(
+            max_rate=1000, time_period=60
+        )  # Limit api call for throttling
+
+        if self.ssl_enabled and self.certificate:
+            self.ssl_ctx = ssl_context(certificate=self.certificate)
+        else:
+            self.ssl_ctx = False
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def _set_access_token(self):
+        """Set access token using configuration fields"""
+        expires_at = self.token_expires_at
+        if self.token_expires_at and (not isinstance(expires_at, datetime)):
+            expires_at = datetime.fromisoformat(expires_at)  # pyright: ignore
+        if not is_expired(expires_at=expires_at):
+            return
+        tenant_id = self.configuration["tenant_id"]
+        logger.debug("Generating access token")
+        url = f"https://accounts.accesscontrol.windows.net/{tenant_id}/tokens/OAuth/2"
+        # GUID in resource is always a constant used to create access token
+        data = {
+            "grant_type": "client_credentials",
+            "resource": f"00000003-0000-0ff1-ce00-000000000000/{self.configuration['tenant']}.sharepoint.com@{tenant_id}",
+            "client_id": f"{self.configuration['client_id']}@{tenant_id}",
+            "client_secret": self.configuration["secret_id"],
+        }
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+        async with aiohttp.request(
+            method="POST", url=url, data=data, headers=headers
+        ) as response:
+            json_data = await response.json()
+            self.access_token = json_data["access_token"]
+            self.token_expires_at = evaluate_timedelta(
+                seconds=int(json_data["expires_in"]), time_skew=20
+            )
+
+    def _get_session(self):
+        """Generate base client session using configuration fields
+
+        Returns:
+            ClientSession: Base client session.
+        """
+        if self.session:
+            return self.session
+        logger.info("Generating aiohttp Client Session...")
+        request_headers = {
+            "accept": "application/json",
+            "content-type": "application/json",
+        }
+        timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
+        connector = aiohttp.TCPConnector(force_close=True)
+
+        if self.is_cloud:
+            basic_auth = None
+        else:
+            basic_auth = aiohttp.BasicAuth(
+                login=self.configuration["username"],
+                password=self.configuration["password"],
+            )
+        self.session = aiohttp.ClientSession(
+            connector=connector,
+            auth=basic_auth,
+            headers=request_headers,
+            timeout=timeout,
+            raise_for_status=True,
+        )
+        return self.session
+
+    async def close_session(self):
+        """Closes unclosed client session"""
+        self._sleeps.cancel()
+        if self.session is None:
+            return
+        await self.session.close()
+        self.session = None
+
+    async def api_call(self, url_name, url="", **url_kwargs):
+        """Make an API call to the Sharepoint Server/Online
+
+        Args:
+            url_name (str): Sharepoint url name to be executed.
+            url(str, optional): Paginated url for drive and list items. Defaults to "".
+            url_kwargs (dict): Url kwargs to format the query.
+        Raises:
+            exception: An instance of an exception class.
+
+        Yields:
+            data: API response.
+        """
+        async with self.limiter:
+            retry = 1
+            # If pagination happens for list and drive items then next pagination url comes in response which will be passed in url field.
+            if url == "":
+                url = URLS[url_name].format(**url_kwargs)
+            headers = None
+
+            while True:
+                try:
+                    if self.is_cloud:
+                        await self._set_access_token()
+                        headers = {"Authorization": f"Bearer {self.access_token}"}
+                    async with self._get_session().get(  # pyright: ignore
+                        url=url,
+                        ssl=self.ssl_ctx,
+                        headers=headers,
+                    ) as result:
+                        if url_name == ATTACHMENT:
+                            yield result
+                        else:
+                            yield await result.json()
+                        break
+                except Exception as exception:
+                    if retry > self.retry_count:
+                        raise exception
+                    logger.warning(
+                        f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
+                    )
+                    retry += 1
+
+                    retry_after = RETRY_INTERVAL**retry
+
+                    if getattr(exception, "code", None) == 429:
+                        retry_after = int(
+                            exception.headers.get("Retry-After", 0)  # pyright: ignore
+                        )
+                    elif isinstance(
+                        exception,
+                        ClientResponseError,
+                    ) and "token has expired" in exception.headers.get(  # pyright: ignore
+                        "x-ms-diagnostics", ""
+                    ):
+                        await self._set_access_token()
+                    elif isinstance(
+                        exception,
+                        ServerDisconnectedError,
+                    ):
+                        await self.close_session()
+
+                    await self._sleeps.sleep(retry_after)
+
+    async def invoke_get_call(self, site_url, param_name, list_id=None):
+        """Invokes a GET call to the Sharepoint Server/Online.
+
+        Args:
+            site_url(string): site url to the sharepoint farm.
+            param_name(string): parameter name whether it is SITES, LISTS, DRIVE_ITEM, LIST_ITEM.
+            list_id(string, optional): Id of list item or drive item. Defaults to None.
+        Yields:
+            Response of the GET call.
+        """
+        skip = 0
+        next_url = ""
+        while True:
+            if param_name in [SITES, LISTS]:
+                response = await anext(
+                    self.api_call(
+                        url_name=param_name,
+                        parent_site_url=site_url,
+                        skip=skip,
+                        top=TOP,
+                        host_url=self.host_url,
+                    )
+                )
+                response_result = response.get("value", [])  # pyright: ignore
+                yield response_result
+
+                skip += TOP
+                if len(response_result) < TOP:
+                    break
+            elif param_name in [
+                DRIVE_ITEM,
+                LIST_ITEM,
+            ]:
+                if next_url != "":
+                    response = await anext(
+                        self.api_call(
+                            url_name=param_name,
+                            url=next_url,
+                        )
+                    )
+                else:
+                    response = await anext(
+                        self.api_call(
+                            url_name=param_name,
+                            parent_site_url=site_url,
+                            list_id=list_id,
+                            top=TOP,
+                            host_url=self.host_url,
+                        )
+                    )
+                response_result = response.get("value", [])  # pyright: ignore
+                yield response_result
+
+                next_url = response.get("odata.nextLink", "")  # pyright: ignore
+                if next_url == "":
+                    break
+
+
 class SharepointDataSource(BaseDataSource):
     """Sharepoint"""
 
@@ -105,21 +326,7 @@ class SharepointDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self.is_cloud = self.configuration["is_cloud"]
-        self.site_collections = self.configuration["site_collections"]
-        self.ssl_enabled = self.configuration["ssl_enabled"]
-        self.host_url = self.configuration["host_url"]
-        self.certificate = self.configuration["ssl_ca"]
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
-        self.retry_count = self.configuration["retry_count"]
-        self._sleeps = CancellableSleeps()
-        self.ssl_ctx = False
-        self.session = None
-        self.access_token = None
-        self.token_expires_at = None
-        self.limiter = AsyncLimiter(
-            max_rate=1000, time_period=60
-        )  # Limit api call for throttling
+        self.sharepoint_client = SharepointClient(configuration=configuration)
 
     @classmethod
     def get_default_configuration(cls):
@@ -196,6 +403,10 @@ class SharepointDataSource(BaseDataSource):
             },
         }
 
+    async def close(self):
+        """Closes unclosed client session"""
+        await self.sharepoint_client.close_session()
+
     async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields
 
@@ -213,7 +424,7 @@ class SharepointDataSource(BaseDataSource):
                 "tenant",
                 "tenant_id",
             ]
-            if self.is_cloud
+            if self.sharepoint_client.is_cloud
             else ["host_url", "site_collections", "username", "password"]
         )
 
@@ -224,145 +435,14 @@ class SharepointDataSource(BaseDataSource):
             for field in connection_fields
             if self.configuration[field] == ""
         ]:
-            raise ConfigurableFieldValueError(
+            raise Exception(
                 f"Configured keys: {empty_connection_fields} can't be empty."
             )
-        if self.ssl_enabled and self.certificate == "":
-            raise ConfigurableFieldValueError("SSL certificate must be configured.")
-
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def _set_access_token(self):
-        """Set access token using configuration fields"""
-        expires_at = self.token_expires_at
-        if self.token_expires_at and (not isinstance(expires_at, datetime)):
-            expires_at = datetime.fromisoformat(expires_at)  # pyright: ignore
-        if not is_expired(expires_at=expires_at):
-            return
-        tenant_id = self.configuration["tenant_id"]
-        logger.debug("Generating access token")
-        url = f"https://accounts.accesscontrol.windows.net/{tenant_id}/tokens/OAuth/2"
-        # GUID in resource is always a constant used to create access token
-        data = {
-            "grant_type": "client_credentials",
-            "resource": f"00000003-0000-0ff1-ce00-000000000000/{self.configuration['tenant']}.sharepoint.com@{tenant_id}",
-            "client_id": f"{self.configuration['client_id']}@{tenant_id}",
-            "client_secret": self.configuration["secret_id"],
-        }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
-        async with aiohttp.request(
-            method="POST", url=url, data=data, headers=headers
-        ) as response:
-            json_data = await response.json()
-            self.access_token = json_data["access_token"]
-            self.token_expires_at = evaluate_timedelta(
-                seconds=int(json_data["expires_in"]), time_skew=20
-            )
-
-    async def _generate_session(self):
-        """Generate base client session using configuration fields
-
-        Returns:
-            ClientSession: Base client session.
-        """
-        logger.info("Generating aiohttp Client Session...")
-        request_headers = {
-            "accept": "application/json",
-            "content-type": "application/json",
-        }
-        timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
-        connector = aiohttp.TCPConnector(force_close=True)
-
-        if self.is_cloud:
-            basic_auth = None
-            await self._set_access_token()
-        else:
-            basic_auth = aiohttp.BasicAuth(
-                login=self.configuration["username"],
-                password=self.configuration["password"],
-            )
-        self.session = aiohttp.ClientSession(
-            connector=connector,
-            auth=basic_auth,
-            headers=request_headers,
-            timeout=timeout,
-            raise_for_status=True,
-        )
-
-    async def close(self):
-        """Closes unclosed client session"""
-        if self.session is None:
-            return
-        await self.session.close()
-
-    async def _api_call(self, url_name, url="", **url_kwargs):
-        """Make an API call to the Sharepoint Server/Online
-
-        Args:
-            url_name (str): Sharepoint url name to be executed.
-            url(str, optional): Paginated url for drive and list items. Defaults to "".
-            url_kwargs (dict): Url kwargs to format the query.
-        Raises:
-            exception: An instance of an exception class.
-
-        Yields:
-            data: API response.
-        """
-        async with self.limiter:
-            retry = 1
-            # If pagination happens for list and drive items then next pagination url comes in response which will be passed in url field.
-            if url == "":
-                url = URLS[url_name].format(**url_kwargs)
-
-            headers = None
-
-            if self.is_cloud:
-                headers = {"Authorization": f"Bearer {self.access_token}"}
-            while True:
-                try:
-                    async with self.session.get(
-                        url=url,
-                        ssl=self.ssl_ctx,
-                        headers=headers,
-                    ) as result:
-                        if url_name == ATTACHMENT:
-                            yield result
-                        else:
-                            yield await result.json()
-                        break
-                except Exception as exception:
-                    if retry > self.retry_count:
-                        raise exception
-                    logger.warning(
-                        f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
-                    )
-                    retry += 1
-
-                    retry_after = RETRY_INTERVAL**retry
-
-                    if getattr(exception, "code", None) == 429:
-                        retry_after = int(
-                            exception.headers.get("Retry-After", 0)  # pyright: ignore
-                        )
-                    elif isinstance(
-                        exception,
-                        ClientResponseError,
-                    ) and "token has expired" in exception.headers.get(  # pyright: ignore
-                        "x-ms-diagnostics", ""
-                    ):
-                        await self._set_access_token()
-                    elif isinstance(
-                        exception,
-                        ServerDisconnectedError,
-                    ):
-                        await self.session.close()
-                        await self._generate_session()
-
-                    await self._sleeps.sleep(retry_after)
+        if (
+            self.sharepoint_client.ssl_enabled
+            and self.sharepoint_client.certificate == ""
+        ):
+            raise Exception("SSL certificate must be configured.")
 
     def format_document(
         self,
@@ -386,7 +466,7 @@ class SharepointDataSource(BaseDataSource):
 
         if document_type in [LISTS, DOCUMENT_LIBRARY]:
             document["url"] = urljoin(
-                self.host_url, item["RootFolder"]["ServerRelativeUrl"]
+                self.sharepoint_client.host_url, item["RootFolder"]["ServerRelativeUrl"]
             )
 
         elif document_type == DRIVE_ITEM:
@@ -394,7 +474,10 @@ class SharepointDataSource(BaseDataSource):
                 {
                     "_id": item["GUID"],
                     "size": item.get("File", {}).get("Length"),
-                    "url": urljoin(self.host_url, item[item_type]["ServerRelativeUrl"]),
+                    "url": urljoin(
+                        self.sharepoint_client.host_url,
+                        item[item_type]["ServerRelativeUrl"],
+                    ),
                     "type": item_type,
                 }
             )
@@ -420,26 +503,20 @@ class SharepointDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Sharepoint"""
-        if self.session is None:
-            await self._generate_session()
-
-        if self.ssl_enabled and (not self.ssl_ctx):
-            self.ssl_ctx = ssl_context(certificate=self.certificate)
-
         try:
             await anext(
-                self._api_call(
+                self.sharepoint_client.api_call(
                     url_name=PING,
-                    site_collections=self.site_collections[0],
-                    host_url=self.host_url,
+                    site_collections=self.sharepoint_client.site_collections[0],
+                    host_url=self.sharepoint_client.host_url,
                 )
             )
             logger.debug(
-                f"Successfully connected to the Sharepoint via {self.host_url}"
+                f"Successfully connected to the Sharepoint via {self.sharepoint_client.host_url}"
             )
         except Exception:
             logger.exception(
-                f"Error while connecting to the Sharepoint via {self.host_url}"
+                f"Error while connecting to the Sharepoint via {self.sharepoint_client.host_url}"
             )
             raise
 
@@ -464,7 +541,11 @@ class SharepointDataSource(BaseDataSource):
             dictionary: Content document with id, timestamp & text.
         """
 
-        if not (self.enable_content_extraction and doit and document["size"]):
+        if not (
+            self.configuration["enable_content_extraction"]
+            and doit
+            and document["size"]
+        ):
             return
 
         document_size = int(document["size"])
@@ -477,9 +558,9 @@ class SharepointDataSource(BaseDataSource):
         source_file_name = ""
 
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            async for response in self._api_call(
+            async for response in self.sharepoint_client.api_call(
                 url_name=ATTACHMENT,
-                host_url=self.host_url,
+                host_url=self.sharepoint_client.host_url,
                 value=site_url,
                 file_relative_url=file_relative_url,
             ):
@@ -502,63 +583,6 @@ class SharepointDataSource(BaseDataSource):
             "_attachment": attachment_content,
         }
 
-    async def invoke_get_call(self, site_url, param_name, list_id=None):
-        """Invokes a GET call to the Sharepoint Server/Online.
-
-        Args:
-            site_url(string): site url to the sharepoint farm.
-            param_name(string): parameter name whether it is SITES, LISTS, DRIVE_ITEM, LIST_ITEM.
-            list_id(string, optional): Id of list item or drive item. Defaults to None.
-        Yields:
-            Response of the GET call.
-        """
-        skip = 0
-        next_url = ""
-        while True:
-            if param_name in [SITES, LISTS]:
-                response = await anext(
-                    self._api_call(
-                        url_name=param_name,
-                        parent_site_url=site_url,
-                        skip=skip,
-                        top=TOP,
-                        host_url=self.host_url,
-                    )
-                )
-                response_result = response.get("value", [])  # pyright: ignore
-                yield response_result
-
-                skip += TOP
-                if len(response_result) < TOP:
-                    break
-            elif param_name in [
-                DRIVE_ITEM,
-                LIST_ITEM,
-            ]:
-                if next_url != "":
-                    response = await anext(
-                        self._api_call(
-                            url_name=param_name,
-                            url=next_url,
-                        )
-                    )
-                else:
-                    response = await anext(
-                        self._api_call(
-                            url_name=param_name,
-                            parent_site_url=site_url,
-                            list_id=list_id,
-                            top=TOP,
-                            host_url=self.host_url,
-                        )
-                    )
-                response_result = response.get("value", [])  # pyright: ignore
-                yield response_result
-
-                next_url = response.get("odata.nextLink", "")  # pyright: ignore
-                if next_url == "":
-                    break
-
     async def get_sites(self, site_url):
         """Get sites from Sharepoint Server/Online
 
@@ -567,7 +591,7 @@ class SharepointDataSource(BaseDataSource):
         Yields:
             site_server_url(string): Site path.
         """
-        async for sites_data in self.invoke_get_call(
+        async for sites_data in self.sharepoint_client.invoke_get_call(
             site_url=site_url, param_name=SITES
         ):
             for data in sites_data:
@@ -588,12 +612,12 @@ class SharepointDataSource(BaseDataSource):
             dictionary: dictionary containing meta-data of the list item.
         """
         file_relative_url = None
-        async for list_items_data in self.invoke_get_call(
+        async for list_items_data in self.sharepoint_client.invoke_get_call(
             site_url=site_url, param_name=LIST_ITEM, list_id=list_id
         ):
             for result in list_items_data:
                 if not result.get("Attachments"):
-                    url = f"{self.host_url}{server_relative_url}/DispForm.aspx?ID={result['Id']}&Source={self.host_url}{server_relative_url}/AllItems.aspx&ContentTypeId={result['ContentTypeId']}"
+                    url = f"{self.sharepoint_client.host_url}{server_relative_url}/DispForm.aspx?ID={result['Id']}&Source={self.sharepoint_client.host_url}{server_relative_url}/AllItems.aspx&ContentTypeId={result['ContentTypeId']}"
                     result["url"] = url
                     yield self.format_document(
                         item=result,
@@ -607,9 +631,9 @@ class SharepointDataSource(BaseDataSource):
                     )
 
                     attachment_data = await anext(
-                        self._api_call(
+                        self.sharepoint_client.api_call(
                             url_name=ATTACHMENT_DATA,
-                            host_url=self.host_url,
+                            host_url=self.sharepoint_client.host_url,
                             parent_site_url=site_url,
                             file_relative_url=file_relative_url,
                         )
@@ -617,7 +641,8 @@ class SharepointDataSource(BaseDataSource):
                     result["size"] = attachment_data.get("Length")  # pyright: ignore
                     result["_id"] = attachment_data["UniqueId"]  # pyright: ignore
                     result["url"] = urljoin(
-                        self.host_url, attachment_file.get("ServerRelativeUrl")
+                        self.sharepoint_client.host_url,
+                        attachment_file.get("ServerRelativeUrl"),
                     )
 
                     if (
@@ -642,7 +667,7 @@ class SharepointDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the drive item.
         """
-        async for drive_items_data in self.invoke_get_call(
+        async for drive_items_data in self.sharepoint_client.invoke_get_call(
             site_url=site_url, param_name=DRIVE_ITEM, list_id=list_id
         ):
             for result in drive_items_data:
@@ -672,7 +697,9 @@ class SharepointDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the list, list item and drive item.
         """
-        async for list_data in self.invoke_get_call(site_url=site, param_name=LISTS):
+        async for list_data in self.sharepoint_client.invoke_get_call(
+            site_url=site, param_name=LISTS
+        ):
             for result in list_data:
                 # if BaseType value is 1 then it's document library else it's a list item
                 if result.get("BaseType") == 1:
@@ -701,27 +728,22 @@ class SharepointDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the Sharepoint objects.
         """
-        if self.session is None:
-            await self._generate_session()
-
-        if self.ssl_enabled and (not self.ssl_ctx):
-            self.ssl_ctx = ssl_context(certificate=self.certificate)
 
         server_relative_url = []
 
-        for collection in self.site_collections:
+        for collection in self.sharepoint_client.site_collections:
             server_relative_url.append(f"/sites/{collection}")
             async for site_document in self.get_sites(site_url=f"/sites/{collection}"):
                 server_relative_url.append(site_document["server_relative_url"])
                 yield site_document, None
 
-            for site_url in server_relative_url:
-                async for item, file_relative_url in self.get_lists_and_items(
-                    site=site_url
-                ):
-                    if file_relative_url is None:
-                        yield item, None
-                    else:
-                        yield item, partial(
-                            self.get_content, item, file_relative_url, site_url
-                        )
+        for site_url in server_relative_url:
+            async for item, file_relative_url in self.get_lists_and_items(
+                site=site_url
+            ):
+                if file_relative_url is None:
+                    yield item, None
+                else:
+                    yield item, partial(
+                        self.get_content, item, file_relative_url, site_url
+                    )
