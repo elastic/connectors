@@ -500,7 +500,7 @@ async def test_sync_done(job, expected_doc_source_update):
 )
 @patch("connectors.byoc.next_run")
 async def test_connector_next_sync(
-    next_run, sync_now, scheduling_enabled, expected_next_sync, patch_logger
+    next_run, sync_now, scheduling_enabled, expected_next_sync
 ):
     connector_doc = {
         "_id": "1",
@@ -593,7 +593,7 @@ async def test_sync_job_validate_filtering(
 
 
 @pytest.mark.asyncio
-async def test_sync_job_claim(patch_logger):
+async def test_sync_job_claim():
     source = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -611,7 +611,7 @@ async def test_sync_job_claim(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_update_metadata(patch_logger):
+async def test_sync_job_update_metadata():
     source = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -639,7 +639,7 @@ async def test_sync_job_update_metadata(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_done(patch_logger):
+async def test_sync_job_done():
     source = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -657,7 +657,7 @@ async def test_sync_job_done(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_fail(patch_logger):
+async def test_sync_job_fail():
     source = {"_id": "1"}
     message = "something wrong"
     index = Mock()
@@ -676,7 +676,7 @@ async def test_sync_job_fail(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_cancel(patch_logger):
+async def test_sync_job_cancel():
     source = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -695,7 +695,7 @@ async def test_sync_job_cancel(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_suspend(patch_logger):
+async def test_sync_job_suspend():
     source = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -769,7 +769,7 @@ async def test_prepare(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_not_edited(patch_logger):
+async def test_connector_validate_filtering_not_edited():
     index = Mock()
     index.update = AsyncMock()
     validator = Mock()
@@ -783,7 +783,7 @@ async def test_connector_validate_filtering_not_edited(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_invalid(patch_logger):
+async def test_connector_validate_filtering_invalid():
     index = Mock()
     index.update = AsyncMock()
     index.fetch_response_by_id = AsyncMock()
@@ -818,7 +818,7 @@ async def test_connector_validate_filtering_invalid(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_valid(patch_logger):
+async def test_connector_validate_filtering_valid():
     index = Mock()
     index.update = AsyncMock()
     index.fetch_response_by_id = AsyncMock()
@@ -1162,9 +1162,7 @@ def test_nested_get(nested_dict, keys, default, expected):
     ],
 )
 @patch("connectors.byoc.SyncJobIndex.index")
-async def test_create_job(
-    index_method, sync_now, trigger_method, patch_logger, set_env
-):
+async def test_create_job(index_method, sync_now, trigger_method, set_env):
     connector = Mock()
     connector.id = "id"
     connector.index_name = "index_name"
@@ -1190,7 +1188,7 @@ async def test_create_job(
 
 @pytest.mark.asyncio
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
-async def test_pending_jobs(get_all_docs, patch_logger, set_env):
+async def test_pending_jobs(get_all_docs, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
@@ -1223,7 +1221,7 @@ async def test_pending_jobs(get_all_docs, patch_logger, set_env):
 
 @pytest.mark.asyncio
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
-async def test_orphaned_jobs(get_all_docs, patch_logger, set_env):
+async def test_orphaned_jobs(get_all_docs, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
@@ -1242,7 +1240,7 @@ async def test_orphaned_jobs(get_all_docs, patch_logger, set_env):
 
 @pytest.mark.asyncio
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
-async def test_idle_jobs(get_all_docs, patch_logger, set_env):
+async def test_idle_jobs(get_all_docs, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
