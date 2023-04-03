@@ -24,10 +24,15 @@ from connectors.logger import logger
 
 class Field:
     def __init__(
-        self, name, label=None, value="", type="str", depends_on=[], validations=[]
+        self, name, label=None, value="", type="str", depends_on=None, validations=None
     ):
         if label is None:
             label = name
+        if depends_on is None:
+            depends_on = []
+        if validations is None:
+            validations = []
+
         self.name = name
         self.label = label
         self._type = type
@@ -101,7 +106,7 @@ class DataSourceConfiguration:
         return name in self._config
 
     def set_field(
-        self, name, label=None, value="", type="str", depends_on=[], validations=[]
+        self, name, label=None, value="", type="str", depends_on=None, validations=None
     ):
         self._config[name] = Field(name, label, value, type, depends_on, validations)
 

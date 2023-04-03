@@ -213,7 +213,7 @@ def test_get_source_klass_dict():
                     "validations": [
                         {
                             "type": "regex",
-                            "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\.[A-Z|a-z]{2,})+",
+                            "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\\.[A-Z|a-z]{2,})+",
                         },
                     ],
                 }
@@ -223,7 +223,7 @@ def test_get_source_klass_dict():
 )
 async def test_is_valid_when_validations_succeed_returns_true(config):
     c = DataSourceConfiguration(config)
-    assert c.is_valid() == True
+    assert c.is_valid() is True
 
 
 @pytest.mark.asyncio
@@ -332,7 +332,7 @@ async def test_is_valid_when_validations_succeed_returns_true(config):
                     "validations": [
                         {
                             "type": "regex",
-                            "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\.[A-Z|a-z]{2,})+",
+                            "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\\.[A-Z|a-z]{2,})+",
                         },
                     ],
                 }
@@ -342,7 +342,7 @@ async def test_is_valid_when_validations_succeed_returns_true(config):
 )
 async def test_is_valid_when_validations_fail_raises_error(config):
     c = DataSourceConfiguration(config)
-    with pytest.raises(ConfigurableFieldValueError) as e:
+    with pytest.raises(ConfigurableFieldValueError):
         c.is_valid()
 
 
