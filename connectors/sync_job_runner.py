@@ -25,6 +25,27 @@ class JobClaimError(Exception):
     pass
 
 
+class ConnectorNotFoundError(Exception):
+    def __init__(self, connector_id):
+        super().__init__(f"Connector is not found for connector ID {connector_id}.")
+
+
+class ConnectorJobNotFoundError(Exception):
+    def __init__(self, job_id):
+        super().__init__(f"Connector job is not found for job ID {job_id}.")
+
+
+class ConnectorJobCanceledError(Exception):
+    pass
+
+
+class ConnectorJobNotRunningError(Exception):
+    def __init__(self, job_id, status):
+        super().__init__(
+            f"Connector job (ID: {job_id}) is not running but in status of {status}."
+        )
+
+
 class SyncJobRunner:
     """The class to run a sync job.
 
@@ -123,6 +144,7 @@ class SyncJobRunner:
                 self.update_ingestion_stats(JOB_REPORTING_INTERVAL)
             )
             while not self.elastic_server.done():
+                await self.check_job()
                 await asyncio.sleep(JOB_CHECK_INTERVAL)
             fetch_error = self.elastic_server.fetch_error()
             sync_status = (
@@ -131,7 +153,10 @@ class SyncJobRunner:
             await self._sync_done(sync_status=sync_status, sync_error=fetch_error)
         except asyncio.CancelledError:
             await self._sync_done(sync_status=JobStatus.SUSPENDED)
+        except ConnectorJobCanceledError:
+            await self._sync_done(sync_status=JobStatus.CANCELED)
         except Exception as e:
+            logger.critical(e, exc_info=True)
             await self._sync_done(sync_status=JobStatus.ERROR, sync_error=e)
         finally:
             self.running = False
@@ -157,24 +182,28 @@ class SyncJobRunner:
             "indexed_document_count": result.get("indexed_document_count", 0),
             "indexed_document_volume": result.get("indexed_document_volume", 0),
             "deleted_document_count": result.get("deleted_document_count", 0),
-            "total_document_count": await self.connector.document_count(),
         }
 
-        if sync_status == JobStatus.ERROR:
-            await self.sync_job.fail(sync_error, ingestion_stats=ingestion_stats)
-        elif sync_status == JobStatus.SUSPENDED:
-            await self.sync_job.suspend(ingestion_stats=ingestion_stats)
-        elif sync_status == JobStatus.CANCELED:
-            await self.sync_job.cancel(ingestion_stats=ingestion_stats)
-        else:
-            await self.sync_job.done(ingestion_stats=ingestion_stats)
+        if await self.reload_sync_job():
+            if await self.reload_connector():
+                ingestion_stats[
+                    "total_document_count"
+                ] = await self.connector.document_count()
 
-        try:
-            await self.sync_job.reload()
-        except DocumentNotFoundError as e:
-            logger.error(f"Failed to reload sync job {self.job_id}. Error: {e}")
-            self.sync_job = None
-        await self.connector.sync_done(self.sync_job)
+            if sync_status == JobStatus.ERROR:
+                await self.sync_job.fail(sync_error, ingestion_stats=ingestion_stats)
+            elif sync_status == JobStatus.SUSPENDED:
+                await self.sync_job.suspend(ingestion_stats=ingestion_stats)
+            elif sync_status == JobStatus.CANCELED:
+                await self.sync_job.cancel(ingestion_stats=ingestion_stats)
+            else:
+                await self.sync_job.done(ingestion_stats=ingestion_stats)
+
+            await self.reload_sync_job()
+
+        if await self.reload_connector():
+            await self.connector.sync_done(self.sync_job)
+
         logger.info(
             f"[{self.job_id}] Sync done: {ingestion_stats.get('indexed_document_count')} indexed, "
             f"{ingestion_stats.get('deleted_document_count')} deleted. "
@@ -230,6 +259,19 @@ class SyncJobRunner:
             }
             await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
 
+    async def check_job(self):
+        if not await self.reload_connector():
+            raise ConnectorNotFoundError(self.connector_id)
+
+        if not await self.reload_sync_job():
+            raise ConnectorJobNotFoundError(self.job_id)
+
+        if self.sync_job.status == JobStatus.CANCELING:
+            raise ConnectorJobCanceledError
+
+        if self.sync_job.status != JobStatus.IN_PROGRESS:
+            raise ConnectorJobNotRunningError(self.job_id, self.sync_job.status)
+
     async def reload_sync_job(self):
         if self.sync_job is None:
             return False
@@ -239,3 +281,13 @@ class SyncJobRunner:
             logger.error(f"Couldn't find sync job by id {self.job_id}")
             self.sync_job = None
         return self.sync_job is not None
+
+    async def reload_connector(self):
+        if self.connector is None:
+            return False
+        try:
+            await self.connector.reload()
+        except DocumentNotFoundError:
+            logger.error(f"Couldn't find connector by id {self.connector_id}")
+            self.connector = None
+        return self.connector is not None

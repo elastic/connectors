@@ -61,7 +61,7 @@ class ConfluenceClient:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self.is_cloud = self.configuration["is_cloud"]
-        self.host_url = self.configuration["host_url"]
+        self.host_url = self.configuration["confluence_url"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
         self.retry_count = self.configuration["retry_count"]
@@ -84,7 +84,7 @@ class ConfluenceClient:
             return self.session
         if self.is_cloud:
             auth = (
-                self.configuration["service_account_id"],
+                self.configuration["account_email"],
                 self.configuration["api_token"],
             )
         else:
@@ -219,9 +219,9 @@ class ConfluenceDataSource(BaseDataSource):
                 "label": "Confluence Server password",
                 "type": "str",
             },
-            "service_account_id": {
+            "account_email": {
                 "value": "me@example.com",
-                "label": "Confluence Cloud username",
+                "label": "Confluence Cloud account email",
                 "type": "str",
             },
             "api_token": {
@@ -229,9 +229,9 @@ class ConfluenceDataSource(BaseDataSource):
                 "label": "Confluence Cloud API token",
                 "type": "str",
             },
-            "host_url": {
+            "confluence_url": {
                 "value": "http://127.0.0.1:5000",
-                "label": "Confluence host url",
+                "label": "Confluence URL",
                 "type": "str",
             },
             "ssl_enabled": {
@@ -284,9 +284,9 @@ class ConfluenceDataSource(BaseDataSource):
         logger.info("Validating Confluence Configuration...")
 
         connection_fields = (
-            ["host_url", "service_account_id", "api_token"]
+            ["confluence_url", "account_email", "api_token"]
             if self.confluence_client.is_cloud
-            else ["host_url", "username", "password"]
+            else ["confluence_url", "username", "password"]
         )
         default_config = self.get_default_configuration()
 
