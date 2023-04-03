@@ -134,7 +134,7 @@ class DataSourceConfiguration:
 
         if len(validation_errors) > 0:
             raise ConfigurableFieldValueError(
-                f"Field validations: a{'; '.join(validation_errors)}"
+                f"Field validation errors: {'; '.join(validation_errors)}"
             )
 
         return True
