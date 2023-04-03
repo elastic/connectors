@@ -125,7 +125,7 @@ class NASDataSource(BaseDataSource):
             yield {
                 "path": file.path,
                 "size": file_details["allocation_size"].get_value(),
-                "_id": file_details["file_id"].get_value(),
+                "_id": str(file_details["file_id"].get_value()),
                 "created_at": iso_utc(file_details["creation_time"].get_value()),
                 "_timestamp": iso_utc(file_details["change_time"].get_value()),
                 "type": "folder" if file.is_dir() else "file",
