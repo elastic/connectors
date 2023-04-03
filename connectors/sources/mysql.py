@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """MySQL source module responsible to fetch documents from MySQL"""
+import re
 import ssl
 from contextlib import asynccontextmanager
 
@@ -23,12 +24,21 @@ from connectors.sources.generic_database import (
 )
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
+SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN = re.compile(r"`(?:[^`]|``)+`|\w+")
+
 MAX_POOL_SIZE = 10
 DEFAULT_FETCH_SIZE = 50
 RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_SSL_ENABLED = False
 DEFAULT_SSL_CA = ""
+
+
+def parse_tables_string_to_list_of_tables(tables_string):
+    if tables_string is None or len(tables_string) == 0:
+        return []
+
+    return SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN.findall(tables_string)
 
 
 def format_list(list_):
