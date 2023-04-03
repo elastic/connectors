@@ -155,6 +155,16 @@ class MySQLClient:
             connection_pool.close()
             await connection_pool.wait_closed()
 
+    async def ping(self):
+        async with self.with_connection_pool() as connection_pool:
+            try:
+                async with connection_pool.acquire() as connection:
+                    await connection.ping()
+                    logger.info("Successfully connected to the MySQL Server.")
+            except Exception:
+                logger.exception("Error while connecting to the MySQL Server.")
+                raise
+
 
 class MySqlDataSource(BaseDataSource):
     """MySQL"""
@@ -341,16 +351,7 @@ class MySqlDataSource(BaseDataSource):
             )
 
     async def ping(self):
-        """Verify the connection with MySQL server"""
-
-        async with self._mysql_client.with_connection_pool() as connection_pool:
-            try:
-                async with connection_pool.acquire() as connection:
-                    await connection.ping()
-                    logger.info("Successfully connected to the MySQL Server.")
-            except Exception:
-                logger.exception("Error while connecting to the MySQL Server.")
-                raise
+        await self._mysql_client.ping()
 
     async def _connect(self, query, fetch_many=False, **query_kwargs):
         """Executes the passed query on the MySQL server.
