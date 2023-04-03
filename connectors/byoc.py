@@ -29,6 +29,13 @@ SYNC_DISABLED = -1
 JOB_NOT_FOUND_ERROR = "Couldn't find the job"
 UNKNOWN_ERROR = "unknown error"
 
+ALLOWED_INGESTION_STATS_KEYS = (
+    "indexed_document_count",
+    "indexed_document_volume",
+    "deleted_document_count",
+    "total_document_count",
+)
+
 
 class Status(Enum):
     CREATED = "created"
@@ -130,6 +137,15 @@ class ConnectorIndex(ESIndex):
             yield connector
 
 
+def filter_ingestion_stats(ingestion_stats):
+    if ingestion_stats is None:
+        return {}
+
+    return {
+        k: v for (k, v) in ingestion_stats.items() if k in ALLOWED_INGESTION_STATS_KEYS
+    }
+
+
 class SyncJob(ESDocument):
     @property
     def status(self):
@@ -204,6 +220,19 @@ class SyncJob(ESDocument):
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
+    async def update_metadata(self, ingestion_stats=None, connector_metadata=None):
+        ingestion_stats = filter_ingestion_stats(ingestion_stats)
+        if connector_metadata is None:
+            connector_metadata = {}
+
+        doc = {
+            "last_seen": iso_utc(),
+        }
+        doc.update(ingestion_stats)
+        if len(connector_metadata) > 0:
+            doc["metadata"] = connector_metadata
+        await self.index.update(doc_id=self.id, doc=doc)
+
     async def done(self, ingestion_stats=None, connector_metadata=None):
         await self._terminate(
             JobStatus.COMPLETED, None, ingestion_stats, connector_metadata
@@ -227,10 +256,10 @@ class SyncJob(ESDocument):
     async def _terminate(
         self, status, error=None, ingestion_stats=None, connector_metadata=None
     ):
-        if ingestion_stats is None:
-            ingestion_stats = {}
+        ingestion_stats = filter_ingestion_stats(ingestion_stats)
         if connector_metadata is None:
             connector_metadata = {}
+
         doc = {
             "last_seen": iso_utc(),
             "status": status.value,
