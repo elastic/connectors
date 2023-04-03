@@ -58,8 +58,14 @@ class ESIndex(ESClient):
         resp = await self.client.index(index=self.index_name, document=doc)
         return resp["_id"]
 
-    async def update(self, doc_id, doc):
-        await self.client.update(index=self.index_name, id=doc_id, doc=doc)
+    async def update(self, doc_id, doc, if_seq_no=None, if_primary_term=None):
+        await self.client.update(
+            index=self.index_name,
+            id=doc_id,
+            doc=doc,
+            if_seq_no=if_seq_no,
+            if_primary_term=if_primary_term,
+        )
 
     async def get_all_docs(self, query=None, page_size=DEFAULT_PAGE_SIZE):
         """
