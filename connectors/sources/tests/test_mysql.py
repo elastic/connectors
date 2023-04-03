@@ -17,6 +17,7 @@ from connectors.sources.mysql import (
     MySQLAdvancedRulesValidator,
     MySqlDataSource,
     NoDatabaseConfiguredError,
+    parse_tables_string_to_list_of_tables,
 )
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
@@ -555,3 +556,21 @@ async def test_validate_tables_accessible_when_not_accessible_then_error_raised(
 
     with pytest.raises(ConfigurableFieldValueError):
         await source._validate_tables_accessible(cursor)
+
+
+@pytest.mark.parametrize(
+    "tables_string, expected_tables_list",
+    [
+        (None, []),
+        ("", []),
+        ("table_1", ["table_1"]),
+        ("table_1, ", ["table_1"]),
+        ("`table_1,`,", ["`table_1,`"]),
+        ("table_1, table_2", ["table_1", "table_2"]),
+        ("`table_1,abc`", ["`table_1,abc`"]),
+        ("`table_1,abc`, table_2", ["`table_1,abc`", "table_2"]),
+        ("`table_1,abc`, `table_2,def`", ["`table_1,abc`", "`table_2,def`"]),
+    ],
+)
+def test_parse_tables_string_to_list(tables_string, expected_tables_list):
+    assert parse_tables_string_to_list_of_tables(tables_string) == expected_tables_list
