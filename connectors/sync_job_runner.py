@@ -197,7 +197,7 @@ class SyncJobRunner:
         async for doc, lazy_download in self.data_provider.get_docs(
             filtering=self.sync_job.filtering
         ):
-            doc_id = doc.get("_id", "")
+            doc_id = str(doc.get("_id", ""))
             doc_id_size = len(doc_id.encode("utf-8"))
 
             if doc_id_size > ES_ID_SIZE_LIMIT:
