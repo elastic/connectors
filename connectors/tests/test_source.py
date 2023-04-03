@@ -274,7 +274,7 @@ def test_get_source_klass_dict():
         ),
     ],
 )
-async def test_check_valid_when_validations_succeed_returns_true(config):
+async def test_check_valid_when_validations_succeed_no_errors_raised(config):
     c = DataSourceConfiguration(config)
     c.check_valid()
 
