@@ -339,7 +339,9 @@ class JiraDataSource(BaseDataSource):
                 f"Configured keys: {empty_connection_fields} can't be empty."
             )
 
-        if self.jira_client.ssl_enabled and self.jira_client.certificate == "":
+        if self.jira_client.ssl_enabled and (
+            self.jira_client.certificate == "" or self.jira_client.certificate is None
+        ):
             raise ConfigurableFieldValueError("SSL certificate must be configured.")
 
         if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:

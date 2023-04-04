@@ -430,7 +430,7 @@ async def test_verify_projects_with_unavailable_project_keys():
 
 
 @pytest.mark.asyncio
-async def test_put_issue(patch_logger):
+async def test_put_issue():
     """Test _put_issue method"""
     # Setup
     source = create_source(JiraDataSource)
@@ -444,7 +444,7 @@ async def test_put_issue(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_put_attachment_positive(patch_logger):
+async def test_put_attachment_positive():
     """Test _put_attachment method"""
     # Setup
     source = create_source(JiraDataSource)
