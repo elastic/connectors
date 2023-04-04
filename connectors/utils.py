@@ -483,13 +483,18 @@ def get_pem_format(key, max_split=-1):
 
 TIKA = [
     "curl",
-    "-F",
-    "upload=@{filename}",
+    "-X",
+    "PUT",
+    "http://localhost:9998/tika",
+    "--header",
+    '"fetcherName: fsf"',
     "--header",
     '"Accept: text/plain"',
-    "http://localhost:9998/tika/form",
+    "--header",
+    '"fetchKey: /files/{filename}"',
 ]
 
 
 def send_to_tika(filename):
+    filename = os.path.basename(filename)
     return subprocess.check_output(" ".join(TIKA), shell=True)

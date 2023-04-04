@@ -484,7 +484,8 @@ class SharepointDataSource(BaseDataSource):
 
         source_file_name = ""
 
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+        async with NamedTemporaryFile(mode="wb", delete=False, dir=DROP_DIR) as async_buffer:
+
             async for response in self._api_call(
                 url_name=ATTACHMENT,
                 host_url=self.host_url,

@@ -1,0 +1,15 @@
+<properties>
+  <fetchers>
+    <fetcher class="org.apache.tika.pipes.fetcher.fs.FileSystemFetcher">
+      <params>
+        <name>fsf</name>
+        <basePath>/files</basePath>
+      </params>
+    </fetcher>
+  </fetchers>
+  <server>
+    <params>
+      <enableUnsecureFeatures>true</enableUnsecureFeatures>
+    </params>
+  </server>
+</properties>
