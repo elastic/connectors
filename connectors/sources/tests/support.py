@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from connectors.source import DataSourceConfiguration, Defaults
+from connectors.source import DataSourceConfiguration, DEFAULT_CONFIGURATION
 
 
 def create_source(klass, **extras):
@@ -12,7 +12,7 @@ def create_source(klass, **extras):
         if k in config:
             config[k].update({"value": v})
         else:
-            config[k] = Defaults.CONFIGURATION.value.copy() | {"value": v}
+            config[k] = DEFAULT_CONFIGURATION.copy() | {"value": v}
 
     return klass(configuration=DataSourceConfiguration(config))
 

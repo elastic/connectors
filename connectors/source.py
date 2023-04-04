@@ -23,22 +23,21 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 
 
-class Defaults(Enum):
-    CONFIGURATION = {
-        "default_value": None,
-        "depends_on": [],
-        "display": "text",
-        "label": "",
-        "options": [],
-        "order": 1,
-        "required": True,
-        "sensitive": False,
-        "tooltip": None,
-        "type": "str",
-        "ui_restrictions": [],
-        "validations": [],
-        "value": "",
-    }
+DEFAULT_CONFIGURATION = {
+    "default_value": None,
+    "depends_on": [],
+    "display": "text",
+    "label": "",
+    "options": [],
+    "order": 1,
+    "required": True,
+    "sensitive": False,
+    "tooltip": None,
+    "type": "str",
+    "ui_restrictions": [],
+    "validations": [],
+    "value": "",
+}
 
 
 class ValidationTypes(Enum):
@@ -315,7 +314,7 @@ class BaseDataSource:
         res = {}
 
         for config_name, fields in cls.get_default_configuration().items():
-            entry = Defaults.CONFIGURATION.value.copy()
+            entry = DEFAULT_CONFIGURATION.copy()
 
             for field_property, value in fields.items():
                 if field_property == "label":
