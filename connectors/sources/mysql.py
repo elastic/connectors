@@ -117,17 +117,18 @@ class MySQLClient:
         password,
         ssl_enabled,
         ssl_certificate,
-        db=None,
+        database=None,
         max_pool_size=MAX_POOL_SIZE,
     ):
         self.host = host
         self.port = port
         self.user = user
         self.password = password
-        self.db = db
+        self.database = database
         self.max_pool_size = max_pool_size
         self.ssl_enabled = ssl_enabled
         self.ssl_certificate = ssl_certificate
+        self.queries = MySQLQueries(self.database)
 
     @asynccontextmanager
     async def with_connection_pool(self):
@@ -136,7 +137,7 @@ class MySQLClient:
             "port": int(self.port),
             "user": self.user,
             "password": self.password,
-            "db": self.db,
+            "db": self.database,
             "maxsize": self.max_pool_size,
             "ssl": ssl_context(certificate=self.ssl_certificate)
             if self.ssl_enabled
@@ -154,6 +155,18 @@ class MySQLClient:
         finally:
             connection_pool.close()
             await connection_pool.wait_closed()
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_all_table_names(self):
+        async with self.with_connection_pool() as connection_pool:
+            async with connection_pool.acquire() as connection:
+                async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+                    await cursor.execute(self.queries.all_tables())
+                    return list(map(lambda table: table[0], await cursor.fetchall()))
 
     async def ping(self):
         async with self.with_connection_pool() as connection_pool:
@@ -276,6 +289,7 @@ class MySqlDataSource(BaseDataSource):
             port=self.configuration["port"],
             user=self.configuration["user"],
             password=self.configuration["password"],
+            database=self.configuration["database"],
             ssl_enabled=self.configuration["ssl_enabled"],
             ssl_certificate=self.configuration["ssl_ca"],
         )
