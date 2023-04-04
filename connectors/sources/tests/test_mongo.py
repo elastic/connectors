@@ -146,7 +146,7 @@ def build_resp():
     "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
 )
 async def test_get_docs(*args):
-    source = create_source(MongoDataSource)
+    source = create_connector()
     num = 0
     async for (doc, dl) in source.get_docs():
         assert doc["id"] in ("one", "two")
