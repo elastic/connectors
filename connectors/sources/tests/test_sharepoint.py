@@ -192,7 +192,7 @@ def test_prepare_drive_items_doc(patch_logger):
     }
 
     # Execute
-    target_response = source.format_document(
+    target_response = source.sharepoint_client.format_document(
         item=list_items, document_type=document_type, item_type="File"
     )
     # Assert
@@ -227,7 +227,7 @@ def test_prepare_list_items_doc(patch_logger):
     }
 
     # Execute
-    target_response = source.format_document(
+    target_response = source.sharepoint_client.format_document(
         item=list_items,
         document_type=document_type,
         item_type=server_relative_url,
@@ -261,7 +261,7 @@ def test_prepare_sites_doc(patch_logger):
     }
 
     # Execute
-    target_response = source.format_document(
+    target_response = source.sharepoint_client.format_document(
         item=list_items, document_type=document_type
     )
     # Assert
@@ -275,11 +275,13 @@ async def test_get_sites_when_no_site_available(patch_logger):
     source = create_source(SharepointDataSource)
     api_response = []
     # Execute
-    source.sharepoint_client.invoke_get_call = Mock(
+    source.sharepoint_client.invoke_site_and_list_call = Mock(
         return_value=AsyncIter(api_response)
     )
     actual_response = None
-    async for item in source.get_sites(site_url="sites/collection1/ctest"):
+    async for item in source.sharepoint_client.get_sites(
+        site_url="sites/collection1/ctest"
+    ):
         actual_response = item
 
     # Assert
@@ -347,7 +349,7 @@ async def test_get_list_items(patch_logger):
         },
     ]
     attachment_response = {"UniqueId": "1"}
-    source.sharepoint_client.invoke_get_call = Mock(
+    source.sharepoint_client.invoke_list_and_drive_call = Mock(
         return_value=AsyncIter(api_response)
     )
     source.sharepoint_client.api_call = Mock(
@@ -355,7 +357,7 @@ async def test_get_list_items(patch_logger):
     )
     expected_response = []
     # Execute
-    async for item, _ in source.get_list_items(
+    async for item, _ in source.sharepoint_client.get_list_items(
         list_id="620070a1-ee50-4585-b6a7-0f6210b1a69d",
         site_url="/sites/enterprise/ctest",
         server_relative_url="/sites/enterprise/site1",
@@ -425,12 +427,12 @@ async def test_get_drive_items(patch_logger):
         ),
     ]
 
-    source.sharepoint_client.invoke_get_call = Mock(
+    source.sharepoint_client.invoke_list_and_drive_call = Mock(
         return_value=AsyncIter(api_response)
     )
     expected_response = []
     # Execute
-    async for item in source.get_drive_items(
+    async for item in source.sharepoint_client.get_drive_items(
         list_id="620070a1-ee50-4585-b6a7-0f6210b1a69d",
         site_url="/sites/enterprise/ctest",
         server_relative_url=None,
@@ -465,7 +467,9 @@ async def test_get_lists_and_items(patch_logger):
             "RootFolder": {"ServerRelativeUrl": "/site"},
         },
     ]
-    source.sharepoint_client.invoke_get_call = Mock(return_value=AsyncIter(lists))
+    source.sharepoint_client.invoke_site_and_list_call = Mock(
+        return_value=AsyncIter(lists)
+    )
     drive_item = [
         {
             "_id": 1,
@@ -542,15 +546,17 @@ async def test_get_lists_and_items(patch_logger):
             None,
         ),
     ]
-    source.get_drive_items = Mock(
+    source.sharepoint_client.get_drive_items = Mock(
         return_value=async_native_coroutine_generator((drive_item, None))
     )
-    source.get_list_items = Mock(
+    source.sharepoint_client.get_list_items = Mock(
         return_value=async_native_coroutine_generator((list_item, None))
     )
     actual_response = []
     # Execute
-    async for items in source.get_lists_and_items(site="/sites/enterprise/sptest"):
+    async for items in source.sharepoint_client.get_lists_and_items(
+        site="/sites/enterprise/sptest"
+    ):
         actual_response.append(items)
     # Assert
     assert actual_response == expected_response
@@ -574,9 +580,13 @@ async def test_get_docs(patch_logger):
         "_timestamp": "2022-06-20T10:04:03Z",
     }
     actual_response = []
-    source.get_sites = Mock(return_value=AsyncIter(item_content_response))
-    source.get_lists_and_items = Mock(return_value=AsyncIter(([], None)))
-    source.get_content = Mock(return_value=None)
+    source.sharepoint_client.get_sites = Mock(
+        return_value=AsyncIter(item_content_response)
+    )
+    source.sharepoint_client.get_lists_and_items = Mock(
+        return_value=AsyncIter(([], None))
+    )
+    source.sharepoint_client.get_content = Mock(return_value=None)
     # Execute
     async for document, _ in source.get_docs():
         actual_response.append(document)
@@ -591,7 +601,12 @@ async def test_get_docs_when_no_site_available(patch_logger):
     # Setup
     source = create_source(SharepointDataSource)
     actual_response = []
-    source.sharepoint_client.invoke_get_call = Mock(return_value=AsyncIter([]))
+    source.sharepoint_client.invoke_list_and_drive_call = Mock(
+        return_value=AsyncIter([])
+    )
+    source.sharepoint_client.invoke_site_and_list_call = Mock(
+        return_value=AsyncIter([])
+    )
     # Execute
     async for document, _ in source.get_docs():
         actual_response.append(document)
@@ -625,7 +640,7 @@ async def test_get_content(patch_logger):
         return_value=AsyncIter(bytes(RESPONSE_CONTENT, "utf-8")),
     ):
         # Execute
-        response_content = await source.get_content(
+        response_content = await source.sharepoint_client.get_content(
             document=EXPECTED_ATTACHMENT,
             file_relative_url="abc.com",
             site_url="/site",
@@ -651,7 +666,7 @@ async def test_get_content_when_size_is_bigger(patch_logger):
 
     source = create_source(SharepointDataSource)
     # Execute
-    response_content = await source.get_content(
+    response_content = await source.sharepoint_client.get_content(
         document=document, file_relative_url="abc.com", site_url="/site", doit=True
     )
 
@@ -671,7 +686,7 @@ async def test_get_content_when_doit_is_none(patch_logger):
     }
     source = create_source(SharepointDataSource)
     # Execute
-    response_content = await source.get_content(
+    response_content = await source.sharepoint_client.get_content(
         document=document, file_relative_url="abc.com", site_url="/site"
     )
 
@@ -680,8 +695,8 @@ async def test_get_content_when_doit_is_none(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_invoke_call_with_list(patch_logger):
-    """Test get invoke call when param name is lists"""
+async def test_get_invoke_call_with_sites(patch_logger):
+    """Test get invoke call for sites"""
     # Setup
     source = create_source(SharepointDataSource)
     get_response = {
@@ -699,7 +714,44 @@ async def test_get_invoke_call_with_list(patch_logger):
     actual_response = []
 
     # Execute
-    async for response in source.sharepoint_client.invoke_get_call(
+    async for response in source.sharepoint_client.invoke_site_and_list_call(
+        site_url="/sites/collection1/_api/web/webs", param_name="sites"
+    ):
+        actual_response.extend(response)
+
+    # Assert
+    assert [actual_response] == [
+        [
+            {
+                "Id": "111111122222222-0fd8-471c-96aa-c75f71293131",
+                "ServerRelativeUrl": "/sites/collection1",
+                "Title": "ctest",
+            }
+        ]
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_invoke_call_with_list(patch_logger):
+    """Test get invoke call for list"""
+    # Setup
+    source = create_source(SharepointDataSource)
+    get_response = {
+        "value": [
+            {
+                "Id": "111111122222222-0fd8-471c-96aa-c75f71293131",
+                "ServerRelativeUrl": "/sites/collection1",
+                "Title": "ctest",
+            }
+        ]
+    }
+    source.sharepoint_client.api_call = Mock(
+        return_value=async_native_coroutine_generator(get_response)
+    )
+    actual_response = []
+
+    # Execute
+    async for response in source.sharepoint_client.invoke_site_and_list_call(
         site_url="/sites/collection1/_api/web/webs", param_name="lists"
     ):
         actual_response.extend(response)
@@ -718,7 +770,7 @@ async def test_get_invoke_call_with_list(patch_logger):
 
 @pytest.mark.asyncio
 async def test_get_invoke_call_with_drive_items(patch_logger):
-    """Test get invoke call when param name is drive_item"""
+    """Test get invoke call for drive item"""
     # Setup
     source = create_source(SharepointDataSource)
     get_response = {
@@ -735,8 +787,48 @@ async def test_get_invoke_call_with_drive_items(patch_logger):
         return_value=async_native_coroutine_generator(get_response)
     )
     # Execute
-    async for response in source.sharepoint_client.invoke_get_call(
-        site_url="/sites/collection1/_api/web/webs", param_name="drive_item"
+    async for response in source.sharepoint_client.invoke_list_and_drive_call(
+        site_url="/sites/collection1/_api/web/webs",
+        list_id="123abc",
+        param_name="drive_items",
+    ):
+        actual_response.append(response)
+
+    # Assert
+    assert actual_response == [
+        [
+            {
+                "Id": "111111122222222-0fd8-471c-96aa-c75f71293131",
+                "ServerRelativeUrl": "/sites/collection1",
+                "Title": "ctest",
+            }
+        ]
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_invoke_call_with_list_items(patch_logger):
+    """Test get invoke call when for list item"""
+    # Setup
+    source = create_source(SharepointDataSource)
+    get_response = {
+        "value": [
+            {
+                "Id": "111111122222222-0fd8-471c-96aa-c75f71293131",
+                "ServerRelativeUrl": "/sites/collection1",
+                "Title": "ctest",
+            }
+        ]
+    }
+    actual_response = []
+    source.sharepoint_client.api_call = Mock(
+        return_value=async_native_coroutine_generator(get_response)
+    )
+    # Execute
+    async for response in source.sharepoint_client.invoke_list_and_drive_call(
+        site_url="/sites/collection1/_api/web/webs",
+        list_id="123abc",
+        param_name="list_items",
     ):
         actual_response.append(response)
 
