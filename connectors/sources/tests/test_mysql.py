@@ -224,13 +224,13 @@ async def test_client_get_column_names(patch_connection_pool):
     column_1 = "column_1"
     column_2 = "column_2"
 
-    description = [
-        ("column_1",),
-        ("column_2",),
+    description_response = [
+        (column_1,),
+        (column_2,),
     ]
 
     mock_cursor = MagicMock(spec=aiomysql.Cursor)
-    mock_cursor.description = description
+    mock_cursor.description = description_response
     mock_cursor.__aenter__.return_value = mock_cursor
 
     mock_connection = MagicMock(spec=aiomysql.Connection)
