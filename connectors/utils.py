@@ -492,4 +492,4 @@ TIKA = [
 
 
 def send_to_tika(filename):
-    return subprocess.check_output(TIKA)
+    return subprocess.check_output(" ".join(TIKA), shell=True)
