@@ -15,6 +15,7 @@ from connectors.byoc import (
     ConnectorIndex,
     ConnectorUpdateError,
     DataSourceError,
+    JobTriggerMethod,
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
     Status,
@@ -96,7 +97,14 @@ class JobSchedulingService(BaseService):
         if not await self._should_sync(connector):
             return
 
-        await self.sync_job_index.create(connector)
+        trigger_method = (
+            JobTriggerMethod.ON_DEMAND
+            if connector.sync_now
+            else JobTriggerMethod.SCHEDULED
+        )
+        await self.sync_job_index.create(
+            connector=connector, trigger_method=trigger_method
+        )
         if connector.sync_now:
             await connector.reset_sync_now_flag()
 
