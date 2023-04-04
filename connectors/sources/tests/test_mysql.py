@@ -219,14 +219,14 @@ async def test_close_when_source_setup_correctly_does_not_raise_errors():
 
 
 @pytest.mark.asyncio
-async def test_ping(patch_logger, patch_connection_pool):
+async def test_ping(patch_connection_pool):
     source = await setup_mysql_source(MySqlDataSource)
 
     await source.ping()
 
 
 @pytest.mark.asyncio
-async def test_ping_negative(patch_logger):
+async def test_ping_negative():
     source = create_source(MySqlDataSource)
 
     mock_response = asyncio.Future()
@@ -240,9 +240,7 @@ async def test_ping_negative(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_connect_with_retry(
-    patch_logger, patch_connection_pool, patch_default_wait_multiplier
-):
+async def test_connect_with_retry(patch_connection_pool, patch_default_wait_multiplier):
     source = await setup_mysql_source(is_connection_lost=True)
 
     streamer = source._connect(query="select * from database.table", fetch_many=True)

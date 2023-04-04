@@ -15,43 +15,28 @@ from connectors.byoc import (
     ConnectorIndex,
     ConnectorUpdateError,
     DataSourceError,
-    JobStatus,
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
     Status,
     SyncJobIndex,
 )
-from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass_dict
-from connectors.sync_job_runner import SyncJobRunner
-from connectors.utils import ConcurrentTasks
-
-DEFAULT_MAX_CONCURRENT_SYNCS = 1
 
 
 class JobSchedulingService(BaseService):
-    name = "poll"
+    name = "schedule"
 
     def __init__(self, config):
         super().__init__(config)
         self.idling = self.service_config["idling"]
         self.heartbeat_interval = self.service_config["heartbeat"]
-        self.concurrent_syncs = self.service_config.get(
-            "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
-        )
         self.source_klass_dict = get_source_klass_dict(config)
         self.connector_index = None
         self.sync_job_index = None
-        self.syncs = None
 
-    def stop(self):
-        super().stop()
-        if self.syncs is not None:
-            self.syncs.cancel()
-
-    async def _sync(self, connector):
+    async def _schedule(self, connector):
         if self.running is False:
             logger.debug(
                 f"Skipping run for {connector.id} because service is terminating"
@@ -111,21 +96,9 @@ class JobSchedulingService(BaseService):
         if not await self._should_sync(connector):
             return
 
-        job_id = await self.sync_job_index.create(connector)
+        await self.sync_job_index.create(connector)
         if connector.sync_now:
             await connector.reset_sync_now_flag()
-        try:
-            sync_job = await self.sync_job_index.fetch_by_id(job_id)
-        except DocumentNotFoundError:
-            logger.error(f"Couldn't load sync job by id {job_id}")
-            return
-        sync_job_runner = SyncJobRunner(
-            source_klass=source_klass,
-            sync_job=sync_job,
-            connector=connector,
-            es_config=self.es_config,
-        )
-        await self.syncs.put(sync_job_runner.execute)
 
     async def _run(self):
         """Main event loop."""
@@ -149,23 +122,17 @@ class JobSchedulingService(BaseService):
 
         try:
             while self.running:
-                # creating a pool of task for every round
-                self.syncs = ConcurrentTasks(max_concurrency=self.concurrent_syncs)
-
                 try:
                     logger.debug(f"Polling every {self.idling} seconds")
                     async for connector in self.connector_index.supported_connectors(
                         native_service_types=native_service_types,
                         connector_ids=connector_ids,
                     ):
-                        await self._sync(connector)
+                        await self._schedule(connector)
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
-                finally:
-                    await self.syncs.join()
 
-                self.syncs = None
                 # Immediately break instead of sleeping
                 if not self.running:
                     break
@@ -186,10 +153,6 @@ class JobSchedulingService(BaseService):
             if next_sync == SYNC_DISABLED:
                 logger.debug(f"Scheduling is disabled for connector {connector.id}")
                 return False
-            # Then we check if we need to restart SUSPENDED job
-            if connector.last_sync_status == JobStatus.SUSPENDED:
-                logger.debug("Restarting sync after suspension")
-                return True
             # And only then we check if we need to run sync right now or not
             if next_sync - self.idling > 0:
                 logger.debug(
