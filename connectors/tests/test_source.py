@@ -279,7 +279,7 @@ def test_get_source_klass_dict():
                 "string_field": {
                     "type": "str",
                     "required": False,
-                    "value": "foo",
+                    "value": "",
                     "validations": [],
                 }
             }
