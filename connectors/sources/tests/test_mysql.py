@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-import ssl
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import aiomysql
@@ -15,8 +14,9 @@ from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.mysql import (
     MySQLAdvancedRulesValidator,
+    MySQLClient,
     MySqlDataSource,
-    NoDatabaseConfiguredError,
+    parse_tables_string_to_list_of_tables,
 )
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
@@ -220,31 +220,31 @@ async def test_close_when_source_setup_correctly_does_not_raise_errors():
 
 
 @pytest.mark.asyncio
-async def test_ping(patch_logger, patch_connection_pool):
-    source = await setup_mysql_source(MySqlDataSource)
+async def test_client_ping(patch_logger, patch_connection_pool):
+    client = await setup_mysql_client()
 
-    await source.ping()
+    await client.ping()
 
 
 @pytest.mark.asyncio
-async def test_ping_negative(patch_logger):
-    source = create_source(MySqlDataSource)
+async def test_client_ping_negative(patch_logger):
+    client = await setup_mysql_client()
 
     mock_response = asyncio.Future()
     mock_response.set_result(Mock())
 
-    source.connection_pool = await mock_response
+    client.connection_pool = await mock_response
 
     with patch.object(aiomysql, "create_pool", return_value=mock_response):
         with pytest.raises(Exception):
-            await source.ping()
+            await client.ping()
 
 
 @pytest.mark.asyncio
 async def test_connect_with_retry(
     patch_logger, patch_connection_pool, patch_default_wait_multiplier
 ):
-    source = await setup_mysql_source(is_connection_lost=True)
+    source = await setup_mysql_source()
 
     streamer = source._connect(query="select * from database.table", fetch_many=True)
 
@@ -255,76 +255,73 @@ async def test_connect_with_retry(
 
 @pytest.mark.asyncio
 async def test_fetch_documents(patch_connection_pool):
+    last_update_time = "2023-01-18 17:18:56"
+    primary_key_col = "pk"
+    column = "column"
+
+    document = {
+        "Table": "table_name",
+        "_id": "table_name_",
+        "_timestamp": last_update_time,
+        f"table_name_{column}": "table1",
+    }
+
     source = await setup_mysql_source(DATABASE)
+    source._get_primary_key_columns = AsyncMock(return_value=[primary_key_col])
+    source._connect = AsyncIterator([[[last_update_time]], [column], document])
 
     query = "select * from table"
 
-    response = source._connect(query)
-
-    patch("source._connect", return_value=response)
-
     document_list = []
-    async for document in source.fetch_documents(table="table_name"):
+    async for document in source.fetch_documents(table="table_name", query=query):
         document_list.append(document)
 
-    assert {
-        "Database": f"{DATABASE}",
-        "Table": "table_name",
-        "_id": f"{DATABASE}_table_name_",
-        "_timestamp": "table1",
-        f"{DATABASE}_table_name_Database": "table1",
-    } in document_list
+    assert document in document_list
 
 
 @pytest.mark.asyncio
 async def test_fetch_rows_from_tables(patch_connection_pool):
+    document = {"_id": 1}
+
     source = await setup_mysql_source()
-
-    query = "select * from table"
-
-    response = source._connect(query)
-
-    patch("source._connect", return_value=response)
+    source.fetch_rows_for_table = AsyncIterator([document])
 
     async for row in source.fetch_rows_from_tables("table"):
         assert "_id" in row
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_empty_db_fields_raises_error():
-    source = await setup_mysql_source("")
-
-    with pytest.raises(NoDatabaseConfiguredError):
-        async for doc, _ in source.get_docs():
-            pass
-
-
-@pytest.mark.asyncio
 async def test_get_docs(patch_connection_pool):
     source = await setup_mysql_source(DATABASE)
 
-    source.fetch_rows_from_tables = MagicMock(
-        return_value=AsyncIterator([{"a": 1, "b": 2}])
-    )
+    source.get_tables_to_fetch = AsyncMock(return_value=["table"])
+    source.fetch_rows_from_tables = AsyncIterator([{"a": 1, "b": 2}])
 
     async for doc, _ in source.get_docs():
         assert doc == {"a": 1, "b": 2}
 
 
-async def setup_mysql_source(database="", is_connection_lost=False):
+async def setup_mysql_client():
+    client = MySQLClient(
+        host="host",
+        port=123,
+        user="user",
+        password="password",
+        ssl_enabled=False,
+        ssl_certificate="",
+    )
+
+    return client
+
+
+async def setup_mysql_source(database=""):
     source = create_source(MySqlDataSource)
     source.configuration.set_field(
         name="database", label="Database", value=database, type="str"
     )
 
     source.database = database
-
-    connection_pool = await mock_mysql_response()
-    connection_pool.acquire = Connection
-    connection_pool.acquire.cursor = Cursor
-    connection_pool.acquire.cursor.is_connection_lost = is_connection_lost
-
-    patch.object(source, "_get_connection_pool", connection_pool)
+    source._mysql_client = Mock()
 
     return source
 
@@ -406,15 +403,6 @@ async def test_validate_config_when_port_has_wrong_type_then_raise_error():
 
     with pytest.raises(ConfigurableFieldValueError):
         await source.validate_config()
-
-
-def test_ssl_context():
-    """This function test _ssl_context with dummy certificate"""
-    certificate = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
-    source = create_source(MySqlDataSource)
-
-    with patch.object(ssl, "create_default_context", return_value=MockSsl()):
-        source._ssl_context(certificate=certificate)
 
 
 @pytest.mark.parametrize(
@@ -555,3 +543,64 @@ async def test_validate_tables_accessible_when_not_accessible_then_error_raised(
 
     with pytest.raises(ConfigurableFieldValueError):
         await source._validate_tables_accessible(cursor)
+
+
+@pytest.mark.parametrize(
+    "tables_string, expected_tables_list",
+    [
+        (None, []),
+        ("", []),
+        ("table_1", ["table_1"]),
+        ("table_1, ", ["table_1"]),
+        ("`table_1,`,", ["`table_1,`"]),
+        ("table_1, table_2", ["table_1", "table_2"]),
+        ("`table_1,abc`", ["`table_1,abc`"]),
+        ("`table_1,abc`, table_2", ["`table_1,abc`", "table_2"]),
+        ("`table_1,abc`, `table_2,def`", ["`table_1,abc`", "`table_2,def`"]),
+    ],
+)
+def test_parse_tables_string_to_list(tables_string, expected_tables_list):
+    assert parse_tables_string_to_list_of_tables(tables_string) == expected_tables_list
+
+
+@pytest.mark.parametrize(
+    "primary_key_tuples, expected_primary_key_columns",
+    [
+        ([], []),
+        ([("id",)], [f"{TABLE_ONE}_id"]),
+        (
+            [("group",), ("class",), ("name",)],
+            [
+                f"{TABLE_ONE}_group",
+                f"{TABLE_ONE}_class",
+                f"{TABLE_ONE}_name",
+            ],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_primary_key_columns(
+    primary_key_tuples, expected_primary_key_columns
+):
+    source = create_source(MySqlDataSource)
+    source._connect = AsyncIterator([primary_key_tuples])
+
+    primary_key_columns = await source._get_primary_key_columns(TABLE_ONE)
+
+    assert primary_key_columns == expected_primary_key_columns
+
+
+@pytest.mark.parametrize(
+    "row, primary_key_columns, expected_id",
+    [
+        ({"key_1": 1, "key_2": 2}, ["key_1"], f"{TABLE_ONE}_1_"),
+        ({"key_1": 1, "key_2": 2}, ["key_1", "key_2"], f"{TABLE_ONE}_1_2_"),
+        ({"key_1": 1, "key_2": 2}, ["key_1", "key_3"], f"{TABLE_ONE}_1_"),
+    ],
+)
+def test_generate_id(row, primary_key_columns, expected_id):
+    source = create_source(MySqlDataSource)
+
+    row_id = source._generate_id(TABLE_ONE, row, primary_key_columns)
+
+    assert row_id == expected_id

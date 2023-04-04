@@ -49,7 +49,7 @@ async def test_create_engine_in_thin_mode(mock_fun):
 
 
 @pytest.mark.asyncio
-async def test_get_docs_oracle(patch_logger):
+async def test_get_docs_oracle():
     # Setup
     source = create_source(OracleDataSource)
 

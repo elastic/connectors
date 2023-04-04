@@ -73,7 +73,6 @@ async def test_cleanup_jobs(
     idle_jobs,
     delete_indices,
     delete_jobs,
-    patch_logger,
 ):
     existing_index_name = "foo"
     to_be_deleted_index_name = "bar"

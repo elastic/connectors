@@ -82,7 +82,7 @@ async def test_es_client_auth_error(mock_responses, patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_es_client_no_server(patch_logger):
+async def test_es_client_no_server():
     # if we can't reach the server, we need to catch it cleanly
     config = {
         "username": "elastic",

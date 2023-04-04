@@ -66,7 +66,7 @@ def test_invalid_names():
             validate_index_name(name)
 
 
-def test_mem_queue_speed(patch_logger):
+def test_mem_queue_speed():
     def mem_queue():
         import asyncio
 
@@ -103,7 +103,7 @@ def test_mem_queue_speed(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_mem_queue_race(patch_logger):
+async def test_mem_queue_race():
     item = "small stuff"
     queue = MemQueue(
         maxmemsize=get_size(item) * 2 + 1, refresh_interval=0.01, refresh_timeout=1
@@ -134,7 +134,7 @@ async def test_mem_queue_race(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_mem_queue(patch_logger):
+async def test_mem_queue():
     queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=0.1)
     await queue.put("small stuff")
 
@@ -168,7 +168,7 @@ async def test_mem_queue(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_mem_queue_too_large_item(patch_logger):
+async def test_mem_queue_too_large_item():
     queue = MemQueue(maxmemsize=10, refresh_interval=0, refresh_timeout=1)
 
     with pytest.raises(asyncio.QueueFull) as e:
@@ -184,7 +184,7 @@ def test_get_base64_value():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runner(patch_logger):
+async def test_concurrent_runner():
     results = []
 
     def _results_callback(result):
@@ -203,7 +203,7 @@ async def test_concurrent_runner(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runner_fails(patch_logger):
+async def test_concurrent_runner_fails():
     results = []
 
     def _results_callback(result):
@@ -226,7 +226,7 @@ async def test_concurrent_runner_fails(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runner_high_concurrency(patch_logger):
+async def test_concurrent_runner_high_concurrency():
     results = []
 
     def _results_callback(result):

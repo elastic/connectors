@@ -18,7 +18,7 @@ index_name = "fake_index"
 
 
 @pytest.mark.asyncio
-async def test_es_index_create_object_error(mock_responses, patch_logger):
+async def test_es_index_create_object_error(mock_responses):
     index = ESIndex(index_name, config)
     mock_responses.post(
         f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
@@ -144,8 +144,8 @@ async def test_index(mock_responses):
         payload={"_id": doc_id},
     )
 
-    indexed_id = await index.index({})
-    assert indexed_id == doc_id
+    resp = await index.index({})
+    assert resp["_id"] == doc_id
 
     await index.close()
 
