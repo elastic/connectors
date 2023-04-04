@@ -254,7 +254,7 @@ def test_get_source_klass_dict():
             }
         ),
         (
-            # if dependencies are not met it should skip validation (is_valid == True)
+            # if dependencies are not met it should skip validation
             {
                 "email": {
                     "type": "str",
@@ -274,9 +274,9 @@ def test_get_source_klass_dict():
         ),
     ],
 )
-async def test_is_valid_when_validations_succeed_returns_true(config):
+async def test_check_valid_when_validations_succeed_no_errors_raised(config):
     c = DataSourceConfiguration(config)
-    assert c.is_valid() is True
+    c.check_valid()
 
 
 @pytest.mark.asyncio
@@ -425,14 +425,14 @@ async def test_is_valid_when_validations_succeed_returns_true(config):
         ),
     ],
 )
-async def test_is_valid_when_validations_fail_raises_error(config):
+async def test_check_valid_when_validations_fail_raises_error(config):
     c = DataSourceConfiguration(config)
     with pytest.raises(ConfigurableFieldValueError):
-        c.is_valid()
+        c.check_valid()
 
 
 @pytest.mark.asyncio
-async def test_is_valid_when_dependencies_are_invalid_raises_error():
+async def test_check_valid_when_dependencies_are_invalid_raises_error():
     config = {
         "port": {
             "type": "int",
@@ -446,7 +446,7 @@ async def test_is_valid_when_dependencies_are_invalid_raises_error():
 
     c = DataSourceConfiguration(config)
     with pytest.raises(ConfigurableFieldDependencyError):
-        c.is_valid()
+        c.check_valid()
 
 
 # ABCs
