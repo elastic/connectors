@@ -14,6 +14,7 @@ from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.mysql import (
     MySQLAdvancedRulesValidator,
+    MySQLClient,
     MySqlDataSource,
     parse_tables_string_to_list_of_tables,
 )
@@ -219,29 +220,31 @@ async def test_close_when_source_setup_correctly_does_not_raise_errors():
 
 
 @pytest.mark.asyncio
-async def test_ping(patch_connection_pool):
-    source = await setup_mysql_source(MySqlDataSource)
+async def test_client_ping(patch_logger, patch_connection_pool):
+    client = await setup_mysql_client()
 
-    await source.ping()
+    await client.ping()
 
 
 @pytest.mark.asyncio
-async def test_ping_negative():
-    source = create_source(MySqlDataSource)
+async def test_client_ping_negative(patch_logger):
+    client = await setup_mysql_client()
 
     mock_response = asyncio.Future()
     mock_response.set_result(Mock())
 
-    source.connection_pool = await mock_response
+    client.connection_pool = await mock_response
 
     with patch.object(aiomysql, "create_pool", return_value=mock_response):
         with pytest.raises(Exception):
-            await source.ping()
+            await client.ping()
 
 
 @pytest.mark.asyncio
-async def test_connect_with_retry(patch_connection_pool, patch_default_wait_multiplier):
-    source = await setup_mysql_source(is_connection_lost=True)
+async def test_connect_with_retry(
+    patch_logger, patch_connection_pool, patch_default_wait_multiplier
+):
+    source = await setup_mysql_source()
 
     streamer = source._connect(query="select * from database.table", fetch_many=True)
 
@@ -252,35 +255,36 @@ async def test_connect_with_retry(patch_connection_pool, patch_default_wait_mult
 
 @pytest.mark.asyncio
 async def test_fetch_documents(patch_connection_pool):
+    last_update_time = "2023-01-18 17:18:56"
+    primary_key_col = "pk"
+    column = "column"
+
+    document = {
+        "Table": "table_name",
+        "_id": "table_name_",
+        "_timestamp": last_update_time,
+        f"table_name_{column}": "table1",
+    }
+
     source = await setup_mysql_source(DATABASE)
+    source._get_primary_key_columns = AsyncMock(return_value=[primary_key_col])
+    source._connect = AsyncIterator([[[last_update_time]], [column], document])
 
     query = "select * from table"
-
-    response = source._connect(query)
-
-    patch("source._connect", return_value=response)
 
     document_list = []
     async for document in source.fetch_documents(table="table_name", query=query):
         document_list.append(document)
 
-    assert {
-        "Table": "table_name",
-        "_id": "table_name_",
-        "_timestamp": "table1",
-        "table_name_Database": "table1",
-    } in document_list
+    assert document in document_list
 
 
 @pytest.mark.asyncio
 async def test_fetch_rows_from_tables(patch_connection_pool):
+    document = {"_id": 1}
+
     source = await setup_mysql_source()
-
-    query = "select * from table"
-
-    response = source._connect(query)
-
-    patch("source._connect", return_value=response)
+    source.fetch_rows_for_table = AsyncIterator([document])
 
     async for row in source.fetch_rows_from_tables("table"):
         assert "_id" in row
@@ -290,28 +294,34 @@ async def test_fetch_rows_from_tables(patch_connection_pool):
 async def test_get_docs(patch_connection_pool):
     source = await setup_mysql_source(DATABASE)
 
-    source.fetch_rows_from_tables = MagicMock(
-        return_value=AsyncIterator([{"a": 1, "b": 2}])
-    )
+    source.get_tables_to_fetch = AsyncMock(return_value=["table"])
+    source.fetch_rows_from_tables = AsyncIterator([{"a": 1, "b": 2}])
 
     async for doc, _ in source.get_docs():
         assert doc == {"a": 1, "b": 2}
 
 
-async def setup_mysql_source(database="", is_connection_lost=False):
+async def setup_mysql_client():
+    client = MySQLClient(
+        host="host",
+        port=123,
+        user="user",
+        password="password",
+        ssl_enabled=False,
+        ssl_certificate="",
+    )
+
+    return client
+
+
+async def setup_mysql_source(database=""):
     source = create_source(MySqlDataSource)
     source.configuration.set_field(
         name="database", label="Database", value=database, type="str"
     )
 
     source.database = database
-
-    connection_pool = await mock_mysql_response()
-    connection_pool.acquire = Connection
-    connection_pool.acquire.cursor = Cursor
-    connection_pool.acquire.cursor.is_connection_lost = is_connection_lost
-
-    patch.object(source, "_get_connection_pool", connection_pool)
+    source._mysql_client = Mock()
 
     return source
 
