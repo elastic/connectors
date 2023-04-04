@@ -76,6 +76,13 @@ class ESIndex(ESClient):
             if_primary_term=if_primary_term,
         )
 
+    async def update_by_script(self, doc_id, script):
+        return await self.client.update(
+            index=self.index_name,
+            id=doc_id,
+            script=script,
+        )
+
     async def get_all_docs(self, query=None, page_size=DEFAULT_PAGE_SIZE):
         """
         Lookup for elasticsearch documents using {query}
