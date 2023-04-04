@@ -61,6 +61,9 @@ class MySQLQueries(Queries):
     def table_last_update_time(self, table):
         return f"SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
 
+    def columns(self, table):
+        return f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
+
     def ping(self):
         pass
 
@@ -177,6 +180,23 @@ class MySQLClient:
             except Exception:
                 logger.exception("Error while connecting to the MySQL Server.")
                 raise
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_column_names(self, table, query=None):
+        if query is None:
+            # fetch all columns on default
+            query = self.queries.columns(table)
+
+        async with self.with_connection_pool() as connection_pool:
+            async with connection_pool.acquire() as connection:
+                async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+                    await cursor.execute(query)
+
+                    return [f"{table}_{column[0]}" for column in cursor.description]
 
 
 class MySqlDataSource(BaseDataSource):
