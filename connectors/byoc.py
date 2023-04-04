@@ -647,12 +647,7 @@ class SyncJobIndex(ESIndex):
             doc_source=doc_source,
         )
 
-    async def create(self, connector):
-        trigger_method = (
-            JobTriggerMethod.ON_DEMAND
-            if connector.sync_now
-            else JobTriggerMethod.SCHEDULED
-        )
+    async def create(self, connector, trigger_method):
         filtering = connector.filtering.get_active_filter().transform_filtering()
         job_def = {
             "connector": {
@@ -669,7 +664,7 @@ class SyncJobIndex(ESIndex):
             "created_at": iso_utc(),
             "last_seen": iso_utc(),
         }
-        return await self.index(job_def)
+        await self.index(job_def)
 
     async def pending_jobs(self, connector_ids):
         query = {

@@ -144,8 +144,8 @@ async def test_index(mock_responses):
         payload={"_id": doc_id},
     )
 
-    indexed_id = await index.index({})
-    assert indexed_id == doc_id
+    resp = await index.index({})
+    assert resp["_id"] == doc_id
 
     await index.close()
 

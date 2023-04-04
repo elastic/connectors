@@ -1155,20 +1155,19 @@ def test_nested_get(nested_dict, keys, default, expected):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "sync_now, trigger_method",
+    "trigger_method",
     [
-        (True, JobTriggerMethod.ON_DEMAND),
-        (False, JobTriggerMethod.SCHEDULED),
+        JobTriggerMethod.ON_DEMAND,
+        JobTriggerMethod.SCHEDULED,
     ],
 )
 @patch("connectors.byoc.SyncJobIndex.index")
-async def test_create_job(index_method, sync_now, trigger_method, set_env):
+async def test_create_job(index_method, trigger_method, set_env):
     connector = Mock()
     connector.id = "id"
     connector.index_name = "index_name"
     connector.language = "en"
     config = load_config(CONFIG)
-    connector.sync_now = sync_now
     connector.filtering.get_active_filter.transform_filtering.return_value = Filter()
     connector.pipeline = Pipeline({})
 
@@ -1181,7 +1180,7 @@ async def test_create_job(index_method, sync_now, trigger_method, set_env):
     }
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    await sync_job_index.create(connector=connector)
+    await sync_job_index.create(connector=connector, trigger_method=trigger_method)
 
     index_method.assert_called_with(expected_index_doc)
 
