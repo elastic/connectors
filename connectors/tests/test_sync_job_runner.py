@@ -333,7 +333,9 @@ async def test_prepare_docs_when_original_id_and_hashed_id_too_long_then_skip_do
 @patch("connectors.sync_job_runner.ES_ID_SIZE_LIMIT", 10)
 @pytest.mark.parametrize("_id", ["ab", 1, 1.5])
 @pytest.mark.asyncio
-async def test_prepare_docs_when_original_id_below_limit_then_yield_doc_with_original_id(_id):
+async def test_prepare_docs_when_original_id_below_limit_then_yield_doc_with_original_id(
+    _id,
+):
     sync_job_runner = create_runner_yielding_docs(docs=[({"_id": _id}, None)])
 
     docs = []
