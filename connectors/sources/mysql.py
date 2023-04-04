@@ -61,6 +61,9 @@ class MySQLQueries(Queries):
     def table_last_update_time(self, table):
         return f"SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
 
+    def columns(self, table):
+        return f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
+
     def ping(self):
         pass
 
@@ -117,17 +120,18 @@ class MySQLClient:
         password,
         ssl_enabled,
         ssl_certificate,
-        db=None,
+        database=None,
         max_pool_size=MAX_POOL_SIZE,
     ):
         self.host = host
         self.port = port
         self.user = user
         self.password = password
-        self.db = db
+        self.database = database
         self.max_pool_size = max_pool_size
         self.ssl_enabled = ssl_enabled
         self.ssl_certificate = ssl_certificate
+        self.queries = MySQLQueries(self.database)
 
     @asynccontextmanager
     async def with_connection_pool(self):
@@ -136,7 +140,7 @@ class MySQLClient:
             "port": int(self.port),
             "user": self.user,
             "password": self.password,
-            "db": self.db,
+            "db": self.database,
             "maxsize": self.max_pool_size,
             "ssl": ssl_context(certificate=self.ssl_certificate)
             if self.ssl_enabled
@@ -164,6 +168,23 @@ class MySQLClient:
             except Exception:
                 logger.exception("Error while connecting to the MySQL Server.")
                 raise
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_column_names(self, table, query=None):
+        if query is None:
+            # fetch all columns on default
+            query = self.queries.columns(table)
+
+        async with self.with_connection_pool() as connection_pool:
+            async with connection_pool.acquire() as connection:
+                async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+                    await cursor.execute(query)
+
+                    return [f"{table}_{column[0]}" for column in cursor.description]
 
 
 class MySqlDataSource(BaseDataSource):
@@ -276,6 +297,7 @@ class MySqlDataSource(BaseDataSource):
             port=self.configuration["port"],
             user=self.configuration["user"],
             password=self.configuration["password"],
+            database=self.configuration["database"],
             ssl_enabled=self.configuration["ssl_enabled"],
             ssl_certificate=self.configuration["ssl_ca"],
         )
