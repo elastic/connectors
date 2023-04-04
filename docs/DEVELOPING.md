@@ -18,10 +18,17 @@ The [Elastic Jira connector](../connectors/sources/jira.py) is provided in the E
 
 ### Availability and prerequisites
 
-⚠️ _Currently, this connector is available in **beta** starting in 8.8_.
-Features in beta are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
+This connector is available as a **connector client** from the **Python connectors framework**. To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
 
-Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
+This connector is in **beta** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Beta features are not subject to the support SLA of official GA features.
+
+### Usage
+
+To use this connector as a **connector client**, use the **build a connector** workflow. See [Connector clients and frameworks](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
+
+For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
+
+### Compatibility
 
 Jira versions 7 or later are compatible with Elastic connector frameworks.
 
@@ -36,48 +43,49 @@ Complete the following steps to deploy the connector:
 
 Collect the information that is required to connect to your Jira instance:
 
-- The server host url where Jira is hosted.
-- Username for the Jira server or service account for the Jira cloud.
-- Password for the Jira server or API key for the Jira cloud.
+- The domain where Jira is hosted.
+- Username for Jira server or account email for Jira cloud.
+- Password for Jira server or API Token for Jira cloud.
 - Project Keys to fetch the data from Jira server or cloud.
 - SSL certificate for a secure connection
 
 #### Configure Jira connector
 
-The following configuration fields need to be provided to set up the connector:
+The following configuration fields need to be provided for setting up the connector:
 
-##### `is_cloud`
+##### `data_source`
 
-Flag to determine the Jira platform type. `True` if Jira cloud and `False` if Jira server. Default value is `True`.
+Dropdown to determine Jira platform type. `Jira Cloud` if Jira cloud and `Jira Server` if Jira server. Default value is `Jira Cloud`.
 
 ##### `username`
 
-The username of the account for Jira server. Default value is `admin`.
+The username of the account for Jira server.
 
 ##### `password`
 
-The password of the account to be used for the Jira server. Default value is `changeme`.
+The password of the account to be used for Jira server.
 
-##### `service_account_id`
+##### `account_email`
 
-The service account for the Jira cloud. Default value is `me@example.com`.
+The account email for Jira cloud.
 
 ##### `api_token`
 
-The API key to authenticate with Jira cloud. Default value is `abc#123`.
+The API Token to authenticate with Jira cloud.
 
-##### `host_url`
+##### `jira_url`
 
-The server host url where the Jira is hosted. Default value is `http://127.0.0.1:8080`. Examples:
+The domain where Jira is hosted. Examples:
 
   - `https://192.158.1.38:8080/`
   - `https://test_user.atlassian.net/`
 
 ##### `projects`
 
-Comma separated `Project Keys` to fetch the data from Jira server or cloud. Default value is `*` i.e. fetches the data of all projects. Examples:
+Comma separated `Project Keys` to fetch the data from Jira server or cloud. Jira connector will fetch data from all projects present in the configured `project keys`, if the value is `*`. Default value is `*`. Examples:
 
   - `EC, TP`
+  - `*`
 
 ##### `ssl_enabled`
 
@@ -97,42 +105,49 @@ Content of SSL certificate. Note: In case of ssl_enabled is `False`, keep `ssl_c
 
 ##### `retry_count`
 
-The number of retry attempts after failed request to the Jira. Default value is `3`.
+The number of retry attempts after failed request to Jira. Default value is `3`.
 
 ##### `concurrent_downloads`
 
-The number of concurrent downloads for fetching the attachment content. This speeds up the content extraction of attachments. Defaults to `50`.
-
-##### `enable_content_extraction`
-
-Whether the connector should extract content from a Jira attachment. Default value is `True` i.e. the connector will try to extract file contents.
-
-ℹ️ Default values exist for end-to-end testing only.
-
-ℹ️ The values for these fields need to be provided in `get_default_configuration` method of [jira.py](../connectors/sources/jira.py) file before running the connector for the first time. Further, these can be changed from UI editor which will appear on the UI once the first successful connection is made.
+The number of concurrent downloads for fetching the attachment content. This speeds up the content extraction of attachments. Defaults to `100`.
 
 #### Content Extraction
 
 The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
 
-### Connector Limitations
+### Sync rules
 
 - Files bigger than 10 MB won't be extracted.
 - Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
 - Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
 
-### E2E Tests
+### Connector Client operations
 
-The framework provides a way to test ingestion through a connector against a real data source. This is called a functional test. To execute a functional test for the Jira connector, run the following command:
+#### End-to-end Testing
+
+The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html#build-connector-testing) for more details.
+
+To perform E2E testing for Jira connector, run the following command:
+
 ```shell
 $ make ftest NAME=jira
 ```
 
-ℹ️ Users can generate the perf8 report using an argument i.e. `PERF8=True`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
+ℹ️ Users can generate the performance report using an argument i.e. `PERF8=True`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
 
 ℹ️ Users do not need to have a running Elasticsearch instance or a Jira source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Jira source using the docker image.
 
-ℹ️ The e2e test uses default values defined in [Configure Jira connector](#configure-jira-connector)
+### Known issues
+
+There are no known issues for this connector. Refer to [Known issues](https://www.elastic.co/guide/en/enterprise-search/master/connectors-known-issues.html) for a list of known issues for all connectors.
+
+### Troubleshooting
+
+See [Troubleshooting](https://www.elastic.co/guide/en/enterprise-search/master/connectors-troubleshooting.html).
+
+### Security
+
+See [security](https://www.elastic.co/guide/en/enterprise-search/master/connectors-security.html).
 
 ## General Configuration
 
