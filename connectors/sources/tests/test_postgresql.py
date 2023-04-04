@@ -114,7 +114,7 @@ class CursorAsync:
         pass
 
 
-def test_get_connect_argss(patch_logger):
+def test_get_connect_argss():
     """This function test get_connect_args with dummy certificate"""
     # Setup
     source = create_source(PostgreSQLDataSource)
@@ -126,7 +126,7 @@ def test_get_connect_argss(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_docs_postgresql(patch_logger):
+async def test_get_docs_postgresql():
     # Setup
     source = create_source(PostgreSQLDataSource)
     with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):

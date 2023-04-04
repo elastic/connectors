@@ -47,8 +47,21 @@ steps:
       - ".buildkite/run_nigthly.sh oracle"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Sharepoint"
+    command:
+      - ".buildkite/run_nigthly.sh sharepoint"
+    artifact_paths:
+      - "perf8-report-*/**/*"
   - label: "🔨 Microsoft SQL"
     command:
       - ".buildkite/run_nigthly.sh mssql"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Jira"
+    command:
+      - ".buildkite/run_nigthly.sh jira"
+  - label: "🔨 Confluence"
+    command:
+      - ".buildkite/run_nigthly.sh confluence"
     artifact_paths:
       - "perf8-report-*/**/*"

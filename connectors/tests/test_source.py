@@ -17,8 +17,11 @@ from connectors.filtering.validation import (
 )
 from connectors.source import (
     BaseDataSource,
+    ConfigurableFieldDependencyError,
+    ConfigurableFieldValueError,
     DataSourceConfiguration,
     Field,
+    ValidationTypes,
     get_source_klass,
     get_source_klass_dict,
     get_source_klasses,
@@ -106,6 +109,346 @@ def test_get_source_klass_dict():
     assert source_klass_dict["yea2"] == MyConnector
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "config",
+    [
+        (
+            # less_than
+            {
+                "port": {
+                    "type": "int",
+                    "value": 9,
+                    "validations": [
+                        {"type": ValidationTypes.LESS_THAN.value, "constraint": 10}
+                    ],
+                }
+            }
+        ),
+        (
+            # greater_than
+            {
+                "port": {
+                    "type": "int",
+                    "value": 11,
+                    "validations": [
+                        {"type": ValidationTypes.GREATER_THAN.value, "constraint": 10}
+                    ],
+                }
+            }
+        ),
+        (
+            # less_than and greater_than with both valid
+            {
+                "port": {
+                    "type": "int",
+                    "value": 5,
+                    "validations": [
+                        {"type": ValidationTypes.GREATER_THAN.value, "constraint": 0},
+                        {"type": ValidationTypes.LESS_THAN.value, "constraint": 10},
+                    ],
+                }
+            }
+        ),
+        (
+            # list_type str
+            {
+                "option_list": {
+                    "type": "list",
+                    "value": ["option1", "option2", "option3"],
+                    "validations": [
+                        {"type": ValidationTypes.LIST_TYPE.value, "constraint": "str"},
+                    ],
+                }
+            }
+        ),
+        (
+            # list_type int
+            {
+                "option_list": {
+                    "type": "int",
+                    "value": [1, 2, 3],
+                    "validations": [
+                        {"type": ValidationTypes.LIST_TYPE.value, "constraint": "int"},
+                    ],
+                }
+            }
+        ),
+        (
+            # included_in when list
+            {
+                "option_list": {
+                    "type": "list",
+                    "value": ["option1", "option2"],
+                    "validations": [
+                        {
+                            "type": ValidationTypes.INCLUDED_IN.value,
+                            "constraint": ["option1", "option2"],
+                        },
+                    ],
+                }
+            }
+        ),
+        (
+            # included_in when str
+            {
+                "option_str": {
+                    "type": "str",
+                    "value": "option2",
+                    "validations": [
+                        {
+                            "type": ValidationTypes.INCLUDED_IN.value,
+                            "constraint": ["option1", "option2"],
+                        },
+                    ],
+                }
+            }
+        ),
+        (
+            # included_in when int
+            {
+                "option_int": {
+                    "type": "int",
+                    "value": 2,
+                    "validations": [
+                        {
+                            "type": ValidationTypes.INCLUDED_IN.value,
+                            "constraint": [1, 2],
+                        },
+                    ],
+                }
+            }
+        ),
+        (
+            # regex
+            {
+                "email": {
+                    "type": "str",
+                    "value": "real@email.com",
+                    "validations": [
+                        {
+                            "type": ValidationTypes.REGEX.value,
+                            "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\\.[A-Z|a-z]{2,})+",
+                        },
+                    ],
+                }
+            }
+        ),
+        (
+            # with dependencies met should attempt validation
+            {
+                "email": {
+                    "type": "str",
+                    "value": "real@email.com",
+                    "validations": [
+                        {
+                            "type": ValidationTypes.REGEX.value,
+                            "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\\.[A-Z|a-z]{2,})+",
+                        },
+                    ],
+                    "depends_on": [{"field": "foo", "value": "bar"}],
+                },
+                "foo": {
+                    "value": "bar",
+                },
+            }
+        ),
+        (
+            # if dependencies are not met it should skip validation
+            {
+                "email": {
+                    "type": "str",
+                    "value": "invalid_email.com",
+                    "validations": [
+                        {
+                            "type": ValidationTypes.REGEX.value,
+                            "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\\.[A-Z|a-z]{2,})+",
+                        },
+                    ],
+                    "depends_on": [{"field": "foo", "value": "bar"}],
+                },
+                "foo": {
+                    "value": "not_bar",
+                },
+            }
+        ),
+    ],
+)
+async def test_check_valid_when_validations_succeed_no_errors_raised(config):
+    c = DataSourceConfiguration(config)
+    c.check_valid()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "config",
+    [
+        (
+            # less_than
+            {
+                "port": {
+                    "type": "int",
+                    "value": 11,
+                    "validations": [
+                        {"type": ValidationTypes.LESS_THAN.value, "constraint": 10}
+                    ],
+                }
+            }
+        ),
+        (
+            # greater_than
+            {
+                "port": {
+                    "type": "int",
+                    "value": 9,
+                    "validations": [
+                        {"type": ValidationTypes.GREATER_THAN.value, "constraint": 10}
+                    ],
+                }
+            }
+        ),
+        (
+            # less_than and greater_than with one invalid
+            {
+                "port": {
+                    "type": "int",
+                    "value": 10,
+                    "validations": [
+                        {"type": ValidationTypes.GREATER_THAN.value, "constraint": 0},
+                        {"type": ValidationTypes.LESS_THAN.value, "constraint": 10},
+                    ],
+                }
+            }
+        ),
+        (
+            # list_type str
+            {
+                "option_list": {
+                    "type": "list",
+                    "value": ["option1", "option2", 3],
+                    "validations": [
+                        {"type": ValidationTypes.LIST_TYPE.value, "constraint": "str"},
+                    ],
+                }
+            }
+        ),
+        (
+            # list_type int
+            {
+                "option_list": {
+                    "type": "list",
+                    "value": [1, 2, "option3"],
+                    "validations": [
+                        {"type": ValidationTypes.LIST_TYPE.value, "constraint": "int"},
+                    ],
+                }
+            }
+        ),
+        (
+            # included_in when list
+            {
+                "option_list": {
+                    "type": "list",
+                    "value": ["option1", "option2"],
+                    "validations": [
+                        {
+                            "type": ValidationTypes.INCLUDED_IN.value,
+                            "constraint": ["option1", "option3"],
+                        },
+                    ],
+                }
+            }
+        ),
+        (
+            # included_in when str
+            {
+                "option_str": {
+                    "type": "str",
+                    "value": "option2",
+                    "validations": [
+                        {
+                            "type": ValidationTypes.INCLUDED_IN.value,
+                            "constraint": ["option1", "option3"],
+                        },
+                    ],
+                }
+            }
+        ),
+        (
+            # included_in when int
+            {
+                "option_int": {
+                    "type": "int",
+                    "value": 2,
+                    "validations": [
+                        {
+                            "type": ValidationTypes.INCLUDED_IN.value,
+                            "constraint": [1, 3],
+                        },
+                    ],
+                }
+            }
+        ),
+        (
+            # regex
+            {
+                "email": {
+                    "type": "str",
+                    "value": "not_an_email.com",
+                    "validations": [
+                        {
+                            "type": ValidationTypes.REGEX.value,
+                            "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\\.[A-Z|a-z]{2,})+",
+                        },
+                    ],
+                }
+            }
+        ),
+        (
+            # with dependencies met should attempt validation
+            {
+                "email": {
+                    "type": "str",
+                    "value": "not_an_email.com",
+                    "validations": [
+                        {
+                            "type": ValidationTypes.REGEX.value,
+                            "constraint": "([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\\.[A-Z|a-z]{2,})+",
+                        },
+                    ],
+                    "depends_on": [{"field": "foo", "value": "bar"}],
+                },
+                "foo": {
+                    "value": "bar",
+                },
+            }
+        ),
+    ],
+)
+async def test_check_valid_when_validations_fail_raises_error(config):
+    c = DataSourceConfiguration(config)
+    with pytest.raises(ConfigurableFieldValueError):
+        c.check_valid()
+
+
+@pytest.mark.asyncio
+async def test_check_valid_when_dependencies_are_invalid_raises_error():
+    config = {
+        "port": {
+            "type": "int",
+            "value": 9,
+            "validations": [
+                {"type": ValidationTypes.LESS_THAN.value, "constraint": 10}
+            ],
+            "depends_on": [{"field": "missing_field", "value": "foo"}],
+        }
+    }
+
+    c = DataSourceConfiguration(config)
+    with pytest.raises(ConfigurableFieldDependencyError):
+        c.check_valid()
+
+
 # ABCs
 class DataSource(BaseDataSource):
     @classmethod
@@ -117,11 +460,13 @@ class DataSource(BaseDataSource):
                 "type": "str",
             },
             "port": {
+                "display": "numeric",
                 "value": 3306,
                 "label": "Port",
                 "type": "int",
             },
             "direct": {
+                "display": "toggle",
                 "value": True,
                 "label": "Direct connect",
                 "type": "bool",
@@ -173,12 +518,69 @@ async def test_base_class():
     assert options == {"a": "1"}
 
     # data we send back to kibana
-    # we want to make sure we only send back label+value
+    # we want to make sure all default values are included in the configuration
+    # any specified values should override the defaults
     expected = {
-        "host": {"label": "Host", "value": "127.0.0.1"},
-        "port": {"label": "Port", "value": "3306"},
-        "direct": {"label": "Direct connect", "value": "true"},
-        "user": {"label": "Username", "value": "root"},
+        "host": {
+            "default_value": None,
+            "depends_on": [],
+            "display": "text",
+            "label": "Host",
+            "options": [],
+            "order": 1,
+            "required": True,
+            "sensitive": False,
+            "tooltip": None,
+            "type": "str",
+            "ui_restrictions": [],
+            "validations": [],
+            "value": "127.0.0.1",
+        },
+        "port": {
+            "default_value": None,
+            "depends_on": [],
+            "display": "numeric",
+            "label": "Port",
+            "options": [],
+            "order": 1,
+            "required": True,
+            "sensitive": False,
+            "tooltip": None,
+            "type": "int",
+            "ui_restrictions": [],
+            "validations": [],
+            "value": 3306,
+        },
+        "direct": {
+            "default_value": None,
+            "depends_on": [],
+            "display": "toggle",
+            "label": "Direct connect",
+            "options": [],
+            "order": 1,
+            "required": True,
+            "sensitive": False,
+            "tooltip": None,
+            "type": "bool",
+            "ui_restrictions": [],
+            "validations": [],
+            "value": True,
+        },
+        "user": {
+            "default_value": None,
+            "depends_on": [],
+            "display": "text",
+            "label": "Username",
+            "options": [],
+            "order": 1,
+            "required": True,
+            "sensitive": False,
+            "tooltip": None,
+            "type": "str",
+            "ui_restrictions": [],
+            "validations": [],
+            "value": "root",
+        },
     }
     assert ds.get_simple_configuration() == expected
 
