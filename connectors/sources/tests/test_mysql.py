@@ -220,6 +220,35 @@ async def test_close_when_source_setup_correctly_does_not_raise_errors():
 
 
 @pytest.mark.asyncio
+async def test_client_get_column_names(patch_connection_pool):
+    column_1 = "column_1"
+    column_2 = "column_2"
+
+    description_response = [
+        (column_1,),
+        (column_2,),
+    ]
+
+    mock_cursor = MagicMock(spec=aiomysql.Cursor)
+    mock_cursor.description = description_response
+    mock_cursor.__aenter__.return_value = mock_cursor
+
+    mock_connection = MagicMock(spec=aiomysql.Connection)
+    mock_connection.cursor.return_value = mock_cursor
+    mock_connection.__aenter__.return_value = mock_connection
+
+    patch_connection_pool.acquire.return_value = mock_connection
+
+    client = await setup_mysql_client()
+    table = "table"
+
+    result = await client.get_column_names(table)
+    expected_result = [f"{table}_{column_1}", f"{table}_{column_2}"]
+
+    assert result == expected_result
+
+
+@pytest.mark.asyncio
 async def test_client_ping(patch_logger, patch_connection_pool):
     client = await setup_mysql_client()
 
