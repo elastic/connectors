@@ -318,6 +318,7 @@ async def test_connector_properties():
             "last_seen": iso_utc(),
             "last_sync_status": "completed",
             "pipeline": {},
+            "last_sync_scheduled_at": iso_utc(),
         },
     }
 
@@ -337,6 +338,7 @@ async def test_connector_properties():
     assert isinstance(connector.filtering, Filtering)
     assert isinstance(connector.pipeline, Pipeline)
     assert isinstance(connector.features, Features)
+    assert isinstance(connector.last_sync_scheduled_at, datetime)
 
 
 @pytest.mark.asyncio
