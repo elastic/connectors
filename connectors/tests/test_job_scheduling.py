@@ -13,6 +13,7 @@ from connectors.byoc import (
     SYNC_DISABLED,
     ConnectorUpdateError,
     DataSourceError,
+    JobTriggerMethod,
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
     Status,
@@ -132,7 +133,9 @@ async def test_connector_sync_now(
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
     connector.reset_sync_now_flag.assert_awaited()
-    sync_job_index_mock.create.assert_awaited_once_with(connector)
+    sync_job_index_mock.create.assert_awaited_once_with(
+        connector=connector, trigger_method=JobTriggerMethod.ON_DEMAND
+    )
 
 
 @pytest.mark.asyncio
@@ -148,7 +151,9 @@ async def test_connector_ready_to_sync(
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited
     connector.reset_sync_now_flag.assert_not_awaited()
-    sync_job_index_mock.create.assert_awaited_once_with(connector)
+    sync_job_index_mock.create.assert_awaited_once_with(
+        connector=connector, trigger_method=JobTriggerMethod.SCHEDULED
+    )
 
 
 @pytest.mark.asyncio
