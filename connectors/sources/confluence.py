@@ -53,6 +53,9 @@ QUEUE_SIZE = 1024
 QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
 END_SIGNAL = "FINISHED_TASK"
 
+CONFLUENCE_CLOUD = "confluence_cloud"
+CONFLUENCE_SERVER = "confluence_server"
+
 
 class ConfluenceClient:
     """Confluence client to handle API calls made to Confluence"""
@@ -60,7 +63,7 @@ class ConfluenceClient:
     def __init__(self, configuration):
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
-        self.is_cloud = self.configuration["is_cloud"]
+        self.is_cloud = self.configuration["data_source"] == CONFLUENCE_CLOUD
         self.host_url = self.configuration["confluence_url"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
@@ -188,7 +191,6 @@ class ConfluenceDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
         self.confluence_client = ConfluenceClient(configuration)
 
@@ -204,60 +206,86 @@ class ConfluenceDataSource(BaseDataSource):
             dictionary: Default configuration.
         """
         return {
-            "is_cloud": {
-                "value": False,
-                "label": "True if Confluence Cloud, False if Confluence Server",
-                "type": "bool",
+            "data_source": {
+                "display": "dropdown",
+                "label": "Confluence data source",
+                "options": [
+                    {"label": "Confluence Cloud", "value": CONFLUENCE_CLOUD},
+                    {"label": "Confluence Server", "value": CONFLUENCE_SERVER},
+                ],
+                "order": 1,
+                "type": "str",
+                "value": CONFLUENCE_SERVER,
             },
             "username": {
-                "value": "admin",
+                "depends_on": [{"field": "data_source", "value": CONFLUENCE_SERVER}],
                 "label": "Confluence Server username",
+                "order": 2,
                 "type": "str",
+                "value": "admin",
             },
             "password": {
-                "value": "abc@123",
+                "depends_on": [{"field": "data_source", "value": CONFLUENCE_SERVER}],
                 "label": "Confluence Server password",
+                "sensitive": True,
+                "order": 3,
                 "type": "str",
+                "value": "abc@123",
             },
             "account_email": {
-                "value": "me@example.com",
+                "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
                 "label": "Confluence Cloud account email",
+                "order": 4,
                 "type": "str",
+                "value": "me@example.com",
             },
             "api_token": {
-                "value": "abc#123",
+                "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
                 "label": "Confluence Cloud API token",
+                "sensitive": True,
+                "order": 5,
                 "type": "str",
+                "value": "abc#123",
             },
             "confluence_url": {
-                "value": "http://127.0.0.1:5000",
                 "label": "Confluence URL",
+                "order": 6,
                 "type": "str",
+                "value": "http://127.0.0.1:5000",
             },
             "ssl_enabled": {
-                "value": False,
-                "label": "Enable SSL verification (true/false)",
+                "display": "toggle",
+                "label": "Enable SSL verification",
+                "order": 7,
                 "type": "bool",
+                "value": False,
             },
             "ssl_ca": {
-                "value": "",
+                "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
+                "order": 8,
                 "type": "str",
-            },
-            "enable_content_extraction": {
-                "value": True,
-                "label": "Enable content extraction (true/false)",
-                "type": "bool",
+                "value": "",
             },
             "retry_count": {
-                "value": 3,
+                "default_value": 3,
+                "display": "numeric",
                 "label": "Maximum retries per request",
+                "order": 9,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": 3,
             },
             "concurrent_downloads": {
-                "value": MAX_CONCURRENT_DOWNLOADS,
+                "default_value": 50,
+                "display": "numeric",
                 "label": "Maximum concurrent downloads",
+                "order": 10,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": MAX_CONCURRENT_DOWNLOADS,
             },
         }
 
@@ -427,7 +455,7 @@ class ConfluenceDataSource(BaseDataSource):
             Dictionary: Document of the attachment to be indexed.
         """
         attachment_size = int(attachment["size"])
-        if not (self.enable_content_extraction and doit and attachment_size):
+        if not (doit and attachment_size):
             return
         attachment_name = attachment["title"]
         file_extension = os.path.splitext(attachment_name)[-1]
