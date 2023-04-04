@@ -135,7 +135,7 @@ async def test_mem_queue_race():
 
 @pytest.mark.asyncio
 async def test_mem_queue():
-    queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=0.1)
+    queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=0.15)
     await queue.put("small stuff")
 
     assert not queue.full()
