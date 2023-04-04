@@ -180,11 +180,11 @@ class DataSourceConfiguration:
             if not self.dependencies_satisfied(field):
                 # we don't validate a field if its dependencies are not met
                 logger.debug(
-                    f"{field.label} was not validated because its dependencies were not met."
+                    f"'{field.label}' was not validated because its dependencies were not met."
                 )
                 continue
 
-            if field.required is True and self.is_value_empty(field):
+            if field.required and self.is_value_empty(field):
                 # a value is invalid if it is both required and empty
                 validation_errors.extend([f"`{field.label}` cannot be empty."])
                 continue
