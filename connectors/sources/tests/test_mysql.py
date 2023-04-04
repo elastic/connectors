@@ -231,16 +231,19 @@ async def test_client_get_tables(patch_connection_pool):
 
     mock_cursor = MagicMock(spec=aiomysql.Cursor)
     mock_cursor.fetchall = AsyncMock(return_value=fetchall_tables_response)
-    
+    mock_cursor.__aenter__.return_value = mock_cursor
+
     mock_connection = MagicMock(spec=aiomysql.Connection)
     mock_connection.cursor.return_value = mock_cursor
     mock_connection.__aenter__.return_value = mock_connection
 
     patch_connection_pool.acquire.return_value = mock_connection
-    
+
+    client = await setup_mysql_client()
+
     result = await client.get_all_table_names()
     expected_result = [table_1, table_2]
-    
+
     assert result == expected_result
 
 
