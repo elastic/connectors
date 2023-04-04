@@ -159,6 +159,18 @@ class MySQLClient:
             connection_pool.close()
             await connection_pool.wait_closed()
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_all_table_names(self):
+        async with self.with_connection_pool() as connection_pool:
+            async with connection_pool.acquire() as connection:
+                async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+                    await cursor.execute(self.queries.all_tables())
+                    return list(map(lambda table: table[0], await cursor.fetchall()))
+
     async def ping(self):
         async with self.with_connection_pool() as connection_pool:
             try:
