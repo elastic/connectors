@@ -109,7 +109,7 @@ def create_runner_yielding_docs(docs=None):
 
 
 @pytest.mark.asyncio
-async def test_job_claim_fail(patch_logger):
+async def test_job_claim_fail():
     sync_job_runner = create_runner()
     sync_job_runner.sync_job.claim.side_effect = Exception()
     with pytest.raises(JobClaimError):
@@ -126,7 +126,7 @@ async def test_job_claim_fail(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_connector_starts_fail(patch_logger):
+async def test_connector_starts_fail():
     sync_job_runner = create_runner()
     sync_job_runner.connector.sync_starts.side_effect = Exception()
     with pytest.raises(JobClaimError):
@@ -143,7 +143,7 @@ async def test_connector_starts_fail(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_source_not_changed(patch_logger):
+async def test_source_not_changed():
     sync_job_runner = create_runner(source_changed=False)
     await sync_job_runner.execute()
 
@@ -165,7 +165,7 @@ async def test_source_not_changed(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_source_invalid_config(patch_logger):
+async def test_source_invalid_config():
     sync_job_runner = create_runner(validate_config_exception=Exception())
     await sync_job_runner.execute()
 
@@ -189,7 +189,7 @@ async def test_source_invalid_config(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_source_not_available(patch_logger):
+async def test_source_not_available():
     sync_job_runner = create_runner(source_available=False)
     await sync_job_runner.execute()
 
@@ -213,7 +213,7 @@ async def test_source_not_available(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_invalid_filtering(patch_logger):
+async def test_invalid_filtering():
     sync_job_runner = create_runner()
     sync_job_runner.sync_job.validate_filtering.side_effect = InvalidFilteringError()
     await sync_job_runner.execute()
@@ -238,7 +238,7 @@ async def test_invalid_filtering(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_async_bulk_error(elastic_server_mock, patch_logger):
+async def test_async_bulk_error(elastic_server_mock):
     error = "something wrong"
     ingestion_stats = {
         "indexed_document_count": 0,
@@ -265,7 +265,7 @@ async def test_async_bulk_error(elastic_server_mock, patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_runner(elastic_server_mock, patch_logger):
+async def test_sync_job_runner(elastic_server_mock):
     ingestion_stats = {
         "indexed_document_count": 25,
         "indexed_document_volume": 30,
@@ -288,7 +288,7 @@ async def test_sync_job_runner(elastic_server_mock, patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_runner_suspend(elastic_server_mock, patch_logger):
+async def test_sync_job_runner_suspend(elastic_server_mock):
     ingestion_stats = {
         "indexed_document_count": 25,
         "indexed_document_volume": 30,
@@ -346,7 +346,7 @@ async def test_prepare_docs_when_id_below_limit_then_yield_doc(_id):
 @pytest.mark.asyncio
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
-async def test_sync_job_runner_reporting_metadata(elastic_server_mock, patch_logger):
+async def test_sync_job_runner_reporting_metadata(elastic_server_mock):
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,
@@ -377,7 +377,7 @@ async def test_sync_job_runner_reporting_metadata(elastic_server_mock, patch_log
 @pytest.mark.asyncio
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
-async def test_sync_job_runner_connector_not_found(elastic_server_mock, patch_logger):
+async def test_sync_job_runner_connector_not_found(elastic_server_mock):
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,
@@ -403,7 +403,7 @@ async def test_sync_job_runner_connector_not_found(elastic_server_mock, patch_lo
 @pytest.mark.asyncio
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
-async def test_sync_job_runner_sync_job_not_found(elastic_server_mock, patch_logger):
+async def test_sync_job_runner_sync_job_not_found(elastic_server_mock):
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,
@@ -423,7 +423,7 @@ async def test_sync_job_runner_sync_job_not_found(elastic_server_mock, patch_log
 @pytest.mark.asyncio
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
-async def test_sync_job_runner_canceled(elastic_server_mock, patch_logger):
+async def test_sync_job_runner_canceled(elastic_server_mock):
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,
@@ -454,7 +454,7 @@ async def test_sync_job_runner_canceled(elastic_server_mock, patch_logger):
 @pytest.mark.asyncio
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
-async def test_sync_job_runner_not_running(elastic_server_mock, patch_logger):
+async def test_sync_job_runner_not_running(elastic_server_mock):
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,

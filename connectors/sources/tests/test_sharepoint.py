@@ -83,7 +83,7 @@ async def async_native_coroutine_generator(item):
     yield item
 
 
-def test_get_configuration(patch_logger):
+def test_get_configuration():
     """Tests the get configurations method of the Sharepoint source class."""
     # Setup
     klass = SharepointDataSource
@@ -96,7 +96,7 @@ def test_get_configuration(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_ping_for_successful_connection(patch_logger):
+async def test_ping_for_successful_connection():
     """Tests the ping functionality for ensuring connection to the Sharepoint."""
 
     # Setup
@@ -109,7 +109,7 @@ async def test_ping_for_successful_connection(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_ping_for_failed_connection_exception(patch_logger):
+async def test_ping_for_failed_connection_exception():
     """Tests the ping functionality when connection can not be established to Sharepoint."""
 
     # Setup
@@ -151,7 +151,7 @@ async def test_validate_config_for_ssl_enabled():
 
 
 @pytest.mark.asyncio
-async def test_api_call_for_exception(patch_logger):
+async def test_api_call_for_exception():
     """This function test _api_call when credentials are incorrect"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -164,7 +164,7 @@ async def test_api_call_for_exception(patch_logger):
             await source._api_call(url_name="lists", url="abc")
 
 
-def test_prepare_drive_items_doc(patch_logger):
+def test_prepare_drive_items_doc():
     """Test the prepare drive items method"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -197,7 +197,7 @@ def test_prepare_drive_items_doc(patch_logger):
     assert target_response == expected_response
 
 
-def test_prepare_list_items_doc(patch_logger):
+def test_prepare_list_items_doc():
     """Test the prepare list items method"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -235,7 +235,7 @@ def test_prepare_list_items_doc(patch_logger):
     assert target_response == expected_response
 
 
-def test_prepare_sites_doc(patch_logger):
+def test_prepare_sites_doc():
     """Test the method for preparing sites document"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -267,7 +267,7 @@ def test_prepare_sites_doc(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_sites_when_no_site_available(patch_logger):
+async def test_get_sites_when_no_site_available():
     """Test get sites method with valid details"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -283,7 +283,7 @@ async def test_get_sites_when_no_site_available(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_list_items(patch_logger):
+async def test_get_list_items():
     """Test get list items method with valid details"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -360,7 +360,7 @@ async def test_get_list_items(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_drive_items(patch_logger):
+async def test_get_drive_items():
     """Test get drive items method with valid details"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -433,7 +433,7 @@ async def test_get_drive_items(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_lists_and_items(patch_logger):
+async def test_get_lists_and_items():
     """Test get items method with valid details"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -549,7 +549,7 @@ async def test_get_lists_and_items(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_docs(patch_logger):
+async def test_get_docs():
     """Test get docs method"""
 
     # Setup
@@ -577,7 +577,7 @@ async def test_get_docs(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_docs_when_no_site_available(patch_logger):
+async def test_get_docs_when_no_site_available():
     """Test get docs when site is not available method"""
 
     # Setup
@@ -592,7 +592,7 @@ async def test_get_docs_when_no_site_available(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_content(patch_logger):
+async def test_get_content():
     """Test the get content method"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -629,7 +629,7 @@ async def test_get_content(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_size_is_bigger(patch_logger):
+async def test_get_content_when_size_is_bigger():
     """Test the get content method when document size is greater than the allowed size limit."""
     # Setup
     document = {
@@ -652,7 +652,7 @@ async def test_get_content_when_size_is_bigger(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_doit_is_none(patch_logger):
+async def test_get_content_when_doit_is_none():
     """Test the get content method when doit is None"""
     # Setup
     document = {
@@ -672,7 +672,7 @@ async def test_get_content_when_doit_is_none(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_invoke_call_with_list(patch_logger):
+async def test_get_invoke_call_with_list():
     """Test get invoke call when param name is lists"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -707,7 +707,7 @@ async def test_get_invoke_call_with_list(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_invoke_call_with_drive_items(patch_logger):
+async def test_get_invoke_call_with_drive_items():
     """Test get invoke call when param name is drive_item"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -749,7 +749,7 @@ class ClientSession:
 
 
 @pytest.mark.asyncio
-async def test_close_with_client_session(patch_logger):
+async def test_close_with_client_session():
     """Test close method of SharepointDataSource with client session"""
 
     # Setup
@@ -761,7 +761,7 @@ async def test_close_with_client_session(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_close_without_client_session(patch_logger):
+async def test_close_without_client_session():
     """Test close method of SharepointDataSource without client session"""
 
     # Setup
