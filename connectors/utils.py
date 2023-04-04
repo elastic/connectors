@@ -223,8 +223,13 @@ class MemQueue(asyncio.Queue):
         """This coroutine will set the result of the putter to QueueFull when a certain timeout it reached."""
         start = time.time()
         while not putter.done():
-            if time.time() - start >= self.refresh_timeout:
-                putter.set_result(asyncio.QueueFull())
+            elapsed_time = time.time() - start
+            if elapsed_time >= self.refresh_timeout:
+                putter.set_result(
+                    asyncio.QueueFull(
+                        f"MemQueue has been full for {round(elapsed_time, 4)}s. while timeout is {self.refresh_timeout}s."
+                    )
+                )
                 return
             logger.debug("Queue Full")
             await asyncio.sleep(self.refresh_interval)
@@ -281,7 +286,9 @@ class MemQueue(asyncio.Queue):
     def put_nowait(self, item):
         item_size = get_size(item)
         if self.full(item_size):
-            raise asyncio.QueueFull
+            raise asyncio.QueueFull(
+                f"Queue is full: attempting to add item of size {item_size} bytes while {self.maxmemsize - self._current_memsize} free bytes left."
+            )
         super().put_nowait((item_size, item))
 
 
