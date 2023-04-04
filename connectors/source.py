@@ -170,6 +170,7 @@ class Field:
 
         return validation_errors
 
+
 class DataSourceConfiguration:
     """Holds the configuration needed by the source class"""
 
@@ -286,6 +287,7 @@ class DataSourceConfiguration:
                 return False
 
         return True
+
 
 class BaseDataSource:
     """Base class, defines a loose contract."""
