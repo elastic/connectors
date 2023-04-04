@@ -57,7 +57,7 @@ URLS = {
     ATTACHMENT_SERVER: "/secure/attachment/{attachment_id}/{attachment_name}",
 }
 
-JIRA_ONLINE = "jira_online"
+JIRA_CLOUD = "jira_cloud"
 JIRA_SERVER = "jira_server"
 
 
@@ -67,7 +67,7 @@ class JiraClient:
     def __init__(self, configuration):
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
-        self.is_cloud = self.configuration["data_source"] == JIRA_ONLINE
+        self.is_cloud = self.configuration["data_source"] == JIRA_CLOUD
         self.host_url = self.configuration["host_url"]
         self.projects = self.configuration["projects"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
@@ -222,12 +222,12 @@ class JiraDataSource(BaseDataSource):
                 "display": "dropdown",
                 "label": "Jira data source",
                 "options": [
-                    {"label": "Jira Online", "value": JIRA_ONLINE},
+                    {"label": "Jira Cloud", "value": JIRA_CLOUD},
                     {"label": "Jira Server", "value": JIRA_SERVER},
                 ],
                 "order": 1,
                 "type": "str",
-                "value": JIRA_ONLINE,
+                "value": JIRA_CLOUD,
             },
             "username": {
                 "depends_on": [{"field": "data_source", "value": JIRA_SERVER}],
@@ -245,14 +245,14 @@ class JiraDataSource(BaseDataSource):
                 "value": "changeme",
             },
             "service_account_id": {
-                "depends_on": [{"field": "data_source", "value": JIRA_ONLINE}],
+                "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
                 "label": "Jira Cloud service account id",
                 "order": 4,
                 "type": "str",
                 "value": "me@example.com",
             },
             "api_token": {
-                "depends_on": [{"field": "data_source", "value": JIRA_ONLINE}],
+                "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
                 "label": "Jira Cloud API token",
                 "order": 5,
                 "sensitive": True,
