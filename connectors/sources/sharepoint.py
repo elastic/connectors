@@ -11,7 +11,6 @@ from datetime import datetime
 from functools import partial
 from urllib.parse import urljoin
 
-import aiofiles
 import aiohttp
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
@@ -23,17 +22,17 @@ from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
     RetryStrategy,
-    convert_to_b64,
     evaluate_timedelta,
     is_expired,
     retryable,
+    send_to_tika,
     ssl_context,
     url_encode,
 )
 
 RETRY_INTERVAL = 2
 RETRIES = 3
-FILE_SIZE_LIMIT = 10485760
+FILE_SIZE_LIMIT = -1
 CHUNK_SIZE = 1024
 TOP = 5000
 PING = "ping"
@@ -477,7 +476,7 @@ class SharepointDataSource(BaseDataSource):
             return
 
         document_size = int(document["size"])
-        if document_size > FILE_SIZE_LIMIT:
+        if FILE_SIZE_LIMIT != -1 and document_size > FILE_SIZE_LIMIT:
             logger.warning(
                 f"File size {document_size} of file {document['title']} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
             )
@@ -497,18 +496,21 @@ class SharepointDataSource(BaseDataSource):
 
             source_file_name = async_buffer.name
 
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
+        logger.debug(f"Sending {source_file_name} to Tika (size {document_size})")
+        result = await asyncio.to_thread(
+            send_to_tika,
+            filename=source_file_name,
         )
-        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            attachment_content = (await target_file.read()).strip()
+        logger.debug(f"Got back {len(result) * 2} bytes.")
+
+        # async with aiofiles.open(file=source_file_name, mode="r") as target_file:
+        #    # base64 on macOS will add a EOL, so we strip() here
+        #    attachment_content = (await target_file.read()).strip()
         await remove(source_file_name)  # pyright: ignore
         return {
             "_id": document.get("id"),
             "_timestamp": document.get("_timestamp"),
-            "_attachment": attachment_content,
+            "attachment": result,
         }
 
     async def invoke_get_call(self, site_url, param_name, list_id=None):
