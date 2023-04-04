@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from connectors.source import DataSourceConfiguration, DEFAULT_CONFIGURATION
+from connectors.source import DEFAULT_CONFIGURATION, DataSourceConfiguration
 
 
 def create_source(klass, **extras):

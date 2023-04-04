@@ -22,7 +22,6 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 
-
 DEFAULT_CONFIGURATION = {
     "default_value": None,
     "depends_on": [],
