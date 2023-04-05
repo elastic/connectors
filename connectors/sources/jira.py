@@ -68,7 +68,7 @@ class JiraClient:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self.is_cloud = self.configuration["data_source"] == JIRA_CLOUD
-        self.host_url = self.configuration["host_url"]
+        self.host_url = self.configuration["jira_url"]
         self.projects = self.configuration["projects"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
@@ -90,7 +90,7 @@ class JiraClient:
             return self.session
         if self.is_cloud:
             login, password = (
-                self.configuration["service_account_id"],
+                self.configuration["account_email"],
                 self.configuration["api_token"],
             )
         else:
@@ -244,7 +244,7 @@ class JiraDataSource(BaseDataSource):
                 "type": "str",
                 "value": "changeme",
             },
-            "service_account_id": {
+            "account_email": {
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
                 "label": "Jira Cloud service account id",
                 "order": 4,
@@ -259,7 +259,7 @@ class JiraDataSource(BaseDataSource):
                 "type": "str",
                 "value": "abc#123",
             },
-            "host_url": {
+            "jira_url": {
                 "label": "Jira host url",
                 "order": 6,
                 "type": "str",
@@ -323,9 +323,9 @@ class JiraDataSource(BaseDataSource):
         """
         logger.info("Validating Jira Configuration")
         connection_fields = (
-            ["host_url", "service_account_id", "api_token", "projects"]
+            ["jira_url", "account_email", "api_token", "projects"]
             if self.jira_client.is_cloud
-            else ["host_url", "username", "password", "projects"]
+            else ["jira_url", "username", "password", "projects"]
         )
 
         default_config = self.get_default_configuration()
