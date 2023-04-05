@@ -11,6 +11,7 @@ import re
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
+from functools import cache
 
 from bson import Decimal128
 
@@ -428,6 +429,7 @@ class BaseDataSource:
         return doc
 
 
+@cache
 def get_source_klass(fqn):
     """Converts a Fully Qualified Name into a class instance."""
     module_name, klass_name = fqn.split(":")
