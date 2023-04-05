@@ -290,6 +290,8 @@ async def test_validate_config_when_collection_name_invalid_then_raises_exceptio
         source = create_source(
             MongoDataSource,
             host="mongodb://127.0.0.1:27021",
+            user="foo",
+            password="bar",
             database=configured_database_name,
             collection=configured_collection_name,
         )
@@ -319,6 +321,8 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise():
         source = create_source(
             MongoDataSource,
             host="mongodb://127.0.0.1:27021",
+            user="foo",
+            password="bar",
             database=configured_database_name,
             collection=configured_collection_name,
         )
