@@ -132,30 +132,28 @@ class DataSourceConfiguration:
     def to_dict(self):
         return dict(self._raw_config)
 
-    def is_valid(self):
+    def check_valid(self):
         """Validates every Field against its `validations`.
 
-        Raises ConfigurableFieldValueError if any validation errors are found,
-        otherwise returns True.
+        Raises ConfigurableFieldValueError if any validation errors are found.
+        If no errors are raised, then everything is valid.
         """
         validation_errors = []
 
         for _, field in self._config.items():
             if not self.dependencies_satisfied(field):
                 # we don't validate a field if its dependencies are not met
-                logger.info(
+                logger.debug(
                     f"Field {field.label} was not validated because its dependencies were not met."
                 )
                 continue
 
-            validation_errors = validation_errors + self.validate_field(field)
+            validation_errors.extend(self.validate_field(field))
 
         if len(validation_errors) > 0:
             raise ConfigurableFieldValueError(
                 f"Field validation errors: {'; '.join(validation_errors)}"
             )
-
-        return True
 
     def dependencies_satisfied(self, field):
         """Used to check if a Field has its dependencies satisfied.
@@ -166,8 +164,6 @@ class DataSourceConfiguration:
         if len(field.depends_on) <= 0:
             return True
 
-        satisfied = True
-
         for dependency in field.depends_on:
             if dependency["field"] not in self._config:
                 # cannot check dependency if field does not exist
@@ -176,9 +172,9 @@ class DataSourceConfiguration:
                 )
 
             if self._config[dependency["field"]].value != dependency["value"]:
-                satisfied = False
+                return False
 
-        return satisfied
+        return True
 
     def validate_field(self, field):
         """Used to validate the `value` of a Field using its `validations`.
