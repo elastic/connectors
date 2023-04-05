@@ -498,6 +498,7 @@ class Connector(ESDocument):
 
         script = {
             "lang": "painless",
+            # only reset sync_now flag if it's set, otherwise set op to 'noop' (the returned 'result' will be 'noop')
             "source": "if (ctx._source.sync_now) { ctx._source.sync_now = false } else { ctx.op = 'noop' }",
         }
         resp = await self.index.update_by_script(doc_id=self.id, script=script)
@@ -508,6 +509,7 @@ class Connector(ESDocument):
         updated."""
         script = {
             "lang": "painless",
+            # only update last_sync_scheduled_at to new_ts if it's not updated by other instances, otherwise set op to 'noop' (the returned 'result' will be 'noop')
             "source": "if (ctx._source.last_sync_scheduled_at == params['old_ts']) { ctx._source.last_sync_scheduled_at = params['new_ts'] } else { ctx.op = 'noop' }",
             "params": {
                 "old_ts": self.last_sync_scheduled_at,
