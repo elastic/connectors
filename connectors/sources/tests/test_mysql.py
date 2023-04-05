@@ -379,7 +379,7 @@ async def setup_mysql_source(database=""):
     )
 
     source.database = database
-    source._mysql_client = MagicMock()
+    source._client_properties = MagicMock()
 
     return source
 

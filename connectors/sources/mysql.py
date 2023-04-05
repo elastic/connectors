@@ -294,16 +294,16 @@ class MySqlDataSource(BaseDataSource):
         }
 
     @cached_property
-    def _mysql_client(self):
-        return MySQLClient(
-            host=self.configuration["host"],
-            port=self.configuration["port"],
-            user=self.configuration["user"],
-            password=self.configuration["password"],
-            database=self.configuration["database"],
-            ssl_enabled=self.configuration["ssl_enabled"],
-            ssl_certificate=self.configuration["ssl_ca"],
-        )
+    def _client_properties(self):
+        return {
+            "host": self.configuration["host"],
+            "port": self.configuration["port"],
+            "user": self.configuration["user"],
+            "password": self.configuration["password"],
+            "database": self.configuration["database"],
+            "ssl_enabled": self.configuration["ssl_enabled"],
+            "ssl_certificate": self.configuration["ssl_ca"],
+        }
 
     def advanced_rules_validators(self):
         return [MySQLAdvancedRulesValidator(self)]
@@ -346,7 +346,7 @@ class MySqlDataSource(BaseDataSource):
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def _remote_validation(self):
-        async with self._mysql_client as client:
+        async with MySQLClient(**self._client_properties) as client:
             async with client.connection.cursor() as cursor:
                 await self._validate_database_accessible(cursor)
                 await self._validate_tables_accessible(cursor)
@@ -375,7 +375,7 @@ class MySqlDataSource(BaseDataSource):
             )
 
     async def ping(self):
-        async with self._mysql_client as client:
+        async with MySQLClient(**self._client_properties) as client:
             await client.ping()
 
     async def _connect(self, query, fetch_many=False, **query_kwargs):
@@ -398,7 +398,7 @@ class MySqlDataSource(BaseDataSource):
         rows_fetched = 0
         cursor_position = 0
 
-        async with self._mysql_client as client:
+        async with MySQLClient(**self._client_properties) as client:
             while retry <= self.retry_count:
                 try:
                     async with client.connection.cursor(
