@@ -44,8 +44,8 @@ from connectors.utils import (
 @freeze_time("2023-01-18 17:18:56.814003", tick=True)
 def test_next_run():
     # can run within two minutes
-    assert next_run("1 * * * * *") < 120
-    assert next_run("* * * * * *") == 0
+    assert next_run("1 * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:19:01"
+    assert next_run("* * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:18:57"
 
     # this should get parsed
     next_run("0/5 14,18,52 * ? JAN,MAR,SEP MON-FRI 2010-2030")
@@ -135,7 +135,7 @@ async def test_mem_queue_race():
 
 @pytest.mark.asyncio
 async def test_mem_queue():
-    queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=0.1)
+    queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=0.15)
     await queue.put("small stuff")
 
     assert not queue.full()

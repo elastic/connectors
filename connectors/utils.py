@@ -61,14 +61,9 @@ def iso_utc(when=None):
 
 
 def next_run(quartz_definition):
-    """Returns the number of seconds before the next run."""
+    """Returns the datetime of the next run."""
     cron_obj = QuartzCron(quartz_definition, datetime.utcnow())
-    when = cron_obj.next_trigger()
-    now = datetime.utcnow()
-    secs = (when - now).total_seconds()
-    if secs < 1.0:
-        secs = 0
-    return secs
+    return cron_obj.next_trigger()
 
 
 INVALID_CHARS = "\\", "/", "*", "?", '"', "<", ">", "|", " ", ",", "#"

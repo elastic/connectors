@@ -38,7 +38,7 @@ FETCH_SIZE = 100
 CHUNK_SIZE = 1024
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
 MAX_CONCURRENCY = 5
-MAX_CONCURRENT_DOWNLOADS = 50  # Max concurrent download supported by jira
+MAX_CONCURRENT_DOWNLOADS = 100  # Max concurrent download supported by jira
 
 PING = "ping"
 PROJECT = "project"
@@ -57,7 +57,7 @@ URLS = {
     ATTACHMENT_SERVER: "/secure/attachment/{attachment_id}/{attachment_name}",
 }
 
-JIRA_ONLINE = "jira_online"
+JIRA_CLOUD = "jira_cloud"
 JIRA_SERVER = "jira_server"
 
 
@@ -67,7 +67,7 @@ class JiraClient:
     def __init__(self, configuration):
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
-        self.is_cloud = self.configuration["data_source"] == JIRA_ONLINE
+        self.is_cloud = self.configuration["data_source"] == JIRA_CLOUD
         self.host_url = self.configuration["host_url"]
         self.projects = self.configuration["projects"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
@@ -222,12 +222,12 @@ class JiraDataSource(BaseDataSource):
                 "display": "dropdown",
                 "label": "Jira data source",
                 "options": [
-                    {"label": "Jira Online", "value": JIRA_ONLINE},
+                    {"label": "Jira Cloud", "value": JIRA_CLOUD},
                     {"label": "Jira Server", "value": JIRA_SERVER},
                 ],
                 "order": 1,
                 "type": "str",
-                "value": JIRA_ONLINE,
+                "value": JIRA_CLOUD,
             },
             "username": {
                 "depends_on": [{"field": "data_source", "value": JIRA_SERVER}],
@@ -245,14 +245,14 @@ class JiraDataSource(BaseDataSource):
                 "value": "changeme",
             },
             "service_account_id": {
-                "depends_on": [{"field": "data_source", "value": JIRA_ONLINE}],
+                "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
                 "label": "Jira Cloud service account id",
                 "order": 4,
                 "type": "str",
                 "value": "me@example.com",
             },
             "api_token": {
-                "depends_on": [{"field": "data_source", "value": JIRA_ONLINE}],
+                "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
                 "label": "Jira Cloud API token",
                 "order": 5,
                 "sensitive": True,
@@ -296,7 +296,7 @@ class JiraDataSource(BaseDataSource):
                 "value": 3,
             },
             "concurrent_downloads": {
-                "default_value": 50,
+                "default_value": 100,
                 "display": "numeric",
                 "label": "Number of concurrent downloads for fetching attachment content",
                 "order": 10,
@@ -333,13 +333,15 @@ class JiraDataSource(BaseDataSource):
         if empty_connection_fields := [
             default_config[field]["label"]
             for field in connection_fields
-            if self.configuration[field] == ""
+            if self.configuration[field] in ["", [""]]
         ]:
             raise ConfigurableFieldValueError(
                 f"Configured keys: {empty_connection_fields} can't be empty."
             )
 
-        if self.jira_client.ssl_enabled and self.jira_client.certificate == "":
+        if self.jira_client.ssl_enabled and (
+            self.jira_client.certificate == "" or self.jira_client.certificate is None
+        ):
             raise ConfigurableFieldValueError("SSL certificate must be configured.")
 
         if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
@@ -407,7 +409,7 @@ class JiraDataSource(BaseDataSource):
             await remove(temp_filename)
         except Exception as exception:
             logger.warning(
-                f"Could not remove file: {temp_filename}. Error: {exception}"
+                f"Could not remove file from: {temp_filename}. Error: {exception}"
             )
         return document
 
@@ -450,6 +452,21 @@ class JiraDataSource(BaseDataSource):
             timezone = await response.json()
             return timezone["timeZone"]
 
+    async def _put_projects(self, project, timestamp):
+        """Store project documents to queue
+
+        Args:
+            project (dict): Project document to store in queue
+            timestamp (str): Timestamp to manage project document
+        """
+        document = {
+            "_id": f"project-{project['id']}",
+            "_timestamp": timestamp,
+            "Type": "Project",
+            "Project": project,
+        }
+        await self.queue.put((document, None))  # pyright: ignore
+
     async def _get_projects(self):
         """Get projects with the help of REST APIs
 
@@ -466,26 +483,45 @@ class JiraDataSource(BaseDataSource):
                 async for response in self.jira_client.api_call(url_name=PROJECT):
                     response = await response.json()
                     for project in response:
-                        yield {
-                            "_id": f"project-{project['id']}",
-                            "_timestamp": timestamp,
-                            "Type": "Project",
-                            "Project": project,
-                        }
+                        await self._put_projects(project=project, timestamp=timestamp)
             else:
                 for project_key in self.jira_client.projects:
                     async for response in self.jira_client.api_call(
                         url_name=PROJECT_BY_KEY, key=project_key
                     ):
                         project = await response.json()
-                        yield {
-                            "_id": f"project-{project['id']}",
-                            "_timestamp": timestamp,
-                            "Type": "Project",
-                            "Project": project,
-                        }
+                        await self._put_projects(project=project, timestamp=timestamp)
+            await self.queue.put("FINISHED")  # pyright: ignore
         except Exception as exception:
             logger.warning(f"Skipping data for type: {PROJECT}. Error: {exception}")
+
+    async def _put_issue(self, issue):
+        """Put specific issue as per the given issue_key in a queue
+
+        Args:
+            issue (str): Issue key to fetch an issue
+        """
+        try:
+            async for response in self.jira_client.api_call(
+                url_name=ISSUE_DATA, id=issue["key"]
+            ):
+                issue = await response.json()
+                response_fields = issue.get("fields")
+                document = {
+                    "_id": f"{response_fields['project']['name']}-{issue['key']}",
+                    "_timestamp": response_fields["updated"],
+                    "Type": response_fields["issuetype"]["name"],
+                    "Issue": response_fields,
+                }
+                await self.queue.put((document, None))  # pyright: ignore
+                attachments = issue["fields"]["attachment"]
+                if len(attachments) > 0:
+                    await self._put_attachment(
+                        attachments=attachments, issue_key=issue["key"]
+                    )
+            await self.queue.put("FINISHED")  # pyright: ignore
+        except Exception as exception:
+            logger.warning(f"Skipping data for type: {ISSUE_DATA}. Error: {exception}")
 
     async def _get_issues(self):
         """Get issues with the help of REST APIs
@@ -500,58 +536,29 @@ class JiraDataSource(BaseDataSource):
             url_name=ISSUES, jql=jql
         ):
             for issue in response.get("issues", []):
-                try:
-                    async for response in self.jira_client.api_call(
-                        url_name=ISSUE_DATA, id=issue["key"]
-                    ):
-                        issue = await response.json()
-                        if issue:
-                            response_fields = issue.get("fields")
-                            yield {
-                                "_id": f"{response_fields['project']['name']}-{issue['key']}",
-                                "_timestamp": response_fields["updated"],
-                                "Type": response_fields["issuetype"]["name"],
-                                "Issue": response_fields,
-                            }, issue
-                except Exception as exception:
-                    logger.warning(
-                        f"Skipping data for type: {ISSUE_DATA}. Error: {exception}"
-                    )
+                await self.fetchers.put(partial(self._put_issue, issue))
+                self.tasks += 1
+        await self.queue.put("FINISHED")  # pyright: ignore
 
-    async def _get_attachments(self, attachments, issue_key):
-        """Get attachments of a specific issue
+    async def _put_attachment(self, attachments, issue_key):
+        """Put attachments of a specific issue in a queue
 
         Args:
             attachments (list): List of attachments for an issue
             issue_key (str): Issue key for generating `_id` field
-
-        Yields:
-            Dictionary: Jira attachment on the given issue
-            attachment (dict): Attachment dictionary for extracting the content
         """
         for attachment in attachments:
-            yield {
+            document = {
                 "_id": f"{issue_key}-{attachment['id']}",
                 "title": attachment["filename"],
                 "Type": "Attachment",
                 "issue": issue_key,
                 "_timestamp": attachment["created"],
                 "size": attachment["size"],
-            }, attachment
-
-    async def _grab_content(self, attachments, issue_key):
-        """Coroutine to add attachments to Queue and get content
-
-        Args:
-            attachments (list): List of attachments for an issue
-            issue_key (str): Issue key for generating `_id` field
-        """
-        async for content, attachment in self._get_attachments(
-            attachments=attachments, issue_key=issue_key
-        ):
+            }
             await self.queue.put(
                 (  # pyright: ignore
-                    content,
+                    document,
                     partial(
                         self.get_content,
                         issue_key=issue_key,
@@ -559,7 +566,19 @@ class JiraDataSource(BaseDataSource):
                     ),
                 )
             )
-        await self.queue.put("FINISHED")  # pyright: ignore
+
+    async def _consumer(self):
+        """Async generator to process entries of the queue
+
+        Yields:
+            dictionary: Documents from Jira.
+        """
+        while self.tasks > 0:
+            _, item = await self.queue.get()
+            if item == "FINISHED":
+                self.tasks -= 1
+            else:
+                yield item
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch jira objects in async manner
@@ -572,35 +591,11 @@ class JiraDataSource(BaseDataSource):
         """
         await self._verify_projects()
 
-        async def _project_task():
-            """Coroutine to add projects documents to Queue"""
-            async for project_data in self._get_projects():
-                await self.queue.put((project_data, None))  # pyright: ignore
-            await self.queue.put("FINISHED")  # pyright: ignore
-
-        async def _document_task():
-            """Coroutine to add issues/attachments to Queue"""
-            async for document, issue in self._get_issues():
-                await self.queue.put((document, None))  # pyright: ignore
-                attachments = issue["fields"]["attachment"]
-                if len(attachments) > 0:
-                    await self.fetchers.put(
-                        partial(self._grab_content, attachments, issue["key"])
-                    )
-                    self.tasks += 1
-            await self.queue.put("FINISHED")  # pyright: ignore
-
-        await self.fetchers.put(_project_task)
-        await self.fetchers.put(_document_task)
+        await self.fetchers.put(self._get_projects)
+        await self.fetchers.put(self._get_issues)
         self.tasks += 2
 
-        # Consumer block to grab items from queue in a loop and yield one at a time.
-        # Once, all tasks are completed, loop is terminated to stop the consumer.
-        while self.tasks > 0:
-            _, item = await self.queue.get()
-            if item == "FINISHED":
-                self.tasks -= 1
-            else:
-                yield item
+        async for item in self._consumer():
+            yield item
 
         await self.fetchers.join()
