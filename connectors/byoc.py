@@ -469,6 +469,15 @@ class Connector(ESDocument):
     def last_sync_status(self):
         return JobStatus(self.get("last_sync_status"))
 
+    @property
+    def last_sync_scheduled_at(self):
+        last_sync_scheduled_at = self.get("last_sync_scheduled_at")
+        if last_sync_scheduled_at is not None:
+            last_sync_scheduled_at = datetime.fromisoformat(
+                last_sync_scheduled_at  # pyright: ignore
+            )
+        return last_sync_scheduled_at
+
     async def heartbeat(self, interval):
         if (
             self.last_seen is None
