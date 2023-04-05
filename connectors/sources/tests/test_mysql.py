@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+import random
+import string
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import aiomysql
@@ -661,3 +663,10 @@ def test_generate_id(row, primary_key_columns, expected_id):
     row_id = source._generate_id(TABLE_ONE, row, primary_key_columns)
 
     assert row_id == expected_id
+
+
+def test_hash_id():
+    limit = 512
+    random_id_too_long = ''.join(random.choices(string.ascii_letters + string.digits, k=1000))
+
+    assert len(MySqlDataSource.hash_id(random_id_too_long).encode("UTF-8")) < limit

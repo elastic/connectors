@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """MySQL source module responsible to fetch documents from MySQL"""
+import hashlib
 import re
 from contextlib import asynccontextmanager
 from functools import cached_property
@@ -316,6 +317,11 @@ class MySqlDataSource(BaseDataSource):
 
     def advanced_rules_validators(self):
         return [MySQLAdvancedRulesValidator(self)]
+
+    @classmethod
+    def hash_id(cls, _id):
+        # Collision probability: 1.47*10^-29
+        return hashlib.md5(_id.encode("utf8")).hexdigest()
 
     async def close(self):
         self._sleeps.cancel()
