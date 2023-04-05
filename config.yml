@@ -1,21 +1,24 @@
 elasticsearch:
-  host: http://localhost:9200
-  username: elastic
-  password: changeme
+  host: XXX
+  api_key: XXX
   ssl: true
+  verification_mode: none
   bulk:
-    queue_max_size: 1024
-    queue_max_mem_size: 25
+    queue_max_size: 4096
+    queue_max_mem_size: 1024
     display_every: 100
-    chunk_size: 1000
-    max_concurrency: 5
-    chunk_max_mem_size: 5
-    concurrent_downloads: 10
+    chunk_size: 125
+    max_concurrency: 4
+    chunk_max_mem_size: 50
+    concurrent_downloads: 40
   request_timeout: 120
   max_wait_duration: 120
   initial_backoff_duration: 1
   backoff_multiplier: 2
   log_level: info
+
+connector_id: "V0-6UocBeNy9m6iDazts"
+service_type: 'sharepoint'
 
 service:
   idling: 30
@@ -35,17 +38,13 @@ native_service_types:
   - azure_blob_storage
   - postgresql
   - oracle
-  - confluence
   - dir
   - sharepoint
   - mssql
   - jira
-
-
 # Connector client settings
 #connector_id: 'changeme'
 #service_type: 'changeme'
-
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
   s3: connectors.sources.s3:S3DataSource
@@ -59,4 +58,3 @@ sources:
   sharepoint: connectors.sources.sharepoint:SharepointDataSource
   mssql: connectors.sources.mssql:MSSQLDataSource
   jira: connectors.sources.jira:JiraDataSource
-  confluence: connectors.sources.confluence:ConfluenceDataSource

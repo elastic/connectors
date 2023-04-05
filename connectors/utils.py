@@ -488,10 +488,19 @@ async def send_to_tika(filename):
         "Accept": "text/plain",
         "fetchKey": f"/files/{os.path.basename(filename)}",
     }
-    logger.debug(f"sending to tika {filename}")
     async with aiohttp.ClientSession(headers=headers) as session:
         async with session.put("http://127.0.0.1:9999/tika") as resp:
             content = await resp.text()
             if resp.status != 200:
-                raise Exception(resp)
+                if resp.status == 422:
+                    logger.debug(
+                        f"Tika could not parse {os.path.basename(filename)}, discarding"
+                    )
+                else:
+                    raise Exception(resp)
+            if len(content) > 20971520:
+                logger.warning(
+                    f"We got more than 20MiB out of Tika for {os.path.basename(filename)} -- keeping only 20MiB"
+                )
+                content = content[:20971520]
             return content
