@@ -304,6 +304,16 @@ class BaseDataSource:
             BasicRulesSetSemanticValidator,
         ]
 
+    @classmethod
+    def hash_id(cls, _id):
+        """Called, when an `_id` is too long to be ingested into elasticsearch.
+
+        This method can be overridden to execute a hash function on a document `_id`,
+        which returns a hashed `_id` with a length below the elasticsearch `_id` size limit.
+        """
+
+        return _id
+
     async def validate_filtering(self, filtering):
         """Execute all basic rule and advanced rule validators."""
 
