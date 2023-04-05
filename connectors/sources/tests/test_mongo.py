@@ -259,6 +259,8 @@ async def test_validate_config_when_database_name_invalid_then_raises_exception(
         source = create_source(
             MongoDataSource,
             host="mongodb://127.0.0.1:27021",
+            user="foo",
+            password="password",
             database=configured_database_name,
             collection="something",
         )

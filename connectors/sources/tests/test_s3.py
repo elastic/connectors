@@ -329,8 +329,8 @@ def test_get_bucket_list():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_for_empty_bucket_string():
-    """This function test validate_configwhen buckets string is empty"""
+async def test_validate_config_for_empty_bucket_string_raises_error():
+    """This function test validate_config when buckets string is empty"""
     # Setup
     source = create_source(S3DataSource)
     source.configuration.set_field(name="buckets", value=[""])

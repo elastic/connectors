@@ -196,6 +196,8 @@ class MongoDataSource(BaseDataSource):
         self._dirty = False
 
     async def validate_config(self):
+        self.configuration.check_valid()
+
         client = self.client
         configured_database_name = self.configuration["database"]
         configured_collection_name = self.configuration["collection"]
