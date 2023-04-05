@@ -223,7 +223,12 @@ class DataSourceConfiguration:
             case "str":
                 return value is None or value == ""
             case "list":
-                return value is None or len(value) <= 0
+                # also check if list contains only empty strings or None values
+                return (
+                    value is None
+                    or len(value) <= 0
+                    or "".join(str(x or "") for x in value) == ""
+                )
             case _:
                 # int and bool
                 return value is None
