@@ -503,6 +503,20 @@ class Connector(ESDocument):
         resp = await self.index.update_by_script(doc_id=self.id, script=script)
         return resp["result"] == "updated"
 
+    async def update_last_sync_scheduled_at(self, new_ts):
+        """Update last_sync_scheduled_at with update_by_script, and return True only if last_sync_scheduled_at is
+        updated."""
+        script = {
+            "lang": "painless",
+            "source": "if (ctx._source.last_sync_scheduled_at == params['old_ts']) { ctx._source.last_sync_scheduled_at = params['new_ts'] } else { ctx.op = 'noop' }",
+            "params": {
+                "old_ts": self.last_sync_scheduled_at,
+                "new_ts": new_ts,
+            },
+        }
+        resp = await self.index.update_by_script(doc_id=self.id, script=script)
+        return resp["result"] == "updated"
+
     async def sync_starts(self):
         doc = {
             "last_sync_status": JobStatus.IN_PROGRESS.value,

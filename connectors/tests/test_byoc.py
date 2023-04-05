@@ -774,11 +774,56 @@ async def test_prepare(mock_responses):
     [(False, None, False), (True, "updated", True), (True, "noop", False)],
 )
 async def test_connector_reset_sync_now_flag(sync_now, updated, expected_result):
-    connector_doc = {"_id": "1", "_source": {"sync_now": sync_now}}
+    doc_id = "1"
+    connector_doc = {"_id": doc_id, "_source": {"sync_now": sync_now}}
+    expected_script = {
+        "lang": "painless",
+        "source": "if (ctx._source.sync_now) { ctx._source.sync_now = false } else { ctx.op = 'noop' }",
+    }
     index = Mock()
     index.update_by_script = AsyncMock(return_value={"result": updated})
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    assert await connector.reset_sync_now_flag() == expected_result
+    result = await connector.reset_sync_now_flag()
+
+    if updated is None:
+        index.update_by_script.assert_not_awaited()
+    else:
+        index.update_by_script.assert_awaited_once_with(
+            doc_id=doc_id, script=expected_script
+        )
+    assert result == expected_result
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "updated, expected_result",
+    [("updated", True), ("noop", False)],
+)
+async def test_connector_update_last_sync_scheduled_at(updated, expected_result):
+    doc_id = "1"
+    old_ts = datetime.utcnow()
+    new_ts = datetime.utcnow() + timedelta(seconds=20)
+    connector_doc = {
+        "_id": doc_id,
+        "_source": {"last_sync_scheduled_at": old_ts.isoformat()},
+    }
+    expected_script = {
+        "lang": "painless",
+        "source": "if (ctx._source.last_sync_scheduled_at == params['old_ts']) { ctx._source.last_sync_scheduled_at = params['new_ts'] } else { ctx.op = 'noop' }",
+        "params": {
+            "old_ts": old_ts,
+            "new_ts": new_ts,
+        },
+    }
+    index = Mock()
+    index.update_by_script = AsyncMock(return_value={"result": updated})
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    result = await connector.update_last_sync_scheduled_at(new_ts)
+
+    index.update_by_script.assert_awaited_once_with(
+        doc_id=doc_id, script=expected_script
+    )
+    assert result == expected_result
 
 
 @pytest.mark.asyncio
