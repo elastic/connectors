@@ -237,12 +237,24 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
         # TODO: add test case with a mocked SSL cert
     ],
 )
-async def test_validate_configuration_with_valid_dependency_fields_does_not_raise_error(
+async def test_validate_config_with_valid_dependency_fields_does_not_raise_error(
     extras,
 ):
     source = create_source(ConfluenceDataSource, **extras)
-    await source.validate_config()
 
+    with patch.object(connectors.utils, "ssl_context", return_value=MockSSL()):
+        await source.validate_config()
+
+@pytest.mark.asyncio
+@patch("aiohttp.ClientSession.get")
+async def test_validate_config_when_ssl_enabled_and_ssl_ca_not_empty_does_not_raise_error(mock_get):
+    cert = (
+        "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
+    )
+
+    with patch.object(ssl, "create_default_context", return_value=MockSSL()):
+        source = create_source(ConfluenceDataSource, ssl_enabled=True, ssl_ca=cert)
+        await source.validate_config()
 
 def test_tweak_bulk_options():
     """Test tweak_bulk_options method of BaseDataSource class"""
