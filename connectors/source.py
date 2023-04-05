@@ -22,6 +22,22 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 
+DEFAULT_CONFIGURATION = {
+    "default_value": None,
+    "depends_on": [],
+    "display": "text",
+    "label": "",
+    "options": [],
+    "order": 1,
+    "required": True,
+    "sensitive": False,
+    "tooltip": None,
+    "type": "str",
+    "ui_restrictions": [],
+    "validations": [],
+    "value": "",
+}
+
 
 class ValidationTypes(Enum):
     LESS_THAN = "less_than"
@@ -34,7 +50,14 @@ class ValidationTypes(Enum):
 
 class Field:
     def __init__(
-        self, name, label=None, value="", type="str", depends_on=None, validations=None
+        self,
+        name,
+        label=None,
+        value="",
+        type="str",
+        required=True,
+        depends_on=None,
+        validations=None,
     ):
         if label is None:
             label = name
@@ -47,6 +70,7 @@ class Field:
         self.label = label
         self._type = type
         self.value = self._convert(value, type)
+        self.required = required
         self.depends_on = depends_on
         self.validations = validations
 
@@ -90,6 +114,7 @@ class DataSourceConfiguration:
                         value.get("label"),
                         value.get("value", ""),
                         value.get("type", "str"),
+                        value.get("required", True),
                         value.get("depends_on", []),
                         value.get("validations", []),
                     )
@@ -116,9 +141,18 @@ class DataSourceConfiguration:
         return name in self._config
 
     def set_field(
-        self, name, label=None, value="", type="str", depends_on=None, validations=None
+        self,
+        name,
+        label=None,
+        value="",
+        type="str",
+        required=True,
+        depends_on=None,
+        validations=None,
     ):
-        self._config[name] = Field(name, label, value, type, depends_on, validations)
+        self._config[name] = Field(
+            name, label, value, type, required, depends_on, validations
+        )
 
     def get_field(self, name):
         return self._config[name]
@@ -144,10 +178,16 @@ class DataSourceConfiguration:
             if not self.dependencies_satisfied(field):
                 # we don't validate a field if its dependencies are not met
                 logger.debug(
-                    f"Field {field.label} was not validated because its dependencies were not met."
+                    f"'{field.label}' was not validated because its dependencies were not met."
                 )
                 continue
 
+            if field.required and self.is_value_empty(field):
+                # a value is invalid if it is both required and empty
+                validation_errors.extend([f"`{field.label}` cannot be empty."])
+                continue
+
+            # finally check actual validations
             validation_errors.extend(self.validate_field(field))
 
         if len(validation_errors) > 0:
@@ -168,13 +208,25 @@ class DataSourceConfiguration:
             if dependency["field"] not in self._config:
                 # cannot check dependency if field does not exist
                 raise ConfigurableFieldDependencyError(
-                    f'Configuration `{field.label}` depends on configuration `{dependency["field"]}`, but it does not exist.'
+                    f'`{field.label}` depends on configuration `{dependency["field"]}`, but it does not exist.'
                 )
 
             if self._config[dependency["field"]].value != dependency["value"]:
                 return False
 
         return True
+
+    def is_value_empty(self, field):
+        value = field.value
+
+        match field.type:
+            case "str":
+                return value is None or value == ""
+            case "list":
+                return value is None or len(value) <= 0
+            case _:
+                # int and bool
+                return value is None
 
     def validate_field(self, field):
         """Used to validate the `value` of a Field using its `validations`.
@@ -261,21 +313,7 @@ class BaseDataSource:
         res = {}
 
         for config_name, fields in cls.get_default_configuration().items():
-            entry = {
-                "default_value": None,
-                "depends_on": [],
-                "display": "text",
-                "label": "",
-                "options": [],
-                "order": 1,
-                "required": True,
-                "sensitive": False,
-                "tooltip": None,
-                "type": "str",
-                "ui_restrictions": [],
-                "validations": [],
-                "value": "",
-            }
+            entry = DEFAULT_CONFIGURATION.copy()
 
             for field_property, value in fields.items():
                 if field_property == "label":
@@ -345,8 +383,7 @@ class BaseDataSource:
         If connector configuration is invalid, this method will raise an exception
         with human-friendly and actionable description
         """
-        # TODO: when validate_config is implemented everywhere, we should make this method raise NotImplementedError
-        pass
+        self.configuration.check_valid()
 
     async def ping(self):
         """When called, pings the backend
