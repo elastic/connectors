@@ -14,7 +14,7 @@ from aiofiles.tempfile import NamedTemporaryFile
 from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClient
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
 
 BLOB_SCHEMA = {
@@ -102,25 +102,12 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
+                "validations": [
+                    {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS}
+                ],
                 "value": MAX_CONCURRENT_DOWNLOADS,
             },
         }
-
-    async def validate_config(self):
-        if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
-            raise ConfigurableFieldValueError(
-                f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
-            )
-
-        keys = ["account_name", "account_key", "blob_endpoint"]
-        empty_configuration_fields = list(
-            filter(lambda field: self.configuration[field] == "", keys)
-        )
-
-        if empty_configuration_fields:
-            raise ConfigurableFieldValueError(
-                f"Configured keys: {empty_configuration_fields} can't be empty."
-            )
 
     def _configure_connection_string(self):
         """Generates connection string for ABS
