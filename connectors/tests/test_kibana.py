@@ -61,8 +61,8 @@ def test_main(patch_logger, mock_responses):
                 "fake",
                 "--index-name",
                 "data",
-                "--filtering",
-                "data",
+                "--connector-definition",
+                os.path.join(HERE, "connector.json"),
             ]
         )
         == 0

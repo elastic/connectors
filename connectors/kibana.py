@@ -90,10 +90,7 @@ DEFAULT_PIPELINE = {
 }
 
 
-async def prepare(service_type, index_name, config, filtering=None):
-    if filtering is None:
-        filtering = []
-
+async def prepare(service_type, index_name, config, connector_definition=None):
     klass = get_source_klass(config["sources"][service_type])
     es = ElasticServer(config["elasticsearch"])
 
@@ -136,7 +133,7 @@ async def prepare(service_type, index_name, config, filtering=None):
 
     try:
         # https:#github.com/elastic/enterprise-search-team/discussions/2153#discussioncomment-2999765
-        doc = {
+        doc = connector_definition or {
             # Used by the frontend to manage the api key
             # associated with the connector
             "api_key_id": "",
@@ -162,7 +159,51 @@ async def prepare(service_type, index_name, config, filtering=None):
             "created_at": None,
             # Date the connector was updated
             "updated_at": None,
-            "filtering": filtering,
+            "filtering": [
+                {
+                    "domain": "DEFAULT",
+                    "draft": {
+                        "advanced_snippet": {
+                            "updated_at": "2023-01-31T16:41:27.341Z",
+                            "created_at": "2023-01-31T16:38:49.244Z",
+                            "value": {},
+                        },
+                        "rules": [
+                            {
+                                "field": "_",
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "rule": "regex",
+                                "id": "DEFAULT",
+                                "value": ".*",
+                                "order": 1,
+                                "policy": "include",
+                            }
+                        ],
+                        "validation": {"state": "valid", "errors": []},
+                    },
+                    "active": {
+                        "advanced_snippet": {
+                            "updated_at": "2023-01-31T16:41:27.341Z",
+                            "created_at": "2023-01-31T16:38:49.244Z",
+                            "value": {},
+                        },
+                        "rules": [
+                            {
+                                "field": "_",
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "rule": "regex",
+                                "id": "DEFAULT",
+                                "value": ".*",
+                                "order": 1,
+                                "policy": "include",
+                            }
+                        ],
+                        "validation": {"state": "valid", "errors": []},
+                    },
+                }
+            ],
             # Scheduling intervals
             "scheduling": {
                 "enabled": False,
@@ -248,6 +289,11 @@ def _parser():
         "--service-type", type=str, help="Service type", default="mongodb"
     )
     parser.add_argument(
+        "--connector-definition",
+        type=str,
+        help="Path to a json file with connector Elasticsearch entry to use for testing",
+    )
+    parser.add_argument(
         "--index-name",
         type=validate_index_name,
         help="Elasticsearch index",
@@ -259,49 +305,40 @@ def _parser():
         default=False,
         help="Run the event loop in debug mode.",
     )
-    parser.add_argument(
-        "--filtering",
-        type=str,
-        help="Path to a json file containing an array of filters",
-    )
 
     return parser
-
-
-def _load_filtering(filtering_file_path):
-    if filtering_file_path is None or (
-        not os.path.exists(filtering_file_path)
-        and not os.path.isfile(filtering_file_path)
-    ):
-        logger.warning(
-            f"filtering file at '{filtering_file_path}' does not exist. Fallback to default filtering."
-        )
-        filtering = DEFAULT_FILTERING
-    else:
-        with open(filtering_file_path) as f:
-            filtering = json.loads(f.read())
-
-        logger.info(f"Successfully loaded filtering file from '{filtering_file_path}'.")
-
-    return filtering
 
 
 def main(args=None):
     parser = _parser()
     args = parser.parse_args(args=args)
+
+    connector_definition_file = args.connector_definition
     config_file = args.config_file
-    filtering_file = args.filtering
 
     if not os.path.exists(config_file):
         raise IOError(f"config file at '{config_file}' does not exist")
 
-    logger.info(f"Loading filters from {filtering_file}")
-    filtering = _load_filtering(filtering_file)
-
     set_logger(args.debug and logging.DEBUG or logging.INFO)
     config = EnvYAML(config_file)
+    connector_definition = None
+    if (
+        connector_definition_file
+        and os.path.exists(connector_definition_file)
+        and os.path.isfile(connector_definition_file)
+    ):
+        with open(connector_definition_file) as f:
+            logger.info(f"Loaded connector definition from {connector_definition_file}")
+            connector_definition = json.load(f)
+    else:
+        logger.info(
+            "No connector definition file provided, using default connector definition"
+        )
+
     try:
-        asyncio.run(prepare(args.service_type, args.index_name, config, filtering))
+        asyncio.run(
+            prepare(args.service_type, args.index_name, config, connector_definition)
+        )
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("Bye")
 

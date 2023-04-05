@@ -4,8 +4,9 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """MySQL source module responsible to fetch documents from MySQL"""
-import ssl
+import re
 from contextlib import asynccontextmanager
+from functools import cached_property
 
 import aiomysql
 
@@ -15,16 +16,17 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
-from connectors.sources.generic_database import WILDCARD, configured_tables, is_wildcard
-from connectors.utils import CancellableSleeps, RetryStrategy, retryable
+from connectors.sources.generic_database import (
+    WILDCARD,
+    Queries,
+    configured_tables,
+    is_wildcard,
+)
+from connectors.utils import CancellableSleeps, RetryStrategy, retryable, ssl_context
+
+SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN = re.compile(r"`(?:[^`]|``)+`|\w+")
 
 MAX_POOL_SIZE = 10
-QUERIES = {
-    "ALL_TABLE": "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}'",
-    "TABLE_DATA": "SELECT * FROM {database}.{table}",
-    "TABLE_PRIMARY_KEY": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'",
-    "TABLE_LAST_UPDATE_TIME": "SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}'",
-}
 DEFAULT_FETCH_SIZE = 50
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -32,12 +34,44 @@ DEFAULT_SSL_ENABLED = False
 DEFAULT_SSL_CA = ""
 
 
+def parse_tables_string_to_list_of_tables(tables_string):
+    if tables_string is None or len(tables_string) == 0:
+        return []
+
+    return SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN.findall(tables_string)
+
+
 def format_list(list_):
     return ", ".join(list_)
 
 
-class NoDatabaseConfiguredError(Exception):
-    pass
+class MySQLQueries(Queries):
+    def __init__(self, database):
+        self.database = database
+
+    def all_tables(self, **kwargs):
+        return f"SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}'"
+
+    def table_primary_key(self, table):
+        return f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'"
+
+    def table_data(self, table):
+        return f"SELECT * FROM {self.database}.{table}"
+
+    def table_last_update_time(self, table):
+        return f"SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
+
+    def columns(self, table):
+        return f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
+
+    def ping(self):
+        pass
+
+    def table_data_count(self, **kwargs):
+        pass
+
+    def all_schemas(self):
+        pass
 
 
 class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
@@ -77,6 +111,94 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         )
 
 
+class MySQLClient:
+    def __init__(
+        self,
+        host,
+        port,
+        user,
+        password,
+        ssl_enabled,
+        ssl_certificate,
+        database=None,
+        max_pool_size=MAX_POOL_SIZE,
+    ):
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.database = database
+        self.max_pool_size = max_pool_size
+        self.ssl_enabled = ssl_enabled
+        self.ssl_certificate = ssl_certificate
+        self.queries = MySQLQueries(self.database)
+
+    @asynccontextmanager
+    async def with_connection_pool(self):
+        connection_string = {
+            "host": self.host,
+            "port": int(self.port),
+            "user": self.user,
+            "password": self.password,
+            "db": self.database,
+            "maxsize": self.max_pool_size,
+            "ssl": ssl_context(certificate=self.ssl_certificate)
+            if self.ssl_enabled
+            else None,
+        }
+
+        connection_pool = None
+
+        try:
+            connection_pool = await aiomysql.create_pool(**connection_string)
+            yield connection_pool
+        except Exception:
+            logger.error("Failed to create connection pool for MySQL.")
+            raise
+        finally:
+            connection_pool.close()
+            await connection_pool.wait_closed()
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_all_table_names(self):
+        async with self.with_connection_pool() as connection_pool:
+            async with connection_pool.acquire() as connection:
+                async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+                    await cursor.execute(self.queries.all_tables())
+                    return list(map(lambda table: table[0], await cursor.fetchall()))
+
+    async def ping(self):
+        async with self.with_connection_pool() as connection_pool:
+            try:
+                async with connection_pool.acquire() as connection:
+                    await connection.ping()
+                    logger.info("Successfully connected to the MySQL Server.")
+            except Exception:
+                logger.exception("Error while connecting to the MySQL Server.")
+                raise
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_column_names(self, table, query=None):
+        if query is None:
+            # fetch all columns on default
+            query = self.queries.columns(table)
+
+        async with self.with_connection_pool() as connection_pool:
+            async with connection_pool.acquire() as connection:
+                async with connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+                    await cursor.execute(query)
+
+                    return [f"{table}_{column[0]}" for column in cursor.description]
+
+
 class MySqlDataSource(BaseDataSource):
     """MySQL"""
 
@@ -96,6 +218,7 @@ class MySqlDataSource(BaseDataSource):
         self.certificate = self.configuration["ssl_ca"]
         self.database = self.configuration["database"]
         self.tables = self.configuration["tables"]
+        self.queries = MySQLQueries(self.database)
 
     @classmethod
     def get_default_configuration(cls):
@@ -179,6 +302,18 @@ class MySqlDataSource(BaseDataSource):
             },
         }
 
+    @cached_property
+    def _mysql_client(self):
+        return MySQLClient(
+            host=self.configuration["host"],
+            port=self.configuration["port"],
+            user=self.configuration["user"],
+            password=self.configuration["password"],
+            database=self.configuration["database"],
+            ssl_enabled=self.configuration["ssl_enabled"],
+            ssl_certificate=self.configuration["ssl_ca"],
+        )
+
     def advanced_rules_validators(self):
         return [MySQLAdvancedRulesValidator(self)]
 
@@ -220,7 +355,7 @@ class MySqlDataSource(BaseDataSource):
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def _remote_validation(self):
-        async with self.with_connection_pool() as connection_pool:
+        async with self._mysql_client.with_connection_pool() as connection_pool:
             async with connection_pool.acquire() as conn:
                 async with conn.cursor() as cursor:
                     await self._validate_database_accessible(cursor)
@@ -236,8 +371,9 @@ class MySqlDataSource(BaseDataSource):
 
     async def _validate_tables_accessible(self, cursor):
         non_accessible_tables = []
+        tables_to_validate = await self.get_tables_to_fetch()
 
-        for table in self.tables:
+        for table in tables_to_validate:
             try:
                 await cursor.execute(f"SELECT 1 FROM {table} LIMIT 1;")
             except aiomysql.Error:
@@ -248,62 +384,8 @@ class MySqlDataSource(BaseDataSource):
                 f"The tables '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['user']}'."
             )
 
-    def _ssl_context(self, certificate):
-        """Convert string to pem format and create a SSL context
-
-        Args:
-            certificate (str): certificate in string format
-
-        Returns:
-            ssl_context: SSL context with certificate
-        """
-        certificate = certificate.replace(" ", "\n")
-        pem_format = " ".join(certificate.split("\n", 1))
-        pem_format = " ".join(pem_format.rsplit("\n", 1))
-        ctx = ssl.create_default_context()
-        ctx.load_verify_locations(cadata=pem_format)
-        return ctx
-
-    @asynccontextmanager
-    async def with_connection_pool(self):
-        connection_string = {
-            "host": self.configuration["host"],
-            "port": int(self.configuration["port"]),
-            "user": self.configuration["user"],
-            "password": self.configuration["password"],
-            "db": None,
-            "maxsize": MAX_POOL_SIZE,
-            "ssl": self._ssl_context(certificate=self.certificate)
-            if self.ssl_enabled
-            else None,
-        }
-
-        connection_pool = None
-
-        try:
-            connection_pool = await aiomysql.create_pool(**connection_string)
-        except Exception:
-            logger.error("Failed to create connection pool.")
-            raise
-
-        try:
-            yield connection_pool
-        finally:
-            connection_pool.close()
-            await connection_pool.wait_closed()
-
     async def ping(self):
-        """Verify the connection with MySQL server"""
-
-        logger.info("Pinging MySQL...")
-        async with self.with_connection_pool() as connection_pool:
-            try:
-                async with connection_pool.acquire() as connection:
-                    await connection.ping()
-                    logger.info("Successfully connected to the MySQL Server.")
-            except Exception:
-                logger.exception("Error while connecting to the MySQL Server.")
-                raise
+        await self._mysql_client.ping()
 
     async def _connect(self, query, fetch_many=False, **query_kwargs):
         """Executes the passed query on the MySQL server.
@@ -317,7 +399,6 @@ class MySqlDataSource(BaseDataSource):
             list: Column names and query response
         """
 
-        query_kwargs["database"] = self.database
         formatted_query = query.format(**query_kwargs)
         size = self.configuration["fetch_size"]
         retry = 1
@@ -326,7 +407,7 @@ class MySqlDataSource(BaseDataSource):
         rows_fetched = 0
         cursor_position = 0
 
-        async with self.with_connection_pool() as connection_pool:
+        async with self._mysql_client.with_connection_pool() as connection_pool:
             while retry <= self.retry_count:
                 try:
                     async with connection_pool.acquire() as connection:
@@ -339,7 +420,7 @@ class MySqlDataSource(BaseDataSource):
                                 # sending back column names only once
                                 if yield_once:
                                     yield [
-                                        f"{query_kwargs['database']}_{query_kwargs['table']}_{column[0]}"
+                                        f"{query_kwargs['table']}_{column[0]}"
                                         for column in cursor.description
                                     ]
                                     yield_once = False
@@ -386,9 +467,9 @@ class MySqlDataSource(BaseDataSource):
                     retry += 1
 
     async def fetch_all_tables(self):
-        return await anext(self._connect(query=QUERIES["ALL_TABLE"]))
+        return await anext(self._connect(query=self.queries.all_tables()))
 
-    async def fetch_rows_for_table(self, table=None, query=QUERIES["TABLE_DATA"]):
+    async def fetch_rows_for_table(self, table=None, query=None):
         """Fetches all the rows from all the tables of the database.
 
         Args:
@@ -418,7 +499,7 @@ class MySqlDataSource(BaseDataSource):
 
                 async for row in self.fetch_rows_for_table(
                     table=table,
-                    query=QUERIES["TABLE_DATA"],
+                    query=self.queries.table_data(table),
                 ):
                     yield row
         else:
@@ -426,7 +507,7 @@ class MySqlDataSource(BaseDataSource):
                 f"Fetched 0 tables for database: {self.database}. As database has no tables."
             )
 
-    async def fetch_documents(self, table, query=QUERIES["TABLE_DATA"]):
+    async def fetch_documents(self, table, query=None):
         """Fetches all the table entries and format them in Elasticsearch documents
 
         Args:
@@ -437,44 +518,53 @@ class MySqlDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
 
-        primary_key = await anext(
-            self._connect(query=QUERIES["TABLE_PRIMARY_KEY"], table=table)
-        )
+        primary_key_columns = await self._get_primary_key_columns(table)
 
-        keys = []
-        for column_name in primary_key:
-            keys.append(f"{self.database}_{table}_{column_name[0]}")
-
-        if keys:
-            last_update_time = await anext(
-                self._connect(
-                    query=QUERIES["TABLE_LAST_UPDATE_TIME"],
-                    table=table,
-                )
-            )
-            last_update_time = last_update_time[0][0]
-
-            table_rows = self._connect(query=query, fetch_many=True, table=table)
-            column_names = await anext(table_rows)
-
-            async for row in table_rows:
-                row = dict(zip(column_names, row))
-                keys_value = ""
-                for key in keys:
-                    keys_value += f"{row.get(key)}_" if row.get(key) else ""
-                row.update(
-                    {
-                        "_id": f"{self.database}_{table}_{keys_value}",
-                        "_timestamp": last_update_time,
-                        "Database": self.database,
-                        "Table": table,
-                    }
-                )
-                yield self.serialize(doc=row)
-        else:
+        if not primary_key_columns:
             logger.warning(
                 f"Skipping {table} table from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
             )
+            return
+
+        last_update_time = await anext(
+            self._connect(
+                query=self.queries.table_last_update_time(table),
+                table=table,
+            )
+        )
+        last_update_time = last_update_time[0][0]
+
+        table_rows = self._connect(query=query, fetch_many=True, table=table)
+        column_names = await anext(table_rows)
+
+        async for row in table_rows:
+            row = dict(zip(column_names, row))
+            row.update(
+                {
+                    "_id": self._generate_id(table, row, primary_key_columns),
+                    "_timestamp": last_update_time,
+                    "Table": table,
+                }
+            )
+            yield self.serialize(doc=row)
+
+    def _generate_id(self, table, row, primary_key_columns):
+        keys_value = ""
+        for key in primary_key_columns:
+            keys_value += f"{row.get(key)}_" if row.get(key) else ""
+
+        return f"{table}_{keys_value}"
+
+    async def _get_primary_key_columns(self, table):
+        primary_key = await anext(
+            self._connect(query=self.queries.table_primary_key(table), table=table)
+        )
+
+        columns = []
+        for column_name in primary_key:
+            columns.append(f"{table}_{column_name[0]}")
+
+        return columns
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch tables and rows in async manner.
@@ -482,9 +572,6 @@ class MySqlDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        if self.database is None or not len(self.database):
-            raise NoDatabaseConfiguredError
-
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
 
