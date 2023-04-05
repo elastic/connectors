@@ -98,6 +98,18 @@ class Field:
             return [item.strip() for item in value.split(",")]
         return value
 
+    def is_value_empty(self):
+        value = self.value
+
+        match self.type:
+            case "str":
+                return value is None or value == ""
+            case "list":
+                return value is None or len(value) <= 0
+            case _:
+                # int and bool
+                return value is None
+
 
 class DataSourceConfiguration:
     """Holds the configuration needed by the source class"""
@@ -182,9 +194,9 @@ class DataSourceConfiguration:
                 )
                 continue
 
-            if field.required and self.is_value_empty(field):
+            if field.required and field.is_value_empty():
                 # a value is invalid if it is both required and empty
-                validation_errors.extend([f"`{field.label}` cannot be empty."])
+                validation_errors.extend([f"'{field.label}' cannot be empty."])
                 continue
 
             # finally check actual validations
@@ -216,18 +228,6 @@ class DataSourceConfiguration:
 
         return True
 
-    def is_value_empty(self, field):
-        value = field.value
-
-        match field.type:
-            case "str":
-                return value is None or value == ""
-            case "list":
-                return value is None or len(value) <= 0
-            case _:
-                # int and bool
-                return value is None
-
     def validate_field(self, field):
         """Used to validate the `value` of a Field using its `validations`.
 
@@ -250,7 +250,7 @@ class DataSourceConfiguration:
                         continue
                     else:
                         validation_errors.append(
-                            f"`{label}` value `{value}` should be less than {constraint}."
+                            f"'{label}' value '{value}' should be less than {constraint}."
                         )
                 case ValidationTypes.GREATER_THAN.value:
                     if value > constraint:
@@ -258,7 +258,7 @@ class DataSourceConfiguration:
                         continue
                     else:
                         validation_errors.append(
-                            f"`{label}` value `{value}` should be greater than {constraint}."
+                            f"'{label}' value '{value}' should be greater than {constraint}."
                         )
                 case ValidationTypes.LIST_TYPE.value:
                     for item in value:
@@ -266,24 +266,24 @@ class DataSourceConfiguration:
                             constraint == "int" and not isinstance(item, int)
                         ):
                             validation_errors.append(
-                                f"`{label}` list value `{item}` should be of type {constraint}."
+                                f"'{label}' list value '{item}' should be of type {constraint}."
                             )
                 case ValidationTypes.INCLUDED_IN.value:
                     if field.type == "list":
                         for item in value:
                             if item not in constraint:
                                 validation_errors.append(
-                                    f"`{label}` list value `{item}` should be one of {', '.join(str(x) for x in constraint)}."
+                                    f"'{label}' list value '{item}' should be one of {', '.join(str(x) for x in constraint)}."
                                 )
                     else:
                         if value not in constraint:
                             validation_errors.append(
-                                f"`{label}` list value `{value}` should be one of {', '.join(str(x) for x in constraint)}."
+                                f"'{label}' list value '{value}' should be one of {', '.join(str(x) for x in constraint)}."
                             )
                 case ValidationTypes.REGEX.value:
                     if not re.fullmatch(constraint, value):
                         validation_errors.append(
-                            f"`{label}` value `{value}` failed regex check {constraint}."
+                            f"'{label}' value '{value}' failed regex check {constraint}."
                         )
 
         return validation_errors
