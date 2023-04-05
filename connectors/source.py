@@ -442,16 +442,6 @@ def get_source_klasses(config):
         yield get_source_klass(fqn)
 
 
-def get_source_names(config):
-    """Returns the list of source names"""
-    return config["sources"].keys()
-
-
-def get_source_list(config):
-    """Returns a service type - source klass dictionary"""
-    return config["sources"]
-
-
 class ConfigurableFieldValueError(Exception):
     pass
 

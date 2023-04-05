@@ -7,7 +7,7 @@ from connectors.byoc import ConnectorIndex, DataSourceError, SyncJobIndex
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.services.base import BaseService
-from connectors.source import get_source_klass_dict
+from connectors.source import get_source_klass
 from connectors.sync_job_runner import SyncJobRunner
 from connectors.utils import ConcurrentTasks
 
@@ -23,7 +23,7 @@ class JobExecutionService(BaseService):
         self.concurrent_syncs = self.service_config.get(
             "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_SYNCS
         )
-        self.source_klass_dict = get_source_klass_dict(config)
+        self.source_list = config["sources"]
         self.connector_index = None
         self.sync_job_index = None
         self.syncs = None
@@ -34,11 +34,11 @@ class JobExecutionService(BaseService):
             self.syncs.cancel()
 
     async def _sync(self, sync_job):
-        if sync_job.service_type not in self.source_klass_dict:
+        if sync_job.service_type not in self.source_list:
             raise DataSourceError(
                 f"Couldn't find data source class for {sync_job.service_type}"
             )
-        source_klass = self.source_klass_dict[sync_job.service_type]
+        source_klass = get_source_klass(self.source_list[sync_job.service_type])
 
         try:
             connector = await self.connector_index.fetch_by_id(sync_job.connector_id)
