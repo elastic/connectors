@@ -208,7 +208,7 @@ class DataSourceConfiguration:
             if dependency["field"] not in self._config:
                 # cannot check dependency if field does not exist
                 raise ConfigurableFieldDependencyError(
-                    f'`{field.label}` depends on configuration `{dependency["field"]}`, but it does not exist.'
+                    f'\'{field.label}\' depends on configuration \'{dependency["field"]}\', but it does not exist.'
                 )
 
             if self._config[dependency["field"]].value != dependency["value"]:
