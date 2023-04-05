@@ -7,10 +7,15 @@ import asyncio
 import time
 
 from connectors.byoc import JobStatus
+from connectors.byoei import ElasticServer
 from connectors.es import Mappings
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 
+UTF_8 = "utf-8"
+
+JOB_REPORTING_INTERVAL = 10
+JOB_CHECK_INTERVAL = 1
 ES_ID_SIZE_LIMIT = 512
 
 
@@ -20,6 +25,27 @@ class SyncJobRunningError(Exception):
 
 class JobClaimError(Exception):
     pass
+
+
+class ConnectorNotFoundError(Exception):
+    def __init__(self, connector_id):
+        super().__init__(f"Connector is not found for connector ID {connector_id}.")
+
+
+class ConnectorJobNotFoundError(Exception):
+    def __init__(self, job_id):
+        super().__init__(f"Connector job is not found for job ID {job_id}.")
+
+
+class ConnectorJobCanceledError(Exception):
+    pass
+
+
+class ConnectorJobNotRunningError(Exception):
+    def __init__(self, job_id, status):
+        super().__init__(
+            f"Connector job (ID: {job_id}) is not running but in status of {status}."
+        )
 
 
 class SyncJobRunner:
@@ -32,8 +58,7 @@ class SyncJobRunner:
         - `source_klass`: The source class of the connector
         - `sync_job`: The sync job to run
         - `connector`: The connector of the sync job
-        - `elastic_server`: The sync orchestrator used to fetch data from 3rd-party source and ingest into Elasticsearch
-        - `bulk_options`: The bulk options used for the ingestion
+        - `es_config`: The elasticsearch configuration to build connection to Elasticsearch server
 
     """
 
@@ -42,8 +67,7 @@ class SyncJobRunner:
         source_klass,
         sync_job,
         connector,
-        elastic_server,
-        bulk_options,
+        es_config,
     ):
         self.source_klass = source_klass
         self.data_provider = None
@@ -51,8 +75,10 @@ class SyncJobRunner:
         self.job_id = self.sync_job.id
         self.connector = connector
         self.connector_id = self.connector.id
-        self.elastic_server = elastic_server
-        self.bulk_options = bulk_options
+        self.es_config = es_config
+        self.elastic_server = None
+        self.job_reporting_task = None
+        self.bulk_options = self.es_config.get("bulk", {})
         self._start_time = None
         self.running = False
 
@@ -73,7 +99,7 @@ class SyncJobRunner:
                 logger.debug(
                     f"No change in {self.sync_job.service_type} data provider, skipping..."
                 )
-                await self._sync_done(sync_status=JobStatus.COMPLETED, result={})
+                await self._sync_done(sync_status=JobStatus.COMPLETED)
                 return
 
             logger.debug(f"Validating configuration for {self.data_provider}")
@@ -93,6 +119,8 @@ class SyncJobRunner:
                 is_connectors_index=True,
             )
 
+            self.elastic_server = ElasticServer(self.es_config)
+
             logger.debug("Preparing the content index")
             await self.elastic_server.prepare_content_index(
                 self.sync_job.index_name, mappings=mappings
@@ -102,7 +130,7 @@ class SyncJobRunner:
             bulk_options = self.bulk_options.copy()
             self.data_provider.tweak_bulk_options(bulk_options)
 
-            result = await self.elastic_server.async_bulk(
+            await self.elastic_server.async_bulk(
                 self.sync_job.index_name,
                 self.prepare_docs(),
                 self.sync_job.pipeline,
@@ -113,52 +141,75 @@ class SyncJobRunner:
                 ],
                 options=bulk_options,
             )
-            sync_error = result.get("fetch_error")
-            sync_status = JobStatus.COMPLETED if sync_error is None else JobStatus.ERROR
-            await self._sync_done(
-                sync_status=sync_status, result=result, sync_error=sync_error
+
+            self.job_reporting_task = asyncio.create_task(
+                self.update_ingestion_stats(JOB_REPORTING_INTERVAL)
             )
+            while not self.elastic_server.done():
+                await self.check_job()
+                await asyncio.sleep(JOB_CHECK_INTERVAL)
+            fetch_error = self.elastic_server.fetch_error()
+            sync_status = (
+                JobStatus.COMPLETED if fetch_error is None else JobStatus.ERROR
+            )
+            await self._sync_done(sync_status=sync_status, sync_error=fetch_error)
         except asyncio.CancelledError:
-            await self._sync_done(sync_status=JobStatus.SUSPENDED, result={})
+            await self._sync_done(sync_status=JobStatus.SUSPENDED)
+        except ConnectorJobCanceledError:
+            await self._sync_done(sync_status=JobStatus.CANCELED)
         except Exception as e:
-            await self._sync_done(sync_status=JobStatus.ERROR, result={}, sync_error=e)
+            logger.critical(e, exc_info=True)
+            await self._sync_done(sync_status=JobStatus.ERROR, sync_error=e)
         finally:
+            self.running = False
+            if self.elastic_server is not None:
+                await self.elastic_server.close()
             if self.data_provider is not None:
                 await self.data_provider.close()
 
-    async def _sync_done(self, sync_status, result=None, sync_error=None):
-        if result is None:
-            result = {}
-        doc_updated = result.get("doc_updated", 0)
-        doc_created = result.get("doc_created", 0)
-        doc_deleted = result.get("doc_deleted", 0)
-        indexed_count = doc_updated + doc_created
+    async def _sync_done(self, sync_status, sync_error=None):
+        if self.elastic_server is not None and not self.elastic_server.done():
+            await self.elastic_server.cancel()
+        if self.job_reporting_task is not None and not self.job_reporting_task.done():
+            self.job_reporting_task.cancel()
+            try:
+                await self.job_reporting_task
+            except asyncio.CancelledError:
+                logger.info("Job reporting task is stopped.")
 
+        result = (
+            {} if self.elastic_server is None else self.elastic_server.ingestion_stats()
+        )
         ingestion_stats = {
-            "indexed_document_count": indexed_count,
-            "indexed_document_volume": 0,
-            "deleted_document_count": doc_deleted,
-            "total_document_count": await self.connector.document_count(),
+            "indexed_document_count": result.get("indexed_document_count", 0),
+            "indexed_document_volume": result.get("indexed_document_volume", 0),
+            "deleted_document_count": result.get("deleted_document_count", 0),
         }
 
-        if sync_status == JobStatus.ERROR:
-            await self.sync_job.fail(sync_error, ingestion_stats=ingestion_stats)
-        elif sync_status == JobStatus.SUSPENDED:
-            await self.sync_job.suspend(ingestion_stats=ingestion_stats)
-        elif sync_status == JobStatus.CANCELED:
-            await self.sync_job.cancel(ingestion_stats=ingestion_stats)
-        else:
-            await self.sync_job.done(ingestion_stats=ingestion_stats)
+        if await self.reload_sync_job():
+            if await self.reload_connector():
+                ingestion_stats[
+                    "total_document_count"
+                ] = await self.connector.document_count()
 
-        try:
-            await self.sync_job.reload()
-        except DocumentNotFoundError as e:
-            logger.error(f"Failed to reload sync job {self.job_id}. Error: {e}")
-            self.sync_job = None
-        await self.connector.sync_done(self.sync_job)
+            if sync_status == JobStatus.ERROR:
+                await self.sync_job.fail(sync_error, ingestion_stats=ingestion_stats)
+            elif sync_status == JobStatus.SUSPENDED:
+                await self.sync_job.suspend(ingestion_stats=ingestion_stats)
+            elif sync_status == JobStatus.CANCELED:
+                await self.sync_job.cancel(ingestion_stats=ingestion_stats)
+            else:
+                await self.sync_job.done(ingestion_stats=ingestion_stats)
+
+            await self.reload_sync_job()
+
+        if await self.reload_connector():
+            await self.connector.sync_done(self.sync_job)
+
         logger.info(
-            f"[{self.job_id}] Sync done: {indexed_count} indexed, {doc_deleted} "
-            f" deleted. ({int(time.time() - self._start_time)} seconds)"  # pyright: ignore
+            f"[{self.job_id}] Sync done: {ingestion_stats.get('indexed_document_count')} indexed, "
+            f"{ingestion_stats.get('deleted_document_count')} deleted. "
+            f"({int(time.time() - self._start_time)} seconds)"  # pyright: ignore
         )
 
     async def _claim_job(self):
@@ -177,15 +228,27 @@ class SyncJobRunner:
         async for doc, lazy_download in self.data_provider.get_docs(
             filtering=self.sync_job.filtering
         ):
-            doc_id = doc.get("_id", "")
-            doc_id_size = len(doc_id.encode("utf-8"))
+            doc_id = str(doc.get("_id", ""))
+            doc_id_size = len(doc_id.encode(UTF_8))
 
             if doc_id_size > ES_ID_SIZE_LIMIT:
-                logger.error(
+                logger.debug(
                     f"Document with id '{doc_id}' with a size of '{doc_id_size}' bytes could not be ingested. "
-                    f"Elasticsearch has an upper limit of '{ES_ID_SIZE_LIMIT}' bytes for the '_id' field."
+                    f"Elasticsearch has an upper limit of '{ES_ID_SIZE_LIMIT}' bytes for the '_id' field.",
+                    "Hashing id...",
                 )
-                continue
+
+                hashed_id = self.source_klass.hash_id(doc_id)
+                hashed_id_size = len(hashed_id.encode(UTF_8))
+
+                if hashed_id_size > ES_ID_SIZE_LIMIT:
+                    logger.error(
+                        f"Hashed document id '{hashed_id}' with a size of '{hashed_id_size}' bytes is above the size limit of '{ES_ID_SIZE_LIMIT}' bytes."
+                        f"Check the `hash_id` implementation of {self.source_klass.name}."
+                    )
+                    continue
+
+                doc["_id"] = hashed_id
 
             # adapt doc for pipeline settings
             doc["_extract_binary_content"] = self.sync_job.pipeline[
@@ -194,3 +257,51 @@ class SyncJobRunner:
             doc["_reduce_whitespace"] = self.sync_job.pipeline["reduce_whitespace"]
             doc["_run_ml_inference"] = self.sync_job.pipeline["run_ml_inference"]
             yield doc, lazy_download
+
+    async def update_ingestion_stats(self, interval):
+        while True:
+            await asyncio.sleep(interval)
+
+            if not await self.reload_sync_job():
+                break
+
+            result = self.elastic_server.ingestion_stats()
+            ingestion_stats = {
+                "indexed_document_count": result.get("indexed_document_count", 0),
+                "indexed_document_volume": result.get("indexed_document_volume", 0),
+                "deleted_document_count": result.get("deleted_document_count", 0),
+            }
+            await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
+
+    async def check_job(self):
+        if not await self.reload_connector():
+            raise ConnectorNotFoundError(self.connector_id)
+
+        if not await self.reload_sync_job():
+            raise ConnectorJobNotFoundError(self.job_id)
+
+        if self.sync_job.status == JobStatus.CANCELING:
+            raise ConnectorJobCanceledError
+
+        if self.sync_job.status != JobStatus.IN_PROGRESS:
+            raise ConnectorJobNotRunningError(self.job_id, self.sync_job.status)
+
+    async def reload_sync_job(self):
+        if self.sync_job is None:
+            return False
+        try:
+            await self.sync_job.reload()
+        except DocumentNotFoundError:
+            logger.error(f"Couldn't find sync job by id {self.job_id}")
+            self.sync_job = None
+        return self.sync_job is not None
+
+    async def reload_connector(self):
+        if self.connector is None:
+            return False
+        try:
+            await self.connector.reload()
+        except DocumentNotFoundError:
+            logger.error(f"Couldn't find connector by id {self.connector_id}")
+            self.connector = None
+        return self.connector is not None

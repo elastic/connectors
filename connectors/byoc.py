@@ -29,6 +29,13 @@ SYNC_DISABLED = -1
 JOB_NOT_FOUND_ERROR = "Couldn't find the job"
 UNKNOWN_ERROR = "unknown error"
 
+ALLOWED_INGESTION_STATS_KEYS = (
+    "indexed_document_count",
+    "indexed_document_volume",
+    "deleted_document_count",
+    "total_document_count",
+)
+
 
 class Status(Enum):
     CREATED = "created"
@@ -130,6 +137,15 @@ class ConnectorIndex(ESIndex):
             yield connector
 
 
+def filter_ingestion_stats(ingestion_stats):
+    if ingestion_stats is None:
+        return {}
+
+    return {
+        k: v for (k, v) in ingestion_stats.items() if k in ALLOWED_INGESTION_STATS_KEYS
+    }
+
+
 class SyncJob(ESDocument):
     @property
     def status(self):
@@ -204,6 +220,19 @@ class SyncJob(ESDocument):
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
+    async def update_metadata(self, ingestion_stats=None, connector_metadata=None):
+        ingestion_stats = filter_ingestion_stats(ingestion_stats)
+        if connector_metadata is None:
+            connector_metadata = {}
+
+        doc = {
+            "last_seen": iso_utc(),
+        }
+        doc.update(ingestion_stats)
+        if len(connector_metadata) > 0:
+            doc["metadata"] = connector_metadata
+        await self.index.update(doc_id=self.id, doc=doc)
+
     async def done(self, ingestion_stats=None, connector_metadata=None):
         await self._terminate(
             JobStatus.COMPLETED, None, ingestion_stats, connector_metadata
@@ -227,10 +256,10 @@ class SyncJob(ESDocument):
     async def _terminate(
         self, status, error=None, ingestion_stats=None, connector_metadata=None
     ):
-        if ingestion_stats is None:
-            ingestion_stats = {}
+        ingestion_stats = filter_ingestion_stats(ingestion_stats)
         if connector_metadata is None:
             connector_metadata = {}
+
         doc = {
             "last_seen": iso_utc(),
             "status": status.value,
@@ -440,6 +469,15 @@ class Connector(ESDocument):
     def last_sync_status(self):
         return JobStatus(self.get("last_sync_status"))
 
+    @property
+    def last_sync_scheduled_at(self):
+        last_sync_scheduled_at = self.get("last_sync_scheduled_at")
+        if last_sync_scheduled_at is not None:
+            last_sync_scheduled_at = datetime.fromisoformat(
+                last_sync_scheduled_at  # pyright: ignore
+            )
+        return last_sync_scheduled_at
+
     async def heartbeat(self, interval):
         if (
             self.last_seen is None
@@ -462,7 +500,16 @@ class Connector(ESDocument):
         return next_run(self.scheduling.get("interval"))
 
     async def reset_sync_now_flag(self):
-        await self.index.update(doc_id=self.id, doc={"sync_now": False})
+        """Reset sync_now flag to False, and return True only if the flag is updated."""
+        if not self.sync_now:
+            return False
+
+        script = {
+            "lang": "painless",
+            "source": "if (ctx._source.sync_now) { ctx._source.sync_now = false } else { ctx.op = 'noop' }",
+        }
+        resp = await self.index.update_by_script(doc_id=self.id, script=script)
+        return resp["result"] == "updated"
 
     async def sync_starts(self):
         doc = {
@@ -618,12 +665,7 @@ class SyncJobIndex(ESIndex):
             doc_source=doc_source,
         )
 
-    async def create(self, connector):
-        trigger_method = (
-            JobTriggerMethod.ON_DEMAND
-            if connector.sync_now
-            else JobTriggerMethod.SCHEDULED
-        )
+    async def create(self, connector, trigger_method):
         filtering = connector.filtering.get_active_filter().transform_filtering()
         job_def = {
             "connector": {
@@ -640,7 +682,7 @@ class SyncJobIndex(ESIndex):
             "created_at": iso_utc(),
             "last_seen": iso_utc(),
         }
-        return await self.index(job_def)
+        await self.index(job_def)
 
     async def pending_jobs(self, connector_ids):
         query = {
