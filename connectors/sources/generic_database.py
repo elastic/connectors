@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+import os
 from abc import ABC, abstractmethod
 from functools import partial
 
@@ -16,6 +17,9 @@ from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import iso_utc
 
 WILDCARD = "*"
+
+# Connector will skip the below tables if it gets from the input
+TABLES_TO_SKIP = ["sysutility_ucp_configuration_internal"]
 
 DEFAULT_FETCH_SIZE = 50
 DEFAULT_RETRY_COUNT = 3
@@ -217,7 +221,7 @@ class GenericBaseDataSource(BaseDataSource):
             raise ConfigurableFieldValueError("Configured port has to be an integer.")
 
         if (
-            self.dialect == "Postgresql"
+            self.dialect != "Oracle"
             and self.configuration["ssl_enabled"]
             and (
                 self.configuration["ssl_ca"] == ""
@@ -316,6 +320,15 @@ class GenericBaseDataSource(BaseDataSource):
 
     async def close(self):
         """Close the connection to the database server."""
+        if self.dialect == "Microsoft SQL" and os.path.exists(
+            "ssl_certificate_mssql.pem"
+        ):
+            try:
+                os.remove("ssl_certificate_mssql.pem")
+            except Exception as exception:
+                logger.warning(
+                    f"Something went wrong while removing temporary certificate file. Exception: {exception}"
+                )
         if self.connection is None:
             return
         self.connection.close()
@@ -482,7 +495,7 @@ class GenericBaseDataSource(BaseDataSource):
             Dict: Row document to index
         """
         tables_to_fetch = await self.get_tables_to_fetch(schema)
-
+        tables_to_fetch = [*(set(tables_to_fetch) - set(TABLES_TO_SKIP))]
         for table in tables_to_fetch:
             logger.debug(f"Found table: {table} in database: {self.database}.")
             async for row in self.fetch_documents(

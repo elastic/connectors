@@ -133,7 +133,7 @@ def test_get_configuration():
 @pytest.mark.asyncio
 async def test_validate_config_valid_fields():
     # Setup
-    source = create_source(GenericBaseDataSource)
+    source = create_source(PostgreSQLDataSource)
 
     # Execute
     try:

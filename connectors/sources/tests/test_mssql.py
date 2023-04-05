@@ -52,11 +52,16 @@ def test_create_engine(mock_create_url, mock_create_engine):
     # Assert
     mock_create_engine.assert_called_with(
         MSSQL_CONNECTION_STRING,
-        connect_args={"cafile": "certificate.pem", "validate_host": False},
+        connect_args={"cafile": "ssl_certificate_mssql.pem", "validate_host": False},
     )
 
     # Cleanup
-    os.remove("certificate.pem")
+    try:
+        os.remove("ssl_certificate_mssql.pem")
+    except Exception as exception:
+        print(
+            f"Something went wrong while removing temporary certificate file. Exception: {exception}"
+        )
 
 
 @pytest.mark.asyncio

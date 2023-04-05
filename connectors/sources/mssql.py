@@ -73,21 +73,30 @@ class MSSQLDataSource(GenericBaseDataSource):
         mssql_configuration = super().get_default_configuration().copy()
         mssql_configuration.update(
             {
-                "schema": {"value": "dbo", "label": "Schema", "type": "str"},
+                "schema": {
+                    "label": "Schema",
+                    "order": 9,
+                    "type": "str",
+                    "value": "dbo",
+                },
                 "ssl_enabled": {
-                    "value": False,
+                    "display": "toggle",
                     "label": "Enable SSL verification (true/false)",
+                    "order": 10,
                     "type": "bool",
+                    "value": False,
                 },
                 "ssl_ca": {
-                    "value": "",
                     "label": "Certificate Data",
+                    "order": 11,
                     "type": "str",
+                    "value": "",
                 },
                 "validate_host": {
-                    "value": False,
                     "label": "Do you want to validate host",
+                    "order": 12,
                     "type": "bool",
+                    "value": False,
                 },
             }
         )
@@ -107,7 +116,7 @@ class MSSQLDataSource(GenericBaseDataSource):
         if self.ssl_enabled:
             self.create_pem_file()
             connect_args = {
-                "cafile": "certificate.pem",
+                "cafile": "ssl_certificate_mssql.pem",
                 "validate_host": self.validate_host,
             }
         self.engine = create_engine(connection_string, connect_args=connect_args)
@@ -115,7 +124,7 @@ class MSSQLDataSource(GenericBaseDataSource):
     def create_pem_file(self):
         """Create pem file for SSL Verification"""
         pem_format = get_pem_format(key=self.ssl_ca, max_split=1)
-        with open("certificate.pem", "w") as cert:
+        with open("ssl_certificate_mssql.pem", "w") as cert:
             cert.write(pem_format)
 
     async def get_docs(self, filtering=None):
