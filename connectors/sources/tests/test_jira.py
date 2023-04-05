@@ -172,16 +172,16 @@ async def test_configuration():
     config = DataSourceConfiguration(config=klass.get_default_configuration())
 
     # Assert
-    assert config["host_url"] == HOST_URL
+    assert config["jira_url"] == HOST_URL
 
 
 @pytest.mark.parametrize(
     "field, is_cloud",
     [
-        ("host_url", True),
+        ("jira_url", True),
         ("projects", True),
         ("api_token", True),
-        ("service_account_id", True),
+        ("account_email", True),
         ("username", False),
         ("password", False),
     ],
