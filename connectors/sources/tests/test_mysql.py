@@ -667,6 +667,8 @@ def test_generate_id(row, primary_key_columns, expected_id):
 
 def test_hash_id():
     limit = 512
-    random_id_too_long = ''.join(random.choices(string.ascii_letters + string.digits, k=1000))
+    random_id_too_long = "".join(
+        random.choices(string.ascii_letters + string.digits, k=1000)
+    )
 
     assert len(MySqlDataSource.hash_id(random_id_too_long).encode("UTF-8")) < limit
