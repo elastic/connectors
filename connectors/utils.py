@@ -16,6 +16,7 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
+import aiohttp
 from base64io import Base64IO
 from cstriggers.core.trigger import QuartzCron
 from pympler import asizeof
@@ -481,20 +482,16 @@ def get_pem_format(key, max_split=-1):
     return key
 
 
-TIKA = [
-    "curl",
-    "-X",
-    "PUT",
-    "http://localhost:9998/tika",
-    "--header",
-    '"fetcherName: fsf"',
-    "--header",
-    '"Accept: text/plain"',
-    "--header",
-    '"fetchKey: /files/{filename}"',
-]
-
-
-def send_to_tika(filename):
-    filename = os.path.basename(filename)
-    return subprocess.check_output(" ".join(TIKA), shell=True)
+async def send_to_tika(filename):
+    headers = {
+        "fetcherName": "fsf",
+        "Accept": "text/plain",
+        "fetchKey": f"/files/{os.path.basename(filename)}",
+    }
+    logger.debug(f"sending to tika {filename}")
+    async with aiohttp.ClientSession(headers=headers) as session:
+        async with session.put("http://127.0.0.1:9999/tika") as resp:
+            content = await resp.text()
+            if resp.status != 200:
+                raise Exception(resp)
+            return content

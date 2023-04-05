@@ -5,7 +5,6 @@
 #
 """SharePoint source module responsible to fetch documents from SharePoint Server/Online.
 """
-import asyncio
 import os
 from datetime import datetime
 from functools import partial
@@ -91,6 +90,7 @@ SCHEMA = {
 
 SHAREPOINT_ONLINE = "sharepoint_online"
 SHAREPOINT_SERVER = "sharepoint_server"
+DROP_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "tika-server")
 
 
 class SharepointDataSource(BaseDataSource):
@@ -484,8 +484,9 @@ class SharepointDataSource(BaseDataSource):
 
         source_file_name = ""
 
-        async with NamedTemporaryFile(mode="wb", delete=False, dir=DROP_DIR) as async_buffer:
-
+        async with NamedTemporaryFile(
+            mode="wb", delete=False, dir=DROP_DIR
+        ) as async_buffer:
             async for response in self._api_call(
                 url_name=ATTACHMENT,
                 host_url=self.host_url,
@@ -498,16 +499,16 @@ class SharepointDataSource(BaseDataSource):
             source_file_name = async_buffer.name
 
         logger.debug(f"Sending {source_file_name} to Tika (size {document_size})")
-        result = await asyncio.to_thread(
-            send_to_tika,
-            filename=source_file_name,
-        )
+        try:
+            result = await send_to_tika(source_file_name)
+        finally:
+            await remove(source_file_name)  # pyright: ignore
         logger.debug(f"Got back {len(result) * 2} bytes.")
 
         # async with aiofiles.open(file=source_file_name, mode="r") as target_file:
         #    # base64 on macOS will add a EOL, so we strip() here
         #    attachment_content = (await target_file.read()).strip()
-        await remove(source_file_name)  # pyright: ignore
+        # await remove(source_file_name)  # pyright: ignore
         return {
             "_id": document.get("id"),
             "_timestamp": document.get("_timestamp"),

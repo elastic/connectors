@@ -9,14 +9,16 @@ Demo of a standalone source
 import functools
 import hashlib
 import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, send_to_tika
 
 DEFAULT_DIR = os.environ.get("SYSTEM_DIR", os.path.dirname(__file__))
+DROP_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "tika-server")
 
 
 class DirectoryDataSource(BaseDataSource):
@@ -61,14 +63,19 @@ class DirectoryDataSource(BaseDataSource):
     async def _download(self, path, timestamp=None, doit=None):
         if not (doit and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES):
             return
-
-        logger.info(f"Reading {path}")
-        with open(file=path, mode="rb") as f:
-            return {
-                "_id": self.get_id(path),
-                "_timestamp": timestamp,
-                "_attachment": get_base64_value(f.read()),
-            }
+        target = os.path.join(DROP_DIR, self.get_id(path))
+        shutil.copyfile(path, target)
+        logger.debug(f"Sending {target} to tika")
+        try:
+            result = await send_to_tika(target)
+        finally:
+            os.remove(target)
+        logger.debug(f"Got back {len(result) * 2} bytes.")
+        return {
+            "_id": self.get_id(path),
+            "_timestamp": timestamp,
+            "attachment": result,
+        }
 
     async def get_docs(self, filtering=None):
         logger.debug(f"Reading {self.directory}...")
