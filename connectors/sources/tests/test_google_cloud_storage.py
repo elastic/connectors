@@ -89,7 +89,7 @@ async def test_raise_on_invalid_configuration():
 
 
 @pytest.mark.asyncio
-async def test_ping_for_successful_connection(catch_stdout, patch_logger):
+async def test_ping_for_successful_connection(catch_stdout):
     """Tests the ping functionality for ensuring connection to Google Cloud Storage."""
 
     # Setup
@@ -111,7 +111,7 @@ async def test_ping_for_successful_connection(catch_stdout, patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_ping_for_failed_connection(catch_stdout, patch_logger):
+async def test_ping_for_failed_connection(catch_stdout):
     """Tests the ping functionality when connection can not be established to Google Cloud Storage."""
 
     # Setup
@@ -458,7 +458,7 @@ async def test_get_content_when_type_not_supported():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_file_size_is_large(catch_stdout, patch_logger):
+async def test_get_content_when_file_size_is_large(catch_stdout):
     """Test the module responsible for fetching the content of the file if it is not extractable or doit is not true."""
 
     # Setup
@@ -502,7 +502,7 @@ async def test_get_content_when_file_size_is_large(catch_stdout, patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_api_call_for_attribute_error(catch_stdout, patch_logger):
+async def test_api_call_for_attribute_error(catch_stdout):
     """Tests the api_call method when resource attribute is not present in the getattr."""
 
     # Setup
