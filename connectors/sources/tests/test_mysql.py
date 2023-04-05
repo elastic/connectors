@@ -103,9 +103,7 @@ def patch_connection_pool():
     connection_pool = Mock()
     connection_pool.close = Mock()
     connection_pool.wait_closed = AsyncMock()
-    connection_pool.acquire = Mock(return_value=Connection())
-    connection_pool.acquire.__aenter__ = AsyncMock()
-    connection_pool.acquire.__aexit__ = AsyncMock()
+    connection_pool.acquire = AsyncMock(return_value=Connection())
 
     with patch(
         "aiomysql.create_pool",
@@ -214,7 +212,7 @@ async def mock_mysql_response():
 
 @pytest.mark.asyncio
 async def test_close_when_source_setup_correctly_does_not_raise_errors():
-    source = create_source(MySqlDataSource)
+    source = await setup_mysql_source()
 
     await source.close()
 
@@ -241,10 +239,11 @@ async def test_client_get_tables(patch_connection_pool):
 
     client = await setup_mysql_client()
 
-    result = await client.get_all_table_names()
-    expected_result = [table_1, table_2]
+    async with client:
+        result = await client.get_all_table_names()
+        expected_result = [table_1, table_2]
 
-    assert result == expected_result
+        assert result == expected_result
 
 
 @pytest.mark.asyncio
@@ -270,17 +269,19 @@ async def test_client_get_column_names(patch_connection_pool):
 
     client = await setup_mysql_client()
 
-    result = await client.get_column_names(table)
-    expected_result = [f"{table}_{column_1}", f"{table}_{column_2}"]
+    async with client:
+        result = await client.get_column_names(table)
+        expected_result = [f"{table}_{column_1}", f"{table}_{column_2}"]
 
-    assert result == expected_result
+        assert result == expected_result
 
 
 @pytest.mark.asyncio
 async def test_client_ping(patch_logger, patch_connection_pool):
     client = await setup_mysql_client()
 
-    await client.ping()
+    async with client:
+        await client.ping()
 
 
 @pytest.mark.asyncio
@@ -378,7 +379,7 @@ async def setup_mysql_source(database=""):
     )
 
     source.database = database
-    source._mysql_client = Mock()
+    source._mysql_client = MagicMock()
 
     return source
 
