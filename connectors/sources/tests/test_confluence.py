@@ -240,7 +240,6 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
 async def test_validate_configuration_with_valid_dependency_fields_does_not_raise_error(
     extras,
 ):
-    # Setup
     source = create_source(ConfluenceDataSource, **extras)
     await source.validate_config()
 
