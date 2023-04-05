@@ -5,7 +5,6 @@
 #
 """MySQL source module responsible to fetch documents from MySQL"""
 import re
-from functools import cached_property
 
 import aiomysql
 
