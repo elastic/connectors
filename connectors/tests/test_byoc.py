@@ -771,6 +771,19 @@ async def test_prepare(mock_responses):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "sync_now, updated, expected_result",
+    [(False, None, False), (True, "updated", True), (True, "noop", False)],
+)
+async def test_connector_reset_sync_now_flag(sync_now, updated, expected_result):
+    connector_doc = {"_id": "1", "_source": {"sync_now": sync_now}}
+    index = Mock()
+    index.update_by_script = AsyncMock(return_value={"result": updated})
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    assert await connector.reset_sync_now_flag() == expected_result
+
+
+@pytest.mark.asyncio
 async def test_connector_validate_filtering_not_edited():
     index = Mock()
     index.update = AsyncMock()

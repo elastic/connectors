@@ -500,7 +500,16 @@ class Connector(ESDocument):
         return next_run(self.scheduling.get("interval"))
 
     async def reset_sync_now_flag(self):
-        await self.index.update(doc_id=self.id, doc={"sync_now": False})
+        """Reset sync_now flag to False, and return True only if the flag is updated."""
+        if not self.sync_now:
+            return False
+
+        script = {
+            "lang": "painless",
+            "source": "if (ctx._source.sync_now) { ctx._source.sync_now = false } else { ctx.op = 'noop' }",
+        }
+        resp = await self.index.update_by_script(doc_id=self.id, script=script)
+        return resp["result"] == "updated"
 
     async def sync_starts(self):
         doc = {
