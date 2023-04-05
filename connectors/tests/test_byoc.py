@@ -14,7 +14,6 @@ import pytest
 from connectors.byoc import (
     IDLE_JOBS_THRESHOLD,
     JOB_NOT_FOUND_ERROR,
-    SYNC_DISABLED,
     Connector,
     ConnectorIndex,
     Features,
@@ -491,28 +490,27 @@ async def test_sync_done(job, expected_doc_source_update):
     index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
 
 
+mock_next_run = iso_utc()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "sync_now, scheduling_enabled, expected_next_sync",
+    "scheduling_enabled, expected_next_sync",
     [
-        (True, False, 0),
-        (False, False, SYNC_DISABLED),
-        (False, True, 10),
+        (False, None),
+        (True, mock_next_run),
     ],
 )
 @patch("connectors.byoc.next_run")
-async def test_connector_next_sync(
-    next_run, sync_now, scheduling_enabled, expected_next_sync
-):
+async def test_connector_next_sync(next_run, scheduling_enabled, expected_next_sync):
     connector_doc = {
         "_id": "1",
         "_source": {
-            "sync_now": sync_now,
             "scheduling": {"enabled": scheduling_enabled, "interval": "1 * * * * *"},
         },
     }
     index = Mock()
-    next_run.return_value = 10
+    next_run.return_value = mock_next_run
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     assert connector.next_sync() == expected_next_sync
 
