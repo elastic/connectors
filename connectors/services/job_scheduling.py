@@ -25,8 +25,6 @@ from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass
 
-DEFAULT_MAX_CONCURRENT_SYNCS = 1
-
 
 class JobSchedulingService(BaseService):
     name = "schedule"
