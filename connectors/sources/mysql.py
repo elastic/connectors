@@ -220,10 +220,10 @@ class MySQLClient:
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
             await cursor.execute(query)
 
-            try:
-                fetched_rows = 0
-                successful_batches = 0
+            fetched_rows = 0
+            successful_batches = 0
 
+            try:
                 while True:
                     rows = await cursor.fetchmany(self.fetch_size)
 
