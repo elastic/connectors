@@ -18,7 +18,7 @@ The [Elastic Jira connector](../connectors/sources/jira.py) is provided in the E
 
 ### Availability and prerequisites
 
-This connector is available as a **connector client** from the **Python connectors framework**. To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
+This connector is available as a **connector client** from the **Python connectors framework**.  This connector is in **beta** and is subject to change. To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
 
 This connector is in **beta** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Beta features are not subject to the support SLA of official GA features.
 
@@ -32,22 +32,9 @@ For additional operations, see [Usage](https://www.elastic.co/guide/en/enterpris
 
 Jira versions 7 or later are compatible with Elastic connector frameworks.
 
-### Setup and basic usage
+### Configuration
 
-Complete the following steps to deploy the connector:
 
-1. [Gather Jira details](#gather-jira-details)
-2. [Configure Jira connector](#configure-jira-connector)
-
-#### Gather Jira details
-
-Collect the information that is required to connect to your Jira instance:
-
-- The domain where Jira is hosted.
-- Username for Jira server or account email for Jira cloud.
-- Password for Jira server or API Token for Jira cloud.
-- Project Keys to fetch the data from Jira server or cloud.
-- SSL certificate for a secure connection
 
 #### Configure Jira connector
 
@@ -55,7 +42,7 @@ The following configuration fields need to be provided for setting up the connec
 
 ##### `data_source`
 
-Dropdown to determine Jira platform type. `Jira Cloud` if Jira cloud and `Jira Server` if Jira server. Default value is `Jira Cloud`.
+Dropdown to determine Jira platform type: `Jira Cloud` or `Jira Server`. Default value is `Jira Cloud`.
 
 ##### `username`
 
