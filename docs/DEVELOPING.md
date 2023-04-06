@@ -30,7 +30,7 @@ For additional operations, see [Usage](https://www.elastic.co/guide/en/enterpris
 
 ### Compatibility
 
-Confluence versions 7 or later are compatible with Elastic connector frameworks.
+Confluence Cloud or Confluence Server versions 7 or later are compatible with Elastic connector frameworks.
 
 ### Configuration
 
