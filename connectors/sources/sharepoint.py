@@ -176,6 +176,14 @@ class SharepointClient:
         )
         return self.session
 
+    async def close_session(self):
+        """Closes unclosed client session"""
+        self._sleeps.cancel()
+        if self.session is None:
+            return
+        await self.session.close()
+        self.session = None
+
     @retryable(
         retries=RETRIES,
         interval=RETRY_INTERVAL,
@@ -196,15 +204,14 @@ class SharepointClient:
         Returns:
             dictionary: Content document with id, timestamp & text.
         """
-
         if not (
             self.configuration["enable_content_extraction"]
             and doit
-            and document["size"]
+            and document["Length"]
         ):
             return
 
-        document_size = int(document["size"])
+        document_size = int(document["Length"])
         if document_size > FILE_SIZE_LIMIT:
             logger.warning(
                 f"File size {document_size} of file {document['title']} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
@@ -214,7 +221,7 @@ class SharepointClient:
         source_file_name = ""
 
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            async for response in self.api_call(
+            async for response in self._api_call(
                 url_name=ATTACHMENT,
                 host_url=self.host_url,
                 value=site_url,
@@ -239,72 +246,7 @@ class SharepointClient:
             "_attachment": attachment_content,
         }
 
-    async def close_session(self):
-        """Closes unclosed client session"""
-        self._sleeps.cancel()
-        if self.session is None:
-            return
-        await self.session.close()
-        self.session = None
-
-    def format_document(
-        self,
-        item,
-        document_type,
-        item_type=None,
-        file_name=None,
-    ):
-        """Prepare key mappings for sites, lists, list items and drive items
-
-        Args:
-            item (dictionary): Document from Sharepoint.
-            document_type(string): Type of document(i.e. list_item and drive_item).
-            item_type(string, optional): Type of item i.e. File or Folder. Defaults to None.
-            file_name(string, optional): Name of file. Defaults to None.
-
-        Returns:
-            dictionary: Modified document with the help of adapter schema.
-        """
-        document = {"type": document_type}
-
-        if document_type in [LISTS, DOCUMENT_LIBRARY]:
-            document["url"] = urljoin(
-                self.host_url, item["RootFolder"]["ServerRelativeUrl"]
-            )
-
-        elif document_type == DRIVE_ITEM:
-            document.update(
-                {
-                    "_id": item["GUID"],
-                    "size": item.get("File", {}).get("Length"),
-                    "url": urljoin(
-                        self.host_url,
-                        item[item_type]["ServerRelativeUrl"],
-                    ),
-                    "type": item_type,
-                }
-            )
-
-        elif document_type == LIST_ITEM:
-            document.update(
-                {
-                    "_id": item["_id"] if "_id" in item.keys() else item["GUID"],
-                    "file_name": file_name,
-                    "size": item.get("size"),
-                    "url": item["url"],
-                }
-            )
-
-        for elasticsearch_field, sharepoint_field in SCHEMA[document_type].items():
-            document[elasticsearch_field] = (
-                item[item_type][sharepoint_field]
-                if document_type in [DRIVE_ITEM]
-                else item[sharepoint_field]
-            )
-
-        return document
-
-    async def api_call(self, url_name, url="", **url_kwargs):
+    async def _api_call(self, url_name, url="", **url_kwargs):
         """Make an API call to the Sharepoint Server/Online
 
         Args:
@@ -360,7 +302,7 @@ class SharepointClient:
                 )
                 await self._sleeps.sleep(RETRY_INTERVAL**retry)
 
-    async def invoke_list_and_drive_call(self, site_url, list_id, param_name):
+    async def _fetch_data_with_next_url(self, site_url, list_id, param_name):
         """Invokes a GET call to the Sharepoint Server/Online for calling list and drive item API.
 
         Args:
@@ -374,14 +316,14 @@ class SharepointClient:
         while True:
             if next_url != "":
                 response = await anext(
-                    self.api_call(
+                    self._api_call(
                         url_name=param_name,
                         url=next_url,
                     )
                 )
             else:
                 response = await anext(
-                    self.api_call(
+                    self._api_call(
                         url_name=param_name,
                         parent_site_url=site_url,
                         list_id=list_id,
@@ -396,7 +338,7 @@ class SharepointClient:
             if next_url == "":
                 break
 
-    async def invoke_site_and_list_call(self, site_url, param_name):
+    async def _fetch_data_with_query(self, site_url, param_name):
         """Invokes a GET call to the Sharepoint Server/Online for calling site and list API.
 
         Args:
@@ -408,7 +350,7 @@ class SharepointClient:
         skip = 0
         while True:
             response = await anext(
-                self.api_call(
+                self._api_call(
                     url_name=param_name,
                     parent_site_url=site_url,
                     skip=skip,
@@ -431,7 +373,7 @@ class SharepointClient:
         Yields:
             site_server_url(string): Site path.
         """
-        async for sites_data in self.invoke_site_and_list_call(
+        async for sites_data in self._fetch_data_with_query(
             site_url=site_url, param_name=SITES
         ):
             for data in sites_data:
@@ -439,7 +381,38 @@ class SharepointClient:
                     site_url=data["ServerRelativeUrl"]
                 ):
                     yield sub_site
-                yield self.format_document(item=data, document_type=SITES)
+                yield data
+
+    async def get_lists(self, site_url):
+        """Get site lists from Sharepoint Server/Online
+
+        Args:
+            site_url(string): Parent site relative path.
+        Yields:
+            list_data(string): Response of list API call
+        """
+        async for list_data in self._fetch_data_with_query(
+            site_url=site_url, param_name=LISTS
+        ):
+            yield list_data
+
+    async def get_attachment(self, site_url, file_relative_url):
+        """Execute the call for fetching attachment metadata
+
+        Args:
+            site_url(string): Parent site relative path
+            file_relative_url(string): Relative url of file
+        Returns:
+            attachment_data(dictionary): Attachment metatdata
+        """
+        return await anext(
+            self._api_call(
+                url_name=ATTACHMENT_DATA,
+                host_url=self.host_url,
+                parent_site_url=site_url,
+                file_relative_url=file_relative_url,
+            )
+        )
 
     async def get_list_items(self, list_id, site_url, server_relative_url):
         """This method fetches items from all the lists in a collection.
@@ -452,17 +425,14 @@ class SharepointClient:
             dictionary: dictionary containing meta-data of the list item.
         """
         file_relative_url = None
-        async for list_items_data in self.invoke_list_and_drive_call(
+        async for list_items_data in self._fetch_data_with_next_url(
             site_url=site_url, list_id=list_id, param_name=LIST_ITEM
         ):
             for result in list_items_data:
                 if not result.get("Attachments"):
                     url = f"{self.host_url}{server_relative_url}/DispForm.aspx?ID={result['Id']}&Source={self.host_url}{server_relative_url}/AllItems.aspx&ContentTypeId={result['ContentTypeId']}"
                     result["url"] = url
-                    yield self.format_document(
-                        item=result,
-                        document_type=LIST_ITEM,
-                    ), file_relative_url
+                    yield result, file_relative_url
                     continue
 
                 for attachment_file in result.get("AttachmentFiles"):
@@ -470,20 +440,16 @@ class SharepointClient:
                         original_string=attachment_file.get("ServerRelativeUrl")
                     )
 
-                    attachment_data = await anext(
-                        self.api_call(
-                            url_name=ATTACHMENT_DATA,
-                            host_url=self.host_url,
-                            parent_site_url=site_url,
-                            file_relative_url=file_relative_url,
-                        )
+                    attachment_data = await self.get_attachment(
+                        site_url, file_relative_url
                     )
-                    result["size"] = attachment_data.get("Length")  # pyright: ignore
+                    result["Length"] = attachment_data.get("Length")  # pyright: ignore
                     result["_id"] = attachment_data["UniqueId"]  # pyright: ignore
                     result["url"] = urljoin(
                         self.host_url,
                         attachment_file.get("ServerRelativeUrl"),
                     )
+                    result["file_name"] = attachment_file.get("FileName")
 
                     if (
                         os.path.splitext(attachment_file["FileName"])[-1]
@@ -491,11 +457,7 @@ class SharepointClient:
                     ):
                         file_relative_url = None
 
-                    yield self.format_document(
-                        item=result,
-                        document_type=LIST_ITEM,
-                        file_name=attachment_file.get("FileName"),
-                    ), file_relative_url
+                    yield result, file_relative_url
 
     async def get_drive_items(self, list_id, site_url, server_relative_url):
         """This method fetches items from all the drives in a collection.
@@ -507,7 +469,7 @@ class SharepointClient:
         Yields:
             dictionary: dictionary containing meta-data of the drive item.
         """
-        async for drive_items_data in self.invoke_list_and_drive_call(
+        async for drive_items_data in self._fetch_data_with_next_url(
             site_url=site_url, list_id=list_id, param_name=DRIVE_ITEM
         ):
             for result in drive_items_data:
@@ -522,45 +484,20 @@ class SharepointClient:
                         in TIKA_SUPPORTED_FILETYPES
                         else None
                     )
+                    result["Length"] = result[item_type]["Length"]
+                result["item_type"] = item_type
 
-                yield self.format_document(
-                    item=result,
-                    document_type=DRIVE_ITEM,
-                    item_type=item_type,
-                ), file_relative_url
+                yield result, file_relative_url
 
-    async def get_lists_and_items(self, site):
-        """Executes the logic to fetch lists and items (list-item, drive-item) in async manner.
-
-        Args:
-            site(string): Path of site.
-        Yields:
-            dictionary: dictionary containing meta-data of the list, list item and drive item.
-        """
-        async for list_data in self.invoke_site_and_list_call(
-            site_url=site, param_name=LISTS
-        ):
-            for result in list_data:
-                # if BaseType value is 1 then it's document library else it's a list item
-                if result.get("BaseType") == 1:
-                    server_url = None
-                    document_type = DOCUMENT_LIBRARY
-                    func = self.get_drive_items
-                else:
-                    document_type = LISTS
-                    server_url = result["RootFolder"]["ServerRelativeUrl"]
-                    func = self.get_list_items
-
-                yield self.format_document(
-                    item=result, document_type=document_type
-                ), None
-
-                async for item, file_relative_url in func(
-                    list_id=result.get("Id"),
-                    site_url=result.get("ParentWebUrl"),
-                    server_relative_url=server_url,
-                ):
-                    yield item, file_relative_url
+    async def ping(self):
+        """Executes the ping call in async manner"""
+        await anext(
+            self._api_call(
+                url_name=PING,
+                site_collections=self.site_collections[0],
+                host_url=self.host_url,
+            )
+        )
 
 
 class SharepointDataSource(BaseDataSource):
@@ -697,13 +634,7 @@ class SharepointDataSource(BaseDataSource):
     async def ping(self):
         """Verify the connection with Sharepoint"""
         try:
-            await anext(
-                self.sharepoint_client.api_call(
-                    url_name=PING,
-                    site_collections=self.sharepoint_client.site_collections[0],
-                    host_url=self.sharepoint_client.host_url,
-                )
-            )
+            await self.sharepoint_client.ping()
             logger.debug(
                 f"Successfully connected to the Sharepoint via {self.sharepoint_client.host_url}"
             )
@@ -712,6 +643,124 @@ class SharepointDataSource(BaseDataSource):
                 f"Error while connecting to the Sharepoint via {self.sharepoint_client.host_url}"
             )
             raise
+
+    def map_documet_with_schema(
+        self,
+        document,
+        item,
+        document_type,
+    ):
+        """Prepare key mappings for documents
+
+        Args:
+            document(dictionary): Modified document
+            item (dictionary): Document from Sharepoint.
+            document_type(string): Type of document(i.e. site,list,list_iitem, drive_item and document_library).
+
+        Returns:
+            dictionary: Modified document with the help of adapter schema.
+        """
+        for elasticsearch_field, sharepoint_field in SCHEMA[document_type].items():
+            document[elasticsearch_field] = item[sharepoint_field]
+
+    def format_lists(
+        self,
+        item,
+        document_type,
+    ):
+        """Prepare key mappings for list
+
+        Args:
+            item (dictionary): Document from Sharepoint.
+            document_type(string): Type of document(i.e. list and document_library).
+
+        Returns:
+            dictionary: Modified document with the help of adapter schema.
+        """
+        document = {"type": document_type}
+
+        document["url"] = urljoin(
+            self.sharepoint_client.host_url, item["RootFolder"]["ServerRelativeUrl"]
+        )
+
+        self.map_documet_with_schema(
+            document=document, item=item, document_type=document_type
+        )
+        return document
+
+    def format_sites(self, item):
+        """Prepare key mappings for site
+
+        Args:
+            item (dictionary): Document from Sharepoint.
+
+        Returns:
+            dictionary: Modified document with the help of adapter schema.
+        """
+        document = {"type": SITES}
+
+        self.map_documet_with_schema(document=document, item=item, document_type=SITES)
+        return document
+
+    def format_drive_item(
+        self,
+        item,
+    ):
+        """Prepare key mappings for drive items
+
+        Args:
+            item (dictionary): Document from Sharepoint.
+
+        Returns:
+            dictionary: Modified document with the help of adapter schema.
+        """
+        document = {"type": DRIVE_ITEM}
+        item_type = item["item_type"]
+
+        document.update(
+            {
+                "_id": item["GUID"],
+                "size": item.get("File", {}).get("Length"),
+                "url": urljoin(
+                    self.sharepoint_client.host_url,
+                    item[item_type]["ServerRelativeUrl"],
+                ),
+                "type": item_type,
+            }
+        )
+        self.map_documet_with_schema(
+            document=document, item=item[item_type], document_type=DRIVE_ITEM
+        )
+
+        return document
+
+    def format_list_item(
+        self,
+        item,
+    ):
+        """Prepare key mappings for list items
+
+        Args:
+            item (dictionary): Document from Sharepoint.
+
+        Returns:
+            dictionary: Modified document with the help of adapter schema.
+        """
+        document = {"type": LIST_ITEM}
+
+        document.update(
+            {
+                "_id": item["_id"] if "_id" in item.keys() else item["GUID"],
+                "file_name": item.get("file_name"),
+                "size": item.get("Length"),
+                "url": item["url"],
+            }
+        )
+
+        self.map_documet_with_schema(
+            document=document, item=item, document_type=LIST_ITEM
+        )
+        return document
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch Sharepoint objects in an async manner.
@@ -724,21 +773,42 @@ class SharepointDataSource(BaseDataSource):
 
         for collection in self.sharepoint_client.site_collections:
             server_relative_url.append(f"/sites/{collection}")
-            async for site_document in self.sharepoint_client.get_sites(
+            async for site_data in self.sharepoint_client.get_sites(
                 site_url=f"/sites/{collection}"
             ):
-                server_relative_url.append(site_document["server_relative_url"])
-                yield site_document, None
+                server_relative_url.append(site_data["server_relative_url"])
+                yield self.format_sites(item=site_data), None
+
         for site_url in server_relative_url:
-            async for item, file_relative_url in self.sharepoint_client.get_lists_and_items(
-                site=site_url
-            ):
-                if file_relative_url is None:
-                    yield item, None
-                else:
-                    yield item, partial(
-                        self.sharepoint_client.get_content,
-                        item,
-                        file_relative_url,
-                        site_url,
-                    )
+            async for list_data in self.sharepoint_client.get_lists(site_url=site_url):
+                for result in list_data:
+                    # if BaseType value is 1 then it's document library else it's a list
+                    if result.get("BaseType") == 1:
+                        yield self.format_lists(
+                            item=result, document_type=DOCUMENT_LIBRARY
+                        ), None
+                        server_url = None
+                        func = self.sharepoint_client.get_drive_items
+                        format_document = self.format_drive_item
+                    else:
+                        yield self.format_lists(item=result, document_type=LISTS), None
+                        server_url = result["RootFolder"]["ServerRelativeUrl"]
+                        func = self.sharepoint_client.get_list_items
+                        format_document = self.format_list_item
+
+                    async for item, file_relative_url in func(
+                        list_id=result.get("Id"),
+                        site_url=result.get("ParentWebUrl"),
+                        server_relative_url=server_url,
+                    ):
+                        if file_relative_url is None:
+                            yield format_document(item=item), None
+                        else:
+                            yield format_document(
+                                item=item,
+                            ), partial(
+                                self.sharepoint_client.get_content,
+                                item,
+                                file_relative_url,
+                                site_url,
+                            )
