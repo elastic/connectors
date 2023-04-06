@@ -67,7 +67,7 @@ The domain where Jira is hosted. Examples:
 
 ##### `projects`
 
-Comma separated [`Project Keys`](https://support.atlassian.com/jira-software-cloud/docs/what-is-an-issue/#Workingwithissues-Projectkeys) to fetch the data from Jira server or cloud. Jira connector will fetch data from all projects present in the configured `projects`, if the value is `*`. Default value is `*`. Examples:
+Comma-separated list of [Project Keys](https://support.atlassian.com/jira-software-cloud/docs/what-is-an-issue/#Workingwithissues-Projectkeys) to fetch data from Jira server or cloud. If the value is `*` the connector will fetch data from all projects present in the configured `projects` . Default value is `*`. Examples:
 
   - `EC, TP`
   - `*`
@@ -102,15 +102,15 @@ The connector uses the Elastic ingest attachment processor plugin for extracting
 
 ### Documents and Sync
 
-The connector indexes following items into the Elastic Search index:
-- Projects
+The connector syncs the following objects and entities:
+- **Projects**
   - Includes metadata such as description, project key, project type, lead name, etc.
-- Issues
+- **Issues**
   - All types of issues including Task, Bug, Sub-task, Enhancement, Story, etc.
   - Includes metadata such as issue type, parent issue details, fix versions, affected versions, resolution, attachments, comments, sub-task details, priority, custom fields, etc.
-- Attachments
+- **Attachments**
 
-**Note:** Archieved projects and issues won't be indexed.
+**Note:** Archived projects and issues are not indexed.
 
 ### Sync rules
 
