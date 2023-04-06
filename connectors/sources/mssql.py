@@ -4,11 +4,17 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Microsoft SQL source module is responsible to fetch documents from Microsoft SQL."""
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 
+from connectors.logger import logger
 from connectors.sources.generic_database import GenericBaseDataSource, Queries
-from connectors.utils import get_pem_format
+from connectors.utils import get_pem_format, iso_utc
+
+# Connector will skip the below tables if it gets from the input
+TABLES_TO_SKIP = {"msdb": ["sysutility_ucp_configuration_internal"]}
 
 
 class MSSQLQueries(Queries):
@@ -62,6 +68,8 @@ class MSSQLDataSource(GenericBaseDataSource):
         self.queries = MSSQLQueries()
         self.dialect = "Microsoft SQL"
         self.schema = self.configuration["schema"]
+        self.certfile = f"ssl_certificate_mssql_{iso_utc()}.pem"
+        self.tables_to_skip = TABLES_TO_SKIP
 
     @classmethod
     def get_default_configuration(cls):
@@ -116,15 +124,28 @@ class MSSQLDataSource(GenericBaseDataSource):
         if self.ssl_enabled:
             self.create_pem_file()
             connect_args = {
-                "cafile": "ssl_certificate_mssql.pem",
+                "cafile": f"/tmp/{self.certfile}",
                 "validate_host": self.validate_host,
             }
         self.engine = create_engine(connection_string, connect_args=connect_args)
 
+    async def close(self):
+        """Close the connection to the database server."""
+        if os.path.exists(f"/tmp/{self.certfile}"):
+            try:
+                os.remove(f"/tmp/{self.certfile}")
+            except Exception as exception:
+                logger.warning(
+                    f"Something went wrong while removing temporary certificate file. Exception: {exception}"
+                )
+        if self.connection is None:
+            return
+        self.connection.close()
+
     def create_pem_file(self):
         """Create pem file for SSL Verification"""
         pem_format = get_pem_format(key=self.ssl_ca, max_split=1)
-        with open("ssl_certificate_mssql.pem", "w") as cert:
+        with open(f"/tmp/{self.certfile}", "w") as cert:
             cert.write(pem_format)
 
     async def get_docs(self, filtering=None):

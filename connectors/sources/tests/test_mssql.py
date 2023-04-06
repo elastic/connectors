@@ -4,10 +4,10 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the microsoft sql database source class methods"""
-import os
 from unittest.mock import patch
 
 import pytest
+from freezegun import freeze_time
 
 from connectors.sources.mssql import MSSQLDataSource, MSSQLQueries
 from connectors.sources.tests.support import create_source
@@ -28,9 +28,11 @@ class MockEngine:
         return ConnectionSync(MSSQLQueries())
 
 
+@freeze_time("2023-01-24T04:07:19")
 @patch("connectors.sources.mssql.create_engine")
 @patch("connectors.sources.mssql.URL.create")
-def test_create_engine(mock_create_url, mock_create_engine):
+@pytest.mark.asyncio
+async def test_create_engine(mock_create_url, mock_create_engine):
     # Setup
     source = create_source(MSSQLDataSource)
     mock_create_engine.return_value = "Mock engine"
@@ -52,16 +54,14 @@ def test_create_engine(mock_create_url, mock_create_engine):
     # Assert
     mock_create_engine.assert_called_with(
         MSSQL_CONNECTION_STRING,
-        connect_args={"cafile": "ssl_certificate_mssql.pem", "validate_host": False},
+        connect_args={
+            "cafile": "/tmp/ssl_certificate_mssql_2023-01-24T04:07:19+00:00.pem",
+            "validate_host": False,
+        },
     )
 
     # Cleanup
-    try:
-        os.remove("ssl_certificate_mssql.pem")
-    except Exception as exception:
-        print(
-            f"Something went wrong while removing temporary certificate file. Exception: {exception}"
-        )
+    await source.close()
 
 
 @pytest.mark.asyncio
