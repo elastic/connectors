@@ -148,12 +148,28 @@ class JobSchedulingService(BaseService):
         if not connector.sync_now:
             return
 
+        if not await connector.reset_sync_now_flag():
+            logger.debug(
+                f"Failed to reset sync_now flag for connector {connector.id}, the on demand sync will be created by other connector service."
+            )
+            return
+
+        logger.info(f"Creating an on demand sync for connector {connector.id}...")
         await self.sync_job_index.create(
             connector=connector, trigger_method=JobTriggerMethod.ON_DEMAND
         )
-        await connector.reset_sync_now_flag()
 
     async def _scheduled_sync(self, connector):
+        now = datetime.utcnow()
+        if (
+            connector.last_sync_scheduled_at is not None
+            and connector.last_sync_scheduled_at > now
+        ):
+            logger.debug(
+                "A scheduled sync is created by another connector instance, skipping..."
+            )
+            return
+
         try:
             next_sync = connector.next_sync()
         except Exception as e:
@@ -165,7 +181,6 @@ class JobSchedulingService(BaseService):
             logger.debug(f"Scheduling is disabled for connector {connector.id}")
             return
 
-        now = datetime.utcnow()
         next_sync_due = (next_sync - now).total_seconds()
         if next_sync_due - self.idling > 0:
             logger.debug(
@@ -173,6 +188,13 @@ class JobSchedulingService(BaseService):
             )
             return
 
+        if not await connector.update_last_sync_scheduled_at(next_sync):
+            logger.debug(
+                f"Failed to update last_sync_scheduled_at for connector {connector.id}, the scheduled sync will be created by other connector service."
+            )
+            return
+
+        logger.info(f"Creating a scheduled sync for connector {connector.id}...")
         await self.sync_job_index.create(
             connector=connector, trigger_method=JobTriggerMethod.SCHEDULED
         )

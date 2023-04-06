@@ -95,6 +95,9 @@ def mock_connector(
     next_sync=default_next_sync,
     sync_now=False,
     prepare_exception=None,
+    last_sync_scheduled_at=None,
+    reset_sync_now=True,
+    update_last_sync_scheduled_at=True,
 ):
     connector = Mock()
     connector.native = True
@@ -102,6 +105,7 @@ def mock_connector(
     connector.status = status
     connector.configuration = DataSourceConfiguration({})
     connector.sync_now = sync_now
+    connector.last_sync_scheduled_at = last_sync_scheduled_at
 
     connector.features.sync_rules_enabled = Mock(return_value=True)
     connector.validate_filtering = AsyncMock()
@@ -110,7 +114,10 @@ def mock_connector(
     connector.prepare = AsyncMock(side_effect=prepare_exception)
     connector.heartbeat = AsyncMock()
     connector.error = AsyncMock()
-    connector.reset_sync_now_flag = AsyncMock()
+    connector.reset_sync_now_flag = AsyncMock(return_value=reset_sync_now)
+    connector.update_last_sync_scheduled_at = AsyncMock(
+        return_value=update_last_sync_scheduled_at
+    )
 
     return connector
 
@@ -142,6 +149,22 @@ async def test_connector_sync_now(
 
 
 @pytest.mark.asyncio
+async def test_connector_sync_now_with_failed_job_creation(
+    connector_index_mock,
+    sync_job_index_mock,
+    set_env,
+):
+    connector = mock_connector(sync_now=True, reset_sync_now=False)
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    await create_and_run_service()
+
+    connector.prepare.assert_awaited()
+    connector.heartbeat.assert_awaited()
+    connector.reset_sync_now_flag.assert_awaited()
+    sync_job_index_mock.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_connector_ready_to_sync(
     connector_index_mock,
     sync_job_index_mock,
@@ -157,6 +180,43 @@ async def test_connector_ready_to_sync(
     sync_job_index_mock.create.assert_awaited_once_with(
         connector=connector, trigger_method=JobTriggerMethod.SCHEDULED
     )
+
+
+@pytest.mark.asyncio
+async def test_connector_ready_to_sync_with_job_created(
+    connector_index_mock,
+    sync_job_index_mock,
+    set_env,
+):
+    future_date = datetime.utcnow() + timedelta(seconds=20)
+    connector = mock_connector(
+        next_sync=datetime.utcnow(), last_sync_scheduled_at=future_date
+    )
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    await create_and_run_service()
+
+    connector.prepare.assert_awaited()
+    connector.heartbeat.assert_awaited
+    connector.reset_sync_now_flag.assert_not_awaited()
+    sync_job_index_mock.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_ready_to_sync_with_failed_job_creation(
+    connector_index_mock,
+    sync_job_index_mock,
+    set_env,
+):
+    connector = mock_connector(
+        next_sync=datetime.utcnow(), update_last_sync_scheduled_at=False
+    )
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    await create_and_run_service()
+
+    connector.prepare.assert_awaited()
+    connector.heartbeat.assert_awaited
+    connector.reset_sync_now_flag.assert_not_awaited()
+    sync_job_index_mock.create.assert_not_awaited()
 
 
 @pytest.mark.asyncio
