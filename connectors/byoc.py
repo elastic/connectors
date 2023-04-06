@@ -23,8 +23,6 @@ from connectors.utils import iso_utc, next_run
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
-RETRY_ON_CONFLICT = 3
-SYNC_DISABLED = -1
 
 JOB_NOT_FOUND_ERROR = "Couldn't find the job"
 UNKNOWN_ERROR = "unknown error"
@@ -469,6 +467,15 @@ class Connector(ESDocument):
     def last_sync_status(self):
         return JobStatus(self.get("last_sync_status"))
 
+    @property
+    def last_sync_scheduled_at(self):
+        last_sync_scheduled_at = self.get("last_sync_scheduled_at")
+        if last_sync_scheduled_at is not None:
+            last_sync_scheduled_at = datetime.fromisoformat(
+                last_sync_scheduled_at  # pyright: ignore
+            )
+        return last_sync_scheduled_at
+
     async def heartbeat(self, interval):
         if (
             self.last_seen is None
@@ -478,20 +485,23 @@ class Connector(ESDocument):
             await self.index.heartbeat(doc_id=self.id)
 
     def next_sync(self):
-        """Returns in seconds when the next sync should happen.
-
-        If the function returns SYNC_DISABLED, no sync is scheduled.
-        """
-        if self.sync_now:
-            logger.debug("sync_now is true, syncing!")
-            return 0
+        """Returns the datetime when the next sync will run, return None if it's disabled."""
         if not self.scheduling.get("enabled", False):
             logger.debug("scheduler is disabled")
-            return SYNC_DISABLED
+            return None
         return next_run(self.scheduling.get("interval"))
 
     async def reset_sync_now_flag(self):
-        await self.index.update(doc_id=self.id, doc={"sync_now": False})
+        """Reset sync_now flag to False, and return True only if the flag is updated."""
+        if not self.sync_now:
+            return False
+
+        script = {
+            "lang": "painless",
+            "source": "if (ctx._source.sync_now) { ctx._source.sync_now = false } else { ctx.op = 'noop' }",
+        }
+        resp = await self.index.update_by_script(doc_id=self.id, script=script)
+        return resp["result"] == "updated"
 
     async def sync_starts(self):
         doc = {
