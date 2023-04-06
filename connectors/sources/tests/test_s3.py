@@ -6,8 +6,10 @@
 import os
 from datetime import datetime
 from unittest import mock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import aioboto3
+import aiofiles
 import pytest
 from botocore.exceptions import ClientError, HTTPClientError
 
@@ -201,30 +203,47 @@ async def test_get_bucket_region_negative(caplog):
             await source.get_bucket_region(bucket_name="dummy")
 
 
+class ReadAsyncMock(AsyncMock):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    async def read():
+        return b"test content"
+
+
 @mock.patch("aiobotocore.client.AioBaseClient")
 @pytest.mark.asyncio
-async def test_get_content(mock_client, patch_logger):
+async def test_get_content(s3_client, patch_logger):
     """Test get_content method of S3DataSource"""
+
     # Setup
     source = create_source(S3DataSource)
     document = {
-        "filename": "test_file.pdf",
-        "bucket": "test-bucket",
         "id": "123",
-        "size_in_bytes": 10,
-        "_timestamp": "2022-01-01T00:00:00Z",
+        "filename": "test.pdf",
+        "bucket": "test-bucket",
+        "_timestamp": "2022-01-01T00:00:00.000Z",
+        "size_in_bytes": 1024,
     }
-    s3_client = mock_client.return_value.__aenter__.return_value
+    s3_client = MagicMock()
+    s3_client.download_fileobj = AsyncMock()
+    async_response = AsyncMock()
+    async_response.__aenter__ = AsyncMock(return_value=ReadAsyncMock)
 
-    # Execute
-    content = await source._get_content(doc=document, s3_client=s3_client, doit=True)
+    with patch("aiofiles.os.remove"):
+        with patch("connectors.utils.convert_to_b64"):
+            with patch.object(aiofiles, "open", return_value=async_response):
+                # Execute
+                result = await source._get_content(
+                    document, s3_client, timestamp=None, doit=True
+                )
 
-    # Assert
-    assert content == {
-        "_id": "123",
-        "_timestamp": "2022-01-01T00:00:00Z",
-        "_attachment": "",
-    }
+                # Assert
+                assert result == {
+                    "_id": "123",
+                    "_timestamp": "2022-01-01T00:00:00.000Z",
+                    "_attachment": b"test content",
+                }
 
 
 @pytest.mark.asyncio

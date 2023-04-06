@@ -71,7 +71,7 @@ class S3DataSource(BaseDataSource):
         region_name = region if region else "default"
 
         if region_name in self.s3_region_client:
-            return
+            return self.s3_region_client[region_name]
 
         if AWS_ENDPOINT is not None:
             logger.debug(f"Creating a session against {AWS_ENDPOINT}")
@@ -88,6 +88,7 @@ class S3DataSource(BaseDataSource):
         self.s3_context_stacks.append(s3_context_stack)
 
         self.s3_region_client[region_name] = s3_client
+        return self.s3_region_client[region_name]
 
     async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields
@@ -103,8 +104,7 @@ class S3DataSource(BaseDataSource):
     async def ping(self):
         """Verify the connection with AWS"""
         try:
-            await self.client()
-            s3 = self.s3_region_client["default"]
+            s3 = await self.client()
             self.bucket_list = await s3.list_buckets()
             logger.info("Successfully connected to AWS Server.")
         except Exception:
@@ -179,8 +179,7 @@ class S3DataSource(BaseDataSource):
         """
         region = None
         try:
-            await self.client()
-            s3 = self.s3_region_client["default"]
+            s3 = await self.client()
             response = await s3.get_bucket_location(
                 Bucket=bucket_name,
             )
@@ -210,19 +209,13 @@ class S3DataSource(BaseDataSource):
             dictionary: Document from Amazon S3.
         """
         if self.bucket_list == []:
-            await self.client()
-            s3 = self.s3_region_client["default"]
+            s3 = await self.client()
             self.bucket_list = await s3.list_buckets()
         bucket_list = self.buckets if self.buckets != ["*"] else self.get_bucket_list()
         page_size = self.configuration["page_size"]
         for bucket in bucket_list:
             region_name = await self.get_bucket_region(bucket)
-            if region_name is not None:
-                await self.client(region=region_name)
-                s3_client = self.s3_region_client[region_name]
-            else:
-                await self.client()
-                s3_client = self.s3_region_client["default"]
+            s3_client = await self.client(region=region_name)
 
             async with self.session.resource(
                 service_name="s3",
