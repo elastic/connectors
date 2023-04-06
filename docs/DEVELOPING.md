@@ -30,11 +30,9 @@ For additional operations, see [Usage](https://www.elastic.co/guide/en/enterpris
 
 ### Compatibility
 
-Jira versions 7 or later are compatible with Elastic connector frameworks.
+Jira Cloud or Jira Server versions 7 or later are compatible with Elastic connector frameworks.
 
 ### Configuration
-
-
 
 #### Configure Jira connector
 
@@ -69,7 +67,7 @@ The domain where Jira is hosted. Examples:
 
 ##### `projects`
 
-Comma separated `Project Keys` to fetch the data from Jira server or cloud. Jira connector will fetch data from all projects present in the configured `project keys`, if the value is `*`. Default value is `*`. Examples:
+Comma separated [`Project Keys`](https://support.atlassian.com/jira-software-cloud/docs/what-is-an-issue/#Workingwithissues-Projectkeys) to fetch the data from Jira server or cloud. Jira connector will fetch data from all projects present in the configured `projects`, if the value is `*`. Default value is `*`. Examples:
 
   - `EC, TP`
   - `*`
