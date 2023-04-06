@@ -6,6 +6,7 @@
 import asyncio
 import base64
 import functools
+import inspect
 import os
 import platform
 import shutil
@@ -378,31 +379,60 @@ class UnknownRetryStrategyError(Exception):
 
 def retryable(retries=3, interval=1.0, strategy=RetryStrategy.LINEAR_BACKOFF):
     def wrapper(func):
-        @functools.wraps(func)
-        async def func_to_execute(*args, **kwargs):
-            retry = 1
-            while retry <= retries:
-                try:
-                    return await func(*args, **kwargs)
-                except Exception as e:
-                    if retry >= retries:
-                        raise e
-
-                    match strategy:
-                        case RetryStrategy.CONSTANT:
-                            await asyncio.sleep(interval)
-                        case RetryStrategy.LINEAR_BACKOFF:
-                            await asyncio.sleep(interval * retry)
-                        case RetryStrategy.EXPONENTIAL_BACKOFF:
-                            await asyncio.sleep(interval**retry)
-                        case _:
-                            raise UnknownRetryStrategyError()
-
-                    retry += 1
-
-        return func_to_execute
+        if inspect.isasyncgenfunction(func):
+            return retryable_async_generator(func, retries, interval, strategy)
+        else:
+            return retryable_async_function(func, retries, interval, strategy)
 
     return wrapper
+
+
+def retryable_async_function(func, retries, interval, strategy):
+    @functools.wraps(func)
+    async def wrapped(*args, **kwargs):
+        retry = 1
+        while retry <= retries:
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                if retry >= retries:
+                    raise e
+
+                await apply_retry_strategy(strategy, interval, retry)
+                retry += 1
+
+    return wrapped
+
+
+def retryable_async_generator(func, retries, interval, strategy):
+    @functools.wraps(func)
+    async def wrapped(*args, **kwargs):
+        retry = 1
+        while retry <= retries:
+            try:
+                async for item in func(*args, **kwargs):
+                    yield item
+                break
+            except Exception as e:
+                if retry >= retries:
+                    raise e
+
+                await apply_retry_strategy(strategy, interval, retry)
+                retry += 1
+
+    return wrapped
+
+
+async def apply_retry_strategy(strategy, interval, retry):
+    match strategy:
+        case RetryStrategy.CONSTANT:
+            await asyncio.sleep(interval)
+        case RetryStrategy.LINEAR_BACKOFF:
+            await asyncio.sleep(interval * retry)
+        case RetryStrategy.EXPONENTIAL_BACKOFF:
+            await asyncio.sleep(interval**retry)
+        case _:
+            raise UnknownRetryStrategyError()
 
 
 def ssl_context(certificate):
