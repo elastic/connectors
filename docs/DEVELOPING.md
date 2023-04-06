@@ -94,7 +94,11 @@ The connector uses the Elastic ingest attachment processor plugin for extracting
 
 ### Documents and syncs
 
-The connector indexes the following items into the elasticsearch index: Pages, Spaces, Blog Posts and Attachments.
+The connector syncs the following Confluence object types: 
+- Pages
+- Spaces
+- Blog Posts
+- Attachments
 
 ### Sync rules
 
