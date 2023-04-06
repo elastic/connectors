@@ -286,6 +286,32 @@ async def test_client_get_last_update_time(patch_connection_pool):
 
 
 @pytest.mark.asyncio
+async def test_client_yield_rows_for_table(patch_connection_pool):
+    rows_per_batch = [[DOC_ONE], [DOC_TWO], [DOC_THREE]]
+
+    mock_cursor = MagicMock(spec=aiomysql.Cursor)
+    mock_cursor.fetchmany.side_effect = AsyncMock(side_effect=[*rows_per_batch, None])
+    mock_cursor.__aenter__.return_value = mock_cursor
+
+    patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
+
+    client = await setup_mysql_client()
+    client.fetch_size = 1
+
+    async with client:
+        yielded_docs = []
+
+        async for doc in client.yield_rows_for_table("table"):
+            yielded_docs.append(doc)
+
+        # 3 batches with rows, 4th batch empty
+        num_batches = len(rows_per_batch) / client.fetch_size + 1
+
+        assert len(yielded_docs) == len(rows_per_batch)
+        assert mock_cursor.fetchmany.call_count == num_batches
+
+
+@pytest.mark.asyncio
 async def test_client_ping(patch_logger, patch_connection_pool):
     client = await setup_mysql_client()
 
