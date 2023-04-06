@@ -32,29 +32,13 @@ For additional operations, see [Usage](https://www.elastic.co/guide/en/enterpris
 
 Confluence versions 7 or later are compatible with Elastic connector frameworks.
 
-### Setup and basic usage
-
-Complete the following steps to deploy the connector:
-
-1. [Gather Confluence details](#gather-confluence-details)
-2. [Configure Confluence connector](#configure-confluence-connector)
-
-#### Gather Confluence details
-
-Collect the information that is required to connect to your Confluence instance:
-
-- The domain where Confluence is hosted.
-- Username for the Confluence server or account email for the Confluence cloud.
-- Password for the Confluence server or API Token for the Confluence cloud.
-- SSL certificate for a secure connection
-
-#### Configure Confluence connector
+### Configuration
 
 The following configuration fields need to be provided for setting up the connector:
 
 ##### `data_source`
 
-Dropdown to determine the Confluence platform type. `Confluence Cloud` if Confluence cloud and `Confluence Server` if Confluence server. Default value is `Confluence Cloud`.
+Dropdown to determine the Confluence platform type: `Confluence Cloud` or `Confluence Server`. Default value is `Confluence Cloud`.
 
 ##### `username`
 
