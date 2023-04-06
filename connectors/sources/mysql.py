@@ -188,6 +188,22 @@ class MySQLClient:
 
             return [f"{table}_{column[0]}" for column in cursor.description]
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_last_update_time(self, table):
+        async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+            await cursor.execute(self.queries.table_last_update_time(table))
+
+            result = await cursor.fetchone()
+
+            if result is not None:
+                return result[0]
+
+            return None
+
 
 class MySqlDataSource(BaseDataSource):
     """MySQL"""
