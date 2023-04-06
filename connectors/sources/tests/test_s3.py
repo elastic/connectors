@@ -191,7 +191,7 @@ async def test_get_bucket_region():
 
 
 @pytest.mark.asyncio
-async def test_get_bucket_region_negative(caplog):
+async def test_get_bucket_region_negative():
     """Test get_bucket_region method of S3DataSource for negative case"""
     # Setup
     source = create_source(S3DataSource)
@@ -213,7 +213,7 @@ class ReadAsyncMock(AsyncMock):
 
 @mock.patch("aiobotocore.client.AioBaseClient")
 @pytest.mark.asyncio
-async def test_get_content(s3_client, patch_logger):
+async def test_get_content(s3_client):
     """Test get_content method of S3DataSource"""
 
     # Setup
@@ -252,12 +252,9 @@ async def test_get_content_with_unsupported_file(mock_aws):
     # Setup
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
-        # Execute
         response = await source._get_content(
-            {"id": 1, "filename": "a.png", "bucket": "dummy"}, "region", doit=1
+            {"id": 1, "filename": "a.png", "bucket": "dummy"}, "client", doit=1
         )
-
-        # Assert
         assert response is None
 
 
@@ -267,12 +264,9 @@ async def test_get_content_when_not_doit(mock_aws):
     # Setup
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
-        # Execute
         response = await source._get_content(
-            {"id": 1, "filename": "a.txt", "bucket": "dummy"}, "region"
+            {"id": 1, "filename": "a.txt", "bucket": "dummy"}, "client"
         )
-
-        # Assert
         assert response is None
 
 
@@ -282,7 +276,6 @@ async def test_get_content_when_size_is_large(mock_aws):
     # Setup
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
-        # Execute
         response = await source._get_content(
             {
                 "id": 1,
@@ -290,11 +283,9 @@ async def test_get_content_when_size_is_large(mock_aws):
                 "bucket": "dummy",
                 "size_in_bytes": 20000000000,
             },
-            "region",
+            "client",
             doit=1,
         )
-
-        # Assert
         assert response is None
 
 
@@ -317,7 +308,6 @@ async def test_get_docs(mock_aws):
         get_roles,
     ):
         num = 0
-
         # Execute
         async for (doc, dl) in source.get_docs():
             # Assert
@@ -364,7 +354,7 @@ async def test_validate_config_for_empty_bucket_string():
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_clienterror(patch_logger):
+async def test_get_content_with_clienterror():
     """Test get_content method of S3DataSource for client error"""
     # Setup
     source = create_source(S3DataSource)

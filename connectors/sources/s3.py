@@ -157,8 +157,8 @@ class S3DataSource(BaseDataSource):
             await remove(source_file_name)  # pyright: ignore
             logger.debug(f"Downloaded {filename} for {doc['size_in_bytes']} bytes ")
             return document
-        except (ClientError, ServerTimeoutError, AioReadTimeoutError) as exception:
-            if getattr(exception, "response", None) and (
+        except ClientError as exception:
+            if (
                 getattr(exception, "response", {}).get("Error", {}).get("Code")
                 == "InvalidObjectState"
             ):
@@ -170,6 +170,11 @@ class S3DataSource(BaseDataSource):
                     f"Something went wrong while extracting data from {filename} of {bucket}. Error: {exception}"
                 )
                 raise
+        except (ServerTimeoutError, AioReadTimeoutError) as exception:
+            logger.error(
+                f"Something went wrong while extracting data from {filename} of {bucket}. Error: {exception}"
+            )
+            raise
 
     async def get_bucket_region(self, bucket_name):
         """This method return the name of region for a bucket.
@@ -216,7 +221,6 @@ class S3DataSource(BaseDataSource):
         for bucket in bucket_list:
             region_name = await self.get_bucket_region(bucket)
             s3_client = await self.client(region=region_name)
-
             async with self.session.resource(
                 service_name="s3",
                 config=self.config,
