@@ -87,14 +87,10 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
     async def _remote_validation(self, advanced_rules):
         await self.source.ping()
 
-        tables = set(
-            map(
-                lambda table: table[0],
-                await self.source.fetch_all_tables(),
-            )
-        )
-        tables_to_filter = set(advanced_rules.keys())
+        async with self.source.mysql_client() as client:
+            tables = set(await client.get_all_table_names())
 
+        tables_to_filter = set(advanced_rules.keys())
         missing_tables = tables_to_filter - tables
 
         if len(missing_tables) > 0:
@@ -308,7 +304,7 @@ class MySqlDataSource(BaseDataSource):
             },
         }
 
-    def _mysql_client(self):
+    def mysql_client(self):
         return MySQLClient(
             host=self.configuration["host"],
             port=self.configuration["port"],
@@ -360,7 +356,7 @@ class MySqlDataSource(BaseDataSource):
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def _remote_validation(self):
-        async with self._mysql_client() as client:
+        async with self.mysql_client() as client:
             async with client.connection.cursor() as cursor:
                 await self._validate_database_accessible(cursor)
                 await self._validate_tables_accessible(cursor)
@@ -389,7 +385,7 @@ class MySqlDataSource(BaseDataSource):
             )
 
     async def ping(self):
-        async with self._mysql_client() as client:
+        async with self.mysql_client() as client:
             await client.ping()
 
     async def _connect(self, query, fetch_many=False, **query_kwargs):
@@ -412,7 +408,7 @@ class MySqlDataSource(BaseDataSource):
         rows_fetched = 0
         cursor_position = 0
 
-        async with self._mysql_client() as client:
+        async with self.mysql_client() as client:
             while retry <= self.retry_count:
                 try:
                     async with client.connection.cursor(
@@ -466,9 +462,6 @@ class MySqlDataSource(BaseDataSource):
                     cursor_position = rows_fetched
                     await self._sleeps.sleep(RETRY_INTERVAL**retry)
                     retry += 1
-
-    async def fetch_all_tables(self):
-        return await anext(self._connect(query=self.queries.all_tables()))
 
     async def fetch_rows_for_table(self, table=None, query=None):
         """Fetches all the rows from all the tables of the database.
@@ -597,11 +590,5 @@ class MySqlDataSource(BaseDataSource):
     async def get_tables_to_fetch(self):
         tables = configured_tables(self.tables)
 
-        def table_name(table):
-            return table[0]
-
-        return (
-            map(lambda table: table_name(table), await self.fetch_all_tables())
-            if is_wildcard(tables)
-            else tables
-        )
+        async with self.mysql_client() as client:
+            return await client.get_all_table_names() if is_wildcard(tables) else tables
