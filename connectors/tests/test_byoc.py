@@ -373,19 +373,35 @@ async def test_heartbeat(interval, last_seen, should_send_heartbeat):
 
 
 @pytest.mark.asyncio
-async def test_sync_starts():
-    connector_doc = {"_id": "1"}
-    index = Mock()
-    index.update = AsyncMock(return_value=1)
-    expected_doc_source_update = {
-        "last_sync_status": JobStatus.IN_PROGRESS.value,
-        "last_sync_error": None,
-        "status": Status.CONNECTED.value,
+@pytest.mark.parametrize(
+    "updated, expected_result",
+    [("updated", True), ("noop", False)],
+)
+async def test_sync_starts(updated, expected_result):
+    doc_id = "1"
+    old_sync_status = JobStatus.COMPLETED.value
+    connector_doc = {
+        "_id": doc_id,
+        "_source": {"last_sync_status": old_sync_status},
     }
-
+    expected_script = {
+        "lang": "painless",
+        "source": "if (ctx._source.last_sync_status == params['old_sync_status']) { ctx._source.last_sync_status = params['new_sync_status']; ctx._source.last_sync_error = null; ctx._source.status = params['connector_status'] } else { ctx.op = 'noop' }",
+        "params": {
+            "old_sync_status": old_sync_status,
+            "new_sync_status": JobStatus.IN_PROGRESS.value,
+            "connector_status": Status.CONNECTED.value,
+        },
+    }
+    index = Mock()
+    index.update_by_script = AsyncMock(return_value={"result": updated})
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.sync_starts()
-    index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
+    result = await connector.sync_starts()
+
+    index.update_by_script.assert_awaited_once_with(
+        doc_id=doc_id, script=expected_script
+    )
+    assert result == expected_result
 
 
 @pytest.mark.asyncio
