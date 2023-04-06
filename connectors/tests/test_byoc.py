@@ -1188,6 +1188,9 @@ async def test_create_job(index_method, trigger_method, set_env):
         "connector": ANY,
         "trigger_method": trigger_method.value,
         "status": JobStatus.PENDING.value,
+        "indexed_document_count": 0,
+        "indexed_document_volume": 0,
+        "deleted_document_count": 0,
         "created_at": ANY,
         "last_seen": ANY,
     }
