@@ -377,7 +377,7 @@ async def test_get_content_with_clienterror():
 
 
 @pytest.mark.asyncio
-async def test_close_with_client_session(patch_logger):
+async def test_close_with_client_session():
     """Test close method of S3DataSource with client session"""
 
     # Setup
