@@ -110,6 +110,8 @@ The connector indexes following items into the Elastic Search index:
   - Includes metadata such as issue type, parent issue details, fix versions, affected versions, resolution, attachments, comments, sub-task details, priority, custom fields, etc.
 - Attachments
 
+**Note:** Archieved projects and issues won't be indexed.
+
 ### Sync rules
 
 - Files bigger than 10 MB won't be extracted.
