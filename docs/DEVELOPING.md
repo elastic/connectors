@@ -95,10 +95,10 @@ The connector uses the Elastic ingest attachment processor plugin for extracting
 ### Documents and syncs
 
 The connector syncs the following Confluence object types: 
-- Pages
-- Spaces
-- Blog Posts
-- Attachments
+- **Pages**
+- **Spaces**
+- **Blog Posts**
+- **Attachments**
 
 ### Sync rules
 
