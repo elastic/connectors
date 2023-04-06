@@ -5,12 +5,12 @@
 #
 import asyncio
 import os
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from connectors.byoc import (
-    SYNC_DISABLED,
     ConnectorUpdateError,
     DataSourceError,
     JobTriggerMethod,
@@ -86,10 +86,13 @@ def sync_job_index_mock():
         yield sync_job_index_mock
 
 
+default_next_sync = datetime.utcnow() + timedelta(hours=1)
+
+
 def mock_connector(
     status=Status.CONNECTED,
     service_type="fake",
-    next_sync=SYNC_DISABLED,
+    next_sync=default_next_sync,
     sync_now=False,
     prepare_exception=None,
 ):
@@ -126,7 +129,7 @@ async def test_connector_sync_now(
     sync_job_index_mock,
     set_env,
 ):
-    connector = mock_connector(sync_now=True, next_sync=0)
+    connector = mock_connector(sync_now=True)
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     await create_and_run_service()
 
@@ -144,7 +147,7 @@ async def test_connector_ready_to_sync(
     sync_job_index_mock,
     set_env,
 ):
-    connector = mock_connector(next_sync=0.01)
+    connector = mock_connector(next_sync=datetime.utcnow())
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     await create_and_run_service()
 
@@ -160,7 +163,7 @@ async def test_connector_ready_to_sync(
 async def test_connector_sync_disabled(
     connector_index_mock, sync_job_index_mock, set_env
 ):
-    connector = mock_connector()
+    connector = mock_connector(next_sync=None)
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     await create_and_run_service()
 
@@ -168,6 +171,28 @@ async def test_connector_sync_disabled(
     connector.heartbeat.assert_awaited()
     connector.reset_sync_now_flag.assert_not_awaited()
     sync_job_index_mock.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_both_on_demand_and_scheduled(
+    connector_index_mock,
+    sync_job_index_mock,
+    set_env,
+):
+    connector = mock_connector(sync_now=True, next_sync=datetime.utcnow())
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    await create_and_run_service()
+
+    connector.prepare.assert_awaited()
+    connector.heartbeat.assert_awaited
+    connector.reset_sync_now_flag.assert_awaited()
+    sync_job_index_mock.create.assert_any_await(
+        connector=connector, trigger_method=JobTriggerMethod.ON_DEMAND
+    )
+    sync_job_index_mock.create.assert_any_await(
+        connector=connector, trigger_method=JobTriggerMethod.SCHEDULED
+    )
+    assert sync_job_index_mock.create.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -221,8 +246,8 @@ async def test_connector_prepare_failed(
 async def test_run_when_sync_fails_then_continues_service_execution(
     connector_index_mock, set_env
 ):
-    connector = mock_connector(sync_now=True, next_sync=0)
-    another_connector = mock_connector(sync_now=True, next_sync=0)
+    connector = mock_connector(sync_now=True)
+    another_connector = mock_connector(sync_now=True)
     connector_index_mock.supported_connectors.return_value = AsyncIterator(
         [connector, another_connector]
     )
@@ -230,8 +255,8 @@ async def test_run_when_sync_fails_then_continues_service_execution(
     connector.heartbeat.side_effect = Exception("Something went wrong!")
 
     # 0.15 is a bit arbitrary here
-    # It should be enough to make the loop execute a couple times
-    # but is there a better way to tell service to execute loop a couple times?
+    # It should be enough to make the loop execute a couple of times
+    # but is there a better way to tell service to execute loop a couple of times?
     await create_and_run_service(stop_after=0.15)
 
     # assert that service tried to call connector heartbeat for all connectors

@@ -10,8 +10,9 @@ Event loop
 - instantiates connector plugins
 - mirrors an Elasticsearch index with a collection of documents
 """
+from datetime import datetime
+
 from connectors.byoc import (
-    SYNC_DISABLED,
     ConnectorIndex,
     ConnectorUpdateError,
     DataSourceError,
@@ -94,19 +95,8 @@ class JobSchedulingService(BaseService):
                 validator=source_klass(connector.configuration)
             )
 
-        if not await self._should_sync(connector):
-            return
-
-        trigger_method = (
-            JobTriggerMethod.ON_DEMAND
-            if connector.sync_now
-            else JobTriggerMethod.SCHEDULED
-        )
-        await self.sync_job_index.create(
-            connector=connector, trigger_method=trigger_method
-        )
-        if connector.sync_now:
-            await connector.reset_sync_now_flag()
+        await self._on_demand_sync(connector)
+        await self._scheduled_sync(connector)
 
     async def _run(self):
         """Main event loop."""
@@ -154,21 +144,35 @@ class JobSchedulingService(BaseService):
                 await self.sync_job_index.close()
         return 0
 
-    async def _should_sync(self, connector):
+    async def _on_demand_sync(self, connector):
+        if not connector.sync_now:
+            return
+
+        await self.sync_job_index.create(
+            connector=connector, trigger_method=JobTriggerMethod.ON_DEMAND
+        )
+        await connector.reset_sync_now_flag()
+
+    async def _scheduled_sync(self, connector):
         try:
             next_sync = connector.next_sync()
-            # First we check if sync is disabled, and it terminates all other conditions
-            if next_sync == SYNC_DISABLED:
-                logger.debug(f"Scheduling is disabled for connector {connector.id}")
-                return False
-            # And only then we check if we need to run sync right now or not
-            if next_sync - self.idling > 0:
-                logger.debug(
-                    f"Next sync for connector {connector.id} due in {int(next_sync)} seconds"
-                )
-                return False
-            return True
         except Exception as e:
             logger.critical(e, exc_info=True)
             await connector.error(str(e))
-            return False
+            return
+
+        if next_sync is None:
+            logger.debug(f"Scheduling is disabled for connector {connector.id}")
+            return
+
+        now = datetime.utcnow()
+        next_sync_due = (next_sync - now).total_seconds()
+        if next_sync_due - self.idling > 0:
+            logger.debug(
+                f"Next sync for connector {connector.id} due in {int(next_sync_due)} seconds"
+            )
+            return
+
+        await self.sync_job_index.create(
+            connector=connector, trigger_method=JobTriggerMethod.SCHEDULED
+        )
