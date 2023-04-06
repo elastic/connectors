@@ -92,6 +92,10 @@ The number of concurrent downloads for fetching the attachment content. This spe
 
 The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
 
+### Documents and syncs
+
+The connector indexes the following items into the elasticsearch index: Pages, Spaces, Blog Posts and Attachments.
+
 ### Sync rules
 
 - Content of files bigger than 10 MB won't be extracted.
