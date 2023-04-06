@@ -324,6 +324,48 @@ class CustomException(Exception):
     pass
 
 
+class CustomGeneratorException(Exception):
+    pass
+
+
+@pytest.mark.fail_slow(1)
+@pytest.mark.asyncio
+async def test_exponential_backoff_retry_async_generator():
+    mock_gen = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        interval=0,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def raises_async_generator():
+        for _ in range(3):
+            mock_gen()
+            raise CustomGeneratorException()
+            yield 1
+
+    with pytest.raises(CustomGeneratorException):
+        async for _ in raises_async_generator():
+            pass
+
+    # retried 10 times
+    assert mock_gen.call_count == num_retries
+
+    # would lead to roughly ~ 50 seconds of retrying
+    @retryable(retries=10, interval=5, strategy=RetryStrategy.LINEAR_BACKOFF)
+    async def does_not_raise_async_generator():
+        for _ in range(3):
+            yield 1
+
+    # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
+    items = []
+    async for item in does_not_raise_async_generator():
+        items.append(item)
+
+    assert items == [1, 1, 1]
+
+
 @pytest.mark.fail_slow(1)
 @pytest.mark.asyncio
 async def test_exponential_backoff_retry():
