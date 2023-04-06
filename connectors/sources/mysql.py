@@ -353,6 +353,7 @@ class MySqlDataSource(BaseDataSource):
             user=self.configuration["user"],
             password=self.configuration["password"],
             database=self.configuration["database"],
+            fetch_size=self.configuration["fetch_size"],
             ssl_enabled=self.configuration["ssl_enabled"],
             ssl_certificate=self.configuration["ssl_ca"],
         )
