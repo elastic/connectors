@@ -12,6 +12,8 @@ from connectors.es import Mappings
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 
+UTF_8 = "utf-8"
+
 JOB_REPORTING_INTERVAL = 10
 JOB_CHECK_INTERVAL = 1
 ES_ID_SIZE_LIMIT = 512
@@ -227,14 +229,26 @@ class SyncJobRunner:
             filtering=self.sync_job.filtering
         ):
             doc_id = str(doc.get("_id", ""))
-            doc_id_size = len(doc_id.encode("utf-8"))
+            doc_id_size = len(doc_id.encode(UTF_8))
 
             if doc_id_size > ES_ID_SIZE_LIMIT:
-                logger.error(
+                logger.debug(
                     f"Document with id '{doc_id}' with a size of '{doc_id_size}' bytes could not be ingested. "
-                    f"Elasticsearch has an upper limit of '{ES_ID_SIZE_LIMIT}' bytes for the '_id' field."
+                    f"Elasticsearch has an upper limit of '{ES_ID_SIZE_LIMIT}' bytes for the '_id' field.",
+                    "Hashing id...",
                 )
-                continue
+
+                hashed_id = self.source_klass.hash_id(doc_id)
+                hashed_id_size = len(hashed_id.encode(UTF_8))
+
+                if hashed_id_size > ES_ID_SIZE_LIMIT:
+                    logger.error(
+                        f"Hashed document id '{hashed_id}' with a size of '{hashed_id_size}' bytes is above the size limit of '{ES_ID_SIZE_LIMIT}' bytes."
+                        f"Check the `hash_id` implementation of {self.source_klass.name}."
+                    )
+                    continue
+
+                doc["_id"] = hashed_id
 
             # adapt doc for pipeline settings
             doc["_extract_binary_content"] = self.sync_job.pipeline[
