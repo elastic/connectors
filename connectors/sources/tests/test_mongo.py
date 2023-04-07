@@ -14,8 +14,18 @@ from bson.decimal128 import Decimal128
 from connectors.byoc import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.mongo import MongoAdvancedRulesValidator, MongoDataSource
-from connectors.sources.tests.support import assert_basics, create_source
+from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
+
+
+def create_connector():
+    return create_source(
+        MongoDataSource,
+        host="mongodb://127.0.0.1:27021",
+        database="db",
+        collection="col",
+        direct_connection=True,
+    )
 
 
 @pytest.mark.asyncio
@@ -111,15 +121,6 @@ async def test_advanced_rules_validator(advanced_rules, is_valid):
     assert validation_result.is_valid == is_valid
 
 
-@pytest.mark.asyncio
-@mock.patch(
-    "pymongo.topology.Topology._select_servers_loop", lambda *x: [mock.MagicMock()]
-)
-@mock.patch("pymongo.mongo_client.MongoClient._get_socket")
-async def test_basics(*args):
-    await assert_basics(MongoDataSource, "host", "mongodb://127.0.0.1:27021")
-
-
 def build_resp():
     doc1 = {"id": "one", "tuple": (1, 2, 3), "date": datetime.now()}
     doc2 = {"id": "two", "dict": {"a": "b"}, "decimal": Decimal128("0.0005")}
@@ -145,7 +146,7 @@ def build_resp():
     "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
 )
 async def test_get_docs(*args):
-    source = create_source(MongoDataSource)
+    source = create_connector()
     num = 0
     async for (doc, dl) in source.get_docs():
         assert doc["id"] in ("one", "two")
@@ -155,9 +156,23 @@ async def test_get_docs(*args):
 
 
 @pytest.mark.asyncio
-async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
-    source = create_source(MongoDataSource)
+@mock.patch(
+    "pymongo.topology.Topology._select_servers_loop", lambda *x: [mock.MagicMock()]
+)
+@mock.patch("pymongo.mongo_client.MongoClient._get_socket")
+@mock.patch(
+    "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
+)
+@pytest.mark.asyncio
+async def test_ping_when_called_then_does_not_raise(*args):
+    source = create_connector()
 
+    await source.ping()
+
+
+@pytest.mark.asyncio
+async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
+    source = create_connector()
     collection_mock = Mock()
     collection_mock.find = AsyncIterator(items=[{"_id": 1}])
     source.collection = collection_mock
@@ -193,7 +208,7 @@ async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
 
 @pytest.mark.asyncio
 async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present():
-    source = create_source(MongoDataSource)
+    source = create_connector()
 
     collection_mock = Mock()
     collection_mock.aggregate = AsyncIterator(items=[{"_id": 1}])
@@ -241,7 +256,12 @@ async def test_validate_config_when_database_name_invalid_then_raises_exception(
         "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
         return_value=future_with_result(server_database_names),
     ):
-        source = create_source(MongoDataSource, database=configured_database_name)
+        source = create_source(
+            MongoDataSource,
+            host="mongodb://127.0.0.1:27021",
+            database=configured_database_name,
+            collection="something",
+        )
         with pytest.raises(ConfigurableFieldValueError) as e:
             await source.validate_config()
         # assert that message contains database name from config
@@ -267,6 +287,7 @@ async def test_validate_config_when_collection_name_invalid_then_raises_exceptio
     ):
         source = create_source(
             MongoDataSource,
+            host="mongodb://127.0.0.1:27021",
             database=configured_database_name,
             collection=configured_collection_name,
         )
@@ -295,6 +316,7 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise():
     ):
         source = create_source(
             MongoDataSource,
+            host="mongodb://127.0.0.1:27021",
             database=configured_database_name,
             collection=configured_collection_name,
         )

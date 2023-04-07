@@ -317,10 +317,11 @@ async def test_sync_job_runner_suspend(elastic_server_mock):
 
 @patch("connectors.sync_job_runner.ES_ID_SIZE_LIMIT", 1)
 @pytest.mark.asyncio
-async def test_prepare_docs_when_id_too_long_then_skip_doc():
+async def test_prepare_docs_when_original_id_and_hashed_id_too_long_then_skip_doc():
     _id_too_long = "ab"
 
     sync_job_runner = create_runner_yielding_docs(docs=[({"_id": _id_too_long}, None)])
+    sync_job_runner.source_klass.hash_id.return_value = _id_too_long
 
     docs = []
     async for doc, _ in sync_job_runner.prepare_docs():
@@ -332,7 +333,9 @@ async def test_prepare_docs_when_id_too_long_then_skip_doc():
 @patch("connectors.sync_job_runner.ES_ID_SIZE_LIMIT", 10)
 @pytest.mark.parametrize("_id", ["ab", 1, 1.5])
 @pytest.mark.asyncio
-async def test_prepare_docs_when_id_below_limit_then_yield_doc(_id):
+async def test_prepare_docs_when_original_id_below_limit_then_yield_doc_with_original_id(
+    _id,
+):
     sync_job_runner = create_runner_yielding_docs(docs=[({"_id": _id}, None)])
 
     docs = []
@@ -341,6 +344,23 @@ async def test_prepare_docs_when_id_below_limit_then_yield_doc(_id):
 
     assert len(docs) == 1
     assert docs[0]["_id"] == _id
+
+
+@patch("connectors.sync_job_runner.ES_ID_SIZE_LIMIT", 3)
+@pytest.mark.asyncio
+async def test_prepare_docs_when_original_id_above_limit_and_hashed_id_below_limit_then_yield_doc_with_hashed_id():
+    _id_too_long = "abcd"
+    hashed_id = "a"
+
+    sync_job_runner = create_runner_yielding_docs(docs=[({"_id": _id_too_long}, None)])
+    sync_job_runner.source_klass.hash_id.return_value = hashed_id
+
+    docs = []
+    async for doc, _ in sync_job_runner.prepare_docs():
+        docs.append(doc)
+
+    assert len(docs) == 1
+    assert docs[0]["_id"] == hashed_id
 
 
 @pytest.mark.asyncio

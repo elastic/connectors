@@ -20,6 +20,7 @@ from connectors.sources.mysql import (
 )
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
+from connectors.utils import iso_utc
 
 
 def immutable_doc(**kwargs):
@@ -103,9 +104,7 @@ def patch_connection_pool():
     connection_pool = Mock()
     connection_pool.close = Mock()
     connection_pool.wait_closed = AsyncMock()
-    connection_pool.acquire = Mock(return_value=Connection())
-    connection_pool.acquire.__aenter__ = AsyncMock()
-    connection_pool.acquire.__aexit__ = AsyncMock()
+    connection_pool.acquire = AsyncMock(return_value=Connection())
 
     with patch(
         "aiomysql.create_pool",
@@ -212,18 +211,94 @@ async def mock_mysql_response():
     return mock_response
 
 
+async def mock_connection(mock_cursor):
+    mock_conn = MagicMock(spec=aiomysql.Connection)
+    mock_conn.cursor.return_value = mock_cursor
+    mock_conn.__aenter__.return_value = mock_conn
+
+    return mock_conn
+
+
 @pytest.mark.asyncio
 async def test_close_when_source_setup_correctly_does_not_raise_errors():
-    source = create_source(MySqlDataSource)
+    source = await setup_mysql_source()
 
     await source.close()
+
+
+@pytest.mark.asyncio
+async def test_client_get_tables(patch_connection_pool):
+    table_1 = "table_1"
+    table_2 = "table_2"
+
+    fetchall_tables_response = [
+        (table_1,),
+        (table_2,),
+    ]
+
+    mock_cursor = MagicMock(spec=aiomysql.Cursor)
+    mock_cursor.fetchall = AsyncMock(return_value=fetchall_tables_response)
+    mock_cursor.__aenter__.return_value = mock_cursor
+
+    patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
+
+    client = await setup_mysql_client()
+
+    async with client:
+        result = await client.get_all_table_names()
+        expected_result = [table_1, table_2]
+
+        assert result == expected_result
+
+
+@pytest.mark.asyncio
+async def test_client_get_column_names(patch_connection_pool):
+    table = "table"
+    column_1 = "column_1"
+    column_2 = "column_2"
+
+    description_response = [
+        (column_1,),
+        (column_2,),
+    ]
+
+    mock_cursor = MagicMock(spec=aiomysql.Cursor)
+    mock_cursor.description = description_response
+    mock_cursor.__aenter__.return_value = mock_cursor
+
+    patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
+
+    client = await setup_mysql_client()
+
+    async with client:
+        result = await client.get_column_names(table)
+        expected_result = [f"{table}_{column_1}", f"{table}_{column_2}"]
+
+        assert result == expected_result
+
+
+@pytest.mark.asyncio
+async def test_client_get_last_update_time(patch_connection_pool):
+    last_update_time = iso_utc()
+
+    mock_cursor = MagicMock(spec=aiomysql.Cursor)
+    mock_cursor.fetchone = AsyncMock(return_value=(last_update_time, None))
+    mock_cursor.__aenter__.return_value = mock_cursor
+
+    patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
+
+    client = await setup_mysql_client()
+
+    async with client:
+        assert await client.get_last_update_time("table") == last_update_time
 
 
 @pytest.mark.asyncio
 async def test_client_ping(patch_logger, patch_connection_pool):
     client = await setup_mysql_client()
 
-    await client.ping()
+    async with client:
+        await client.ping()
 
 
 @pytest.mark.asyncio
@@ -321,7 +396,7 @@ async def setup_mysql_source(database=""):
     )
 
     source.database = database
-    source._mysql_client = Mock()
+    source._mysql_client = MagicMock()
 
     return source
 
