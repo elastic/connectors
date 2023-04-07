@@ -30,7 +30,7 @@ For additional operations, see [Usage](https://www.elastic.co/guide/en/enterpris
 
 ### Compatibility
 
-Jira Cloud or Jira Server versions 7 or later are compatible with Elastic connector frameworks.
+Jira Cloud or Jira Server versions 7 or later are compatible with Elastic connector frameworks. Jira Data Center editions are not currently supported.
 
 ### Configuration
 
@@ -114,7 +114,7 @@ The connector syncs the following objects and entities:
 
 ### Sync rules
 
-- Files bigger than 10 MB won't be extracted.
+- Files bigger than 10 MB won't be extracted
 - Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
 - Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
 
