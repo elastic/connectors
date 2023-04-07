@@ -11,6 +11,7 @@ import re
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
+from functools import cache
 
 from bson import Decimal128
 
@@ -475,9 +476,11 @@ class BaseDataSource:
         return doc
 
 
+@cache
 def get_source_klass(fqn):
     """Converts a Fully Qualified Name into a class instance."""
     module_name, klass_name = fqn.split(":")
+    logger.debug(f"Importing module {module_name}")
     module = importlib.import_module(module_name)
     return getattr(module, klass_name)
 
@@ -486,11 +489,6 @@ def get_source_klasses(config):
     """Returns an iterator of all registered sources."""
     for fqn in config["sources"].values():
         yield get_source_klass(fqn)
-
-
-def get_source_klass_dict(config):
-    """Returns a service type - source klass dictionary"""
-    return {name: get_source_klass(fqn) for name, fqn in config["sources"].items()}
 
 
 class ConfigurableFieldValueError(Exception):
