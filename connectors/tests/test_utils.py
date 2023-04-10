@@ -19,6 +19,7 @@ from datetime import datetime
 from unittest.mock import Mock, patch
 
 import pytest
+from elasticsearch import ConflictError
 from freezegun import freeze_time
 from pympler import asizeof
 
@@ -40,6 +41,7 @@ from connectors.utils import (
     ssl_context,
     url_encode,
     validate_index_name,
+    with_concurrency_control,
 )
 
 
@@ -395,6 +397,28 @@ async def test_exponential_backoff_retry():
         pass
 
     # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
+    await does_not_raise()
+
+
+@pytest.mark.asyncio
+async def test_with_concurrency_control():
+    mock_func = Mock()
+    num_retries = 10
+
+    @with_concurrency_control(retries=num_retries)
+    async def conflict():
+        mock_func()
+        raise ConflictError(message="something wrong", meta=None, body={})
+
+    with pytest.raises(ConflictError):
+        await conflict()
+
+        assert mock_func.call_count == num_retries
+
+    @with_concurrency_control(retries=num_retries)
+    async def does_not_raise():
+        pass
+
     await does_not_raise()
 
 

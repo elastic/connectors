@@ -20,6 +20,7 @@ from enum import Enum
 
 from base64io import Base64IO
 from cstriggers.core.trigger import QuartzCron
+from elasticsearch import ConflictError
 from pympler import asizeof
 
 from connectors.logger import logger
@@ -434,6 +435,24 @@ async def apply_retry_strategy(strategy, interval, retry):
             await asyncio.sleep(interval**retry)
         case _:
             raise UnknownRetryStrategyError()
+
+
+def with_concurrency_control(retries=3):
+    def wrapper(func):
+        @functools.wraps(func)
+        async def wrapped(*args, **kwargs):
+            retry = 1
+            while retry <= retries:
+                try:
+                    return await func(*args, **kwargs)
+                except ConflictError as e:
+                    if retry >= retries:
+                        raise e
+                    retry += 1
+
+        return wrapped
+
+    return wrapper
 
 
 def ssl_context(certificate):
