@@ -23,7 +23,6 @@ from connectors.source import (
     Field,
     ValidationTypes,
     get_source_klass,
-    get_source_klass_dict,
     get_source_klasses,
 )
 
@@ -97,16 +96,6 @@ def test_get_source_klasses():
 
     sources = list(get_source_klasses(settings))
     assert sources == [MyConnector, MyConnector]
-
-
-def test_get_source_klass_dict():
-    settings = {
-        "sources": {"yea": "test_source:MyConnector", "yea2": "test_source:MyConnector"}
-    }
-
-    source_klass_dict = get_source_klass_dict(settings)
-    assert source_klass_dict["yea"] == MyConnector
-    assert source_klass_dict["yea2"] == MyConnector
 
 
 @pytest.mark.asyncio
@@ -272,6 +261,68 @@ def test_get_source_klass_dict():
                 },
             }
         ),
+        (
+            # when not required and value is empty
+            # it should pass validation if no validations exist
+            {
+                "string_field": {
+                    "type": "str",
+                    "required": False,
+                    "value": "",
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "string_field": {
+                    "type": "str",
+                    "required": False,
+                    "value": None,
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "int_field": {
+                    "type": "int",
+                    "required": False,
+                    "value": None,
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "list_field": {
+                    "type": "list",
+                    "required": False,
+                    "value": [],
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "list_field": {
+                    "type": "list",
+                    "required": False,
+                    "value": None,
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "bool_field": {
+                    "type": "bool",
+                    "required": False,
+                    "value": None,
+                    "validations": [],
+                }
+            }
+        ),
     ],
 )
 async def test_check_valid_when_validations_succeed_no_errors_raised(config):
@@ -421,6 +472,67 @@ async def test_check_valid_when_validations_succeed_no_errors_raised(config):
                 "foo": {
                     "value": "bar",
                 },
+            }
+        ),
+        (
+            # when required and value is empty it should fail validation
+            {
+                "string_field": {
+                    "type": "str",
+                    "required": True,
+                    "value": "",
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "string_field": {
+                    "type": "str",
+                    "required": True,
+                    "value": None,
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "int_field": {
+                    "type": "int",
+                    "required": True,
+                    "value": None,
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "int_field": {
+                    "type": "list",
+                    "required": True,
+                    "value": [],
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "int_field": {
+                    "type": "list",
+                    "required": True,
+                    "value": None,
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "int_field": {
+                    "type": "bool",
+                    "required": True,
+                    "value": None,
+                    "validations": [],
+                }
             }
         ),
     ],
