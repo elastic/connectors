@@ -784,7 +784,7 @@ async def test_connector_reset_sync_now_flag(sync_now, updated, expected_result)
 @pytest.mark.asyncio
 async def test_connector_update_last_sync_scheduled_at():
     doc_id = "1"
-    seq_no = (1,)
+    seq_no = 1
     primary_term = 2
     new_ts = datetime.utcnow() + timedelta(seconds=20)
     connector_doc = {
