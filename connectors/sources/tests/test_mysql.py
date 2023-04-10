@@ -74,14 +74,6 @@ def future_with_result(result):
 
 
 @pytest.fixture
-def patch_fetch_tables():
-    with patch.object(
-        MySqlDataSource, "fetch_all_tables", side_effect=([])
-    ) as fetch_tables:
-        yield fetch_tables
-
-
-@pytest.fixture
 def patch_ping():
     with patch.object(MySqlDataSource, "ping", return_value=AsyncMock()) as ping:
         yield ping
@@ -294,6 +286,32 @@ async def test_client_get_last_update_time(patch_connection_pool):
 
 
 @pytest.mark.asyncio
+async def test_client_yield_rows_for_table(patch_connection_pool):
+    rows_per_batch = [[DOC_ONE], [DOC_TWO], [DOC_THREE]]
+
+    mock_cursor = MagicMock(spec=aiomysql.Cursor)
+    mock_cursor.fetchmany.side_effect = AsyncMock(side_effect=[*rows_per_batch, None])
+    mock_cursor.__aenter__.return_value = mock_cursor
+
+    patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
+
+    client = await setup_mysql_client()
+    client.fetch_size = 1
+
+    async with client:
+        yielded_docs = []
+
+        async for doc in client.yield_rows_for_table("table"):
+            yielded_docs.append(doc)
+
+        # 3 batches with rows, 4th batch empty
+        num_batches = len(rows_per_batch) / client.fetch_size + 1
+
+        assert len(yielded_docs) == len(rows_per_batch)
+        assert mock_cursor.fetchmany.call_count == num_batches
+
+
+@pytest.mark.asyncio
 async def test_client_ping(patch_logger, patch_connection_pool):
     client = await setup_mysql_client()
 
@@ -396,7 +414,7 @@ async def setup_mysql_source(database=""):
     )
 
     source.database = database
-    source._mysql_client = MagicMock()
+    source.mysql_client = MagicMock()
 
     return source
 
@@ -529,14 +547,19 @@ async def test_advanced_rules_tables_validation(
     datasource,
     advanced_rules,
     expected_validation_result,
-    patch_fetch_tables,
     patch_ping,
 ):
-    patch_fetch_tables.side_effect = [
-        map(lambda table: (table, None), datasource.keys())
-    ]
+    source = await setup_mysql_source()
 
-    source = create_source(MySqlDataSource)
+    client = MagicMock()
+    client.get_all_table_names = AsyncMock(side_effect=[datasource.keys()])
+
+    context_manager = MagicMock()
+    context_manager.__aenter__.return_value = client
+    context_manager.__aexit__.return_value = None
+
+    source.mysql_client = MagicMock(return_value=context_manager)
+
     validation_result = await MySQLAdvancedRulesValidator(source).validate(
         advanced_rules
     )
@@ -548,11 +571,20 @@ async def test_advanced_rules_tables_validation(
 @pytest.mark.asyncio
 async def test_get_tables_when_wildcard_configured_then_fetch_all_tables(tables):
     source = create_source(MySqlDataSource)
-    source.fetch_all_tables = AsyncMock(return_value="table")
+    source.tables = tables
+
+    client = MagicMock()
+    client.get_all_table_names = AsyncMock(return_value="table")
+
+    context_manager = MagicMock()
+    context_manager.__aenter__.return_value = client
+    context_manager.__aexit__.return_value = None
+
+    source.mysql_client = MagicMock(return_value=context_manager)
 
     await source.get_tables_to_fetch()
 
-    assert source.fetch_all_tables.call_count == 1
+    assert client.get_all_table_names.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -582,7 +614,17 @@ async def test_validate_database_accessible_when_not_accessible_then_error_raise
 async def test_validate_tables_accessible_when_accessible_then_no_error_raised():
     source = create_source(MySqlDataSource)
     source.tables = ["table_1", "table_2", "table_3"]
-    source.fetch_all_tables = AsyncMock(return_value=["table_1", "table_2", "table_3"])
+
+    client = MagicMock()
+    client.get_all_table_names = AsyncMock(
+        return_value=["table_1", "table_2", "table_3"]
+    )
+
+    context_manager = MagicMock()
+    context_manager.__aenter__.return_value = client
+    context_manager.__aexit__.return_value = None
+
+    source.mysql_client = MagicMock(return_value=context_manager)
 
     cursor = AsyncMock()
     cursor.execute.return_value = None
@@ -597,21 +639,23 @@ async def test_validate_tables_accessible_when_accessible_and_wildcard_then_no_e
 ):
     source = create_source(MySqlDataSource)
     source.tables = tables
-    source.fetch_all_tables = AsyncMock(return_value=["table_1", "table_2", "table_3"])
+    source.get_tables_to_fetch = AsyncMock(
+        return_value=["table_1", "table_2", "table_3"]
+    )
 
     cursor = AsyncMock()
     cursor.execute.return_value = None
 
     await source._validate_tables_accessible(cursor)
 
-    assert source.fetch_all_tables.call_count == 1
+    assert source.get_tables_to_fetch.call_count == 1
 
 
 @pytest.mark.asyncio
 async def test_validate_tables_accessible_when_not_accessible_then_error_raised():
     source = create_source(MySqlDataSource)
     source.tables = ["table1"]
-    source.fetch_all_tables = AsyncMock(return_value=["table1"])
+    source.get_tables_to_fetch = AsyncMock(return_value=["table1"])
 
     cursor = AsyncMock()
     cursor.execute.side_effect = aiomysql.Error("Error")
