@@ -795,35 +795,28 @@ async def test_connector_reset_sync_now_flag(sync_now, updated, expected_result)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "updated, expected_result",
-    [("updated", True), ("noop", False)],
-)
-async def test_connector_update_last_sync_scheduled_at(updated, expected_result):
+async def test_connector_update_last_sync_scheduled_at():
     doc_id = "1"
-    old_ts = datetime.utcnow()
+    seq_no = (1,)
+    primary_term = 2
     new_ts = datetime.utcnow() + timedelta(seconds=20)
     connector_doc = {
         "_id": doc_id,
-        "_source": {"last_sync_scheduled_at": old_ts.isoformat()},
-    }
-    expected_script = {
-        "lang": "painless",
-        "source": "if (ctx._source.last_sync_scheduled_at == params['old_ts']) { ctx._source.last_sync_scheduled_at = params['new_ts'] } else { ctx.op = 'noop' }",
-        "params": {
-            "old_ts": old_ts,
-            "new_ts": new_ts,
-        },
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
     }
     index = Mock()
-    index.update_by_script = AsyncMock(return_value={"result": updated})
+    index.update = AsyncMock()
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    result = await connector.update_last_sync_scheduled_at(new_ts)
+    await connector.update_last_sync_scheduled_at(new_ts)
 
-    index.update_by_script.assert_awaited_once_with(
-        doc_id=doc_id, script=expected_script
+    index.update.assert_awaited_once_with(
+        doc_id=doc_id,
+        doc={"last_sync_scheduled_at": new_ts.isoformat()},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
     )
-    assert result == expected_result
 
 
 @pytest.mark.asyncio
