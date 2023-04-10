@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Sharepoint source module responsible to fetch documents from Sharepoint Server/Online.
+"""SharePoint source module responsible to fetch documents from SharePoint Server/Online.
 """
 import asyncio
 import os
@@ -90,14 +90,17 @@ SCHEMA = {
     },
 }
 
+SHAREPOINT_ONLINE = "sharepoint_online"
+SHAREPOINT_SERVER = "sharepoint_server"
+
 
 class SharepointClient:
-    """Sharepoint client to handle API calls made to Sharepoint"""
+    """SharePoint client to handle API calls made to SharePoint"""
 
     def __init__(self, configuration):
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
-        self.is_cloud = self.configuration["is_cloud"]
+        self.is_cloud = self.configuration["data_source"] == SHAREPOINT_ONLINE
         self.host_url = self.configuration["host_url"]
         self.certificate = self.configuration["ssl_ca"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
@@ -133,7 +136,7 @@ class SharepointClient:
             "grant_type": "client_credentials",
             "resource": f"00000003-0000-0ff1-ce00-000000000000/{self.configuration['tenant']}.sharepoint.com@{tenant_id}",
             "client_id": f"{self.configuration['client_id']}@{tenant_id}",
-            "client_secret": self.configuration["secret_id"],
+            "client_secret": self.configuration["client_secret"],
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
@@ -197,18 +200,14 @@ class SharepointClient:
         Args:
             document (dictionary): Modified document.
             file_relative_url (str): Relative url of file
-            site_url (str): Site path of sharepoint
+            site_url (str): Site path of SharePoint
             timestamp (timestamp, optional): Timestamp of item last modified. Defaults to None.
             doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
 
         Returns:
             dictionary: Content document with id, timestamp & text.
         """
-        if not (
-            self.configuration["enable_content_extraction"]
-            and doit
-            and document["Length"]
-        ):
+        if not (doit and document["Length"]):
             return
 
         document_size = int(document["Length"])
@@ -247,10 +246,10 @@ class SharepointClient:
         }
 
     async def _api_call(self, url_name, url="", **url_kwargs):
-        """Make an API call to the Sharepoint Server/Online
+        """Make an API call to the SharePoint Server/Online
 
         Args:
-            url_name (str): Sharepoint url name to be executed.
+            url_name (str): SharePoint url name to be executed.
             url(str, optional): Paginated url for drive and list items. Defaults to "".
             url_kwargs (dict): Url kwargs to format the query.
         Raises:
@@ -263,6 +262,7 @@ class SharepointClient:
         # If pagination happens for list and drive items then next pagination url comes in response which will be passed in url field.
         if url == "":
             url = URLS[url_name].format(**url_kwargs)
+
         headers = None
 
         while True:
@@ -303,10 +303,10 @@ class SharepointClient:
                 await self._sleeps.sleep(RETRY_INTERVAL**retry)
 
     async def _fetch_data_with_next_url(self, site_url, list_id, param_name):
-        """Invokes a GET call to the Sharepoint Server/Online for calling list and drive item API.
+        """Invokes a GET call to the SharePoint Server/Online for calling list and drive item API.
 
         Args:
-            site_url(string): site url to the sharepoint farm.
+            site_url(string): site url to the SharePoint farm.
             list_id(string): Id of list item or drive item.
             param_name(string): parameter name whether it is DRIVE_ITEM, LIST_ITEM.
         Yields:
@@ -339,10 +339,10 @@ class SharepointClient:
                 break
 
     async def _fetch_data_with_query(self, site_url, param_name):
-        """Invokes a GET call to the Sharepoint Server/Online for calling site and list API.
+        """Invokes a GET call to the SharePoint Server/Online for calling site and list API.
 
         Args:
-            site_url(string): site url to the sharepoint farm.
+            site_url(string): site url to the SharePoint farm.
             param_name(string): parameter name whether it is SITES, LISTS.
         Yields:
             Response of the GET call.
@@ -366,7 +366,7 @@ class SharepointClient:
                 break
 
     async def get_sites(self, site_url):
-        """Get sites from Sharepoint Server/Online
+        """Get sites from SharePoint Server/Online
 
         Args:
             site_url(string): Parent site relative path.
@@ -384,7 +384,7 @@ class SharepointClient:
                 yield data
 
     async def get_lists(self, site_url):
-        """Get site lists from Sharepoint Server/Online
+        """Get site lists from SharePoint Server/Online
 
         Args:
             site_url(string): Parent site relative path.
@@ -501,13 +501,13 @@ class SharepointClient:
 
 
 class SharepointDataSource(BaseDataSource):
-    """Sharepoint"""
+    """SharePoint"""
 
-    name = "Sharepoint"
+    name = "SharePoint"
     service_type = "sharepoint"
 
     def __init__(self, configuration):
-        """Setup the connection to the Sharepoint
+        """Setup the connection to the SharePoint
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
@@ -517,76 +517,102 @@ class SharepointDataSource(BaseDataSource):
 
     @classmethod
     def get_default_configuration(cls):
-        """Get the default configuration for Sharepoint
+        """Get the default configuration for SharePoint
 
         Returns:
             dictionary: Default configuration.
         """
         return {
-            "is_cloud": {
-                "value": False,
-                "label": "True if Sharepoint Online, False if Sharepoint Server",
-                "type": "bool",
+            "data_source": {
+                "display": "dropdown",
+                "label": "SharePoint data source",
+                "options": [
+                    {"label": "SharePoint Online", "value": SHAREPOINT_ONLINE},
+                    {"label": "SharePoint Server", "value": SHAREPOINT_SERVER},
+                ],
+                "order": 1,
+                "type": "str",
+                "value": SHAREPOINT_SERVER,
             },
             "username": {
-                "value": "demo_user",
-                "label": "Sharepoint Server username",
+                "depends_on": [{"field": "data_source", "value": SHAREPOINT_SERVER}],
+                "label": "SharePoint Server username",
+                "order": 2,
                 "type": "str",
+                "value": "demo_user",
             },
             "password": {
-                "value": "abc@123",
-                "label": "Sharepoint Server password",
+                "depends_on": [{"field": "data_source", "value": SHAREPOINT_SERVER}],
+                "label": "SharePoint Server password",
+                "sensitive": True,
+                "order": 3,
                 "type": "str",
+                "value": "abc@123",
             },
             "client_id": {
-                "value": "",
-                "label": "Sharepoint Online client id",
+                "depends_on": [{"field": "data_source", "value": SHAREPOINT_ONLINE}],
+                "label": "SharePoint Online client id",
+                "order": 4,
                 "type": "str",
+                "value": "",
             },
-            "secret_id": {
-                "value": "",
-                "label": "Sharepoint Online secret id",
+            "client_secret": {
+                "depends_on": [{"field": "data_source", "value": SHAREPOINT_ONLINE}],
+                "label": "SharePoint Online secret id",
+                "order": 5,
                 "type": "str",
+                "value": "",
             },
             "tenant": {
-                "value": "",
-                "label": "Sharepoint Online tenant",
+                "depends_on": [{"field": "data_source", "value": SHAREPOINT_ONLINE}],
+                "label": "SharePoint Online tenant",
+                "order": 6,
                 "type": "str",
+                "value": "",
             },
             "tenant_id": {
-                "value": "",
-                "label": "Sharepoint Online tenant id",
+                "depends_on": [{"field": "data_source", "value": SHAREPOINT_ONLINE}],
+                "label": "SharePoint Online tenant id",
+                "order": 7,
                 "type": "str",
+                "value": "",
             },
             "host_url": {
-                "value": "http://127.0.0.1:8491",
-                "label": "Sharepoint host url",
+                "label": "SharePoint host url",
+                "order": 8,
                 "type": "str",
+                "value": "http://127.0.0.1:8491",
             },
             "site_collections": {
-                "value": "collection1",
-                "label": "List of Sharepoint site collections to index",
+                "display": "textarea",
+                "label": "Comma-separated list of SharePoint site collections to index",
+                "order": 9,
                 "type": "list",
+                "value": "collection1",
             },
             "ssl_enabled": {
-                "value": False,
-                "label": "Enable SSL verification (true/false)",
+                "display": "toggle",
+                "label": "Enable SSL",
+                "order": 10,
                 "type": "bool",
+                "value": False,
             },
             "ssl_ca": {
-                "value": "",
+                "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
+                "order": 11,
                 "type": "str",
-            },
-            "enable_content_extraction": {
-                "value": True,
-                "label": "Enable content extraction (true/false)",
-                "type": "bool",
+                "value": "",
             },
             "retry_count": {
-                "value": RETRIES,
-                "label": "Maximum retries per request",
+                "default_value": RETRIES,
+                "display": "numeric",
+                "label": "Retries per request",
+                "order": 12,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": RETRIES,
             },
         }
 
@@ -600,14 +626,14 @@ class SharepointDataSource(BaseDataSource):
         Raises:
             Exception: Configured keys can't be empty.
         """
-        logger.info("Validating Sharepoint Configuration")
+        logger.info("Validating SharePoint Configuration")
 
         connection_fields = (
             [
                 "host_url",
                 "site_collections",
                 "client_id",
-                "secret_id",
+                "client_secret",
                 "tenant",
                 "tenant_id",
             ]
@@ -632,15 +658,15 @@ class SharepointDataSource(BaseDataSource):
             raise ConfigurableFieldValueError("SSL certificate must be configured.")
 
     async def ping(self):
-        """Verify the connection with Sharepoint"""
+        """Verify the connection with SharePoint"""
         try:
             await self.sharepoint_client.ping()
             logger.debug(
-                f"Successfully connected to the Sharepoint via {self.sharepoint_client.host_url}"
+                f"Successfully connected to the SharePoint via {self.sharepoint_client.host_url}"
             )
         except Exception:
             logger.exception(
-                f"Error while connecting to the Sharepoint via {self.sharepoint_client.host_url}"
+                f"Error while connecting to the SharePoint via {self.sharepoint_client.host_url}"
             )
             raise
 
@@ -654,7 +680,7 @@ class SharepointDataSource(BaseDataSource):
 
         Args:
             document(dictionary): Modified document
-            item (dictionary): Document from Sharepoint.
+            item (dictionary): Document from SharePoint.
             document_type(string): Type of document(i.e. site,list,list_iitem, drive_item and document_library).
 
         Returns:
@@ -671,7 +697,7 @@ class SharepointDataSource(BaseDataSource):
         """Prepare key mappings for list
 
         Args:
-            item (dictionary): Document from Sharepoint.
+            item (dictionary): Document from SharePoint.
             document_type(string): Type of document(i.e. list and document_library).
 
         Returns:
@@ -692,7 +718,7 @@ class SharepointDataSource(BaseDataSource):
         """Prepare key mappings for site
 
         Args:
-            item (dictionary): Document from Sharepoint.
+            item (dictionary): Document from SharePoint.
 
         Returns:
             dictionary: Modified document with the help of adapter schema.
@@ -709,7 +735,7 @@ class SharepointDataSource(BaseDataSource):
         """Prepare key mappings for drive items
 
         Args:
-            item (dictionary): Document from Sharepoint.
+            item (dictionary): Document from SharePoint.
 
         Returns:
             dictionary: Modified document with the help of adapter schema.
@@ -741,7 +767,7 @@ class SharepointDataSource(BaseDataSource):
         """Prepare key mappings for list items
 
         Args:
-            item (dictionary): Document from Sharepoint.
+            item (dictionary): Document from SharePoint.
 
         Returns:
             dictionary: Modified document with the help of adapter schema.
@@ -763,10 +789,10 @@ class SharepointDataSource(BaseDataSource):
         return document
 
     async def get_docs(self, filtering=None):
-        """Executes the logic to fetch Sharepoint objects in an async manner.
+        """Executes the logic to fetch SharePoint objects in an async manner.
 
         Yields:
-            dictionary: dictionary containing meta-data of the Sharepoint objects.
+            dictionary: dictionary containing meta-data of the SharePoint objects.
         """
 
         server_relative_url = []
