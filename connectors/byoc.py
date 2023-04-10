@@ -504,19 +504,17 @@ class Connector(ESDocument):
         return resp["result"] == "updated"
 
     async def sync_starts(self):
-        """Update last_sync_status with update_by_script, and return True only if last_sync_status is updated."""
-        script = {
-            "lang": "painless",
-            # only update last_sync_status to in_progress if it's not updated by other instances, otherwise set op to 'noop' (the returned 'result' will be 'noop')
-            "source": "if (ctx._source.last_sync_status == params['old_sync_status']) { ctx._source.last_sync_status = params['new_sync_status']; ctx._source.last_sync_error = null; ctx._source.status = params['connector_status'] } else { ctx.op = 'noop' }",
-            "params": {
-                "old_sync_status": self.last_sync_status.value,
-                "new_sync_status": JobStatus.IN_PROGRESS.value,
-                "connector_status": Status.CONNECTED.value,
-            },
+        doc = {
+            "last_sync_status": JobStatus.IN_PROGRESS.value,
+            "last_sync_error": None,
+            "status": Status.CONNECTED.value,
         }
-        resp = await self.index.update_by_script(doc_id=self.id, script=script)
-        return resp["result"] == "updated"
+        await self.index.update(
+            doc_id=self.id,
+            doc=doc,
+            if_seq_no=self._seq_no,
+            if_primary_term=self._primary_term,
+        )
 
     async def error(self, error):
         doc = {
