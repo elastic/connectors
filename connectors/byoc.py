@@ -509,7 +509,12 @@ class Connector(ESDocument):
             "last_sync_error": None,
             "status": Status.CONNECTED.value,
         }
-        await self.index.update(doc_id=self.id, doc=doc)
+        await self.index.update(
+            doc_id=self.id,
+            doc=doc,
+            if_seq_no=self._seq_no,
+            if_primary_term=self._primary_term,
+        )
 
     async def error(self, error):
         doc = {
