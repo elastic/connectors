@@ -801,6 +801,31 @@ async def test_connector_reset_sync_now_flag():
 
 
 @pytest.mark.asyncio
+async def test_connector_update_last_sync_scheduled_at():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    new_ts = datetime.utcnow() + timedelta(seconds=20)
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    index = Mock()
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.update_last_sync_scheduled_at(new_ts)
+
+    index.update.assert_awaited_once_with(
+        doc_id=doc_id,
+        doc={"last_sync_scheduled_at": new_ts.isoformat()},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.asyncio
 async def test_connector_validate_filtering_not_edited():
     index = Mock()
     index.update = AsyncMock()
