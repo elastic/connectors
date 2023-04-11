@@ -61,6 +61,7 @@
                         "value": false
                 },
                 "ssl_ca": {
+                        "depends_on": [{"field": "ssl_enabled", "value": true}],
                         "label": "SSL certificate",
                         "order": 8,
                         "type": "str",
