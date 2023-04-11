@@ -20,7 +20,7 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import BaseDataSource
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -296,14 +296,17 @@ class JiraDataSource(BaseDataSource):
                 "value": 3,
             },
             "concurrent_downloads": {
-                "default_value": 100,
+                "default_value": MAX_CONCURRENT_DOWNLOADS,
                 "display": "numeric",
                 "label": "Number of concurrent downloads for fetching attachment content",
                 "order": 10,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": 50,
+                "validations": [
+                    {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
+                ],
+                "value": MAX_CONCURRENT_DOWNLOADS,
             },
         }
 
@@ -314,40 +317,6 @@ class JiraDataSource(BaseDataSource):
             options (dictionary): Config bulker options
         """
         options["concurrent_downloads"] = self.concurrent_downloads
-
-    async def validate_config(self):
-        """Validates whether user input is empty or not for configuration fields
-
-        Raises:
-            Exception: Configured keys can't be empty
-        """
-        logger.info("Validating Jira Configuration")
-        connection_fields = (
-            ["jira_url", "account_email", "api_token", "projects"]
-            if self.jira_client.is_cloud
-            else ["jira_url", "username", "password", "projects"]
-        )
-
-        default_config = self.get_default_configuration()
-
-        if empty_connection_fields := [
-            default_config[field]["label"]
-            for field in connection_fields
-            if self.configuration[field] in ["", [""]]
-        ]:
-            raise ConfigurableFieldValueError(
-                f"Configured keys: {empty_connection_fields} can't be empty."
-            )
-
-        if self.jira_client.ssl_enabled and (
-            self.jira_client.certificate == "" or self.jira_client.certificate is None
-        ):
-            raise ConfigurableFieldValueError("SSL certificate must be configured.")
-
-        if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
-            raise ConfigurableFieldValueError(
-                f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
-            )
 
     async def close(self):
         """Closes unclosed client session"""
