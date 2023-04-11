@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """MySQL source module responsible to fetch documents from MySQL"""
+import asyncio
 import re
 
 import aiomysql
@@ -116,6 +117,7 @@ class MySQLClient:
         ssl_certificate,
         database=None,
         max_pool_size=MAX_POOL_SIZE,
+        fetch_size=DEFAULT_FETCH_SIZE,
     ):
         self.host = host
         self.port = port
@@ -123,6 +125,7 @@ class MySQLClient:
         self.password = password
         self.database = database
         self.max_pool_size = max_pool_size
+        self.fetch_size = fetch_size
         self.ssl_enabled = ssl_enabled
         self.ssl_certificate = ssl_certificate
         self.queries = MySQLQueries(self.database)
@@ -199,6 +202,41 @@ class MySQLClient:
                 return result[0]
 
             return None
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def yield_rows_for_table(self, table):
+        async for row in self._fetchmany_in_batches(self.queries.table_data(table)):
+            yield row
+
+    async def _fetchmany_in_batches(self, query):
+        async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+            await cursor.execute(query)
+
+            fetched_rows = 0
+            successful_batches = 0
+
+            try:
+                while True:
+                    rows = await cursor.fetchmany(self.fetch_size)
+
+                    if not rows:
+                        break
+
+                    for row in rows:
+                        yield row
+
+                    fetched_rows += len(rows)
+                    successful_batches += 1
+
+                    await asyncio.sleep(0)
+            except IndexError as e:
+                logger.exception(
+                    f"Fetched {fetched_rows} rows in {successful_batches} batches. Encountered exception {e} in batch {successful_batches + 1}."
+                )
 
 
 class MySqlDataSource(BaseDataSource):
@@ -311,6 +349,7 @@ class MySqlDataSource(BaseDataSource):
             user=self.configuration["user"],
             password=self.configuration["password"],
             database=self.configuration["database"],
+            fetch_size=self.configuration["fetch_size"],
             ssl_enabled=self.configuration["ssl_enabled"],
             ssl_certificate=self.configuration["ssl_ca"],
         )
