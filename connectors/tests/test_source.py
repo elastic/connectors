@@ -23,7 +23,6 @@ from connectors.source import (
     Field,
     ValidationTypes,
     get_source_klass,
-    get_source_klass_dict,
     get_source_klasses,
 )
 
@@ -97,16 +96,6 @@ def test_get_source_klasses():
 
     sources = list(get_source_klasses(settings))
     assert sources == [MyConnector, MyConnector]
-
-
-def test_get_source_klass_dict():
-    settings = {
-        "sources": {"yea": "test_source:MyConnector", "yea2": "test_source:MyConnector"}
-    }
-
-    source_klass_dict = get_source_klass_dict(settings)
-    assert source_klass_dict["yea"] == MyConnector
-    assert source_klass_dict["yea2"] == MyConnector
 
 
 @pytest.mark.asyncio

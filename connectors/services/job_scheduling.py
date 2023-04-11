@@ -24,7 +24,7 @@ from connectors.byoc import (
 )
 from connectors.logger import logger
 from connectors.services.base import BaseService
-from connectors.source import get_source_klass_dict
+from connectors.source import get_source_klass
 
 
 class JobSchedulingService(BaseService):
@@ -34,7 +34,7 @@ class JobSchedulingService(BaseService):
         super().__init__(config)
         self.idling = self.service_config["idling"]
         self.heartbeat_interval = self.service_config["heartbeat"]
-        self.source_klass_dict = get_source_klass_dict(config)
+        self.source_list = config["sources"]
         self.connector_index = None
         self.sync_job_index = None
 
@@ -84,12 +84,12 @@ class JobSchedulingService(BaseService):
             )
             return
 
-        if connector.service_type not in self.source_klass_dict:
+        if connector.service_type not in self.source_list:
             raise DataSourceError(
                 f"Couldn't find data source class for {connector.service_type}"
             )
 
-        source_klass = self.source_klass_dict[connector.service_type]
+        source_klass = get_source_klass(self.source_list[connector.service_type])
         if connector.features.sync_rules_enabled():
             await connector.validate_filtering(
                 validator=source_klass(connector.configuration)
