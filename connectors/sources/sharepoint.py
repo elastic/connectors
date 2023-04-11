@@ -231,7 +231,7 @@ class SharepointClient:
             file_relative_url=file_relative_url,
         ):
             async with self.limiter:
-                 async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+                async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
                     async for data in response.content.iter_chunked(CHUNK_SIZE):
                         await async_buffer.write(data)
 
