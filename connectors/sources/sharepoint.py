@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Sharepoint source module responsible to fetch documents from Sharepoint Server/Online.
+"""SharePoint source module responsible to fetch documents from SharePoint Server/Online.
 """
 import asyncio
 import os
@@ -91,14 +91,17 @@ SCHEMA = {
     },
 }
 
+SHAREPOINT_ONLINE = "sharepoint_online"
+SHAREPOINT_SERVER = "sharepoint_server"
+
 
 class SharepointClient:
-    """Sharepoint client to handle API calls made to Sharepoint"""
+    """SharePoint client to handle API calls made to SharePoint"""
 
     def __init__(self, configuration):
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
-        self.is_cloud = self.configuration["is_cloud"]
+        self.is_cloud = self.configuration["data_source"] == SHAREPOINT_ONLINE
         self.host_url = self.configuration["host_url"]
         self.certificate = self.configuration["ssl_ca"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
@@ -110,7 +113,7 @@ class SharepointClient:
         self.token_expires_at = None
 
         self.limiter = AsyncLimiter(
-            max_rate=1000, time_period=60
+            max_rate=1200, time_period=60
         )  # Limit api call for throttling
 
         if self.ssl_enabled and self.certificate:
@@ -138,7 +141,7 @@ class SharepointClient:
             "grant_type": "client_credentials",
             "resource": f"00000003-0000-0ff1-ce00-000000000000/{self.configuration['tenant']}.sharepoint.com@{tenant_id}",
             "client_id": f"{self.configuration['client_id']}@{tenant_id}",
-            "client_secret": self.configuration["secret_id"],
+            "client_secret": self.configuration["client_secret"],
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
@@ -165,7 +168,6 @@ class SharepointClient:
             "content-type": "application/json",
         }
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
-        connector = aiohttp.TCPConnector(force_close=True)
 
         if self.is_cloud:
             basic_auth = None
@@ -175,7 +177,6 @@ class SharepointClient:
                 password=self.configuration["password"],
             )
         self.session = aiohttp.ClientSession(
-            connector=connector,
             auth=basic_auth,
             headers=request_headers,
             timeout=timeout,
@@ -191,11 +192,70 @@ class SharepointClient:
         await self.session.close()
         self.session = None
 
-    async def api_call(self, url_name, url="", **url_kwargs):
-        """Make an API call to the Sharepoint Server/Online
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_content(
+        self, document, file_relative_url, site_url, timestamp=None, doit=False
+    ):
+        """Get content of list items and drive items
 
         Args:
-            url_name (str): Sharepoint url name to be executed.
+            document (dictionary): Modified document.
+            file_relative_url (str): Relative url of file
+            site_url (str): Site path of SharePoint
+            timestamp (timestamp, optional): Timestamp of item last modified. Defaults to None.
+            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
+
+        Returns:
+            dictionary: Content document with id, timestamp & text.
+        """
+        if not (doit and document["Length"]):
+            return
+
+        document_size = int(document["Length"])
+        if document_size > FILE_SIZE_LIMIT:
+            logger.warning(
+                f"File size {document_size} of file {document['title']} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
+            )
+            return
+
+        source_file_name = ""
+
+        async for response in self._api_call(
+            url_name=ATTACHMENT,
+            host_url=self.host_url,
+            value=site_url,
+            file_relative_url=file_relative_url,
+        ):
+            async with self.limiter:
+                 async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+                    async for data in response.content.iter_chunked(CHUNK_SIZE):
+                        await async_buffer.write(data)
+
+                    source_file_name = async_buffer.name
+
+        await asyncio.to_thread(
+            convert_to_b64,
+            source=source_file_name,
+        )
+        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
+            # base64 on macOS will add a EOL, so we strip() here
+            attachment_content = (await target_file.read()).strip()
+        await remove(source_file_name)  # pyright: ignore
+        return {
+            "_id": document.get("id"),
+            "_timestamp": document.get("_timestamp"),
+            "_attachment": attachment_content,
+        }
+
+    async def _api_call(self, url_name, url="", **url_kwargs):
+        """Make an API call to the SharePoint Server/Online
+
+        Args:
+            url_name (str): SharePoint url name to be executed.
             url(str, optional): Paginated url for drive and list items. Defaults to "".
             url_kwargs (dict): Url kwargs to format the query.
         Raises:
@@ -209,6 +269,7 @@ class SharepointClient:
             # If pagination happens for list and drive items then next pagination url comes in response which will be passed in url field.
             if url == "":
                 url = URLS[url_name].format(**url_kwargs)
+
             headers = None
 
             while True:
@@ -255,343 +316,78 @@ class SharepointClient:
 
                     await self._sleeps.sleep(retry_after)
 
-    async def invoke_get_call(self, site_url, param_name, list_id=None):
-        """Invokes a GET call to the Sharepoint Server/Online.
+    async def _fetch_data_with_next_url(self, site_url, list_id, param_name):
+        """Invokes a GET call to the SharePoint Server/Online for calling list and drive item API.
 
         Args:
-            site_url(string): site url to the sharepoint farm.
-            param_name(string): parameter name whether it is SITES, LISTS, DRIVE_ITEM, LIST_ITEM.
-            list_id(string, optional): Id of list item or drive item. Defaults to None.
+            site_url(string): site url to the SharePoint farm.
+            list_id(string): Id of list item or drive item.
+            param_name(string): parameter name whether it is DRIVE_ITEM, LIST_ITEM.
         Yields:
             Response of the GET call.
         """
-        skip = 0
         next_url = ""
         while True:
-            if param_name in [SITES, LISTS]:
+            if next_url != "":
                 response = await anext(
-                    self.api_call(
+                    self._api_call(
+                        url_name=param_name,
+                        url=next_url,
+                    )
+                )
+            else:
+                response = await anext(
+                    self._api_call(
                         url_name=param_name,
                         parent_site_url=site_url,
-                        skip=skip,
+                        list_id=list_id,
                         top=TOP,
                         host_url=self.host_url,
                     )
                 )
-                response_result = response.get("value", [])  # pyright: ignore
-                yield response_result
+            response_result = response.get("value", [])  # pyright: ignore
+            yield response_result
 
-                skip += TOP
-                if len(response_result) < TOP:
-                    break
-            elif param_name in [
-                DRIVE_ITEM,
-                LIST_ITEM,
-            ]:
-                if next_url != "":
-                    response = await anext(
-                        self.api_call(
-                            url_name=param_name,
-                            url=next_url,
-                        )
-                    )
-                else:
-                    response = await anext(
-                        self.api_call(
-                            url_name=param_name,
-                            parent_site_url=site_url,
-                            list_id=list_id,
-                            top=TOP,
-                            host_url=self.host_url,
-                        )
-                    )
-                response_result = response.get("value", [])  # pyright: ignore
-                yield response_result
+            next_url = response.get("odata.nextLink", "")  # pyright: ignore
+            if next_url == "":
+                break
 
-                next_url = response.get("odata.nextLink", "")  # pyright: ignore
-                if next_url == "":
-                    break
-
-
-class SharepointDataSource(BaseDataSource):
-    """Sharepoint"""
-
-    name = "Sharepoint"
-    service_type = "sharepoint"
-
-    def __init__(self, configuration):
-        """Setup the connection to the Sharepoint
+    async def _fetch_data_with_query(self, site_url, param_name):
+        """Invokes a GET call to the SharePoint Server/Online for calling site and list API.
 
         Args:
-            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
+            site_url(string): site url to the SharePoint farm.
+            param_name(string): parameter name whether it is SITES, LISTS.
+        Yields:
+            Response of the GET call.
         """
-        super().__init__(configuration=configuration)
-        self.sharepoint_client = SharepointClient(configuration=configuration)
-
-    @classmethod
-    def get_default_configuration(cls):
-        """Get the default configuration for Sharepoint
-
-        Returns:
-            dictionary: Default configuration.
-        """
-        return {
-            "is_cloud": {
-                "value": False,
-                "label": "True if Sharepoint Online, False if Sharepoint Server",
-                "type": "bool",
-            },
-            "username": {
-                "value": "demo_user",
-                "label": "Sharepoint Server username",
-                "type": "str",
-            },
-            "password": {
-                "value": "abc@123",
-                "label": "Sharepoint Server password",
-                "type": "str",
-            },
-            "client_id": {
-                "value": "",
-                "label": "Sharepoint Online client id",
-                "type": "str",
-            },
-            "secret_id": {
-                "value": "",
-                "label": "Sharepoint Online secret id",
-                "type": "str",
-            },
-            "tenant": {
-                "value": "",
-                "label": "Sharepoint Online tenant",
-                "type": "str",
-            },
-            "tenant_id": {
-                "value": "",
-                "label": "Sharepoint Online tenant id",
-                "type": "str",
-            },
-            "host_url": {
-                "value": "http://127.0.0.1:8491",
-                "label": "Sharepoint host url",
-                "type": "str",
-            },
-            "site_collections": {
-                "value": "collection1",
-                "label": "List of Sharepoint site collections to index",
-                "type": "list",
-            },
-            "ssl_enabled": {
-                "value": False,
-                "label": "Enable SSL verification (true/false)",
-                "type": "bool",
-            },
-            "ssl_ca": {
-                "value": "",
-                "label": "SSL certificate",
-                "type": "str",
-            },
-            "enable_content_extraction": {
-                "value": True,
-                "label": "Enable content extraction (true/false)",
-                "type": "bool",
-            },
-            "retry_count": {
-                "value": RETRIES,
-                "label": "Maximum retries per request",
-                "type": "int",
-            },
-        }
-
-    async def close(self):
-        """Closes unclosed client session"""
-        await self.sharepoint_client.close_session()
-
-    async def validate_config(self):
-        """Validates whether user input is empty or not for configuration fields
-
-        Raises:
-            Exception: Configured keys can't be empty.
-        """
-        logger.info("Validating Sharepoint Configuration")
-
-        connection_fields = (
-            [
-                "host_url",
-                "site_collections",
-                "client_id",
-                "secret_id",
-                "tenant",
-                "tenant_id",
-            ]
-            if self.sharepoint_client.is_cloud
-            else ["host_url", "site_collections", "username", "password"]
-        )
-
-        default_config = self.get_default_configuration()
-
-        if empty_connection_fields := [
-            default_config[field]["label"]
-            for field in connection_fields
-            if self.configuration[field] == ""
-        ]:
-            raise Exception(
-                f"Configured keys: {empty_connection_fields} can't be empty."
-            )
-        if (
-            self.sharepoint_client.ssl_enabled
-            and self.sharepoint_client.certificate == ""
-        ):
-            raise Exception("SSL certificate must be configured.")
-
-    def format_document(
-        self,
-        item,
-        document_type,
-        item_type=None,
-        file_name=None,
-    ):
-        """Prepare key mappings for sites, lists, list items and drive items
-
-        Args:
-            item (dictionary): Document from Sharepoint.
-            document_type(string): Type of document(i.e. list_item and drive_item).
-            item_type(string, optional): Type of item i.e. File or Folder. Defaults to None.
-            file_name(string, optional): Name of file. Defaults to None.
-
-        Returns:
-            dictionary: Modified document with the help of adapter schema.
-        """
-        document = {"type": document_type}
-
-        if document_type in [LISTS, DOCUMENT_LIBRARY]:
-            document["url"] = urljoin(
-                self.sharepoint_client.host_url, item["RootFolder"]["ServerRelativeUrl"]
-            )
-
-        elif document_type == DRIVE_ITEM:
-            document.update(
-                {
-                    "_id": item["GUID"],
-                    "size": item.get("File", {}).get("Length"),
-                    "url": urljoin(
-                        self.sharepoint_client.host_url,
-                        item[item_type]["ServerRelativeUrl"],
-                    ),
-                    "type": item_type,
-                }
-            )
-
-        elif document_type == LIST_ITEM:
-            document.update(
-                {
-                    "_id": item["_id"] if "_id" in item.keys() else item["GUID"],
-                    "file_name": file_name,
-                    "size": item.get("size"),
-                    "url": item["url"],
-                }
-            )
-
-        for elasticsearch_field, sharepoint_field in SCHEMA[document_type].items():
-            document[elasticsearch_field] = (
-                item[item_type][sharepoint_field]
-                if document_type in [DRIVE_ITEM]
-                else item[sharepoint_field]
-            )
-
-        return document
-
-    async def ping(self):
-        """Verify the connection with Sharepoint"""
-        try:
-            await anext(
-                self.sharepoint_client.api_call(
-                    url_name=PING,
-                    site_collections=self.sharepoint_client.site_collections[0],
-                    host_url=self.sharepoint_client.host_url,
+        skip = 0
+        while True:
+            response = await anext(
+                self._api_call(
+                    url_name=param_name,
+                    parent_site_url=site_url,
+                    skip=skip,
+                    top=TOP,
+                    host_url=self.host_url,
                 )
             )
-            logger.debug(
-                f"Successfully connected to the Sharepoint via {self.sharepoint_client.host_url}"
-            )
-        except Exception:
-            logger.exception(
-                f"Error while connecting to the Sharepoint via {self.sharepoint_client.host_url}"
-            )
-            raise
+            response_result = response.get("value", [])  # pyright: ignore
+            yield response_result
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def get_content(
-        self, document, file_relative_url, site_url, timestamp=None, doit=False
-    ):
-        """Get content of list items and drive items
-
-        Args:
-            document (dictionary): Modified document.
-            file_relative_url (str): Relative url of file
-            site_url (str): Site path of sharepoint
-            timestamp (timestamp, optional): Timestamp of item last modified. Defaults to None.
-            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
-
-        Returns:
-            dictionary: Content document with id, timestamp & text.
-        """
-
-        if not (
-            self.configuration["enable_content_extraction"]
-            and doit
-            and document["size"]
-        ):
-            return
-
-        document_size = int(document["size"])
-        if document_size > FILE_SIZE_LIMIT:
-            logger.warning(
-                f"File size {document_size} of file {document['title']} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
-            return
-
-        source_file_name = ""
-
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            async for response in self.sharepoint_client.api_call(
-                url_name=ATTACHMENT,
-                host_url=self.sharepoint_client.host_url,
-                value=site_url,
-                file_relative_url=file_relative_url,
-            ):
-                async for data in response.content.iter_chunked(CHUNK_SIZE):
-                    await async_buffer.write(data)
-
-            source_file_name = async_buffer.name
-
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
-        )
-        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            attachment_content = (await target_file.read()).strip()
-        await remove(source_file_name)  # pyright: ignore
-        return {
-            "_id": document.get("id"),
-            "_timestamp": document.get("_timestamp"),
-            "_attachment": attachment_content,
-        }
+            skip += TOP
+            if len(response_result) < TOP:
+                break
 
     async def get_sites(self, site_url):
-        """Get sites from Sharepoint Server/Online
+        """Get sites from SharePoint Server/Online
 
         Args:
             site_url(string): Parent site relative path.
         Yields:
             site_server_url(string): Site path.
         """
-        async for sites_data in self.sharepoint_client.invoke_get_call(
+        async for sites_data in self._fetch_data_with_query(
             site_url=site_url, param_name=SITES
         ):
             for data in sites_data:
@@ -599,7 +395,38 @@ class SharepointDataSource(BaseDataSource):
                     site_url=data["ServerRelativeUrl"]
                 ):
                     yield sub_site
-                yield self.format_document(item=data, document_type=SITES)
+                yield data
+
+    async def get_lists(self, site_url):
+        """Get site lists from SharePoint Server/Online
+
+        Args:
+            site_url(string): Parent site relative path.
+        Yields:
+            list_data(string): Response of list API call
+        """
+        async for list_data in self._fetch_data_with_query(
+            site_url=site_url, param_name=LISTS
+        ):
+            yield list_data
+
+    async def get_attachment(self, site_url, file_relative_url):
+        """Execute the call for fetching attachment metadata
+
+        Args:
+            site_url(string): Parent site relative path
+            file_relative_url(string): Relative url of file
+        Returns:
+            attachment_data(dictionary): Attachment metatdata
+        """
+        return await anext(
+            self._api_call(
+                url_name=ATTACHMENT_DATA,
+                host_url=self.host_url,
+                parent_site_url=site_url,
+                file_relative_url=file_relative_url,
+            )
+        )
 
     async def get_list_items(self, list_id, site_url, server_relative_url):
         """This method fetches items from all the lists in a collection.
@@ -612,17 +439,14 @@ class SharepointDataSource(BaseDataSource):
             dictionary: dictionary containing meta-data of the list item.
         """
         file_relative_url = None
-        async for list_items_data in self.sharepoint_client.invoke_get_call(
-            site_url=site_url, param_name=LIST_ITEM, list_id=list_id
+        async for list_items_data in self._fetch_data_with_next_url(
+            site_url=site_url, list_id=list_id, param_name=LIST_ITEM
         ):
             for result in list_items_data:
                 if not result.get("Attachments"):
-                    url = f"{self.sharepoint_client.host_url}{server_relative_url}/DispForm.aspx?ID={result['Id']}&Source={self.sharepoint_client.host_url}{server_relative_url}/AllItems.aspx&ContentTypeId={result['ContentTypeId']}"
+                    url = f"{self.host_url}{server_relative_url}/DispForm.aspx?ID={result['Id']}&Source={self.host_url}{server_relative_url}/AllItems.aspx&ContentTypeId={result['ContentTypeId']}"
                     result["url"] = url
-                    yield self.format_document(
-                        item=result,
-                        document_type=LIST_ITEM,
-                    ), file_relative_url
+                    yield result, file_relative_url
                     continue
 
                 for attachment_file in result.get("AttachmentFiles"):
@@ -630,20 +454,16 @@ class SharepointDataSource(BaseDataSource):
                         original_string=attachment_file.get("ServerRelativeUrl")
                     )
 
-                    attachment_data = await anext(
-                        self.sharepoint_client.api_call(
-                            url_name=ATTACHMENT_DATA,
-                            host_url=self.sharepoint_client.host_url,
-                            parent_site_url=site_url,
-                            file_relative_url=file_relative_url,
-                        )
+                    attachment_data = await self.get_attachment(
+                        site_url, file_relative_url
                     )
-                    result["size"] = attachment_data.get("Length")  # pyright: ignore
+                    result["Length"] = attachment_data.get("Length")  # pyright: ignore
                     result["_id"] = attachment_data["UniqueId"]  # pyright: ignore
                     result["url"] = urljoin(
-                        self.sharepoint_client.host_url,
+                        self.host_url,
                         attachment_file.get("ServerRelativeUrl"),
                     )
+                    result["file_name"] = attachment_file.get("FileName")
 
                     if (
                         os.path.splitext(attachment_file["FileName"])[-1]
@@ -651,11 +471,7 @@ class SharepointDataSource(BaseDataSource):
                     ):
                         file_relative_url = None
 
-                    yield self.format_document(
-                        item=result,
-                        document_type=LIST_ITEM,
-                        file_name=attachment_file.get("FileName"),
-                    ), file_relative_url
+                    yield result, file_relative_url
 
     async def get_drive_items(self, list_id, site_url, server_relative_url):
         """This method fetches items from all the drives in a collection.
@@ -667,8 +483,8 @@ class SharepointDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the drive item.
         """
-        async for drive_items_data in self.sharepoint_client.invoke_get_call(
-            site_url=site_url, param_name=DRIVE_ITEM, list_id=list_id
+        async for drive_items_data in self._fetch_data_with_next_url(
+            site_url=site_url, list_id=list_id, param_name=DRIVE_ITEM
         ):
             for result in drive_items_data:
                 file_relative_url = None
@@ -682,68 +498,320 @@ class SharepointDataSource(BaseDataSource):
                         in TIKA_SUPPORTED_FILETYPES
                         else None
                     )
+                    result["Length"] = result[item_type]["Length"]
+                result["item_type"] = item_type
 
-                yield self.format_document(
-                    item=result,
-                    document_type=DRIVE_ITEM,
-                    item_type=item_type,
-                ), file_relative_url
+                yield result, file_relative_url
 
-    async def get_lists_and_items(self, site):
-        """Executes the logic to fetch lists and items (list-item, drive-item) in async manner.
+    async def ping(self):
+        """Executes the ping call in async manner"""
+        await anext(
+            self._api_call(
+                url_name=PING,
+                site_collections=self.site_collections[0],
+                host_url=self.host_url,
+            )
+        )
+
+
+class SharepointDataSource(BaseDataSource):
+    """SharePoint"""
+
+    name = "SharePoint"
+    service_type = "sharepoint"
+
+    def __init__(self, configuration):
+        """Setup the connection to the SharePoint
 
         Args:
-            site(string): Path of site.
-        Yields:
-            dictionary: dictionary containing meta-data of the list, list item and drive item.
+            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
-        async for list_data in self.sharepoint_client.invoke_get_call(
-            site_url=site, param_name=LISTS
-        ):
-            for result in list_data:
-                # if BaseType value is 1 then it's document library else it's a list item
-                if result.get("BaseType") == 1:
-                    server_url = None
-                    document_type = DOCUMENT_LIBRARY
-                    func = self.get_drive_items
-                else:
-                    document_type = LISTS
-                    server_url = result["RootFolder"]["ServerRelativeUrl"]
-                    func = self.get_list_items
+        super().__init__(configuration=configuration)
+        self.sharepoint_client = SharepointClient(configuration=configuration)
 
-                yield self.format_document(
-                    item=result, document_type=document_type
-                ), None
+    @classmethod
+    def get_default_configuration(cls):
+        """Get the default configuration for SharePoint
 
-                async for item, file_relative_url in func(
-                    list_id=result.get("Id"),
-                    site_url=result.get("ParentWebUrl"),
-                    server_relative_url=server_url,
-                ):
-                    yield item, file_relative_url
+        Returns:
+            dictionary: Default configuration.
+        """
+        return {
+            "data_source": {
+                "display": "dropdown",
+                "label": "SharePoint data source",
+                "options": [
+                    {"label": "SharePoint Online", "value": SHAREPOINT_ONLINE},
+                    {"label": "SharePoint Server", "value": SHAREPOINT_SERVER},
+                ],
+                "order": 1,
+                "type": "str",
+                "value": SHAREPOINT_SERVER,
+            },
+            "username": {
+                "depends_on": [{"field": "data_source", "value": SHAREPOINT_SERVER}],
+                "label": "SharePoint Server username",
+                "order": 2,
+                "type": "str",
+                "value": "demo_user",
+            },
+            "password": {
+                "depends_on": [{"field": "data_source", "value": SHAREPOINT_SERVER}],
+                "label": "SharePoint Server password",
+                "sensitive": True,
+                "order": 3,
+                "type": "str",
+                "value": "abc@123",
+            },
+            "client_id": {
+                "depends_on": [{"field": "data_source", "value": SHAREPOINT_ONLINE}],
+                "label": "SharePoint Online client id",
+                "order": 4,
+                "type": "str",
+                "value": "",
+            },
+            "client_secret": {
+                "depends_on": [{"field": "data_source", "value": SHAREPOINT_ONLINE}],
+                "label": "SharePoint Online secret id",
+                "order": 5,
+                "type": "str",
+                "value": "",
+            },
+            "tenant": {
+                "depends_on": [{"field": "data_source", "value": SHAREPOINT_ONLINE}],
+                "label": "SharePoint Online tenant",
+                "order": 6,
+                "type": "str",
+                "value": "",
+            },
+            "tenant_id": {
+                "depends_on": [{"field": "data_source", "value": SHAREPOINT_ONLINE}],
+                "label": "SharePoint Online tenant id",
+                "order": 7,
+                "type": "str",
+                "value": "",
+            },
+            "host_url": {
+                "label": "SharePoint host url",
+                "order": 8,
+                "type": "str",
+                "value": "http://127.0.0.1:8491",
+            },
+            "site_collections": {
+                "display": "textarea",
+                "label": "Comma-separated list of SharePoint site collections to index",
+                "order": 9,
+                "type": "list",
+                "value": "collection1",
+            },
+            "ssl_enabled": {
+                "display": "toggle",
+                "label": "Enable SSL",
+                "order": 10,
+                "type": "bool",
+                "value": False,
+            },
+            "ssl_ca": {
+                "depends_on": [{"field": "ssl_enabled", "value": True}],
+                "label": "SSL certificate",
+                "order": 11,
+                "type": "str",
+                "value": "",
+            },
+            "retry_count": {
+                "default_value": RETRIES,
+                "display": "numeric",
+                "label": "Retries per request",
+                "order": 12,
+                "required": False,
+                "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": RETRIES,
+            },
+        }
+
+    async def close(self):
+        """Closes unclosed client session"""
+        await self.sharepoint_client.close_session()
+
+    async def ping(self):
+        """Verify the connection with SharePoint"""
+        try:
+            await self.sharepoint_client.ping()
+            logger.debug(
+                f"Successfully connected to the SharePoint via {self.sharepoint_client.host_url}"
+            )
+        except Exception:
+            logger.exception(
+                f"Error while connecting to the SharePoint via {self.sharepoint_client.host_url}"
+            )
+            raise
+
+    def map_documet_with_schema(
+        self,
+        document,
+        item,
+        document_type,
+    ):
+        """Prepare key mappings for documents
+
+        Args:
+            document(dictionary): Modified document
+            item (dictionary): Document from SharePoint.
+            document_type(string): Type of document(i.e. site,list,list_iitem, drive_item and document_library).
+
+        Returns:
+            dictionary: Modified document with the help of adapter schema.
+        """
+        for elasticsearch_field, sharepoint_field in SCHEMA[document_type].items():
+            document[elasticsearch_field] = item[sharepoint_field]
+
+    def format_lists(
+        self,
+        item,
+        document_type,
+    ):
+        """Prepare key mappings for list
+
+        Args:
+            item (dictionary): Document from SharePoint.
+            document_type(string): Type of document(i.e. list and document_library).
+
+        Returns:
+            dictionary: Modified document with the help of adapter schema.
+        """
+        document = {"type": document_type}
+
+        document["url"] = urljoin(
+            self.sharepoint_client.host_url, item["RootFolder"]["ServerRelativeUrl"]
+        )
+
+        self.map_documet_with_schema(
+            document=document, item=item, document_type=document_type
+        )
+        return document
+
+    def format_sites(self, item):
+        """Prepare key mappings for site
+
+        Args:
+            item (dictionary): Document from SharePoint.
+
+        Returns:
+            dictionary: Modified document with the help of adapter schema.
+        """
+        document = {"type": SITES}
+
+        self.map_documet_with_schema(document=document, item=item, document_type=SITES)
+        return document
+
+    def format_drive_item(
+        self,
+        item,
+    ):
+        """Prepare key mappings for drive items
+
+        Args:
+            item (dictionary): Document from SharePoint.
+
+        Returns:
+            dictionary: Modified document with the help of adapter schema.
+        """
+        document = {"type": DRIVE_ITEM}
+        item_type = item["item_type"]
+
+        document.update(
+            {
+                "_id": item["GUID"],
+                "size": item.get("File", {}).get("Length"),
+                "url": urljoin(
+                    self.sharepoint_client.host_url,
+                    item[item_type]["ServerRelativeUrl"],
+                ),
+                "type": item_type,
+            }
+        )
+        self.map_documet_with_schema(
+            document=document, item=item[item_type], document_type=DRIVE_ITEM
+        )
+
+        return document
+
+    def format_list_item(
+        self,
+        item,
+    ):
+        """Prepare key mappings for list items
+
+        Args:
+            item (dictionary): Document from SharePoint.
+
+        Returns:
+            dictionary: Modified document with the help of adapter schema.
+        """
+        document = {"type": LIST_ITEM}
+
+        document.update(
+            {
+                "_id": item["_id"] if "_id" in item.keys() else item["GUID"],
+                "file_name": item.get("file_name"),
+                "size": item.get("Length"),
+                "url": item["url"],
+            }
+        )
+
+        self.map_documet_with_schema(
+            document=document, item=item, document_type=LIST_ITEM
+        )
+        return document
 
     async def get_docs(self, filtering=None):
-        """Executes the logic to fetch Sharepoint objects in an async manner.
+        """Executes the logic to fetch SharePoint objects in an async manner.
 
         Yields:
-            dictionary: dictionary containing meta-data of the Sharepoint objects.
+            dictionary: dictionary containing meta-data of the SharePoint objects.
         """
 
         server_relative_url = []
 
         for collection in self.sharepoint_client.site_collections:
             server_relative_url.append(f"/sites/{collection}")
-            async for site_document in self.get_sites(site_url=f"/sites/{collection}"):
-                server_relative_url.append(site_document["server_relative_url"])
-                yield site_document, None
+            async for site_data in self.sharepoint_client.get_sites(
+                site_url=f"/sites/{collection}"
+            ):
+                server_relative_url.append(site_data["server_relative_url"])
+                yield self.format_sites(item=site_data), None
 
         for site_url in server_relative_url:
-            async for item, file_relative_url in self.get_lists_and_items(
-                site=site_url
-            ):
-                if file_relative_url is None:
-                    yield item, None
-                else:
-                    yield item, partial(
-                        self.get_content, item, file_relative_url, site_url
-                    )
+            async for list_data in self.sharepoint_client.get_lists(site_url=site_url):
+                for result in list_data:
+                    # if BaseType value is 1 then it's document library else it's a list
+                    if result.get("BaseType") == 1:
+                        yield self.format_lists(
+                            item=result, document_type=DOCUMENT_LIBRARY
+                        ), None
+                        server_url = None
+                        func = self.sharepoint_client.get_drive_items
+                        format_document = self.format_drive_item
+                    else:
+                        yield self.format_lists(item=result, document_type=LISTS), None
+                        server_url = result["RootFolder"]["ServerRelativeUrl"]
+                        func = self.sharepoint_client.get_list_items
+                        format_document = self.format_list_item
+
+                    async for item, file_relative_url in func(
+                        list_id=result.get("Id"),
+                        site_url=result.get("ParentWebUrl"),
+                        server_relative_url=server_url,
+                    ):
+                        if file_relative_url is None:
+                            yield format_document(item=item), None
+                        else:
+                            yield format_document(
+                                item=item,
+                            ), partial(
+                                self.sharepoint_client.get_content,
+                                item,
+                                file_relative_url,
+                                site_url,
+                            )

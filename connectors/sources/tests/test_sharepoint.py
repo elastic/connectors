@@ -12,7 +12,7 @@ import aiohttp
 import pytest
 from aiohttp import StreamReader
 
-from connectors.source import DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.sharepoint import SharepointDataSource
 from connectors.sources.tests.support import create_source
 
@@ -83,7 +83,7 @@ async def async_native_coroutine_generator(item):
     yield item
 
 
-def test_get_configuration(patch_logger):
+def test_get_configuration():
     """Tests the get configurations method of the Sharepoint source class."""
     # Setup
     klass = SharepointDataSource
@@ -96,13 +96,13 @@ def test_get_configuration(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_ping_for_successful_connection(patch_logger):
+async def test_ping_for_successful_connection():
     """Tests the ping functionality for ensuring connection to the Sharepoint."""
 
     # Setup
     source = create_source(SharepointDataSource)
     source.sharepoint_client.is_cloud = False
-    source.sharepoint_client.api_call = Mock(
+    source.sharepoint_client._api_call = Mock(
         return_value=async_native_coroutine_generator(200)
     )
 
@@ -111,7 +111,7 @@ async def test_ping_for_successful_connection(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_ping_for_failed_connection_exception(patch_logger):
+async def test_ping_for_failed_connection_exception():
     """Tests the ping functionality when connection can not be established to Sharepoint."""
 
     # Setup
@@ -136,25 +136,33 @@ async def test_validate_config_when_host_url_is_empty():
     source.configuration.set_field(name="host_url", value="")
 
     # Execute
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         await source.validate_config()
 
 
 @pytest.mark.asyncio
-async def test_validate_config_for_ssl_enabled():
+async def test_validate_config_for_ssl_enabled_when_ssl_ca_not_empty_does_not_raise_error():
     """This function test validate_config when ssl is enabled and certificate is missing"""
     # Setup
     source = create_source(SharepointDataSource)
     source.sharepoint_client.ssl_enabled = True
+    source.sharepoint_client.ssl_ca = "test"
+
+    await source.validate_config()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_for_ssl_enabled_when_ssl_ca_empty_raises_error():
+    source = create_source(SharepointDataSource, ssl_enabled=True)
 
     # Execute
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         await source.validate_config()
 
 
 @pytest.mark.asyncio
-async def testapi_call_for_exception(patch_logger):
-    """This function test api_call when credentials are incorrect"""
+async def test_api_call_for_exception():
+    """This function test _api_call when credentials are incorrect"""
     # Setup
     source = create_source(SharepointDataSource)
     source.sharepoint_client.retry_count = 0
@@ -163,10 +171,10 @@ async def testapi_call_for_exception(patch_logger):
         aiohttp, "ClientSession", side_effect=Exception(EXCEPTION_MESSAGE)
     ):
         with pytest.raises(Exception):
-            await source.sharepoint_client.api_call(url_name="lists", url="abc")
+            await source.sharepoint_client._api_call(url_name="lists", url="abc")
 
 
-def test_prepare_drive_items_doc(patch_logger):
+def test_prepare_drive_items_doc():
     """Test the prepare drive items method"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -179,8 +187,8 @@ def test_prepare_drive_items_doc(patch_logger):
             "ServerRelativeUrl": "/site",
         },
         "GUID": 1,
+        "item_type": "File",
     }
-    document_type = "drive_item"
     expected_response = {
         "_id": 1,
         "type": "File",
@@ -192,14 +200,12 @@ def test_prepare_drive_items_doc(patch_logger):
     }
 
     # Execute
-    target_response = source.format_document(
-        item=list_items, document_type=document_type, item_type="File"
-    )
+    target_response = source.format_drive_item(item=list_items)
     # Assert
     assert target_response == expected_response
 
 
-def test_prepare_list_items_doc(patch_logger):
+def test_prepare_list_items_doc():
     """Test the prepare list items method"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -211,9 +217,8 @@ def test_prepare_list_items_doc(patch_logger):
         "GUID": 1,
         "FileRef": "/site",
         "url": f"{HOST_URL}/site",
+        "file_name": "filename",
     }
-    document_type = "list_item"
-    server_relative_url = "/site"
     expected_response = {
         "type": "list_item",
         "_id": 1,
@@ -227,17 +232,14 @@ def test_prepare_list_items_doc(patch_logger):
     }
 
     # Execute
-    target_response = source.format_document(
+    target_response = source.format_list_item(
         item=list_items,
-        document_type=document_type,
-        item_type=server_relative_url,
-        file_name="filename",
     )
     # Assert
     assert target_response == expected_response
 
 
-def test_prepare_sites_doc(patch_logger):
+def test_prepare_sites_doc():
     """Test the method for preparing sites document"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -249,7 +251,6 @@ def test_prepare_sites_doc(patch_logger):
         "Url": "sharepoint.com",
         "ServerRelativeUrl": "/site",
     }
-    document_type = "sites"
     expected_response = {
         "_id": 1,
         "type": "sites",
@@ -261,25 +262,25 @@ def test_prepare_sites_doc(patch_logger):
     }
 
     # Execute
-    target_response = source.format_document(
-        item=list_items, document_type=document_type
-    )
+    target_response = source.format_sites(item=list_items)
     # Assert
     assert target_response == expected_response
 
 
 @pytest.mark.asyncio
-async def test_get_sites_when_no_site_available(patch_logger):
+async def test_get_sites_when_no_site_available():
     """Test get sites method with valid details"""
     # Setup
     source = create_source(SharepointDataSource)
     api_response = []
     # Execute
-    source.sharepoint_client.invoke_get_call = Mock(
+    source.sharepoint_client._fetch_data_with_query = Mock(
         return_value=AsyncIter(api_response)
     )
     actual_response = None
-    async for item in source.get_sites(site_url="sites/collection1/ctest"):
+    async for item in source.sharepoint_client.get_sites(
+        site_url="sites/collection1/ctest"
+    ):
         actual_response = item
 
     # Assert
@@ -287,7 +288,7 @@ async def test_get_sites_when_no_site_available(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_list_items(patch_logger):
+async def test_get_list_items():
     """Test get list items method with valid details"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -308,6 +309,7 @@ async def test_get_list_items(patch_logger):
             "EditorId": 1073741823,
             "Attachments": True,
             "GUID": "111111122222222-adfa-4e4f-93c4-bfedddda8510",
+            "Length": "12",
         },
         {
             "AttachmentFiles": {},
@@ -324,38 +326,50 @@ async def test_get_list_items(patch_logger):
     ]
     target_response = [
         {
-            "type": "list_item",
+            "AttachmentFiles": [
+                {
+                    "FileName": "s3 queries.txt",
+                    "ServerRelativeUrl": "/sites/collection1/ctest/Lists/ctestlist/Attachments/1/v4.txt",
+                }
+            ],
+            "Title": "HelloWorld",
+            "Id": 1,
+            "FileRef": "/site",
+            "ContentTypeId": "12345",
+            "Modified": "2022-06-20T10:04:03Z",
+            "Created": "2022-06-20T10:04:03Z",
+            "EditorId": 1073741823,
+            "Attachments": True,
+            "GUID": "111111122222222-adfa-4e4f-93c4-bfedddda8510",
+            "Length": None,
             "_id": "1",
+            "url": "http://127.0.0.1:8491/sites/collection1/ctest/Lists/ctestlist/Attachments/1/v4.txt",
             "file_name": "s3 queries.txt",
-            "size": None,
-            "url": f"{HOST_URL}/sites/collection1/ctest/Lists/ctestlist/Attachments/1/v4.txt",
-            "title": "HelloWorld",
-            "author_id": 1073741823,
-            "creation_time": "2022-06-20T10:04:03Z",
-            "_timestamp": "2022-06-20T10:04:03Z",
         },
         {
-            "type": "list_item",
-            "_id": "111111122222222-adfa-4e4f-93c4-bfedddda8510",
-            "file_name": None,
-            "size": None,
-            "url": f"{HOST_URL}/sites/enterprise/site1/DispForm.aspx?ID=1&Source={HOST_URL}/sites/enterprise/site1/AllItems.aspx&ContentTypeId=12345",
-            "title": "HelloWorld",
-            "author_id": 1073741823,
-            "creation_time": "2022-06-20T10:04:03Z",
-            "_timestamp": "2022-06-20T10:04:03Z",
+            "AttachmentFiles": {},
+            "Id": 1,
+            "ContentTypeId": "12345",
+            "Title": "HelloWorld",
+            "FileRef": "/site",
+            "Modified": "2022-06-20T10:04:03Z",
+            "Created": "2022-06-20T10:04:03Z",
+            "EditorId": 1073741823,
+            "Attachments": False,
+            "GUID": "111111122222222-adfa-4e4f-93c4-bfedddda8510",
+            "url": "http://127.0.0.1:8491/sites/enterprise/site1/DispForm.aspx?ID=1&Source=http://127.0.0.1:8491/sites/enterprise/site1/AllItems.aspx&ContentTypeId=12345",
         },
     ]
     attachment_response = {"UniqueId": "1"}
-    source.sharepoint_client.invoke_get_call = Mock(
+    source.sharepoint_client._fetch_data_with_next_url = Mock(
         return_value=AsyncIter(api_response)
     )
-    source.sharepoint_client.api_call = Mock(
+    source.sharepoint_client._api_call = Mock(
         return_value=async_native_coroutine_generator(attachment_response)
     )
     expected_response = []
     # Execute
-    async for item, _ in source.get_list_items(
+    async for item, _ in source.sharepoint_client.get_list_items(
         list_id="620070a1-ee50-4585-b6a7-0f6210b1a69d",
         site_url="/sites/enterprise/ctest",
         server_relative_url="/sites/enterprise/site1",
@@ -366,7 +380,7 @@ async def test_get_list_items(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_drive_items(patch_logger):
+async def test_get_drive_items():
     """Test get drive items method with valid details"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -378,11 +392,12 @@ async def test_get_drive_items(patch_logger):
                 "ServerRelativeUrl": "/sites/enterprise/ctest/SitePages/Home.aspx",
                 "TimeCreated": "2022-05-02T07:20:33Z",
                 "TimeLastModified": "2022-05-02T07:20:34Z",
-                "Title": None,
+                "Title": "Home.txt",
             },
             "Folder": {"__deferred": {}},
             "Modified": "2022-05-02T07:20:35Z",
             "GUID": "111111122222222-c77f-4ed3-84ef-8a4dd87c80d0",
+            "Length": "3356",
         },
         {
             "File": {},
@@ -392,45 +407,58 @@ async def test_get_drive_items(patch_logger):
                 "ServerRelativeUrl": "/sites/enterprise/ctest/SitePages/Home.aspx",
                 "TimeCreated": "2022-05-02T07:20:33Z",
                 "TimeLastModified": "2022-05-02T07:20:34Z",
-                "Title": None,
+                "Title": "Home.txt",
             },
             "Modified": "2022-05-02T07:20:35Z",
             "GUID": "111111122222222-c77f-4ed3-084ef-8a4dd87c80d0",
+            "Length": "3356",
         },
     ]
     target_response = [
         (
             {
-                "type": "File",
-                "_id": "111111122222222-c77f-4ed3-84ef-8a4dd87c80d0",
-                "size": "3356",
-                "url": f"{HOST_URL}/sites/enterprise/ctest/SitePages/Home.aspx",
-                "title": "Home.txt",
-                "creation_time": "2022-05-02T07:20:33Z",
-                "_timestamp": "2022-05-02T07:20:34Z",
+                "File": {
+                    "Length": "3356",
+                    "Name": "Home.txt",
+                    "ServerRelativeUrl": "/sites/enterprise/ctest/SitePages/Home.aspx",
+                    "TimeCreated": "2022-05-02T07:20:33Z",
+                    "TimeLastModified": "2022-05-02T07:20:34Z",
+                    "Title": "Home.txt",
+                },
+                "Folder": {"__deferred": {}},
+                "Modified": "2022-05-02T07:20:35Z",
+                "GUID": "111111122222222-c77f-4ed3-84ef-8a4dd87c80d0",
+                "Length": "3356",
+                "item_type": "File",
             },
             "%2Fsites%2Fenterprise%2Fctest%2FSitePages%2FHome.aspx",
         ),
         (
             {
-                "type": "Folder",
-                "_id": "111111122222222-c77f-4ed3-084ef-8a4dd87c80d0",
-                "size": None,
-                "url": f"{HOST_URL}/sites/enterprise/ctest/SitePages/Home.aspx",
-                "title": "Home.txt",
-                "creation_time": "2022-05-02T07:20:33Z",
-                "_timestamp": "2022-05-02T07:20:34Z",
+                "File": {},
+                "Folder": {
+                    "Length": "3356",
+                    "Name": "Home.txt",
+                    "ServerRelativeUrl": "/sites/enterprise/ctest/SitePages/Home.aspx",
+                    "TimeCreated": "2022-05-02T07:20:33Z",
+                    "TimeLastModified": "2022-05-02T07:20:34Z",
+                    "Title": "Home.txt",
+                },
+                "Modified": "2022-05-02T07:20:35Z",
+                "GUID": "111111122222222-c77f-4ed3-084ef-8a4dd87c80d0",
+                "Length": "3356",
+                "item_type": "Folder",
             },
             None,
         ),
     ]
 
-    source.sharepoint_client.invoke_get_call = Mock(
+    source.sharepoint_client._fetch_data_with_next_url = Mock(
         return_value=AsyncIter(api_response)
     )
     expected_response = []
     # Execute
-    async for item in source.get_drive_items(
+    async for item in source.sharepoint_client.get_drive_items(
         list_id="620070a1-ee50-4585-b6a7-0f6210b1a69d",
         site_url="/sites/enterprise/ctest",
         server_relative_url=None,
@@ -441,157 +469,108 @@ async def test_get_drive_items(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_lists_and_items(patch_logger):
-    """Test get items method with valid details"""
-    # Setup
-    source = create_source(SharepointDataSource)
-    lists = [
-        {
-            "BaseType": 0,
-            "Id": "111111122222222-1c10-4277-8f0c-6fb9806c4a21",
-            "ParentWebUrl": "/sites/enterprise/sptest",
-            "Title": "dummy",
-            "LastItemModifiedDate": "2023-01-30T12:48:31Z",
-            "Created": "2023-01-30T12:48:31Z",
-            "RootFolder": {"ServerRelativeUrl": "/site"},
-        },
-        {
-            "BaseType": 1,
-            "Id": "111111122222222-1c10-4277-8f0c-6fb9806c4a21",
-            "ParentWebUrl": "/sites/enterprise/sptest",
-            "Title": "dummy",
-            "LastItemModifiedDate": "2023-01-30T12:48:31Z",
-            "Created": "2023-01-30T12:48:31Z",
-            "RootFolder": {"ServerRelativeUrl": "/site"},
-        },
-    ]
-    source.sharepoint_client.invoke_get_call = Mock(return_value=AsyncIter(lists))
-    drive_item = [
-        {
-            "_id": 1,
-            "type": "drive_item",
-            "server_relative_url": "/site",
-            "title": "dummy",
-            "creation_time": "2023-01-30T12:48:31Z",
-            "_timestamp": "2023-01-30T12:48:31Z",
-            "length": "12",
-        }
-    ]
-    list_item = [
-        {
-            "_id": 1,
-            "type": "drive_item",
-            "server_relative_url": "/site",
-            "title": "dummy",
-            "author_id": "123",
-            "creation_time": "2023-01-30T12:48:31Z",
-            "_timestamp": "2023-01-30T12:48:31Z",
-        }
-    ]
-    expected_response = [
-        (
-            {
-                "type": "lists",
-                "url": f"{HOST_URL}/site",
-                "title": "dummy",
-                "parent_web_url": "/sites/enterprise/sptest",
-                "_id": "111111122222222-1c10-4277-8f0c-6fb9806c4a21",
-                "_timestamp": "2023-01-30T12:48:31Z",
-                "creation_time": "2023-01-30T12:48:31Z",
-            },
-            None,
-        ),
-        (
-            [
-                {
-                    "_id": 1,
-                    "type": "drive_item",
-                    "server_relative_url": "/site",
-                    "title": "dummy",
-                    "author_id": "123",
-                    "creation_time": "2023-01-30T12:48:31Z",
-                    "_timestamp": "2023-01-30T12:48:31Z",
-                }
-            ],
-            None,
-        ),
-        (
-            {
-                "type": "document_library",
-                "url": f"{HOST_URL}/site",
-                "title": "dummy",
-                "parent_web_url": "/sites/enterprise/sptest",
-                "_id": "111111122222222-1c10-4277-8f0c-6fb9806c4a21",
-                "_timestamp": "2023-01-30T12:48:31Z",
-                "creation_time": "2023-01-30T12:48:31Z",
-            },
-            None,
-        ),
-        (
-            [
-                {
-                    "_id": 1,
-                    "type": "drive_item",
-                    "server_relative_url": "/site",
-                    "title": "dummy",
-                    "creation_time": "2023-01-30T12:48:31Z",
-                    "_timestamp": "2023-01-30T12:48:31Z",
-                    "length": "12",
-                }
-            ],
-            None,
-        ),
-    ]
-    source.get_drive_items = Mock(
-        return_value=async_native_coroutine_generator((drive_item, None))
-    )
-    source.get_list_items = Mock(
-        return_value=async_native_coroutine_generator((list_item, None))
-    )
-    actual_response = []
-    # Execute
-    async for items in source.get_lists_and_items(site="/sites/enterprise/sptest"):
-        actual_response.append(items)
-    # Assert
-    assert actual_response == expected_response
-
-
-@pytest.mark.asyncio
-async def test_get_docs(patch_logger):
-    """Test get docs method"""
+async def test_get_docs_list_items():
+    """Test get docs method for list items"""
 
     # Setup
     source = create_source(SharepointDataSource)
     item_content_response = {
-        "_id": "11111-adfa-4e4f-93c4-bfedddda8510",
-        "type": "list_item",
-        "server_relative_url": "/sites/enterprise/ctest/_api",
-        "file_name": "s3 queries.txt",
-        "title": "HelloWorld",
-        "editor_id": 1073741823,
-        "author_id": 1073741823,
-        "creation_time": "2022-06-20T10:04:03Z",
-        "_timestamp": "2022-06-20T10:04:03Z",
+        "RootFolder": {
+            "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
+        },
+        "Created": "2023-03-19T05:02:52Z",
+        "BaseType": 0,
+        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+        "ParentWebUrl": "/sites/enterprise/ctest/_api",
+        "Title": "HelloWorld",
+    }
+    list_content_response = {
+        "AttachmentFiles": {},
+        "Id": 1,
+        "ContentTypeId": "12345",
+        "Title": "HelloWorld",
+        "FileRef": "/site",
+        "Modified": "2022-06-20T10:04:03Z",
+        "Created": "2022-06-20T10:04:03Z",
+        "EditorId": 1073741823,
+        "Attachments": False,
+        "GUID": "111111122222222-adfa-4e4f-93c4-bfedddda8510",
+        "url": "/sites/enterprise/ctest/_api",
     }
     actual_response = []
-    source.get_sites = Mock(return_value=AsyncIter(item_content_response))
-    source.get_lists_and_items = Mock(return_value=AsyncIter(([], None)))
-    source.get_content = Mock(return_value=None)
+    source.sharepoint_client._fetch_data_with_query = Mock(return_value=AsyncIter([]))
+    source.sharepoint_client.get_lists = Mock(
+        return_value=AsyncIter([item_content_response])
+    )
+    source.sharepoint_client.get_list_items = Mock(
+        return_value=AsyncIter((list_content_response, None))
+    )
     # Execute
     async for document, _ in source.get_docs():
         actual_response.append(document)
     # Assert
-    assert len(actual_response) == 3
+    assert len(actual_response) == 2
 
 
 @pytest.mark.asyncio
-async def test_get_docs_when_no_site_available(patch_logger):
+async def test_get_docs_drive_items():
+    """Test get docs method for drive items"""
+
+    # Setup
+    source = create_source(SharepointDataSource)
+    item_content_response = {
+        "RootFolder": {
+            "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
+        },
+        "Created": "2023-03-19T05:02:52Z",
+        "BaseType": 1,
+        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+        "ParentWebUrl": "/sites/enterprise/ctest/_api",
+        "Title": "HelloWorld",
+    }
+    drive_content_response = {
+        "File": {
+            "Length": "3356",
+            "Name": "Home.aspx",
+            "ServerRelativeUrl": "/sites/enterprise/ctest/SitePages/Home.aspx",
+            "TimeCreated": "2022-05-02T07:20:33Z",
+            "TimeLastModified": "2022-05-02T07:20:34Z",
+            "Title": "Home.aspx",
+        },
+        "Folder": {"__deferred": {}},
+        "Modified": "2022-05-02T07:20:35Z",
+        "GUID": "111111122222222-c77f-4ed3-84ef-8a4dd87c80d0",
+        "Length": "3356",
+        "item_type": "File",
+    }
+    actual_response = []
+    source.sharepoint_client._fetch_data_with_query = Mock(return_value=AsyncIter([]))
+    source.sharepoint_client.get_lists = Mock(
+        return_value=AsyncIter([item_content_response])
+    )
+    source.sharepoint_client.get_drive_items = Mock(
+        return_value=AsyncIter((drive_content_response, None))
+    )
+    # Execute
+    async for document, _ in source.get_docs():
+        actual_response.append(document)
+    # Assert
+    assert len(actual_response) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_docs_when_no_site_available():
     """Test get docs when site is not available method"""
 
     # Setup
     source = create_source(SharepointDataSource)
     actual_response = []
-    source.sharepoint_client.invoke_get_call = Mock(return_value=AsyncIter([]))
+    source.sharepoint_client._fetch_data_with_query = Mock(return_value=AsyncIter([]))
+    source.sharepoint_client._fetch_data_with_next_url = Mock(
+        return_value=AsyncIter([])
+    )
     # Execute
     async for document, _ in source.get_docs():
         actual_response.append(document)
@@ -600,7 +579,7 @@ async def test_get_docs_when_no_site_available(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_content(patch_logger):
+async def test_get_content():
     """Test the get content method"""
     # Setup
     source = create_source(SharepointDataSource)
@@ -611,7 +590,7 @@ async def test_get_content(patch_logger):
         "id": 1,
         "server_relative_url": "/url",
         "_timestamp": "2022-06-20T10:37:44Z",
-        "size": "11",
+        "Length": "11",
         "type": "sites",
     }
     EXPECTED_CONTENT = {
@@ -619,13 +598,13 @@ async def test_get_content(patch_logger):
         "_attachment": "VGhpcyBpcyBhIGR1bW15IHNoYXJlcG9pbnQgYm9keSByZXNwb25zZQ==",
         "_timestamp": "2022-06-20T10:37:44Z",
     }
-    source.sharepoint_client.api_call = Mock(return_value=AsyncIter(async_response))
+    source.sharepoint_client._api_call = Mock(return_value=AsyncIter(async_response))
     with mock.patch(
         "aiohttp.StreamReader.iter_chunked",
         return_value=AsyncIter(bytes(RESPONSE_CONTENT, "utf-8")),
     ):
         # Execute
-        response_content = await source.get_content(
+        response_content = await source.sharepoint_client.get_content(
             document=EXPECTED_ATTACHMENT,
             file_relative_url="abc.com",
             site_url="/site",
@@ -637,13 +616,13 @@ async def test_get_content(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_size_is_bigger(patch_logger):
+async def test_get_content_when_size_is_bigger():
     """Test the get content method when document size is greater than the allowed size limit."""
     # Setup
     document = {
         "id": 1,
         "_timestamp": "2022-06-20T10:37:44Z",
-        "size": "1048576011",
+        "Length": "1048576011",
         "title": "dummy",
         "type": "sites",
         "server_relative_url": "/sites",
@@ -651,7 +630,7 @@ async def test_get_content_when_size_is_bigger(patch_logger):
 
     source = create_source(SharepointDataSource)
     # Execute
-    response_content = await source.get_content(
+    response_content = await source.sharepoint_client.get_content(
         document=document, file_relative_url="abc.com", site_url="/site", doit=True
     )
 
@@ -660,7 +639,7 @@ async def test_get_content_when_size_is_bigger(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_doit_is_none(patch_logger):
+async def test_get_content_when_doit_is_none():
     """Test the get content method when doit is None"""
     # Setup
     document = {
@@ -671,7 +650,7 @@ async def test_get_content_when_doit_is_none(patch_logger):
     }
     source = create_source(SharepointDataSource)
     # Execute
-    response_content = await source.get_content(
+    response_content = await source.sharepoint_client.get_content(
         document=document, file_relative_url="abc.com", site_url="/site"
     )
 
@@ -680,8 +659,8 @@ async def test_get_content_when_doit_is_none(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_invoke_call_with_list(patch_logger):
-    """Test get invoke call when param name is lists"""
+async def test_fetch_data_with_query_sites():
+    """Test get invoke call for sites"""
     # Setup
     source = create_source(SharepointDataSource)
     get_response = {
@@ -693,13 +672,50 @@ async def test_get_invoke_call_with_list(patch_logger):
             }
         ]
     }
-    source.sharepoint_client.api_call = Mock(
+    source.sharepoint_client._api_call = Mock(
         return_value=async_native_coroutine_generator(get_response)
     )
     actual_response = []
 
     # Execute
-    async for response in source.sharepoint_client.invoke_get_call(
+    async for response in source.sharepoint_client._fetch_data_with_query(
+        site_url="/sites/collection1/_api/web/webs", param_name="sites"
+    ):
+        actual_response.extend(response)
+
+    # Assert
+    assert [actual_response] == [
+        [
+            {
+                "Id": "111111122222222-0fd8-471c-96aa-c75f71293131",
+                "ServerRelativeUrl": "/sites/collection1",
+                "Title": "ctest",
+            }
+        ]
+    ]
+
+
+@pytest.mark.asyncio
+async def test_fetch_data_with_query_list():
+    """Test get invoke call for list"""
+    # Setup
+    source = create_source(SharepointDataSource)
+    get_response = {
+        "value": [
+            {
+                "Id": "111111122222222-0fd8-471c-96aa-c75f71293131",
+                "ServerRelativeUrl": "/sites/collection1",
+                "Title": "ctest",
+            }
+        ]
+    }
+    source.sharepoint_client._api_call = Mock(
+        return_value=async_native_coroutine_generator(get_response)
+    )
+    actual_response = []
+
+    # Execute
+    async for response in source.sharepoint_client._fetch_data_with_query(
         site_url="/sites/collection1/_api/web/webs", param_name="lists"
     ):
         actual_response.extend(response)
@@ -717,8 +733,8 @@ async def test_get_invoke_call_with_list(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_get_invoke_call_with_drive_items(patch_logger):
-    """Test get invoke call when param name is drive_item"""
+async def test_fetch_data_with_next_url_items():
+    """Test get invoke call for drive item"""
     # Setup
     source = create_source(SharepointDataSource)
     get_response = {
@@ -731,12 +747,52 @@ async def test_get_invoke_call_with_drive_items(patch_logger):
         ]
     }
     actual_response = []
-    source.sharepoint_client.api_call = Mock(
+    source.sharepoint_client._api_call = Mock(
         return_value=async_native_coroutine_generator(get_response)
     )
     # Execute
-    async for response in source.sharepoint_client.invoke_get_call(
-        site_url="/sites/collection1/_api/web/webs", param_name="drive_item"
+    async for response in source.sharepoint_client._fetch_data_with_next_url(
+        site_url="/sites/collection1/_api/web/webs",
+        list_id="123abc",
+        param_name="drive_items",
+    ):
+        actual_response.append(response)
+
+    # Assert
+    assert actual_response == [
+        [
+            {
+                "Id": "111111122222222-0fd8-471c-96aa-c75f71293131",
+                "ServerRelativeUrl": "/sites/collection1",
+                "Title": "ctest",
+            }
+        ]
+    ]
+
+
+@pytest.mark.asyncio
+async def test_fetch_data_with_next_url_list_items():
+    """Test get invoke call when for list item"""
+    # Setup
+    source = create_source(SharepointDataSource)
+    get_response = {
+        "value": [
+            {
+                "Id": "111111122222222-0fd8-471c-96aa-c75f71293131",
+                "ServerRelativeUrl": "/sites/collection1",
+                "Title": "ctest",
+            }
+        ]
+    }
+    actual_response = []
+    source.sharepoint_client._api_call = Mock(
+        return_value=async_native_coroutine_generator(get_response)
+    )
+    # Execute
+    async for response in source.sharepoint_client._fetch_data_with_next_url(
+        site_url="/sites/collection1/_api/web/webs",
+        list_id="123abc",
+        param_name="list_items",
     ):
         actual_response.append(response)
 
@@ -761,7 +817,7 @@ class ClientSession:
 
 
 @pytest.mark.asyncio
-async def test_close_with_client_session(patch_logger):
+async def test_close_with_client_session():
     """Test close method of SharepointDataSource with client session"""
 
     # Setup
@@ -773,7 +829,7 @@ async def test_close_with_client_session(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_close_without_client_session(patch_logger):
+async def test_close_without_client_session():
     """Test close method of SharepointDataSource without client session"""
 
     # Setup
@@ -785,8 +841,8 @@ async def test_close_without_client_session(patch_logger):
 
 
 @pytest.mark.asyncio
-async def testapi_call_negative():
-    """Tests the api_call function while getting an exception."""
+async def test_api_call_negative():
+    """Tests the _api_call function while getting an exception."""
 
     # Setup
     source = create_source(SharepointDataSource)
@@ -798,12 +854,12 @@ async def testapi_call_negative():
         source.sharepoint_client.session = source.sharepoint_client._get_session()
         with pytest.raises(Exception):
             # Execute
-            await anext(source.sharepoint_client.api_call(url_name="ping"))
+            await anext(source.sharepoint_client._api_call(url_name="ping"))
 
 
 @pytest.mark.asyncio
-async def testapi_call_successfully():
-    """Tests the api_call function."""
+async def test_api_call_successfully():
+    """Tests the _api_call function."""
 
     # Setup
     source = create_source(SharepointDataSource)
@@ -817,7 +873,7 @@ async def testapi_call_successfully():
     ):
         source.sharepoint_client._get_session()
         # Execute
-        async for response in source.sharepoint_client.api_call(
+        async for response in source.sharepoint_client._api_call(
             url_name="ping", site_collections="abc", host_url="sharepoint.com"
         ):
             # Assert
@@ -862,8 +918,8 @@ def patch_default_wait_multiplier():
 
 
 @pytest.mark.asyncio
-async def testapi_call_when_token_is_expired(patch_default_wait_multiplier):
-    """Tests the api_call function while token expire."""
+async def test_api_call_when_token_is_expired(patch_default_wait_multiplier):
+    """Tests the _api_call function while token expire."""
 
     # Setup
     source = create_source(SharepointDataSource)
@@ -889,7 +945,7 @@ async def testapi_call_when_token_is_expired(patch_default_wait_multiplier):
 
                 # Execute
                 await anext(
-                    source.sharepoint_client.api_call(
+                    source.sharepoint_client._api_call(
                         url_name="attachment", url="abc.com"
                     )
                 )
@@ -902,7 +958,7 @@ class TooManyRequestException(Exception):
 
 
 @pytest.mark.asyncio
-async def testapi_call_when_status_429_exception():
+async def test_api_call_when_status_429_exception():
     # Setup
     source = create_source(SharepointDataSource)
     mock_response = {"access_token": "test2344", "expires_in": "1234555"}
@@ -921,7 +977,7 @@ async def testapi_call_when_status_429_exception():
             with pytest.raises(TooManyRequestException):
                 # Execute
                 await anext(
-                    source.sharepoint_client.api_call(
+                    source.sharepoint_client._api_call(
                         url_name="attachment", url="abc.com"
                     )
                 )
@@ -929,8 +985,8 @@ async def testapi_call_when_status_429_exception():
 
 
 @pytest.mark.asyncio
-async def testapi_call_when_server_is_down(patch_default_wait_multiplier):
-    """Tests the api_call function while server gets disconnected."""
+async def test_api_call_when_server_is_down(patch_default_wait_multiplier):
+    """Tests the _api_call function while server gets disconnected."""
     # Setup
     source = create_source(SharepointDataSource)
     mock_response = {"access_token": "test2344", "expires_in": "1234555"}
@@ -946,7 +1002,7 @@ async def testapi_call_when_server_is_down(patch_default_wait_multiplier):
             with pytest.raises(aiohttp.ServerDisconnectedError):
                 # Execute
                 await anext(
-                    source.sharepoint_client.api_call(
+                    source.sharepoint_client._api_call(
                         url_name="attachment", url="abc.com"
                     )
                 )
