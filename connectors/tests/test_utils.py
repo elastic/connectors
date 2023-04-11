@@ -408,18 +408,27 @@ async def test_with_concurrency_control():
     @with_concurrency_control(retries=num_retries)
     async def conflict():
         mock_func()
-        raise ConflictError(message="something wrong", meta=None, body={})
+        raise ConflictError(
+            message="This is an error message from test_with_concurrency_control",
+            meta=None,
+            body={},
+        )
 
     with pytest.raises(ConflictError):
         await conflict()
 
         assert mock_func.call_count == num_retries
 
+    mock_func = Mock()
+
     @with_concurrency_control(retries=num_retries)
     async def does_not_raise():
+        mock_func()
         pass
 
     await does_not_raise()
+
+    assert mock_func.call_count == 1
 
 
 class MockSSL:

@@ -446,6 +446,9 @@ def with_concurrency_control(retries=3):
                 try:
                     return await func(*args, **kwargs)
                 except ConflictError as e:
+                    logger.debug(
+                        f"A conflict error was returned from elasticsearch: {e.message}"
+                    )
                     if retry >= retries:
                         raise e
                     retry += 1
