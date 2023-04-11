@@ -53,6 +53,9 @@ QUEUE_SIZE = 1024
 QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
 END_SIGNAL = "FINISHED_TASK"
 
+CONFLUENCE_CLOUD = "confluence_cloud"
+CONFLUENCE_SERVER = "confluence_server"
+
 
 class ConfluenceClient:
     """Confluence client to handle API calls made to Confluence"""
@@ -60,8 +63,8 @@ class ConfluenceClient:
     def __init__(self, configuration):
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
-        self.is_cloud = self.configuration["is_cloud"]
-        self.host_url = self.configuration["host_url"]
+        self.is_cloud = self.configuration["data_source"] == CONFLUENCE_CLOUD
+        self.host_url = self.configuration["confluence_url"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
         self.retry_count = self.configuration["retry_count"]
@@ -84,7 +87,7 @@ class ConfluenceClient:
             return self.session
         if self.is_cloud:
             auth = (
-                self.configuration["service_account_id"],
+                self.configuration["account_email"],
                 self.configuration["api_token"],
             )
         else:
@@ -188,7 +191,6 @@ class ConfluenceDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
         self.confluence_client = ConfluenceClient(configuration)
 
@@ -204,60 +206,89 @@ class ConfluenceDataSource(BaseDataSource):
             dictionary: Default configuration.
         """
         return {
-            "is_cloud": {
-                "value": False,
-                "label": "True if Confluence Cloud, False if Confluence Server",
-                "type": "bool",
+            "data_source": {
+                "display": "dropdown",
+                "label": "Confluence data source",
+                "options": [
+                    {"label": "Confluence Cloud", "value": CONFLUENCE_CLOUD},
+                    {"label": "Confluence Server", "value": CONFLUENCE_SERVER},
+                ],
+                "order": 1,
+                "type": "str",
+                "value": CONFLUENCE_SERVER,
             },
             "username": {
-                "value": "admin",
+                "depends_on": [{"field": "data_source", "value": CONFLUENCE_SERVER}],
                 "label": "Confluence Server username",
+                "order": 2,
                 "type": "str",
+                "value": "admin",
             },
             "password": {
-                "value": "abc@123",
+                "depends_on": [{"field": "data_source", "value": CONFLUENCE_SERVER}],
                 "label": "Confluence Server password",
+                "sensitive": True,
+                "order": 3,
                 "type": "str",
+                "value": "abc@123",
             },
-            "service_account_id": {
-                "value": "me@example.com",
-                "label": "Confluence Cloud username",
+            "account_email": {
+                "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
+                "label": "Confluence Cloud account email",
+                "order": 4,
                 "type": "str",
+                "value": "me@example.com",
             },
             "api_token": {
-                "value": "abc#123",
+                "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
                 "label": "Confluence Cloud API token",
+                "sensitive": True,
+                "order": 5,
                 "type": "str",
+                "value": "abc#123",
             },
-            "host_url": {
-                "value": "http://127.0.0.1:5000",
-                "label": "Confluence host url",
+            "confluence_url": {
+                "label": "Confluence URL",
+                "order": 6,
                 "type": "str",
+                "value": "http://127.0.0.1:5000",
             },
             "ssl_enabled": {
-                "value": False,
-                "label": "Enable SSL verification (true/false)",
+                "display": "toggle",
+                "label": "Enable SSL verification",
+                "order": 7,
                 "type": "bool",
+                "value": False,
             },
             "ssl_ca": {
-                "value": "",
+                "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
+                "order": 8,
                 "type": "str",
-            },
-            "enable_content_extraction": {
-                "value": True,
-                "label": "Enable content extraction (true/false)",
-                "type": "bool",
+                "value": "",
             },
             "retry_count": {
-                "value": 3,
+                "default_value": 3,
+                "display": "numeric",
                 "label": "Maximum retries per request",
+                "order": 9,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": 3,
             },
             "concurrent_downloads": {
-                "value": MAX_CONCURRENT_DOWNLOADS,
+                "default_value": MAX_CONCURRENT_DOWNLOADS,
+                "display": "numeric",
                 "label": "Maximum concurrent downloads",
+                "order": 10,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "validations": [
+                    {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
+                ],
+                "value": MAX_CONCURRENT_DOWNLOADS,
             },
         }
 
@@ -272,42 +303,6 @@ class ConfluenceDataSource(BaseDataSource):
             options (dictionary): Config bulker options
         """
         options["concurrent_downloads"] = self.concurrent_downloads
-
-    async def validate_config(self):
-        """Validates whether user input is empty or not for configuration fields
-
-        Raises:
-            Exception: Configured fields can't be empty.
-            Exception: SSL certificate must be configured.
-            Exception: Concurrent downloads can't be set more than maximum allowed value.
-        """
-        logger.info("Validating Confluence Configuration...")
-
-        connection_fields = (
-            ["host_url", "service_account_id", "api_token"]
-            if self.confluence_client.is_cloud
-            else ["host_url", "username", "password"]
-        )
-        default_config = self.get_default_configuration()
-
-        if empty_connection_fields := [
-            default_config[field]["label"]
-            for field in connection_fields
-            if self.configuration[field] == ""
-        ]:
-            raise Exception(
-                f"Configured keys: {empty_connection_fields} can't be empty."
-            )
-        if self.confluence_client.ssl_enabled and (
-            self.confluence_client.certificate == ""
-            or self.confluence_client.certificate is None
-        ):
-            raise Exception("SSL certificate must be configured.")
-
-        if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
-            raise Exception(
-                f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
-            )
 
     async def ping(self):
         """Verify the connection with Confluence"""
@@ -427,7 +422,7 @@ class ConfluenceDataSource(BaseDataSource):
             Dictionary: Document of the attachment to be indexed.
         """
         attachment_size = int(attachment["size"])
-        if not (self.enable_content_extraction and doit and attachment_size):
+        if not (doit and attachment_size):
             return
         attachment_name = attachment["title"]
         file_extension = os.path.splitext(attachment_name)[-1]

@@ -44,8 +44,8 @@ from connectors.utils import (
 @freeze_time("2023-01-18 17:18:56.814003", tick=True)
 def test_next_run():
     # can run within two minutes
-    assert next_run("1 * * * * *") < 120
-    assert next_run("* * * * * *") == 0
+    assert next_run("1 * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:19:01"
+    assert next_run("* * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:18:57"
 
     # this should get parsed
     next_run("0/5 14,18,52 * ? JAN,MAR,SEP MON-FRI 2010-2030")
@@ -66,7 +66,7 @@ def test_invalid_names():
             validate_index_name(name)
 
 
-def test_mem_queue_speed(patch_logger):
+def test_mem_queue_speed():
     def mem_queue():
         import asyncio
 
@@ -103,7 +103,7 @@ def test_mem_queue_speed(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_mem_queue_race(patch_logger):
+async def test_mem_queue_race():
     item = "small stuff"
     queue = MemQueue(
         maxmemsize=get_size(item) * 2 + 1, refresh_interval=0.01, refresh_timeout=1
@@ -134,8 +134,8 @@ async def test_mem_queue_race(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_mem_queue(patch_logger):
-    queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=0.1)
+async def test_mem_queue():
+    queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=0.15)
     await queue.put("small stuff")
 
     assert not queue.full()
@@ -168,7 +168,7 @@ async def test_mem_queue(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_mem_queue_too_large_item(patch_logger):
+async def test_mem_queue_too_large_item():
     queue = MemQueue(maxmemsize=10, refresh_interval=0, refresh_timeout=1)
 
     with pytest.raises(asyncio.QueueFull) as e:
@@ -184,7 +184,7 @@ def test_get_base64_value():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runner(patch_logger):
+async def test_concurrent_runner():
     results = []
 
     def _results_callback(result):
@@ -203,7 +203,7 @@ async def test_concurrent_runner(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runner_fails(patch_logger):
+async def test_concurrent_runner_fails():
     results = []
 
     def _results_callback(result):
@@ -226,7 +226,7 @@ async def test_concurrent_runner_fails(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runner_high_concurrency(patch_logger):
+async def test_concurrent_runner_high_concurrency():
     results = []
 
     def _results_callback(result):
@@ -322,6 +322,48 @@ def test_convert_to_b64_no_overwrite(converter):
 
 class CustomException(Exception):
     pass
+
+
+class CustomGeneratorException(Exception):
+    pass
+
+
+@pytest.mark.fail_slow(1)
+@pytest.mark.asyncio
+async def test_exponential_backoff_retry_async_generator():
+    mock_gen = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        interval=0,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def raises_async_generator():
+        for _ in range(3):
+            mock_gen()
+            raise CustomGeneratorException()
+            yield 1
+
+    with pytest.raises(CustomGeneratorException):
+        async for _ in raises_async_generator():
+            pass
+
+    # retried 10 times
+    assert mock_gen.call_count == num_retries
+
+    # would lead to roughly ~ 50 seconds of retrying
+    @retryable(retries=10, interval=5, strategy=RetryStrategy.LINEAR_BACKOFF)
+    async def does_not_raise_async_generator():
+        for _ in range(3):
+            yield 1
+
+    # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
+    items = []
+    async for item in does_not_raise_async_generator():
+        items.append(item)
+
+    assert items == [1, 1, 1]
 
 
 @pytest.mark.fail_slow(1)

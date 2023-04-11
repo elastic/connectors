@@ -14,7 +14,6 @@ import pytest
 from connectors.byoc import (
     IDLE_JOBS_THRESHOLD,
     JOB_NOT_FOUND_ERROR,
-    SYNC_DISABLED,
     Connector,
     ConnectorIndex,
     Features,
@@ -318,6 +317,7 @@ async def test_connector_properties():
             "last_seen": iso_utc(),
             "last_sync_status": "completed",
             "pipeline": {},
+            "last_sync_scheduled_at": iso_utc(),
         },
     }
 
@@ -337,6 +337,7 @@ async def test_connector_properties():
     assert isinstance(connector.filtering, Filtering)
     assert isinstance(connector.pipeline, Pipeline)
     assert isinstance(connector.features, Features)
+    assert isinstance(connector.last_sync_scheduled_at, datetime)
 
 
 @pytest.mark.asyncio
@@ -489,28 +490,27 @@ async def test_sync_done(job, expected_doc_source_update):
     index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
 
 
+mock_next_run = iso_utc()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "sync_now, scheduling_enabled, expected_next_sync",
+    "scheduling_enabled, expected_next_sync",
     [
-        (True, False, 0),
-        (False, False, SYNC_DISABLED),
-        (False, True, 10),
+        (False, None),
+        (True, mock_next_run),
     ],
 )
 @patch("connectors.byoc.next_run")
-async def test_connector_next_sync(
-    next_run, sync_now, scheduling_enabled, expected_next_sync, patch_logger
-):
+async def test_connector_next_sync(next_run, scheduling_enabled, expected_next_sync):
     connector_doc = {
         "_id": "1",
         "_source": {
-            "sync_now": sync_now,
             "scheduling": {"enabled": scheduling_enabled, "interval": "1 * * * * *"},
         },
     }
     index = Mock()
-    next_run.return_value = 10
+    next_run.return_value = mock_next_run
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     assert connector.next_sync() == expected_next_sync
 
@@ -593,7 +593,7 @@ async def test_sync_job_validate_filtering(
 
 
 @pytest.mark.asyncio
-async def test_sync_job_claim(patch_logger):
+async def test_sync_job_claim():
     source = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -611,7 +611,7 @@ async def test_sync_job_claim(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_update_metadata(patch_logger):
+async def test_sync_job_update_metadata():
     source = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -639,7 +639,7 @@ async def test_sync_job_update_metadata(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_done(patch_logger):
+async def test_sync_job_done():
     source = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -657,7 +657,7 @@ async def test_sync_job_done(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_fail(patch_logger):
+async def test_sync_job_fail():
     source = {"_id": "1"}
     message = "something wrong"
     index = Mock()
@@ -676,7 +676,7 @@ async def test_sync_job_fail(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_cancel(patch_logger):
+async def test_sync_job_cancel():
     source = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -695,7 +695,7 @@ async def test_sync_job_cancel(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_suspend(patch_logger):
+async def test_sync_job_suspend():
     source = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -769,7 +769,20 @@ async def test_prepare(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_not_edited(patch_logger):
+@pytest.mark.parametrize(
+    "sync_now, updated, expected_result",
+    [(False, None, False), (True, "updated", True), (True, "noop", False)],
+)
+async def test_connector_reset_sync_now_flag(sync_now, updated, expected_result):
+    connector_doc = {"_id": "1", "_source": {"sync_now": sync_now}}
+    index = Mock()
+    index.update_by_script = AsyncMock(return_value={"result": updated})
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    assert await connector.reset_sync_now_flag() == expected_result
+
+
+@pytest.mark.asyncio
+async def test_connector_validate_filtering_not_edited():
     index = Mock()
     index.update = AsyncMock()
     validator = Mock()
@@ -783,7 +796,7 @@ async def test_connector_validate_filtering_not_edited(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_invalid(patch_logger):
+async def test_connector_validate_filtering_invalid():
     index = Mock()
     index.update = AsyncMock()
     index.fetch_response_by_id = AsyncMock()
@@ -818,7 +831,7 @@ async def test_connector_validate_filtering_invalid(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_valid(patch_logger):
+async def test_connector_validate_filtering_valid():
     index = Mock()
     index.update = AsyncMock()
     index.fetch_response_by_id = AsyncMock()
@@ -1155,22 +1168,19 @@ def test_nested_get(nested_dict, keys, default, expected):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "sync_now, trigger_method",
+    "trigger_method",
     [
-        (True, JobTriggerMethod.ON_DEMAND),
-        (False, JobTriggerMethod.SCHEDULED),
+        JobTriggerMethod.ON_DEMAND,
+        JobTriggerMethod.SCHEDULED,
     ],
 )
 @patch("connectors.byoc.SyncJobIndex.index")
-async def test_create_job(
-    index_method, sync_now, trigger_method, patch_logger, set_env
-):
+async def test_create_job(index_method, trigger_method, set_env):
     connector = Mock()
     connector.id = "id"
     connector.index_name = "index_name"
     connector.language = "en"
     config = load_config(CONFIG)
-    connector.sync_now = sync_now
     connector.filtering.get_active_filter.transform_filtering.return_value = Filter()
     connector.pipeline = Pipeline({})
 
@@ -1178,19 +1188,22 @@ async def test_create_job(
         "connector": ANY,
         "trigger_method": trigger_method.value,
         "status": JobStatus.PENDING.value,
+        "indexed_document_count": 0,
+        "indexed_document_volume": 0,
+        "deleted_document_count": 0,
         "created_at": ANY,
         "last_seen": ANY,
     }
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    await sync_job_index.create(connector=connector)
+    await sync_job_index.create(connector=connector, trigger_method=trigger_method)
 
     index_method.assert_called_with(expected_index_doc)
 
 
 @pytest.mark.asyncio
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
-async def test_pending_jobs(get_all_docs, patch_logger, set_env):
+async def test_pending_jobs(get_all_docs, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
@@ -1223,7 +1236,7 @@ async def test_pending_jobs(get_all_docs, patch_logger, set_env):
 
 @pytest.mark.asyncio
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
-async def test_orphaned_jobs(get_all_docs, patch_logger, set_env):
+async def test_orphaned_jobs(get_all_docs, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
@@ -1242,7 +1255,7 @@ async def test_orphaned_jobs(get_all_docs, patch_logger, set_env):
 
 @pytest.mark.asyncio
 @patch("connectors.byoc.SyncJobIndex.get_all_docs")
-async def test_idle_jobs(get_all_docs, patch_logger, set_env):
+async def test_idle_jobs(get_all_docs, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)

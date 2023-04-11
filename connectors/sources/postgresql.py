@@ -87,6 +87,7 @@ class PostgreSQLDataSource(GenericBaseDataSource):
                     "value": DEFAULT_SSL_ENABLED,
                 },
                 "ssl_ca": {
+                    "depends_on": [{"field": "ssl_enabled", "value": True}],
                     "label": "SSL certificate",
                     "order": 10,
                     "type": "str",
