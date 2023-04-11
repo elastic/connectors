@@ -4,12 +4,17 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Microsoft SQL source module is responsible to fetch documents from Microsoft SQL."""
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 
+from connectors.logger import logger
 from connectors.sources.generic_database import GenericBaseDataSource, Queries
+from connectors.utils import get_pem_format, iso_utc
 
-SECURED_CONNECTION = False
+# Connector will skip the below tables if it gets from the input
+TABLES_TO_SKIP = {"msdb": ["sysutility_ucp_configuration_internal"]}
 
 
 class MSSQLQueries(Queries):
@@ -57,11 +62,14 @@ class MSSQLDataSource(GenericBaseDataSource):
             configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self.mssql_driver = self.configuration["mssql_driver"]
-        self.secured_connection = self.configuration["secured_connection"]
+        self.ssl_enabled = self.configuration["ssl_enabled"]
+        self.ssl_ca = self.configuration["ssl_ca"]
+        self.validate_host = self.configuration["validate_host"]
         self.queries = MSSQLQueries()
         self.dialect = "Microsoft SQL"
         self.schema = self.configuration["schema"]
+        self.certfile = f"ssl_certificate_mssql_{iso_utc()}.pem"
+        self.tables_to_skip = TABLES_TO_SKIP
 
     @classmethod
     def get_default_configuration(cls):
@@ -79,18 +87,25 @@ class MSSQLDataSource(GenericBaseDataSource):
                     "type": "str",
                     "value": "dbo",
                 },
-                "mssql_driver": {
-                    "label": "Microsoft SQL Driver Name (ODBC Driver 18 for SQL Server)",
-                    "order": 10,
-                    "type": "str",
-                    "value": "ODBC Driver 18 for SQL Server",
-                },
-                "secured_connection": {
+                "ssl_enabled": {
                     "display": "toggle",
-                    "label": "Connection will be secured or not",
-                    "order": 11,
+                    "label": "Enable SSL verification (true/false)",
+                    "order": 10,
                     "type": "bool",
-                    "value": SECURED_CONNECTION,
+                    "value": False,
+                },
+                "ssl_ca": {
+                    "depends_on": [{"field": "ssl_enabled", "value": True}],
+                    "label": "Certificate Data",
+                    "order": 11,
+                    "type": "str",
+                    "value": "",
+                },
+                "validate_host": {
+                    "label": "Do you want to validate host",
+                    "order": 12,
+                    "type": "bool",
+                    "value": False,
                 },
             }
         )
@@ -98,25 +113,41 @@ class MSSQLDataSource(GenericBaseDataSource):
 
     def _create_engine(self):
         """Create sync engine for mssql"""
-        if self.secured_connection:
-            query = {
-                "driver": self.mssql_driver,
-                "TrustServerCertificate": "no",
-                "Encrypt": "Yes",
-            }
-        else:
-            query = {"driver": self.mssql_driver, "TrustServerCertificate": "yes"}
-
         connection_string = URL.create(
-            "mssql+pyodbc",
+            "mssql+pytds",
             username=self.user,
             password=self.password,
             host=self.host,
             port=self.port,
             database=self.database,
-            query=query,
         )
-        self.engine = create_engine(connection_string)
+        connect_args = {}
+        if self.ssl_enabled:
+            self.create_pem_file()
+            connect_args = {
+                "cafile": f"/tmp/{self.certfile}",
+                "validate_host": self.validate_host,
+            }
+        self.engine = create_engine(connection_string, connect_args=connect_args)
+
+    async def close(self):
+        """Close the connection to the database server."""
+        if os.path.exists(f"/tmp/{self.certfile}"):
+            try:
+                os.remove(f"/tmp/{self.certfile}")
+            except Exception as exception:
+                logger.warning(
+                    f"Something went wrong while removing temporary certificate file. Exception: {exception}"
+                )
+        if self.connection is None:
+            return
+        self.connection.close()
+
+    def create_pem_file(self):
+        """Create pem file for SSL Verification"""
+        pem_format = get_pem_format(key=self.ssl_ca, max_split=1)
+        with open(f"/tmp/{self.certfile}", "w") as cert:
+            cert.write(pem_format)
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch databases, tables and rows in async manner.
