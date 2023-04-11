@@ -232,6 +232,17 @@ async def test_close_when_source_setup_correctly_does_not_raise_errors():
 
 
 @pytest.mark.asyncio
+async def test_client_when_aexit_called_then_cancel_sleeps(patch_connection_pool):
+    client = await setup_mysql_client()
+
+    async with client:
+        client._sleeps.cancel = Mock()
+        pass
+
+    client._sleeps.cancel.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_client_get_tables(patch_connection_pool):
     table_1 = "table_1"
     table_2 = "table_2"

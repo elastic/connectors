@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """MySQL source module responsible to fetch documents from MySQL"""
-import asyncio
 import re
 
 import aiomysql
@@ -147,9 +146,13 @@ class MySQLClient:
         self.connection_pool = await aiomysql.create_pool(**connection_string)
         self.connection = await self.connection_pool.acquire()
 
+        self._sleeps = CancellableSleeps()
+
         return self
 
     async def __aexit__(self, exception_type, exception_value, exception_traceback):
+        self._sleeps.cancel()
+
         self.connection_pool.release(self.connection)
         self.connection_pool.close()
         await self.connection_pool.wait_closed()
@@ -246,7 +249,7 @@ class MySQLClient:
                     fetched_rows += len(rows)
                     successful_batches += 1
 
-                    await asyncio.sleep(0)
+                    await self._sleeps.sleep(0)
             except IndexError as e:
                 logger.exception(
                     f"Fetched {fetched_rows} rows in {successful_batches} batches. Encountered exception {e} in batch {successful_batches + 1}."
