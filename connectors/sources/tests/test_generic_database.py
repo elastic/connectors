@@ -19,6 +19,7 @@ from connectors.sources.generic_database import (
     configured_tables,
     is_wildcard,
 )
+from connectors.sources.mssql import MSSQLDataSource
 from connectors.sources.postgresql import PostgreSQLDataSource
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
@@ -133,7 +134,7 @@ def test_get_configuration():
 @pytest.mark.asyncio
 async def test_validate_config_valid_fields():
     # Setup
-    source = create_source(GenericBaseDataSource)
+    source = create_source(PostgreSQLDataSource)
 
     # Execute
     try:
@@ -171,7 +172,8 @@ async def test_validate_config_ssl():
 @pytest.mark.asyncio
 async def test_close():
     """Test close method"""
-    source = create_source(GenericBaseDataSource)
+    source = create_source(MSSQLDataSource)
+
     await source.close()
 
 
@@ -305,6 +307,20 @@ async def test_fetch_rows_with_zero_table():
         assert doc == []
         with pytest.raises(Exception):
             await anext(source.execute_query("select 1+1"))
+
+
+@pytest.mark.asyncio
+async def test_fetch_rows_with_msdb():
+    # Setup
+    source = create_source(GenericBaseDataSource)
+    source._create_engine = Mock()
+    source.queries = Mock()
+    source.execute_query = Mock(return_value=AsyncIterator([[]]))
+    source.database = "msdb"
+
+    # Execute and Assert
+    async for doc in source.fetch_rows():
+        assert doc == []
 
 
 @pytest.mark.parametrize(
