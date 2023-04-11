@@ -185,7 +185,12 @@ class MySQLClient:
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
             await cursor.execute(query)
 
-            return [f"{table}_{column[0]}" for column in cursor.description]
+            return [f"{table}_{column[0]}" for column in await cursor.fetchall()]
+
+    async def get_primary_key_column_names(self, table):
+        return await self.get_column_names(
+            table, query=self.queries.table_primary_key(table)
+        )
 
     @retryable(
         retries=RETRIES,
@@ -210,6 +215,15 @@ class MySQLClient:
     )
     async def yield_rows_for_table(self, table):
         async for row in self._fetchmany_in_batches(self.queries.table_data(table)):
+            yield row
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def yield_rows_for_query(self, query):
+        async for row in self._fetchmany_in_batches(query):
             yield row
 
     async def _fetchmany_in_batches(self, query):
@@ -533,35 +547,33 @@ class MySqlDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
 
-        primary_key_columns = await self._get_primary_key_columns(table)
+        async with self.mysql_client() as client:
+            primary_key_columns = await client.get_primary_key_column_names(table)
 
-        if not primary_key_columns:
-            logger.warning(
-                f"Skipping {table} table from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
+            if not primary_key_columns:
+                logger.warning(
+                    f"Skipping {table} table from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
+                )
+                return
+
+            last_update_time = await client.get_last_update_time(table)
+            column_names = await client.get_column_names(table)
+            row_generator = (
+                client.yield_rows_for_table(table)
+                if query is None
+                else client.yield_rows_for_query(query)
             )
-            return
 
-        last_update_time = await anext(
-            self._connect(
-                query=self.queries.table_last_update_time(table),
-                table=table,
-            )
-        )
-        last_update_time = last_update_time[0][0]
-
-        table_rows = self._connect(query=query, fetch_many=True, table=table)
-        column_names = await anext(table_rows)
-
-        async for row in table_rows:
-            row = dict(zip(column_names, row))
-            row.update(
-                {
-                    "_id": self._generate_id(table, row, primary_key_columns),
-                    "_timestamp": last_update_time,
-                    "Table": table,
-                }
-            )
-            yield self.serialize(doc=row)
+            async for row in row_generator:
+                row = dict(zip(column_names, row))
+                row.update(
+                    {
+                        "_id": self._generate_id(table, row, primary_key_columns),
+                        "_timestamp": last_update_time,
+                        "Table": table,
+                    }
+                )
+                yield self.serialize(doc=row)
 
     def _generate_id(self, table, row, primary_key_columns):
         keys_value = ""
@@ -595,18 +607,16 @@ class MySqlDataSource(BaseDataSource):
                 logger.debug(
                     f"Fetching rows from table '{table}' in database '{self.database}' with a custom query."
                 )
-                async for row in self.fetch_rows_for_table(
-                    table=table,
-                    query=query,
-                ):
+                async for row in self.fetch_documents(table, query):
                     yield row, None
                 await self._sleeps.sleep(0)
         else:
             tables_to_fetch = await self.get_tables_to_fetch()
 
-            async for row in self.fetch_rows_from_tables(tables_to_fetch):
-                yield row, None
-            await self._sleeps.sleep(0)
+            for table in tables_to_fetch:
+                async for row in self.fetch_documents(table):
+                    yield row, None
+                await self._sleeps.sleep(0)
 
     async def get_tables_to_fetch(self):
         tables = configured_tables(self.tables)
