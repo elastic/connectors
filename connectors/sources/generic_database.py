@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import BaseDataSource
 from connectors.utils import iso_utc
 
 WILDCARD = "*"
@@ -187,44 +187,6 @@ class GenericBaseDataSource(BaseDataSource):
                 "value": DEFAULT_RETRY_COUNT,
             },
         }
-
-    async def validate_config(self):
-        """Validates the configuration parameters
-
-        Raises:
-            Exception: Configured keys can't be empty
-        """
-        connection_fields = [
-            "host",
-            "port",
-            "username",
-            "password",
-            "database",
-            "tables",
-        ]
-
-        if empty_connection_fields := [
-            field for field in connection_fields if self.configuration[field] == ""
-        ]:
-            raise ConfigurableFieldValueError(
-                f"Configured keys: {empty_connection_fields} can't be empty."
-            )
-
-        if (
-            isinstance(self.configuration["port"], str)
-            and not self.configuration["port"].isnumeric()
-        ):
-            raise ConfigurableFieldValueError("Configured port has to be an integer.")
-
-        if (
-            self.dialect == "Postgresql"
-            and self.configuration["ssl_enabled"]
-            and (
-                self.configuration["ssl_ca"] == ""
-                or self.configuration["ssl_ca"] is None
-            )
-        ):
-            raise ConfigurableFieldValueError("SSL certificate must be configured.")
 
     async def execute_query(self, query, fetch_many=False, **kwargs):
         """Executes a query and yield rows

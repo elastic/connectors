@@ -139,11 +139,17 @@ async def test_validate_config_when_host_url_is_empty():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_for_ssl_enabled():
+async def test_validate_config_for_ssl_enabled_when_ssl_ca_not_empty_does_not_raise_error():
     """This function test validate_config when ssl is enabled and certificate is missing"""
     # Setup
-    source = create_source(SharepointDataSource)
-    source.ssl_enabled = True
+    source = create_source(SharepointDataSource, ssl_enabled=True, ssl_ca="test")
+
+    await source.validate_config()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_for_ssl_enabled_when_ssl_ca_empty_raises_error():
+    source = create_source(SharepointDataSource, ssl_enabled=True)
 
     # Execute
     with pytest.raises(ConfigurableFieldValueError):
