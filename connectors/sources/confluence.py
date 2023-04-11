@@ -278,13 +278,16 @@ class ConfluenceDataSource(BaseDataSource):
                 "value": 3,
             },
             "concurrent_downloads": {
-                "default_value": 50,
+                "default_value": MAX_CONCURRENT_DOWNLOADS,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
                 "order": 10,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
+                "validations": [
+                    {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
+                ],
                 "value": MAX_CONCURRENT_DOWNLOADS,
             },
         }
@@ -300,42 +303,6 @@ class ConfluenceDataSource(BaseDataSource):
             options (dictionary): Config bulker options
         """
         options["concurrent_downloads"] = self.concurrent_downloads
-
-    async def validate_config(self):
-        """Validates whether user input is empty or not for configuration fields
-
-        Raises:
-            Exception: Configured fields can't be empty.
-            Exception: SSL certificate must be configured.
-            Exception: Concurrent downloads can't be set more than maximum allowed value.
-        """
-        logger.info("Validating Confluence Configuration...")
-
-        connection_fields = (
-            ["confluence_url", "account_email", "api_token"]
-            if self.confluence_client.is_cloud
-            else ["confluence_url", "username", "password"]
-        )
-        default_config = self.get_default_configuration()
-
-        if empty_connection_fields := [
-            default_config[field]["label"]
-            for field in connection_fields
-            if self.configuration[field] == ""
-        ]:
-            raise Exception(
-                f"Configured keys: {empty_connection_fields} can't be empty."
-            )
-        if self.confluence_client.ssl_enabled and (
-            self.confluence_client.certificate == ""
-            or self.confluence_client.certificate is None
-        ):
-            raise Exception("SSL certificate must be configured.")
-
-        if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
-            raise Exception(
-                f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
-            )
 
     async def ping(self):
         """Verify the connection with Confluence"""

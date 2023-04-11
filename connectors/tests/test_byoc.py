@@ -374,9 +374,12 @@ async def test_heartbeat(interval, last_seen, should_send_heartbeat):
 
 @pytest.mark.asyncio
 async def test_sync_starts():
-    connector_doc = {"_id": "1"}
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {"_id": doc_id, "_seq_no": seq_no, "_primary_term": primary_term}
     index = Mock()
-    index.update = AsyncMock(return_value=1)
+    index.update = AsyncMock()
     expected_doc_source_update = {
         "last_sync_status": JobStatus.IN_PROGRESS.value,
         "last_sync_error": None,
@@ -385,7 +388,12 @@ async def test_sync_starts():
 
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     await connector.sync_starts()
-    index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
+    index.update.assert_called_with(
+        doc_id=connector.id,
+        doc=expected_doc_source_update,
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
 
 
 @pytest.mark.asyncio
