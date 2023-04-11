@@ -22,6 +22,7 @@ from connectors.filtering.validation import (
     FilteringValidator,
 )
 from connectors.logger import logger
+from connectors.utils import hash_id
 
 DEFAULT_CONFIGURATION = {
     "default_value": None,
@@ -365,9 +366,10 @@ class BaseDataSource:
 
         This method can be overridden to execute a hash function on a document `_id`,
         which returns a hashed `_id` with a length below the elasticsearch `_id` size limit.
+        On default it uses md5 for hashing an `_id`.
         """
 
-        return _id
+        return hash_id(_id)
 
     async def validate_filtering(self, filtering):
         """Execute all basic rule and advanced rule validators."""
