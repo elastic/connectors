@@ -21,7 +21,7 @@ from connectors.sources.generic_database import (
     configured_tables,
     is_wildcard,
 )
-from connectors.utils import CancellableSleeps, RetryStrategy, retryable, ssl_context
+from connectors.utils import CancellableSleeps, RetryStrategy, retryable, ssl_context, iso_utc
 
 SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN = re.compile(r"`(?:[^`]|``)+`|\w+")
 
@@ -557,7 +557,7 @@ class MySqlDataSource(BaseDataSource):
             row.update(
                 {
                     "_id": self._generate_id(table, row, primary_key_columns),
-                    "_timestamp": last_update_time,
+                    "_timestamp": last_update_time or iso_utc(),
                     "Table": table,
                 }
             )
