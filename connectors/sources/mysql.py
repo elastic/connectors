@@ -85,8 +85,6 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def _remote_validation(self, advanced_rules):
-        await self.source.ping()
-
         async with self.source.mysql_client() as client:
             tables = set(await client.get_all_table_names())
 
