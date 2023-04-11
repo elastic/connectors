@@ -130,7 +130,7 @@ def test_default():
         ("bool", False, True, None, True),
     ],
 )
-def test_value_when_str_returns_correct_value(
+def test_value_returns_correct_value(
     type, required, default_value, value, expected_value
 ):
     assert (
