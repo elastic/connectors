@@ -93,14 +93,18 @@ class OracleDataSource(GenericBaseDataSource):
                     "value": DEFAULT_PROTOCOL,
                 },
                 "oracle_home": {
+                    "default_value": DEFAULT_ORACLE_HOME,
                     "label": "Path of Oracle Service",
                     "order": 10,
+                    "required": False,
                     "type": "str",
                     "value": DEFAULT_ORACLE_HOME,
                 },
                 "wallet_configuration_path": {
+                    "default_value": "",
                     "label": "Path of oracle service configuration files",
                     "order": 11,
+                    "required": False,
                     "type": "str",
                     "value": "",
                 },
