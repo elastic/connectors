@@ -299,7 +299,7 @@ async def test_validate_config_with_invalid_concurrent_downloads():
     # Execute
     with pytest.raises(
         ConfigurableFieldValueError,
-        match="Field validation errors: `Number of concurrent downloads for fetching attachment content` value `1000` should be less than 101.",
+        match="Field validation errors: 'Number of concurrent downloads for fetching attachment content' value '1000' should be less than 101.",
     ):
         await source.validate_config()
 
