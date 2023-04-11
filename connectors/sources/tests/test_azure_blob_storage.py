@@ -420,8 +420,7 @@ async def test_validate_config_no_account_name():
     """Test configure connection string method of AzureBlobStorageDataSource class"""
 
     # Setup
-    source = create_source(AzureBlobStorageDataSource)
-    source.configuration.set_field(name="account_name", value="")
+    source = create_source(AzureBlobStorageDataSource, account_name="")
 
     with pytest.raises(ConfigurableFieldValueError):
         # Execute

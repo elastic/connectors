@@ -92,7 +92,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_RETRY_COUNT,
+                "value": None,
             },
             "concurrent_downloads": {
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
@@ -105,7 +105,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "validations": [
                     {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
                 ],
-                "value": MAX_CONCURRENT_DOWNLOADS,
+                "value": None,
             },
         }
 

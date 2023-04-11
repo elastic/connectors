@@ -28,19 +28,37 @@ from connectors.source import (
 
 CONFIG = {
     "host": {
-        "value": "mongodb://127.0.0.1:27021",
         "label": "MongoDB Host",
         "type": "str",
+        "value": "mongodb://127.0.0.1:27021",
     },
     "database": {
-        "value": "sample_airbnb",
         "label": "MongoDB Database",
         "type": "str",
+        "value": "sample_airbnb",
     },
     "collection": {
-        "value": "listingsAndReviews",
         "label": "MongoDB Collection",
         "type": "str",
+        "value": "listingsAndReviews",
+    },
+    "connector_nickname": {
+        "default_value": "MongoDB Connector",
+        "label": "Connector Nickname",
+        "type": "str",
+        "value": ""
+    },
+    "retry_count": {
+        "default_value": 3,
+        "label": "Retry Count",
+        "type": "int",
+        "value": None
+    },
+    "tables": {
+        "default_value": ["*"],
+        "label": "List of Tables",
+        "type": "list",
+        "value": [""]
     },
 }
 
@@ -75,6 +93,41 @@ def test_default():
     c = DataSourceConfiguration(CONFIG)
     assert c.get("database") == "sample_airbnb"
     assert c.get("dd", 1) == 1
+def test_value_when_str_returns_correct_value():
+    # when required, always returns `_value`
+    field_params = {"default_value": "default", "required": True, "type": "str"}
+    assert Field("name", field_params | {"value": "my input"}).value == "my input"
+    # assert Field("name", default_value="default", required=True, type="str", value=None).value == None
+    # assert Field("name", default_value="default", required=True, type="str", value="").value == ""
+    #
+    # # when not required, returns `_value` if present, else `default_value`
+    # assert Field("name", default_value="default", required=False, type="str", value="my input").value == "my input"
+    # assert Field("name", default_value="default", required=False, type="str", value="").value == "default"
+    # assert Field("name", default_value="default", required=False, type="str", value=None).value == "default"
+
+def test_value_when_int_returns_correct_value():
+    # when required, always returns `_value`
+    assert Field("name", default_value=3, required=True, type="int", value=1).value == 1
+    assert Field("name", default_value=3, required=True, type="int", value=None).value == None
+
+    # when not required, returns `_value` if present, else `default_value`
+    assert Field("name", default_value=3, required=False, type="int", value=1).value == 1
+    assert Field("name", default_value=3, required=False, type="int", value=None).value == 3
+
+def test_value_when_list_returns_correct_value():
+    # when required, always returns `_value`
+    assert Field("name", default_value=["one", "two"], required=True, type="list", value=["three", "four"]).value == ["three", "four"]
+    assert Field("name", default_value=["one", "two"], required=True, type="list", value=[]).value == []
+    assert Field("name", default_value=["one", "two"], required=True, type="list", value=[""]).value == [""]
+    assert Field("name", default_value=["one", "two"], required=True, type="list", value=[None]).value == [None]
+    assert Field("name", default_value=["one", "two"], required=True, type="list", value=None).value == None
+
+    # when not required, returns `_value` if present, else `default_value`
+    assert Field("name", default_value=["one", "two"], required=False, type="list", value=["three", "four"]).value == ["three", "four"]
+    assert Field("name", default_value=["one", "two"], required=False, type="list", value=[]).value == []
+    assert Field("name", default_value=["one", "two"], required=False, type="list", value=[""]).value == [""]
+    assert Field("name", default_value=["one", "two"], required=False, type="list", value=[None]).value == [None]
+    assert Field("name", default_value=["one", "two"], required=False, type="list", value=None).value == None
 
 
 class MyConnector:
