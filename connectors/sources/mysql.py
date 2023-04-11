@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """MySQL source module responsible to fetch documents from MySQL"""
-import asyncio
 import re
 
 import aiomysql
@@ -21,7 +20,13 @@ from connectors.sources.generic_database import (
     configured_tables,
     is_wildcard,
 )
-from connectors.utils import CancellableSleeps, RetryStrategy, retryable, ssl_context
+from connectors.utils import (
+    CancellableSleeps,
+    RetryStrategy,
+    iso_utc,
+    retryable,
+    ssl_context,
+)
 
 SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN = re.compile(r"`(?:[^`]|``)+`|\w+")
 
@@ -86,8 +91,6 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def _remote_validation(self, advanced_rules):
-        await self.source.ping()
-
         async with self.source.mysql_client() as client:
             tables = set(await client.get_all_table_names())
 
@@ -147,9 +150,13 @@ class MySQLClient:
         self.connection_pool = await aiomysql.create_pool(**connection_string)
         self.connection = await self.connection_pool.acquire()
 
+        self._sleeps = CancellableSleeps()
+
         return self
 
     async def __aexit__(self, exception_type, exception_value, exception_traceback):
+        self._sleeps.cancel()
+
         self.connection_pool.release(self.connection)
         self.connection_pool.close()
         await self.connection_pool.wait_closed()
@@ -246,7 +253,7 @@ class MySQLClient:
                     fetched_rows += len(rows)
                     successful_batches += 1
 
-                    await asyncio.sleep(0)
+                    await self._sleeps.sleep(0)
             except IndexError as e:
                 logger.exception(
                     f"Fetched {fetched_rows} rows in {successful_batches} batches. Encountered exception {e} in batch {successful_batches + 1}."
@@ -456,7 +463,7 @@ class MySqlDataSource(BaseDataSource):
                 row.update(
                     {
                         "_id": self._generate_id(table, row, primary_key_columns),
-                        "_timestamp": last_update_time,
+                        "_timestamp": last_update_time or iso_utc(),
                         "Table": table,
                     }
                 )
