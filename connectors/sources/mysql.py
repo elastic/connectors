@@ -423,119 +423,6 @@ class MySqlDataSource(BaseDataSource):
         async with self.mysql_client() as client:
             await client.ping()
 
-    async def _connect(self, query, fetch_many=False, **query_kwargs):
-        """Executes the passed query on the MySQL server.
-
-        Args:
-            query (str): MySql query to be executed.
-            query_kwargs (dict): Query kwargs to format the query.
-            fetch_many (boolean): Should use fetchmany to fetch the response.
-
-        Yields:
-            list: Column names and query response
-        """
-
-        formatted_query = query.format(**query_kwargs)
-        size = self.configuration["fetch_size"]
-        retry = 1
-        yield_once = True
-
-        rows_fetched = 0
-        cursor_position = 0
-
-        async with self.mysql_client() as client:
-            while retry <= self.retry_count:
-                try:
-                    async with client.connection.cursor(
-                        aiomysql.cursors.SSCursor
-                    ) as cursor:
-                        await cursor.execute(formatted_query)
-
-                        if fetch_many:
-                            # sending back column names only once
-                            if yield_once:
-                                yield [
-                                    f"{query_kwargs['table']}_{column[0]}"
-                                    for column in cursor.description
-                                ]
-                                yield_once = False
-
-                            # setting cursor position where it was failed
-                            if cursor_position:
-                                await cursor.scroll(cursor_position, mode="absolute")
-
-                            while True:
-                                rows = await cursor.fetchmany(size=size)
-                                rows_length = len(rows)
-
-                                # resetting cursor position & retry to 0 for next batch
-                                if cursor_position:
-                                    cursor_position = retry = 0
-
-                                if not rows_length:
-                                    break
-
-                                for row in rows:
-                                    yield row
-
-                                rows_fetched += rows_length
-                                await self._sleeps.sleep(0)
-                        else:
-                            yield await cursor.fetchall()
-                        break
-                except IndexError as exception:
-                    logger.exception(
-                        f"None of responses fetched from {rows_fetched} rows. Exception: {exception}"
-                    )
-                    break
-                except Exception as exception:
-                    logger.warning(
-                        f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
-                    )
-                    if retry == self.retry_count:
-                        raise exception
-                    cursor_position = rows_fetched
-                    await self._sleeps.sleep(RETRY_INTERVAL**retry)
-                    retry += 1
-
-    async def fetch_rows_for_table(self, table=None, query=None):
-        """Fetches all the rows from all the tables of the database.
-
-        Args:
-            table (str): Name of the table to fetch from
-            query (str): MySQL query
-
-        Yields:
-            Dict: Row document to index
-        """
-        if table is not None:
-            async for row in self.fetch_documents(table=table, query=query):
-                yield row
-        else:
-            logger.warning(
-                f"Fetched 0 rows for the table: {table}. As table has no rows."
-            )
-
-    async def fetch_rows_from_tables(self, tables):
-        """Fetches all the rows from all the tables of the database.
-
-        Yields:
-            Dict: Row document to index
-        """
-        if tables:
-            for table in tables:
-                logger.debug(f"Found table: {table} in database: {self.database}.")
-
-                async for row in self.fetch_rows_for_table(
-                    table=table,
-                    query=self.queries.table_data(table),
-                ):
-                    yield row
-        else:
-            logger.warning(
-                f"Fetched 0 tables for database: {self.database}. As database has no tables."
-            )
-
     async def fetch_documents(self, table, query=None):
         """Fetches all the table entries and format them in Elasticsearch documents
 
@@ -581,17 +468,6 @@ class MySqlDataSource(BaseDataSource):
             keys_value += f"{row.get(key)}_" if row.get(key) else ""
 
         return f"{table}_{keys_value}"
-
-    async def _get_primary_key_columns(self, table):
-        primary_key = await anext(
-            self._connect(query=self.queries.table_primary_key(table), table=table)
-        )
-
-        columns = []
-        for column_name in primary_key:
-            columns.append(f"{table}_{column_name[0]}")
-
-        return columns
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch tables and rows in async manner.
