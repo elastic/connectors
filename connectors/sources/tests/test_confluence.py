@@ -109,6 +109,23 @@ EXPECTED_ATTACHMENT = {
 
 RESPONSE_CONTENT = "# This is the dummy file"
 
+RESPONSE_SPACE_KEYS = {
+    "results": [
+        {
+            "id": 23456,
+            "key": "DM",
+        },
+        {
+            "id": 9876,
+            "key": "ES",
+        },
+    ],
+    "start": 0,
+    "limit": 100,
+    "size": 2,
+    "_links": {},
+}
+
 EXPECTED_CONTENT = {
     "_id": "att3637249",
     "_timestamp": "2023-01-03T09:24:50.633Z",
@@ -205,6 +222,35 @@ async def test_close_without_client_session():
     await source.close()
 
     assert source.confluence_client.session is None
+
+
+@pytest.mark.asyncio
+async def test_verify_spaces_when_space_keys_are_valid():
+    """Test verify_spaces method with valid space keys"""
+    source = create_source(ConfluenceDataSource)
+    source.confluence_client.spaces = ["DM", "ES"]
+    async_response = AsyncMock()
+    async_response.__aenter__ = AsyncMock(
+        return_value=JSONAsyncMock(RESPONSE_SPACE_KEYS)
+    )
+
+    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+        await source.confluence_client.verify_spaces()
+
+
+@pytest.mark.asyncio
+async def test_verify_spaces_when_space_keys_are_unavailable_then_raise_exception():
+    """Test verify_spaces method with unavailable space keys"""
+    source = create_source(ConfluenceDataSource)
+    source.confluence_client.spaces = ["ES", "CS"]
+    async_response = AsyncMock()
+    async_response.__aenter__ = AsyncMock(
+        return_value=JSONAsyncMock(RESPONSE_SPACE_KEYS)
+    )
+
+    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+        with pytest.raises(Exception, match="Configured unavailable spaces: CS"):
+            await source.confluence_client.verify_spaces()
 
 
 class MockSSL:

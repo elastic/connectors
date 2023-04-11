@@ -37,12 +37,12 @@ DOWNLOAD = "download"
 SPACE_QUERY = "limit=100"
 ATTACHMENT_QUERY = "limit=100&expand=version"
 CONTENT_QUERY = (
-    "limit=100&expand=children.attachment,history.lastUpdated,body.storage,space"
+    "limit=50&expand=children.attachment,history.lastUpdated,body.storage,space"
 )
 
 URLS = {
     SPACE: "rest/api/space?{api_query}",
-    CONTENT: "rest/api/content?{api_query}",
+    CONTENT: "rest/api/content/search?{api_query}",
     ATTACHMENT: "rest/api/content/{id}/child/attachment?{api_query}",
 }
 PING_URL = "rest/api/space?limit=1"
@@ -65,6 +65,7 @@ class ConfluenceClient:
         self.configuration = configuration
         self.is_cloud = self.configuration["data_source"] == CONFLUENCE_CLOUD
         self.host_url = self.configuration["confluence_url"]
+        self.spaces = self.configuration["spaces"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
         self.retry_count = self.configuration["retry_count"]
@@ -177,6 +178,25 @@ class ConfluenceClient:
                 )
                 break
 
+    async def verify_spaces(self):
+        """Checks if user configured spaces are available in confluence
+
+        Raises:
+            Exception: Configured unavailable spaces: <unavailable_space_keys>
+        """
+        if self.spaces == ["*"]:
+            return
+        space_keys = []
+        async for response in self.paginated_api_call(
+            url_name=SPACE, api_query=SPACE_QUERY
+        ):
+            spaces = response.get("results", [])
+            space_keys.extend([space["key"] for space in spaces])
+        if unavailable_spaces := set(self.spaces) - set(space_keys):
+            raise Exception(
+                f"Configured unavailable spaces: {', '.join(unavailable_spaces)}"
+            )
+
 
 class ConfluenceDataSource(BaseDataSource):
     """Confluence"""
@@ -253,17 +273,24 @@ class ConfluenceDataSource(BaseDataSource):
                 "type": "str",
                 "value": "http://127.0.0.1:5000",
             },
+            "spaces": {
+                "display": "textarea",
+                "label": "Confluence Space Keys",
+                "order": 7,
+                "type": "list",
+                "value": "*",
+            },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL verification",
-                "order": 7,
+                "order": 8,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 8,
+                "order": 9,
                 "type": "str",
                 "value": "",
             },
@@ -271,7 +298,7 @@ class ConfluenceDataSource(BaseDataSource):
                 "default_value": 3,
                 "display": "numeric",
                 "label": "Maximum retries per request",
-                "order": 9,
+                "order": 10,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -281,7 +308,7 @@ class ConfluenceDataSource(BaseDataSource):
                 "default_value": 50,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
-                "order": 10,
+                "order": 11,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -312,16 +339,16 @@ class ConfluenceDataSource(BaseDataSource):
         logger.info("Validating Confluence Configuration...")
 
         connection_fields = (
-            ["confluence_url", "account_email", "api_token"]
+            ["confluence_url", "account_email", "api_token", "spaces"]
             if self.confluence_client.is_cloud
-            else ["confluence_url", "username", "password"]
+            else ["confluence_url", "username", "password", "spaces"]
         )
         default_config = self.get_default_configuration()
 
         if empty_connection_fields := [
             default_config[field]["label"]
             for field in connection_fields
-            if self.configuration[field] == ""
+            if self.configuration[field] in ["", [""]]
         ]:
             raise Exception(
                 f"Configured keys: {empty_connection_fields} can't be empty."
@@ -364,13 +391,16 @@ class ConfluenceDataSource(BaseDataSource):
                 space_url = os.path.join(
                     self.confluence_client.host_url, space["_links"]["webui"][1:]
                 )
-                yield {
-                    "_id": space["id"],
-                    "type": "Space",
-                    "title": space["name"],
-                    "_timestamp": iso_utc(),
-                    "url": space_url,
-                }
+                if (self.confluence_client.spaces == ["*"]) or (
+                    space["key"] in self.confluence_client.spaces
+                ):
+                    yield {
+                        "_id": space["id"],
+                        "type": "Space",
+                        "title": space["name"],
+                        "_timestamp": iso_utc(),
+                        "url": space_url,
+                    }
 
     async def fetch_documents(self, api_query):
         """Get pages and blog posts with the help of REST APIs
@@ -557,11 +587,19 @@ class ConfluenceDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the content.
         """
+        await self.confluence_client.verify_spaces()
+        if self.confluence_client.spaces == ["*"]:
+            cql = "cql=type="
+        else:
+            quoted_spaces = "','".join(self.confluence_client.spaces)
+            cql = f"cql=space in ('{quoted_spaces}') AND type="
         await self.fetchers.put(self._space_coro)
         await self.fetchers.put(
-            partial(self._page_blog_coro, f"type=blogpost&{CONTENT_QUERY}")
+            partial(self._page_blog_coro, f"{cql}blogpost&{CONTENT_QUERY}")
         )
-        await self.fetchers.put(partial(self._page_blog_coro, CONTENT_QUERY))
+        await self.fetchers.put(
+            partial(self._page_blog_coro, f"{cql}page&{CONTENT_QUERY}")
+        )
         self.fetcher_count += 3
 
         async for item in self._consumer():
