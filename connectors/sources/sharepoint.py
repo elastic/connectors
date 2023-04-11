@@ -18,7 +18,7 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import BaseDataSource
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -219,40 +219,6 @@ class SharepointDataSource(BaseDataSource):
                 "value": RETRIES,
             },
         }
-
-    async def validate_config(self):
-        """Validates whether user input is empty or not for configuration fields
-
-        Raises:
-            Exception: Configured keys can't be empty.
-        """
-        logger.info("Validating SharePoint Configuration")
-
-        connection_fields = (
-            [
-                "host_url",
-                "site_collections",
-                "client_id",
-                "secret_id",
-                "tenant",
-                "tenant_id",
-            ]
-            if self.is_cloud
-            else ["host_url", "site_collections", "username", "password"]
-        )
-
-        default_config = self.get_default_configuration()
-
-        if empty_connection_fields := [
-            default_config[field]["label"]
-            for field in connection_fields
-            if self.configuration[field] == ""
-        ]:
-            raise ConfigurableFieldValueError(
-                f"Configured keys: {empty_connection_fields} can't be empty."
-            )
-        if self.ssl_enabled and self.certificate == "":
-            raise ConfigurableFieldValueError("SSL certificate must be configured.")
 
     @retryable(
         retries=RETRIES,

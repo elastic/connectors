@@ -315,6 +315,7 @@ class MySqlDataSource(BaseDataSource):
                 "value": DEFAULT_SSL_ENABLED,
             },
             "ssl_ca": {
+                "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
                 "order": 8,
                 "type": "str",
@@ -367,26 +368,7 @@ class MySqlDataSource(BaseDataSource):
         Raises:
             Exception: Configured keys can't be empty
         """
-        connection_fields = ["host", "port", "user", "password", "database", "tables"]
-        empty_connection_fields = []
-        for field in connection_fields:
-            if self.configuration[field] == "":
-                empty_connection_fields.append(field)
-
-        if empty_connection_fields:
-            raise ConfigurableFieldValueError(
-                f"Configured keys: {empty_connection_fields} can't be empty."
-            )
-
-        if (
-            isinstance(self.configuration["port"], str)
-            and not self.configuration["port"].isnumeric()
-        ):
-            raise ConfigurableFieldValueError("Configured port has to be an integer.")
-
-        if self.ssl_enabled and (self.certificate == "" or self.certificate is None):
-            raise ConfigurableFieldValueError("SSL certificate must be configured.")
-
+        self.configuration.check_valid()
         await self._remote_validation()
 
     @retryable(
