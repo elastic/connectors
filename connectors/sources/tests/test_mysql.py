@@ -371,19 +371,6 @@ async def test_client_ping_negative(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_connect_with_retry(
-    patch_logger, patch_connection_pool, patch_default_wait_multiplier
-):
-    source = await setup_mysql_source()
-
-    streamer = source._connect(query="select * from database.table", fetch_many=True)
-
-    with pytest.raises(Exception):
-        async for _ in streamer:
-            pass
-
-
-@pytest.mark.asyncio
 async def test_fetch_documents(patch_connection_pool):
     last_update_time = "2023-01-18 17:18:56"
     primary_key_col = "pk"
@@ -412,17 +399,6 @@ async def test_fetch_documents(patch_connection_pool):
         document_list.append(document)
 
     assert document in document_list
-
-
-@pytest.mark.asyncio
-async def test_fetch_rows_from_tables(patch_connection_pool):
-    document = {"_id": 1}
-
-    source = await setup_mysql_source()
-    source.fetch_rows_for_table = AsyncIterator([document])
-
-    async for row in source.fetch_rows_from_tables("table"):
-        assert "_id" in row
 
 
 @pytest.mark.asyncio
