@@ -246,11 +246,7 @@ class DataSourceConfiguration:
     def __getitem__(self, key):
         if key not in self._config and key in self._defaults:
             return self._defaults[key]
-
-        if self._config[key].required:
-            return self._config[key].value
-
-        return self._config[key].value or self._config[key].default_value
+        return self._config[key].value
 
     def get(self, key, default=None):
         if key not in self._config:
