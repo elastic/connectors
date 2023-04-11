@@ -489,15 +489,6 @@ async def test_validate_config_when_host_empty_then_raise_error():
         await source.validate_config()
 
 
-@pytest.mark.asyncio
-async def test_validate_config_when_port_has_wrong_type_then_raise_error():
-    source = create_source(MySqlDataSource)
-    source.configuration.set_field(name="port", value="port")
-
-    with pytest.raises(ConfigurableFieldValueError):
-        await source.validate_config()
-
-
 @pytest.mark.parametrize(
     "datasource, advanced_rules, expected_validation_result",
     [

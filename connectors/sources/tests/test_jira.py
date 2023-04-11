@@ -279,11 +279,10 @@ async def test_ping_for_failed_connection_exception(client_session_get):
 
 
 @pytest.mark.asyncio
-async def test_validate_config_for_ssl_enabled():
+async def test_validate_config_for_ssl_enabled_when_ssl_ca_empty_raises_error():
     """This function test _validate_configuration when certification is empty when ssl is enabled"""
     # Setup
-    source = create_source(JiraDataSource)
-    source.jira_client.ssl_enabled = True
+    source = create_source(JiraDataSource, ssl_enabled=True)
 
     # Execute
     with pytest.raises(ConfigurableFieldValueError):
@@ -295,13 +294,12 @@ async def test_validate_config_with_invalid_concurrent_downloads():
     """Test validate_config method of BaseDataSource class with invalid concurrent downloads"""
 
     # Setup
-    source = create_source(JiraDataSource)
-    source.concurrent_downloads = 1000
+    source = create_source(JiraDataSource, concurrent_downloads=1000)
 
     # Execute
     with pytest.raises(
         ConfigurableFieldValueError,
-        match="Configured concurrent downloads can't be set more than *",
+        match="Field validation errors: `Number of concurrent downloads for fetching attachment content` value `1000` should be less than 101.",
     ):
         await source.validate_config()
 
