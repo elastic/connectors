@@ -671,6 +671,9 @@ class SyncJobIndex(ESIndex):
             },
             "trigger_method": trigger_method.value,
             "status": JobStatus.PENDING.value,
+            "indexed_document_count": 0,
+            "indexed_document_volume": 0,
+            "deleted_document_count": 0,
             "created_at": iso_utc(),
             "last_seen": iso_utc(),
         }

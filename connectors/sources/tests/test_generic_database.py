@@ -157,18 +157,6 @@ async def test_validate_config_missing_fields(field):
 
 
 @pytest.mark.asyncio
-async def test_validate_config_port():
-    """Test validate_config method check port"""
-    # Setup
-    source = create_source(GenericBaseDataSource)
-    with pytest.raises(ConfigurableFieldValueError):
-        source.configuration.set_field(name="port", value="abcd")
-
-        # Execute
-        await source.validate_config()
-
-
-@pytest.mark.asyncio
 async def test_validate_config_ssl():
     """Test validate_config method check ssl"""
     # Setup

@@ -67,7 +67,7 @@ async def test_empty_configuration():
     # Execute
     with pytest.raises(
         ConfigurableFieldValueError,
-        match="Google Cloud service account json can't be empty.",
+        match="Field validation errors: `Service_account_credentials` cannot be empty.",
     ):
         await gcs_object.validate_config()
 
