@@ -36,7 +36,7 @@ native_service_types:
   - postgresql
   - oracle
   - dir
-  # - mssql # temporary not working, migrating it to a different library
+  - mssql
 
 
 # Connector client settings
@@ -53,5 +53,4 @@ sources:
   azure_blob_storage: connectors.sources.azure_blob_storage:AzureBlobStorageDataSource
   postgresql: connectors.sources.postgresql:PostgreSQLDataSource
   oracle: connectors.sources.oracle:OracleDataSource
-  # mssql: connectors.sources.mssql:MSSQLDataSource # temporary not working, migrating it to a different library
-
+  mssql: connectors.sources.mssql:MSSQLDataSource
