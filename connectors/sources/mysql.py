@@ -20,7 +20,13 @@ from connectors.sources.generic_database import (
     configured_tables,
     is_wildcard,
 )
-from connectors.utils import CancellableSleeps, RetryStrategy, retryable, ssl_context
+from connectors.utils import (
+    CancellableSleeps,
+    RetryStrategy,
+    iso_utc,
+    retryable,
+    ssl_context,
+)
 
 SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN = re.compile(r"`(?:[^`]|``)+`|\w+")
 
@@ -85,16 +91,10 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def _remote_validation(self, advanced_rules):
-        await self.source.ping()
+        async with self.source.mysql_client() as client:
+            tables = set(await client.get_all_table_names())
 
-        tables = set(
-            map(
-                lambda table: table[0],
-                await self.source.fetch_all_tables(),
-            )
-        )
         tables_to_filter = set(advanced_rules.keys())
-
         missing_tables = tables_to_filter - tables
 
         if len(missing_tables) > 0:
@@ -120,6 +120,7 @@ class MySQLClient:
         ssl_certificate,
         database=None,
         max_pool_size=MAX_POOL_SIZE,
+        fetch_size=DEFAULT_FETCH_SIZE,
     ):
         self.host = host
         self.port = port
@@ -127,6 +128,7 @@ class MySQLClient:
         self.password = password
         self.database = database
         self.max_pool_size = max_pool_size
+        self.fetch_size = fetch_size
         self.ssl_enabled = ssl_enabled
         self.ssl_certificate = ssl_certificate
         self.queries = MySQLQueries(self.database)
@@ -148,9 +150,13 @@ class MySQLClient:
         self.connection_pool = await aiomysql.create_pool(**connection_string)
         self.connection = await self.connection_pool.acquire()
 
+        self._sleeps = CancellableSleeps()
+
         return self
 
     async def __aexit__(self, exception_type, exception_value, exception_traceback):
+        self._sleeps.cancel()
+
         self.connection_pool.release(self.connection)
         self.connection_pool.close()
         await self.connection_pool.wait_closed()
@@ -186,7 +192,12 @@ class MySQLClient:
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
             await cursor.execute(query)
 
-            return [f"{table}_{column[0]}" for column in cursor.description]
+            return [f"{table}_{column[0]}" for column in await cursor.fetchall()]
+
+    async def get_primary_key_column_names(self, table):
+        return await self.get_column_names(
+            table, query=self.queries.table_primary_key(table)
+        )
 
     @retryable(
         retries=RETRIES,
@@ -203,6 +214,50 @@ class MySQLClient:
                 return result[0]
 
             return None
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def yield_rows_for_table(self, table):
+        async for row in self._fetchmany_in_batches(self.queries.table_data(table)):
+            yield row
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def yield_rows_for_query(self, query):
+        async for row in self._fetchmany_in_batches(query):
+            yield row
+
+    async def _fetchmany_in_batches(self, query):
+        async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+            await cursor.execute(query)
+
+            fetched_rows = 0
+            successful_batches = 0
+
+            try:
+                while True:
+                    rows = await cursor.fetchmany(self.fetch_size)
+
+                    if not rows:
+                        break
+
+                    for row in rows:
+                        yield row
+
+                    fetched_rows += len(rows)
+                    successful_batches += 1
+
+                    await self._sleeps.sleep(0)
+            except IndexError as e:
+                logger.exception(
+                    f"Fetched {fetched_rows} rows in {successful_batches} batches. Encountered exception {e} in batch {successful_batches + 1}."
+                )
 
 
 class MySqlDataSource(BaseDataSource):
@@ -281,6 +336,7 @@ class MySqlDataSource(BaseDataSource):
                 "value": DEFAULT_SSL_ENABLED,
             },
             "ssl_ca": {
+                "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
                 "order": 8,
                 "type": "str",
@@ -308,13 +364,14 @@ class MySqlDataSource(BaseDataSource):
             },
         }
 
-    def _mysql_client(self):
+    def mysql_client(self):
         return MySQLClient(
             host=self.configuration["host"],
             port=self.configuration["port"],
             user=self.configuration["user"],
             password=self.configuration["password"],
             database=self.configuration["database"],
+            fetch_size=self.configuration["fetch_size"],
             ssl_enabled=self.configuration["ssl_enabled"],
             ssl_certificate=self.configuration["ssl_ca"],
         )
@@ -332,26 +389,7 @@ class MySqlDataSource(BaseDataSource):
         Raises:
             Exception: Configured keys can't be empty
         """
-        connection_fields = ["host", "port", "user", "password", "database", "tables"]
-        empty_connection_fields = []
-        for field in connection_fields:
-            if self.configuration[field] == "":
-                empty_connection_fields.append(field)
-
-        if empty_connection_fields:
-            raise ConfigurableFieldValueError(
-                f"Configured keys: {empty_connection_fields} can't be empty."
-            )
-
-        if (
-            isinstance(self.configuration["port"], str)
-            and not self.configuration["port"].isnumeric()
-        ):
-            raise ConfigurableFieldValueError("Configured port has to be an integer.")
-
-        if self.ssl_enabled and (self.certificate == "" or self.certificate is None):
-            raise ConfigurableFieldValueError("SSL certificate must be configured.")
-
+        self.configuration.check_valid()
         await self._remote_validation()
 
     @retryable(
@@ -360,7 +398,7 @@ class MySqlDataSource(BaseDataSource):
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def _remote_validation(self):
-        async with self._mysql_client() as client:
+        async with self.mysql_client() as client:
             async with client.connection.cursor() as cursor:
                 await self._validate_database_accessible(cursor)
                 await self._validate_tables_accessible(cursor)
@@ -389,124 +427,8 @@ class MySqlDataSource(BaseDataSource):
             )
 
     async def ping(self):
-        async with self._mysql_client() as client:
+        async with self.mysql_client() as client:
             await client.ping()
-
-    async def _connect(self, query, fetch_many=False, **query_kwargs):
-        """Executes the passed query on the MySQL server.
-
-        Args:
-            query (str): MySql query to be executed.
-            query_kwargs (dict): Query kwargs to format the query.
-            fetch_many (boolean): Should use fetchmany to fetch the response.
-
-        Yields:
-            list: Column names and query response
-        """
-
-        formatted_query = query.format(**query_kwargs)
-        size = self.configuration["fetch_size"]
-        retry = 1
-        yield_once = True
-
-        rows_fetched = 0
-        cursor_position = 0
-
-        async with self._mysql_client() as client:
-            while retry <= self.retry_count:
-                try:
-                    async with client.connection.cursor(
-                        aiomysql.cursors.SSCursor
-                    ) as cursor:
-                        await cursor.execute(formatted_query)
-
-                        if fetch_many:
-                            # sending back column names only once
-                            if yield_once:
-                                yield [
-                                    f"{query_kwargs['table']}_{column[0]}"
-                                    for column in cursor.description
-                                ]
-                                yield_once = False
-
-                            # setting cursor position where it was failed
-                            if cursor_position:
-                                await cursor.scroll(cursor_position, mode="absolute")
-
-                            while True:
-                                rows = await cursor.fetchmany(size=size)
-                                rows_length = len(rows)
-
-                                # resetting cursor position & retry to 0 for next batch
-                                if cursor_position:
-                                    cursor_position = retry = 0
-
-                                if not rows_length:
-                                    break
-
-                                for row in rows:
-                                    yield row
-
-                                rows_fetched += rows_length
-                                await self._sleeps.sleep(0)
-                        else:
-                            yield await cursor.fetchall()
-                        break
-                except IndexError as exception:
-                    logger.exception(
-                        f"None of responses fetched from {rows_fetched} rows. Exception: {exception}"
-                    )
-                    break
-                except Exception as exception:
-                    logger.warning(
-                        f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
-                    )
-                    if retry == self.retry_count:
-                        raise exception
-                    cursor_position = rows_fetched
-                    await self._sleeps.sleep(RETRY_INTERVAL**retry)
-                    retry += 1
-
-    async def fetch_all_tables(self):
-        return await anext(self._connect(query=self.queries.all_tables()))
-
-    async def fetch_rows_for_table(self, table=None, query=None):
-        """Fetches all the rows from all the tables of the database.
-
-        Args:
-            table (str): Name of the table to fetch from
-            query (str): MySQL query
-
-        Yields:
-            Dict: Row document to index
-        """
-        if table is not None:
-            async for row in self.fetch_documents(table=table, query=query):
-                yield row
-        else:
-            logger.warning(
-                f"Fetched 0 rows for the table: {table}. As table has no rows."
-            )
-
-    async def fetch_rows_from_tables(self, tables):
-        """Fetches all the rows from all the tables of the database.
-
-        Yields:
-            Dict: Row document to index
-        """
-        if tables:
-            for table in tables:
-                logger.debug(f"Found table: {table} in database: {self.database}.")
-
-                async for row in self.fetch_rows_for_table(
-                    table=table,
-                    query=self.queries.table_data(table),
-                ):
-                    yield row
-        else:
-            logger.warning(
-                f"Fetched 0 tables for database: {self.database}. As database has no tables."
-            )
 
     async def fetch_documents(self, table, query=None):
         """Fetches all the table entries and format them in Elasticsearch documents
@@ -519,35 +441,33 @@ class MySqlDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
 
-        primary_key_columns = await self._get_primary_key_columns(table)
+        async with self.mysql_client() as client:
+            primary_key_columns = await client.get_primary_key_column_names(table)
 
-        if not primary_key_columns:
-            logger.warning(
-                f"Skipping {table} table from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
+            if not primary_key_columns:
+                logger.warning(
+                    f"Skipping {table} table from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
+                )
+                return
+
+            last_update_time = await client.get_last_update_time(table)
+            column_names = await client.get_column_names(table)
+            row_generator = (
+                client.yield_rows_for_table(table)
+                if query is None
+                else client.yield_rows_for_query(query)
             )
-            return
 
-        last_update_time = await anext(
-            self._connect(
-                query=self.queries.table_last_update_time(table),
-                table=table,
-            )
-        )
-        last_update_time = last_update_time[0][0]
-
-        table_rows = self._connect(query=query, fetch_many=True, table=table)
-        column_names = await anext(table_rows)
-
-        async for row in table_rows:
-            row = dict(zip(column_names, row))
-            row.update(
-                {
-                    "_id": self._generate_id(table, row, primary_key_columns),
-                    "_timestamp": last_update_time,
-                    "Table": table,
-                }
-            )
-            yield self.serialize(doc=row)
+            async for row in row_generator:
+                row = dict(zip(column_names, row))
+                row.update(
+                    {
+                        "_id": self._generate_id(table, row, primary_key_columns),
+                        "_timestamp": last_update_time or iso_utc(),
+                        "Table": table,
+                    }
+                )
+                yield self.serialize(doc=row)
 
     def _generate_id(self, table, row, primary_key_columns):
         keys_value = ""
@@ -555,17 +475,6 @@ class MySqlDataSource(BaseDataSource):
             keys_value += f"{row.get(key)}_" if row.get(key) else ""
 
         return f"{table}_{keys_value}"
-
-    async def _get_primary_key_columns(self, table):
-        primary_key = await anext(
-            self._connect(query=self.queries.table_primary_key(table), table=table)
-        )
-
-        columns = []
-        for column_name in primary_key:
-            columns.append(f"{table}_{column_name[0]}")
-
-        return columns
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch tables and rows in async manner.
@@ -581,27 +490,19 @@ class MySqlDataSource(BaseDataSource):
                 logger.debug(
                     f"Fetching rows from table '{table}' in database '{self.database}' with a custom query."
                 )
-                async for row in self.fetch_rows_for_table(
-                    table=table,
-                    query=query,
-                ):
+                async for row in self.fetch_documents(table, query):
                     yield row, None
                 await self._sleeps.sleep(0)
         else:
             tables_to_fetch = await self.get_tables_to_fetch()
 
-            async for row in self.fetch_rows_from_tables(tables_to_fetch):
-                yield row, None
-            await self._sleeps.sleep(0)
+            for table in tables_to_fetch:
+                async for row in self.fetch_documents(table):
+                    yield row, None
+                await self._sleeps.sleep(0)
 
     async def get_tables_to_fetch(self):
         tables = configured_tables(self.tables)
 
-        def table_name(table):
-            return table[0]
-
-        return (
-            map(lambda table: table_name(table), await self.fetch_all_tables())
-            if is_wildcard(tables)
-            else tables
-        )
+        async with self.mysql_client() as client:
+            return await client.get_all_table_names() if is_wildcard(tables) else tables

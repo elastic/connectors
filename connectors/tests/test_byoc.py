@@ -374,9 +374,12 @@ async def test_heartbeat(interval, last_seen, should_send_heartbeat):
 
 @pytest.mark.asyncio
 async def test_sync_starts():
-    connector_doc = {"_id": "1"}
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {"_id": doc_id, "_seq_no": seq_no, "_primary_term": primary_term}
     index = Mock()
-    index.update = AsyncMock(return_value=1)
+    index.update = AsyncMock()
     expected_doc_source_update = {
         "last_sync_status": JobStatus.IN_PROGRESS.value,
         "last_sync_error": None,
@@ -385,7 +388,12 @@ async def test_sync_starts():
 
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     await connector.sync_starts()
-    index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
+    index.update.assert_called_with(
+        doc_id=connector.id,
+        doc=expected_doc_source_update,
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
 
 
 @pytest.mark.asyncio
@@ -769,16 +777,52 @@ async def test_prepare(mock_responses):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "sync_now, updated, expected_result",
-    [(False, None, False), (True, "updated", True), (True, "noop", False)],
-)
-async def test_connector_reset_sync_now_flag(sync_now, updated, expected_result):
-    connector_doc = {"_id": "1", "_source": {"sync_now": sync_now}}
+async def test_connector_reset_sync_now_flag():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
     index = Mock()
-    index.update_by_script = AsyncMock(return_value={"result": updated})
+    index.update = AsyncMock()
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    assert await connector.reset_sync_now_flag() == expected_result
+    await connector.reset_sync_now_flag()
+
+    index.update.assert_awaited_once_with(
+        doc_id=doc_id,
+        doc={"sync_now": False},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.asyncio
+async def test_connector_update_last_sync_scheduled_at():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    new_ts = datetime.utcnow() + timedelta(seconds=20)
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    index = Mock()
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.update_last_sync_scheduled_at(new_ts)
+
+    index.update.assert_awaited_once_with(
+        doc_id=doc_id,
+        doc={"last_sync_scheduled_at": new_ts.isoformat()},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
 
 
 @pytest.mark.asyncio
@@ -1188,6 +1232,9 @@ async def test_create_job(index_method, trigger_method, set_env):
         "connector": ANY,
         "trigger_method": trigger_method.value,
         "status": JobStatus.PENDING.value,
+        "indexed_document_count": 0,
+        "indexed_document_volume": 0,
+        "deleted_document_count": 0,
         "created_at": ANY,
         "last_seen": ANY,
     }

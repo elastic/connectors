@@ -3,11 +3,12 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import functools
 import logging
 import time
 
 from elastic_transport.client_utils import url_to_node_config
-from elasticsearch import ApiError, AsyncElasticsearch
+from elasticsearch import ApiError, AsyncElasticsearch, ConflictError
 from elasticsearch import ConnectionError as ElasticConnectionError
 from elasticsearch import NotFoundError
 
@@ -131,3 +132,24 @@ class ESClient:
 
     async def delete_indices(self, indices):
         await self.client.indices.delete(index=indices, ignore_unavailable=True)
+
+
+def with_concurrency_control(retries=3):
+    def wrapper(func):
+        @functools.wraps(func)
+        async def wrapped(*args, **kwargs):
+            retry = 1
+            while retry <= retries:
+                try:
+                    return await func(*args, **kwargs)
+                except ConflictError as e:
+                    logger.debug(
+                        f"A conflict error was returned from elasticsearch: {e.message}"
+                    )
+                    if retry >= retries:
+                        raise e
+                    retry += 1
+
+        return wrapped
+
+    return wrapper

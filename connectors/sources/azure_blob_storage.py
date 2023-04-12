@@ -103,7 +103,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "type": "int",
                 "ui_restrictions": ["advanced"],
                 "validations": [
-                    {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS}
+                    {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
                 ],
                 "value": MAX_CONCURRENT_DOWNLOADS,
             },

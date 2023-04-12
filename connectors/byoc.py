@@ -492,16 +492,20 @@ class Connector(ESDocument):
         return next_run(self.scheduling.get("interval"))
 
     async def reset_sync_now_flag(self):
-        """Reset sync_now flag to False, and return True only if the flag is updated."""
-        if not self.sync_now:
-            return False
+        await self.index.update(
+            doc_id=self.id,
+            doc={"sync_now": False},
+            if_seq_no=self._seq_no,
+            if_primary_term=self._primary_term,
+        )
 
-        script = {
-            "lang": "painless",
-            "source": "if (ctx._source.sync_now) { ctx._source.sync_now = false } else { ctx.op = 'noop' }",
-        }
-        resp = await self.index.update_by_script(doc_id=self.id, script=script)
-        return resp["result"] == "updated"
+    async def update_last_sync_scheduled_at(self, new_ts):
+        await self.index.update(
+            doc_id=self.id,
+            doc={"last_sync_scheduled_at": new_ts.isoformat()},
+            if_seq_no=self._seq_no,
+            if_primary_term=self._primary_term,
+        )
 
     async def sync_starts(self):
         doc = {
@@ -509,7 +513,12 @@ class Connector(ESDocument):
             "last_sync_error": None,
             "status": Status.CONNECTED.value,
         }
-        await self.index.update(doc_id=self.id, doc=doc)
+        await self.index.update(
+            doc_id=self.id,
+            doc=doc,
+            if_seq_no=self._seq_no,
+            if_primary_term=self._primary_term,
+        )
 
     async def error(self, error):
         doc = {
@@ -671,6 +680,9 @@ class SyncJobIndex(ESIndex):
             },
             "trigger_method": trigger_method.value,
             "status": JobStatus.PENDING.value,
+            "indexed_document_count": 0,
+            "indexed_document_volume": 0,
+            "deleted_document_count": 0,
             "created_at": iso_utc(),
             "last_seen": iso_utc(),
         }
