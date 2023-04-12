@@ -340,7 +340,10 @@ async def test_verify_spaces_when_space_keys_are_unavailable_then_raise_exceptio
     )
 
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-        with pytest.raises(Exception, match="Configured unavailable spaces: CS"):
+        with pytest.raises(
+            Exception,
+            match="Spaces 'CS' are not available. Available spaces are: 'DM, ES'",
+        ):
             await source.confluence_client.verify_spaces()
 
 
