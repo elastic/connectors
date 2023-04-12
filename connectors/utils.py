@@ -6,6 +6,7 @@
 import asyncio
 import base64
 import functools
+import hashlib
 import inspect
 import os
 import platform
@@ -504,3 +505,8 @@ def get_pem_format(key, max_split=-1):
     key = " ".join(key.split("\n", max_split))
     key = " ".join(key.rsplit("\n", max_split))
     return key
+
+
+def hash_id(_id):
+    # Collision probability: 1.47*10^-29
+    return hashlib.md5(_id.encode("utf8")).hexdigest()
