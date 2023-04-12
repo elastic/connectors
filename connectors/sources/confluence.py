@@ -326,19 +326,15 @@ class ConfluenceDataSource(BaseDataSource):
         if self.spaces == ["*"]:
             return
         space_keys = []
-        try:
-            async for response in self.confluence_client.paginated_api_call(
-                url_name=SPACE, api_query=SPACE_QUERY
-            ):
-                spaces = response.get("results", [])
-                space_keys.extend([space["key"] for space in spaces])
-            if unavailable_spaces := set(self.spaces) - set(space_keys):
-                raise ConfigurableFieldValueError(
-                    f"Spaces '{', '.join(unavailable_spaces)}' are not available. Available spaces are: '{', '.join(space_keys)}'"
-                )
-        except Exception:
-            logger.exception("Error while verifying configured spaces")
-            raise
+        async for response in self.confluence_client.paginated_api_call(
+            url_name=SPACE, api_query=SPACE_QUERY
+        ):
+            spaces = response.get("results", [])
+            space_keys.extend([space["key"] for space in spaces])
+        if unavailable_spaces := set(self.spaces) - set(space_keys):
+            raise ConfigurableFieldValueError(
+                f"Spaces '{', '.join(unavailable_spaces)}' are not available. Available spaces are: '{', '.join(space_keys)}'"
+            )
 
     async def ping(self):
         """Verify the connection with Confluence"""
