@@ -30,7 +30,7 @@ For additional operations, see [Usage](https://www.elastic.co/guide/en/enterpris
 
 ### Compatibility
 
-Confluence Cloud or Confluence Server versions 7 or later are compatible with Elastic connector frameworks.
+Confluence Cloud or Confluence Server versions 7 or later are compatible with Elastic connector frameworks. Confluence Data Center editions are not currently supported.
 
 ### Configuration
 
@@ -62,6 +62,13 @@ The domain where the Confluence is hosted. Examples:
 
   - `https://192.158.1.38:8080/`
   - `https://test_user.atlassian.net/`
+
+##### `spaces`
+
+Comma-separated list of [Space Keys](https://confluence.atlassian.com/doc/space-keys-829076188.html) to fetch data from Confluence server or cloud. If the value is `*`, the connector will fetch data from all spaces present in the configured `spaces` . Default value is `*`. Examples:
+
+  - `EC, TP`
+  - `*`
 
 ##### `ssl_enabled`
 
