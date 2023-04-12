@@ -6,6 +6,8 @@
 import asyncio
 import base64
 import functools
+import hashlib
+import inspect
 import os
 import platform
 import shutil
@@ -61,14 +63,9 @@ def iso_utc(when=None):
 
 
 def next_run(quartz_definition):
-    """Returns the number of seconds before the next run."""
+    """Returns the datetime of the next run."""
     cron_obj = QuartzCron(quartz_definition, datetime.utcnow())
-    when = cron_obj.next_trigger()
-    now = datetime.utcnow()
-    secs = (when - now).total_seconds()
-    if secs < 1.0:
-        secs = 0
-    return secs
+    return cron_obj.next_trigger()
 
 
 INVALID_CHARS = "\\", "/", "*", "?", '"', "<", ">", "|", " ", ",", "#"
@@ -383,31 +380,60 @@ class UnknownRetryStrategyError(Exception):
 
 def retryable(retries=3, interval=1.0, strategy=RetryStrategy.LINEAR_BACKOFF):
     def wrapper(func):
-        @functools.wraps(func)
-        async def func_to_execute(*args, **kwargs):
-            retry = 1
-            while retry <= retries:
-                try:
-                    return await func(*args, **kwargs)
-                except Exception as e:
-                    if retry >= retries:
-                        raise e
-
-                    match strategy:
-                        case RetryStrategy.CONSTANT:
-                            await asyncio.sleep(interval)
-                        case RetryStrategy.LINEAR_BACKOFF:
-                            await asyncio.sleep(interval * retry)
-                        case RetryStrategy.EXPONENTIAL_BACKOFF:
-                            await asyncio.sleep(interval**retry)
-                        case _:
-                            raise UnknownRetryStrategyError()
-
-                    retry += 1
-
-        return func_to_execute
+        if inspect.isasyncgenfunction(func):
+            return retryable_async_generator(func, retries, interval, strategy)
+        else:
+            return retryable_async_function(func, retries, interval, strategy)
 
     return wrapper
+
+
+def retryable_async_function(func, retries, interval, strategy):
+    @functools.wraps(func)
+    async def wrapped(*args, **kwargs):
+        retry = 1
+        while retry <= retries:
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                if retry >= retries:
+                    raise e
+
+                await apply_retry_strategy(strategy, interval, retry)
+                retry += 1
+
+    return wrapped
+
+
+def retryable_async_generator(func, retries, interval, strategy):
+    @functools.wraps(func)
+    async def wrapped(*args, **kwargs):
+        retry = 1
+        while retry <= retries:
+            try:
+                async for item in func(*args, **kwargs):
+                    yield item
+                break
+            except Exception as e:
+                if retry >= retries:
+                    raise e
+
+                await apply_retry_strategy(strategy, interval, retry)
+                retry += 1
+
+    return wrapped
+
+
+async def apply_retry_strategy(strategy, interval, retry):
+    match strategy:
+        case RetryStrategy.CONSTANT:
+            await asyncio.sleep(interval)
+        case RetryStrategy.LINEAR_BACKOFF:
+            await asyncio.sleep(interval * retry)
+        case RetryStrategy.EXPONENTIAL_BACKOFF:
+            await asyncio.sleep(interval**retry)
+        case _:
+            raise UnknownRetryStrategyError()
 
 
 def ssl_context(certificate):
@@ -479,3 +505,8 @@ def get_pem_format(key, max_split=-1):
     key = " ".join(key.split("\n", max_split))
     key = " ".join(key.rsplit("\n", max_split))
     return key
+
+
+def hash_id(_id):
+    # Collision probability: 1.47*10^-29
+    return hashlib.md5(_id.encode("utf8")).hexdigest()

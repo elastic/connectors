@@ -3,6 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from unittest.mock import AsyncMock, Mock
+
 import pytest
 from elasticsearch import ApiError, ConflictError
 
@@ -144,8 +146,8 @@ async def test_index(mock_responses):
         payload={"_id": doc_id},
     )
 
-    indexed_id = await index.index({})
-    assert indexed_id == doc_id
+    resp = await index.index({})
+    assert resp["_id"] == doc_id
 
     await index.close()
 
@@ -180,6 +182,20 @@ async def test_update_with_concurrency_control(mock_responses):
         await index.update(doc_id, {}, if_seq_no=1, if_primary_term=1)
 
     await index.close()
+
+
+@pytest.mark.asyncio
+async def test_update_by_script():
+    doc_id = "1"
+    script = {"source": ""}
+    index = ESIndex(index_name, config)
+    index.client = Mock()
+    index.client.update = AsyncMock()
+
+    await index.update_by_script(doc_id, script)
+    index.client.update.assert_awaited_once_with(
+        index=index_name, id=doc_id, script=script
+    )
 
 
 @pytest.mark.asyncio

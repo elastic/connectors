@@ -14,7 +14,6 @@ import pytest
 from connectors.byoc import (
     IDLE_JOBS_THRESHOLD,
     JOB_NOT_FOUND_ERROR,
-    SYNC_DISABLED,
     Connector,
     ConnectorIndex,
     Features,
@@ -318,6 +317,7 @@ async def test_connector_properties():
             "last_seen": iso_utc(),
             "last_sync_status": "completed",
             "pipeline": {},
+            "last_sync_scheduled_at": iso_utc(),
         },
     }
 
@@ -337,6 +337,7 @@ async def test_connector_properties():
     assert isinstance(connector.filtering, Filtering)
     assert isinstance(connector.pipeline, Pipeline)
     assert isinstance(connector.features, Features)
+    assert isinstance(connector.last_sync_scheduled_at, datetime)
 
 
 @pytest.mark.asyncio
@@ -373,9 +374,12 @@ async def test_heartbeat(interval, last_seen, should_send_heartbeat):
 
 @pytest.mark.asyncio
 async def test_sync_starts():
-    connector_doc = {"_id": "1"}
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {"_id": doc_id, "_seq_no": seq_no, "_primary_term": primary_term}
     index = Mock()
-    index.update = AsyncMock(return_value=1)
+    index.update = AsyncMock()
     expected_doc_source_update = {
         "last_sync_status": JobStatus.IN_PROGRESS.value,
         "last_sync_error": None,
@@ -384,7 +388,12 @@ async def test_sync_starts():
 
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     await connector.sync_starts()
-    index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
+    index.update.assert_called_with(
+        doc_id=connector.id,
+        doc=expected_doc_source_update,
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
 
 
 @pytest.mark.asyncio
@@ -489,28 +498,27 @@ async def test_sync_done(job, expected_doc_source_update):
     index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
 
 
+mock_next_run = iso_utc()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "sync_now, scheduling_enabled, expected_next_sync",
+    "scheduling_enabled, expected_next_sync",
     [
-        (True, False, 0),
-        (False, False, SYNC_DISABLED),
-        (False, True, 10),
+        (False, None),
+        (True, mock_next_run),
     ],
 )
 @patch("connectors.byoc.next_run")
-async def test_connector_next_sync(
-    next_run, sync_now, scheduling_enabled, expected_next_sync
-):
+async def test_connector_next_sync(next_run, scheduling_enabled, expected_next_sync):
     connector_doc = {
         "_id": "1",
         "_source": {
-            "sync_now": sync_now,
             "scheduling": {"enabled": scheduling_enabled, "interval": "1 * * * * *"},
         },
     }
     index = Mock()
-    next_run.return_value = 10
+    next_run.return_value = mock_next_run
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     assert connector.next_sync() == expected_next_sync
 
@@ -766,6 +774,55 @@ async def test_prepare(mock_responses):
     assert connector.status == Status.NEEDS_CONFIGURATION
     assert connector.service_type == service_type
     assert not connector.configuration.is_empty()
+
+
+@pytest.mark.asyncio
+async def test_connector_reset_sync_now_flag():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    index = Mock()
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.reset_sync_now_flag()
+
+    index.update.assert_awaited_once_with(
+        doc_id=doc_id,
+        doc={"sync_now": False},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.asyncio
+async def test_connector_update_last_sync_scheduled_at():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    new_ts = datetime.utcnow() + timedelta(seconds=20)
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    index = Mock()
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.update_last_sync_scheduled_at(new_ts)
+
+    index.update.assert_awaited_once_with(
+        doc_id=doc_id,
+        doc={"last_sync_scheduled_at": new_ts.isoformat()},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
 
 
 @pytest.mark.asyncio
@@ -1155,20 +1212,19 @@ def test_nested_get(nested_dict, keys, default, expected):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "sync_now, trigger_method",
+    "trigger_method",
     [
-        (True, JobTriggerMethod.ON_DEMAND),
-        (False, JobTriggerMethod.SCHEDULED),
+        JobTriggerMethod.ON_DEMAND,
+        JobTriggerMethod.SCHEDULED,
     ],
 )
 @patch("connectors.byoc.SyncJobIndex.index")
-async def test_create_job(index_method, sync_now, trigger_method, set_env):
+async def test_create_job(index_method, trigger_method, set_env):
     connector = Mock()
     connector.id = "id"
     connector.index_name = "index_name"
     connector.language = "en"
     config = load_config(CONFIG)
-    connector.sync_now = sync_now
     connector.filtering.get_active_filter.transform_filtering.return_value = Filter()
     connector.pipeline = Pipeline({})
 
@@ -1176,12 +1232,15 @@ async def test_create_job(index_method, sync_now, trigger_method, set_env):
         "connector": ANY,
         "trigger_method": trigger_method.value,
         "status": JobStatus.PENDING.value,
+        "indexed_document_count": 0,
+        "indexed_document_volume": 0,
+        "deleted_document_count": 0,
         "created_at": ANY,
         "last_seen": ANY,
     }
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    await sync_job_index.create(connector=connector)
+    await sync_job_index.create(connector=connector, trigger_method=trigger_method)
 
     index_method.assert_called_with(expected_index_doc)
 

@@ -23,7 +23,6 @@ from connectors.source import (
     Field,
     ValidationTypes,
     get_source_klass,
-    get_source_klass_dict,
     get_source_klasses,
 )
 
@@ -97,16 +96,6 @@ def test_get_source_klasses():
 
     sources = list(get_source_klasses(settings))
     assert sources == [MyConnector, MyConnector]
-
-
-def test_get_source_klass_dict():
-    settings = {
-        "sources": {"yea": "test_source:MyConnector", "yea2": "test_source:MyConnector"}
-    }
-
-    source_klass_dict = get_source_klass_dict(settings)
-    assert source_klass_dict["yea"] == MyConnector
-    assert source_klass_dict["yea2"] == MyConnector
 
 
 @pytest.mark.asyncio
@@ -254,7 +243,7 @@ def test_get_source_klass_dict():
             }
         ),
         (
-            # if dependencies are not met it should skip validation (is_valid == True)
+            # if dependencies are not met it should skip validation
             {
                 "email": {
                     "type": "str",
@@ -272,11 +261,73 @@ def test_get_source_klass_dict():
                 },
             }
         ),
+        (
+            # when not required and value is empty
+            # it should pass validation if no validations exist
+            {
+                "string_field": {
+                    "type": "str",
+                    "required": False,
+                    "value": "",
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "string_field": {
+                    "type": "str",
+                    "required": False,
+                    "value": None,
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "int_field": {
+                    "type": "int",
+                    "required": False,
+                    "value": None,
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "list_field": {
+                    "type": "list",
+                    "required": False,
+                    "value": [],
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "list_field": {
+                    "type": "list",
+                    "required": False,
+                    "value": None,
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "bool_field": {
+                    "type": "bool",
+                    "required": False,
+                    "value": None,
+                    "validations": [],
+                }
+            }
+        ),
     ],
 )
-async def test_is_valid_when_validations_succeed_returns_true(config):
+async def test_check_valid_when_validations_succeed_no_errors_raised(config):
     c = DataSourceConfiguration(config)
-    assert c.is_valid() is True
+    c.check_valid()
 
 
 @pytest.mark.asyncio
@@ -423,16 +474,77 @@ async def test_is_valid_when_validations_succeed_returns_true(config):
                 },
             }
         ),
+        (
+            # when required and value is empty it should fail validation
+            {
+                "string_field": {
+                    "type": "str",
+                    "required": True,
+                    "value": "",
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "string_field": {
+                    "type": "str",
+                    "required": True,
+                    "value": None,
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "int_field": {
+                    "type": "int",
+                    "required": True,
+                    "value": None,
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "int_field": {
+                    "type": "list",
+                    "required": True,
+                    "value": [],
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "int_field": {
+                    "type": "list",
+                    "required": True,
+                    "value": None,
+                    "validations": [],
+                }
+            }
+        ),
+        (
+            {
+                "int_field": {
+                    "type": "bool",
+                    "required": True,
+                    "value": None,
+                    "validations": [],
+                }
+            }
+        ),
     ],
 )
-async def test_is_valid_when_validations_fail_raises_error(config):
+async def test_check_valid_when_validations_fail_raises_error(config):
     c = DataSourceConfiguration(config)
     with pytest.raises(ConfigurableFieldValueError):
-        c.is_valid()
+        c.check_valid()
 
 
 @pytest.mark.asyncio
-async def test_is_valid_when_dependencies_are_invalid_raises_error():
+async def test_check_valid_when_dependencies_are_invalid_raises_error():
     config = {
         "port": {
             "type": "int",
@@ -446,7 +558,7 @@ async def test_is_valid_when_dependencies_are_invalid_raises_error():
 
     c = DataSourceConfiguration(config)
     with pytest.raises(ConfigurableFieldDependencyError):
-        c.is_valid()
+        c.check_valid()
 
 
 # ABCs
