@@ -405,7 +405,6 @@ class MySqlDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "validations": [{"type": "greater_than", "constraint": 0}],
             },
             "retry_count": {
                 "default_value": RETRIES,
@@ -415,7 +414,6 @@ class MySqlDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "validations": [{"type": "greater_than", "constraint": -1}],
             },
         }
 
