@@ -54,27 +54,29 @@ class Field:
     def __init__(
         self,
         name,
-        label=None,
-        value="",
-        type="str",
-        required=True,
+        default_value=None,
         depends_on=None,
+        label=None,
+        required=True,
+        type="str",
         validations=None,
+        value=None,
     ):
-        if label is None:
-            label = name
         if depends_on is None:
             depends_on = []
+        if label is None:
+            label = name
         if validations is None:
             validations = []
 
-        self.name = name
-        self.label = label
-        self._type = type
-        self.value = self._convert(value, type)
-        self.required = required
+        self.default_value = self._convert(default_value, type)
         self.depends_on = depends_on
+        self.label = label
+        self.name = name
+        self.required = required
+        self._type = type
         self.validations = validations
+        self._value = self._convert(value, type)
 
     @property
     def type(self):
@@ -84,6 +86,24 @@ class Field:
     def type(self, value):
         self._type = value
         self.value = self._convert(self.value, self._type)
+
+    @property
+    def value(self):
+        """Returns either the `value` or `default_value` of a Field.
+        The `default_value` will only be returned if the Field is not required
+        and the `value` is empty.
+        """
+        if self.required:
+            return self._value
+
+        if self.is_value_empty():
+            return self.default_value
+
+        return self._value
+
+    @value.setter
+    def value(self, value):
+        self._value = value
 
     def _convert(self, value, type_):
         if not isinstance(value, str):
@@ -101,7 +121,10 @@ class Field:
         return value
 
     def is_value_empty(self):
-        value = self.value
+        """Checks if the `value` field is empty or not.
+        This always checks `value` and never `default_value`.
+        """
+        value = self._value
 
         match value:
             case str():
@@ -118,6 +141,8 @@ class Field:
 
     def validate(self):
         """Used to validate the `value` of a Field using its `validations`.
+        If `value` is empty and the field is not required,
+        the validation is run on the `default_value` instead.
 
         Returns a list of errors as strings.
         If the list is empty, then the Field `value` is valid.
@@ -201,12 +226,13 @@ class DataSourceConfiguration:
                 if isinstance(value, dict):
                     self.set_field(
                         key,
-                        value.get("label"),
-                        value.get("value", ""),
-                        value.get("type", "str"),
-                        value.get("required", True),
+                        value.get("default_value", None),
                         value.get("depends_on", []),
+                        value.get("label"),
+                        value.get("required", True),
+                        value.get("type", "str"),
                         value.get("validations", []),
+                        value.get("value", None),
                     )
                 else:
                     self.set_field(key, label=key.capitalize(), value=str(value))
@@ -233,15 +259,16 @@ class DataSourceConfiguration:
     def set_field(
         self,
         name,
-        label=None,
-        value="",
-        type="str",
-        required=True,
+        default_value=None,
         depends_on=None,
+        label=None,
+        required=True,
+        type="str",
         validations=None,
+        value=None,
     ):
         self._config[name] = Field(
-            name, label, value, type, required, depends_on, validations
+            name, default_value, depends_on, label, required, type, validations, value
         )
 
     def get_field(self, name):
