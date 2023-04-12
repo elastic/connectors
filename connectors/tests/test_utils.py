@@ -11,6 +11,7 @@ import functools
 import os
 import random
 import ssl
+import string
 import tempfile
 import time
 import timeit
@@ -32,6 +33,7 @@ from connectors.utils import (
     get_base64_value,
     get_pem_format,
     get_size,
+    hash_id,
     is_expired,
     next_run,
     retryable,
@@ -466,3 +468,12 @@ Certificate2
     # Execute
     formated_certificate = get_pem_format(key=certificate, max_split=1)
     assert formated_certificate == expected_formated_certificate
+
+
+def test_hash_id():
+    limit = 512
+    random_id_too_long = "".join(
+        random.choices(string.ascii_letters + string.digits, k=1000)
+    )
+
+    assert len(hash_id(random_id_too_long).encode("UTF-8")) < limit
