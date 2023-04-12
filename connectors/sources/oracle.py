@@ -98,7 +98,6 @@ class OracleDataSource(GenericBaseDataSource):
                     "order": 10,
                     "required": False,
                     "type": "str",
-                    "value": DEFAULT_ORACLE_HOME,
                 },
                 "wallet_configuration_path": {
                     "default_value": "",
@@ -106,7 +105,6 @@ class OracleDataSource(GenericBaseDataSource):
                     "order": 11,
                     "required": False,
                     "type": "str",
-                    "value": "",
                 },
             }
         )

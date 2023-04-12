@@ -22,7 +22,15 @@ DSN = "oracle+oracledb://admin:Password_123@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)
 async def test_create_engine_in_thick_mode(mock_fun):
     """Test create_engine method of OracleDataSource class in thick mode"""
     # Setup
-    source = create_source(OracleDataSource)
+    source = create_source(
+        OracleDataSource,
+        username="admin",
+        password="Password_123",
+        protocol="TCP",
+        host="127.0.0.1",
+        port="9090",
+        database="xe",
+    )
     config_file_path = {"lib_dir": "/home/devuser/lib", "config_dir": ""}
     source.oracle_home = "/home/devuser"
     mock_fun.return_value = "Mock Response"
@@ -39,7 +47,15 @@ async def test_create_engine_in_thick_mode(mock_fun):
 async def test_create_engine_in_thin_mode(mock_fun):
     """Test create_engine method of OracleDataSource class in thin mode"""
     # Setup
-    source = create_source(OracleDataSource)
+    source = create_source(
+        OracleDataSource,
+        username="admin",
+        password="Password_123",
+        protocol="TCP",
+        host="127.0.0.1",
+        port="9090",
+        database="xe",
+    )
 
     # Execute
     source._create_engine()
@@ -51,7 +67,16 @@ async def test_create_engine_in_thin_mode(mock_fun):
 @pytest.mark.asyncio
 async def test_get_docs_oracle():
     # Setup
-    source = create_source(OracleDataSource)
+    source = create_source(
+        OracleDataSource,
+        username="admin",
+        password="Password_123",
+        protocol="TCP",
+        host="127.0.0.1",
+        port="9090",
+        database="xe",
+        tables="*",
+    )
 
     with patch.object(Engine, "connect", return_value=ConnectionSync(OracleQueries())):
         source.engine = create_engine(DSN)

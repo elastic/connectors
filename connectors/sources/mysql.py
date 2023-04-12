@@ -37,7 +37,6 @@ DEFAULT_FETCH_SIZE = 50
 RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_SSL_ENABLED = False
-DEFAULT_SSL_CA = ""
 
 
 def parse_tables_string_to_list_of_tables(tables_string):
@@ -356,40 +355,34 @@ class MySqlDataSource(BaseDataSource):
                 "label": "Host",
                 "order": 1,
                 "type": "str",
-                "value": "127.0.0.1",
             },
             "port": {
                 "display": "numeric",
                 "label": "Port",
                 "order": 2,
                 "type": "int",
-                "value": 3306,
             },
             "user": {
                 "label": "Username",
                 "order": 3,
                 "type": "str",
-                "value": "root",
             },
             "password": {
                 "label": "Password",
                 "order": 4,
                 "sensitive": True,
                 "type": "str",
-                "value": "changeme",
             },
             "database": {
                 "label": "Database",
                 "order": 5,
                 "type": "str",
-                "value": "customerinfo",
             },
             "tables": {
                 "display": "textarea",
                 "label": "Comma-separated list of tables",
                 "order": 6,
                 "type": "list",
-                "value": WILDCARD,
             },
             "ssl_enabled": {
                 "display": "toggle",
@@ -403,7 +396,6 @@ class MySqlDataSource(BaseDataSource):
                 "label": "SSL certificate",
                 "order": 8,
                 "type": "str",
-                "value": DEFAULT_SSL_CA,
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
@@ -413,7 +405,7 @@ class MySqlDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_FETCH_SIZE,
+                "validations": [{"type": "greater_than", "constraint": 0}],
             },
             "retry_count": {
                 "default_value": RETRIES,
@@ -423,7 +415,7 @@ class MySqlDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": RETRIES,
+                "validations": [{"type": "greater_than", "constraint": -1}],
             },
         }
 

@@ -67,7 +67,14 @@ async def test_create_engine(mock_create_url, mock_create_engine):
 @pytest.mark.asyncio
 async def test_get_docs_mssql():
     # Setup
-    source = create_source(MSSQLDataSource)
+    source = create_source(
+        MSSQLDataSource,
+        schema="dbo",
+        database="xe",
+        tables="*",
+        username="admin",
+        password="password",
+    )
     source.engine = MockEngine()
     actual_response = []
     expected_response = [

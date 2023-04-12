@@ -147,16 +147,6 @@ def patch_connection_pool():
         yield connection_pool
 
 
-def test_get_configuration():
-    """Test get_configuration method of MySQL"""
-    klass = MySqlDataSource
-
-    config = DataSourceConfiguration(klass.get_default_configuration())
-
-    assert config["host"] == "127.0.0.1"
-    assert config["port"] == 3306
-
-
 class Result:
     """This class contains method which returns dummy response"""
 

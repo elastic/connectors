@@ -15,7 +15,6 @@ from connectors.utils import get_pem_format
 # Below schemas are system schemas and the tables of the systems schema's will not get indexed
 SYSTEM_SCHEMA = ["pg_toast", "pg_catalog", "information_schema"]
 DEFAULT_SSL_ENABLED = False
-DEFAULT_SSL_CA = ""
 
 
 class PostgreSQLQueries(Queries):
@@ -92,7 +91,6 @@ class PostgreSQLDataSource(GenericBaseDataSource):
                     "label": "SSL certificate",
                     "order": 10,
                     "type": "str",
-                    "value": DEFAULT_SSL_CA,
                 },
             }
         )
