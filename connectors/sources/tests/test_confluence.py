@@ -316,24 +316,22 @@ async def test_close_without_client_session():
 
 
 @pytest.mark.asyncio
-async def test_verify_spaces_when_space_keys_are_valid():
-    """Test verify_spaces method with valid space keys"""
+async def test_remote_validation_when_space_keys_are_valid():
     source = create_source(ConfluenceDataSource)
-    source.confluence_client.spaces = ["DM", "ES"]
+    source.spaces = ["DM", "ES"]
     async_response = AsyncMock()
     async_response.__aenter__ = AsyncMock(
         return_value=JSONAsyncMock(RESPONSE_SPACE_KEYS)
     )
 
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-        await source.confluence_client.verify_spaces()
+        await source._remote_validation()
 
 
 @pytest.mark.asyncio
-async def test_verify_spaces_when_space_keys_are_unavailable_then_raise_exception():
-    """Test verify_spaces method with unavailable space keys"""
+async def test_remote_validation_when_space_keys_are_unavailable_then_raise_exception():
     source = create_source(ConfluenceDataSource)
-    source.confluence_client.spaces = ["ES", "CS"]
+    source.spaces = ["ES", "CS"]
     async_response = AsyncMock()
     async_response.__aenter__ = AsyncMock(
         return_value=JSONAsyncMock(RESPONSE_SPACE_KEYS)
@@ -341,10 +339,10 @@ async def test_verify_spaces_when_space_keys_are_unavailable_then_raise_exceptio
 
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
         with pytest.raises(
-            Exception,
+            ConfigurableFieldValueError,
             match="Spaces 'CS' are not available. Available spaces are: 'DM, ES'",
         ):
-            await source.confluence_client.verify_spaces()
+            await source._remote_validation()
 
 
 class MockSSL:

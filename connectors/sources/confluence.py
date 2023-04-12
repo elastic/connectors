@@ -17,7 +17,7 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -65,7 +65,6 @@ class ConfluenceClient:
         self.configuration = configuration
         self.is_cloud = self.configuration["data_source"] == CONFLUENCE_CLOUD
         self.host_url = self.configuration["confluence_url"]
-        self.spaces = self.configuration["spaces"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
         self.retry_count = self.configuration["retry_count"]
@@ -178,25 +177,6 @@ class ConfluenceClient:
                 )
                 break
 
-    async def verify_spaces(self):
-        """Checks if user configured spaces are available in confluence
-
-        Raises:
-            Exception: Configured unavailable spaces: <unavailable_space_keys>
-        """
-        if self.spaces == ["*"]:
-            return
-        space_keys = []
-        async for response in self.paginated_api_call(
-            url_name=SPACE, api_query=SPACE_QUERY
-        ):
-            spaces = response.get("results", [])
-            space_keys.extend([space["key"] for space in spaces])
-        if unavailable_spaces := set(self.spaces) - set(space_keys):
-            raise Exception(
-                f"Spaces '{', '.join(unavailable_spaces)}' are not available. Available spaces are: '{', '.join(space_keys)}'"
-            )
-
 
 class ConfluenceDataSource(BaseDataSource):
     """Confluence"""
@@ -211,6 +191,7 @@ class ConfluenceDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
+        self.spaces = self.configuration["spaces"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
         self.confluence_client = ConfluenceClient(configuration)
 
@@ -331,6 +312,34 @@ class ConfluenceDataSource(BaseDataSource):
         """
         options["concurrent_downloads"] = self.concurrent_downloads
 
+    async def validate_config(self):
+        """Validates whether user input is empty or not for configuration fields.
+        Also validate, if user configured spaces are available in Confluence.
+
+        Raises:
+            Exception: Configured keys can't be empty
+        """
+        self.configuration.check_valid()
+        await self._remote_validation()
+
+    async def _remote_validation(self):
+        if self.spaces == ["*"]:
+            return
+        space_keys = []
+        try:
+            async for response in self.confluence_client.paginated_api_call(
+                url_name=SPACE, api_query=SPACE_QUERY
+            ):
+                spaces = response.get("results", [])
+                space_keys.extend([space["key"] for space in spaces])
+            if unavailable_spaces := set(self.spaces) - set(space_keys):
+                raise ConfigurableFieldValueError(
+                    f"Spaces '{', '.join(unavailable_spaces)}' are not available. Available spaces are: '{', '.join(space_keys)}'"
+                )
+        except Exception:
+            logger.exception("Error while verifying configured spaces")
+            raise
+
     async def ping(self):
         """Verify the connection with Confluence"""
         try:
@@ -358,9 +367,7 @@ class ConfluenceDataSource(BaseDataSource):
                 space_url = os.path.join(
                     self.confluence_client.host_url, space["_links"]["webui"][1:]
                 )
-                if (self.confluence_client.spaces == ["*"]) or (
-                    space["key"] in self.confluence_client.spaces
-                ):
+                if (self.spaces == ["*"]) or (space["key"] in self.spaces):
                     yield {
                         "_id": space["id"],
                         "type": "Space",
@@ -554,18 +561,22 @@ class ConfluenceDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the content.
         """
-        await self.confluence_client.verify_spaces()
-        if self.confluence_client.spaces == ["*"]:
-            cql = "cql=type="
+        if self.spaces == ["*"]:
+            configured_spaces_query = "cql=type="
         else:
-            quoted_spaces = "','".join(self.confluence_client.spaces)
-            cql = f"cql=space in ('{quoted_spaces}') AND type="
+            quoted_spaces = "','".join(self.spaces)
+            configured_spaces_query = f"cql=space in ('{quoted_spaces}') AND type="
         await self.fetchers.put(self._space_coro)
         await self.fetchers.put(
-            partial(self._page_blog_coro, f"{cql}blogpost&{CONTENT_QUERY}")
+            partial(
+                self._page_blog_coro,
+                f"{configured_spaces_query}blogpost&{CONTENT_QUERY}",
+            )
         )
         await self.fetchers.put(
-            partial(self._page_blog_coro, f"{cql}page&{CONTENT_QUERY}")
+            partial(
+                self._page_blog_coro, f"{configured_spaces_query}page&{CONTENT_QUERY}"
+            )
         )
         self.fetcher_count += 3
 
