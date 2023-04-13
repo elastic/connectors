@@ -116,6 +116,8 @@ class GenericBaseDataSource(BaseDataSource):
         self.dialect = ""
         self.connection = None
         self.queries = None
+        self.certfile = None
+        self.tables_to_skip = {}
 
     @classmethod
     def get_default_configuration(cls):
@@ -196,7 +198,7 @@ class GenericBaseDataSource(BaseDataSource):
             raise Exception("Configured port has to be an integer.")
 
         if (
-            self.dialect == "Postgresql"
+            self.dialect != "Oracle"
             and self.configuration["ssl_enabled"]
             and (
                 self.configuration["ssl_ca"] == ""
@@ -461,7 +463,10 @@ class GenericBaseDataSource(BaseDataSource):
             Dict: Row document to index
         """
         tables_to_fetch = await self.get_tables_to_fetch(schema)
-
+        if self.database in self.tables_to_skip.keys():
+            tables_to_fetch = [
+                *(set(tables_to_fetch) - set(self.tables_to_skip[self.database]))
+            ]
         for table in tables_to_fetch:
             logger.debug(f"Found table: {table} in database: {self.database}.")
             async for row in self.fetch_documents(

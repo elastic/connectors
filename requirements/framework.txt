@@ -16,3 +16,6 @@ azure-storage-blob==12.13.0
 SQLAlchemy==2.0.1
 oracledb==1.2.2
 asyncpg==0.27.0
+python-tds==1.12.0
+sqlalchemy-pytds==0.3.5
+pyOpenSSL==23.1.1
