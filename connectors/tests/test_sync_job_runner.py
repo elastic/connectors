@@ -7,11 +7,12 @@ import asyncio
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
+from elasticsearch import ConflictError
 
 from connectors.byoc import Filter, JobStatus, Pipeline
 from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import InvalidFilteringError
-from connectors.sync_job_runner import JobClaimError, SyncJobRunner
+from connectors.sync_job_runner import SyncJobRunner
 from connectors.tests.commons import AsyncIterator
 
 total_document_count = 100
@@ -20,9 +21,10 @@ total_document_count = 100
 def mock_connector():
     connector = Mock()
     connector.id = "1"
+    connector.last_sync_status = JobStatus.COMPLETED
     connector.features.sync_rules_enabled.return_value = True
     connector.document_count = AsyncMock(return_value=total_document_count)
-    connector.sync_starts = AsyncMock()
+    connector.sync_starts = AsyncMock(return_value=True)
     connector.sync_done = AsyncMock()
     connector.reload = AsyncMock()
 
@@ -109,32 +111,25 @@ def create_runner_yielding_docs(docs=None):
 
 
 @pytest.mark.asyncio
-async def test_job_claim_fail():
+async def test_connector_sync_starts_fail():
     sync_job_runner = create_runner()
-    sync_job_runner.sync_job.claim.side_effect = Exception()
-    with pytest.raises(JobClaimError):
-        await sync_job_runner.execute()
+
+    # Do nothing in the first call, and the last_sync_status is set to `in_progress` by another instance in the subsequent calls
+    def _reset_last_sync_status():
+        if sync_job_runner.connector.reload.await_count > 1:
+            sync_job_runner.connector.last_sync_status = JobStatus.IN_PROGRESS
+
+    sync_job_runner.connector.reload.side_effect = _reset_last_sync_status
+    sync_job_runner.connector.sync_starts.side_effect = ConflictError(
+        message="This is an error message from test_connector_sync_starts_fail",
+        meta=None,
+        body={},
+    )
+    await sync_job_runner.execute()
 
     assert sync_job_runner.elastic_server is None
-    sync_job_runner.sync_job.claim.assert_awaited()
-    sync_job_runner.connector.sync_starts.assert_not_awaited()
-    sync_job_runner.sync_job.done.assert_not_awaited()
-    sync_job_runner.sync_job.fail.assert_not_awaited()
-    sync_job_runner.sync_job.cancel.assert_not_awaited()
-    sync_job_runner.sync_job.suspend.assert_not_awaited()
-    sync_job_runner.connector.sync_done.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_connector_starts_fail():
-    sync_job_runner = create_runner()
-    sync_job_runner.connector.sync_starts.side_effect = Exception()
-    with pytest.raises(JobClaimError):
-        await sync_job_runner.execute()
-
-    assert sync_job_runner.elastic_server is None
-    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_not_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
     sync_job_runner.sync_job.fail.assert_not_awaited()
     sync_job_runner.sync_job.cancel.assert_not_awaited()
@@ -155,8 +150,8 @@ async def test_source_not_changed():
     }
 
     assert sync_job_runner.elastic_server is None
-    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.sync_job.done.assert_awaited_with(ingestion_stats=ingestion_stats)
     sync_job_runner.sync_job.fail.assert_not_awaited()
     sync_job_runner.sync_job.cancel.assert_not_awaited()
@@ -177,8 +172,8 @@ async def test_source_invalid_config():
     }
 
     assert sync_job_runner.elastic_server is None
-    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited
     sync_job_runner.sync_job.fail.assert_awaited_with(
         ANY, ingestion_stats=ingestion_stats
@@ -201,8 +196,8 @@ async def test_source_not_available():
     }
 
     assert sync_job_runner.elastic_server is None
-    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited
     sync_job_runner.sync_job.fail.assert_awaited_with(
         ANY, ingestion_stats=ingestion_stats
@@ -226,8 +221,8 @@ async def test_invalid_filtering():
     }
 
     assert sync_job_runner.elastic_server is None
-    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited
     sync_job_runner.sync_job.fail.assert_awaited_with(
         ANY, ingestion_stats=ingestion_stats
@@ -252,8 +247,8 @@ async def test_async_bulk_error(elastic_server_mock):
 
     ingestion_stats["total_document_count"] = total_document_count
 
-    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited
     sync_job_runner.sync_job.fail.assert_awaited_with(
@@ -277,8 +272,8 @@ async def test_sync_job_runner(elastic_server_mock):
 
     ingestion_stats["total_document_count"] = total_document_count
 
-    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_awaited_with(ingestion_stats=ingestion_stats)
     sync_job_runner.sync_job.fail.assert_not_awaited
@@ -303,8 +298,8 @@ async def test_sync_job_runner_suspend(elastic_server_mock):
 
     ingestion_stats["total_document_count"] = total_document_count
 
-    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
     sync_job_runner.sync_job.fail.assert_not_awaited()
@@ -379,8 +374,8 @@ async def test_sync_job_runner_reporting_metadata(elastic_server_mock):
     asyncio.get_event_loop().call_later(0.1, task.cancel)
     await task
 
-    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.update_metadata.assert_awaited_with(
         ingestion_stats=ingestion_stats
@@ -406,7 +401,13 @@ async def test_sync_job_runner_connector_not_found(elastic_server_mock):
     elastic_server_mock.ingestion_stats.return_value = ingestion_stats
     elastic_server_mock.done.return_value = False
     sync_job_runner = create_runner()
-    sync_job_runner.connector.reload.side_effect = DocumentNotFoundError()
+
+    # Do nothing in the first call(in sync_starts), then raise DocumentNotFoundError,
+    def _raise_document_not_found_error():
+        if sync_job_runner.connector.reload.await_count > 1:
+            raise DocumentNotFoundError()
+
+    sync_job_runner.connector.reload.side_effect = _raise_document_not_found_error
     await sync_job_runner.execute()
 
     assert sync_job_runner.connector is None
@@ -459,8 +460,8 @@ async def test_sync_job_runner_canceled(elastic_server_mock):
     sync_job_runner.sync_job.reload.side_effect = _update_job_status
     await sync_job_runner.execute()
 
-    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
     sync_job_runner.sync_job.fail.assert_not_awaited
@@ -490,8 +491,8 @@ async def test_sync_job_runner_not_running(elastic_server_mock):
     sync_job_runner.sync_job.reload.side_effect = _update_job_status
     await sync_job_runner.execute()
 
-    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
     sync_job_runner.sync_job.fail.assert_awaited_with(

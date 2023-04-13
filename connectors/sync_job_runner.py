@@ -9,6 +9,7 @@ import time
 from connectors.byoc import JobStatus
 from connectors.byoei import ElasticServer
 from connectors.es import Mappings
+from connectors.es.client import with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 
@@ -20,10 +21,6 @@ ES_ID_SIZE_LIMIT = 512
 
 
 class SyncJobRunningError(Exception):
-    pass
-
-
-class JobClaimError(Exception):
     pass
 
 
@@ -85,13 +82,16 @@ class SyncJobRunner:
     async def execute(self):
         if self.running:
             raise SyncJobRunningError(f"Sync job {self.job_id} is already running.")
-
         self.running = True
-        if not await self._claim_job():
-            logger.error(
-                f"Unable to claim job {self.job_id} for connector {self.connector_id}"
+
+        if not await self.sync_starts():
+            logger.debug(
+                f"Failed to start sync for connector {self.connector_id}, the sync is executed by another connector service."
             )
-            raise JobClaimError
+            return
+
+        await self.sync_job.claim()
+        self._start_time = time.time()
 
         try:
             self.data_provider = self.source_klass(self.sync_job.configuration)
@@ -212,15 +212,19 @@ class SyncJobRunner:
             f"({int(time.time() - self._start_time)} seconds)"  # pyright: ignore
         )
 
-    async def _claim_job(self):
-        try:
-            await self.sync_job.claim()
-            await self.connector.sync_starts()
-            self._start_time = time.time()
-            return True
-        except Exception as e:
-            logger.critical(e, exc_info=True)
+    @with_concurrency_control()
+    async def sync_starts(self):
+        if not await self.reload_connector():
             return False
+
+        if self.connector.last_sync_status == JobStatus.IN_PROGRESS:
+            logger.debug(
+                f"Connector {self.connector_id} is syncing, skip the job {self.job_id}..."
+            )
+            return False
+
+        await self.connector.sync_starts()
+        return True
 
     async def prepare_docs(self):
         logger.debug(f"Using pipeline {self.sync_job.pipeline}")
