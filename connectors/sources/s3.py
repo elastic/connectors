@@ -27,7 +27,7 @@ from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
 MAX_CHUNK_SIZE = 1048576
 DEFAULT_MAX_FILE_SIZE = 10485760
 DEFAULT_PAGE_SIZE = 100
-DEFAULT_MAX_RETRY_ATTEMPS = 5
+DEFAULT_MAX_RETRY_ATTEMPTS = 5
 DEFAULT_CONNECTION_TIMEOUT = 90
 DEFAULT_READ_TIMEOUT = 90
 
@@ -144,17 +144,17 @@ class S3DataSource(BaseDataSource):
         source_file_name = ""
         try:
             async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+                source_file_name = async_buffer.name
                 await s3_client.download_fileobj(
                     Bucket=bucket, Key=filename, Fileobj=async_buffer
                 )
-                source_file_name = async_buffer.name
             await asyncio.to_thread(
                 convert_to_b64,
                 source=source_file_name,
             )
             async with aiofiles.open(file=source_file_name, mode="r") as async_buffer:
                 document["_attachment"] = (await async_buffer.read()).strip()
-            await remove(source_file_name)  # pyright: ignore
+
             logger.debug(f"Downloaded {filename} for {doc['size_in_bytes']} bytes ")
             return document
         except ClientError as exception:
@@ -175,6 +175,8 @@ class S3DataSource(BaseDataSource):
                 f"Something went wrong while extracting data from {filename} of {bucket}. Error: {exception}"
             )
             raise
+        finally:
+            await remove(source_file_name)  # pyright: ignore
 
     async def get_bucket_region(self, bucket_name):
         """This method return the name of region for a bucket.
@@ -296,14 +298,14 @@ class S3DataSource(BaseDataSource):
                 "value": DEFAULT_CONNECTION_TIMEOUT,
             },
             "max_attempts": {
-                "default_value": DEFAULT_MAX_RETRY_ATTEMPS,
+                "default_value": DEFAULT_MAX_RETRY_ATTEMPTS,
                 "display": "numeric",
                 "label": "Maximum retry attempts",
                 "order": 4,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_MAX_RETRY_ATTEMPS,
+                "value": DEFAULT_MAX_RETRY_ATTEMPTS,
             },
             "page_size": {
                 "default_value": DEFAULT_PAGE_SIZE,
