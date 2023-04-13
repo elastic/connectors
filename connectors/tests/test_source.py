@@ -28,19 +28,37 @@ from connectors.source import (
 
 CONFIG = {
     "host": {
-        "value": "mongodb://127.0.0.1:27021",
         "label": "MongoDB Host",
         "type": "str",
+        "value": "mongodb://127.0.0.1:27021",
     },
     "database": {
-        "value": "sample_airbnb",
         "label": "MongoDB Database",
         "type": "str",
+        "value": "sample_airbnb",
     },
     "collection": {
-        "value": "listingsAndReviews",
         "label": "MongoDB Collection",
         "type": "str",
+        "value": "listingsAndReviews",
+    },
+    "connector_nickname": {
+        "default_value": "MongoDB Connector",
+        "label": "Connector Nickname",
+        "type": "str",
+        "value": "",
+    },
+    "retry_count": {
+        "default_value": 3,
+        "label": "Retry Count",
+        "type": "int",
+        "value": None,
+    },
+    "tables": {
+        "default_value": ["*"],
+        "label": "List of Tables",
+        "type": "list",
+        "value": [""],
     },
 }
 
@@ -75,6 +93,56 @@ def test_default():
     c = DataSourceConfiguration(CONFIG)
     assert c.get("database") == "sample_airbnb"
     assert c.get("dd", 1) == 1
+
+
+@pytest.mark.parametrize(
+    "type, required, default_value, value, expected_value",
+    [
+        # these include examples that would not normally validate
+        # that is because `.value` does care about validation, it only returns a value
+        # strings
+        ("str", True, "default", "input", "input"),
+        ("str", True, "default", None, None),
+        ("str", True, "default", "", ""),
+        ("str", False, "default", "input", "input"),
+        ("str", False, "default", None, "default"),
+        ("str", False, "default", "", "default"),
+        # integers
+        ("int", True, 3, 1, 1),
+        ("int", True, 3, None, None),
+        ("int", False, 3, 1, 1),
+        ("int", False, 3, None, 3),
+        # lists
+        ("list", True, ["1", "2"], ["3", "4"], ["3", "4"]),
+        ("list", True, ["1", "2"], [], []),
+        ("list", True, ["1", "2"], [""], [""]),
+        ("list", True, ["1", "2"], [None], [None]),
+        ("list", True, ["1", "2"], None, None),
+        ("list", False, ["1", "2"], ["3", "4"], ["3", "4"]),
+        ("list", False, ["1", "2"], [], ["1", "2"]),
+        ("list", False, ["1", "2"], [""], ["1", "2"]),
+        ("list", False, ["1", "2"], [None], ["1", "2"]),
+        ("list", False, ["1", "2"], None, ["1", "2"]),
+        # booleans
+        ("bool", True, True, False, False),
+        ("bool", True, True, None, None),
+        ("bool", False, True, False, False),
+        ("bool", False, True, None, True),
+    ],
+)
+def test_value_returns_correct_value(
+    type, required, default_value, value, expected_value
+):
+    assert (
+        Field(
+            "name",
+            type=type,
+            required=required,
+            default_value=default_value,
+            value=value,
+        ).value
+        == expected_value
+    )
 
 
 class MyConnector:

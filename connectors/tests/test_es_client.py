@@ -8,9 +8,9 @@ from unittest import mock
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from elasticsearch import ConnectionError
+from elasticsearch import ConflictError, ConnectionError
 
-from connectors.es.client import ESClient
+from connectors.es.client import ESClient, with_concurrency_control
 
 
 def test_esclient():
@@ -119,3 +119,34 @@ async def test_delete_indices():
     es_client.client.indices.delete.assert_awaited_with(
         index=indices, ignore_unavailable=True
     )
+
+
+@pytest.mark.asyncio
+async def test_with_concurrency_control():
+    mock_func = Mock()
+    num_retries = 10
+
+    @with_concurrency_control(retries=num_retries)
+    async def conflict():
+        mock_func()
+        raise ConflictError(
+            message="This is an error message from test_with_concurrency_control",
+            meta=None,
+            body={},
+        )
+
+    with pytest.raises(ConflictError):
+        await conflict()
+
+        assert mock_func.call_count == num_retries
+
+    mock_func = Mock()
+
+    @with_concurrency_control(retries=num_retries)
+    async def does_not_raise():
+        mock_func()
+        pass
+
+    await does_not_raise()
+
+    assert mock_func.call_count == 1
