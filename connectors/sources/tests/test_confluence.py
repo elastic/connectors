@@ -13,8 +13,13 @@ import pytest
 from aiohttp import StreamReader
 from freezegun import freeze_time
 
-from connectors.source import DataSourceConfiguration
-from connectors.sources.confluence import ConfluenceClient, ConfluenceDataSource
+from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
+from connectors.sources.confluence import (
+    CONFLUENCE_CLOUD,
+    CONFLUENCE_SERVER,
+    ConfluenceClient,
+    ConfluenceDataSource,
+)
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
 from connectors.utils import ssl_context
@@ -109,6 +114,23 @@ EXPECTED_ATTACHMENT = {
 
 RESPONSE_CONTENT = "# This is the dummy file"
 
+RESPONSE_SPACE_KEYS = {
+    "results": [
+        {
+            "id": 23456,
+            "key": "DM",
+        },
+        {
+            "id": 9876,
+            "key": "ES",
+        },
+    ],
+    "start": 0,
+    "limit": 100,
+    "size": 2,
+    "_links": {},
+}
+
 EXPECTED_CONTENT = {
     "_id": "att3637249",
     "_timestamp": "2023-01-03T09:24:50.633Z",
@@ -157,13 +179,99 @@ async def test_validate_configuration_with_invalid_concurrent_downloads():
     """Test validate configuration method of BaseDataSource class with invalid concurrent downloads"""
 
     # Setup
-    source = create_source(ConfluenceDataSource)
-    source.concurrent_downloads = 1000
+    source = create_source(ConfluenceDataSource, concurrent_downloads=1000)
 
     # Execute
-    with pytest.raises(
-        Exception, match="Configured concurrent downloads can't be set more than *"
-    ):
+    with pytest.raises(ConfigurableFieldValueError):
+        await source.validate_config()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "extras",
+    [
+        (
+            # Confluence Server with blank dependent fields
+            {
+                "data_source": CONFLUENCE_SERVER,
+                "username": "",
+                "password": "",
+                "account_email": "foo@bar.me",
+                "api_token": "foo",
+            }
+        ),
+        (
+            # Confluence Cloud with blank dependent fields
+            {
+                "data_source": CONFLUENCE_CLOUD,
+                "username": "foo",
+                "password": "bar",
+                "account_email": "",
+                "api_token": "",
+            }
+        ),
+    ],
+)
+async def test_validate_configuration_with_invalid_dependency_fields_raises_error(
+    extras,
+):
+    # Setup
+    source = create_source(ConfluenceDataSource, **extras)
+
+    # Execute
+    with pytest.raises(ConfigurableFieldValueError):
+        await source.validate_config()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "extras",
+    [
+        (
+            # Confluence Server with blank non-dependent fields
+            {
+                "data_source": CONFLUENCE_SERVER,
+                "username": "foo",
+                "password": "bar",
+                "account_email": "",
+                "api_token": "",
+            }
+        ),
+        (
+            # Confluence Cloud with blank non-dependent fields
+            {
+                "data_source": CONFLUENCE_CLOUD,
+                "username": "",
+                "password": "",
+                "account_email": "foo@bar.me",
+                "api_token": "foobar",
+            }
+        ),
+        (
+            # SSL certificate not enabled (empty ssl_ca okay)
+            {"ssl_enabled": False, "ssl_ca": ""}
+        ),
+    ],
+)
+async def test_validate_config_with_valid_dependency_fields_does_not_raise_error(
+    extras,
+):
+    source = create_source(ConfluenceDataSource, **extras)
+
+    await source.validate_config()
+
+
+@pytest.mark.asyncio
+@patch("aiohttp.ClientSession.get")
+async def test_validate_config_when_ssl_enabled_and_ssl_ca_not_empty_does_not_raise_error(
+    mock_get,
+):
+    with patch.object(ssl, "create_default_context", return_value=MockSSL()):
+        source = create_source(
+            ConfluenceDataSource,
+            ssl_enabled=True,
+            ssl_ca="-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----",
+        )
         await source.validate_config()
 
 
@@ -205,6 +313,36 @@ async def test_close_without_client_session():
     await source.close()
 
     assert source.confluence_client.session is None
+
+
+@pytest.mark.asyncio
+async def test_remote_validation_when_space_keys_are_valid():
+    source = create_source(ConfluenceDataSource)
+    source.spaces = ["DM", "ES"]
+    async_response = AsyncMock()
+    async_response.__aenter__ = AsyncMock(
+        return_value=JSONAsyncMock(RESPONSE_SPACE_KEYS)
+    )
+
+    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+        await source._remote_validation()
+
+
+@pytest.mark.asyncio
+async def test_remote_validation_when_space_keys_are_unavailable_then_raise_exception():
+    source = create_source(ConfluenceDataSource)
+    source.spaces = ["ES", "CS"]
+    async_response = AsyncMock()
+    async_response.__aenter__ = AsyncMock(
+        return_value=JSONAsyncMock(RESPONSE_SPACE_KEYS)
+    )
+
+    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+        with pytest.raises(
+            ConfigurableFieldValueError,
+            match="Spaces 'CS' are not available. Available spaces are: 'DM, ES'",
+        ):
+            await source._remote_validation()
 
 
 class MockSSL:

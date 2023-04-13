@@ -203,16 +203,10 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         """Validates whether user inputs are valid or not for configuration field.
 
         Raises:
-            Exception: The service account json is empty.
             Exception: The format of service account json is invalid.
         """
-        if (
-            self.configuration["service_account_credentials"] == ""
-            or self.configuration["service_account_credentials"] is None
-        ):
-            raise ConfigurableFieldValueError(
-                "Google Cloud service account json can't be empty."
-            )
+        self.configuration.check_valid()
+
         try:
             json.loads(self.configuration["service_account_credentials"])
         except ValueError:
