@@ -953,7 +953,7 @@ async def test_api_call_when_token_is_expired(patch_default_wait_multiplier):
 
 
 class TooManyRequestException(Exception):
-    code = 429
+    status = 429
     headers = {"Retry-After": 0}
 
 

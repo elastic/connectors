@@ -168,6 +168,7 @@ class SharepointClient:
             "content-type": "application/json",
         }
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
+        connector = aiohttp.TCPConnector(force_close=True)
 
         if self.is_cloud:
             basic_auth = None
@@ -177,6 +178,7 @@ class SharepointClient:
                 password=self.configuration["password"],
             )
         self.session = aiohttp.ClientSession(
+            connector=connector,
             auth=basic_auth,
             headers=request_headers,
             timeout=timeout,
@@ -297,7 +299,7 @@ class SharepointClient:
 
                     retry_after = RETRY_INTERVAL**retry
 
-                    if getattr(exception, "code", None) == 429:
+                    if getattr(exception, "status", None) == 429:
                         retry_after = int(
                             exception.headers.get("Retry-After", 0)  # pyright: ignore
                         )
