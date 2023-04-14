@@ -29,7 +29,7 @@ class ConfluenceAPI:
         self.attachment_end_at = 6
 
         self.app.route("/rest/api/space", methods=["GET"])(self.get_spaces)
-        self.app.route("/rest/api/content", methods=["GET"])(self.get_content)
+        self.app.route("/rest/api/content/search", methods=["GET"])(self.get_content)
         self.app.route(
             "/rest/api/content/<string:id>/child/attachment", methods=["GET"]
         )(self.get_attachments)
@@ -67,6 +67,7 @@ class ConfluenceAPI:
                 spaces["results"].append(
                     {
                         "id": f"space {space_count}",
+                        "key": f"space{space_count}",
                         "name": f"Demo Space {space_count}",
                         "_links": {
                             "webui": f"/spaces/space{space_count}",
