@@ -234,8 +234,8 @@ class SyncJobRunner:
             if doc_id_size > ES_ID_SIZE_LIMIT:
                 logger.debug(
                     f"Document with id '{doc_id}' with a size of '{doc_id_size}' bytes could not be ingested. "
-                    f"Elasticsearch has an upper limit of '{ES_ID_SIZE_LIMIT}' bytes for the '_id' field.",
-                    "Hashing id...",
+                    f"Elasticsearch has an upper limit of '{ES_ID_SIZE_LIMIT}' bytes for the '_id' field."
+                    f"Hashing id...",
                 )
 
                 hashed_id = self.source_klass.hash_id(doc_id)
