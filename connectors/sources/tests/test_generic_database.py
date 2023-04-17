@@ -19,7 +19,6 @@ from connectors.sources.generic_database import (
     configured_tables,
     is_wildcard,
 )
-from connectors.sources.mssql import MSSQLDataSource
 from connectors.sources.postgresql import PostgreSQLDataSource
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
@@ -171,8 +170,7 @@ async def test_validate_config_ssl():
 
 @pytest.mark.asyncio
 async def test_close():
-    """Test close method"""
-    source = create_source(MSSQLDataSource)
+    source = create_source(GenericBaseDataSource)
 
     await source.close()
 

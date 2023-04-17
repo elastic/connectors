@@ -5,13 +5,14 @@
 #
 """Microsoft SQL source module is responsible to fetch documents from Microsoft SQL."""
 import os
+from tempfile import NamedTemporaryFile
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 
 from connectors.logger import logger
 from connectors.sources.generic_database import GenericBaseDataSource, Queries
-from connectors.utils import get_pem_format, iso_utc
+from connectors.utils import get_pem_format
 
 # Connector will skip the below tables if it gets from the input
 TABLES_TO_SKIP = {"msdb": ["sysutility_ucp_configuration_internal"]}
@@ -68,7 +69,6 @@ class MSSQLDataSource(GenericBaseDataSource):
         self.queries = MSSQLQueries()
         self.dialect = "Microsoft SQL"
         self.schema = self.configuration["schema"]
-        self.certfile = f"ssl_certificate_mssql_{iso_utc()}.pem"
         self.tables_to_skip = TABLES_TO_SKIP
 
     @classmethod
@@ -125,16 +125,16 @@ class MSSQLDataSource(GenericBaseDataSource):
         if self.ssl_enabled:
             self.create_pem_file()
             connect_args = {
-                "cafile": f"/tmp/{self.certfile}",
+                "cafile": self.certfile,
                 "validate_host": self.validate_host,
             }
         self.engine = create_engine(connection_string, connect_args=connect_args)
 
     async def close(self):
         """Close the connection to the database server."""
-        if os.path.exists(f"/tmp/{self.certfile}"):
+        if os.path.exists(self.certfile):
             try:
-                os.remove(f"/tmp/{self.certfile}")
+                os.remove(self.certfile)
             except Exception as exception:
                 logger.warning(
                     f"Something went wrong while removing temporary certificate file. Exception: {exception}"
@@ -146,8 +146,9 @@ class MSSQLDataSource(GenericBaseDataSource):
     def create_pem_file(self):
         """Create pem file for SSL Verification"""
         pem_format = get_pem_format(key=self.ssl_ca, max_split=1)
-        with open(f"/tmp/{self.certfile}", "w") as cert:
+        with NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as cert:
             cert.write(pem_format)
+            self.certfile = cert.name
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch databases, tables and rows in async manner.
