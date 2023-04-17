@@ -7,6 +7,8 @@
 import re
 
 import aiomysql
+import fastjsonschema
+from fastjsonschema import JsonSchemaValueException
 
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -79,10 +81,29 @@ class MySQLQueries(Queries):
 
 
 class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
+    QUERY_OBJECT_SCHEMA_DEFINITION = {
+        "type": "object",
+        "properties": {
+            "tables": {"type": "array", "minItems": 1},
+            "query": {"type": "string", "minLength": 1},
+        },
+        "required": ["tables", "query"],
+        "additionalProperties": False,
+    }
+
+    SCHEMA_DEFINITION = {"type": "array", "items": QUERY_OBJECT_SCHEMA_DEFINITION}
+
+    SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
+
     def __init__(self, source):
         self.source = source
 
     async def validate(self, advanced_rules):
+        if len(advanced_rules) == 0:
+            return SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            )
+
         return await self._remote_validation(advanced_rules)
 
     @retryable(
@@ -91,10 +112,23 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def _remote_validation(self, advanced_rules):
+        try:
+            MySQLAdvancedRulesValidator.SCHEMA(advanced_rules)
+        except JsonSchemaValueException as e:
+            return SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=e.message,
+            )
+
         async with self.source.mysql_client() as client:
             tables = set(await client.get_all_table_names())
 
-        tables_to_filter = set(advanced_rules.keys())
+        tables_to_filter = set(
+            table
+            for query_info in advanced_rules
+            for table in query_info.get("tables", [])
+        )
         missing_tables = tables_to_filter - tables
 
         if len(missing_tables) > 0:
