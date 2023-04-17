@@ -55,7 +55,7 @@ async def test_create_engine(mock_create_url, mock_create_engine):
     mock_create_engine.assert_called_with(
         MSSQL_CONNECTION_STRING,
         connect_args={
-            "cafile": "/tmp/ssl_certificate_mssql_2023-01-24T04:07:19+00:00.pem",
+            "cafile": source.certfile,
             "validate_host": False,
         },
     )
@@ -97,3 +97,10 @@ async def test_get_docs_mssql():
 
     # Assert
     assert actual_response == expected_response
+
+
+@pytest.mark.asyncio
+async def test_close():
+    source = create_source(MSSQLDataSource)
+    source.create_pem_file()
+    await source.close()
