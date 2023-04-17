@@ -114,6 +114,8 @@ DOC_SOURCE_FILTERING_EDITED = [FILTERING_DEFAULT_DOMAIN_EDITED, FILTERING_OTHER_
 
 DOC_SOURCE = {
     "_id": CONNECTOR_ID,
+    "_seq_no": 1,
+    "_primary_term": 2,
     "_source": {
         "configuration": {"key": "value"},
         "description": "description",
@@ -829,6 +831,7 @@ async def test_connector_update_last_sync_scheduled_at():
 async def test_connector_validate_filtering_not_edited():
     index = Mock()
     index.update = AsyncMock()
+    index.fetch_response_by_id = AsyncMock(return_value=DOC_SOURCE)
     validator = Mock()
     validator.validate_filtering = AsyncMock()
 
@@ -841,9 +844,10 @@ async def test_connector_validate_filtering_not_edited():
 
 @pytest.mark.asyncio
 async def test_connector_validate_filtering_invalid():
+    doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.update = AsyncMock()
-    index.fetch_response_by_id = AsyncMock()
+    index.fetch_response_by_id = AsyncMock(return_value=doc_source)
     validation_result = FilteringValidationResult(
         state=FilteringValidationState.INVALID,
         errors=[FilterValidationError(ids=[1], messages="something wrong")],
@@ -862,23 +866,24 @@ async def test_connector_validate_filtering_invalid():
         ]
     }
 
-    connector = Connector(
-        elastic_index=index, doc_source=deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
-    )
+    connector = Connector(elastic_index=index, doc_source=doc_source)
     await connector.validate_filtering(validator=validator)
 
     validator.validate_filtering.assert_awaited()
-    index.update.assert_awaited_with(
-        doc_id=CONNECTOR_ID, doc=expected_validation_update_doc
+    index.update.assert_awaited_once_with(
+        doc_id=CONNECTOR_ID,
+        doc=expected_validation_update_doc,
+        if_seq_no=doc_source["_seq_no"],
+        if_primary_term=doc_source["_primary_term"],
     )
-    index.fetch_response_by_id.assert_awaited()
 
 
 @pytest.mark.asyncio
 async def test_connector_validate_filtering_valid():
+    doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.update = AsyncMock()
-    index.fetch_response_by_id = AsyncMock()
+    index.fetch_response_by_id = AsyncMock(return_value=doc_source)
     validation_result = FilteringValidationResult()
     validator = Mock()
     validator.validate_filtering = AsyncMock(return_value=validation_result)
@@ -895,17 +900,53 @@ async def test_connector_validate_filtering_valid():
         ]
     }
 
-    connector = Connector(
-        elastic_index=index, doc_source=deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
-    )
-    index.fetch_by_id = AsyncMock(return_value=connector)
+    connector = Connector(elastic_index=index, doc_source=doc_source)
     await connector.validate_filtering(validator=validator)
 
     validator.validate_filtering.assert_awaited()
-    index.update.assert_awaited_with(
-        doc_id=CONNECTOR_ID, doc=expected_validation_update_doc
+    index.update.assert_awaited_once_with(
+        doc_id=CONNECTOR_ID,
+        doc=expected_validation_update_doc,
+        if_seq_no=doc_source["_seq_no"],
+        if_primary_term=doc_source["_primary_term"],
     )
-    index.fetch_response_by_id.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_validate_filtering_with_race_condition():
+    doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
+    index = Mock()
+    index.update = AsyncMock()
+    validation_result = FilteringValidationResult()
+    validator = Mock()
+    validator.validate_filtering = AsyncMock(return_value=validation_result)
+    expected_validation_update_doc = {
+        "filtering": [
+            {
+                "domain": DEFAULT_DOMAIN,
+                "draft": DRAFT_FILTERING_DEFAULT_DOMAIN
+                | {"validation": validation_result.to_dict()},
+                "active": DRAFT_FILTERING_DEFAULT_DOMAIN
+                | {"validation": validation_result.to_dict()},
+            },
+            FILTERING_OTHER_DOMAIN,
+        ]
+    }
+    # make reload method return `edited` filtering in the first call, and `valid` filtering in the second call
+    index.fetch_response_by_id = AsyncMock(
+        side_effect=[doc_source, deepcopy(DOC_SOURCE)]
+    )
+
+    connector = Connector(elastic_index=index, doc_source=doc_source)
+    await connector.validate_filtering(validator=validator)
+
+    validator.validate_filtering.assert_awaited()
+    index.update.assert_awaited_once_with(
+        doc_id=CONNECTOR_ID,
+        doc=expected_validation_update_doc,
+        if_seq_no=doc_source["_seq_no"],
+        if_primary_term=doc_source["_primary_term"],
+    )
 
 
 @pytest.mark.parametrize(
