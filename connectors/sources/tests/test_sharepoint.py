@@ -223,7 +223,7 @@ def test_prepare_list_items_doc():
         "type": "list_item",
         "_id": 1,
         "file_name": "filename",
-        "size": None,
+        "size": 0,
         "title": "dummy",
         "author_id": "123",
         "creation_time": "2023-01-30T12:48:31Z",
@@ -590,8 +590,9 @@ async def test_get_content():
         "id": 1,
         "server_relative_url": "/url",
         "_timestamp": "2022-06-20T10:37:44Z",
-        "Length": "11",
+        "size": "11",
         "type": "sites",
+        "file_name": "dummy.pdf",
     }
     EXPECTED_CONTENT = {
         "_id": 1,
@@ -622,10 +623,11 @@ async def test_get_content_when_size_is_bigger():
     document = {
         "id": 1,
         "_timestamp": "2022-06-20T10:37:44Z",
-        "Length": "1048576011",
+        "size": "1048576011",
         "title": "dummy",
         "type": "sites",
         "server_relative_url": "/sites",
+        "file_name": "dummy.pdf",
     }
 
     source = create_source(SharepointDataSource)
@@ -645,8 +647,9 @@ async def test_get_content_when_doit_is_none():
     document = {
         "id": 1,
         "_timestamp": "2022-06-20T10:37:44Z",
-        "length": "11",
+        "size": "11",
         "type": "sites",
+        "file_name": "dummy.pdf",
     }
     source = create_source(SharepointDataSource)
     # Execute
