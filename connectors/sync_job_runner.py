@@ -228,11 +228,10 @@ class SyncJobRunner:
 
         try:
             await self.connector.sync_starts()
+        except elasticsearch.ConflictError:
+            raise
         except Exception as e:
-            if isinstance(e, elasticsearch.ConflictError):
-                raise
-            else:
-                raise SyncJobStartError(f"Unexpected error happened: {e}")
+            raise SyncJobStartError from e
 
     async def prepare_docs(self):
         logger.debug(f"Using pipeline {self.sync_job.pipeline}")
