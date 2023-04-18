@@ -384,7 +384,7 @@ In addition to the connector index `.elastic-connectors`, we have an additional 
     "deleted_document_count" : { "type" : "integer" },
     "error" : { "type" : "keyword" },
     "indexed_document_count" : { "type" : "integer" },
-    "indexed_document_volume" : { "type" : "unsigned_long" },
+    "indexed_document_volume" : { "type" : "integer" },
     "last_seen" : { "type" : "date" },
     "metadata" : { "type" : "object" },
     "started_at" : { "type" : "date" },
