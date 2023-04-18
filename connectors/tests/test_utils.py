@@ -33,6 +33,7 @@ from connectors.utils import (
     get_base64_value,
     get_pem_format,
     get_size,
+    has_duplicates,
     hash_id,
     is_expired,
     next_run,
@@ -477,3 +478,11 @@ def test_hash_id():
     )
 
     assert len(hash_id(random_id_too_long).encode("UTF-8")) < limit
+
+
+@pytest.mark.parametrize(
+    "_list, should_have_duplicate",
+    [([], False), (["abc"], False), (["abc", "def"], False), (["abc", "abc"], True)],
+)
+def test_has_duplicates(_list, should_have_duplicate):
+    assert has_duplicates(_list) == should_have_duplicate
