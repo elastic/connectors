@@ -33,6 +33,7 @@ from connectors.utils import (
     get_base64_value,
     get_pem_format,
     get_size,
+    has_duplicates,
     hash_id,
     is_expired,
     next_run,
@@ -485,3 +486,11 @@ def test_truncate_id():
     truncated_id = truncate_id(long_id)
 
     assert len(truncated_id) < len(long_id)
+    
+    
+@pytest.mark.parametrize(
+    "_list, should_have_duplicate",
+    [([], False), (["abc"], False), (["abc", "def"], False), (["abc", "abc"], True)],
+)
+def test_has_duplicates(_list, should_have_duplicate):
+    assert has_duplicates(_list) == should_have_duplicate
