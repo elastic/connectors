@@ -1,7 +1,7 @@
 agents:
-  provider: "gcp"
-  machineType: "n1-standard-8"
-  useVault: true
+  image: docker.elastic.co/ci-agent-images/enterprise-search/connectors-python:1.0.0
+  ephemeralStorage: 50G
+  memory: 4G
 
 steps:
   - label: "🏗️ Docker images"
