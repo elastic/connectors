@@ -10,18 +10,22 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
+from elasticsearch import ConflictError
 
 from connectors.byoc import (
     IDLE_JOBS_THRESHOLD,
     JOB_NOT_FOUND_ERROR,
     Connector,
     ConnectorIndex,
+    DataSourceError,
     Features,
     Filter,
     Filtering,
     JobStatus,
     JobTriggerMethod,
     Pipeline,
+    ServiceTypeNotConfiguredError,
+    ServiceTypeNotSupportedError,
     Status,
     SyncJob,
     SyncJobIndex,
@@ -730,52 +734,205 @@ class Banana(BaseDataSource):
 
 
 @pytest.mark.asyncio
-async def test_prepare(mock_responses):
-    class Client:
-        pass
-
-    class Index:
-        client = Client()
-
-        async def update(self, doc_id, doc):
-            pass
-
-        async def fetch_response_by_id(self, doc_id):
-            return connector_doc_after_prepare
-
-    # generic empty doc created by the user through the Kibana UI
-    # when it's created that way, the service type is None,
-    # so it's up to the connector to set it back to its value
+async def test_connector_prepare_different_id():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
     connector_doc = {
-        "_id": "1",
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    config = {
+        "connector_id": "2",
+        "service_type": "banana",
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.prepare(config)
+    index.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare_with_prepared_connector():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
         "_source": {
-            "status": "created",
-            "service_type": None,
-            "index_name": "test",
-            "configuration": {},
-            "language": "en",
-            "scheduling": {"enabled": False},
+            "service_type": "banana",
+            "configuration": {"user": {}},
         },
     }
-    service_type = "mongodb"
-    connector_doc_after_prepare = deepcopy(connector_doc)
-    connector_doc_after_prepare["_source"]["status"] = "needs_configuration"
-    connector_doc_after_prepare["_source"]["service_type"] = service_type
-    connector_doc_after_prepare["_source"][
-        "configuration"
-    ] = Banana.get_default_configuration()
-    connector = Connector(Index(), connector_doc)
-
     config = {
-        "connector_id": "1",
-        "service_type": service_type,
-        "sources": {"mongodb": "connectors.tests.test_byoc:Banana"},
+        "connector_id": doc_id,
+        "service_type": "banana",
     }
-
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
     await connector.prepare(config)
-    assert connector.status == Status.NEEDS_CONFIGURATION
-    assert connector.service_type == service_type
-    assert not connector.configuration.is_empty()
+    index.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare_with_service_type_not_configured():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    config = {
+        "connector_id": doc_id,
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    with pytest.raises(ServiceTypeNotConfiguredError):
+        await connector.prepare(config)
+        index.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare_with_service_type_not_supported():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    config = {
+        "connector_id": doc_id,
+        "service_type": "banana",
+        "sources": {},
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    with pytest.raises(ServiceTypeNotSupportedError):
+        await connector.prepare(config)
+        index.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare_with_data_source_error():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    config = {
+        "connector_id": doc_id,
+        "service_type": "banana",
+        "sources": {"banana": "foobar"},
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    with pytest.raises(DataSourceError):
+        await connector.prepare(config)
+        index.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    config = {
+        "connector_id": doc_id,
+        "service_type": "banana",
+        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.prepare(config)
+    index.update.assert_called_once_with(
+        doc_id=doc_id,
+        doc={
+            "service_type": "banana",
+            "configuration": Banana.get_simple_configuration(),
+            "status": Status.NEEDS_CONFIGURATION.value,
+        },
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare_with_race_condition():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    config = {
+        "connector_id": doc_id,
+        "service_type": "banana",
+        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
+    }
+    connector_doc_after_update = connector_doc | {
+        "_source": {
+            "service_type": "banana",
+            "configuration": Banana.get_simple_configuration(),
+        }
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(
+        side_effect=[connector_doc, connector_doc_after_update]
+    )
+    index.update = AsyncMock(
+        side_effect=ConflictError(
+            message="This is an error message from test_connector_prepare_with_race_condition",
+            meta=None,
+            body={},
+        )
+    )
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.prepare(config)
+    index.update.assert_called_once_with(
+        doc_id=doc_id,
+        doc={
+            "service_type": "banana",
+            "configuration": Banana.get_simple_configuration(),
+            "status": Status.NEEDS_CONFIGURATION.value,
+        },
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
 
 
 @pytest.mark.asyncio

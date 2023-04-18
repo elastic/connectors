@@ -14,7 +14,6 @@ from datetime import datetime
 
 from connectors.byoc import (
     ConnectorIndex,
-    ConnectorUpdateError,
     DataSourceError,
     JobTriggerMethod,
     ServiceTypeNotConfiguredError,
@@ -52,13 +51,13 @@ class JobSchedulingService(BaseService):
 
         try:
             await connector.prepare(self.config)
+        except DocumentNotFoundError:
+            logger.error(f"Couldn't find connector by id {connector.id}")
+            return
         except ServiceTypeNotConfiguredError:
             logger.error(
                 f"Service type is not configured for connector {self.config['connector_id']}"
             )
-            return
-        except ConnectorUpdateError as e:
-            logger.error(e)
             return
         except ServiceTypeNotSupportedError:
             logger.debug(f"Can't handle source of type {connector.service_type}")

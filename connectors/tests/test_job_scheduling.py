@@ -12,7 +12,6 @@ import pytest
 from elasticsearch import ConflictError
 
 from connectors.byoc import (
-    ConnectorUpdateError,
     DataSourceError,
     JobTriggerMethod,
     ServiceTypeNotConfiguredError,
@@ -20,6 +19,7 @@ from connectors.byoc import (
     Status,
 )
 from connectors.config import load_config
+from connectors.es.index import DocumentNotFoundError
 from connectors.services.job_scheduling import JobSchedulingService
 from connectors.source import DataSourceConfiguration
 from connectors.tests.commons import AsyncIterator
@@ -289,7 +289,7 @@ async def test_connector_not_configured(
     "prepare_exception",
     [
         ServiceTypeNotConfiguredError,
-        ConnectorUpdateError,
+        DocumentNotFoundError,
         ServiceTypeNotSupportedError,
         DataSourceError,
     ],
