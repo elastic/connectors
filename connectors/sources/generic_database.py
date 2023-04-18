@@ -116,7 +116,7 @@ class GenericBaseDataSource(BaseDataSource):
         self.dialect = ""
         self.connection = None
         self.queries = None
-        self.certfile = None
+        self.certfile = ""
         self.tables_to_skip = {}
 
     @classmethod

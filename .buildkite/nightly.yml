@@ -60,6 +60,8 @@ steps:
   - label: "🔨 Jira"
     command:
       - ".buildkite/run_nigthly.sh jira"
+    artifact_paths:
+      - "perf8-report-*/**/*"
   - label: "🔨 Confluence"
     command:
       - ".buildkite/run_nigthly.sh confluence"

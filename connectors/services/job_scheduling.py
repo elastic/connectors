@@ -22,6 +22,8 @@ from connectors.byoc import (
     Status,
     SyncJobIndex,
 )
+from connectors.es.client import with_concurrency_control
+from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass
@@ -145,34 +147,68 @@ class JobSchedulingService(BaseService):
         return 0
 
     async def _on_demand_sync(self, connector):
-        if not connector.sync_now:
-            return
+        @with_concurrency_control()
+        async def _should_schedule_on_demand_sync():
+            try:
+                await connector.reload()
+            except DocumentNotFoundError:
+                logger.error(f"Couldn't reload connector {connector.id}")
+                return False
 
-        await self.sync_job_index.create(
-            connector=connector, trigger_method=JobTriggerMethod.ON_DEMAND
-        )
-        await connector.reset_sync_now_flag()
+            if not connector.sync_now:
+                return False
+
+            await connector.reset_sync_now_flag()
+            return True
+
+        if await _should_schedule_on_demand_sync():
+            logger.info(f"Creating an on demand sync for connector {connector.id}...")
+            await self.sync_job_index.create(
+                connector=connector, trigger_method=JobTriggerMethod.ON_DEMAND
+            )
 
     async def _scheduled_sync(self, connector):
-        try:
-            next_sync = connector.next_sync()
-        except Exception as e:
-            logger.critical(e, exc_info=True)
-            await connector.error(str(e))
-            return
+        @with_concurrency_control()
+        async def _should_schedule_scheduled_sync():
+            try:
+                await connector.reload()
+            except DocumentNotFoundError:
+                logger.error(f"Couldn't reload connector {connector.id}")
+                return False
 
-        if next_sync is None:
-            logger.debug(f"Scheduling is disabled for connector {connector.id}")
-            return
+            now = datetime.utcnow()
+            if (
+                connector.last_sync_scheduled_at is not None
+                and connector.last_sync_scheduled_at > now
+            ):
+                logger.debug(
+                    "A scheduled sync is created by another connector instance, skipping..."
+                )
+                return False
 
-        now = datetime.utcnow()
-        next_sync_due = (next_sync - now).total_seconds()
-        if next_sync_due - self.idling > 0:
-            logger.debug(
-                f"Next sync for connector {connector.id} due in {int(next_sync_due)} seconds"
+            try:
+                next_sync = connector.next_sync()
+            except Exception as e:
+                logger.critical(e, exc_info=True)
+                await connector.error(str(e))
+                return False
+
+            if next_sync is None:
+                logger.debug(f"Scheduling is disabled for connector {connector.id}")
+                return False
+
+            next_sync_due = (next_sync - now).total_seconds()
+            if next_sync_due - self.idling > 0:
+                logger.debug(
+                    f"Next sync for connector {connector.id} due in {int(next_sync_due)} seconds"
+                )
+                return False
+
+            await connector.update_last_sync_scheduled_at(next_sync)
+            return True
+
+        if await _should_schedule_scheduled_sync():
+            logger.info(f"Creating a scheduled sync for connector {connector.id}...")
+            await self.sync_job_index.create(
+                connector=connector, trigger_method=JobTriggerMethod.SCHEDULED
             )
-            return
-
-        await self.sync_job_index.create(
-            connector=connector, trigger_method=JobTriggerMethod.SCHEDULED
-        )
