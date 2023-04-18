@@ -710,7 +710,8 @@ class SyncJobIndex(ESIndex):
                 ]
             }
         }
-        async for job in self.get_all_docs(query=query):
+        sort = [{"created_at": "asc"}]
+        async for job in self.get_all_docs(query=query, sort=sort):
             yield job
 
     async def orphaned_jobs(self, connector_ids):
