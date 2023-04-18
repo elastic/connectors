@@ -44,15 +44,18 @@ DRIVE_ITEM = "drive_item"
 LIST_ITEM = "list_item"
 ATTACHMENT_DATA = "attachment_data"
 DOCUMENT_LIBRARY = "document_library"
+LIST_BY_TITLE = " list_by_title"
+TIKA_SUPPORTED_FILETYPES.append(".aspx")
 
 URLS = {
     PING: "{host_url}/sites/{site_collections}/_api/web/webs",
     SITES: "{host_url}{parent_site_url}/_api/web/webs?$skip={skip}&$top={top}",
     LISTS: "{host_url}{parent_site_url}/_api/web/lists?$skip={skip}&$top={top}&$expand=RootFolder&$filter=(Hidden eq false)",
     ATTACHMENT: "{host_url}{value}/_api/web/GetFileByServerRelativeUrl('{file_relative_url}')/$value",
-    DRIVE_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$select=Modified,Id,GUID,File,Folder&$expand=File,Folder&$top={top}",
+    DRIVE_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$select=*&$expand=File,Folder&$top={top}",
     LIST_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$expand=AttachmentFiles&$select=*,FileRef",
     ATTACHMENT_DATA: "{host_url}{parent_site_url}/_api/web/getfilebyserverrelativeurl('{file_relative_url}')",
+    LIST_BY_TITLE: "{host_url}{parent_site_url}/_api/web/lists/getbytitle('Site%20Pages')/items?$select=Title,CanvasContent1,FileLeafRef&$filter=FileLeafRef eq '{filename}'",
 }
 SCHEMA = {
     SITES: {
@@ -241,7 +244,83 @@ class SharepointClient:
         async with aiofiles.open(file=source_file_name, mode="r") as target_file:
             # base64 on macOS will add a EOL, so we strip() here
             attachment_content = (await target_file.read()).strip()
-        await remove(source_file_name)  # pyright: ignore
+        try:
+            await remove(source_file_name)  # pyright: ignore
+        except Exception as exception:
+            logger.warning(
+                f"Could not remove file from: {source_file_name}. Error: {exception}"
+            )
+        return {
+            "_id": document.get("id"),
+            "_timestamp": document.get("_timestamp"),
+            "_attachment": attachment_content,
+        }
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_site_pages_content(
+        self, document, site_url, response_data, timestamp=None, doit=False
+    ):
+        """Get content of site pages for SharePoint
+        Args:
+            document (dictionary): Modified document.
+            site_url (str): Site path of sharepoint
+            response_data (dict): Dictionary of item response
+            timestamp (timestamp, optional): Timestamp of item last modified. Defaults to None.
+            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
+        Returns:
+            dictionary: Content document with id, timestamp & text.
+        """
+        document_size = int(document["size"])
+        filename = (
+            document["title"] if document["type"] == "File" else document["file_name"]
+        )
+        if not (doit and document_size):
+            return
+        if document_size > FILE_SIZE_LIMIT:
+            logger.warning(
+                f"File size {document_size} of file {filename} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
+            )
+            return
+        source_file_name = ""
+        if self.is_cloud:
+            async for response in self._api_call(
+                url_name=LIST_BY_TITLE,
+                host_url=self.host_url,
+                parent_site_url=site_url,
+                filename=filename,
+            ):
+                response_data = response["value"][0][  # pyright: ignore
+                    "CanvasContent1"
+                ]
+                if response_data is None:
+                    return
+                async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+                    await async_buffer.write(bytes(response_data, "utf-8"))
+                    source_file_name = async_buffer.name
+        else:
+            response_data = response_data["WikiField"]
+            if response_data is None:
+                return
+            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+                await async_buffer.write(bytes(response_data, "utf-8"))
+                source_file_name = async_buffer.name
+        await asyncio.to_thread(
+            convert_to_b64,
+            source=source_file_name,
+        )
+        async with aiofiles.open(file=source_file_name) as target_file:
+            # base64 on macOS will add a EOL, so we strip() here
+            attachment_content = (await target_file.read()).strip()
+        try:
+            await remove(source_file_name)  # pyright: ignore
+        except Exception as exception:
+            logger.warning(
+                f"Could not remove file from: {source_file_name}. Error: {exception}"
+            )
         return {
             "_id": document.get("id"),
             "_timestamp": document.get("_timestamp"),
@@ -774,8 +853,11 @@ class SharepointDataSource(BaseDataSource):
         for site_url in server_relative_url:
             async for list_data in self.sharepoint_client.get_lists(site_url=site_url):
                 for result in list_data:
+                    is_site_page = False
                     # if BaseType value is 1 then it's document library else it's a list
                     if result.get("BaseType") == 1:
+                        if result.get("Title") == "Site Pages":
+                            is_site_page = True
                         yield self.format_lists(
                             item=result, document_type=DOCUMENT_LIBRARY
                         ), None
@@ -798,9 +880,17 @@ class SharepointDataSource(BaseDataSource):
                         if file_relative_url is None:
                             yield document, None
                         else:
-                            yield document, partial(
-                                self.sharepoint_client.get_content,
-                                document,
-                                file_relative_url,
-                                site_url,
-                            )
+                            if is_site_page:
+                                yield document, partial(
+                                    self.sharepoint_client.get_site_pages_content,
+                                    document,
+                                    site_url,
+                                    item,
+                                )
+                            else:
+                                yield document, partial(
+                                    self.sharepoint_client.get_content,
+                                    document,
+                                    file_relative_url,
+                                    site_url,
+                                )
