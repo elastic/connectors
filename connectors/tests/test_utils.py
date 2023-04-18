@@ -486,8 +486,8 @@ def test_truncate_id():
     truncated_id = truncate_id(long_id)
 
     assert len(truncated_id) < len(long_id)
-    
-    
+
+
 @pytest.mark.parametrize(
     "_list, should_have_duplicate",
     [([], False), (["abc"], False), (["abc", "def"], False), (["abc", "abc"], True)],

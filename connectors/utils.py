@@ -531,8 +531,8 @@ def truncate_id(_id):
         return _id[:8] + "..." + _id[-8:]
 
     return _id
-    
-    
+
+
 def has_duplicates(strings_list):
     seen = set()
     for string in strings_list:
