@@ -207,13 +207,16 @@ class SharepointClient:
         Returns:
             dictionary: Content document with id, timestamp & text.
         """
-        if not (doit and document["Length"]):
+        document_size = int(document["size"])
+        filename = (
+            document["title"] if document["type"] == "File" else document["file_name"]
+        )
+        if not (doit and document_size):
             return
 
-        document_size = int(document["Length"])
         if document_size > FILE_SIZE_LIMIT:
             logger.warning(
-                f"File size {document_size} of file {document['title']} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
+                f"File size {document_size} of file {filename} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
             )
             return
 
@@ -709,7 +712,7 @@ class SharepointDataSource(BaseDataSource):
         document.update(
             {
                 "_id": item["GUID"],
-                "size": item.get("File", {}).get("Length"),
+                "size": item.get("File", {}).get("Length", 0),
                 "url": urljoin(
                     self.sharepoint_client.host_url,
                     item[item_type]["ServerRelativeUrl"],
@@ -741,7 +744,7 @@ class SharepointDataSource(BaseDataSource):
             {
                 "_id": item["_id"] if "_id" in item.keys() else item["GUID"],
                 "file_name": item.get("file_name"),
-                "size": item.get("Length"),
+                "size": item.get("Length", 0),
                 "url": item["url"],
             }
         )
@@ -765,7 +768,7 @@ class SharepointDataSource(BaseDataSource):
             async for site_data in self.sharepoint_client.get_sites(
                 site_url=f"/sites/{collection}"
             ):
-                server_relative_url.append(site_data["server_relative_url"])
+                server_relative_url.append(site_data["ServerRelativeUrl"])
                 yield self.format_sites(item=site_data), None
 
         for site_url in server_relative_url:
@@ -790,14 +793,14 @@ class SharepointDataSource(BaseDataSource):
                         site_url=result.get("ParentWebUrl"),
                         server_relative_url=server_url,
                     ):
+                        document = format_document(item=item)
+
                         if file_relative_url is None:
-                            yield format_document(item=item), None
+                            yield document, None
                         else:
-                            yield format_document(
-                                item=item,
-                            ), partial(
+                            yield document, partial(
                                 self.sharepoint_client.get_content,
-                                item,
+                                document,
                                 file_relative_url,
                                 site_url,
                             )
