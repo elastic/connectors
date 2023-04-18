@@ -24,12 +24,12 @@ class ConfluenceAPI:
         self.space_start_at = 0
         self.space_page_limit = 100
         self.total_spaces = 4000
-        self.total_content = 100
+        self.total_content = 50
         self.attachment_start_at = 1
         self.attachment_end_at = 6
 
         self.app.route("/rest/api/space", methods=["GET"])(self.get_spaces)
-        self.app.route("/rest/api/content", methods=["GET"])(self.get_content)
+        self.app.route("/rest/api/content/search", methods=["GET"])(self.get_content)
         self.app.route(
             "/rest/api/content/<string:id>/child/attachment", methods=["GET"]
         )(self.get_attachments)
@@ -67,6 +67,7 @@ class ConfluenceAPI:
                 spaces["results"].append(
                     {
                         "id": f"space {space_count}",
+                        "key": f"space{space_count}",
                         "name": f"Demo Space {space_count}",
                         "_links": {
                             "webui": f"/spaces/space{space_count}",
@@ -97,11 +98,12 @@ class ConfluenceAPI:
         content = {
             "results": [],
             "start": 0,
-            "limit": 100,
-            "size": 100,
+            "limit": 50,
+            "size": 50,
             "_links": {"next": None},
         }
-        document_type = args.get("type", "page")
+        confluence_query = args.get("cql")
+        document_type = confluence_query.split("type=")[1]
         for content_count in range(self.total_content):
             content["results"].append(
                 {
