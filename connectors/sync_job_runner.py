@@ -238,7 +238,7 @@ class SyncJobRunner:
 
             if doc_id_size > ES_ID_SIZE_LIMIT:
                 logger.debug(
-                    f"Id '{truncate_id(doc_id)}' is too long: '[{doc_id_size} of maximum {ES_ID_SIZE_LIMIT} bytes]', hashing"
+                    f"Id '{truncate_id(doc_id)}' is too long: {doc_id_size} of maximum {ES_ID_SIZE_LIMIT} bytes, hashing"
                 )
 
                 hashed_id = self.source_klass.hash_id(doc_id)
