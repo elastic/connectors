@@ -578,9 +578,9 @@ class MySqlDataSource(BaseDataSource):
         primary_key_columns = [
             await client.get_primary_key_column_names(table) for table in tables
         ]
-        primary_key_columns = sorted([
-            column for columns in primary_key_columns for column in columns
-        ])
+        primary_key_columns = sorted(
+            [column for columns in primary_key_columns for column in columns]
+        )
 
         if not primary_key_columns:
             logger.warning(
