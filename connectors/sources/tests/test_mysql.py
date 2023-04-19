@@ -804,15 +804,32 @@ def test_parse_tables_string_to_list(tables_string, expected_tables_list):
 
 
 @pytest.mark.parametrize(
-    "row, primary_key_columns, expected_id",
+    "tables, row, primary_key_columns, expected_id",
     [
-        ({"key_1": 1, "key_2": 2}, ["key_1"], f"{TABLE_ONE}_1_"),
-        ({"key_1": 1, "key_2": 2}, ["key_1", "key_2"], f"{TABLE_ONE}_1_2_"),
-        ({"key_1": 1, "key_2": 2}, ["key_1", "key_3"], f"{TABLE_ONE}_1_"),
+        (TABLE_ONE, {"key_1": 1, "key_2": 2}, ["key_1"], f"{TABLE_ONE}_1"),
+        ([TABLE_ONE], {"key_1": 1, "key_2": 2}, ["key_1"], f"{TABLE_ONE}_1"),
+        (
+            [TABLE_ONE, TABLE_TWO],
+            {"key_1": 1, "key_2": 2},
+            ["key_1", "key_2"],
+            f"{TABLE_ONE}_{TABLE_TWO}_1_2",
+        ),
+        (
+            [TABLE_THREE, TABLE_ONE, TABLE_TWO],
+            {"key_1": 1, "key_2": 2},
+            ["key_1", "key_3"],
+            f"{TABLE_ONE}_{TABLE_TWO}_{TABLE_THREE}_1",
+        ),
+        (
+            [TABLE_ONE, TABLE_TWO, TABLE_THREE],
+            {"key_1": 1, "key_2": 2},
+            ["key_1", "key_3"],
+            f"{TABLE_ONE}_{TABLE_TWO}_{TABLE_THREE}_1",
+        ),
     ],
 )
-def test_generate_id(row, primary_key_columns, expected_id):
-    row_id = generate_id(TABLE_ONE, row, primary_key_columns)
+def test_generate_id(tables, row, primary_key_columns, expected_id):
+    row_id = generate_id(tables, row, primary_key_columns)
 
     assert row_id == expected_id
 
