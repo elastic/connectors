@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from connectors.es import ESDocument, ESIndex
+from connectors.es.client import with_concurrency_control
 from connectors.filtering.validation import (
     FilteringValidationState,
     InvalidFilteringError,
@@ -602,7 +603,9 @@ class Connector(ESDocument):
             )
         await self.reload()
 
+    @with_concurrency_control()
     async def validate_filtering(self, validator):
+        await self.reload()
         draft_filter = self.filtering.get_draft_filter()
         if not draft_filter.has_validation_state(FilteringValidationState.EDITED):
             logger.debug(
@@ -627,7 +630,12 @@ class Connector(ESDocument):
                 if validation_result.state == FilteringValidationState.VALID:
                     filter_["active"] = filter_.get("draft")
 
-        await self.index.update(doc_id=self.id, doc={"filtering": filtering})
+        await self.index.update(
+            doc_id=self.id,
+            doc={"filtering": filtering},
+            if_seq_no=self._seq_no,
+            if_primary_term=self._primary_term,
+        )
         await self.reload()
 
     async def document_count(self):
