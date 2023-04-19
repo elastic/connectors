@@ -44,7 +44,7 @@ DRIVE_ITEM = "drive_item"
 LIST_ITEM = "list_item"
 ATTACHMENT_DATA = "attachment_data"
 DOCUMENT_LIBRARY = "document_library"
-LIST_BY_TITLE = " list_by_title"
+LIST_BY_TITLE = "list_by_title"
 TIKA_SUPPORTED_FILETYPES.append(".aspx")
 
 URLS = {
@@ -241,77 +241,39 @@ class SharepointClient:
             convert_to_b64,
             source=source_file_name,
         )
-        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            attachment_content = (await target_file.read()).strip()
-        try:
-            await remove(source_file_name)  # pyright: ignore
-        except Exception as exception:
-            logger.warning(
-                f"Could not remove file from: {source_file_name}. Error: {exception}"
-            )
         return {
             "_id": document.get("id"),
             "_timestamp": document.get("_timestamp"),
-            "_attachment": attachment_content,
+            "_attachment": await self.convert_file_to_b64(source_file_name),
         }
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def get_site_pages_content(
-        self, document, site_url, response_data, timestamp=None, doit=False
-    ):
-        """Get content of site pages for SharePoint
+    async def get_site_page_for_online(self, site_url, filename):
+        """Get metadata of site pages for SharePoint Online
+
         Args:
-            document (dictionary): Modified document.
             site_url (str): Site path of sharepoint
-            response_data (dict): Dictionary of item response
-            timestamp (timestamp, optional): Timestamp of item last modified. Defaults to None.
-            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
+            filename (str): Name of file
+
         Returns:
-            dictionary: Content document with id, timestamp & text.
+            data: API response
         """
-        document_size = int(document["size"])
-        filename = (
-            document["title"] if document["type"] == "File" else document["file_name"]
-        )
-        if not (doit and document_size):
-            return
-        if document_size > FILE_SIZE_LIMIT:
-            logger.warning(
-                f"File size {document_size} of file {filename} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
-            return
-        source_file_name = ""
-        if self.is_cloud:
-            async for response in self._api_call(
+        response = await anext(
+            self._api_call(
                 url_name=LIST_BY_TITLE,
                 host_url=self.host_url,
                 parent_site_url=site_url,
                 filename=filename,
-            ):
-                response_data = response["value"][0][  # pyright: ignore
-                    "CanvasContent1"
-                ]
-                if response_data is None:
-                    return
-                async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-                    await async_buffer.write(bytes(response_data, "utf-8"))
-                    source_file_name = async_buffer.name
-        else:
-            response_data = response_data["WikiField"]
-            if response_data is None:
-                return
-            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-                await async_buffer.write(bytes(response_data, "utf-8"))
-                source_file_name = async_buffer.name
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
+            )
         )
+        return response["value"][0].get("CanvasContent1")  # pyright: ignore
+
+    async def convert_file_to_b64(self, source_file_name):
+        """This method convert th file content into b64
+        Args:
+            source_file_name: Name of source file
+        Returns:
+            attachment_content: Attachment content in b64
+        """
         async with aiofiles.open(file=source_file_name) as target_file:
             # base64 on macOS will add a EOL, so we strip() here
             attachment_content = (await target_file.read()).strip()
@@ -321,10 +283,63 @@ class SharepointClient:
             logger.warning(
                 f"Could not remove file from: {source_file_name}. Error: {exception}"
             )
+        return attachment_content
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_site_pages_content(
+        self, document, site_url, list_response, timestamp=None, doit=False
+    ):
+        """Get content of site pages for SharePoint
+
+        Args:
+            document (dictionary): Modified document.
+            site_url (str): Site path of sharepoint
+            list_response (dict): Dictionary of list item response
+            timestamp (timestamp, optional): Timestamp of item last modified. Defaults to None.
+            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
+
+        Returns:
+            dictionary: Content document with id, timestamp & text.
+        """
+        document_size = int(document["size"])
+        filename = (
+            document["title"] if document["type"] == "File" else document["file_name"]
+        )
+        if not (doit and document_size):
+            return
+
+        if document_size > FILE_SIZE_LIMIT:
+            logger.warning(
+                f"File size {document_size} of file {filename} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
+            )
+            return
+
+        source_file_name = ""
+        if self.is_cloud:
+            response_data = await self.get_site_page_for_online(site_url, filename)
+        else:
+            response_data = list_response["WikiField"]
+
+        if response_data is None:
+            return
+
+        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+            await async_buffer.write(bytes(response_data, "utf-8"))
+
+            source_file_name = async_buffer.name
+
+        await asyncio.to_thread(
+            convert_to_b64,
+            source=source_file_name,
+        )
         return {
             "_id": document.get("id"),
             "_timestamp": document.get("_timestamp"),
-            "_attachment": attachment_content,
+            "_attachment": await self.convert_file_to_b64(source_file_name),
         }
 
     async def _api_call(self, url_name, url="", **url_kwargs):
@@ -485,7 +500,7 @@ class SharepointClient:
             site_url(string): Parent site relative path
             file_relative_url(string): Relative url of file
         Returns:
-            attachment_data(dictionary): Attachment metatdata
+            attachment_data(dictionary): Attachment metadata
         """
         return await anext(
             self._api_call(
@@ -715,7 +730,7 @@ class SharepointDataSource(BaseDataSource):
             )
             raise
 
-    def map_documet_with_schema(
+    def map_document_with_schema(
         self,
         document,
         item,
@@ -754,7 +769,7 @@ class SharepointDataSource(BaseDataSource):
             self.sharepoint_client.host_url, item["RootFolder"]["ServerRelativeUrl"]
         )
 
-        self.map_documet_with_schema(
+        self.map_document_with_schema(
             document=document, item=item, document_type=document_type
         )
         return document
@@ -770,7 +785,7 @@ class SharepointDataSource(BaseDataSource):
         """
         document = {"type": SITES}
 
-        self.map_documet_with_schema(document=document, item=item, document_type=SITES)
+        self.map_document_with_schema(document=document, item=item, document_type=SITES)
         return document
 
     def format_drive_item(
@@ -799,7 +814,7 @@ class SharepointDataSource(BaseDataSource):
                 "type": item_type,
             }
         )
-        self.map_documet_with_schema(
+        self.map_document_with_schema(
             document=document, item=item[item_type], document_type=DRIVE_ITEM
         )
 
@@ -828,7 +843,7 @@ class SharepointDataSource(BaseDataSource):
             }
         )
 
-        self.map_documet_with_schema(
+        self.map_document_with_schema(
             document=document, item=item, document_type=LIST_ITEM
         )
         return document

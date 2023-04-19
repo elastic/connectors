@@ -1009,11 +1009,19 @@ async def test_get_site_pages_content():
     response_content = await source.sharepoint_client.get_site_pages_content(
         document=EXPECTED_ATTACHMENT,
         site_url="/site",
-        response_data=RESPONSE_DATA,
+        list_response=RESPONSE_DATA,
         doit=True,
     )
     # Assert
     assert response_content == EXPECTED_CONTENT
+
+
+async def coroutine_generator(item):
+    """create a method for returning fake coroutine value for
+    Args:
+        item: Value for converting into coroutine
+    """
+    return item
 
 
 @pytest.mark.asyncio
@@ -1021,7 +1029,6 @@ async def test_get_site_pages_content_when_canvascontent_is_not_none():
     # Setup
     source = create_source(SharepointDataSource)
     source.sharepoint_client.is_cloud = True
-    async_response = {"value": [{"CanvasContent1": "<div>dummy</div>"}]}
     EXPECTED_ATTACHMENT = {
         "id": 1,
         "server_relative_url": "/url",
@@ -1030,12 +1037,14 @@ async def test_get_site_pages_content_when_canvascontent_is_not_none():
         "type": "sites",
         "file_name": "dummy.pdf",
     }
-    source.sharepoint_client._api_call = Mock(return_value=AsyncIter(async_response))
+    source.sharepoint_client.get_site_page_for_online = Mock(
+        return_value=coroutine_generator("<div>dummy</div>")
+    )
     # Execute
     response_content = await source.sharepoint_client.get_site_pages_content(
         document=EXPECTED_ATTACHMENT,
         site_url="/site",
-        response_data={"CanvasContent1": None},
+        list_response={"CanvasContent1": None},
         doit=True,
     )
     # Assert
@@ -1047,18 +1056,19 @@ async def test_get_site_pages_content_when_canvascontent_is_none():
     # Setup
     source = create_source(SharepointDataSource)
     source.sharepoint_client.is_cloud = True
-    async_response = {"value": [{"CanvasContent1": None}]}
     EXPECTED_ATTACHMENT = {
         "title": "Home.aspx",
         "type": "File",
         "size": "10000000",
     }
-    source.sharepoint_client._api_call = Mock(return_value=AsyncIter(async_response))
+    source.sharepoint_client.get_site_page_for_online = Mock(
+        return_value=coroutine_generator(None)
+    )
     # Execute
     response_content = await source.sharepoint_client.get_site_pages_content(
         document=EXPECTED_ATTACHMENT,
         site_url="/site",
-        response_data={"CanvasContent1": None},
+        list_response={"CanvasContent1": None},
         doit=True,
     )
     # Assert
@@ -1082,7 +1092,7 @@ async def test_get_site_pages_content_for_is_cloud_when_size_big():
     response_content = await source.sharepoint_client.get_site_pages_content(
         document=EXPECTED_ATTACHMENT,
         site_url="/site",
-        response_data={},
+        list_response={},
         doit=True,
     )
     # Assert
@@ -1098,7 +1108,7 @@ async def test_get_site_pages_content_for_wikifiled_none():
     response_content = await source.sharepoint_client.get_site_pages_content(
         document=EXPECTED_ATTACHMENT,
         site_url="/site",
-        response_data={"WikiField": None},
+        list_response={"WikiField": None},
         doit=True,
     )
     # Assert
