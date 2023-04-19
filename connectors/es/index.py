@@ -83,12 +83,13 @@ class ESIndex(ESClient):
             script=script,
         )
 
-    async def get_all_docs(self, query=None, page_size=DEFAULT_PAGE_SIZE):
+    async def get_all_docs(self, query=None, sort=None, page_size=DEFAULT_PAGE_SIZE):
         """
         Lookup for elasticsearch documents using {query}
 
         Args:
             query (dict): Represents an Elasticsearch query
+            sort (list): A list of fields to sort the result
             page_size (int): Number of documents per query
         Returns:
             Iterator
@@ -106,6 +107,7 @@ class ESIndex(ESClient):
                 resp = await self.client.search(
                     index=self.index_name,
                     query=query,
+                    sort=sort,
                     from_=offset,
                     size=page_size,
                     expand_wildcards="hidden",
