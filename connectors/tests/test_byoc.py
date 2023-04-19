@@ -26,6 +26,7 @@ from connectors.byoc import (
     Pipeline,
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
+    Sort,
     Status,
     SyncJob,
     SyncJobIndex,
@@ -1465,7 +1466,7 @@ async def test_pending_jobs(get_all_docs, set_env):
             ]
         }
     }
-    expected_sort = [{"created_at": "asc"}]
+    expected_sort = [{"created_at": Sort.ASC.value}]
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
     jobs = [

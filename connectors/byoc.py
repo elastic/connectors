@@ -62,6 +62,11 @@ class JobTriggerMethod(Enum):
     UNSET = None
 
 
+class Sort(Enum):
+    ASC = "asc"
+    DESC = "desc"
+
+
 class ServiceTypeNotSupportedError(Exception):
     pass
 
@@ -710,7 +715,7 @@ class SyncJobIndex(ESIndex):
                 ]
             }
         }
-        sort = [{"created_at": "asc"}]
+        sort = [{"created_at": Sort.ASC.value}]
         async for job in self.get_all_docs(query=query, sort=sort):
             yield job
 
