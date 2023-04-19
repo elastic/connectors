@@ -536,9 +536,9 @@ class ElasticServer(ESClient):
                 {
                     "bulk_operations": dict(self._bulker.ops),
                     "indexed_document_count": self._bulker.indexed_document_count,
-                    "indexed_document_volume": round(
-                        self._bulker.indexed_document_volume
-                    ),
+                    # return indexed_document_volume in number of MiB
+                    "indexed_document_volume": self._bulker.indexed_document_volume
+                    // (1024 * 1024),
                     "deleted_document_count": self._bulker.deleted_document_count,
                 }
             )

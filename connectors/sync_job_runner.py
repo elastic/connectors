@@ -6,6 +6,8 @@
 import asyncio
 import time
 
+import elasticsearch
+
 from connectors.byoc import JobStatus
 from connectors.byoei import ElasticServer
 from connectors.es import Mappings
@@ -21,6 +23,10 @@ ES_ID_SIZE_LIMIT = 512
 
 
 class SyncJobRunningError(Exception):
+    pass
+
+
+class SyncJobStartError(Exception):
     pass
 
 
@@ -84,12 +90,7 @@ class SyncJobRunner:
             raise SyncJobRunningError(f"Sync job {self.job_id} is already running.")
         self.running = True
 
-        if not await self.sync_starts():
-            logger.debug(
-                f"Failed to start sync for connector {self.connector_id}, the sync is executed by another connector service."
-            )
-            return
-
+        await self.sync_starts()
         await self.sync_job.claim()
         self._start_time = time.time()
 
@@ -215,16 +216,22 @@ class SyncJobRunner:
     @with_concurrency_control()
     async def sync_starts(self):
         if not await self.reload_connector():
-            return False
+            raise SyncJobStartError(f"Couldn't reload connector {self.connector_id}")
 
         if self.connector.last_sync_status == JobStatus.IN_PROGRESS:
             logger.debug(
-                f"Connector {self.connector_id} is syncing, skip the job {self.job_id}..."
+                f"A sync job is started for connector {self.connector_id} by another connector instance, skipping..."
             )
-            return False
+            raise SyncJobStartError(
+                f"A sync job is started for connector {self.connector_id} by another connector instance"
+            )
 
-        await self.connector.sync_starts()
-        return True
+        try:
+            await self.connector.sync_starts()
+        except elasticsearch.ConflictError:
+            raise
+        except Exception as e:
+            raise SyncJobStartError from e
 
     async def prepare_docs(self):
         logger.debug(f"Using pipeline {self.sync_job.pipeline}")
