@@ -38,7 +38,7 @@ The following configuration fields need to be provided for setting up the connec
 
 ##### `data_source`
 
-Dropdown to determine the Confluence platform type: `Confluence Cloud` or `Confluence Server`. Default value is `Confluence Cloud`.
+Dropdown to determine the Confluence platform type: `Confluence Cloud` or `Confluence Server`. Default value is `Confluence Server`.
 
 ##### `username`
 
