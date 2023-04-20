@@ -5,16 +5,11 @@ agents:
   image: family/enterprise-search-ubuntu-2204-connectors-py
 
 steps:
-  - label: ":ladder: Prepare environment"
-    command: ".buildkite/setup.sh"
-
-  - wait
-
   - label: ":face_with_peeking_eye: Lint"
-    command: "make lint"
+    command: ".buildkite/setup.sh && make lint"
 
   - label: ":pytest: Test"
-    command: "make test"
+    command: ".buildkite/setup.sh && make test"
 
   - label: ":shipit: Smoke test"
-    command: "make ftest NAME=dir DATA_SIZE=small PYTHON=bin/python"
+    command: ".buildkite/setup.sh && make ftest NAME=dir DATA_SIZE=small PYTHON=bin/python"
