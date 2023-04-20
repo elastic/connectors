@@ -67,3 +67,8 @@ steps:
       - ".buildkite/run_nigthly.sh confluence"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 MongoDB"
+    command:
+      - ".buildkite/run_nigthly.sh mongodb"
+    artifact_paths:
+      - "perf8-report-*/**/*"
