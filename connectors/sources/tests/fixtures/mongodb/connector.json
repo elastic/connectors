@@ -43,14 +43,14 @@
                 "label": "Username",
                 "order": 5,
                 "type": "str",
-                "value": ""
+                "value": "admin"
             },
             "password": {
                 "label": "Password",
                 "order": 6,
                 "sensitive": true,
                 "type": "str",
-                "value": ""
+                "value": "justtesting"
             }
         },
         "filtering": [

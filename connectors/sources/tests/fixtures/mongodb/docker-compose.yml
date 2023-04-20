@@ -34,6 +34,10 @@ services:
     ports:
       - 27021:27017
     restart: always
+    environment:
+      # provide your credentials here
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=justtesting
   kibana:
     image: docker.elastic.co/kibana/kibana:${VERSION}
     ports:
