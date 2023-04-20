@@ -26,7 +26,7 @@ def create_connector():
         collection="col",
         direct_connection=True,
         user="foo",
-        password="password"
+        password="password",
     )
 
 
