@@ -19,4 +19,4 @@ $PIP install -r requirements/tests.txt
 $PIP install -r requirements/x86_64.txt
 $PYTHON setup.py develop
 
-make ftest NAME=dir DATA_SIZE=small PYTHON=$ROOT/bin/python
+make ftest NAME=mongodb DATA_SIZE=small PYTHON=$ROOT/bin/python
