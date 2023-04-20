@@ -33,11 +33,13 @@ from connectors.utils import (
     get_base64_value,
     get_pem_format,
     get_size,
+    has_duplicates,
     hash_id,
     is_expired,
     next_run,
     retryable,
     ssl_context,
+    truncate_id,
     url_encode,
     validate_index_name,
 )
@@ -477,3 +479,18 @@ def test_hash_id():
     )
 
     assert len(hash_id(random_id_too_long).encode("UTF-8")) < limit
+
+
+def test_truncate_id():
+    long_id = "something-12341361361-21905128510263"
+    truncated_id = truncate_id(long_id)
+
+    assert len(truncated_id) < len(long_id)
+
+
+@pytest.mark.parametrize(
+    "_list, should_have_duplicate",
+    [([], False), (["abc"], False), (["abc", "def"], False), (["abc", "abc"], True)],
+)
+def test_has_duplicates(_list, should_have_duplicate):
+    assert has_duplicates(_list) == should_have_duplicate

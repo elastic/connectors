@@ -7,6 +7,8 @@
 import re
 
 import aiomysql
+import fastjsonschema
+from fastjsonschema import JsonSchemaValueException
 
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -23,6 +25,7 @@ from connectors.sources.generic_database import (
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
+    has_duplicates,
     iso_utc,
     retryable,
     ssl_context,
@@ -66,7 +69,7 @@ class MySQLQueries(Queries):
         return f"SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
 
     def columns(self, table):
-        return f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
+        return f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}' ORDER BY ORDINAL_POSITION"
 
     def ping(self):
         pass
@@ -79,10 +82,29 @@ class MySQLQueries(Queries):
 
 
 class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
+    QUERY_OBJECT_SCHEMA_DEFINITION = {
+        "type": "object",
+        "properties": {
+            "tables": {"type": "array", "minItems": 1},
+            "query": {"type": "string", "minLength": 1},
+        },
+        "required": ["tables", "query"],
+        "additionalProperties": False,
+    }
+
+    SCHEMA_DEFINITION = {"type": "array", "items": QUERY_OBJECT_SCHEMA_DEFINITION}
+
+    SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
+
     def __init__(self, source):
         self.source = source
 
     async def validate(self, advanced_rules):
+        if len(advanced_rules) == 0:
+            return SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            )
+
         return await self._remote_validation(advanced_rules)
 
     @retryable(
@@ -91,10 +113,23 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def _remote_validation(self, advanced_rules):
+        try:
+            MySQLAdvancedRulesValidator.SCHEMA(advanced_rules)
+        except JsonSchemaValueException as e:
+            return SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=e.message,
+            )
+
         async with self.source.mysql_client() as client:
             tables = set(await client.get_all_table_names())
 
-        tables_to_filter = set(advanced_rules.keys())
+        tables_to_filter = set(
+            table
+            for query_info in advanced_rules
+            for table in query_info.get("tables", [])
+        )
         missing_tables = tables_to_filter - tables
 
         if len(missing_tables) > 0:
@@ -184,20 +219,25 @@ class MySQLClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def get_column_names(self, table, query=None):
-        if query is None:
-            # fetch all columns on default
-            query = self.queries.columns(table)
-
+    async def get_column_names_for_query(self, query):
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
             await cursor.execute(query)
 
-            return [f"{table}_{column[0]}" for column in await cursor.fetchall()]
+            return [f"{column[0]}" for column in cursor.description]
 
+    async def get_column_names_for_table(self, table):
+        return await self.get_column_names_for_query(self.queries.table_data(table))
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
     async def get_primary_key_column_names(self, table):
-        return await self.get_column_names(
-            table, query=self.queries.table_primary_key(table)
-        )
+        async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+            await cursor.execute(self.queries.table_primary_key(table))
+
+            return [f"{column[0]}" for column in await cursor.fetchall()]
 
     @retryable(
         retries=RETRIES,
@@ -258,6 +298,37 @@ class MySQLClient:
                 logger.exception(
                     f"Fetched {fetched_rows} rows in {successful_batches} batches. Encountered exception {e} in batch {successful_batches + 1}."
                 )
+
+
+def row2doc(row, column_names, primary_key_columns, table, timestamp):
+    row = dict(zip(column_names, row))
+    row.update(
+        {
+            "_id": generate_id(table, row, primary_key_columns),
+            "_timestamp": timestamp or iso_utc(),
+            "Table": table,
+        }
+    )
+
+    return row
+
+
+def generate_id(tables, row, primary_key_columns):
+    """Generates an id using table names as prefix in sorted order and primary key values.
+
+    Example:
+        tables: table1, table2
+        primary key values: 1, 42
+        table1_table2_1_42
+    """
+
+    if not isinstance(tables, list):
+        tables = [tables]
+
+    return (
+        f"{'_'.join(sorted(tables))}_"
+        f"{'_'.join([str(pk_value) for pk in primary_key_columns if (pk_value := row.get(pk)) is not None])}"
+    )
 
 
 class MySqlDataSource(BaseDataSource):
@@ -430,52 +501,6 @@ class MySqlDataSource(BaseDataSource):
         async with self.mysql_client() as client:
             await client.ping()
 
-    async def fetch_documents(self, table, query=None):
-        """Fetches all the table entries and format them in Elasticsearch documents
-
-        Args:
-            table (str): Name of table
-            query (str): Query to fetch data from a table
-
-        Yields:
-            Dict: Document to be indexed
-        """
-
-        async with self.mysql_client() as client:
-            primary_key_columns = await client.get_primary_key_column_names(table)
-
-            if not primary_key_columns:
-                logger.warning(
-                    f"Skipping {table} table from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
-                )
-                return
-
-            last_update_time = await client.get_last_update_time(table)
-            column_names = await client.get_column_names(table)
-            row_generator = (
-                client.yield_rows_for_table(table)
-                if query is None
-                else client.yield_rows_for_query(query)
-            )
-
-            async for row in row_generator:
-                row = dict(zip(column_names, row))
-                row.update(
-                    {
-                        "_id": self._generate_id(table, row, primary_key_columns),
-                        "_timestamp": last_update_time or iso_utc(),
-                        "Table": table,
-                    }
-                )
-                yield self.serialize(doc=row)
-
-    def _generate_id(self, table, row, primary_key_columns):
-        keys_value = ""
-        for key in primary_key_columns:
-            keys_value += f"{row.get(key)}_" if row.get(key) else ""
-
-        return f"{table}_{keys_value}"
-
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch tables and rows in async manner.
 
@@ -485,21 +510,103 @@ class MySqlDataSource(BaseDataSource):
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
 
-            for table in advanced_rules:
-                query = advanced_rules.get(table)
+            for query_info in advanced_rules:
+                tables = query_info.get("tables", [])
+                query = query_info.get("query", "")
+
                 logger.debug(
-                    f"Fetching rows from table '{table}' in database '{self.database}' with a custom query."
+                    f"Fetching rows from table '{format_list(tables)}' in database '{self.database}' with a custom query."
                 )
-                async for row in self.fetch_documents(table, query):
+
+                async for row in self.fetch_documents(tables, query):
                     yield row, None
+
                 await self._sleeps.sleep(0)
         else:
-            tables_to_fetch = await self.get_tables_to_fetch()
+            tables = await self.get_tables_to_fetch()
 
-            for table in tables_to_fetch:
-                async for row in self.fetch_documents(table):
-                    yield row, None
-                await self._sleeps.sleep(0)
+            async for row in self.fetch_documents(tables):
+                yield row, None
+
+    async def fetch_documents(self, tables, query=None):
+        """If query is not present it fetches all rows from all tables.
+        Otherwise, the custom query is executed.
+
+        Args:
+            tables (str): Name of tables
+            query (str): Custom query
+
+        Yields:
+            Dict: Document to be indexed
+        """
+        if not isinstance(tables, list):
+            tables = [tables]
+
+        async with self.mysql_client() as client:
+            docs_generator = (
+                self._yield_docs_custom_query(client, tables, query)
+                if query is not None
+                else self._yield_all_docs_from_tables(client, tables)
+            )
+
+            async for doc in docs_generator:
+                yield self.serialize(doc=doc)
+
+    async def _yield_all_docs_from_tables(self, client, tables):
+        for table in tables:
+            primary_key_columns = await client.get_primary_key_column_names(table)
+
+            if not primary_key_columns:
+                logger.warning(
+                    f"Skipping table {table} from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
+                )
+                continue
+
+            last_update_time = await client.get_last_update_time(table)
+            column_names = await client.get_column_names_for_table(table)
+
+            async for row in client.yield_rows_for_table(table):
+                yield row2doc(
+                    row=row,
+                    column_names=column_names,
+                    primary_key_columns=primary_key_columns,
+                    table=table,
+                    timestamp=last_update_time,
+                )
+
+    async def _yield_docs_custom_query(self, client, tables, query):
+        primary_key_columns = [
+            await client.get_primary_key_column_names(table) for table in tables
+        ]
+        primary_key_columns = sorted(
+            [column for columns in primary_key_columns for column in columns]
+        )
+
+        if not primary_key_columns:
+            logger.warning(
+                f"Skipping tables {format_list(tables)} from database {self.database} since no primary key is associated with them. Assign primary key to the tables to index it in the next sync interval."
+            )
+            return
+
+        if has_duplicates(primary_key_columns):
+            logger.warning(
+                f"Skipping custom query for tables {format_list(tables)} as there are multiple primary key columns with the same name. Consider using 'AS' to uniquely identify primary key columns from different tables."
+            )
+            return
+
+        last_update_times = [
+            await client.get_last_update_time(table) for table in tables
+        ]
+        column_names = await client.get_column_names_for_query(query=query)
+
+        async for row in client.yield_rows_for_query(query):
+            yield row2doc(
+                row=row,
+                column_names=column_names,
+                primary_key_columns=primary_key_columns,
+                table=tables,
+                timestamp=max(last_update_times),
+            )
 
     async def get_tables_to_fetch(self):
         tables = configured_tables(self.tables)

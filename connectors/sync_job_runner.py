@@ -6,11 +6,15 @@
 import asyncio
 import time
 
+import elasticsearch
+
 from connectors.byoc import JobStatus
 from connectors.byoei import ElasticServer
 from connectors.es import Mappings
+from connectors.es.client import with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
+from connectors.utils import truncate_id
 
 UTF_8 = "utf-8"
 
@@ -23,7 +27,7 @@ class SyncJobRunningError(Exception):
     pass
 
 
-class JobClaimError(Exception):
+class SyncJobStartError(Exception):
     pass
 
 
@@ -85,13 +89,11 @@ class SyncJobRunner:
     async def execute(self):
         if self.running:
             raise SyncJobRunningError(f"Sync job {self.job_id} is already running.")
-
         self.running = True
-        if not await self._claim_job():
-            logger.error(
-                f"Unable to claim job {self.job_id} for connector {self.connector_id}"
-            )
-            raise JobClaimError
+
+        await self.sync_starts()
+        await self.sync_job.claim()
+        self._start_time = time.time()
 
         try:
             self.data_provider = self.source_klass(self.sync_job.configuration)
@@ -212,15 +214,25 @@ class SyncJobRunner:
             f"({int(time.time() - self._start_time)} seconds)"  # pyright: ignore
         )
 
-    async def _claim_job(self):
+    @with_concurrency_control()
+    async def sync_starts(self):
+        if not await self.reload_connector():
+            raise SyncJobStartError(f"Couldn't reload connector {self.connector_id}")
+
+        if self.connector.last_sync_status == JobStatus.IN_PROGRESS:
+            logger.debug(
+                f"A sync job is started for connector {self.connector_id} by another connector instance, skipping..."
+            )
+            raise SyncJobStartError(
+                f"A sync job is started for connector {self.connector_id} by another connector instance"
+            )
+
         try:
-            await self.sync_job.claim()
             await self.connector.sync_starts()
-            self._start_time = time.time()
-            return True
+        except elasticsearch.ConflictError:
+            raise
         except Exception as e:
-            logger.critical(e, exc_info=True)
-            return False
+            raise SyncJobStartError from e
 
     async def prepare_docs(self):
         logger.debug(f"Using pipeline {self.sync_job.pipeline}")
@@ -233,9 +245,7 @@ class SyncJobRunner:
 
             if doc_id_size > ES_ID_SIZE_LIMIT:
                 logger.debug(
-                    f"Document with id '{doc_id}' with a size of '{doc_id_size}' bytes could not be ingested. "
-                    f"Elasticsearch has an upper limit of '{ES_ID_SIZE_LIMIT}' bytes for the '_id' field.",
-                    "Hashing id...",
+                    f"Id '{truncate_id(doc_id)}' is too long: {doc_id_size} of maximum {ES_ID_SIZE_LIMIT} bytes, hashing"
                 )
 
                 hashed_id = self.source_klass.hash_id(doc_id)
