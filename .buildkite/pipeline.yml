@@ -1,7 +1,5 @@
 agents:
-  image: docker.elastic.co/ci-agent-images/enterprise-search/connectors-python:1.0.0
-  ephemeralStorage: 50G
-  memory: 4G
+  image: family/enterprise-search-ubuntu-2204-connectors-py
 
 steps:
   - command:
