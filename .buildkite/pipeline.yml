@@ -12,4 +12,4 @@ steps:
     command: "make test"
 
   - label: ":shipit: Smoke test"
-    command: ".buildkite/setup.sh && make ftest NAME=dir DATA_SIZE=small PYTHON=bin/python"
+    command: ".buildkite/run_dockerized_test.sh"
