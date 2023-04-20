@@ -6,10 +6,10 @@ agents:
 
 steps:
   - label: ":face_with_peeking_eye: Lint"
-    command: ".buildkite/setup.sh && make lint"
+    command: ".make lint"
 
   - label: ":pytest: Test"
-    command: ".buildkite/setup.sh && make test"
+    command: "make test"
 
   - label: ":shipit: Smoke test"
     command: ".buildkite/setup.sh && make ftest NAME=dir DATA_SIZE=small PYTHON=bin/python"
