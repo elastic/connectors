@@ -1,5 +1,5 @@
 agents:
-  image: enterprise-search-ubuntu-2204-connectors-py
+  image: family/enterprise-search-ubuntu-2204-connectors-py
 
 steps:
   - command:
