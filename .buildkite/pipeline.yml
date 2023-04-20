@@ -6,7 +6,7 @@ agents:
 
 steps:
   - label: ":face_with_peeking_eye: Lint"
-    command: ".make lint"
+    command: "make lint"
 
   - label: ":pytest: Test"
     command: "make test"
