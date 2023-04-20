@@ -12,7 +12,7 @@ from elasticsearch import ConflictError
 from connectors.byoc import Filter, JobStatus, Pipeline
 from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import InvalidFilteringError
-from connectors.sync_job_runner import SyncJobRunner
+from connectors.sync_job_runner import SyncJobRunner, SyncJobStartError
 from connectors.tests.commons import AsyncIterator
 
 total_document_count = 100
@@ -125,7 +125,9 @@ async def test_connector_sync_starts_fail():
         meta=None,
         body={},
     )
-    await sync_job_runner.execute()
+
+    with pytest.raises(SyncJobStartError):
+        await sync_job_runner.execute()
 
     assert sync_job_runner.elastic_server is None
     sync_job_runner.connector.sync_starts.assert_awaited()

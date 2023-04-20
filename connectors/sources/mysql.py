@@ -314,14 +314,20 @@ def row2doc(row, column_names, primary_key_columns, table, timestamp):
 
 
 def generate_id(tables, row, primary_key_columns):
-    keys_value = ""
-    for key in primary_key_columns:
-        keys_value += f"{row.get(key)}_" if row.get(key) else ""
+    """Generates an id using table names as prefix in sorted order and primary key values.
+
+    Example:
+        tables: table1, table2
+        primary key values: 1, 42
+        table1_table2_1_42
+    """
+
+    if not isinstance(tables, list):
+        tables = [tables]
 
     return (
-        f"{'_'.join(tables)}_{keys_value}"
-        if isinstance(tables, list)
-        else f"{tables}_{keys_value}"
+        f"{'_'.join(sorted(tables))}_"
+        f"{'_'.join([str(pk_value) for pk in primary_key_columns if (pk_value := row.get(pk)) is not None])}"
     )
 
 
@@ -572,9 +578,9 @@ class MySqlDataSource(BaseDataSource):
         primary_key_columns = [
             await client.get_primary_key_column_names(table) for table in tables
         ]
-        primary_key_columns = [
-            column for columns in primary_key_columns for column in columns
-        ]
+        primary_key_columns = sorted(
+            [column for columns in primary_key_columns for column in columns]
+        )
 
         if not primary_key_columns:
             logger.warning(
