@@ -1,5 +1,5 @@
 agents:
-  image: family/enterprise-search-ubuntu-2204-connectors-py
+  image: enterprise-search-ubuntu-2204-connectors-py
 
 steps:
   - label: "🏗️ Docker images"
