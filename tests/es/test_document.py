@@ -92,25 +92,3 @@ async def test_reload():
     assert doc._seq_no == 2
     assert doc._primary_term == 2
     assert doc.get("status") == "in_progress"
-
-
-class Fake(ESDocument):
-    def _prefix_msg(self, msg):
-        return f"[foobar] {msg}"
-
-
-def test_logging(patch_logger):
-    fake_doc = Fake(elastic_index=None, doc_source={"_id": "1"})
-
-    for level in [
-        "log_debug",
-        "log_info",
-        "log_warning",
-        "log_error",
-        "log_exception",
-        "log_critical",
-        "log_fatal",
-    ]:
-        func = getattr(fake_doc, level)
-        func("sample message")
-        patch_logger.assert_present("[foobar]")
