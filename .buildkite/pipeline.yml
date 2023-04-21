@@ -12,6 +12,6 @@ steps:
     command: "make test"
 
   - label: ":shipit: Smoke test"
-    command: ".buildkite/run_dockerized_test.sh"
+    command: "make ftest NAME=dir DATA_SIZE=small"
     agents:
       machineType: "n1-standard-8"
