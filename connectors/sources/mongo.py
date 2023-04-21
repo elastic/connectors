@@ -134,13 +134,20 @@ class MongoDataSource(BaseDataSource):
                 "type": "str",
                 "value": "",
             },
-            "user": {"label": "Username", "order": 5, "type": "str", "value": ""},
+            "user": {
+                "label": "Username",
+                "order": 5,
+                "type": "str",
+                "value": "",
+                "required": False,
+            },
             "password": {
                 "label": "Password",
                 "order": 6,
                 "sensitive": True,
                 "type": "str",
                 "value": "",
+                "required": False,
             },
         }
 

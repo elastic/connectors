@@ -39,6 +39,7 @@ from connectors.utils import (
     next_run,
     retryable,
     ssl_context,
+    truncate_id,
     url_encode,
     validate_index_name,
 )
@@ -478,6 +479,13 @@ def test_hash_id():
     )
 
     assert len(hash_id(random_id_too_long).encode("UTF-8")) < limit
+
+
+def test_truncate_id():
+    long_id = "something-12341361361-21905128510263"
+    truncated_id = truncate_id(long_id)
+
+    assert len(truncated_id) < len(long_id)
 
 
 @pytest.mark.parametrize(
