@@ -40,17 +40,21 @@
                 "value": "mongodb://127.0.0.1:27021"
             },
             "user": {
+                "default_value": "",
                 "label": "Username",
                 "order": 5,
                 "type": "str",
-                "value": "admin"
+                "value": "admin",
+                "required": false
             },
             "password": {
+                "default_value": "",
                 "label": "Password",
                 "order": 6,
                 "sensitive": true,
                 "type": "str",
-                "value": "justtesting"
+                "value": "justtesting",
+                "required": false
             }
         },
         "filtering": [
