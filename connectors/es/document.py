@@ -51,34 +51,68 @@ class ESDocument:
         self._source = doc_source.get("_source", {})
 
     def log_debug(self, msg, *args, **kwargs):
-        logger.debug(msg, *args, prefix=self._prefix(), extra=self._extra(), **kwargs)
+        logger.debug(
+            msg,
+            *args,
+            prefix=self._prefix(),  # pyright: ignore
+            extra=self._extra(),
+            **kwargs,
+        )
 
     def log_info(self, msg, *args, **kwargs):
-        logger.info(msg, *args, prefix=self._prefix(), extra=self._extra(), **kwargs)
+        logger.info(
+            msg,
+            *args,
+            prefix=self._prefix(),  # pyright: ignore
+            extra=self._extra(),
+            **kwargs,
+        )
 
     def log_warning(self, msg, *args, **kwargs):
-        logger.warning(msg, *args, prefix=self._prefix(), extra=self._extra(), **kwargs)
+        logger.warning(
+            msg,
+            *args,
+            prefix=self._prefix(),  # pyright: ignore
+            extra=self._extra(),
+            **kwargs,
+        )
 
     def log_error(self, msg, *args, **kwargs):
-        logger.error(msg, *args, prefix=self._prefix(), extra=self._extra(), **kwargs)
+        logger.error(
+            msg,
+            *args,
+            prefix=self._prefix(),  # pyright: ignore
+            extra=self._extra(),
+            **kwargs,
+        )
 
     def log_exception(self, msg, *args, exc_info=True, **kwargs):
         logger.exception(
             msg,
             *args,
             exc_info=exc_info,
-            prefix=self._prefix(),
+            prefix=self._prefix(),  # pyright: ignore
             extra=self._extra(),
             **kwargs,
         )
 
     def log_critical(self, msg, *args, **kwargs):
         logger.critical(
-            msg, *args, prefix=self._prefix(), extra=self._extra(), **kwargs
+            msg,
+            *args,
+            prefix=self._prefix(),  # pyright: ignore
+            extra=self._extra(),
+            **kwargs,
         )
 
     def log_fatal(self, msg, *args, **kwargs):
-        logger.fatal(msg, *args, prefix=self._prefix(), extra=self._extra(), **kwargs)
+        logger.fatal(
+            msg,
+            *args,
+            prefix=self._prefix(),  # pyright: ignore
+            extra=self._extra(),
+            **kwargs,
+        )
 
     def _prefix(self):
         """Return a string which will be prefixed to the log message when filebeat is not turned on"""

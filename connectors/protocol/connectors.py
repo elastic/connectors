@@ -596,7 +596,7 @@ class Connector(ESDocument):
             self.last_seen is None
             or (datetime.now(timezone.utc) - self.last_seen).total_seconds() > interval
         ):
-            logger.debug(f"Sending heartbeat for connector {self.id}")
+            self.log_debug("Sending heartbeat")
             await self.index.heartbeat(doc_id=self.id)
 
     def next_sync(self, job_type):
@@ -613,7 +613,7 @@ class Connector(ESDocument):
                 raise ValueError(f"Unknown job type: {job_type}")
 
         if not scheduling_property.get("enabled", False):
-            logger.debug(f"'{job_type.value}' sync scheduling is disabled")
+            self.log_debug(f"'{job_type.value}' sync scheduling is disabled")
             return None
         return next_run(scheduling_property.get("interval"))
 
@@ -782,9 +782,9 @@ class Connector(ESDocument):
                 # sets the defaults and the flag to NEEDS_CONFIGURATION
                 doc["configuration"] = source_klass.get_simple_configuration()
                 doc["status"] = Status.NEEDS_CONFIGURATION.value
-                logger.debug(f"Populated configuration for connector {self.id}")
+                self.log_debug("Populated configuration")
             except Exception as e:
-                logger.critical(e, exc_info=True)
+                self.log_critical(e, exc_info=True)
                 raise DataSourceError(
                     f"Could not instantiate {fqn} for {configured_service_type}"
                 ) from e
@@ -802,18 +802,16 @@ class Connector(ESDocument):
         await self.reload()
         draft_filter = self.filtering.get_draft_filter()
         if not draft_filter.has_validation_state(FilteringValidationState.EDITED):
-            logger.debug(
-                f"Filtering of connector {self.id} is in state {draft_filter.validation['state']}, skipping..."
+            self.log_debug(
+                f"Filtering is in state {draft_filter.validation['state']}, skipping..."
             )
             return
 
-        logger.info(
-            f"Filtering of connector {self.id} is in state {FilteringValidationState.EDITED.value}, validating...)"
+        self.log_info(
+            f"Filtering is in state {FilteringValidationState.EDITED.value}, validating...)"
         )
         validation_result = await validator.validate_filtering(draft_filter)
-        logger.info(
-            f"Filtering validation result for connector {self.id}: {validation_result.state.value}"
-        )
+        self.log_info(f"Filtering validation result: {validation_result.state.value}")
 
         filtering = self.filtering.to_list()
         for filter_ in filtering:
