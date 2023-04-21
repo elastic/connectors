@@ -212,8 +212,16 @@ class MemQueue(asyncio.Queue):
 
     def full(self, next_item_size=0):
         full_by_numbers = super().full()
+
         if full_by_numbers:
             return True
+
+        # Fun stuff here: if we don't have anything in-memory
+        # then it's okay to put any object inside - it's already in memory
+        # so we won't overload memory too much
+        if self._current_memsize == 0:
+            return False
+
         return self._current_memsize + next_item_size >= self.maxmemsize
 
     async def _putter_timeout(self, putter):
@@ -233,12 +241,6 @@ class MemQueue(asyncio.Queue):
 
     async def put(self, item):
         item_size = get_size(item)
-
-        if item_size > self.maxmemsize:
-            logger.debug(
-                f"Document is too big: {item_size} of maximum allowed {self.maxmemsize} bytes. Skipping."
-            )
-            return
 
         # This block is taken from the original put() method but with two
         # changes:

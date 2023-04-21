@@ -182,11 +182,15 @@ async def test_mem_queue_too_large_item():
 
     After a fix the item is discarded with a log line stating that the document is skipped.
     """
-    queue = MemQueue(maxmemsize=10, refresh_interval=0.1, refresh_timeout=1)
+    queue = MemQueue(maxmemsize=1, refresh_interval=0.1, refresh_timeout=0.5)
 
+    # Does not raise an error - it'll be full after the item is added inside
     await queue.put("lala" * 1000)
 
-    assert queue.empty()
+    with pytest.raises(asyncio.QueueFull) as e:
+        await queue.put("x")
+
+    assert e is not None
 
 
 def test_get_base64_value():
