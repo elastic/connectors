@@ -234,6 +234,12 @@ class MemQueue(asyncio.Queue):
     async def put(self, item):
         item_size = get_size(item)
 
+        if item_size > self.maxmemsize:
+            logger.debug(
+                f"Document is too big: {item_size} of maximum allowed {self.maxmemsize} bytes. Skipping."
+            )
+            return
+
         # This block is taken from the original put() method but with two
         # changes:
         #
