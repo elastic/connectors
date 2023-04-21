@@ -110,7 +110,7 @@ class JobExecutionService(BaseService):
         try:
             connector = await self.connector_index.fetch_by_id(connector_id)
         except DocumentNotFoundError:
-            sync_job.error("Couldn't find connector")
+            sync_job.log_error("Couldn't find connector")
             return
 
         if requires_platinum_license(sync_job, connector, source_klass):

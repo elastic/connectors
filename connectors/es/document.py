@@ -50,25 +50,25 @@ class ESDocument:
         self._primary_term = doc_source.get("_primary_term")
         self._source = doc_source.get("_source", {})
 
-    def debug(self, msg, *args, **kwargs):
+    def log_debug(self, msg, *args, **kwargs):
         logger.debug(self._prefix_msg(msg), *args, **kwargs)
 
-    def info(self, msg, *args, **kwargs):
+    def log_info(self, msg, *args, **kwargs):
         logger.info(self._prefix_msg(msg), *args, **kwargs)
 
-    def warning(self, msg, *args, **kwargs):
+    def log_warning(self, msg, *args, **kwargs):
         logger.warning(self._prefix_msg(msg), *args, **kwargs)
 
-    def error(self, msg, *args, **kwargs):
+    def log_error(self, msg, *args, **kwargs):
         logger.error(self._prefix_msg(msg), *args, **kwargs)
 
-    def exception(self, msg, *args, exc_info=True, **kwargs):
+    def log_exception(self, msg, *args, exc_info=True, **kwargs):
         logger.exception(self._prefix_msg(msg), *args, exc_info=exc_info, **kwargs)
 
-    def critical(self, msg, *args, **kwargs):
+    def log_critical(self, msg, *args, **kwargs):
         logger.critical(self._prefix_msg(msg), *args, **kwargs)
 
-    def fatal(self, msg, *args, **kwargs):
+    def log_fatal(self, msg, *args, **kwargs):
         logger.fatal(self._prefix_msg(msg), *args, **kwargs)
 
     def _prefix_msg(self, msg):

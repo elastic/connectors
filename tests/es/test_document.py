@@ -103,13 +103,13 @@ def test_logging(patch_logger):
     fake_doc = Fake(elastic_index=None, doc_source={"_id": "1"})
 
     for level in [
-        "debug",
-        "info",
-        "warning",
-        "error",
-        "exception",
-        "critical",
-        "fatal",
+        "log_debug",
+        "log_info",
+        "log_warning",
+        "log_error",
+        "log_exception",
+        "log_critical",
+        "log_fatal",
     ]:
         func = getattr(fake_doc, level)
         func("sample message")
