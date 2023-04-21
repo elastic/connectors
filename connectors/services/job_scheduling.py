@@ -42,47 +42,43 @@ class JobSchedulingService(BaseService):
 
     async def _schedule(self, connector):
         if self.running is False:
-            logger.debug(
-                f"Skipping run for {connector.id} because service is terminating"
-            )
+            connector.debug("Skipping run because service is terminating")
             return
 
         if connector.native:
-            logger.debug(f"Connector {connector.id} natively supported")
+            connector.debug("Natively supported")
 
         try:
             await connector.prepare(self.config)
         except DocumentNotFoundError:
-            logger.error(f"Couldn't find connector by id {connector.id}")
+            connector.error("Couldn't find connector")
             return
         except ServiceTypeNotConfiguredError:
-            logger.error(
-                f"Service type is not configured for connector {self.config['connector_id']}"
-            )
+            connector.error("Service type is not configured")
             return
         except ServiceTypeNotSupportedError:
-            logger.debug(f"Can't handle source of type {connector.service_type}")
+            connector.debug(f"Can't handle source of type {connector.service_type}")
             return
         except DataSourceError as e:
-            await connector.error(e)
+            await connector.mark_error(e)
             logger.critical(e, exc_info=True)
             raise
 
         # the heartbeat is always triggered
         await connector.heartbeat(self.heartbeat_interval)
 
-        logger.debug(f"Connector status is {connector.status}")
+        connector.debug(f"Status is {connector.status}")
 
         # we trigger a sync
         if connector.status == Status.CREATED:
-            logger.info(
-                f'Connector for {connector.service_type}(id: "{connector.id}") has just been created and cannot sync. Wait for Kibana to initialise connector correctly before proceeding.'
+            connector.info(
+                "Connector has just been created and cannot sync. Wait for Kibana to initialise connector correctly before proceeding."
             )
             return
 
         if connector.status == Status.NEEDS_CONFIGURATION:
-            logger.info(
-                f'Connector for {connector.service_type}(id: "{connector.id}") is not configured yet. Finish connector configuration in Kibana to make it possible to run a sync.'
+            connector.info(
+                "Connector is not configured yet. Finish connector configuration in Kibana to make it possible to run a sync."
             )
             return
 
@@ -174,7 +170,7 @@ class JobSchedulingService(BaseService):
             try:
                 await connector.reload()
             except DocumentNotFoundError:
-                logger.error(f"Couldn't reload connector {connector.id}")
+                connector.error("Couldn't reload connector")
                 return False
 
             job_type_value = job_type.value
@@ -184,7 +180,7 @@ class JobSchedulingService(BaseService):
             )
 
             if last_sync_scheduled_at is not None and last_sync_scheduled_at > now:
-                logger.debug(
+                connector.debug(
                     f"A scheduled '{job_type_value}' sync is created by another connector instance, skipping..."
                 )
                 return False
@@ -192,19 +188,19 @@ class JobSchedulingService(BaseService):
             try:
                 next_sync = connector.next_sync(job_type)
             except Exception as e:
-                logger.critical(e, exc_info=True)
-                await connector.error(str(e))
+                connector.critical(e, exc_info=True)
+                await connector.mark_error(str(e))
                 return False
 
             if next_sync is None:
-                logger.debug(
+                connector.debug(
                     f"'{job_type_value}' sync scheduling is disabled for connector {connector.id}"
                 )
                 return False
 
             next_sync_due = (next_sync - now).total_seconds()
             if next_sync_due - self.idling > 0:
-                logger.debug(
+                connector.debug(
                     f"Next '{job_type_value}' sync for connector {connector.id} due in {int(next_sync_due)} seconds"
                 )
                 return False
@@ -216,8 +212,8 @@ class JobSchedulingService(BaseService):
             return True
 
         if await _should_schedule_scheduled_sync(job_type):
-            logger.info(
-                f"Creating a scheduled '{job_type.value}' sync for connector {connector.id}..."
+            connector.info(
+                f"Creating a scheduled '{job_type.value}' sync..."
             )
             await self.sync_job_index.create(
                 connector=connector,

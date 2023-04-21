@@ -453,7 +453,7 @@ async def test_sync_starts(job_type, expected_doc_source_update):
 
 
 @pytest.mark.asyncio
-async def test_connector_error():
+async def test_connector_mark_error():
     connector_doc = {"_id": "1"}
     error = "something wrong"
     index = Mock()
@@ -464,7 +464,7 @@ async def test_connector_error():
     }
 
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.error(error)
+    await connector.mark_error(error)
     index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
 
 
