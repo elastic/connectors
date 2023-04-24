@@ -222,7 +222,7 @@ class S3DataSource(BaseDataSource):
         return {
             "buckets": {
                 "display": "textarea",
-                "label": "AWS Buckets",
+                "label": "Comma-separated list of buckets",
                 "order": 1,
                 "type": "list",
                 "value": "ent-search-ingest-dev",

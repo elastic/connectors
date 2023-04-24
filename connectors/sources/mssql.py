@@ -89,20 +89,20 @@ class MSSQLDataSource(GenericBaseDataSource):
                 },
                 "ssl_enabled": {
                     "display": "toggle",
-                    "label": "Enable SSL verification (true/false)",
+                    "label": "Enable SSL verification",
                     "order": 10,
                     "type": "bool",
                     "value": False,
                 },
                 "ssl_ca": {
                     "depends_on": [{"field": "ssl_enabled", "value": True}],
-                    "label": "Certificate Data",
+                    "label": "Certificate data",
                     "order": 11,
                     "type": "str",
                     "value": "",
                 },
                 "validate_host": {
-                    "label": "Do you want to validate host",
+                    "label": "Validate host",
                     "order": 12,
                     "type": "bool",
                     "value": False,

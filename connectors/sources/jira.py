@@ -267,13 +267,13 @@ class JiraDataSource(BaseDataSource):
             },
             "projects": {
                 "display": "textarea",
-                "label": "Jira Project Keys",
+                "label": "Jira project keys",
                 "type": "list",
                 "value": "*",
             },
             "ssl_enabled": {
                 "display": "toggle",
-                "label": "Enable SSL verification",
+                "label": "Enable SSL",
                 "order": 7,
                 "type": "bool",
                 "value": False,
@@ -288,7 +288,7 @@ class JiraDataSource(BaseDataSource):
             "retry_count": {
                 "default_value": 3,
                 "display": "numeric",
-                "label": "Maximum retries for failed requests",
+                "label": "Retries for failed requests",
                 "order": 9,
                 "required": False,
                 "type": "int",
@@ -298,7 +298,7 @@ class JiraDataSource(BaseDataSource):
             "concurrent_downloads": {
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
                 "display": "numeric",
-                "label": "Number of concurrent downloads for fetching attachment content",
+                "label": "Maximum concurrent downloads",
                 "order": 10,
                 "required": False,
                 "type": "int",
