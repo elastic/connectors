@@ -6,12 +6,16 @@
 import asyncio
 import base64
 import functools
+import hashlib
+import inspect
 import os
 import platform
 import shutil
+import ssl
 import subprocess
 import time
-from datetime import datetime, timezone
+import urllib.parse
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 from base64io import Base64IO
@@ -59,14 +63,9 @@ def iso_utc(when=None):
 
 
 def next_run(quartz_definition):
-    """Returns the number of seconds before the next run."""
+    """Returns the datetime of the next run."""
     cron_obj = QuartzCron(quartz_definition, datetime.utcnow())
-    when = cron_obj.next_trigger()
-    now = datetime.utcnow()
-    secs = (when - now).total_seconds()
-    if secs < 1.0:
-        secs = 0
-    return secs
+    return cron_obj.next_trigger()
 
 
 INVALID_CHARS = "\\", "/", "*", "?", '"', "<", ">", "|", " ", ",", "#"
@@ -221,8 +220,13 @@ class MemQueue(asyncio.Queue):
         """This coroutine will set the result of the putter to QueueFull when a certain timeout it reached."""
         start = time.time()
         while not putter.done():
-            if time.time() - start >= self.refresh_timeout:
-                putter.set_result(asyncio.QueueFull())
+            elapsed_time = time.time() - start
+            if elapsed_time >= self.refresh_timeout:
+                putter.set_result(
+                    asyncio.QueueFull(
+                        f"MemQueue has been full for {round(elapsed_time, 4)}s. while timeout is {self.refresh_timeout}s."
+                    )
+                )
                 return
             logger.debug("Queue Full")
             await asyncio.sleep(self.refresh_interval)
@@ -279,7 +283,9 @@ class MemQueue(asyncio.Queue):
     def put_nowait(self, item):
         item_size = get_size(item)
         if self.full(item_size):
-            raise asyncio.QueueFull
+            raise asyncio.QueueFull(
+                f"Queue is full: attempting to add item of size {item_size} bytes while {self.maxmemsize - self._current_memsize} free bytes left."
+            )
         super().put_nowait((item_size, item))
 
 
@@ -374,28 +380,163 @@ class UnknownRetryStrategyError(Exception):
 
 def retryable(retries=3, interval=1.0, strategy=RetryStrategy.LINEAR_BACKOFF):
     def wrapper(func):
-        @functools.wraps(func)
-        async def func_to_execute(*args, **kwargs):
-            retry = 1
-            while retry <= retries:
-                try:
-                    return await func(*args, **kwargs)
-                except Exception as e:
-                    if retry >= retries:
-                        raise e
-
-                    match strategy:
-                        case RetryStrategy.CONSTANT:
-                            await asyncio.sleep(interval)
-                        case RetryStrategy.LINEAR_BACKOFF:
-                            await asyncio.sleep(interval * retry)
-                        case RetryStrategy.EXPONENTIAL_BACKOFF:
-                            await asyncio.sleep(interval**retry)
-                        case _:
-                            raise UnknownRetryStrategyError()
-
-                    retry += 1
-
-        return func_to_execute
+        if inspect.isasyncgenfunction(func):
+            return retryable_async_generator(func, retries, interval, strategy)
+        else:
+            return retryable_async_function(func, retries, interval, strategy)
 
     return wrapper
+
+
+def retryable_async_function(func, retries, interval, strategy):
+    @functools.wraps(func)
+    async def wrapped(*args, **kwargs):
+        retry = 1
+        while retry <= retries:
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                if retry >= retries:
+                    raise e
+
+                await apply_retry_strategy(strategy, interval, retry)
+                retry += 1
+
+    return wrapped
+
+
+def retryable_async_generator(func, retries, interval, strategy):
+    @functools.wraps(func)
+    async def wrapped(*args, **kwargs):
+        retry = 1
+        while retry <= retries:
+            try:
+                async for item in func(*args, **kwargs):
+                    yield item
+                break
+            except Exception as e:
+                if retry >= retries:
+                    raise e
+
+                await apply_retry_strategy(strategy, interval, retry)
+                retry += 1
+
+    return wrapped
+
+
+async def apply_retry_strategy(strategy, interval, retry):
+    match strategy:
+        case RetryStrategy.CONSTANT:
+            await asyncio.sleep(interval)
+        case RetryStrategy.LINEAR_BACKOFF:
+            await asyncio.sleep(interval * retry)
+        case RetryStrategy.EXPONENTIAL_BACKOFF:
+            await asyncio.sleep(interval**retry)
+        case _:
+            raise UnknownRetryStrategyError()
+
+
+def ssl_context(certificate):
+    """Convert string to pem format and create a SSL context
+
+    Args:
+        certificate (str): certificate in string format
+
+    Returns:
+        ssl_context: SSL context with certificate
+    """
+    certificate = get_pem_format(certificate, max_split=1)
+    ctx = ssl.create_default_context()
+    ctx.load_verify_locations(cadata=certificate)
+    return ctx
+
+
+def url_encode(original_string):
+    """Performs encoding on the objects
+    containing special characters in their url, and
+    replaces single quote with two single quote since quote
+    is treated as an escape character
+
+    Args:
+        original_string(string): String containing special characters
+
+    Returns:
+        encoded_string(string): Parsed string without single quotes
+    """
+    return urllib.parse.quote(original_string, safe="'")
+
+
+def evaluate_timedelta(seconds, time_skew=0):
+    """Adds seconds to the current utc time.
+
+    Args:
+        seconds (int): Number of seconds to add in current time
+        time_skew (int): Time of clock skew. Defaults to 0
+    """
+    modified_time = datetime.utcnow() + timedelta(seconds=seconds)
+    # account for clock skew
+    modified_time -= timedelta(seconds=time_skew)
+    return iso_utc(when=modified_time)
+
+
+def is_expired(expires_at):
+    """Compares the given time with present time
+
+    Args:
+        expires_at (datetime): Time to check if expired.
+    """
+    # Recreate in case there's no expires_at present
+    if expires_at is None:
+        return True
+    return datetime.utcnow() >= expires_at
+
+
+def get_pem_format(key, max_split=-1):
+    """Convert key into PEM format.
+
+    Args:
+        key (str): Key in raw format.
+        max_split (int): Specifies how many splits to do. Defaults to -1.
+
+    Returns:
+        string: PEM format
+    """
+    key = key.replace(" ", "\n")
+    key = " ".join(key.split("\n", max_split))
+    key = " ".join(key.rsplit("\n", max_split))
+    return key
+
+
+def hash_id(_id):
+    # Collision probability: 1.47*10^-29
+    return hashlib.md5(_id.encode("utf8")).hexdigest()
+
+
+def truncate_id(_id):
+    """Truncate ID of an object.
+
+    We cannot guarantee that connector returns small IDs.
+    In some places in our code we log IDs and if the ID is
+    too big, these lines become unreadable.
+
+    This function can help - it truncates the ID to not
+    overwhelm the logging system and still have somewhat
+    readable error messages.
+
+    Args:
+    _id (str): ID of an object to truncate.
+    """
+
+    if len(_id) > 20:
+        return _id[:8] + "..." + _id[-8:]
+
+    return _id
+
+
+def has_duplicates(strings_list):
+    seen = set()
+    for string in strings_list:
+        if string in seen:
+            return True
+        seen.add(string)
+    return False

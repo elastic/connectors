@@ -9,18 +9,10 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from connectors.byoc import (
-    SYNC_DISABLED,
-    ConnectorUpdateError,
-    DataSourceError,
-    JobStatus,
-    ServiceTypeNotConfiguredError,
-    ServiceTypeNotSupportedError,
-    Status,
-)
+from connectors.byoc import JobStatus
 from connectors.config import load_config
-from connectors.services.sync import SyncService
-from connectors.source import DataSourceConfiguration
+from connectors.es.index import DocumentNotFoundError
+from connectors.services.job_execution import JobExecutionService
 from connectors.tests.commons import AsyncIterator
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yml")
@@ -28,7 +20,7 @@ CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yml")
 
 def create_service(config_file):
     config = load_config(config_file)
-    service = SyncService(config)
+    service = JobExecutionService(config)
     service.idling = 0.05
 
     return service
@@ -61,7 +53,9 @@ async def create_and_run_service(config_file=CONFIG_FILE, stop_after=0):
 
 @pytest.fixture(autouse=True)
 def connector_index_mock():
-    with patch("connectors.services.sync.ConnectorIndex") as connector_index_klass_mock:
+    with patch(
+        "connectors.services.job_execution.ConnectorIndex"
+    ) as connector_index_klass_mock:
         connector_index_mock = Mock()
         connector_index_mock.stop_waiting = Mock()
         connector_index_mock.close = AsyncMock()
@@ -72,10 +66,10 @@ def connector_index_mock():
 
 @pytest.fixture(autouse=True)
 def sync_job_index_mock():
-    with patch("connectors.services.sync.SyncJobIndex") as sync_job_index_klass_mock:
+    with patch(
+        "connectors.services.job_execution.SyncJobIndex"
+    ) as sync_job_index_klass_mock:
         sync_job_index_mock = Mock()
-        sync_job_index_mock.create = AsyncMock(return_value="1")
-        sync_job_index_mock.fetch_by_id = AsyncMock(return_value=Mock())
         sync_job_index_mock.stop_waiting = Mock()
         sync_job_index_mock.close = AsyncMock()
         sync_job_index_klass_mock.return_value = sync_job_index_mock
@@ -86,7 +80,7 @@ def sync_job_index_mock():
 @pytest.fixture(autouse=True)
 def concurrent_tasks_mock():
     with patch(
-        "connectors.services.sync.ConcurrentTasks"
+        "connectors.services.job_execution.ConcurrentTasks"
     ) as concurrent_tasks_klass_mock:
         concurrent_tasks_mock = Mock()
         concurrent_tasks_mock.put = AsyncMock()
@@ -99,7 +93,9 @@ def concurrent_tasks_mock():
 
 @pytest.fixture(autouse=True)
 def sync_job_runner_mock():
-    with patch("connectors.services.sync.SyncJobRunner") as sync_job_runner_klass_mock:
+    with patch(
+        "connectors.services.job_execution.SyncJobRunner"
+    ) as sync_job_runner_klass_mock:
         sync_job_runner_mock = Mock()
         sync_job_runner_mock.execute = AsyncMock()
         sync_job_runner_klass_mock.return_value = sync_job_runner_mock
@@ -107,38 +103,24 @@ def sync_job_runner_mock():
         yield sync_job_runner_mock
 
 
-def mock_connector(
-    status=Status.CONNECTED,
-    service_type="fake",
-    next_sync=SYNC_DISABLED,
-    last_sync_status=JobStatus.COMPLETED,
-    sync_now=False,
-    prepare_exception=None,
-):
+def mock_connector(last_sync_status=JobStatus.COMPLETED):
     connector = Mock()
-    connector.native = True
-    connector.service_type = service_type
-    connector.status = status
-    connector.configuration = DataSourceConfiguration({})
+    connector.id = "1"
     connector.last_sync_status = last_sync_status
-    connector.sync_now = sync_now
-
-    connector.features.sync_rules_enabled = Mock(return_value=True)
-    connector.validate_filtering = AsyncMock()
-    connector.next_sync = Mock(return_value=next_sync)
-
-    connector.prepare = AsyncMock(side_effect=prepare_exception)
-    connector.heartbeat = AsyncMock()
-    connector.error = AsyncMock()
-    connector.reset_sync_now_flag = AsyncMock()
 
     return connector
 
 
+def mock_sync_job(service_type="fake"):
+    sync_job = Mock()
+    sync_job.service_type = service_type
+    sync_job.connector_id = "1"
+
+    return sync_job
+
+
 @pytest.mark.asyncio
-async def test_no_connector(
-    connector_index_mock, concurrent_tasks_mock, patch_logger, set_env
-):
+async def test_no_connector(connector_index_mock, concurrent_tasks_mock, set_env):
     connector_index_mock.supported_connectors.return_value = AsyncIterator([])
     await create_and_run_service()
 
@@ -146,117 +128,85 @@ async def test_no_connector(
 
 
 @pytest.mark.asyncio
-async def test_connector_sync_now(
+async def test_no_pending_jobs(
     connector_index_mock,
+    sync_job_index_mock,
     concurrent_tasks_mock,
-    sync_job_runner_mock,
-    patch_logger,
     set_env,
-):
-    connector = mock_connector(sync_now=True, next_sync=0)
-    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
-    await create_and_run_service()
-
-    connector.prepare.assert_awaited()
-    connector.heartbeat.assert_awaited()
-    connector.reset_sync_now_flag.assert_awaited()
-    concurrent_tasks_mock.put.assert_awaited_once_with(sync_job_runner_mock.execute)
-
-
-@pytest.mark.asyncio
-async def test_connector_with_suspended_job(
-    connector_index_mock,
-    concurrent_tasks_mock,
-    sync_job_runner_mock,
-    patch_logger,
-    set_env,
-):
-    connector = mock_connector(next_sync=100, last_sync_status=JobStatus.SUSPENDED)
-    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
-    await create_and_run_service()
-
-    connector.prepare.assert_awaited()
-    connector.heartbeat.assert_awaited()
-    connector.reset_sync_now_flag.assert_not_awaited()
-    concurrent_tasks_mock.put.assert_awaited_once_with(sync_job_runner_mock.execute)
-
-
-@pytest.mark.asyncio
-async def test_connector_ready_to_sync(
-    connector_index_mock,
-    concurrent_tasks_mock,
-    sync_job_runner_mock,
-    patch_logger,
-    set_env,
-):
-    connector = mock_connector(next_sync=0.01)
-    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
-    await create_and_run_service()
-
-    connector.prepare.assert_awaited()
-    connector.heartbeat.assert_awaited
-    connector.reset_sync_now_flag.assert_not_awaited()
-    concurrent_tasks_mock.put.assert_awaited_once_with(sync_job_runner_mock.execute)
-
-
-@pytest.mark.asyncio
-async def test_connector_sync_disabled(
-    connector_index_mock, concurrent_tasks_mock, patch_logger, set_env
 ):
     connector = mock_connector()
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    sync_job_index_mock.pending_jobs.return_value = AsyncIterator([])
     await create_and_run_service()
 
-    connector.prepare.assert_awaited()
-    connector.heartbeat.assert_awaited()
-    connector.reset_sync_now_flag.assert_not_awaited()
     concurrent_tasks_mock.put.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "connector_status",
-    [Status.CREATED, Status.NEEDS_CONFIGURATION],
-)
-async def test_connector_not_configured(
-    connector_status,
+async def test_job_execution(
     connector_index_mock,
+    sync_job_index_mock,
     concurrent_tasks_mock,
-    patch_logger,
+    sync_job_runner_mock,
     set_env,
 ):
-    connector = mock_connector(status=connector_status)
+    connector = mock_connector()
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
+    sync_job = mock_sync_job()
+    sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service()
 
-    connector.prepare.assert_awaited()
-    connector.heartbeat.assert_awaited()
-    connector.reset_sync_now_flag.assert_not_awaited()
+    concurrent_tasks_mock.put.assert_awaited_once_with(sync_job_runner_mock.execute)
+
+
+@pytest.mark.asyncio
+async def test_job_execution_with_unsupported_source(
+    connector_index_mock,
+    sync_job_index_mock,
+    concurrent_tasks_mock,
+    set_env,
+):
+    connector = mock_connector()
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    sync_job = mock_sync_job(service_type="mysql")
+    sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
+    await create_and_run_service()
+
     concurrent_tasks_mock.put.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "prepare_exception",
-    [
-        ServiceTypeNotConfiguredError,
-        ConnectorUpdateError,
-        ServiceTypeNotSupportedError,
-        DataSourceError,
-    ],
-)
-async def test_connector_prepare_failed(
-    prepare_exception,
+async def test_job_execution_with_connector_not_found(
     connector_index_mock,
+    sync_job_index_mock,
     concurrent_tasks_mock,
-    patch_logger,
+    sync_job_runner_mock,
     set_env,
 ):
-    connector = mock_connector(prepare_exception=prepare_exception())
+    connector = mock_connector()
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    connector_index_mock.fetch_by_id = AsyncMock(side_effect=DocumentNotFoundError())
+    sync_job = mock_sync_job()
+    sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service()
 
-    connector.prepare.assert_awaited()
-    connector.heartbeat.assert_not_awaited()
-    connector.reset_sync_now_flag.assert_not_awaited()
+    concurrent_tasks_mock.put.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_job_execution_with_connector_still_syncing(
+    connector_index_mock,
+    sync_job_index_mock,
+    concurrent_tasks_mock,
+    sync_job_runner_mock,
+    set_env,
+):
+    connector = mock_connector(last_sync_status=JobStatus.IN_PROGRESS)
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
+    sync_job = mock_sync_job()
+    sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
+    await create_and_run_service()
+
     concurrent_tasks_mock.put.assert_not_awaited()

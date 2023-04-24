@@ -23,7 +23,6 @@ BLOB_SCHEMA = {
     "size": "size",
     "container": "container",
 }
-DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_FILE_SIZE_LIMIT = 10485760
 DEFAULT_RETRY_COUNT = 3
 MAX_CONCURRENT_DOWNLOADS = (
@@ -45,7 +44,6 @@ class AzureBlobStorageDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
         self.connection_string = None
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.retry_count = self.configuration["retry_count"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
 
@@ -58,10 +56,6 @@ class AzureBlobStorageDataSource(BaseDataSource):
         Raises:
             Exception: Invalid configured concurrent_downloads
         """
-        if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
-            raise Exception(
-                f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
-            )
         options["concurrent_downloads"] = self.concurrent_downloads
 
     @classmethod
@@ -73,61 +67,60 @@ class AzureBlobStorageDataSource(BaseDataSource):
         """
         return {
             "account_name": {
-                "value": "devstoreaccount1",
                 "label": "Azure Blob Storage account name",
+                "order": 1,
                 "type": "str",
+                "value": "devstoreaccount1",
             },
             "account_key": {
-                "value": "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==",
                 "label": "Azure Blob Storage account key",
+                "order": 2,
                 "type": "str",
+                "value": "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==",
             },
             "blob_endpoint": {
-                "value": "http://127.0.0.1:10000/devstoreaccount1",
                 "label": "Azure Blob Storage blob endpoint",
+                "order": 3,
                 "type": "str",
-            },
-            "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Enable content extraction (true/false)",
-                "type": "bool",
+                "value": "http://127.0.0.1:10000/devstoreaccount1",
             },
             "retry_count": {
-                "value": DEFAULT_RETRY_COUNT,
+                "default_value": DEFAULT_RETRY_COUNT,
+                "display": "numeric",
                 "label": "Retries per request",
+                "order": 4,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": DEFAULT_RETRY_COUNT,
             },
             "concurrent_downloads": {
-                "value": MAX_CONCURRENT_DOWNLOADS,
+                "default_value": MAX_CONCURRENT_DOWNLOADS,
+                "display": "numeric",
                 "label": "Maximum concurrent downloads",
+                "order": 5,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "validations": [
+                    {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
+                ],
+                "value": MAX_CONCURRENT_DOWNLOADS,
             },
         }
 
     def _configure_connection_string(self):
-        """Validates whether user input is empty or not for configuration fields and generate connection string
-
-        Raises:
-            Exception: Configured keys can't be empty
+        """Generates connection string for ABS
 
         Returns:
             str: Connection string with user input configuration fields
         """
-        keys = ["account_name", "account_key", "blob_endpoint"]
-        empty_configuration_fields = list(
-            filter(lambda field: self.configuration[field] == "", keys)
-        )
-
-        if empty_configuration_fields:
-            raise Exception(
-                f"Configured keys: {empty_configuration_fields} can't be empty."
-            )
 
         return f'AccountName={self.configuration["account_name"]};AccountKey={self.configuration["account_key"]};BlobEndpoint={self.configuration["blob_endpoint"]}'
 
     async def ping(self):
         """Verify the connection with Azure Blob Storage"""
-        logger.info("Validating configurations & Generating connection string...")
+        logger.info("Generating connection string...")
         self.connection_string = self._configure_connection_string()
         try:
             async with BlobServiceClient.from_connection_string(
@@ -174,7 +167,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             dictionary: Content document with id, timestamp & text
         """
         blob_size = int(blob["size"])
-        if not (self.enable_content_extraction and doit and blob_size > 0):
+        if not (doit and blob_size > 0):
             return
 
         blob_name = blob["title"]

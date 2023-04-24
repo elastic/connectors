@@ -1,5 +1,5 @@
 aiohttp==3.8.3
-elasticsearch[async]==8.6.1
+elasticsearch[async]==8.7.0
 elastic-transport==8.4.0
 pyyaml==6.0
 envyaml==1.10.211231
@@ -16,3 +16,6 @@ azure-storage-blob==12.13.0
 SQLAlchemy==2.0.1
 oracledb==1.2.2
 asyncpg==0.27.0
+python-tds==1.12.0
+sqlalchemy-pytds==0.3.5
+pyOpenSSL==23.1.1

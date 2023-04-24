@@ -18,7 +18,6 @@ from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value, iso_utc
 
 MAX_CHUNK_SIZE = 65536
-DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_FILE_SIZE_LIMIT = 10485760
 
 
@@ -40,7 +39,6 @@ class NASDataSource(BaseDataSource):
         self.server_ip = self.configuration["server_ip"]
         self.port = self.configuration["server_port"]
         self.drive_path = self.configuration["drive_path"]
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -51,34 +49,36 @@ class NASDataSource(BaseDataSource):
         """
         return {
             "username": {
-                "value": "admin",
-                "label": "SMB username",
+                "label": "Username",
+                "order": 1,
                 "type": "str",
+                "value": "admin",
             },
             "password": {
-                "value": "abc@123",
-                "label": "SMB password",
+                "label": "Password",
+                "order": 2,
+                "sensitive": True,
                 "type": "str",
+                "value": "abc@123",
             },
             "server_ip": {
-                "value": "127.0.0.1",
                 "label": "SMB IP",
+                "order": 3,
                 "type": "str",
+                "value": "127.0.0.1",
             },
             "server_port": {
-                "value": 445,
+                "display": "numeric",
                 "label": "SMB port",
+                "order": 4,
                 "type": "int",
+                "value": 445,
             },
             "drive_path": {
-                "value": "Folder1",
-                "label": "SMB shared folder/directory",
+                "label": "SMB path",
+                "order": 5,
                 "type": "str",
-            },
-            "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Enable content extraction (true/false)",
-                "type": "bool",
+                "value": "Folder1",
             },
         }
 
@@ -165,8 +165,7 @@ class NASDataSource(BaseDataSource):
             dictionary: Content document with id, timestamp & text
         """
         if not (
-            self.enable_content_extraction
-            and doit
+            doit
             and os.path.splitext(file["title"])[-1] in TIKA_SUPPORTED_FILETYPES
             and file["size"]
         ):

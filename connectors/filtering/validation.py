@@ -160,7 +160,6 @@ class FilteringValidator:
     async def validate(self, filtering):
         logger.info("Filtering validation started")
         basic_rules = filtering.basic_rules
-        advanced_rules = filtering.get_advanced_rules()
 
         filtering_validation_result = FilteringValidationResult()
 
@@ -176,8 +175,16 @@ class FilteringValidator:
                     # pass rule by rule (validate rule in isolation)
                     filtering_validation_result += validator.validate(basic_rule)
 
-        for validator in self.advanced_rules_validators:
-            filtering_validation_result += await validator.validate(advanced_rules)
+        if filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
+            advanced_rules_validators = (
+                self.advanced_rules_validators
+                if isinstance(self.advanced_rules_validators, list)
+                else [self.advanced_rules_validators]
+            )
+
+            for validator in advanced_rules_validators:
+                filtering_validation_result += await validator.validate(advanced_rules)
 
         logger.info(f"Filtering validation result: {filtering_validation_result.state}")
         logger.info(

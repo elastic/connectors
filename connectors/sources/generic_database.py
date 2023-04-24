@@ -4,10 +4,12 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+from abc import ABC, abstractmethod
 from functools import partial
 
 from asyncpg.exceptions._base import InternalClientError
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
@@ -49,6 +51,45 @@ def is_wildcard(tables):
     return tables in (WILDCARD, [WILDCARD])
 
 
+class Queries(ABC):
+    """Class contains abstract methods for queries"""
+
+    @abstractmethod
+    def ping(self):
+        """Query to ping source"""
+        pass
+
+    @abstractmethod
+    def all_tables(self, **kwargs):
+        """Query to get all tables"""
+        pass
+
+    @abstractmethod
+    def table_primary_key(self, **kwargs):
+        """Query to get the primary key"""
+        pass
+
+    @abstractmethod
+    def table_data(self, **kwargs):
+        """Query to get the table data"""
+        pass
+
+    @abstractmethod
+    def table_last_update_time(self, **kwargs):
+        """Query to get the last update time of the table"""
+        pass
+
+    @abstractmethod
+    def table_data_count(self, **kwargs):
+        """Query to get the number of rows in the table"""
+        pass
+
+    @abstractmethod
+    def all_schemas(self):
+        """Query to get all schemas of database"""
+        pass
+
+
 class GenericBaseDataSource(BaseDataSource):
     """Class contains common functionalities for Generic Database connector"""
 
@@ -64,7 +105,7 @@ class GenericBaseDataSource(BaseDataSource):
         self.retry_count = self.configuration["retry_count"]
 
         # Connection related configurations
-        self.user = self.configuration["user"]
+        self.user = self.configuration["username"]
         self.password = self.configuration["password"]
         self.host = self.configuration["host"]
         self.port = self.configuration["port"]
@@ -75,6 +116,8 @@ class GenericBaseDataSource(BaseDataSource):
         self.dialect = ""
         self.connection = None
         self.queries = None
+        self.certfile = ""
+        self.tables_to_skip = {}
 
     @classmethod
     def get_default_configuration(cls):
@@ -85,78 +128,72 @@ class GenericBaseDataSource(BaseDataSource):
         """
         return {
             "host": {
-                "value": "127.0.0.1",
                 "label": "Host",
+                "order": 1,
                 "type": "str",
+                "value": "127.0.0.1",
             },
             "port": {
-                "value": 9090,
+                "display": "numeric",
                 "label": "Port",
+                "order": 2,
                 "type": "int",
+                "value": 9090,
             },
-            "user": {
-                "value": "admin",
+            "username": {
                 "label": "Username",
+                "order": 3,
                 "type": "str",
+                "value": "admin",
             },
             "password": {
-                "value": "Password_123",
                 "label": "Password",
+                "order": 4,
+                "sensitive": True,
                 "type": "str",
+                "value": "Password_123",
             },
             "database": {
-                "value": "xe",
                 "label": "Database",
+                "order": 5,
                 "type": "str",
+                "value": "xe",
             },
             "tables": {
-                "value": WILDCARD,
+                "display": "textarea",
                 "label": "Comma-separated list of tables",
+                "options": [],
+                "order": 6,
                 "type": "list",
+                "value": WILDCARD,
             },
             "fetch_size": {
-                "value": DEFAULT_FETCH_SIZE,
+                "default_value": DEFAULT_FETCH_SIZE,
+                "display": "numeric",
                 "label": "Rows fetched per request",
+                "order": 7,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": DEFAULT_FETCH_SIZE,
             },
             "retry_count": {
-                "value": DEFAULT_RETRY_COUNT,
+                "default_value": DEFAULT_RETRY_COUNT,
+                "display": "numeric",
                 "label": "Retries per request",
+                "order": 8,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": DEFAULT_RETRY_COUNT,
             },
         }
 
-    def _validate_configuration(self):
-        """Validates the configuration parameters
-
-        Raises:
-            Exception: Configured keys can't be empty
-        """
-        connection_fields = ["host", "port", "user", "password", "database", "tables"]
-
-        if empty_connection_fields := [
-            field for field in connection_fields if self.configuration[field] == ""
-        ]:
-            raise Exception(
-                f"Configured keys: {empty_connection_fields} can't be empty."
-            )
-
-        if (
-            isinstance(self.configuration["port"], str)
-            and not self.configuration["port"].isnumeric()
-        ):
-            raise Exception("Configured port has to be an integer.")
-
-        if self.dialect == "Postgresql" and not (
-            self.configuration["ssl_disabled"] or self.configuration["ssl_ca"]
-        ):
-            raise Exception("SSL certificate must be configured.")
-
-    async def execute_query(self, query_name, fetch_many=False, **query_kwargs):
+    async def execute_query(self, query, fetch_many=False, **kwargs):
         """Executes a query and yield rows
 
         Args:
-            query_name (str): Name of query.
+            query (str): Query.
             fetch_many (bool): Flag to use fetchmany method. Defaults to False.
 
         Raises:
@@ -165,10 +202,6 @@ class GenericBaseDataSource(BaseDataSource):
         Yields:
             list: Column names and query response
         """
-        if self.queries is None:
-            raise NotImplementedError()
-
-        query = self.queries[query_name].format(**query_kwargs)
         size = self.configuration["fetch_size"]
 
         retry = 1
@@ -185,14 +218,14 @@ class GenericBaseDataSource(BaseDataSource):
                 if fetch_many:
                     # sending back column names only once
                     if yield_once:
-                        if query_kwargs["schema"]:
+                        if kwargs["schema"] is not None:
                             yield [
-                                f"{query_kwargs['schema']}_{query_kwargs['table']}_{column}".lower()
+                                f"{kwargs['schema']}_{kwargs['table']}_{column}".lower()
                                 for column in cursor.keys()
                             ]
                         else:
                             yield [
-                                f"{query_kwargs['table']}_{column}".lower()
+                                f"{kwargs['table']}_{column}".lower()
                                 for column in cursor.keys()
                             ]
                         yield_once = False
@@ -212,7 +245,7 @@ class GenericBaseDataSource(BaseDataSource):
                 else:
                     yield cursor.fetchall()
                 break
-            except InternalClientError:
+            except (InternalClientError, ProgrammingError):
                 raise
             except Exception as exception:
                 logger.warning(
@@ -232,10 +265,10 @@ class GenericBaseDataSource(BaseDataSource):
         Returns:
             cursor: Asynchronous cursor
         """
-        if self.engine is None:
-            raise NotImplementedError()
         try:
-            async with self.engine.connect() as connection:
+            if self.engine is None:
+                self._create_engine()
+            async with self.engine.connect() as connection:  # pyright: ignore
                 cursor = await connection.execute(text(query))
                 return cursor
         except Exception as exception:
@@ -259,13 +292,14 @@ class GenericBaseDataSource(BaseDataSource):
         Returns:
             cursor: Synchronous cursor
         """
-        if self.engine is None:
-            raise NotImplementedError()
         try:
+            if self.engine is None:
+                self._create_engine()
             loop = asyncio.get_running_loop()
-            self.connection = await loop.run_in_executor(
-                executor=None, func=self.engine.connect
-            )
+            if self.connection is None:
+                self.connection = await loop.run_in_executor(
+                    executor=None, func=self.engine.connect  # pyright: ignore
+                )
             cursor = await loop.run_in_executor(
                 executor=None,
                 func=partial(self.connection.execute, statement=text(query)),
@@ -285,11 +319,12 @@ class GenericBaseDataSource(BaseDataSource):
         """Verify the connection with the database-server configured by user"""
         logger.info("Validating the Connector Configuration...")
         try:
-            self._validate_configuration()
-            self._create_engine()
+            if self.queries is None:
+                raise NotImplementedError
+
             await anext(
                 self.execute_query(
-                    query_name="PING",
+                    query=self.queries.ping(),
                 )
             )
             logger.info(f"Successfully connected to {self.dialect}.")
@@ -307,22 +342,27 @@ class GenericBaseDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
         try:
+            if self.queries is None:
+                raise NotImplementedError
+
             [[row_count]] = await anext(
                 self.execute_query(
-                    query_name="TABLE_DATA_COUNT",
-                    schema=schema,
-                    table=table,
+                    query=self.queries.table_data_count(
+                        schema=schema,
+                        table=table,
+                    ),
                 )
             )
             if row_count > 0:
                 # Query to get the table's primary key
                 columns = await anext(
                     self.execute_query(
-                        query_name="TABLE_PRIMARY_KEY",
-                        user=self.user.upper(),
-                        database=self.database,
-                        schema=schema,
-                        table=table,
+                        query=self.queries.table_primary_key(
+                            user=self.user.upper(),
+                            database=self.database,
+                            schema=schema,
+                            table=table,
+                        ),
                     )
                 )
                 if schema:
@@ -341,10 +381,11 @@ class GenericBaseDataSource(BaseDataSource):
                     try:
                         last_update_time = await anext(
                             self.execute_query(
-                                query_name="TABLE_LAST_UPDATE_TIME",
-                                database=self.database,
-                                schema=schema,
-                                table=table,
+                                query=self.queries.table_last_update_time(
+                                    database=self.database,
+                                    schema=schema,
+                                    table=table,
+                                ),
                             )
                         )
                         last_update_time = last_update_time[0][0]
@@ -352,7 +393,10 @@ class GenericBaseDataSource(BaseDataSource):
                         logger.warning(f"Unable to fetch last_updated_time for {table}")
                         last_update_time = None
                     streamer = self.execute_query(
-                        query_name="TABLE_DATA",
+                        query=self.queries.table_data(
+                            schema=schema,
+                            table=table,
+                        ),
                         fetch_many=True,
                         schema=schema,
                         table=table,
@@ -386,7 +430,7 @@ class GenericBaseDataSource(BaseDataSource):
                     )
             else:
                 logger.warning(f"No rows found for {table}.")
-        except InternalClientError as exception:
+        except (InternalClientError, ProgrammingError) as exception:
             logger.warning(
                 f"Something went wrong while fetching document for table {table}. Error: {exception}"
             )
@@ -401,7 +445,10 @@ class GenericBaseDataSource(BaseDataSource):
             Dict: Row document to index
         """
         tables_to_fetch = await self.get_tables_to_fetch(schema)
-
+        if self.database in self.tables_to_skip.keys():
+            tables_to_fetch = [
+                *(set(tables_to_fetch) - set(self.tables_to_skip[self.database]))
+            ]
         for table in tables_to_fetch:
             logger.debug(f"Found table: {table} in database: {self.database}.")
             async for row in self.fetch_documents(
@@ -419,16 +466,18 @@ class GenericBaseDataSource(BaseDataSource):
 
     async def get_tables_to_fetch(self, schema):
         tables = configured_tables(self.tables)
-
+        if self.queries is None:
+            raise NotImplementedError
         return (
             map(
                 lambda table: table[0],
                 await anext(
                     self.execute_query(
-                        query_name="ALL_TABLE",
-                        user=self.user.upper(),
-                        database=self.database,
-                        schema=schema,
+                        query=self.queries.all_tables(
+                            user=self.user.upper(),
+                            database=self.database,
+                            schema=schema,
+                        )
                     )
                 ),
             )

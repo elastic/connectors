@@ -1,347 +1,281 @@
 # Connectors Developer's Guide
 
-## Network Drive Connector
+ℹ️ Find documentation for the following connector clients in the Elastic Enterprise Search docs:
 
-The [Elastic Network Drive connector](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/network_drive.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+- [Azure Blob Storage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-azure-blob.html)
+- [Google Cloud Storage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-google-cloud.html)
+- [Microsoft SQL](https://www.elastic.co/guide/en/enterprise-search/master/connectors-ms-sql.html)
+- [MongoDB](https://www.elastic.co/guide/en/enterprise-search/master/connectors-mongodb.html)
+- [MySQL](https://www.elastic.co/guide/en/enterprise-search/master/connectors-mysql.html)
+- [Network drive](https://www.elastic.co/guide/en/enterprise-search/master/connectors-network-drive.html)
+- [Oracle](https://www.elastic.co/guide/en/enterprise-search/master/connectors-oracle.html)
+- [PostgreSQL](https://www.elastic.co/guide/en/enterprise-search/master/connectors-postgresql.html)
+- [S3](https://www.elastic.co/guide/en/enterprise-search/master/connectors-s3.html)
+
+## Confluence Connector
+
+The [Elastic Confluence connector](../connectors/sources/confluence.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ### Availability and prerequisites
 
-⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
-Features in beta are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
+This connector is available as a **connector client** from the **Python connectors framework**. To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
 
-Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
+This connector is in **beta** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Beta features are not subject to the support SLA of official GA features.
 
+### Usage
 
-### Setup and basic usage
+To use this connector as a **connector client**, use the **build a connector** workflow. See [Connector clients and frameworks](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
 
-Complete the following steps to deploy the connector:
+For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
 
-1. [Gather Network Drive details](#gather-network-drive-details)
-2. [Configure Network Drive connector](#configure-network-drive-connector)
+### Compatibility
 
-#### Gather Network Drive details
+Confluence Cloud or Confluence Server versions 7 or later are compatible with Elastic connector frameworks. Confluence Data Center editions are not currently supported.
 
-Collect the information that is required to connect to your network drive:
-
-- The network drive path the connector will crawl to fetch files. This is the name of the folder shared via SMB.
-- The username the connector will use to log in to network drive.
-- The password the connector will use to log in to network drive.
-- The server IP address where the network drive is hosted.
-- The port where the network drive service is hosted.
-
-#### Configure Network Drive connector
+### Configuration
 
 The following configuration fields need to be provided for setting up the connector:
+
+##### `data_source`
+
+Dropdown to determine the Confluence platform type: `Confluence Cloud` or `Confluence Server`. Default value is `Confluence Server`.
 
 ##### `username`
 
-The username of the account for network drive. Default value is `admin`.
-
-ℹ️ The user must have atleast **read** permissions for the folder path provided.
+The username of the account for Confluence server.
 
 ##### `password`
 
-The password of the account to be used for crawling the network drive.
+The password of the account to be used for the Confluence server.
 
-##### `server_ip`
+##### `account_email`
 
-The server ip where network drive is hosted. Default value is `127.0.0.1`. Examples:
+The account email for the Confluence cloud.
 
-- `192.158.1.38`
-- `127.0.0.1`
+##### `api_token`
 
-##### `server_port`
+The API Token to authenticate with Confluence cloud.
 
-The server port where network drive service is available. Default value is `445`. Examples:
+##### `confluence_url`
 
-- `9454`
-- `8429`
+The domain where the Confluence is hosted. Examples:
 
-##### `drive_path`
+  - `https://192.158.1.38:8080/`
+  - `https://test_user.atlassian.net/`
 
-The network drive path the connector will crawl to fetch files. Examples:
+##### `spaces`
 
-- `Users/perftest`
-- `admin/bin`
+Comma-separated list of [Space Keys](https://confluence.atlassian.com/doc/space-keys-829076188.html) to fetch data from Confluence server or cloud. If the value is `*`, the connector will fetch data from all spaces present in the configured `spaces` . Default value is `*`. Examples:
 
-ℹ️ The drive path should have forward slashes as path separators.
-
-##### `enable_content_extraction`
-
-Whether the connector should extract file content from network drive. Default value is `True` i.e. the connector will try to extract file contents.
-
-ℹ️ The values for these fields need to be provided [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/network_drive.py#L67) before running the connector for the first time. Further, these can be changed from UI editor which will appear on the UI once the first successful connection is made.
-
-#### Content extraction
-
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/network_drive.py#L19).
-
-### Connector Limitations
-
-- Files bigger than 10 MB won't be extracted.
-- Permission are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
-- Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
-
-### E2E Tests
-
-The framework provides a way to test ingestion through a connector against a real data source. This is called a functional test. To execute a functional test for the Network Drive connector, run the following command:
-```shell
-$ make ftest NAME=network_drive
-```
-
-ℹ️ Users do not need to have a running Elasticsearch instance or a Network Drive source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Network Drive source using the docker image.
-
-ℹ️ The e2e test does not currently support testing ingestion against an Elastic Cloud instance. The test uses a dockerized Elasticsearch for the ingestion as configured [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/tests/fixtures/network_drive/docker-compose.yml).
-
-ℹ️ The e2e test uses default values defined in [configure Network Drive connector](#configure-network-drive-connector)
-
-
-## Amazon S3 Connector
-
-The [Elastic Amazon S3 connector](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/s3.py) is used to sync files and file content for supported file types from [Amazon S3](https://s3.console.aws.amazon.com/s3/home) data sources. It is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
-
-### Availability and prerequisites
-
-⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
-Features in beta are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
-
-Elastic versions 8.6.0+ are compatible with Elastic connector frameworks.
-
-Amazon S3 permissions required to run the connector:
-  - ListAllMyBuckets
-  - ListBucket
-  - GetBucketLocation
-  - GetObject
-
-### Setup and basic usage
-
-Complete the following steps to deploy the connector:
-
-1. [Gather Amazon S3 details](#gather-amazon-s3-details)
-2. [Configure Amazon S3 connector](#configure-amazon-s3-connector)
-
-#### Gather Amazon S3 details
-
-Collect the information that is required to connect to your Amazon S3:
-
-- Setup AWS configuration by installing [awscli](https://pypi.org/project/awscli/).
-- Add aws_access_key, aws_secret_key and region to run the connector.
-
-
-#### Configure Amazon S3 connector
-
-The following configuration fields need to be provided for setting up the connector:
-
-##### `buckets`
-
-List buckets for Amazon S3. For * in string connector will fetch data for all the buckets. Examples:
-
-  - `testbucket, prodbucket`
-  - `testbucket`
+  - `EC, TP`
   - `*`
 
-##### `read_timeout`
+##### `ssl_enabled`
 
-The read_timeout for Amazon S3. Default value is `90`. Examples:
+Whether SSL verification will be enabled. Default value is `False`.
 
-  - `60`
-  - `120`
+##### `ssl_ca`
 
-##### `connect_timeout`
+Content of SSL certificate. Note: In case of ssl_enabled is `False`, keep `ssl_ca` field empty. Example certificate:
 
-The connect_timeout for crawling the Amazon S3. Default value is `90`. Examples:
-
-  - `60`
-  - `120`
-
-##### `max_attempts`
-
-The max_attempts for retry the Amazon S3. Default value is `5`. Examples:
-
-  - `1`
-  - `3`
-
-##### `page_size`
-
-The page_size for iterating bucket objects in Amazon S3. Default value is `100`. Examples:
-
-  - `50`
-  - `150`
-
-##### `enable_content_extraction`
-
-Whether the connector should extract file content from Amazon S3. Default value is `True` i.e. the connector will try to extract file contents.
-
-ℹ️ The values for these fields need to be provided [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/s3.py#L241) before running the connector for the first time. Further, these can be changed from UI editor which will appear on the UI once the first successful connection is made.
-
-#### Content extraction
-
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/s3.py#L25).
-
-### Connector Limitations
-
-- Files bigger than 10 MB won't be extracted.
-- Permission are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
-- Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
-- The user needs to set a profile with the AWS configure command.
-- Currently the connector does not support S3 compatible vendors.
-
-### E2E Tests
-
-The framework provides a way to test ingestion through a connector against a real data source. This is called a functional test. To execute a functional test for the Amazon S3 connector, run the following command:
-```shell
-$ make ftest NAME=s3
-```
-
-ℹ️ Users do not need to have a running Elasticsearch instance or an Amazon S3 source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Amazon S3 source using the docker image.
-
-ℹ️ The e2e test does not currently support testing ingestion against an Elastic Cloud instance. The test uses a dockerized Elasticsearch for the ingestion as configured [here](https://github.com/elastic/connectors-python/blob/8.6/connectors/sources/tests/fixtures/s3/docker-compose.yml).
-
-ℹ️ The e2e test uses default values defined in [configure Amazon S3 connector](#configure-amazon-s3-connector)
-
-## Google Cloud Storage Connector
-
-The [Elastic Google Cloud Storage connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/google_cloud_storage.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
-
-### Availability and prerequisites
-
-⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
-Features in beta are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
-
-Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
-
-The Google Cloud Storage service account must have (at least) the following scopes and roles :
-  - Security Admin
-  - Storage Admin
-  - Serviceusage.services.use
-  - Project Billing Manager
-
-### Setup and basic usage
-
-Complete the following steps to deploy the connector:
-
-1. [Gather Google Cloud Storage details](#gather-google-cloud-storage-details)
-2. [Configure Google Cloud Storage connector](#configure-google-cloud-storage-connector)
-
-#### Gather Google Cloud Storage details
-
-Collect the information that is required to connect to your Google Cloud Storage:
-
-- The Google Cloud Storage service account credentials json file.
-
-#### Configure Google Cloud Storage connector
-
-The following configuration fields need to be provided for setting up the connector:
-
-##### `service_account_credentials`
-
-The service account credentials generated from Google Cloud Storage.  Default value is [here](https://github.com/elastic/connectors-python/blob/main/connectors/sources/google_cloud_storage.py#L100)
-
+  - ```
+    -----BEGIN CERTIFICATE-----
+    MIID+jCCAuKgAwIBAgIGAJJMzlxLMA0GCSqGSIb3DQEBCwUAMHoxCzAJBgNVBAYT
+    ...
+    7RhLQyWn2u00L7/9Omw=
+    -----END CERTIFICATE-----
+    ```
 
 ##### `retry_count`
 
-The number of retry attempts after failed call to Google Cloud Storage. Default value is `3`.
-
-##### `enable_content_extraction`
-
-Whether the connector should extract file content from Google Cloud Storage. Default value is `True` i.e. the connector will try to extract file contents.
-
-#### Content extraction
-
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/main/connectors/utils.py#L29).
-
-### Connector Limitations
-
-- Files bigger than 10 MB won't be extracted.
-- Permission are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
-- Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
-
-### E2E Tests
-
-The end to end test is usually performed by developers after the functional and system testing is completed. The framework allows users to test the connector end to end. To perform e2e test for Google Cloud Storage connector, run the following make command:
-```shell
-$ make ftest NAME=google_cloud_storage
-```
-
-ℹ️ Users do not need to have a running Elasticsearch instance or an Google Cloud Storage source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Google Cloud Storage source using the docker image.
-
-ℹ️ The e2e test uses default values defined in [configure Google Cloud Storage connector](#configure-google-cloud-storage-connector).
-
-
-## Azure Blob Storage Connector
-
-The [Elastic Azure Blob Storage connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/azure_blob_storage.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
-
-### Availability and prerequisites
-
-⚠️ _Currently, this connector is available in **beta** starting in 8.7_.
-Features in beta are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
-
-Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
-
-### Setup and basic usage
-
-Complete the following steps to deploy the connector:
-
-1. [Gather Azure Blob Storage details](#gather-azure-blob-storage-details)
-2. [Configure Azure Blob Storage connector](#configure-azure-blob-storage-connector)
-
-#### Gather Azure Blob Storage details
-
-Collect the information that is required to connect to your Azure Blob Storage:
-
-- The account name and account key for the Azure Blob Storage account.
-- The blob endpoint for Azure Blob Service.
-
-#### Configure Azure Blob Storage connector
-
-The following configuration fields need to be provided for setting up the connector:
-
-##### `account_name`
-
-The account name of Azure Blob Storage account. Default value is `devstoreaccount1`.
-
-##### `account_key`
-
-The account key of Azure Blob Storage account. Default value is `Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==`.
-
-##### `blob_endpoint`
-
-The blob endpoint of Blob Service provided by Azure Blob Storage. Default value is `http://127.0.0.1:10000/devstoreaccount1`.
-
-##### `retry_count`
-
-The number of retry attempts after failed call to Azure Blob Storage. Default value is `3`.
+The number of retry attempts after failed request to Confluence. Default value is `3`.
 
 ##### `concurrent_downloads`
 
-The number of concurrent downloads for fetching content of Azure Blob Storage. Default value is `100`.
+The number of concurrent downloads for fetching the attachment content. This speeds up the content extraction of attachments. Defaults to `50`.
 
-##### `enable_content_extraction`
 
-Whether the connector should extract file content from Azure Blob Storage. Default value is `True` i.e. the connector will try to extract file contents.
+#### Content Extraction
 
-#### Content extraction
+The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
 
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found [here](https://github.com/elastic/connectors-python/blob/main/connectors/utils.py#L29).
+### Documents and syncs
 
-### Connector Limitations
+The connector syncs the following Confluence object types: 
+- **Pages**
+- **Spaces**
+- **Blog Posts**
+- **Attachments**
 
-- Currently, Lease data and Blob tier wonâ€™t be updated in the document, because the blob timestamp is not updated. Issue can be found [here](https://github.com/elastic/connectors-python/issues/289).
-- Files bigger than 10 MB won't be extracted.
-- Permission are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
+### Sync rules
+
+- Content of files bigger than 10 MB won't be extracted.
+- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
 - Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
 
-### E2E Tests
+### Connector Client operations
 
-The end to end test is usually performed by developers after the functional and system testing is completed. The framework allows users to test the connector end to end. To perform e2e test for Azure Blob Storage connector, run the following make command:
+#### End-to-end Testing
+
+The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html#build-connector-testing) for more details.
+
+To perform E2E testing for the Confluence connector, run the following command:
+
 ```shell
-$ make ftest NAME=azure_blob_storage
+$ make ftest NAME=confluence
 ```
 
-ℹ️ Users do not need to have a running Elasticsearch instance or an Azure Blob Storage source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Azure Blob Storage source using the docker image.
+ℹ️ Users can generate the performance report using an argument i.e. `PERF8=True`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
 
-ℹ️ The e2e test uses default values defined in [configure Azure Blob Storage connector](#configure-azure-blob-storage-connector)
+ℹ️ Users do not need to have a running Elasticsearch instance or a Confluence source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Confluence source using the docker image.
+
+ℹ️ The e2e test uses default values defined in [Configure Confluence connector](#configure-confluence-connector)
+
+### Known issues
+
+There are no known issues for this connector. Refer to [Known issues](https://www.elastic.co/guide/en/enterprise-search/master/connectors-known-issues.html) for a list of known issues for all connectors.
+
+### Troubleshooting
+
+See [Troubleshooting](https://www.elastic.co/guide/en/enterprise-search/master/connectors-troubleshooting.html).
+
+### Security
+
+See [security](https://www.elastic.co/guide/en/enterprise-search/master/connectors-security.html).
+
+## Jira Connector
+
+The [Elastic Jira connector](../connectors/sources/jira.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+
+### Availability and prerequisites
+
+This connector is available as a **connector client** from the **Python connectors framework**.  This connector is in **beta** and is subject to change. To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
+
+This connector is in **beta** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Beta features are not subject to the support SLA of official GA features.
+
+### Usage
+
+To use this connector as a **connector client**, use the **build a connector** workflow. See [Connector clients and frameworks](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
+
+For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
+
+### Compatibility
+
+Jira Cloud or Jira Server versions 7 or later are compatible with Elastic connector frameworks. Jira Data Center editions are not currently supported.
+
+### Configuration
+
+#### Configure Jira connector
+
+The following configuration fields need to be provided for setting up the connector:
+
+##### `data_source`
+
+Dropdown to determine Jira platform type: `Jira Cloud` or `Jira Server`. Default value is `Jira Cloud`.
+
+##### `username`
+
+The username of the account for Jira server.
+
+##### `password`
+
+The password of the account to be used for Jira server.
+
+##### `account_email`
+
+The account email for Jira cloud.
+
+##### `api_token`
+
+The API Token to authenticate with Jira cloud.
+
+##### `jira_url`
+
+The domain where Jira is hosted. Examples:
+
+  - `https://192.158.1.38:8080/`
+  - `https://test_user.atlassian.net/`
+
+##### `projects`
+
+Comma-separated list of [Project Keys](https://support.atlassian.com/jira-software-cloud/docs/what-is-an-issue/#Workingwithissues-Projectkeys) to fetch data from Jira server or cloud. If the value is `*` the connector will fetch data from all projects present in the configured `projects` . Default value is `*`. Examples:
+
+  - `EC, TP`
+  - `*`
+
+##### `ssl_enabled`
+
+Whether SSL verification will be enabled. Default value is `False`.
+
+##### `ssl_ca`
+
+Content of SSL certificate. Note: In case of ssl_enabled is `False`, keep `ssl_ca` field empty. Example certificate:
+
+  - ```
+    -----BEGIN CERTIFICATE-----
+    MIID+jCCAuKgAwIBAgIGAJJMzlxLMA0GCSqGSIb3DQEBCwUAMHoxCzAJBgNVBAYT
+    ...
+    7RhLQyWn2u00L7/9Omw=
+    -----END CERTIFICATE-----
+    ```
+
+##### `retry_count`
+
+The number of retry attempts after failed request to Jira. Default value is `3`.
+
+##### `concurrent_downloads`
+
+The number of concurrent downloads for fetching the attachment content. This speeds up the content extraction of attachments. Defaults to `100`.
+
+#### Content Extraction
+
+The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
+
+### Documents and Sync
+
+The connector syncs the following objects and entities:
+- **Projects**
+  - Includes metadata such as description, project key, project type, lead name, etc.
+- **Issues**
+  - All types of issues including Task, Bug, Sub-task, Enhancement, Story, etc.
+  - Includes metadata such as issue type, parent issue details, fix versions, affected versions, resolution, attachments, comments, sub-task details, priority, custom fields, etc.
+- **Attachments**
+
+**Note:** Archived projects and issues are not indexed.
+
+### Sync rules
+
+- Files bigger than 10 MB won't be extracted
+- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
+- Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
+
+### Connector Client operations
+
+#### End-to-end Testing
+
+The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html#build-connector-testing) for more details.
+
+To perform E2E testing for Jira connector, run the following command:
+
+```shell
+$ make ftest NAME=jira
+```
+
+ℹ️ Users can generate the performance report using an argument i.e. `PERF8=True`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
+
+ℹ️ Users do not need to have a running Elasticsearch instance or a Jira source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Jira source using the docker image.
+
+### Known issues
+
+There are no known issues for this connector. Refer to [Known issues](https://www.elastic.co/guide/en/enterprise-search/master/connectors-known-issues.html) for a list of known issues for all connectors.
+
+### Troubleshooting
+
+See [Troubleshooting](https://www.elastic.co/guide/en/enterprise-search/master/connectors-troubleshooting.html).
+
+### Security
+
+See [security](https://www.elastic.co/guide/en/enterprise-search/master/connectors-security.html).
 
 ## General Configuration
 

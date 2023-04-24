@@ -10,10 +10,13 @@ import contextlib
 import functools
 import os
 import random
+import ssl
+import string
 import tempfile
 import time
 import timeit
-from unittest.mock import Mock
+from datetime import datetime
+from unittest.mock import Mock, patch
 
 import pytest
 from freezegun import freeze_time
@@ -26,10 +29,18 @@ from connectors.utils import (
     MemQueue,
     RetryStrategy,
     convert_to_b64,
+    evaluate_timedelta,
     get_base64_value,
+    get_pem_format,
     get_size,
+    has_duplicates,
+    hash_id,
+    is_expired,
     next_run,
     retryable,
+    ssl_context,
+    truncate_id,
+    url_encode,
     validate_index_name,
 )
 
@@ -37,8 +48,8 @@ from connectors.utils import (
 @freeze_time("2023-01-18 17:18:56.814003", tick=True)
 def test_next_run():
     # can run within two minutes
-    assert next_run("1 * * * * *") < 120
-    assert next_run("* * * * * *") == 0
+    assert next_run("1 * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:19:01"
+    assert next_run("* * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:18:57"
 
     # this should get parsed
     next_run("0/5 14,18,52 * ? JAN,MAR,SEP MON-FRI 2010-2030")
@@ -59,7 +70,7 @@ def test_invalid_names():
             validate_index_name(name)
 
 
-def test_mem_queue_speed(patch_logger):
+def test_mem_queue_speed():
     def mem_queue():
         import asyncio
 
@@ -96,7 +107,7 @@ def test_mem_queue_speed(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_mem_queue_race(patch_logger):
+async def test_mem_queue_race():
     item = "small stuff"
     queue = MemQueue(
         maxmemsize=get_size(item) * 2 + 1, refresh_interval=0.01, refresh_timeout=1
@@ -127,19 +138,18 @@ async def test_mem_queue_race(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_mem_queue(patch_logger):
-    queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=0.1)
+async def test_mem_queue():
+    queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=0.15)
     await queue.put("small stuff")
 
     assert not queue.full()
     assert queue.qmemsize() == asizeof.asizeof("small stuff")
 
     # let's pile up until it can't accept anymore stuff
-    while True:
-        try:
+
+    with pytest.raises(asyncio.QueueFull):
+        while True:
             await queue.put("x" * 100)
-        except asyncio.QueueFull:
-            break
 
     when = []
 
@@ -161,6 +171,16 @@ async def test_mem_queue(patch_logger):
     assert when[1] - when[0] > 0.1
 
 
+@pytest.mark.asyncio
+async def test_mem_queue_too_large_item():
+    queue = MemQueue(maxmemsize=10, refresh_interval=0, refresh_timeout=1)
+
+    with pytest.raises(asyncio.QueueFull) as e:
+        await queue.put_nowait("lala" * 1000)
+
+    assert e.match("Queue is full")
+
+
 def test_get_base64_value():
     """This test verify get_base64_value method and convert encoded data into base64"""
     expected_result = get_base64_value("dummy".encode("utf-8"))
@@ -168,7 +188,7 @@ def test_get_base64_value():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runner(patch_logger):
+async def test_concurrent_runner():
     results = []
 
     def _results_callback(result):
@@ -187,7 +207,7 @@ async def test_concurrent_runner(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runner_fails(patch_logger):
+async def test_concurrent_runner_fails():
     results = []
 
     def _results_callback(result):
@@ -210,7 +230,7 @@ async def test_concurrent_runner_fails(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runner_high_concurrency(patch_logger):
+async def test_concurrent_runner_high_concurrency():
     results = []
 
     def _results_callback(result):
@@ -308,6 +328,48 @@ class CustomException(Exception):
     pass
 
 
+class CustomGeneratorException(Exception):
+    pass
+
+
+@pytest.mark.fail_slow(1)
+@pytest.mark.asyncio
+async def test_exponential_backoff_retry_async_generator():
+    mock_gen = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        interval=0,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def raises_async_generator():
+        for _ in range(3):
+            mock_gen()
+            raise CustomGeneratorException()
+            yield 1
+
+    with pytest.raises(CustomGeneratorException):
+        async for _ in raises_async_generator():
+            pass
+
+    # retried 10 times
+    assert mock_gen.call_count == num_retries
+
+    # would lead to roughly ~ 50 seconds of retrying
+    @retryable(retries=10, interval=5, strategy=RetryStrategy.LINEAR_BACKOFF)
+    async def does_not_raise_async_generator():
+        for _ in range(3):
+            yield 1
+
+    # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
+    items = []
+    async for item in does_not_raise_async_generator():
+        items.append(item)
+
+    assert items == [1, 1, 1]
+
+
 @pytest.mark.fail_slow(1)
 @pytest.mark.asyncio
 async def test_exponential_backoff_retry():
@@ -336,3 +398,99 @@ async def test_exponential_backoff_retry():
 
     # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
     await does_not_raise()
+
+
+class MockSSL:
+    """This class contains methods which returns dummy ssl context"""
+
+    def load_verify_locations(self, cadata):
+        """This method verify locations"""
+        pass
+
+
+def test_ssl_context():
+    """This function test ssl_context with dummy certificate"""
+    # Setup
+    certificate = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
+
+    # Execute
+    with patch.object(ssl, "create_default_context", return_value=MockSSL()):
+        ssl_context(certificate=certificate)
+
+
+def test_url_encode():
+    """Test the url_encode method by passing a string"""
+    # Execute
+    encode_response = url_encode("http://ascii.cl?parameter='Click on URL Decode!'")
+    # Assert
+    assert (
+        encode_response
+        == "http%3A%2F%2Fascii.cl%3Fparameter%3D'Click%20on%20URL%20Decode%21'"
+    )
+
+
+def test_is_expired():
+    """This method checks whether token expires or not"""
+    # Execute
+    expires_at = datetime.fromisoformat("2023-02-10T09:02:23.629821")
+    actual_response = is_expired(expires_at=expires_at)
+    # Assert
+    assert actual_response is True
+
+
+@freeze_time("2023-02-18 14:25:26.158843", tz_offset=-4)
+def test_evaluate_timedelta():
+    """This method tests adding seconds to the current utc time"""
+    # Execute
+    expected_response = evaluate_timedelta(seconds=86399, time_skew=20)
+
+    # Assert
+    assert expected_response == "2023-02-19T14:25:05.158843"
+
+
+def test_get_pem_format():
+    """This function tests prepare private key and certificate with dummy values"""
+    # Setup
+    expected_formated_pem_key = """-----BEGIN PRIVATE KEY-----
+PrivateKey
+-----END PRIVATE KEY-----"""
+    private_key = "-----BEGIN PRIVATE KEY----- PrivateKey -----END PRIVATE KEY-----"
+
+    # Execute
+    formated_privat_key = get_pem_format(key=private_key, max_split=2)
+    assert formated_privat_key == expected_formated_pem_key
+
+    # Setup
+    expected_formated_certificate = """-----BEGIN CERTIFICATE-----
+Certificate1
+Certificate2
+-----END CERTIFICATE-----"""
+    certificate = "-----BEGIN CERTIFICATE----- Certificate1 Certificate2 -----END CERTIFICATE-----"
+
+    # Execute
+    formated_certificate = get_pem_format(key=certificate, max_split=1)
+    assert formated_certificate == expected_formated_certificate
+
+
+def test_hash_id():
+    limit = 512
+    random_id_too_long = "".join(
+        random.choices(string.ascii_letters + string.digits, k=1000)
+    )
+
+    assert len(hash_id(random_id_too_long).encode("UTF-8")) < limit
+
+
+def test_truncate_id():
+    long_id = "something-12341361361-21905128510263"
+    truncated_id = truncate_id(long_id)
+
+    assert len(truncated_id) < len(long_id)
+
+
+@pytest.mark.parametrize(
+    "_list, should_have_duplicate",
+    [([], False), (["abc"], False), (["abc", "def"], False), (["abc", "abc"], True)],
+)
+def test_has_duplicates(_list, should_have_duplicate):
+    assert has_duplicates(_list) == should_have_duplicate

@@ -25,7 +25,7 @@ def test_main(catch_stdout):
     assert catch_stdout.read().strip() == __version__
 
 
-def test_main_and_kill(patch_logger, mock_responses):
+def test_main_and_kill(mock_responses):
     headers = {"X-Elastic-Product": "Elasticsearch"}
     host = "http://localhost:9200"
 
@@ -47,11 +47,11 @@ def test_main_and_kill(patch_logger, mock_responses):
     main([])
 
 
-def test_run(mock_responses, patch_logger, set_env):
+def test_run(mock_responses, set_env):
     args = mock.MagicMock()
     args.log_level = "DEBUG"
     args.config_file = CONFIG
-    args.action = "list"
+    args.action = ["list"]
     with patch("sys.stdout", new=StringIO()) as patched_stdout:
         assert run(args) == 0
 
@@ -63,9 +63,20 @@ def test_run(mock_responses, patch_logger, set_env):
         assert "Bye" in output
 
 
+def test_run_snowflake(mock_responses, set_env):
+    args = mock.MagicMock()
+    args.log_level = "DEBUG"
+    args.config_file = CONFIG
+    args.action = ["list", "poll"]
+    with patch("sys.stdout", new=StringIO()) as patched_stdout:
+        assert run(args) == -1
+        output = patched_stdout.getvalue().strip()
+        assert "Cannot use the `list` action with other actions" in output
+
+
 @patch("connectors.cli.set_logger")
 @patch("connectors.cli.load_config", side_effect=Exception("something went wrong"))
-def test_main_with_invalid_configuration(load_config, set_logger, patch_logger):
+def test_main_with_invalid_configuration(load_config, set_logger):
     args = mock.MagicMock()
     args.log_level = logging.DEBUG  # should be ignored!
     args.filebeat = True

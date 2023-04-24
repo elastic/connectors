@@ -25,7 +25,9 @@ from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 MAX_CHUNK_SIZE = 1048576
 DEFAULT_MAX_FILE_SIZE = 10485760
 DEFAULT_PAGE_SIZE = 100
-DEFAULT_CONTENT_EXTRACTION = True
+DEFAULT_MAX_RETRY_ATTEMPS = 5
+DEFAULT_CONNECTION_TIMEOUT = 90
+DEFAULT_READ_TIMEOUT = 90
 
 if "AWS_ENDPOINT_URL" in os.environ:
     AWS_ENDPOINT = f"{os.environ['AWS_ENDPOINT_URL']}:{os.environ['AWS_PORT']}"
@@ -56,7 +58,6 @@ class S3DataSource(BaseDataSource):
             connect_timeout=self.configuration["connect_timeout"],
             retries={"max_attempts": self.configuration["max_attempts"]},
         )
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
     @asynccontextmanager
     async def client(self, **kwargs):
@@ -69,19 +70,8 @@ class S3DataSource(BaseDataSource):
         ) as s3:
             yield s3
 
-    def _validate_configuration(self):
-        """Validates whether user input is empty or not for configuration fields
-
-        Raises:
-            Exception: Configured keys can't be empty
-        """
-        if self.configuration["buckets"] == [""]:
-            raise Exception("Configured keys: buckets can't be empty.")
-
     async def ping(self):
         """Verify the connection with AWS"""
-        logger.info("Validating Amazon S3 Configuration...")
-        self._validate_configuration()
         try:
             async with self.client() as s3:
                 self.bucket_list = await s3.list_buckets()
@@ -103,7 +93,7 @@ class S3DataSource(BaseDataSource):
             dictionary: Document of file content
         """
         # Reuse the same for all files
-        if not (doit and self.enable_content_extraction):
+        if not (doit):
             return
         filename = doc["filename"]
         bucket = doc["bucket"]
@@ -231,33 +221,50 @@ class S3DataSource(BaseDataSource):
         """
         return {
             "buckets": {
-                "value": "ent-search-ingest-dev",
-                "label": "AWS Buckets",
+                "display": "textarea",
+                "label": "Comma-separated list of buckets",
+                "order": 1,
                 "type": "list",
+                "value": "ent-search-ingest-dev",
             },
             "read_timeout": {
-                "value": 90,
+                "default_value": DEFAULT_READ_TIMEOUT,
+                "display": "numeric",
                 "label": "Read timeout",
+                "order": 2,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": DEFAULT_READ_TIMEOUT,
             },
             "connect_timeout": {
-                "value": 90,
+                "default_value": DEFAULT_CONNECTION_TIMEOUT,
+                "display": "numeric",
                 "label": "Connection timeout",
+                "order": 3,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": DEFAULT_CONNECTION_TIMEOUT,
             },
             "max_attempts": {
-                "value": 5,
+                "default_value": DEFAULT_MAX_RETRY_ATTEMPS,
+                "display": "numeric",
                 "label": "Maximum retry attempts",
+                "order": 4,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": DEFAULT_MAX_RETRY_ATTEMPS,
             },
             "page_size": {
-                "value": DEFAULT_PAGE_SIZE,
+                "default_value": DEFAULT_PAGE_SIZE,
+                "display": "numeric",
                 "label": "Maximum size of page",
+                "order": 5,
+                "required": False,
                 "type": "int",
-            },
-            "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Enable content extraction (true/false)",
-                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": DEFAULT_PAGE_SIZE,
             },
         }
