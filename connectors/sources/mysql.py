@@ -373,7 +373,7 @@ class MySqlDataSource(BaseDataSource):
                 "type": "int",
                 "value": 3306,
             },
-            "user": {
+            "username": {
                 "label": "Username",
                 "order": 3,
                 "type": "str",
@@ -416,7 +416,7 @@ class MySqlDataSource(BaseDataSource):
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
                 "display": "numeric",
-                "label": "Number of rows fetched per request",
+                "label": "Rows fetched per request",
                 "order": 9,
                 "required": False,
                 "type": "int",
@@ -426,7 +426,7 @@ class MySqlDataSource(BaseDataSource):
             "retry_count": {
                 "default_value": RETRIES,
                 "display": "numeric",
-                "label": "Maximum retries per request",
+                "label": "Retries per request",
                 "order": 10,
                 "required": False,
                 "type": "int",
@@ -439,7 +439,7 @@ class MySqlDataSource(BaseDataSource):
         return MySQLClient(
             host=self.configuration["host"],
             port=self.configuration["port"],
-            user=self.configuration["user"],
+            user=self.configuration["username"],
             password=self.configuration["password"],
             database=self.configuration["database"],
             fetch_size=self.configuration["fetch_size"],
@@ -479,7 +479,7 @@ class MySqlDataSource(BaseDataSource):
             await cursor.execute(f"USE {self.database};")
         except aiomysql.Error:
             raise ConfigurableFieldValueError(
-                f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['user']}'."
+                f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['username']}'."
             )
 
     async def _validate_tables_accessible(self, cursor):
@@ -494,7 +494,7 @@ class MySqlDataSource(BaseDataSource):
 
         if len(non_accessible_tables) > 0:
             raise ConfigurableFieldValueError(
-                f"The tables '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['user']}'."
+                f"The tables '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['username']}'."
             )
 
     async def ping(self):
