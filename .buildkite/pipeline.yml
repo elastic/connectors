@@ -1,9 +1,17 @@
 agents:
   provider: "gcp"
-  machineType: "n1-standard-8"
-  useVault: false
+  machineType: "n1-standard-2"
+  useVault: true
   image: family/enterprise-search-ubuntu-2204-connectors-py
 
 steps:
-  - command:
-    - ".buildkite/run_dockerized_test.sh"
+  - label: ":face_with_peeking_eye: Lint"
+    command: "make lint"
+
+  - label: ":pytest: Test"
+    command: "make test"
+
+  - label: ":shipit: Smoke test"
+    command: "make ftest NAME=dir DATA_SIZE=small"
+    agents:
+      machineType: "n1-standard-8"

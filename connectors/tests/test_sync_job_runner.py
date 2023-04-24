@@ -412,7 +412,7 @@ async def test_sync_job_runner_connector_not_found(elastic_server_mock):
     sync_job_runner.connector.reload.side_effect = _raise_document_not_found_error
     await sync_job_runner.execute()
 
-    assert sync_job_runner.connector is None
+    sync_job_runner.connector.sync_starts.assert_awaited()
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
@@ -421,6 +421,7 @@ async def test_sync_job_runner_connector_not_found(elastic_server_mock):
     )
     sync_job_runner.sync_job.cancel.assert_not_awaited()
     sync_job_runner.sync_job.suspend.assert_not_awaited()
+    sync_job_runner.connector.sync_done.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -438,9 +439,14 @@ async def test_sync_job_runner_sync_job_not_found(elastic_server_mock):
     sync_job_runner.sync_job.reload.side_effect = DocumentNotFoundError()
     await sync_job_runner.execute()
 
-    assert sync_job_runner.sync_job is None
+    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
-    sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
+    sync_job_runner.sync_job.done.assert_not_awaited()
+    sync_job_runner.sync_job.fail.assert_not_awaited
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_not_awaited()
+    sync_job_runner.connector.sync_done.assert_awaited_with(None)
 
 
 @pytest.mark.asyncio
