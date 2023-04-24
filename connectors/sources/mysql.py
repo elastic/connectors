@@ -338,11 +338,6 @@ class MySqlDataSource(BaseDataSource):
     service_type = "mysql"
 
     def __init__(self, configuration):
-        """Set up the connection to the MySQL server.
-
-        Args:
-            configuration (DataSourceConfiguration): Object  of DataSourceConfiguration class.
-        """
         super().__init__(configuration=configuration)
         self._sleeps = CancellableSleeps()
         self.retry_count = self.configuration["retry_count"]
@@ -354,11 +349,6 @@ class MySqlDataSource(BaseDataSource):
 
     @classmethod
     def get_default_configuration(cls):
-        """Get the default configuration for MySQL server
-
-        Returns:
-            dictionary: Default configuration
-        """
         return {
             "host": {
                 "label": "Host",
@@ -454,11 +444,12 @@ class MySqlDataSource(BaseDataSource):
         self._sleeps.cancel()
 
     async def validate_config(self):
-        """Validates whether user input is empty or not for configuration fields and validate type for port.
-        Also validate, if the configured database and the configured tables are present and accessible by the configured user.
+        """Validates that user input is not empty and adheres to the specified constraints.
+        Also validate, if the configured database and the configured tables are present and accessible using the configured user.
 
         Raises:
-            Exception: Configured keys can't be empty
+            ConfigurableFieldValueError: The database or the tables do not exist or aren't accessible, or a field contains an empty or wrong value
+            ConfigurableFieldDependencyError: A inter-field dependency is not met
         """
         self.configuration.check_valid()
         await self._remote_validation()
@@ -502,10 +493,10 @@ class MySqlDataSource(BaseDataSource):
             await client.ping()
 
     async def get_docs(self, filtering=None):
-        """Executes the logic to fetch tables and rows in async manner.
+        """Fetch documents by either fetching all documents from the configured tables or using custom queries provided in the advanced rules.
 
         Yields:
-            dictionary: Row dictionary containing meta-data of the row.
+            Dict: Document representing a row and its metadata
         """
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
@@ -537,7 +528,7 @@ class MySqlDataSource(BaseDataSource):
             query (str): Custom query
 
         Yields:
-            Dict: Document to be indexed
+            Dict: Document representing a row and its metadata
         """
         if not isinstance(tables, list):
             tables = [tables]
