@@ -182,7 +182,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         return {
             "service_account_credentials": {
                 "display": "textarea",
-                "label": "Google Cloud service account json",
+                "label": "Google Cloud service account JSON",
                 "order": 1,
                 "type": "str",
                 "value": json.dumps(default_credentials),
