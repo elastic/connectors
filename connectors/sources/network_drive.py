@@ -69,7 +69,7 @@ class NASDataSource(BaseDataSource):
             },
             "server_port": {
                 "display": "numeric",
-                "label": "SMB Port",
+                "label": "SMB port",
                 "order": 4,
                 "type": "int",
                 "value": 445,
