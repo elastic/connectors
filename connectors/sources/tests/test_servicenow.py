@@ -6,11 +6,11 @@
 """Tests the ServiceNow source class methods"""
 from unittest import mock
 
-import aiohttp
 import pytest
+from aiohttp.client_exceptions import ServerDisconnectedError
 
-from connectors.source import DataSourceConfiguration
-from connectors.sources.servicenow import ServiceNowDataSource
+from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
+from connectors.sources.servicenow import ServiceNowClient, ServiceNowDataSource
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
 
@@ -50,66 +50,71 @@ class StreamerReader:
         yield self._res, self._size
 
 
-def test_get_configuration(patch_logger):
-    # Setup
-    klass = ServiceNowDataSource
+def test_get_configuration():
+    config = DataSourceConfiguration(ServiceNowDataSource.get_default_configuration())
 
-    # Execute
-    config = DataSourceConfiguration(klass.get_default_configuration())
-
-    # Assert
+    assert config["services"] == ["*"]
     assert config["username"] == "admin"
+    assert config["password"] == "changeme"
 
 
+@pytest.mark.parametrize("field", ["url", "username", "password", "services"])
 @pytest.mark.asyncio
-async def test_validate_configuration_with_invalid_concurrent(patch_logger):
-    # Setup
+async def test_validate_config_missing_fields_then_raise(field):
     source = create_source(ServiceNowDataSource)
-    source.concurrent_downloads = 100
+    source.configuration.set_field(name=field, value="")
 
-    # Execute
     with pytest.raises(Exception):
         await source.validate_config()
 
 
 @pytest.mark.asyncio
-async def test_validate_configuration_without_username(patch_logger):
-    # Setup
+async def test_validate_configuration_with_invalid_service_then_raise():
     source = create_source(ServiceNowDataSource)
-    source.configuration.set_field(name="username", value="")
+    source.servicenow_client.services = ["label_1", "label_3"]
 
-    # Execute
-    with pytest.raises(Exception):
-        await source.validate_config()
+    with pytest.raises(
+        ConfigurableFieldValueError,
+        match="Services 'label_3' are not available. Available services are: 'name_1'",
+    ):
+        with mock.patch.object(
+            ServiceNowClient,
+            "_api_call",
+            return_value=AsyncIterator(
+                [
+                    [
+                        {"name": "name_1", "label": "label_1"},
+                        {"name": "name_2", "label": "label_2"},
+                    ]
+                ]
+            ),
+        ):
+            await source.validate_config()
 
 
 @pytest.mark.asyncio
-async def test_close_with_client_session(patch_logger):
-    # Setup
+async def test_close_with_client_session():
     source = create_source(ServiceNowDataSource)
-    source._generate_session()
+    source.servicenow_client._get_session()
 
-    # Execute
     await source.close()
+    assert source.servicenow_client.session is None
 
 
 @pytest.mark.asyncio
-async def test_close_without_client_session(patch_logger):
-    # Setup
+async def test_close_without_client_session():
     source = create_source(ServiceNowDataSource)
 
-    # Execute
     await source.close()
+    assert source.servicenow_client.session is None
 
 
 @pytest.mark.asyncio
-async def test_ping_for_successful_connection(patch_logger):
-    # Setup
+async def test_ping_for_successful_connection():
     source = create_source(ServiceNowDataSource)
 
-    # Execute
     with mock.patch.object(
-        ServiceNowDataSource,
+        ServiceNowClient,
         "_api_call",
         return_value=AsyncIterator([{"service_label": "service_name"}]),
     ):
@@ -117,38 +122,33 @@ async def test_ping_for_successful_connection(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_ping_for_unsuccessful_connection(patch_logger):
-    # Setup
+async def test_ping_for_unsuccessful_connection_then_raise():
     source = create_source(ServiceNowDataSource)
 
-    # Execute
     with mock.patch.object(
-        ServiceNowDataSource, "_api_call", side_effect=Exception("Something went wrong")
+        ServiceNowClient, "_api_call", side_effect=Exception("Something went wrong")
     ):
         with pytest.raises(Exception):
             await source.ping()
 
 
 def test_tweak_bulk_options():
-    # Setup
     source = create_source(ServiceNowDataSource)
-    options = {}
-    options["concurrent_downloads"] = 10
+    source.concurrent_downloads = 10
+    options = {"concurrent_downloads": 5}
 
-    # Execute
     source.tweak_bulk_options(options)
+    assert options["concurrent_downloads"] == 10
 
 
 @pytest.mark.asyncio
-async def test_api_call(patch_logger):
-    # Setup
+async def test_api_call():
     source = create_source(ServiceNowDataSource)
-    source._generate_session()
+    session = source.servicenow_client._get_session()
 
-    # Execute
     response_list = []
     with mock.patch.object(
-        source.session,
+        session,
         "get",
         side_effect=[
             MockResponse(
@@ -167,37 +167,33 @@ async def test_api_call(patch_logger):
             ),
         ],
     ):
-        async for response in source._api_call(
+        async for response in source.servicenow_client._api_call(
             url="/test", params={"sysparm_query": "label=Incident"}
         ):
             response_list.append(response)
 
-    # Assert
     assert [{"id": "record_1"}] in response_list
 
 
 @pytest.mark.asyncio
-async def test_api_call_with_attachment(patch_logger):
-    # Setup
+async def test_api_call_with_attachment():
     source = create_source(ServiceNowDataSource)
-    source._generate_session()
+    session = source.servicenow_client._get_session()
 
-    # Execute
     response_list = []
     with mock.patch.object(
-        source.session,
+        session,
         "get",
         return_value=MockResponse(
             res=b"Attachment Content",
             headers={"Content-Type": "application/json"},
         ),
     ):
-        async for response in source._api_call(
+        async for response in source.servicenow_client._api_call(
             url="/test", params={}, is_attachment=True
         ):
             response_list.append(response)
 
-    # Assert
     assert await response_list[0].read() == b"Attachment Content"
 
 
@@ -210,102 +206,138 @@ def patch_default_retry_interval():
 
 
 @pytest.mark.asyncio
-async def test_api_call_with_retry(patch_logger, patch_default_retry_interval):
-    # Setup
+async def test_api_call_with_retry(patch_default_retry_interval):
     source = create_source(ServiceNowDataSource)
-    source._generate_session()
+    session = source.servicenow_client._get_session()
 
-    # Execute
     with pytest.raises(Exception):
-        with mock.patch.object(
-            source.session, "get", side_effect=aiohttp.ServerDisconnectedError()
-        ):
-            async for response in source._api_call(url="/test", params={}):
+        with mock.patch.object(session, "get", side_effect=ServerDisconnectedError):
+            async for response in source.servicenow_client._api_call(
+                url="/test", params={}
+            ):
                 pass
 
 
 @pytest.mark.asyncio
-async def test_api_call_with_close_connection(
-    patch_logger, patch_default_retry_interval
-):
-    # Setup
+async def test_api_call_with_close_connection(patch_default_retry_interval):
     source = create_source(ServiceNowDataSource)
-    source._generate_session()
+    session = source.servicenow_client._get_session()
 
-    # Execute
     with pytest.raises(Exception):
         with mock.patch.object(
-            source.session,
+            session,
             "get",
             return_value=MockResponse(
                 res=b'{"result": [{"id": "record_1"}]}',
                 headers={"Connection": "close", "Content-Type": "application/json"},
             ),
         ):
-            async for response in source._api_call(url="/test", params={}):
+            async for response in source.servicenow_client._api_call(
+                url="/test", params={}
+            ):
                 pass
 
 
 @pytest.mark.asyncio
-async def test_api_call_with_empty_response(patch_logger, patch_default_retry_interval):
-    # Setup
+async def test_api_call_with_empty_response(patch_default_retry_interval):
     source = create_source(ServiceNowDataSource)
-    source._generate_session()
+    session = source.servicenow_client._get_session()
+    mock_response = MockResponse(
+        res=b"",
+        headers={"Content-Type": "application/json"},
+    )
 
-    # Execute
     with pytest.raises(Exception):
         with mock.patch.object(
-            source.session,
+            session,
             "get",
             side_effect=[
-                MockResponse(
-                    res=b"",
-                    headers={"Content-Type": "application/json"},
-                ),
+                mock_response,
+                mock_response,
+                mock_response,
             ],
         ):
-            async for response in source._api_call(url="/test", params={}):
+            async for response in source.servicenow_client._api_call(
+                url="/test", params={}
+            ):
                 pass
 
 
 @pytest.mark.asyncio
-async def test_api_call_with_text_response(patch_logger, patch_default_retry_interval):
-    # Setup
+async def test_api_call_with_text_response(patch_default_retry_interval):
     source = create_source(ServiceNowDataSource)
-    source._generate_session()
+    session = source.servicenow_client._get_session()
+    mock_response = MockResponse(
+        res=b"Text",
+        headers={"Content-Type": "text/html"},
+    )
 
-    # Execute
     with pytest.raises(Exception):
         with mock.patch.object(
-            source.session,
+            session,
             "get",
             side_effect=[
-                MockResponse(
-                    res=b"Text",
-                    headers={"Content-Type": "text/html"},
-                ),
+                mock_response,
+                mock_response,
+                mock_response,
             ],
         ):
-            async for response in source._api_call(url="/test", params={}):
+            async for response in source.servicenow_client._api_call(
+                url="/test", params={}
+            ):
                 pass
 
 
 @pytest.mark.asyncio
-async def test_api_call_for_skipping(patch_logger, patch_default_retry_interval):
-    # Setup
+async def test_api_call_for_max_retries(patch_default_retry_interval):
     source = create_source(ServiceNowDataSource)
-    source._generate_session()
+    session = source.servicenow_client._get_session()
     mock_response = MockResponse(
         res=b"",
         headers={"Content-Type": "text/html"},
     )
 
-    # Execute
     with pytest.raises(Exception):
         with mock.patch.object(
-            source.session,
+            session,
             "get",
             side_effect=[mock_response, mock_response, mock_response],
         ):
-            async for response in source._api_call(url="/test", params={}):
+            async for response in source.servicenow_client._api_call(
+                url="/test", params={}
+            ):
                 pass
+
+
+@pytest.mark.asyncio
+async def test_filter_services():
+    source = create_source(ServiceNowDataSource)
+    source.servicenow_client.services = ["label_1", "label_3"]
+
+    with mock.patch.object(
+        ServiceNowClient,
+        "_api_call",
+        return_value=AsyncIterator(
+            [
+                [
+                    {"name": "name_1", "label": "label_1"},
+                    {"name": "name_2", "label": "label_2"},
+                ]
+            ]
+        ),
+    ):
+        response = await source.servicenow_client.filter_services()
+
+    assert response == (["name_1"], ["label_3"])
+
+
+@pytest.mark.asyncio
+async def test_filter_services_with_exception():
+    source = create_source(ServiceNowDataSource)
+    source.servicenow_client.services = ["label_1", "label_3"]
+
+    with mock.patch.object(
+        ServiceNowClient, "_api_call", side_effect=Exception("Something went wrong")
+    ):
+        with pytest.raises(Exception):
+            await source.servicenow_client.filter_services()

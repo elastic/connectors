@@ -5,20 +5,28 @@
 #
 """ServiceNow source module responsible to fetch documents from ServiceNow."""
 import json
+import os
 
 import aiohttp
 from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import CancellableSleeps, iso_utc
 
+RETRIES = 3
 RETRY_INTERVAL = 2
 FETCH_SIZE = 1000
-MAX_CONCURRENCY_SUPPORT = 15
+MAX_CONCURRENCY_SUPPORT = 10
+
+RUNNING_FTEST = (
+    "RUNNING_FTEST" in os.environ
+)  # Flag to check if a connector is run for ftest or not.
 
 ENDPOINTS = {
     "TABLE": "/api/now/table/{table}",
+    "ATTACHMENT": "/api/now/attachment",
+    "DOWNLOAD": "/api/now/attachment/{sys_id}/file",
 }
 
 
@@ -32,107 +40,31 @@ class InvalidResponse(Exception):
     pass
 
 
-class ServiceNowDataSource(BaseDataSource):
-    """ServiceNow"""
-
-    name = "ServiceNow"
-    service_type = "servicenow"
+class ServiceNowClient(BaseDataSource):
+    """ServiceNow Client"""
 
     def __init__(self, configuration):
-        """Setup the connection to the ServiceNow instance.
+        """Setup the ServiceNow client.
 
         Args:
             configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
         """
 
-        super().__init__(configuration=configuration)
         self.session = None
-        self.sleeps = CancellableSleeps()
+        self._sleeps = CancellableSleeps()
+        self.configuration = configuration
+        self.services = self.configuration["services"]
         self.retry_count = self.configuration["retry_count"]
-        self.concurrent_downloads = self.configuration["concurrent_downloads"]
 
-    def tweak_bulk_options(self, options):
-        """Tweak bulk options as per concurrent downloads support by ServiceNow
-
-        Args:
-            options (dict): Config bulker options.
-        """
-
-        options["concurrent_downloads"] = self.concurrent_downloads
-
-    @classmethod
-    def get_default_configuration(cls):
-        """Get the default configuration for ServiceNow.
+    def _get_session(self):
+        """Generate aiohttp client session with configuration fields.
 
         Returns:
-            dict: Default configuration.
-        """
-        return {
-            "url": {
-                "value": "http://127.0.0.1:9318",
-                "label": "Service URL",
-                "type": "str",
-            },
-            "username": {
-                "value": "admin",
-                "label": "Username",
-                "type": "str",
-            },
-            "password": {
-                "value": "changeme",
-                "label": "Password",
-                "type": "str",
-            },
-            "services": {
-                "value": "*",
-                "label": "List of services",
-                "type": "list",
-            },
-            "retry_count": {
-                "value": 3,
-                "label": "Maximum retries for failed requests",
-                "type": "int",
-            },
-            "enable_content_extraction": {
-                "value": True,
-                "label": "Enable content extraction (true/false)",
-                "type": "bool",
-            },
-            "concurrent_downloads": {
-                "value": MAX_CONCURRENCY_SUPPORT,
-                "label": "Maximum concurrent downloads",
-                "type": "int",
-            },
-        }
-
-    async def validate_config(self):
-        """Validates whether user input is empty or not for configuration fields.
-
-        Raises:
-            Exception: Configured keys can't be empty.
-            Exception: Invalid configured concurrent_downloads.
+            aiohttp.ClientSession: An instance of Client Session
         """
 
-        logger.info("Validating ServiceNow Configuration")
-        connection_fields = ["url", "username", "password", "services"]
-        default_config = self.get_default_configuration()
-
-        if empty_connection_fields := [
-            default_config[field]["label"]
-            for field in connection_fields
-            if self.configuration[field] in ["", [""]]
-        ]:
-            raise Exception(
-                f"Configured keys: {empty_connection_fields} can't be empty."
-            )
-
-        if self.concurrent_downloads > MAX_CONCURRENCY_SUPPORT:
-            raise Exception(
-                f"Configured concurrent downloads can't be set more than {MAX_CONCURRENCY_SUPPORT}."
-            )
-
-    def _generate_session(self):
-        """Generate aiohttp client session with configuration fields."""
+        if self.session:
+            return self.session
 
         logger.debug("Generating aiohttp client session")
         connector = aiohttp.TCPConnector(limit=MAX_CONCURRENCY_SUPPORT)
@@ -154,6 +86,7 @@ class ServiceNowDataSource(BaseDataSource):
             timeout=timeout,
             raise_for_status=True,
         )
+        return self.session
 
     async def _api_call(self, url, params, is_attachment=False):
         """Handle every api call to ServiceNow instance with retries.
@@ -185,10 +118,13 @@ class ServiceNowDataSource(BaseDataSource):
                 params["sysparm_offset"] = offset
 
             try:
-                async with self.session.get(  # pyright: ignore
+                async with self._get_session().get(  # pyright: ignore
                     url=url, params=params
                 ) as response:
-                    if response.headers.get("Connection") == "close":
+                    if (
+                        not RUNNING_FTEST
+                        and response.headers.get("Connection") == "close"
+                    ):
                         raise Exception("Couldn't connect to ServiceNow instance")
 
                     if is_attachment:
@@ -200,10 +136,8 @@ class ServiceNowDataSource(BaseDataSource):
                         raise InvalidResponse(
                             "Request hasn't processed from ServiceNow server"
                         )
-                    elif (
-                        not response.headers["Content-Type"]
-                        .strip()
-                        .startswith("application/json")
+                    elif not response.headers["Content-Type"].startswith(
+                        "application/json"
                     ):
                         raise InvalidResponse(
                             "Request retrieved with invalid content type to process further"
@@ -224,43 +158,183 @@ class ServiceNowDataSource(BaseDataSource):
                 logger.warning(
                     f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}."
                 )
-                await self.sleeps.sleep(RETRY_INTERVAL**retry)
+                await self._sleeps.sleep(RETRY_INTERVAL**retry)
 
                 if isinstance(
                     exception,
                     ServerDisconnectedError,
                 ):
                     await self.session.close()  # pyright: ignore
-                    self.session = self._generate_session()
 
                 if retry == self.retry_count:
                     raise exception
                 retry += 1
 
-    async def close(self):
-        """Closes unclosed client session."""
-        self.sleeps.cancel()
+    async def filter_services(self):
+        """Filter services based on service mappings.
+
+        Returns:
+            list, list: Valid service names, Invalid services.
+        """
+
+        try:
+            logger.debug("Filtering services")
+            service_names, invalid_services = [], self.services.copy()
+
+            payload = {"sysparm_fields": "label, name"}
+            async for response in self._api_call(
+                url=ENDPOINTS["TABLE"].format(table="sys_db_object"), params=payload
+            ):
+                for mapping in response:  # pyright: ignore
+                    if mapping["label"] in invalid_services:
+                        service_names.append(mapping["name"])
+                        invalid_services.remove(mapping["label"])
+
+            return service_names, invalid_services
+
+        except Exception as exception:
+            logger.exception(f"Error while filtering services. Exception: {exception}.")
+            raise
+
+    async def ping(self):
+        """Ping to ServiceNow instance."""
+
+        payload = {
+            "sysparm_query": "label=Incident",
+            "sysparm_fields": "label, name",
+        }
+        await anext(
+            self._api_call(
+                url=ENDPOINTS["TABLE"].format(table="sys_db_object"), params=payload
+            )
+        )
+
+    async def close_session(self):
+        """Closes unclosed client session"""
+        self._sleeps.cancel()
         if self.session is None:
             return
         await self.session.close()
+        self.session = None
+
+
+class ServiceNowDataSource(BaseDataSource):
+    """ServiceNow"""
+
+    name = "ServiceNow"
+    service_type = "servicenow"
+
+    def __init__(self, configuration):
+        """Setup the connection to the ServiceNow instance.
+
+        Args:
+            configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
+        """
+
+        super().__init__(configuration=configuration)
+        self.concurrent_downloads = self.configuration["concurrent_downloads"]
+        self.servicenow_client = ServiceNowClient(configuration=configuration)
+
+    def tweak_bulk_options(self, options):
+        """Tweak bulk options as per concurrent downloads support by ServiceNow
+
+        Args:
+            options (dict): Config bulker options.
+        """
+
+        options["concurrent_downloads"] = self.concurrent_downloads
+
+    @classmethod
+    def get_default_configuration(cls):
+        """Get the default configuration for ServiceNow.
+
+        Returns:
+            dict: Default configuration.
+        """
+        return {
+            "url": {
+                "label": "Service URL",
+                "order": 1,
+                "type": "str",
+                "value": "http://127.0.0.1:9318",
+            },
+            "username": {
+                "label": "Username",
+                "order": 2,
+                "type": "str",
+                "value": "admin",
+            },
+            "password": {
+                "label": "Password",
+                "sensitive": True,
+                "order": 3,
+                "type": "str",
+                "value": "changeme",
+            },
+            "services": {
+                "label": "List of services",
+                "order": 4,
+                "type": "list",
+                "value": "*",
+            },
+            "retry_count": {
+                "display_value": RETRIES,
+                "display": "numeric",
+                "label": "Maximum retries per request",
+                "order": 5,
+                "required": False,
+                "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": RETRIES,
+            },
+            "concurrent_downloads": {
+                "default_value": MAX_CONCURRENCY_SUPPORT,
+                "display": "numeric",
+                "label": "Maximum concurrent downloads",
+                "order": 6,
+                "required": False,
+                "type": "int",
+                "ui_restrictions": ["advanced"],
+                "value": MAX_CONCURRENCY_SUPPORT,
+            },
+        }
+
+    async def _remote_validation(self):
+        """Validate configured services
+
+        Raises:
+            ConfigurableFieldValueError: Unavaliable services error.
+        """
+
+        if self.servicenow_client.services != ["*"]:
+            (
+                service_names,
+                invalid_services,
+            ) = await self.servicenow_client.filter_services()
+            if invalid_services:
+                raise ConfigurableFieldValueError(
+                    f"Services '{', '.join(invalid_services)}' are not available. Available services are: '{', '.join(service_names)}'"
+                )
+
+    async def validate_config(self):
+        """Validates whether user input is empty or not for configuration fields
+        Also validate, if user configured services are available in ServiceNow."""
+
+        logger.info("Validating ServiceNow Configuration")
+        self.configuration.check_valid()
+        await self._remote_validation()
+
+    async def close(self):
+        """Closes servicenow client."""
+
+        await self.servicenow_client.close_session()
 
     async def ping(self):
         """Verify the connection with ServiceNow."""
 
         try:
             logger.info("Pinging ServiceNow instance")
-            if self.session is None:
-                self._generate_session()
-
-            payload = {
-                "sysparm_query": "label=Incident",
-                "sysparm_fields": "label, name",
-            }
-            await anext(
-                self._api_call(
-                    url=ENDPOINTS["TABLE"].format(table="sys_db_object"), params=payload
-                )
-            )
+            await self.servicenow_client.ping()
             logger.debug("Successfully connected to the ServiceNow.")
 
         except Exception:
