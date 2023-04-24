@@ -448,7 +448,7 @@ class MySqlDataSource(BaseDataSource):
         Also validate, if the configured database and the configured tables are present and accessible using the configured user.
 
         Raises:
-            ConfigurableFieldValueError: The database or the tables do not exist or aren't accessible/a field contains an empty or wrong value
+            ConfigurableFieldValueError: The database or the tables do not exist or aren't accessible, or a field contains an empty or wrong value
             ConfigurableFieldDependencyError: A inter-field dependency is not met
         """
         self.configuration.check_valid()
