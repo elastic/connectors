@@ -406,7 +406,7 @@ class MySqlDataSource(BaseDataSource):
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
                 "display": "numeric",
-                "label": "Number of rows fetched per request",
+                "label": "Rows fetched per request",
                 "order": 9,
                 "required": False,
                 "type": "int",
@@ -416,7 +416,7 @@ class MySqlDataSource(BaseDataSource):
             "retry_count": {
                 "default_value": RETRIES,
                 "display": "numeric",
-                "label": "Maximum retries per request",
+                "label": "Retries per request",
                 "order": 10,
                 "required": False,
                 "type": "int",
