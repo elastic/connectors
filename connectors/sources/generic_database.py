@@ -157,7 +157,6 @@ class GenericBaseDataSource(BaseDataSource):
                 "label": "Database",
                 "order": 5,
                 "type": "str",
-                "validations": [],
                 "value": "xe",
             },
             "tables": {

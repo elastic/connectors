@@ -123,7 +123,7 @@ class MongoDataSource(BaseDataSource):
             "database": {"label": "Database", "order": 2, "type": "str", "value": ""},
             "direct_connection": {
                 "display": "toggle",
-                "label": "Direct connection?",
+                "label": "Direct connection",
                 "order": 3,
                 "type": "bool",
                 "value": False,
