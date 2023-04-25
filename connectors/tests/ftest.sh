@@ -58,11 +58,6 @@ fi
 
 $PYTHON fixture.py --name $NAME --action monitor --pid $PID
 
-# breathe for 2 minutes
-if [[ $PERF8 == "yes" ]]; then
-    sleep 120
-fi
-
 $PYTHON fixture.py --name $NAME --action remove
 $PYTHON fixture.py --name $NAME --action sync
 
@@ -74,3 +69,16 @@ NUM_DOCS=`$PYTHON fixture.py --name $NAME --action get_num_docs`
 $PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size $NUM_DOCS
 $PYTHON fixture.py --name $NAME --action stop_stack
 $PYTHON fixture.py --name $NAME --action teardown
+
+# Wait for PERF8 to compile the report
+# Actual report compilation starts right when the first sync finishes, but happens in the background
+# So we wait in the end of the script to not block second sync from happening while we also compile the report
+if [[ $PERF8 == "yes" ]]; then
+    set +e
+    echo 'Waiting for PERF8 to finish the report'
+    PERF8_PID=`ps aux | grep bin/perf8 | grep -v grep | awk '{print $2}'`
+    while kill -0 "$PERF8_PID"; do
+        sleep 0.5
+    done
+    set -e
+fi
