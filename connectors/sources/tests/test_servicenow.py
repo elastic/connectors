@@ -64,7 +64,7 @@ async def test_validate_config_missing_fields_then_raise(field):
     source = create_source(ServiceNowDataSource)
     source.configuration.set_field(name=field, value="")
 
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurableFieldValueError):
         await source.validate_config()
 
 

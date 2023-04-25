@@ -140,7 +140,7 @@ class ServiceNowClient(BaseDataSource):
                         "application/json"
                     ):
                         raise InvalidResponse(
-                            "Request retrieved with invalid content type to process further"
+                            f"Cannot proceed due to unexpected response type '{response.headers["Content-Type"]}'; response type must begin with 'application/json'."
                         )
 
                     json_response = json.loads(fetched_response)
@@ -156,7 +156,7 @@ class ServiceNowClient(BaseDataSource):
 
             except Exception as exception:
                 logger.warning(
-                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}."
+                    f"Retry attempt {retry} out of {self.retry_count} failed. Exception: {exception}."
                 )
                 await self._sleeps.sleep(RETRY_INTERVAL**retry)
 
@@ -197,7 +197,6 @@ class ServiceNowClient(BaseDataSource):
             raise
 
     async def ping(self):
-        """Ping to ServiceNow instance."""
 
         payload = {
             "sysparm_query": "label=Incident",
@@ -246,11 +245,6 @@ class ServiceNowDataSource(BaseDataSource):
 
     @classmethod
     def get_default_configuration(cls):
-        """Get the default configuration for ServiceNow.
-
-        Returns:
-            dict: Default configuration.
-        """
         return {
             "url": {
                 "label": "Service URL",
@@ -272,15 +266,16 @@ class ServiceNowDataSource(BaseDataSource):
                 "value": "changeme",
             },
             "services": {
-                "label": "List of services",
+                "display": "textarea",
+                "label": "Comma-separated list of services",
                 "order": 4,
                 "type": "list",
                 "value": "*",
             },
             "retry_count": {
-                "display_value": RETRIES,
+                "default_value": RETRIES,
                 "display": "numeric",
-                "label": "Maximum retries per request",
+                "label": "Retries per request",
                 "order": 5,
                 "required": False,
                 "type": "int",
@@ -320,12 +315,10 @@ class ServiceNowDataSource(BaseDataSource):
         """Validates whether user input is empty or not for configuration fields
         Also validate, if user configured services are available in ServiceNow."""
 
-        logger.info("Validating ServiceNow Configuration")
         self.configuration.check_valid()
         await self._remote_validation()
 
     async def close(self):
-        """Closes servicenow client."""
 
         await self.servicenow_client.close_session()
 
@@ -333,7 +326,6 @@ class ServiceNowDataSource(BaseDataSource):
         """Verify the connection with ServiceNow."""
 
         try:
-            logger.info("Pinging ServiceNow instance")
             await self.servicenow_client.ping()
             logger.debug("Successfully connected to the ServiceNow.")
 
