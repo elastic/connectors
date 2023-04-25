@@ -391,7 +391,7 @@ class MySqlDataSource(BaseDataSource):
             },
             "ssl_enabled": {
                 "display": "toggle",
-                "label": "Enable SSL verification",
+                "label": "Enable SSL",
                 "order": 7,
                 "type": "bool",
                 "value": DEFAULT_SSL_ENABLED,
