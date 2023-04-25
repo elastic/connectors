@@ -140,7 +140,7 @@ class ServiceNowClient(BaseDataSource):
                         "application/json"
                     ):
                         raise InvalidResponse(
-                            f"Cannot proceed due to unexpected response type '{response.headers["Content-Type"]}'; response type must begin with 'application/json'."
+                            f"Cannot proceed due to unexpected response type '{response.headers['Content-Type']}'; response type must begin with 'application/json'."
                         )
 
                     json_response = json.loads(fetched_response)
@@ -197,7 +197,6 @@ class ServiceNowClient(BaseDataSource):
             raise
 
     async def ping(self):
-
         payload = {
             "sysparm_query": "label=Incident",
             "sysparm_fields": "label, name",
@@ -319,7 +318,6 @@ class ServiceNowDataSource(BaseDataSource):
         await self._remote_validation()
 
     async def close(self):
-
         await self.servicenow_client.close_session()
 
     async def ping(self):
