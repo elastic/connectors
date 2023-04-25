@@ -79,6 +79,10 @@ class DataSourceError(Exception):
     pass
 
 
+class MalformedConfigurationError(Exception):
+    pass
+
+
 class ConnectorIndex(ESIndex):
     def __init__(self, elastic_config):
         logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
@@ -567,6 +571,38 @@ class Connector(ESDocument):
         await self.reload()
 
         if self.service_type is not None and not self.configuration.is_empty():
+            if configured_service_type not in config["sources"]:
+                raise ServiceTypeNotSupportedError(configured_service_type)
+
+            # check if the configuration is missing any fields before continuing
+            fqn = config["sources"][configured_service_type]
+            source_klass = get_source_klass(fqn)
+            missing_fields = self.configuration.check_missing_fields(
+                source_klass.get_simple_configuration()
+            )
+            if len(missing_fields) > 0:
+                raise MalformedConfigurationError(
+                    f"Configuration for {configured_service_type} has missing fields: {', '.join(missing_fields)}"
+                )
+
+            if self.configuration.has_missing_field_properties():
+                logger.info(
+                    f"Connector {self.id} is missing configuration field properties. Generating defaults."
+                )
+                doc = {
+                    "configuration": self.configuration.add_missing_field_properties(
+                        source_klass.get_simple_configuration()
+                    )
+                }
+
+                await self.index.update(
+                    doc_id=self.id,
+                    doc=doc,
+                    if_seq_no=self._seq_no,
+                    if_primary_term=self._primary_term,
+                )
+                await self.reload()
+
             return
 
         doc = {}

@@ -105,6 +105,12 @@ class Field:
     def value(self, value):
         self._value = value
 
+    def to_dict(self):
+        dict = self.__dict__
+        dict["value"] = dict.pop('_value', None)
+        dict["type"] = dict.pop('_type', None)
+        return dict
+
     def _convert(self, value, type_):
         if not isinstance(value, str):
             # we won't convert the value if it's not a str
@@ -282,6 +288,30 @@ class DataSourceConfiguration:
 
     def to_dict(self):
         return dict(self._raw_config)
+
+    def has_missing_field_properties(self):
+        for _, field in self._config.items():
+            missing_properties = (
+                DEFAULT_CONFIGURATION.copy().keys() - field.to_dict().keys()
+            )
+            if missing_properties:
+                return True
+
+        return False
+
+    def add_missing_field_properties(self, expected_configuration):
+        merged = {}
+        for config_name, field in self._config.items():
+            merged[config_name] = expected_configuration[config_name] | field.to_dict()
+
+        return merged
+
+    def check_missing_fields(self, expected_configuration):
+        """Checks current configuration against the expected format.
+
+        Returns a list of all missing configuration keys.
+        """
+        return list(set(expected_configuration.keys()) - set(self._config.keys()))
 
     def check_valid(self):
         """Validates every Field against its `validations`.
