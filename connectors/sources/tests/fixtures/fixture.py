@@ -88,7 +88,7 @@ def _monitor_service(pid):
         print(f"Failed to monitor the sync job. Something bad happened: {e}")
     finally:
         # the process should always be killed, no matter the monitor succeeds, times out or raises errors.
-        os.kill(pid, signal.SIGTERM)
+        os.kill(pid, signal.SIGINT)
         es_client.close()
 
 

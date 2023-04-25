@@ -55,7 +55,7 @@
                 },
                 "ssl_enabled": {
                         "display": "toggle",
-                        "label": "Enable SSL verification",
+                        "label": "Enable SSL",
                         "order": 7,
                         "type": "bool",
                         "value": false
@@ -70,7 +70,7 @@
                 "fetch_size": {
                         "default_value": 50,
                         "display": "numeric",
-                        "label": "Number of rows fetched per request",
+                        "label": "Rows fetched per request",
                         "order": 9,
                         "required": false,
                         "type": "int",
@@ -80,7 +80,7 @@
                 "retry_count": {
                         "default_value": 3,
                         "display": "numeric",
-                        "label": "Maximum retries per request",
+                        "label": "Retries per request",
                         "order": 10,
                         "required": false,
                         "type": "int",

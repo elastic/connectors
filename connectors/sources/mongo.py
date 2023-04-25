@@ -114,40 +114,40 @@ class MongoDataSource(BaseDataSource):
     @classmethod
     def get_default_configuration(cls):
         return {
-            "collection": {
-                "label": "Collection",
-                "order": 1,
-                "type": "str",
-                "value": "",
-            },
-            "database": {"label": "Database", "order": 2, "type": "str", "value": ""},
-            "direct_connection": {
-                "display": "toggle",
-                "label": "Direct connection",
-                "order": 3,
-                "type": "bool",
-                "value": False,
-            },
             "host": {
-                "label": "Server Hostname",
-                "order": 4,
+                "label": "Server hostname",
+                "order": 1,
                 "type": "str",
                 "value": "",
             },
             "user": {
                 "label": "Username",
-                "order": 5,
+                "order": 2,
                 "type": "str",
                 "value": "",
                 "required": False,
             },
             "password": {
                 "label": "Password",
-                "order": 6,
+                "order": 3,
                 "sensitive": True,
                 "type": "str",
                 "value": "",
                 "required": False,
+            },
+            "database": {"label": "Database", "order": 4, "type": "str", "value": ""},
+            "collection": {
+                "label": "Collection",
+                "order": 5,
+                "type": "str",
+                "value": "",
+            },
+            "direct_connection": {
+                "display": "toggle",
+                "label": "Direct connection",
+                "order": 6,
+                "type": "bool",
+                "value": False,
             },
         }
 
