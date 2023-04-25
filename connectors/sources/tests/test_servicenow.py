@@ -75,7 +75,7 @@ async def test_validate_configuration_with_invalid_service_then_raise():
 
     with pytest.raises(
         ConfigurableFieldValueError,
-        match="Services 'label_3' are not available. Available services are: 'name_1'",
+        match="Services 'label_3' are not available. Available services are: 'label_1'",
     ):
         with mock.patch.object(
             ServiceNowClient,

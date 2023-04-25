@@ -131,7 +131,7 @@ class ServiceNowClient(BaseDataSource):
                     fetched_response = await response.read()
                     if fetched_response == b"":
                         raise InvalidResponse(
-                            "Request hasn't processed from ServiceNow server"
+                            "Request to ServiceNow server returned an empty response."
                         )
                     elif not response.headers["Content-Type"].startswith(
                         "application/json"
@@ -298,12 +298,12 @@ class ServiceNowDataSource(BaseDataSource):
 
         if self.servicenow_client.services != ["*"]:
             (
-                service_names,
+                _,
                 invalid_services,
             ) = await self.servicenow_client.filter_services()
             if invalid_services:
                 raise ConfigurableFieldValueError(
-                    f"Services '{', '.join(invalid_services)}' are not available. Available services are: '{', '.join(service_names)}'"
+                    f"Services '{', '.join(invalid_services)}' are not available. Available services are: '{', '.join(set(self.servicenow_client.services)-set(invalid_services))}'"
                 )
 
     async def validate_config(self):
