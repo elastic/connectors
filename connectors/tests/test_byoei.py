@@ -191,8 +191,9 @@ async def test_get_existing_ids(mock_responses):
     set_responses(mock_responses)
 
     es = ElasticServer(config)
+    fetcher = Fetcher(es.client, None, "search-some-index")
     ids = []
-    async for doc_id, ts in es.get_existing_ids("search-some-index"):
+    async for doc_id, ts in fetcher._get_existing_ids():
         ids.append(doc_id)
 
     assert ids == ["1", "2"]
@@ -323,13 +324,11 @@ async def lazy_downloads_mock():
     return lazy_downloads
 
 
-async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enabled):
-    existing_ids = {doc["_id"]: doc["_timestamp"] for doc in existing_docs}
-
+async def setup_fetcher(basic_rule_engine, queue, sync_rules_enabled):
     # filtering content doesn't matter as the BasicRuleEngine behavior is mocked
     filter_mock = Mock()
     filter_mock.get_active_filter = Mock(return_value={})
-    fetcher = Fetcher(queue, INDEX, existing_ids, filter_=filter_mock)
+    fetcher = Fetcher(None, queue, INDEX, filter_=filter_mock)
     fetcher.basic_rule_engine = basic_rule_engine if sync_rules_enabled else None
     return fetcher
 
@@ -518,8 +517,10 @@ async def setup_fetcher(basic_rule_engine, existing_docs, queue, sync_rules_enab
         ),
     ],
 )
+@mock.patch("connectors.byoei.Fetcher._get_existing_ids")
 @pytest.mark.asyncio
 async def test_get_docs(
+    get_existing_ids,
     existing_docs,
     docs_from_source,
     doc_should_ingest,
@@ -532,6 +533,10 @@ async def test_get_docs(
 ):
     lazy_downloads = await lazy_downloads_mock()
 
+    get_existing_ids.return_value = AsyncIterator(
+        [(doc["_id"], doc["_timestamp"]) for doc in existing_docs]
+    )
+
     with mock.patch("connectors.utils.ConcurrentTasks", return_value=lazy_downloads):
         queue = await queue_mock()
         basic_rule_engine = await basic_rule_engine_mock(doc_should_ingest)
@@ -541,7 +546,7 @@ async def test_get_docs(
         doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
 
         fetcher = await setup_fetcher(
-            basic_rule_engine, existing_docs, queue, sync_rules_enabled
+            basic_rule_engine, queue, sync_rules_enabled
         )
 
         await fetcher.get_docs(doc_generator)
