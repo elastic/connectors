@@ -41,7 +41,7 @@ class InvalidResponse(Exception):
     pass
 
 
-class ServiceNowClient(BaseDataSource):
+class ServiceNowClient():
     """ServiceNow Client"""
 
     def __init__(self, configuration):
