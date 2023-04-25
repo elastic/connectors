@@ -6,6 +6,7 @@
 """ServiceNow source module responsible to fetch documents from ServiceNow."""
 import json
 import os
+from functools import cached_property
 
 import aiohttp
 from aiohttp.client_exceptions import ServerDisconnectedError
@@ -50,21 +51,18 @@ class ServiceNowClient(BaseDataSource):
             configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
         """
 
-        self.session = None
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self.services = self.configuration["services"]
         self.retry_count = self.configuration["retry_count"]
 
+    @cached_property
     def _get_session(self):
         """Generate aiohttp client session with configuration fields.
 
         Returns:
             aiohttp.ClientSession: An instance of Client Session
         """
-
-        if self.session:
-            return self.session
 
         logger.debug("Generating aiohttp client session")
         connector = aiohttp.TCPConnector(limit=MAX_CONCURRENCY_SUPPORT)
@@ -78,7 +76,7 @@ class ServiceNowClient(BaseDataSource):
         }
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
 
-        self.session = aiohttp.ClientSession(
+        return aiohttp.ClientSession(
             connector=connector,
             base_url=self.configuration["url"],
             auth=basic_auth,
@@ -86,7 +84,6 @@ class ServiceNowClient(BaseDataSource):
             timeout=timeout,
             raise_for_status=True,
         )
-        return self.session
 
     async def _api_call(self, url, params, is_attachment=False):
         """Handle every api call to ServiceNow instance with retries.
@@ -118,7 +115,7 @@ class ServiceNowClient(BaseDataSource):
                 params["sysparm_offset"] = offset
 
             try:
-                async with self._get_session().get(  # pyright: ignore
+                async with self._get_session.get(  # pyright: ignore
                     url=url, params=params
                 ) as response:
                     if (
@@ -155,16 +152,17 @@ class ServiceNowClient(BaseDataSource):
                     yield result
 
             except Exception as exception:
-                logger.warning(
-                    f"Retry attempt {retry} out of {self.retry_count} failed. Exception: {exception}."
-                )
-                await self._sleeps.sleep(RETRY_INTERVAL**retry)
-
                 if isinstance(
                     exception,
                     ServerDisconnectedError,
                 ):
-                    await self.session.close()  # pyright: ignore
+                    await self._get_session.close()
+                    del self._get_session
+
+                logger.warning(
+                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}."
+                )
+                await self._sleeps.sleep(RETRY_INTERVAL**retry)
 
                 if retry == self.retry_count:
                     raise exception
@@ -210,10 +208,8 @@ class ServiceNowClient(BaseDataSource):
     async def close_session(self):
         """Closes unclosed client session"""
         self._sleeps.cancel()
-        if self.session is None:
-            return
-        await self.session.close()
-        self.session = None
+        await self._get_session.close()
+        del self._get_session
 
 
 class ServiceNowDataSource(BaseDataSource):

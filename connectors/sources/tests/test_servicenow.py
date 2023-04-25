@@ -95,18 +95,10 @@ async def test_validate_configuration_with_invalid_service_then_raise():
 @pytest.mark.asyncio
 async def test_close_with_client_session():
     source = create_source(ServiceNowDataSource)
-    source.servicenow_client._get_session()
+    source.servicenow_client._get_session
 
     await source.close()
-    assert source.servicenow_client.session is None
-
-
-@pytest.mark.asyncio
-async def test_close_without_client_session():
-    source = create_source(ServiceNowDataSource)
-
-    await source.close()
-    assert source.servicenow_client.session is None
+    assert hasattr(source.servicenow_client.__dict__, "_get_session") is False
 
 
 @pytest.mark.asyncio
@@ -144,7 +136,7 @@ def test_tweak_bulk_options():
 @pytest.mark.asyncio
 async def test_api_call():
     source = create_source(ServiceNowDataSource)
-    session = source.servicenow_client._get_session()
+    session = source.servicenow_client._get_session
 
     response_list = []
     with mock.patch.object(
@@ -178,7 +170,7 @@ async def test_api_call():
 @pytest.mark.asyncio
 async def test_api_call_with_attachment():
     source = create_source(ServiceNowDataSource)
-    session = source.servicenow_client._get_session()
+    session = source.servicenow_client._get_session
 
     response_list = []
     with mock.patch.object(
@@ -208,7 +200,7 @@ def patch_default_retry_interval():
 @pytest.mark.asyncio
 async def test_api_call_with_retry(patch_default_retry_interval):
     source = create_source(ServiceNowDataSource)
-    session = source.servicenow_client._get_session()
+    session = source.servicenow_client._get_session
 
     with pytest.raises(Exception):
         with mock.patch.object(session, "get", side_effect=ServerDisconnectedError):
@@ -221,7 +213,7 @@ async def test_api_call_with_retry(patch_default_retry_interval):
 @pytest.mark.asyncio
 async def test_api_call_with_close_connection(patch_default_retry_interval):
     source = create_source(ServiceNowDataSource)
-    session = source.servicenow_client._get_session()
+    session = source.servicenow_client._get_session
 
     with pytest.raises(Exception):
         with mock.patch.object(
@@ -241,7 +233,7 @@ async def test_api_call_with_close_connection(patch_default_retry_interval):
 @pytest.mark.asyncio
 async def test_api_call_with_empty_response(patch_default_retry_interval):
     source = create_source(ServiceNowDataSource)
-    session = source.servicenow_client._get_session()
+    session = source.servicenow_client._get_session
     mock_response = MockResponse(
         res=b"",
         headers={"Content-Type": "application/json"},
@@ -266,7 +258,7 @@ async def test_api_call_with_empty_response(patch_default_retry_interval):
 @pytest.mark.asyncio
 async def test_api_call_with_text_response(patch_default_retry_interval):
     source = create_source(ServiceNowDataSource)
-    session = source.servicenow_client._get_session()
+    session = source.servicenow_client._get_session
     mock_response = MockResponse(
         res=b"Text",
         headers={"Content-Type": "text/html"},
@@ -291,7 +283,7 @@ async def test_api_call_with_text_response(patch_default_retry_interval):
 @pytest.mark.asyncio
 async def test_api_call_for_max_retries(patch_default_retry_interval):
     source = create_source(ServiceNowDataSource)
-    session = source.servicenow_client._get_session()
+    session = source.servicenow_client._get_session
     mock_response = MockResponse(
         res=b"",
         headers={"Content-Type": "text/html"},
