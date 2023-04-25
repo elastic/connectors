@@ -55,7 +55,7 @@
                 "order": 6,
                 "type": "bool",
                 "value": true
-            },
+            }
         },
         "filtering": [
                 {
