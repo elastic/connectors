@@ -85,5 +85,5 @@ if [[ $PERF8 == "yes" ]]; then
 fi
 
 # reading the status to know if we need to fail
-STATUS=$($ROOT_DIR/perf8-report-$NAME/status)
+STATUS=$(<$ROOT_DIR/perf8-report-$NAME/status)
 exit $STATUS
