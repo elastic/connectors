@@ -8,6 +8,7 @@ PERF8=$2
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR="$SCRIPT_DIR/../.."
 PLATFORM='unknown'
+MAX_RSS="200M"
 
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
@@ -47,9 +48,9 @@ if [[ $PERF8 == "yes" ]]
 then
     if [[ $PLATFORM == "darwin" ]]
     then
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss 209715200 -c $ELASTIC_INGEST --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS -c $ELASTIC_INGEST --debug & PID=$!
     else
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss 209715200 -c $ELASTIC_INGEST --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS -c $ELASTIC_INGEST --debug & PID=$!
     fi
 else
     $ELASTIC_INGEST --debug & PID=$!
