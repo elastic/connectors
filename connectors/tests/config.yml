@@ -15,6 +15,7 @@ service:
   max_errors: 20
   max_errors_span: 600
   max_concurrent_syncs: 10
+  log_level: INFO
 
 connector_id: '1'
 
