@@ -512,6 +512,27 @@ def hash_id(_id):
     return hashlib.md5(_id.encode("utf8")).hexdigest()
 
 
+def truncate_id(_id):
+    """Truncate ID of an object.
+
+    We cannot guarantee that connector returns small IDs.
+    In some places in our code we log IDs and if the ID is
+    too big, these lines become unreadable.
+
+    This function can help - it truncates the ID to not
+    overwhelm the logging system and still have somewhat
+    readable error messages.
+
+    Args:
+    _id (str): ID of an object to truncate.
+    """
+
+    if len(_id) > 20:
+        return _id[:8] + "..." + _id[-8:]
+
+    return _id
+
+
 def has_duplicates(strings_list):
     seen = set()
     for string in strings_list:

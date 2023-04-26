@@ -7,7 +7,7 @@ services:
     environment:
       - cluster.name=docker-cluster
       - bootstrap.memory_lock=true
-      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g
       - ELASTIC_PASSWORD=changeme
       - xpack.security.enabled=true
       - xpack.security.authc.api_key.enabled=true
@@ -34,6 +34,10 @@ services:
     ports:
       - 27021:27017
     restart: always
+    environment:
+      # provide your credentials here
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=justtesting
   kibana:
     image: docker.elastic.co/kibana/kibana:${VERSION}
     ports:

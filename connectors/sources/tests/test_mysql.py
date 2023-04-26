@@ -99,6 +99,12 @@ def patch_ping():
 
 
 @pytest.fixture
+def patch_row2doc():
+    with patch("connectors.sources.mysql.row2doc", return_value=MagicMock()) as row2doc:
+        yield row2doc
+
+
+@pytest.fixture
 def patch_default_wait_multiplier():
     with patch("connectors.sources.mysql.RETRY_INTERVAL", 0):
         yield
@@ -438,6 +444,54 @@ async def test_fetch_documents(patch_connection_pool):
         document_list.append(document)
 
     assert document in document_list
+
+
+@pytest.mark.asyncio
+async def test_fetch_documents_when_used_custom_query_then_sort_pk_cols(
+    patch_connection_pool, patch_row2doc
+):
+    last_update_time = "2023-01-18 17:18:56"
+    primary_key_col = ["cd", "ab"]
+    column = "column"
+
+    document = {
+        "Table": "table_name",
+        "_id": "table_name_",
+        "_timestamp": last_update_time,
+        f"table_name_{column}": "table1",
+    }
+
+    patch_row2doc.return_value = document
+
+    client = MagicMock()
+    client.get_primary_key_column_names = AsyncMock(side_effect=[primary_key_col])
+    client.get_last_update_time = AsyncMock(return_value=last_update_time)
+    client.get_column_names_for_query = AsyncMock(return_value=[column])
+    client.yield_rows_for_query = AsyncIterator([document])
+
+    source = await setup_mysql_source(DATABASE)
+    source.mysql_client = wrap_mock_client_in_context_manager(client)
+
+    document_list = []
+    async for document in source.fetch_documents(
+        tables=[TABLE_ONE], query="SELECT * FROM *"
+    ):
+        document_list.append(document)
+
+    assert document in document_list
+    assert patch_row2doc.call_args.kwargs == {
+        "row": {
+            "Table": "table_name",
+            "_id": "table_name_",
+            "_timestamp": "2023-01-18 17:18:56",
+            "table_name_column": "table1",
+        },
+        "column_names": ["column"],
+        # primary key columns are now sorted
+        "primary_key_columns": ["ab", "cd"],
+        "table": ["table1"],
+        "timestamp": "2023-01-18 17:18:56",
+    }
 
 
 @pytest.mark.asyncio
@@ -804,15 +858,32 @@ def test_parse_tables_string_to_list(tables_string, expected_tables_list):
 
 
 @pytest.mark.parametrize(
-    "row, primary_key_columns, expected_id",
+    "tables, row, primary_key_columns, expected_id",
     [
-        ({"key_1": 1, "key_2": 2}, ["key_1"], f"{TABLE_ONE}_1_"),
-        ({"key_1": 1, "key_2": 2}, ["key_1", "key_2"], f"{TABLE_ONE}_1_2_"),
-        ({"key_1": 1, "key_2": 2}, ["key_1", "key_3"], f"{TABLE_ONE}_1_"),
+        (TABLE_ONE, {"key_1": 1, "key_2": 2}, ["key_1"], f"{TABLE_ONE}_1"),
+        ([TABLE_ONE], {"key_1": 1, "key_2": 2}, ["key_1"], f"{TABLE_ONE}_1"),
+        (
+            [TABLE_ONE, TABLE_TWO],
+            {"key_1": 1, "key_2": 2},
+            ["key_1", "key_2"],
+            f"{TABLE_ONE}_{TABLE_TWO}_1_2",
+        ),
+        (
+            [TABLE_THREE, TABLE_ONE, TABLE_TWO],
+            {"key_1": 1, "key_2": 2},
+            ["key_1", "key_3"],
+            f"{TABLE_ONE}_{TABLE_TWO}_{TABLE_THREE}_1",
+        ),
+        (
+            [TABLE_ONE, TABLE_TWO, TABLE_THREE],
+            {"key_1": 1, "key_2": 2},
+            ["key_1", "key_3"],
+            f"{TABLE_ONE}_{TABLE_TWO}_{TABLE_THREE}_1",
+        ),
     ],
 )
-def test_generate_id(row, primary_key_columns, expected_id):
-    row_id = generate_id(TABLE_ONE, row, primary_key_columns)
+def test_generate_id(tables, row, primary_key_columns, expected_id):
+    row_id = generate_id(tables, row, primary_key_columns)
 
     assert row_id == expected_id
 

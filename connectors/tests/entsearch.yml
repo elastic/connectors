@@ -5,3 +5,5 @@ elasticsearch:
   headers:
     X-Elastic-Auth: SomeYeahValue
     X-Something: 1
+
+log_level: DEBUG

@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from connectors.byoc import ConnectorIndex, DataSourceError, SyncJobIndex
+from connectors.byoc import ConnectorIndex, DataSourceError, JobStatus, SyncJobIndex
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.services.base import BaseService
@@ -45,6 +45,13 @@ class JobExecutionService(BaseService):
         except DocumentNotFoundError:
             logger.error(f"Couldn't find connector by id {sync_job.connector_id}")
             return
+
+        if connector.last_sync_status == JobStatus.IN_PROGRESS:
+            logger.debug(
+                f"Connector {connector.id} is still syncing, skip the job {sync_job.id}..."
+            )
+            return
+
         sync_job_runner = SyncJobRunner(
             source_klass=source_klass,
             sync_job=sync_job,

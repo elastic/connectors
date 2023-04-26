@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from connectors.byoc import JobStatus
 from connectors.config import load_config
 from connectors.es.index import DocumentNotFoundError
 from connectors.services.job_execution import JobExecutionService
@@ -102,9 +103,10 @@ def sync_job_runner_mock():
         yield sync_job_runner_mock
 
 
-def mock_connector():
+def mock_connector(last_sync_status=JobStatus.COMPLETED):
     connector = Mock()
     connector.id = "1"
+    connector.last_sync_status = last_sync_status
 
     return connector
 
@@ -185,6 +187,24 @@ async def test_job_execution_with_connector_not_found(
     connector = mock_connector()
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     connector_index_mock.fetch_by_id = AsyncMock(side_effect=DocumentNotFoundError())
+    sync_job = mock_sync_job()
+    sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
+    await create_and_run_service()
+
+    concurrent_tasks_mock.put.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_job_execution_with_connector_still_syncing(
+    connector_index_mock,
+    sync_job_index_mock,
+    concurrent_tasks_mock,
+    sync_job_runner_mock,
+    set_env,
+):
+    connector = mock_connector(last_sync_status=JobStatus.IN_PROGRESS)
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
     sync_job = mock_sync_job()
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service()
