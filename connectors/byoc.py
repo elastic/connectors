@@ -570,28 +570,34 @@ class Connector(ESDocument):
 
         await self.reload()
 
+        fqn = config["sources"][configured_service_type]
+        source_klass = get_source_klass(fqn)
+
         if self.service_type is not None and not self.configuration.is_empty():
             if configured_service_type not in config["sources"]:
                 raise ServiceTypeNotSupportedError(configured_service_type)
 
             # check if the configuration is missing any fields before continuing
-            fqn = config["sources"][configured_service_type]
-            source_klass = get_source_klass(fqn)
+            simple_config = source_klass.get_simple_configuration()
             missing_fields = self.configuration.check_missing_fields(
-                source_klass.get_simple_configuration()
+                simple_config
             )
             if len(missing_fields) > 0:
                 raise MalformedConfigurationError(
-                    f"Configuration for {configured_service_type} has missing fields: {', '.join(missing_fields)}"
+                    f'Connector for {self.service_type}(id: "{self.id}") has missing configuration fields: {", ".join(missing_fields)}'
                 )
 
-            if self.configuration.has_missing_field_properties():
+            # if a field is missing properties, add them with default values
+            current_config = self.configuration.to_dict()
+            if self.configuration.has_missing_field_properties(
+                simple_config, current_config
+            ):
                 logger.info(
-                    f"Connector {self.id} is missing configuration field properties. Generating defaults."
+                    f'Connector for {self.service_type}(id: "{self.id}") is missing configuration field properties. Generating defaults.'
                 )
                 doc = {
-                    "configuration": self.configuration.add_missing_field_properties(
-                        source_klass.get_simple_configuration()
+                    "configuration": self.configuration.deep_merge_configurations(
+                        simple_config, current_config
                     )
                 }
 
@@ -620,10 +626,8 @@ class Connector(ESDocument):
         if self.configuration.is_empty():
             if configured_service_type not in config["sources"]:
                 raise ServiceTypeNotSupportedError(configured_service_type)
-            fqn = config["sources"][configured_service_type]
-            try:
-                source_klass = get_source_klass(fqn)
 
+            try:
                 # sets the defaults and the flag to NEEDS_CONFIGURATION
                 doc["configuration"] = source_klass.get_simple_configuration()
                 doc["status"] = Status.NEEDS_CONFIGURATION.value
