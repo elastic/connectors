@@ -117,7 +117,7 @@ class Field:
             return value
 
         if type_ == "int":
-            return int(value) if value else None
+            return int(value)
         elif type_ == "float":
             return float(value)
         elif type_ == "bool":
