@@ -52,7 +52,7 @@ URLS = {
     SITES: "{host_url}{parent_site_url}/_api/web/webs?$skip={skip}&$top={top}",
     LISTS: "{host_url}{parent_site_url}/_api/web/lists?$skip={skip}&$top={top}&$expand=RootFolder&$filter=(Hidden eq false)",
     ATTACHMENT: "{host_url}{value}/_api/web/GetFileByServerRelativeUrl('{file_relative_url}')/$value",
-    DRIVE_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$select=*&$expand=File,Folder&$top={top}",
+    DRIVE_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$select={selected_field}&$expand=File,Folder&$top={top}",
     LIST_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$expand=AttachmentFiles&$select=*,FileRef",
     ATTACHMENT_DATA: "{host_url}{parent_site_url}/_api/web/getfilebyserverrelativeurl('{file_relative_url}')",
     LIST_BY_TITLE: "{host_url}{parent_site_url}/_api/web/lists/getbytitle('Site%20Pages')/items?$select=Title,CanvasContent1,FileLeafRef&$filter=FileLeafRef eq '{filename}'",
@@ -399,13 +399,16 @@ class SharepointClient:
                 )
                 await self._sleeps.sleep(RETRY_INTERVAL**retry)
 
-    async def _fetch_data_with_next_url(self, site_url, list_id, param_name):
+    async def _fetch_data_with_next_url(
+        self, site_url, list_id, param_name, selected_field=""
+    ):
         """Invokes a GET call to the SharePoint Server/Online for calling list and drive item API.
 
         Args:
             site_url(string): site url to the SharePoint farm.
             list_id(string): Id of list item or drive item.
             param_name(string): parameter name whether it is DRIVE_ITEM, LIST_ITEM.
+            selected_field(string): Select query parameter for drive item.
         Yields:
             Response of the GET call.
         """
@@ -426,6 +429,7 @@ class SharepointClient:
                         list_id=list_id,
                         top=TOP,
                         host_url=self.host_url,
+                        selected_field=selected_field,
                     )
                 )
             response_result = response.get("value", [])  # pyright: ignore
@@ -511,7 +515,7 @@ class SharepointClient:
             )
         )
 
-    async def get_list_items(self, list_id, site_url, server_relative_url):
+    async def get_list_items(self, list_id, site_url, server_relative_url, **kwargs):
         """This method fetches items from all the lists in a collection.
 
         Args:
@@ -556,18 +560,22 @@ class SharepointClient:
 
                     yield result, file_relative_url
 
-    async def get_drive_items(self, list_id, site_url, server_relative_url):
+    async def get_drive_items(self, list_id, site_url, server_relative_url, **kwargs):
         """This method fetches items from all the drives in a collection.
 
         Args:
             list_id(string): List id.
             site_url(string): Site path.
             server_relative_url(string): Relative url of site
+            kwargs(string): Select query parameter for drive item.
         Yields:
             dictionary: dictionary containing meta-data of the drive item.
         """
         async for drive_items_data in self._fetch_data_with_next_url(
-            site_url=site_url, list_id=list_id, param_name=DRIVE_ITEM
+            site_url=site_url,
+            list_id=list_id,
+            selected_field=kwargs["selected_field"],
+            param_name=DRIVE_ITEM,
         ):
             for result in drive_items_data:
                 file_relative_url = None
@@ -869,10 +877,13 @@ class SharepointDataSource(BaseDataSource):
             async for list_data in self.sharepoint_client.get_lists(site_url=site_url):
                 for result in list_data:
                     is_site_page = False
+                    selected_field = "Modified,Id,GUID,File,Folder"
                     # if BaseType value is 1 then it's document library else it's a list
                     if result.get("BaseType") == 1:
                         if result.get("Title") == "Site Pages":
                             is_site_page = True
+                            if not self.sharepoint_client.is_cloud:
+                                selected_field = "WikiField," + selected_field
                         yield self.format_lists(
                             item=result, document_type=DOCUMENT_LIBRARY
                         ), None
@@ -889,6 +900,7 @@ class SharepointDataSource(BaseDataSource):
                         list_id=result.get("Id"),
                         site_url=result.get("ParentWebUrl"),
                         server_relative_url=server_url,
+                        selected_field=selected_field,
                     ):
                         document = format_document(item=item)
 

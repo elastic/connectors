@@ -373,6 +373,7 @@ async def test_get_list_items():
         list_id="620070a1-ee50-4585-b6a7-0f6210b1a69d",
         site_url="/sites/enterprise/ctest",
         server_relative_url="/sites/enterprise/site1",
+        selected_field="",
     ):
         expected_response.append(item)
     # Assert
@@ -462,6 +463,7 @@ async def test_get_drive_items():
         list_id="620070a1-ee50-4585-b6a7-0f6210b1a69d",
         site_url="/sites/enterprise/ctest",
         server_relative_url=None,
+        selected_field="",
     ):
         expected_response.append(item)
     # Assert
@@ -529,6 +531,51 @@ async def test_get_docs_drive_items():
         "LastItemModifiedDate": "2023-03-19T05:02:52Z",
         "ParentWebUrl": "/sites/enterprise/ctest/_api",
         "Title": "HelloWorld",
+    }
+    drive_content_response = {
+        "File": {
+            "Length": "3356",
+            "Name": "Home.aspx",
+            "ServerRelativeUrl": "/sites/enterprise/ctest/SitePages/Home.aspx",
+            "TimeCreated": "2022-05-02T07:20:33Z",
+            "TimeLastModified": "2022-05-02T07:20:34Z",
+            "Title": "Home.aspx",
+        },
+        "Folder": {"__deferred": {}},
+        "Modified": "2022-05-02T07:20:35Z",
+        "GUID": "111111122222222-c77f-4ed3-84ef-8a4dd87c80d0",
+        "Length": "3356",
+        "item_type": "File",
+    }
+    actual_response = []
+    source.sharepoint_client._fetch_data_with_query = Mock(return_value=AsyncIter([]))
+    source.sharepoint_client.get_lists = Mock(
+        return_value=AsyncIter([item_content_response])
+    )
+    source.sharepoint_client.get_drive_items = Mock(
+        return_value=AsyncIter((drive_content_response, None))
+    )
+    # Execute
+    async for document, _ in source.get_docs():
+        actual_response.append(document)
+    # Assert
+    assert len(actual_response) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_docs_drive_items_for_web_pages():
+    # Setup
+    source = create_source(SharepointDataSource)
+    item_content_response = {
+        "RootFolder": {
+            "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
+        },
+        "Created": "2023-03-19T05:02:52Z",
+        "BaseType": 1,
+        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+        "ParentWebUrl": "/sites/enterprise/ctest/_api",
+        "Title": "Site Pages",
     }
     drive_content_response = {
         "File": {
