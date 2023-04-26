@@ -289,7 +289,18 @@ class DataSourceConfiguration:
     def to_dict(self):
         return dict(self._raw_config)
 
+    def check_missing_fields(self, expected_configuration):
+        """Checks current configuration fields for missing keys.
+
+        Returns a list of all missing configuration fields.
+        """
+        return list(set(expected_configuration.keys()) - set(self._config.keys()))
+
     def has_missing_field_properties(self, simple_config, current_config):
+        """Checks all configuration field properties for missing keys.
+
+        Returns True if a single field property is missing from any field, otherwise False
+        """
         expected_properties = DEFAULT_CONFIGURATION.keys()
 
         for _, field in current_config.items():
@@ -321,13 +332,6 @@ class DataSourceConfiguration:
                 simple_config[config_name] = current_config[config_name]
 
         return simple_config
-
-    def check_missing_fields(self, expected_configuration):
-        """Checks current configuration against the expected format.
-
-        Returns a list of all missing configuration keys.
-        """
-        return list(set(expected_configuration.keys()) - set(self._config.keys()))
 
     def check_valid(self):
         """Validates every Field against its `validations`.
