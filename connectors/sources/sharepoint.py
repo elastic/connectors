@@ -268,7 +268,7 @@ class SharepointClient:
         return response["value"][0].get("CanvasContent1")  # pyright: ignore
 
     async def convert_file_to_b64(self, source_file_name):
-        """This method convert th file content into b64
+        """This method converts the file content into b64
         Args:
             source_file_name: Name of source file
         Returns:
@@ -281,7 +281,7 @@ class SharepointClient:
             await remove(source_file_name)  # pyright: ignore
         except Exception as exception:
             logger.warning(
-                f"Could not remove file from: {source_file_name}. Error: {exception}"
+                f"Could not remove file: {source_file_name}. Error: {exception}"
             )
         return attachment_content
 
@@ -306,11 +306,12 @@ class SharepointClient:
             dictionary: Content document with id, timestamp & text.
         """
         document_size = int(document["size"])
+        if not (doit and document_size):
+            return
+
         filename = (
             document["title"] if document["type"] == "File" else document["file_name"]
         )
-        if not (doit and document_size):
-            return
 
         if document_size > FILE_SIZE_LIMIT:
             logger.warning(
