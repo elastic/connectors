@@ -570,8 +570,23 @@ class Connector(ESDocument):
 
         await self.reload()
 
-        fqn = config["sources"][configured_service_type]
-        source_klass = get_source_klass(fqn)
+        if not configured_service_type:
+            logger.error(
+                f"Service type is not configured for connector {configured_connector_id}"
+            )
+            raise ServiceTypeNotConfiguredError("Service type is not configured.")
+
+        if configured_service_type not in config["sources"]:
+            raise ServiceTypeNotSupportedError(configured_service_type)
+
+        try:
+            fqn = config["sources"][configured_service_type]
+            source_klass = get_source_klass(fqn)
+        except Exception as e:
+            logger.critical(e, exc_info=True)
+            raise DataSourceError(
+                f"Could not instantiate {fqn} for {configured_service_type}"
+            )
 
         if self.service_type is not None and not self.configuration.is_empty():
             if configured_service_type not in config["sources"]:
@@ -579,9 +594,7 @@ class Connector(ESDocument):
 
             # check if the configuration is missing any fields before continuing
             simple_config = source_klass.get_simple_configuration()
-            missing_fields = self.configuration.check_missing_fields(
-                simple_config
-            )
+            missing_fields = self.configuration.check_missing_fields(simple_config)
             if len(missing_fields) > 0:
                 raise MalformedConfigurationError(
                     f'Connector for {self.service_type}(id: "{self.id}") has missing configuration fields: {", ".join(missing_fields)}'
@@ -613,30 +626,16 @@ class Connector(ESDocument):
 
         doc = {}
         if self.service_type is None:
-            if not configured_service_type:
-                logger.error(
-                    f"Service type is not configured for connector {configured_connector_id}"
-                )
-                raise ServiceTypeNotConfiguredError("Service type is not configured.")
             doc["service_type"] = configured_service_type
             logger.debug(
                 f"Populated service type {configured_service_type} for connector {self.id}"
             )
 
         if self.configuration.is_empty():
-            if configured_service_type not in config["sources"]:
-                raise ServiceTypeNotSupportedError(configured_service_type)
-
-            try:
-                # sets the defaults and the flag to NEEDS_CONFIGURATION
-                doc["configuration"] = source_klass.get_simple_configuration()
-                doc["status"] = Status.NEEDS_CONFIGURATION.value
-                logger.debug(f"Populated configuration for connector {self.id}")
-            except Exception as e:
-                logger.critical(e, exc_info=True)
-                raise DataSourceError(
-                    f"Could not instantiate {fqn} for {configured_service_type}"
-                )
+            # sets the defaults and the flag to NEEDS_CONFIGURATION
+            doc["configuration"] = source_klass.get_simple_configuration()
+            doc["status"] = Status.NEEDS_CONFIGURATION.value
+            logger.debug(f"Populated configuration for connector {self.id}")
 
         await self.index.update(
             doc_id=self.id,
