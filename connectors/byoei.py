@@ -42,7 +42,7 @@ from connectors.utils import (
     DEFAULT_QUEUE_MEM_SIZE,
     DEFAULT_QUEUE_SIZE,
     ConcurrentTasks,
-    MemQueue,
+    DualQueue,
     get_size,
     iso_utc,
 )
@@ -595,7 +595,11 @@ class ElasticServer(ESClient):
             "concurrent_downloads", DEFAULT_CONCURRENT_DOWNLOADS
         )
 
-        stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
+        stream = DualQueue(
+            max_small_queue_size=queue_size,
+            max_large_queue_size=5,
+            mem_split_size=queue_mem_size * 1024 * 1024,
+        )
 
         # start the fetcher
         self._fetcher = Fetcher(

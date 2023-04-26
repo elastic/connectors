@@ -188,6 +188,136 @@ def convert_to_b64(source, target=None, overwrite=False):
     return source if inplace else target
 
 
+class DualQueue(asyncio.Queue):
+    def __init__(
+        self,
+        max_small_queue_size=0,
+        max_large_queue_size=0,
+        mem_split_size=1048576,
+        refresh_interval=1.0,
+        refresh_timeout=60,
+    ):
+        self.small_queue = asyncio.Queue(maxsize=max_small_queue_size)
+        self.large_queue = asyncio.Queue(maxsize=max_large_queue_size)
+
+        self.mem_split_size = mem_split_size
+        self.refresh_interval = refresh_interval
+        self.refresh_timeout = refresh_timeout
+
+        self._done = False
+
+    def _get_queue_by_item_size(self, item_size):
+        if item_size > self.mem_split_size:
+            return self.large_queue
+        return self.small_queue
+
+    def _get_queue_by_priority(self):
+        if self.large_queue.empty():
+            return self.small_queue
+
+        if self.small_queue.empty():
+            return self.large_queue
+        return self.small_queue
+
+    def _get_another_queue(self, queue):
+        if self.large_queue == queue:
+            return self.small_queue
+        return self.large_queue
+
+    async def _putter_timeout(self, putter):
+        """This coroutine will set the result of the putter to QueueFull when a certain timeout it reached."""
+        start = time.time()
+        while not putter.done():
+            elapsed_time = time.time() - start
+            if elapsed_time >= self.refresh_timeout:
+                putter.set_result(
+                    asyncio.QueueFull(
+                        f"MemQueue has been full for {round(elapsed_time, 4)}s. while timeout is {self.refresh_timeout}s."
+                    )
+                )
+                return
+            logger.debug("Queue Full")
+            await asyncio.sleep(self.refresh_interval)
+
+    async def put(self, item):
+        if self._done:
+            raise Exception("Cannot put more - we're finished")
+
+        item_size = get_size(item)
+
+        queue = self._get_queue_by_item_size(item_size)
+
+        while self.full(item_size):
+            #
+            # self._putter is a deque used as a FIFO queue by asyncio.Queue.
+            #
+            # Everytime a item is to be added in a full queue, a future (putter)
+            # is added at the end of that deque. A `get` call on the queue will remove the
+            # fist element in that deque and set the future result, and this
+            # will unlock the corresponding put() call here.
+            #
+            # This mechanism ensures that we serialize put() calls when the queue is full.
+            putter = self._get_loop().create_future()  # pyright: ignore
+            putter_timeout = self._get_loop().create_task(  # pyright: ignore
+                self._putter_timeout(putter)
+            )
+            self._putters.append(putter)  # pyright: ignore
+            try:
+                result = await putter
+                if isinstance(result, asyncio.QueueFull):
+                    raise result
+            except:  # NOQA
+                putter.cancel()  # Just in case putter is not done yet.
+                try:
+                    # Clean self._putters from canceled putters.
+                    self._putters.remove(putter)  # pyright: ignore
+                except ValueError:
+                    # The putter could be removed from self._putters by a
+                    # previous get_nowait call.
+                    pass
+                if not self.full() and not putter.cancelled():
+                    # We were woken up by get_nowait(), but can't take
+                    # the call.  Wake up the next in line.
+                    self._wakeup_next(self._putters)  # pyright: ignore
+                raise
+
+            await putter_timeout
+
+        queue.put_nowait((item, item_size))
+
+    async def get(self):
+        queue = self._get_queue_by_priority()
+        item = None
+        while True:
+            if self.empty() and self._done:
+                return 0, "END_DOCS"
+            try:
+                # wait for a task to complete
+                item, item_size = await asyncio.wait_for(queue.get(), timeout=1)
+                return item_size, item
+            except asyncio.TimeoutError:
+                queue = self._get_another_queue(queue)
+                await asyncio.sleep(0.1)
+
+    def empty(self):
+        return self.small_queue.empty() and self.large_queue.empty()
+
+    def full(self, next_item_size=0):
+        queue = self._get_queue_by_item_size(next_item_size)
+
+        return queue.full()
+
+    def put_nowait(self, item):
+        item_size = get_size(item)
+        queue = self._get_queue_by_item_size(item_size)
+        if queue.full():
+            raise asyncio.QueueFull("Queue is full")
+        queue.put_nowait((item, item_size))
+
+    async def done(self):
+        self._done = True
+
+
 class MemQueue(asyncio.Queue):
     def __init__(
         self, maxsize=0, maxmemsize=0, refresh_interval=1.0, refresh_timeout=60

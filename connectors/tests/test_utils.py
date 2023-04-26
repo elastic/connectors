@@ -25,6 +25,7 @@ from pympler import asizeof
 from connectors import utils
 from connectors.utils import (
     ConcurrentTasks,
+    DualQueue,
     InvalidIndexNameError,
     MemQueue,
     RetryStrategy,
@@ -494,3 +495,31 @@ def test_truncate_id():
 )
 def test_has_duplicates(_list, should_have_duplicate):
     assert has_duplicates(_list) == should_have_duplicate
+
+
+@pytest.mark.asyncio
+async def test_dual_queue_basic():
+    queue = DualQueue()
+
+    item = {"lala": "lolo"}
+
+    await queue.put(item)
+
+    size, got = await queue.get()
+    assert got == item
+
+
+@pytest.mark.asyncio
+async def test_dual_queue_split():
+    queue = DualQueue(mem_split_size=100)
+
+    items = ["hello", "world" * 1000]  # small  # large
+
+    for item in items:
+        await queue.put(item)
+
+    first_size, first = await queue.get()
+    second_size, second = await queue.get()
+
+    assert first in items
+    assert second in items
