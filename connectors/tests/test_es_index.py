@@ -36,6 +36,8 @@ async def test_es_index_create_object_error(mock_responses):
         async for doc_ in index.get_all_docs():
             pass
 
+    await index.close()
+
 
 class FakeDocument:
     pass

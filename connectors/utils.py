@@ -510,3 +510,12 @@ def get_pem_format(key, max_split=-1):
 def hash_id(_id):
     # Collision probability: 1.47*10^-29
     return hashlib.md5(_id.encode("utf8")).hexdigest()
+
+
+def has_duplicates(strings_list):
+    seen = set()
+    for string in strings_list:
+        if string in seen:
+            return True
+        seen.add(string)
+    return False

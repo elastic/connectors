@@ -62,15 +62,16 @@ class JobTriggerMethod(Enum):
     UNSET = None
 
 
+class Sort(Enum):
+    ASC = "asc"
+    DESC = "desc"
+
+
 class ServiceTypeNotSupportedError(Exception):
     pass
 
 
 class ServiceTypeNotConfiguredError(Exception):
-    pass
-
-
-class ConnectorUpdateError(Exception):
     pass
 
 
@@ -551,6 +552,7 @@ class Connector(ESDocument):
 
         await self.index.update(doc_id=self.id, doc=doc)
 
+    @with_concurrency_control()
     async def prepare(self, config):
         """Prepares the connector, given a configuration
         If the connector id and the service type is in the config, we want to
@@ -561,6 +563,8 @@ class Connector(ESDocument):
 
         if self.id != configured_connector_id:
             return
+
+        await self.reload()
 
         if self.service_type is not None and not self.configuration.is_empty():
             return
@@ -594,13 +598,12 @@ class Connector(ESDocument):
                     f"Could not instantiate {fqn} for {configured_service_type}"
                 )
 
-        try:
-            await self.index.update(doc_id=self.id, doc=doc)
-        except Exception as e:
-            logger.critical(e, exc_info=True)
-            raise ConnectorUpdateError(
-                f"Could not update service type/configuration for connector {self.id}"
-            )
+        await self.index.update(
+            doc_id=self.id,
+            doc=doc,
+            if_seq_no=self._seq_no,
+            if_primary_term=self._primary_term,
+        )
         await self.reload()
 
     @with_concurrency_control()
@@ -712,7 +715,8 @@ class SyncJobIndex(ESIndex):
                 ]
             }
         }
-        async for job in self.get_all_docs(query=query):
+        sort = [{"created_at": Sort.ASC.value}]
+        async for job in self.get_all_docs(query=query, sort=sort):
             yield job
 
     async def orphaned_jobs(self, connector_ids):
