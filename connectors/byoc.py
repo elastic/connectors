@@ -604,7 +604,7 @@ class Connector(ESDocument):
             simple_config = source_klass.get_simple_configuration()
             current_config = self.configuration.to_dict()
 
-            # check if the configuration is missing any fields before continuing
+            # raise an error if the configuration is missing any fields
             missing_fields = list(
                 set(simple_config.keys()) - set(current_config.keys())
             )
@@ -624,7 +624,7 @@ class Connector(ESDocument):
                 f'Connector for {self.service_type}(id: "{self.id}") is missing configuration field properties. Generating defaults.'
             )
 
-            # filter the default config by what fields we want to update
+            # filter the default config by what fields we want to update, then merge the actual config into it
             filtered_simple_config = {
                 key: value
                 for key, value in simple_config.items()
