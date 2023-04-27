@@ -18,19 +18,55 @@ def load_config(config_file):
     return configuration
 
 
+# Left - in Enterprise Search; Right - in Connectors
+config_mappings = {
+    "elasticsearch.host": "elasticsearch.host",
+    "elasticsearch.username": "elasticsearch.username",
+    "elasticsearch.password": "elasticsearch.password",
+    "elasticsearch.headers": "elasticsearch.headers",
+    "log_level": "service.log_level",
+}
+
+
 def _ent_search_config(configuration):
     if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
         return
     logger.info("Found ENT_SEARCH_CONFIG_PATH, loading ent-search config")
     ent_search_config = EnvYAML(os.environ["ENT_SEARCH_CONFIG_PATH"])
-    for field in (
-        "elasticsearch.host",
-        "elasticsearch.username",
-        "elasticsearch.password",
-        "elasticsearch.headers",
-    ):
-        sub = field.split(".")[-1]
-        if field not in ent_search_config:
+    for es_field in config_mappings.keys():
+        if es_field not in ent_search_config:
             continue
-        logger.debug(f"Overriding {field}")
-        configuration["elasticsearch"][sub] = ent_search_config[field]
+
+        connector_field = config_mappings[es_field]
+
+        _update_config_field(
+            configuration, connector_field, ent_search_config[es_field]
+        )
+
+        logger.debug(f"Overridden {connector_field}")
+
+
+def _update_config_field(configuration, field, value):
+    """
+    Update configuration field value taking into account the nesting.
+
+    Configuration is a hash of hashes, so we need to dive inside to do proper assignment.
+
+    E.g. _update_config({}, "elasticsearch.bulk.queuesize", 20) will result in the following config:
+    {
+        "elasticsearch": {
+            "bulk": {
+                "queuesize": 20
+            }
+        }
+    }
+    """
+    subfields = field.split(".")
+
+    current_leaf = configuration
+    for subfield in subfields[:-1]:
+        if subfield not in current_leaf:
+            current_leaf[subfield] = {}
+        current_leaf = current_leaf[subfield]
+
+    current_leaf[subfields[-1]] = value
