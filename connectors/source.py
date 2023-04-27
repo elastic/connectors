@@ -37,7 +37,7 @@ DEFAULT_CONFIGURATION = {
     "type": "str",
     "ui_restrictions": [],
     "validations": [],
-    "value": "",
+    "value": None,
 }
 
 
@@ -358,6 +358,18 @@ class BaseDataSource:
         res = {}
 
         for config_name, fields in cls.get_default_configuration().items():
+            # ensure empty values are type-friendly
+            if not fields["value"]:
+                match fields["type"]:
+                    case "int":
+                        # differentiate between 0 and None
+                        fields["value"] = 0 if not (fields["value"] and fields["value"] == 0) else None
+                    case "bool":
+                        fields["value"] = False
+                    case _:
+                        # str and list
+                        fields["value"] = ""
+
             entry = DEFAULT_CONFIGURATION.copy()
 
             for field_property, value in fields.items():

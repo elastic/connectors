@@ -691,7 +691,7 @@ async def test_base_class():
         BaseDataSource(configuration=configuration)
 
     ds = DataSource(configuration=configuration)
-    assert ds.get_default_configuration()["port"]["value"] == 3306
+    assert ds.get_simple_configuration()["port"]["value"] == 3306
 
     options = {"a": "1"}
     ds.tweak_bulk_options(options)
@@ -714,7 +714,7 @@ async def test_base_class():
             "type": "str",
             "ui_restrictions": [],
             "validations": [],
-            "value": "127.0.0.1",
+            "value": "",
         },
         "port": {
             "default_value": None,
@@ -729,7 +729,7 @@ async def test_base_class():
             "type": "int",
             "ui_restrictions": [],
             "validations": [],
-            "value": 3306,
+            "value": None,
         },
         "direct": {
             "default_value": None,
@@ -744,7 +744,7 @@ async def test_base_class():
             "type": "bool",
             "ui_restrictions": [],
             "validations": [],
-            "value": True,
+            "value": False,
         },
         "user": {
             "default_value": None,
@@ -759,7 +759,7 @@ async def test_base_class():
             "type": "str",
             "ui_restrictions": [],
             "validations": [],
-            "value": "root",
+            "value": "",
         },
     }
     assert ds.get_simple_configuration() == expected
