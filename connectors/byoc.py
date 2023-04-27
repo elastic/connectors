@@ -611,10 +611,10 @@ class Connector(ESDocument):
                 )
 
             # if a field is missing properties, add them with default values
-            filtered_config = filter_nested_dict_by_keys(
+            configs_missing_properties = filter_nested_dict_by_keys(
                 DEFAULT_CONFIGURATION.keys(), current_config
             )
-            if not filtered_config:
+            if not configs_missing_properties:
                 return
 
             logger.info(
@@ -625,11 +625,11 @@ class Connector(ESDocument):
             filtered_simple_config = {
                 key: value
                 for key, value in simple_config.items()
-                if key in filtered_config.keys()
+                if key in configs_missing_properties.keys()
             }
             doc = {
                 "configuration": deep_merge_dicts(
-                    filtered_simple_config, filtered_config
+                    filtered_simple_config, configs_missing_properties
                 )
             }
 
