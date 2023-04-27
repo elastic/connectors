@@ -19,8 +19,17 @@ from connectors.filtering.validation import (
     InvalidFilteringError,
 )
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, get_source_klass
-from connectors.utils import iso_utc, next_run
+from connectors.source import (
+    DEFAULT_CONFIGURATION,
+    DataSourceConfiguration,
+    get_source_klass,
+)
+from connectors.utils import (
+    deep_merge_dicts,
+    filter_nested_dict_by_keys,
+    iso_utc,
+    next_run,
+)
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
@@ -592,35 +601,48 @@ class Connector(ESDocument):
             if configured_service_type not in config["sources"]:
                 raise ServiceTypeNotSupportedError(configured_service_type)
 
-            # check if the configuration is missing any fields before continuing
             simple_config = source_klass.get_simple_configuration()
-            missing_fields = self.configuration.check_missing_fields(simple_config)
+            current_config = self.configuration.to_dict()
+
+            # check if the configuration is missing any fields before continuing
+            missing_fields = list(
+                set(simple_config.keys()) - set(current_config.keys())
+            )
             if len(missing_fields) > 0:
                 raise MalformedConfigurationError(
                     f'Connector for {self.service_type}(id: "{self.id}") has missing configuration fields: {", ".join(missing_fields)}'
                 )
 
             # if a field is missing properties, add them with default values
-            current_config = self.configuration.to_dict()
-            if self.configuration.has_missing_field_properties(
-                simple_config, current_config
-            ):
-                logger.info(
-                    f'Connector for {self.service_type}(id: "{self.id}") is missing configuration field properties. Generating defaults.'
-                )
-                doc = {
-                    "configuration": self.configuration.deep_merge_configurations(
-                        simple_config, current_config
-                    )
-                }
+            filtered_config = filter_nested_dict_by_keys(
+                DEFAULT_CONFIGURATION.keys(), current_config
+            )
+            if not filtered_config:
+                return
 
-                await self.index.update(
-                    doc_id=self.id,
-                    doc=doc,
-                    if_seq_no=self._seq_no,
-                    if_primary_term=self._primary_term,
+            logger.info(
+                f'Connector for {self.service_type}(id: "{self.id}") is missing configuration field properties. Generating defaults.'
+            )
+
+            # filter the default config by what fields we want to update
+            filtered_simple_config = {
+                key: value
+                for key, value in simple_config.items()
+                if key in filtered_config.keys()
+            }
+            doc = {
+                "configuration": deep_merge_dicts(
+                    filtered_simple_config, filtered_config
                 )
-                await self.reload()
+            }
+
+            await self.index.update(
+                doc_id=self.id,
+                doc=doc,
+                if_seq_no=self._seq_no,
+                if_primary_term=self._primary_term,
+            )
+            await self.reload()
 
             return
 

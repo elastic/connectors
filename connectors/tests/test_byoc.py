@@ -732,7 +732,7 @@ class Banana(BaseDataSource):
 
     @classmethod
     def get_default_configuration(cls):
-        return {"one": {"value": None}}
+        return {"one": {"value": None}, "two": {"value": None}}
 
 
 @pytest.mark.asyncio
@@ -784,7 +784,22 @@ async def test_connector_prepare_with_prepared_connector():
                     "ui_restrictions": [],
                     "validations": [],
                     "value": "foobar",
-                }
+                },
+                "two": {
+                    "default_value": None,
+                    "depends_on": [],
+                    "display": "text",
+                    "label": "",
+                    "options": [],
+                    "order": 1,
+                    "required": True,
+                    "sensitive": False,
+                    "tooltip": None,
+                    "type": "str",
+                    "ui_restrictions": [],
+                    "validations": [],
+                    "value": "foobar",
+                },
             },
         },
     }
@@ -840,7 +855,24 @@ async def test_connector_prepare_with_connector_missing_field_properties_creates
         "_primary_term": primary_term,
         "_source": {
             "service_type": "banana",
-            "configuration": {"one": {"value": "my value"}},
+            "configuration": {
+                "one": {"value": "hoho", "extra_property": "hehe"},
+                "two": {
+                    "default_value": None,
+                    "depends_on": [],
+                    "display": "text",
+                    "label": "",
+                    "options": [],
+                    "order": 1,
+                    "required": True,
+                    "sensitive": False,
+                    "tooltip": None,
+                    "type": "str",
+                    "ui_restrictions": [],
+                    "validations": [],
+                    "value": "foobar",
+                },
+            },
         },
     }
     config = {
@@ -854,14 +886,16 @@ async def test_connector_prepare_with_connector_missing_field_properties_creates
     connector = Connector(elastic_index=index, doc_source=connector_doc)
 
     expected = Banana.get_simple_configuration()
-    expected["one"]["value"] = "my value"
+
+    # only updates fields with missing properties
+    expected["one"]["value"] = "hoho"
+    expected["one"]["extra_property"] = "hehe"
+    del expected["two"]
 
     await connector.prepare(config)
     index.update.assert_called_once_with(
         doc_id=doc_id,
-        doc={
-            "configuration": expected
-        },
+        doc={"configuration": expected},
         if_seq_no=seq_no,
         if_primary_term=primary_term,
     )

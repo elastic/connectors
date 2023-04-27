@@ -540,3 +540,44 @@ def has_duplicates(strings_list):
             return True
         seen.add(string)
     return False
+
+
+def filter_nested_dict_by_keys(key_list, source_dict):
+    """Filters a nested dict by the keys of the sub-level dict.
+    This is used for checking if any configuration fields are missing properties.
+
+    Args:
+        key_list (list): list of keys to compare against nested dict keys
+        source_dict (dict): a nested dict
+
+    Returns a filtered nested dict.
+    """
+    filtered_dict = {}
+
+    for top_key, nested_dict in source_dict.items():
+        if key_list - nested_dict.keys():
+            filtered_dict[top_key] = nested_dict
+
+    return filtered_dict
+
+
+def deep_merge_dicts(base_dict, new_dict):
+    """Deep merges two nested dicts.
+
+    Args:
+        base_dict (dict): dict that will be overwritten
+        new_dict (dict): dict to be merged in
+
+    Returns a merged nested dict.
+    """
+    for key in new_dict:
+        if (
+            key in base_dict
+            and isinstance(base_dict[key], dict)
+            and isinstance(new_dict[key], dict)
+        ):
+            deep_merge_dicts(base_dict[key], new_dict[key])
+        else:
+            base_dict[key] = new_dict[key]
+
+    return base_dict
