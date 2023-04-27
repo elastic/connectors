@@ -588,8 +588,8 @@ class Connector(ESDocument):
         if configured_service_type not in config["sources"]:
             raise ServiceTypeNotSupportedError(configured_service_type)
 
+        fqn = config["sources"][configured_service_type]
         try:
-            fqn = config["sources"][configured_service_type]
             source_klass = get_source_klass(fqn)
         except Exception as e:
             logger.critical(e, exc_info=True)
