@@ -105,12 +105,6 @@ class Field:
     def value(self, value):
         self._value = value
 
-    def to_dict(self):
-        dict = self.__dict__
-        dict["value"] = dict.pop("_value", None)
-        dict["type"] = dict.pop("_type", None)
-        return dict
-
     def _convert(self, value, type_):
         if not isinstance(value, str):
             # we won't convert the value if it's not a str
@@ -288,50 +282,6 @@ class DataSourceConfiguration:
 
     def to_dict(self):
         return dict(self._raw_config)
-
-    def check_missing_fields(self, expected_configuration):
-        """Checks current configuration fields for missing keys.
-
-        Returns a list of all missing configuration fields.
-        """
-        return list(set(expected_configuration.keys()) - set(self._config.keys()))
-
-    def has_missing_field_properties(self, simple_config, current_config):
-        """Checks all configuration field properties for missing keys.
-
-        Returns True if a single field property is missing from any field, otherwise False
-        """
-        expected_properties = DEFAULT_CONFIGURATION.keys()
-
-        for _, field in current_config.items():
-            missing_properties = expected_properties - field.keys()
-            if missing_properties:
-                return True
-
-        return False
-
-    def deep_merge_configurations(self, simple_config, current_config):
-        """Deep merges two configurations.
-
-        This function is used to ensure configuration fields have all required properties.
-        This merge prioritises `current_config`, but if a value is in `simple_config`
-        but not `current_config`, the `simple_config` value will still be used.
-
-        Returns a dict of merged configuration fields with field properties.
-        """
-        for config_name in current_config:
-            if (
-                config_name in simple_config
-                and isinstance(simple_config[config_name], dict)
-                and isinstance(current_config[config_name], dict)
-            ):
-                self.deep_merge_configurations(
-                    simple_config[config_name], current_config[config_name]
-                )
-            else:
-                simple_config[config_name] = current_config[config_name]
-
-        return simple_config
 
     def check_valid(self):
         """Validates every Field against its `validations`.
