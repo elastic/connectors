@@ -598,9 +598,6 @@ class Connector(ESDocument):
             )
 
         if self.service_type is not None and not self.configuration.is_empty():
-            if configured_service_type not in config["sources"]:
-                raise ServiceTypeNotSupportedError(configured_service_type)
-
             simple_config = source_klass.get_simple_configuration()
             current_config = self.configuration.to_dict()
 
