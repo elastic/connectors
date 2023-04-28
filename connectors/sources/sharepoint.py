@@ -285,32 +285,32 @@ class SharepointClient:
                     break
             except Exception as exception:
                 if retry > self.retry_count:
-                        raise exception
-                    logger.warning(
-                        f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
+                    raise exception
+                logger.warning(
+                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
+                )
+                retry += 1
+
+                retry_after = RETRY_INTERVAL**retry
+
+                if getattr(exception, "status", None) == 429:
+                    retry_after = int(
+                        exception.headers.get("Retry-After", 0)  # pyright: ignore
                     )
-                    retry += 1
+                elif isinstance(
+                    exception,
+                    ClientResponseError,
+                ) and "token has expired" in exception.headers.get(  # pyright: ignore
+                    "x-ms-diagnostics", ""
+                ):
+                    await self._set_access_token()
+                elif isinstance(
+                    exception,
+                    ServerDisconnectedError,
+                ):
+                    await self.close_session()
 
-                    retry_after = RETRY_INTERVAL**retry
-
-                    if getattr(exception, "status", None) == 429:
-                        retry_after = int(
-                            exception.headers.get("Retry-After", 0)  # pyright: ignore
-                        )
-                    elif isinstance(
-                        exception,
-                        ClientResponseError,
-                    ) and "token has expired" in exception.headers.get(  # pyright: ignore
-                        "x-ms-diagnostics", ""
-                    ):
-                        await self._set_access_token()
-                    elif isinstance(
-                        exception,
-                        ServerDisconnectedError,
-                    ):
-                        await self.close_session()
-
-                    await self._sleeps.sleep(retry_after)
+                await self._sleeps.sleep(retry_after)
 
     async def _fetch_data_with_next_url(self, site_url, list_id, param_name):
         """Invokes a GET call to the SharePoint Server/Online for calling list and drive item API.
