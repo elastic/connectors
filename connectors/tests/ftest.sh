@@ -45,13 +45,15 @@ $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --conne
 $PYTHON fixture.py --name $NAME --action load
 $PYTHON fixture.py --name $NAME --action sync
 
+DESCRIPTION=`$PYTHON fixture.py --name $NAME --action description)`
+
 if [[ $PERF8 == "yes" ]]
 then
     if [[ $PLATFORM == "darwin" ]]
     then
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS --max-duration $MAX_DURATION -c $ELASTIC_INGEST --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS --max-duration $MAX_DURATION --description $DESCRIPTION -c $ELASTIC_INGEST --debug & PID=$!
     else
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS --max-duration $MAX_DURATION -c $ELASTIC_INGEST --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS --max-duration $MAX_DURATION -c $ELASTIC_INGEST --description $DESCRIPTION --debug & PID=$!
     fi
 else
     $ELASTIC_INGEST --debug & PID=$!

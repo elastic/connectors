@@ -136,6 +136,8 @@ def main(args=None):
                     print("1500")
                 case _:
                     print("3000")
+        if args.action == "description":
+            print(f'Running an e2e test for {args.name} with a {DATA_SIZE} corpus.')
         else:
             print(
                 f"Fixture {args.name} does not have an {args.action} action, skipping"
