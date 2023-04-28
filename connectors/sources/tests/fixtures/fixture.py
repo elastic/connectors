@@ -137,7 +137,7 @@ def main(args=None):
                     print("1500")
                 case _:
                     print("3000")
-        if args.action == "description":
+        elif args.action == "description":
             print(f'Running an e2e test for {args.name} with a {os.environ.get("DATA_SIZE", "medium")} corpus.')
         else:
             print(
