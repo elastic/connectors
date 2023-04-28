@@ -618,16 +618,16 @@ class Connector(ESDocument):
             fqn = config["sources"][configured_service_type]
             try:
                 source_klass = get_source_klass(fqn)
+
+                # sets the defaults and the flag to NEEDS_CONFIGURATION
+                doc["configuration"] = source_klass.get_simple_configuration()
+                doc["status"] = Status.NEEDS_CONFIGURATION.value
+                logger.debug(f"Populated configuration for connector {self.id}")
             except Exception as e:
                 logger.critical(e, exc_info=True)
                 raise DataSourceError(
                     f"Could not instantiate {fqn} for {configured_service_type}"
                 )
-
-            # sets the defaults and the flag to NEEDS_CONFIGURATION
-            doc["configuration"] = source_klass.get_simple_configuration()
-            doc["status"] = Status.NEEDS_CONFIGURATION.value
-            logger.debug(f"Populated configuration for connector {self.id}")
 
         await self.index.update(
             doc_id=self.id,
