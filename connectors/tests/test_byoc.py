@@ -749,6 +749,7 @@ async def test_connector_prepare_different_id():
     config = {
         "connector_id": "2",
         "service_type": "banana",
+        "sources": {},
     }
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
