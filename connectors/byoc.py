@@ -706,7 +706,7 @@ class Connector(ESDocument):
         if not configs_missing_properties:
             return
 
-        logger.debug(
+        logger.info(
             f'Connector for {service_type}(id: "{self.id}") is missing configuration field properties. Generating defaults.'
         )
 
