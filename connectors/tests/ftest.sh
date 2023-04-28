@@ -35,7 +35,6 @@ if [ -f "$NAME/.env" ]; then
   export $(grep -v '^#' $NAME/.env | xargs)
 fi
 
-NUM_DOCS=`$PYTHON fixture.py --name $NAME --action get_num_docs`
 
 if [ -f "$NAME/requirements.txt" ]; then
 $PYTHON -m pip install -r $NAME/requirements.txt
@@ -70,6 +69,7 @@ $ELASTIC_INGEST --debug & PID_2=$!
 $PYTHON fixture.py --name $NAME --action monitor --pid $PID_2
 
 
+NUM_DOCS=`$PYTHON fixture.py --name $NAME --action get_num_docs`
 $PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size $NUM_DOCS
 $PYTHON fixture.py --name $NAME --action stop_stack
 $PYTHON fixture.py --name $NAME --action teardown
