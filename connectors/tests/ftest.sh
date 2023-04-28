@@ -45,7 +45,7 @@ $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --conne
 $PYTHON fixture.py --name $NAME --action load
 $PYTHON fixture.py --name $NAME --action sync
 
-DESCRIPTION=`$PYTHON fixture.py --name $NAME --action description)`
+DESCRIPTION=`$PYTHON fixture.py --name $NAME --action description`
 
 if [[ $PERF8 == "yes" ]]
 then
