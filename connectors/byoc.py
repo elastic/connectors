@@ -587,9 +587,10 @@ class Connector(ESDocument):
                 )
                 return
 
-            await self.check_configuration_formatting(
+            await self.validate_configuration_formatting(
                 config["sources"][self.service_type], self.service_type
             )
+
             return
 
         if not configured_service_type:
@@ -602,9 +603,10 @@ class Connector(ESDocument):
             raise ServiceTypeNotSupportedError(configured_service_type)
 
         if self.service_type is not None and not self.configuration.is_empty():
-            await self.check_configuration_formatting(
+            await self.validate_configuration_formatting(
                 config["sources"][configured_service_type], configured_service_type
             )
+
             return
 
         doc = {}
@@ -681,25 +683,63 @@ class Connector(ESDocument):
         )
         return result["count"]
 
-    async def check_configuration_formatting(self, fqn, service_type):
+    async def validate_configuration_formatting(self, fqn, service_type):
+        """Wrapper function for validating configuration fields
+        and field properties.
+
+        Args:
+            fqn (string): the source fqn for a service, from config file
+            service_type (string): service type of the connector
+        """
         try:
             source_klass = get_source_klass(fqn)
         except Exception as e:
             logger.critical(e, exc_info=True)
             raise DataSourceError(f"Could not instantiate {fqn} for {service_type}")
 
-        simple_config = source_klass.get_simple_configuration()
+        default_config = source_klass.get_simple_configuration()
         current_config = self.configuration.to_dict()
 
+        self.validate_configuration_fields(service_type, default_config, current_config)
+        await self.add_missing_configuration_field_properties(
+            service_type, default_config, current_config
+        )
+
+    def validate_configuration_fields(
+        self, service_type, default_config, current_config
+    ):
+        """Checks if any fields in a configuration are missing.
+        If a field is missing, raises an error.
+        Ignores additional non-standard fields.
+
+        Args:
+            service_type (string): service type of the connector
+            default_config (dict): the default configuration for the connector
+            current_config (dict): the currently existing configuration for the connector
+        """
         # raise an error if the configuration is missing any fields
-        missing_fields = list(set(simple_config.keys()) - set(current_config.keys()))
+        missing_fields = list(set(default_config.keys()) - set(current_config.keys()))
 
         if len(missing_fields) > 0:
             raise MalformedConfigurationError(
                 f'Connector for {service_type}(id: "{self.id}") has missing configuration fields: {", ".join(missing_fields)}'
             )
 
-        # if a field is missing properties, add them with default values
+        return
+
+    async def add_missing_configuration_field_properties(
+        self, service_type, default_config, current_config
+    ):
+        """Checks the field properties for every field in a configuration.
+        If a field is missing field properties, add those field properties
+        with default values.
+        If no field properties are missing, nothing is updated.
+
+        Args:
+            service_type (string): service type of the connector
+            default_config (dict): the default configuration for the connector
+            current_config (dict): the currently existing configuration for the connector
+        """
         configs_missing_properties = filter_nested_dict_by_keys(
             DEFAULT_CONFIGURATION.keys(), current_config
         )
@@ -711,14 +751,14 @@ class Connector(ESDocument):
         )
 
         # filter the default config by what fields we want to update, then merge the actual config into it
-        filtered_simple_config = {
+        filtered_default_config = {
             key: value
-            for key, value in simple_config.items()
+            for key, value in default_config.items()
             if key in configs_missing_properties.keys()
         }
         doc = {
             "configuration": deep_merge_dicts(
-                filtered_simple_config, configs_missing_properties
+                filtered_default_config, configs_missing_properties
             )
         }
 
