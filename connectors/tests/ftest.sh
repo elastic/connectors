@@ -35,6 +35,7 @@ if [ -f "$NAME/.env" ]; then
   export $(grep -v '^#' $NAME/.env | xargs)
 fi
 
+NUM_DOCS=`$PYTHON fixture.py --name $NAME --action get_num_docs`
 
 if [ -f "$NAME/requirements.txt" ]; then
 $PYTHON -m pip install -r $NAME/requirements.txt
@@ -45,15 +46,14 @@ $ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --conne
 $PYTHON fixture.py --name $NAME --action load
 $PYTHON fixture.py --name $NAME --action sync
 
-DESCRIPTION=`$PYTHON fixture.py --name $NAME --action description`
-
 if [[ $PERF8 == "yes" ]]
 then
+    $PYTHON fixture.py --name $NAME --action description > description.txt
     if [[ $PLATFORM == "darwin" ]]
     then
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS --max-duration $MAX_DURATION --description "$DESCRIPTION" -c $ELASTIC_INGEST --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS --max-duration $MAX_DURATION --description description -c $ELASTIC_INGEST --debug & PID=$!
     else
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS --max-duration $MAX_DURATION --description "$DESCRIPTION" -c $ELASTIC_INGEST --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS --max-duration $MAX_DURATION --description description -c $ELASTIC_INGEST --debug & PID=$!
     fi
 else
     $ELASTIC_INGEST --debug & PID=$!
@@ -69,7 +69,7 @@ $ELASTIC_INGEST --debug & PID_2=$!
 
 $PYTHON fixture.py --name $NAME --action monitor --pid $PID_2
 
-NUM_DOCS=`$PYTHON fixture.py --name $NAME --action get_num_docs`
+
 $PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size $NUM_DOCS
 $PYTHON fixture.py --name $NAME --action stop_stack
 $PYTHON fixture.py --name $NAME --action teardown
@@ -85,6 +85,8 @@ if [[ $PERF8 == "yes" ]]; then
         sleep 0.5
     done
     set -e
+
+    rm -f description.txt
 
     # reading the status to know if we need to fail
     STATUS=$(<$ROOT_DIR/perf8-report-$NAME/status)
