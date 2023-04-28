@@ -33,6 +33,7 @@ def _parser():
             "sync",
             "monitor",
             "get_num_docs",
+            "description",
         ],
     )
 
@@ -137,7 +138,7 @@ def main(args=None):
                 case _:
                     print("3000")
         if args.action == "description":
-            print(f'Running an e2e test for {args.name} with a {DATA_SIZE} corpus.')
+            print(f'Running an e2e test for {args.name} with a {os.environ.get("DATA_SIZE", "medium")} corpus.')
         else:
             print(
                 f"Fixture {args.name} does not have an {args.action} action, skipping"
