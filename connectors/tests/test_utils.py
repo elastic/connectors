@@ -29,7 +29,9 @@ from connectors.utils import (
     MemQueue,
     RetryStrategy,
     convert_to_b64,
+    deep_merge_dicts,
     evaluate_timedelta,
+    filter_nested_dict_by_keys,
     get_base64_value,
     get_pem_format,
     get_size,
@@ -494,3 +496,61 @@ def test_truncate_id():
 )
 def test_has_duplicates(_list, should_have_duplicate):
     assert has_duplicates(_list) == should_have_duplicate
+
+
+@pytest.mark.parametrize(
+    "key_list, source_dict, expected_dict",
+    [
+        (["one", "two"], {"foo": {"one": 1, "two": 2}}, {}),
+        (
+            ["one", "two"],
+            {"foo": {"one": 1, "two": 2}, "bar": {"one": 1, "three": 3}},
+            {"bar": {"one": 1, "three": 3}},
+        ),
+        (
+            ["one", "two"],
+            {"foo": {}},
+            {"foo": {}},
+        ),
+        (
+            [],
+            {"foo": {"one": 1, "two": 2}, "bar": {"one": 1, "three": 3}},
+            {},
+        ),
+    ],
+)
+def test_filter_nested_dict_by_keys(key_list, source_dict, expected_dict):
+    assert filter_nested_dict_by_keys(key_list, source_dict) == expected_dict
+
+
+@pytest.mark.parametrize(
+    "base_dict, new_dict, expected_dict",
+    [
+        (
+            {"foo": {"one": 1, "two": 2}, "bar": {"one": 1, "two": 2}},
+            {"foo": {"one": 10}, "bar": {"three": 30}},
+            {"foo": {"one": 10, "two": 2}, "bar": {"one": 1, "two": 2, "three": 30}},
+        ),
+        (
+            {"foo": {}, "bar": {}},
+            {"foo": {"one": 1}, "bar": {"three": 3}},
+            {"foo": {"one": 1}, "bar": {"three": 3}},
+        ),
+        (
+            {
+                "foo": {"level2": {"level3": "fafa"}},
+                "bar": {"level2": {"level3": "fafa"}},
+            },
+            {
+                "foo": {"level2": {"level3": "foofoo"}},
+                "bar": {"level2": {"level4": "haha"}},
+            },
+            {
+                "foo": {"level2": {"level3": "foofoo"}},
+                "bar": {"level2": {"level3": "fafa", "level4": "haha"}},
+            },
+        ),
+    ],
+)
+def test_deep_merge_dicts(base_dict, new_dict, expected_dict):
+    assert deep_merge_dicts(base_dict, new_dict) == expected_dict
