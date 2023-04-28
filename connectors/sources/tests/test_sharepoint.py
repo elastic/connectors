@@ -928,7 +928,7 @@ async def test_api_call_when_token_is_expired(patch_default_wait_multiplier):
     source = create_source(SharepointDataSource)
     mock_response = {"access_token": "test2344", "expires_in": "1234555"}
     async_response = MockResponse(mock_response, 401)
-    source.sharepoint_client.retry_count = 0
+    source.sharepoint_client.retry_count = 1
     async_response.headers = {"x-ms-diagnostics": "token has expired"}
 
     with patch.object(
@@ -946,6 +946,38 @@ async def test_api_call_when_token_is_expired(patch_default_wait_multiplier):
             with pytest.raises(aiohttp.client_exceptions.ClientResponseError):
                 source.sharepoint_client._get_session()
 
+                # Execute
+                await anext(
+                    source.sharepoint_client._api_call(
+                        url_name="attachment", url="abc.com"
+                    )
+                )
+            await source.close()
+
+
+class TooManyRequestException(Exception):
+    status = 429
+    headers = {"Retry-After": 0}
+
+
+@pytest.mark.asyncio
+async def test_api_call_when_status_429_exception():
+    # Setup
+    source = create_source(SharepointDataSource)
+    mock_response = {"access_token": "test2344", "expires_in": "1234555"}
+    async_response = MockResponse(mock_response, 429)
+    source.sharepoint_client.retry_count = 1
+
+    async_response.headers = {}
+
+    with patch.object(
+        aiohttp.ClientSession,
+        "get",
+        side_effect=TooManyRequestException("Something Went Wrong"),
+    ):
+        with patch("aiohttp.request", return_value=async_response):
+            source.sharepoint_client._get_session()
+            with pytest.raises(TooManyRequestException):
                 # Execute
                 await anext(
                     source.sharepoint_client._api_call(
