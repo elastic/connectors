@@ -66,7 +66,7 @@ def _set_sync_now_flag():
 
 def _monitor_service(pid):
     es_client = _es_client()
-    timeout = 10 * 60  # 10 minutes timeout
+    timeout = 20 * 60  # 20 minutes timeout
     try:
         # we should have something like connectorIndex.search()[0].last_synced
         # once we have ConnectorIndex and Connector class ready
