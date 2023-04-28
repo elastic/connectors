@@ -717,7 +717,6 @@ class Connector(ESDocument):
             default_config (dict): the default configuration for the connector
             current_config (dict): the currently existing configuration for the connector
         """
-        # raise an error if the configuration is missing any fields
         missing_fields = list(set(default_config.keys()) - set(current_config.keys()))
 
         if len(missing_fields) > 0:
