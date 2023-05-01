@@ -13,7 +13,7 @@ MAX_RSS="200M"
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
 export RUNNING_FTEST=True
-export VERSION='8.8.0-SNAPSHOT'
+export VERSION='8.9.0-SNAPSHOT'
 
 PERF8_BIN=${PERF8_BIN:-$ROOT_DIR/bin/perf8}
 PYTHON=${PYTHON:-$ROOT_DIR/bin/python}
