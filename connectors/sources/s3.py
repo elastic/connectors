@@ -37,31 +37,21 @@ else:
     AWS_ENDPOINT = None
 
 
-class S3DataSource(BaseDataSource):
-    """Amazon S3"""
-
-    name = "Amazon S3"
-    service_type = "s3"
+class S3Client:
+    """Amazon S3 client to handle method calls made to S3"""
 
     def __init__(self, configuration):
-        """Set up the connection to the Amazon S3.
-
-        Args:
-            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
-        """
-        super().__init__(configuration=configuration)
+        self.configuration = configuration
         self.session = aioboto3.Session()
         set_extra_logger(aws_logger, log_level=logging.DEBUG, prefix="S3")
         set_extra_logger("aioboto3.resources", log_level=logging.INFO, prefix="S3")
-        self.bucket_list = []
-        self.buckets = self.configuration["buckets"]
         self.config = AioConfig(
             read_timeout=self.configuration["read_timeout"],
             connect_timeout=self.configuration["connect_timeout"],
             retries={"max_attempts": self.configuration["max_attempts"]},
         )
-        self.s3_region_client = {}
-        self.s3_context_stacks = []
+        self.clients = {}
+        self.client_context = []
 
     async def client(self, region=None):
         """This method creates context manager and client session object for s3.
@@ -70,12 +60,14 @@ class S3DataSource(BaseDataSource):
         """
         region_name = region if region else "default"
 
-        if region_name in self.s3_region_client:
-            return self.s3_region_client[region_name]
+        if region_name in self.clients:
+            return self.clients[region_name]
 
         if AWS_ENDPOINT is not None:
             logger.debug(f"Creating a session against {AWS_ENDPOINT}")
 
+        # AsyncExitStack, supports asynchronous context managers, used to create client using enter_async_context and
+        # these context manager will be stored in client_context list also client will be stored in clients dict with their region
         s3_context_stack = AsyncExitStack()
         s3_client = await s3_context_stack.enter_async_context(
             self.session.client(
@@ -85,22 +77,83 @@ class S3DataSource(BaseDataSource):
                 region_name=region,
             )
         )
-        self.s3_context_stacks.append(s3_context_stack)
+        self.client_context.append(s3_context_stack)
 
-        self.s3_region_client[region_name] = s3_client
-        return self.s3_region_client[region_name]
+        self.clients[region_name] = s3_client
+        return self.clients[region_name]
 
-    async def ping(self):
-        """Verify the connection with AWS"""
+    async def close_client(self):
+        """Closes unclosed client session"""
+        for context in self.client_context:
+            await context.aclose()
+
+    async def fetch_buckets(self):
+        """This method used to list all the buckets from Amazon S3"""
+        s3 = await self.client()
+        await s3.list_buckets()
+
+    async def get_bucket_list(self):
+        """Returns bucket list from list_buckets response
+
+        Returns:
+            list: List of buckets
+        """
+        if self.configuration["buckets"] == ["*"]:
+            s3 = await self.client()
+            bucket_list = await s3.list_buckets()
+            buckets = [bucket["Name"] for bucket in bucket_list["Buckets"]]
+        else:
+            buckets = self.configuration["buckets"]
+        return buckets
+
+    async def get_bucket_objects(self, bucket):
+        """Returns bucket list from list_buckets response
+        Args:
+            bucket (str): Name of bucket
+        Yields:
+            obj_summary: Bucket objects metadata
+            s3_client: S3 client object
+        """
+        page_size = self.configuration["page_size"]
+        region_name = await self.get_bucket_region(bucket)
+        s3_client = await self.client(region=region_name)
+        async with self.session.resource(
+            service_name="s3",
+            config=self.config,
+            endpoint_url=AWS_ENDPOINT,
+            region_name=region_name,
+        ) as s3:
+            try:
+                bucket_obj = await s3.Bucket(bucket)
+                await asyncio.sleep(0)
+
+                async for obj_summary in bucket_obj.objects.page_size(page_size):
+                    yield obj_summary, s3_client
+            except Exception as exception:
+                logger.warning(
+                    f"Something went wrong while fetching documents from {bucket}. Error: {exception}"
+                )
+
+    async def get_bucket_region(self, bucket_name):
+        """This method return the name of region for a bucket.
+        Args
+            bucket_name (str): Name of bucket
+        Returns:
+            region: Name of region
+        """
+        region = None
         try:
             s3 = await self.client()
-            self.bucket_list = await s3.list_buckets()
-            logger.info("Successfully connected to AWS Server.")
-        except Exception:
-            logger.exception("Error while connecting to AWS.")
-            raise
+            response = await s3.get_bucket_location(
+                Bucket=bucket_name,
+            )
+            region = response.get("LocationConstraint")
+        except ClientError:
+            logger.warning(f"Unable to fetch the region for {bucket_name}")
 
-    async def _get_content(self, doc, s3_client, timestamp=None, doit=None):
+        return region
+
+    async def get_content(self, doc, s3_client, timestamp=None, doit=None):
         """Extracts the content for allowed file types.
 
         Args:
@@ -116,7 +169,6 @@ class S3DataSource(BaseDataSource):
         if not (doit):
             return
         filename = doc["filename"]
-        bucket = doc["bucket"]
         if os.path.splitext(filename)[-1] not in TIKA_SUPPORTED_FILETYPES:
             logger.debug(f"{filename} can't be extracted")
             return
@@ -125,6 +177,8 @@ class S3DataSource(BaseDataSource):
                 f"File size for {filename} is larger than {DEFAULT_MAX_FILE_SIZE} bytes. Discarding the file content"
             )
             return
+
+        bucket = doc["bucket"]
         logger.debug(f"Downloading {filename}")
         document = {
             "_id": doc["id"],
@@ -167,33 +221,53 @@ class S3DataSource(BaseDataSource):
         finally:
             await remove(source_file_name)  # pyright: ignore
 
-    async def get_bucket_region(self, bucket_name):
-        """This method return the name of region for a bucket.
-        :param bucket_name (str): Name of bucket
-        Returns:
-            region: Name of region
+
+class S3DataSource(BaseDataSource):
+    """Amazon S3"""
+
+    name = "Amazon S3"
+    service_type = "s3"
+
+    def __init__(self, configuration):
+        """Set up the connection to the Amazon S3.
+
+        Args:
+            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
-        region = None
+        super().__init__(configuration=configuration)
+        self.s3_client = S3Client(configuration=configuration)
+
+    async def ping(self):
+        """Verify the connection with AWS"""
         try:
-            s3 = await self.client()
-            response = await s3.get_bucket_location(
-                Bucket=bucket_name,
-            )
-            region = response.get("LocationConstraint")
-        except ClientError:
-            logger.warning("Unable to fetch the region")
+            await self.s3_client.fetch_buckets()
+            logger.info("Successfully connected to AWS.")
+        except Exception:
+            logger.exception("Error while connecting to AWS.")
+            raise
 
-        return region
+    async def format_document(self, bucket_name, bucket_object):
+        """Prepare document for bucket object.
 
-    def get_bucket_list(self):
-        """Returns bucket list from list_buckets response
-
+        Args:
+            bucket_name: Name of bucket
+            bucket_object: Response of bucket objects
         Returns:
-            list: List of buckets
+            document: Modified document.
         """
-        return [
-            bucket["Name"] for bucket in self.bucket_list["Buckets"]  # pyright: ignore
-        ]
+
+        doc_id = md5(f"{bucket_name}/{bucket_object.key}".encode("utf8")).hexdigest()
+        owner = await bucket_object.owner
+        document = {
+            "_id": doc_id,
+            "filename": bucket_object.key,
+            "size_in_bytes": await bucket_object.size,
+            "bucket": bucket_name,
+            "owner": owner.get("DisplayName") if owner else "",
+            "storage_class": await bucket_object.storage_class,
+            "_timestamp": (await bucket_object.last_modified).isoformat(),
+        }
+        return document
 
     async def get_docs(self, filtering=None):
         """Get documents from Amazon S3
@@ -204,52 +278,23 @@ class S3DataSource(BaseDataSource):
         Yields:
             dictionary: Document from Amazon S3.
         """
-        if self.bucket_list == []:
-            s3 = await self.client()
-            self.bucket_list = await s3.list_buckets()
-        bucket_list = self.buckets if self.buckets != ["*"] else self.get_bucket_list()
-        page_size = self.configuration["page_size"]
+        bucket_list = await self.s3_client.get_bucket_list()
         for bucket in bucket_list:
-            region_name = await self.get_bucket_region(bucket)
-            s3_client = await self.client(region=region_name)
-            async with self.session.resource(
-                service_name="s3",
-                config=self.config,
-                endpoint_url=AWS_ENDPOINT,
-                region_name=region_name,
-            ) as s3:
-                try:
-                    bucket_obj = await s3.Bucket(bucket)
-                    await asyncio.sleep(0)
-
-                    async for obj_summary in bucket_obj.objects.page_size(page_size):
-                        doc_id = md5(
-                            f"{bucket}/{obj_summary.key}".encode("utf8")
-                        ).hexdigest()
-                        owner = await obj_summary.owner
-                        doc = {
-                            "_id": doc_id,
-                            "filename": obj_summary.key,
-                            "size_in_bytes": await obj_summary.size,
-                            "bucket": bucket,
-                            "owner": owner.get("DisplayName") if owner else "",
-                            "storage_class": await obj_summary.storage_class,
-                            "_timestamp": (await obj_summary.last_modified).isoformat(),
-                        }
-                        yield doc, partial(
-                            self._get_content,
-                            doc=doc,
-                            s3_client=s3_client,
-                        )
-                except Exception as exception:
-                    logger.warning(
-                        f"Something went wrong while fetching documents from {bucket}. Error: {exception}"
-                    )
+            async for obj_summary, s3_client in self.s3_client.get_bucket_objects(
+                bucket
+            ):
+                document = await self.format_document(
+                    bucket_name=bucket, bucket_object=obj_summary
+                )
+                yield document, partial(
+                    self.s3_client.get_content,
+                    doc=document,
+                    s3_client=s3_client,
+                )
 
     async def close(self):
         """Closes unclosed client session"""
-        for context in self.s3_context_stacks:
-            await context.aclose()
+        await self.s3_client.close_client()
 
     @classmethod
     def get_default_configuration(cls):
@@ -261,7 +306,7 @@ class S3DataSource(BaseDataSource):
         return {
             "buckets": {
                 "display": "textarea",
-                "label": "Comma-separated list of buckets",
+                "label": "AWS Buckets",
                 "order": 1,
                 "type": "list",
                 "value": "ent-search-ingest-dev",

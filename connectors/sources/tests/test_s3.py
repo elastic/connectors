@@ -118,6 +118,10 @@ class S3Object(dict):
         self.meta = mock.MagicMock()
         self["Body"] = self
         self["LocationConstraint"] = None
+        self["Buckets"] = [
+            {"Name": "bucket1", "CreationDate": "2022-09-01T12:29:29"},
+            {"Name": "bucket2", "CreationDate": "2022-09-01T12:29:29"},
+        ]
         self.called = False
 
     async def read(self, *args):
@@ -184,7 +188,7 @@ async def test_get_bucket_region():
 
     # Execute
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
-        response = await source.get_bucket_region("dummy")
+        response = await source.s3_client.get_bucket_region("dummy")
 
         # Assert
         assert response is None
@@ -200,7 +204,7 @@ async def test_get_bucket_region_negative():
     ):
         # Execute
         with pytest.raises(Exception):
-            await source.get_bucket_region(bucket_name="dummy")
+            await source.s3_client.get_bucket_region(bucket_name="dummy")
 
 
 class ReadAsyncMock(AsyncMock):
@@ -214,7 +218,7 @@ class ReadAsyncMock(AsyncMock):
 @mock.patch("aiobotocore.client.AioBaseClient")
 @pytest.mark.asyncio
 async def test_get_content(s3_client):
-    """Test get_content method of S3DataSource"""
+    """Test get_content method of S3Client"""
 
     # Setup
     source = create_source(S3DataSource)
@@ -234,7 +238,7 @@ async def test_get_content(s3_client):
         with patch("connectors.utils.convert_to_b64"):
             with patch.object(aiofiles, "open", return_value=async_response):
                 # Execute
-                result = await source._get_content(
+                result = await source.s3_client.get_content(
                     document, s3_client, timestamp=None, doit=True
                 )
 
@@ -248,11 +252,11 @@ async def test_get_content(s3_client):
 
 @pytest.mark.asyncio
 async def test_get_content_with_unsupported_file(mock_aws):
-    """Test get_content method of S3DataSource for unsupported file"""
+    """Test get_content method of S3Client for unsupported file"""
     # Setup
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
-        response = await source._get_content(
+        response = await source.s3_client.get_content(
             {"id": 1, "filename": "a.png", "bucket": "dummy"}, "client", doit=1
         )
         assert response is None
@@ -260,11 +264,11 @@ async def test_get_content_with_unsupported_file(mock_aws):
 
 @pytest.mark.asyncio
 async def test_get_content_when_not_doit(mock_aws):
-    """Test get_content method of S3DataSource when doit is none"""
+    """Test get_content method of S3Client when doit is none"""
     # Setup
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
-        response = await source._get_content(
+        response = await source.s3_client.get_content(
             {"id": 1, "filename": "a.txt", "bucket": "dummy"}, "client"
         )
         assert response is None
@@ -272,11 +276,11 @@ async def test_get_content_when_not_doit(mock_aws):
 
 @pytest.mark.asyncio
 async def test_get_content_when_size_is_large(mock_aws):
-    """Test get_content method of S3DataSource when size is greater than max size"""
+    """Test get_content method of S3Client when size is greater than max size"""
     # Setup
     source = create_source(S3DataSource)
     with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
-        response = await source._get_content(
+        response = await source.s3_client.get_content(
             {
                 "id": 1,
                 "filename": "a.txt",
@@ -298,7 +302,7 @@ async def test_get_docs(mock_aws):
     """Test get_docs method of S3DataSource"""
     # Setup
     source = create_source(S3DataSource)
-    source.get_bucket_location = mock.Mock(
+    source.s3_client.get_bucket_location = mock.Mock(
         return_value=await create_fake_coroutine("ap-south-1")
     )
     with mock.patch(
@@ -321,30 +325,49 @@ async def test_get_docs(mock_aws):
             num += 1
 
 
-def test_get_bucket_list():
-    """Test get_bucket_list method of S3dataSource"""
+@pytest.mark.asyncio
+async def test_get_bucket_list():
+    """Test get_bucket_list method of S3Client"""
     # Setup
     source = create_source(S3DataSource)
-    source.bucket_list = {
+    source.s3_client.bucket_list = []
+    source.s3_client.bucket_list = {
         "Buckets": [
             {"Name": "bucket1", "CreationDate": "2022-09-01T12:29:29"},
             {"Name": "bucket2", "CreationDate": "2022-09-01T12:29:29"},
         ]
     }
-    expected_response = ["bucket1", "bucket2"]
+    expected_response = ["ent-search-ingest-dev"]
 
     # Execute
-    actual_response = source.get_bucket_list()
+    actual_response = await source.s3_client.get_bucket_list()
 
     # Assert
     assert expected_response == actual_response
 
 
 @pytest.mark.asyncio
-async def test_validate_config_for_empty_bucket_string_raises_error():
+async def test_get_bucket_list_for_wildcard():
     # Setup
     source = create_source(S3DataSource)
-    source.configuration.set_field(name="buckets", value=[None, ""], type="list")
+    source.configuration.set_field(name="buckets", value=["*"])
+
+    # Execute
+    with mock.patch(
+        "aioboto3.resources.collection.AIOResourceCollection", AIOResourceCollection
+    ), mock.patch("aiobotocore.client.AioBaseClient", S3Object):
+        actual_response = await source.s3_client.get_bucket_list()
+
+    # Assert
+    assert ["bucket1", "bucket2"] == actual_response
+
+
+@pytest.mark.asyncio
+async def test_validate_config_for_empty_bucket_string():
+    """This function test validate_configwhen buckets string is empty"""
+    # Setup
+    source = create_source(S3DataSource)
+    source.configuration.set_field(name="buckets", value=[""])
     # Execute
     with pytest.raises(ConfigurableFieldValueError) as e:
         await source.validate_config()
@@ -354,7 +377,7 @@ async def test_validate_config_for_empty_bucket_string_raises_error():
 
 @pytest.mark.asyncio
 async def test_get_content_with_clienterror():
-    """Test get_content method of S3DataSource for client error"""
+    """Test get_content method of S3Client for client error"""
     # Setup
     source = create_source(S3DataSource)
     document = {
@@ -370,7 +393,7 @@ async def test_get_content_with_clienterror():
     )
     with pytest.raises(ClientError):
         # Execute
-        await source._get_content(
+        await source.s3_client.get_content(
             doc=document, s3_client=s3_client, timestamp=None, doit=True
         )
 
@@ -382,7 +405,7 @@ async def test_close_with_client_session():
     # Setup
     source = create_source(S3DataSource)
     source.session = aioboto3.Session()
-    await source.client()
+    await source.s3_client.client()
 
     # Execute
     await source.close()
