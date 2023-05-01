@@ -46,6 +46,8 @@ ATTACHMENT_DATA = "attachment_data"
 DOCUMENT_LIBRARY = "document_library"
 LIST_BY_TITLE = "list_by_title"
 TIKA_SUPPORTED_FILETYPES.append(".aspx")
+CLOUD_SELECTED_FIELDS = "Modified,Id,GUID,File,Folder"
+SERVER_SELECTED_FIELDS = "WikiField, Modified,Id,GUID,File,Folder"
 
 URLS = {
     PING: "{host_url}/sites/{site_collections}/_api/web/webs",
@@ -878,13 +880,13 @@ class SharepointDataSource(BaseDataSource):
             async for list_data in self.sharepoint_client.get_lists(site_url=site_url):
                 for result in list_data:
                     is_site_page = False
-                    selected_field = "Modified,Id,GUID,File,Folder"
+                    selected_field = CLOUD_SELECTED_FIELDS
                     # if BaseType value is 1 then it's document library else it's a list
                     if result.get("BaseType") == 1:
                         if result.get("Title") == "Site Pages":
                             is_site_page = True
                             if not self.sharepoint_client.is_cloud:
-                                selected_field = "WikiField," + selected_field
+                                selected_field = SERVER_SELECTED_FIELDS
                         yield self.format_lists(
                             item=result, document_type=DOCUMENT_LIBRARY
                         ), None
