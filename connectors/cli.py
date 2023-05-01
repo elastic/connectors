@@ -12,6 +12,7 @@ executes the `main` function of this module, which starts the service.
 """
 import asyncio
 import functools
+import json
 import logging
 import os
 import signal
@@ -22,7 +23,7 @@ from connectors.config import load_config
 from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
 from connectors.services import get_services
-from connectors.source import get_source_klasses
+from connectors.source import get_source_klass, get_source_klasses
 from connectors.utils import get_event_loop
 
 __all__ = ["main"]
@@ -36,7 +37,7 @@ def _parser():
         "--action",
         type=str,
         default=["schedule", "execute", "cleanup"],
-        choices=["schedule", "execute", "list", "cleanup"],
+        choices=["schedule", "execute", "list", "default_configuration", "cleanup"],
         nargs="+",
         help="What elastic-ingest should do",
     )
@@ -77,6 +78,13 @@ def _parser():
         action="store_true",
         default=False,
         help="Display the version and exit.",
+    )
+
+    parser.add_argument(
+        "--service-type",
+        type=str,
+        default=None,
+        help="Service type to get default configuration for if action is default_configuration",
     )
 
     parser.add_argument(
@@ -154,6 +162,18 @@ def run(args):
         print("Bye")
         return 0
 
+    if args.action == ["default_configuration"]:
+        service_type = args.service_type
+        print(f"Getting default configuration for service type {service_type}")
+        source_list = config["sources"]
+        if service_type not in source_list:
+            print(f"Could not find a connector for service type {service_type}")
+            return 0
+        source_klass = get_source_klass(source_list[service_type])
+        print(json.dumps(source_klass.get_simple_configuration(), indent=2))
+        print("Bye")
+        return 0
+
     if "list" in args.action:
         print("Cannot use the `list` action with other actions")
         return -1
@@ -182,4 +202,5 @@ def main(args=None):
     if args.version:
         print(__version__)
         return 0
+
     return run(args)
