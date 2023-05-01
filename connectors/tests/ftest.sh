@@ -9,6 +9,7 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR="$SCRIPT_DIR/../.."
 PLATFORM='unknown'
 MAX_RSS="200M"
+MAX_DURATION=600
 
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
@@ -46,11 +47,12 @@ $PYTHON fixture.py --name $NAME --action sync
 
 if [[ $PERF8 == "yes" ]]
 then
+    $PYTHON fixture.py --name $NAME --action description > description.txt
     if [[ $PLATFORM == "darwin" ]]
     then
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS -c $ELASTIC_INGEST --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS --max-duration $MAX_DURATION --description description.txt -c $ELASTIC_INGEST --debug & PID=$!
     else
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS -c $ELASTIC_INGEST --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS --max-duration $MAX_DURATION --description description.txt -c $ELASTIC_INGEST --debug & PID=$!
     fi
 else
     $ELASTIC_INGEST --debug & PID=$!
@@ -65,6 +67,7 @@ $PYTHON fixture.py --name $NAME --action sync
 $ELASTIC_INGEST --debug & PID_2=$!
 
 $PYTHON fixture.py --name $NAME --action monitor --pid $PID_2
+
 
 NUM_DOCS=`$PYTHON fixture.py --name $NAME --action get_num_docs`
 $PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size $NUM_DOCS
@@ -82,6 +85,8 @@ if [[ $PERF8 == "yes" ]]; then
         sleep 0.5
     done
     set -e
+
+    rm -f description.txt
 
     # reading the status to know if we need to fail
     STATUS=$(<$ROOT_DIR/perf8-report-$NAME/status)
