@@ -10,18 +10,24 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
+from elasticsearch import ConflictError
 
 from connectors.byoc import (
     IDLE_JOBS_THRESHOLD,
     JOB_NOT_FOUND_ERROR,
     Connector,
     ConnectorIndex,
+    DataSourceError,
     Features,
     Filter,
     Filtering,
     JobStatus,
     JobTriggerMethod,
+    MalformedConfigurationError,
     Pipeline,
+    ServiceTypeNotConfiguredError,
+    ServiceTypeNotSupportedError,
+    Sort,
     Status,
     SyncJob,
     SyncJobIndex,
@@ -114,6 +120,8 @@ DOC_SOURCE_FILTERING_EDITED = [FILTERING_DEFAULT_DOMAIN_EDITED, FILTERING_OTHER_
 
 DOC_SOURCE = {
     "_id": CONNECTOR_ID,
+    "_seq_no": 1,
+    "_primary_term": 2,
     "_source": {
         "configuration": {"key": "value"},
         "description": "description",
@@ -724,56 +732,328 @@ class Banana(BaseDataSource):
 
     @classmethod
     def get_default_configuration(cls):
-        return {"one": {"value": None}}
+        return {"one": {"value": None}, "two": {"value": None}}
 
 
 @pytest.mark.asyncio
-async def test_prepare(mock_responses):
-    class Client:
-        pass
-
-    class Index:
-        client = Client()
-
-        async def update(self, doc_id, doc):
-            pass
-
-        async def fetch_response_by_id(self, doc_id):
-            return connector_doc_after_prepare
-
-    # generic empty doc created by the user through the Kibana UI
-    # when it's created that way, the service type is None,
-    # so it's up to the connector to set it back to its value
+async def test_connector_prepare_different_id():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
     connector_doc = {
-        "_id": "1",
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    config = {
+        "connector_id": "2",
+        "service_type": "banana",
+        "sources": {},
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.prepare(config)
+    index.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare_with_prepared_connector():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
         "_source": {
-            "status": "created",
-            "service_type": None,
-            "index_name": "test",
-            "configuration": {},
-            "language": "en",
-            "scheduling": {"enabled": False},
+            "service_type": "banana",
+            "configuration": {
+                "one": {
+                    "default_value": None,
+                    "depends_on": [],
+                    "display": "text",
+                    "label": "",
+                    "options": [],
+                    "order": 1,
+                    "required": True,
+                    "sensitive": False,
+                    "tooltip": None,
+                    "type": "str",
+                    "ui_restrictions": [],
+                    "validations": [],
+                    "value": "foobar",
+                },
+                "two": {
+                    "default_value": None,
+                    "depends_on": [],
+                    "display": "text",
+                    "label": "",
+                    "options": [],
+                    "order": 1,
+                    "required": True,
+                    "sensitive": False,
+                    "tooltip": None,
+                    "type": "str",
+                    "ui_restrictions": [],
+                    "validations": [],
+                    "value": "foobar",
+                },
+            },
         },
     }
-    service_type = "mongodb"
-    connector_doc_after_prepare = deepcopy(connector_doc)
-    connector_doc_after_prepare["_source"]["status"] = "needs_configuration"
-    connector_doc_after_prepare["_source"]["service_type"] = service_type
-    connector_doc_after_prepare["_source"][
-        "configuration"
-    ] = Banana.get_default_configuration()
-    connector = Connector(Index(), connector_doc)
-
     config = {
-        "connector_id": "1",
-        "service_type": service_type,
-        "sources": {"mongodb": "connectors.tests.test_byoc:Banana"},
+        "connector_id": doc_id,
+        "service_type": "banana",
+        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
     }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.prepare(config)
+    index.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare_with_connector_missing_field_raises_error():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {
+            "service_type": "banana",
+            "configuration": {"two": "value"},
+        },
+    }
+    config = {
+        "connector_id": doc_id,
+        "service_type": "banana",
+        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    with pytest.raises(MalformedConfigurationError):
+        await connector.prepare(config)
+        index.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare_with_connector_missing_field_properties_creates_them():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {
+            "service_type": "banana",
+            "configuration": {
+                "one": {"value": "hoho", "extra_property": "hehe"},
+                "two": {
+                    "default_value": None,
+                    "depends_on": [],
+                    "display": "text",
+                    "label": "",
+                    "options": [],
+                    "order": 1,
+                    "required": True,
+                    "sensitive": False,
+                    "tooltip": None,
+                    "type": "str",
+                    "ui_restrictions": [],
+                    "validations": [],
+                    "value": "foobar",
+                },
+            },
+        },
+    }
+    config = {
+        "connector_id": doc_id,
+        "service_type": "banana",
+        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+
+    expected = Banana.get_simple_configuration()
+
+    # only updates fields with missing properties
+    expected["one"]["value"] = "hoho"
+    expected["one"]["extra_property"] = "hehe"
+    del expected["two"]
 
     await connector.prepare(config)
-    assert connector.status == Status.NEEDS_CONFIGURATION
-    assert connector.service_type == service_type
-    assert not connector.configuration.is_empty()
+    index.update.assert_called_once_with(
+        doc_id=doc_id,
+        doc={"configuration": expected},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare_with_service_type_not_configured():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    config = {
+        "connector_id": doc_id,
+        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    with pytest.raises(ServiceTypeNotConfiguredError):
+        await connector.prepare(config)
+        index.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare_with_service_type_not_supported():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    config = {
+        "connector_id": doc_id,
+        "service_type": "banana",
+        "sources": {},
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    with pytest.raises(ServiceTypeNotSupportedError):
+        await connector.prepare(config)
+        index.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare_with_data_source_error():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    config = {
+        "connector_id": doc_id,
+        "service_type": "banana",
+        "sources": {"banana": "foobar"},
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    with pytest.raises(DataSourceError):
+        await connector.prepare(config)
+        index.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    config = {
+        "connector_id": doc_id,
+        "service_type": "banana",
+        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.prepare(config)
+    index.update.assert_called_once_with(
+        doc_id=doc_id,
+        doc={
+            "service_type": "banana",
+            "configuration": Banana.get_simple_configuration(),
+            "status": Status.NEEDS_CONFIGURATION.value,
+        },
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare_with_race_condition():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    config = {
+        "connector_id": doc_id,
+        "service_type": "banana",
+        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
+    }
+    connector_doc_after_update = connector_doc | {
+        "_source": {
+            "service_type": "banana",
+            "configuration": Banana.get_simple_configuration(),
+        }
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(
+        side_effect=[connector_doc, connector_doc_after_update]
+    )
+    index.update = AsyncMock(
+        side_effect=ConflictError(
+            message="This is an error message from test_connector_prepare_with_race_condition",
+            meta=None,
+            body={},
+        )
+    )
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.prepare(config)
+    index.update.assert_called_once_with(
+        doc_id=doc_id,
+        doc={
+            "service_type": "banana",
+            "configuration": Banana.get_simple_configuration(),
+            "status": Status.NEEDS_CONFIGURATION.value,
+        },
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
 
 
 @pytest.mark.asyncio
@@ -829,6 +1109,7 @@ async def test_connector_update_last_sync_scheduled_at():
 async def test_connector_validate_filtering_not_edited():
     index = Mock()
     index.update = AsyncMock()
+    index.fetch_response_by_id = AsyncMock(return_value=DOC_SOURCE)
     validator = Mock()
     validator.validate_filtering = AsyncMock()
 
@@ -841,9 +1122,10 @@ async def test_connector_validate_filtering_not_edited():
 
 @pytest.mark.asyncio
 async def test_connector_validate_filtering_invalid():
+    doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.update = AsyncMock()
-    index.fetch_response_by_id = AsyncMock()
+    index.fetch_response_by_id = AsyncMock(return_value=doc_source)
     validation_result = FilteringValidationResult(
         state=FilteringValidationState.INVALID,
         errors=[FilterValidationError(ids=[1], messages="something wrong")],
@@ -862,23 +1144,24 @@ async def test_connector_validate_filtering_invalid():
         ]
     }
 
-    connector = Connector(
-        elastic_index=index, doc_source=deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
-    )
+    connector = Connector(elastic_index=index, doc_source=doc_source)
     await connector.validate_filtering(validator=validator)
 
     validator.validate_filtering.assert_awaited()
-    index.update.assert_awaited_with(
-        doc_id=CONNECTOR_ID, doc=expected_validation_update_doc
+    index.update.assert_awaited_once_with(
+        doc_id=CONNECTOR_ID,
+        doc=expected_validation_update_doc,
+        if_seq_no=doc_source["_seq_no"],
+        if_primary_term=doc_source["_primary_term"],
     )
-    index.fetch_response_by_id.assert_awaited()
 
 
 @pytest.mark.asyncio
 async def test_connector_validate_filtering_valid():
+    doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.update = AsyncMock()
-    index.fetch_response_by_id = AsyncMock()
+    index.fetch_response_by_id = AsyncMock(return_value=doc_source)
     validation_result = FilteringValidationResult()
     validator = Mock()
     validator.validate_filtering = AsyncMock(return_value=validation_result)
@@ -895,17 +1178,53 @@ async def test_connector_validate_filtering_valid():
         ]
     }
 
-    connector = Connector(
-        elastic_index=index, doc_source=deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
-    )
-    index.fetch_by_id = AsyncMock(return_value=connector)
+    connector = Connector(elastic_index=index, doc_source=doc_source)
     await connector.validate_filtering(validator=validator)
 
     validator.validate_filtering.assert_awaited()
-    index.update.assert_awaited_with(
-        doc_id=CONNECTOR_ID, doc=expected_validation_update_doc
+    index.update.assert_awaited_once_with(
+        doc_id=CONNECTOR_ID,
+        doc=expected_validation_update_doc,
+        if_seq_no=doc_source["_seq_no"],
+        if_primary_term=doc_source["_primary_term"],
     )
-    index.fetch_response_by_id.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_validate_filtering_with_race_condition():
+    doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
+    index = Mock()
+    index.update = AsyncMock()
+    validation_result = FilteringValidationResult()
+    validator = Mock()
+    validator.validate_filtering = AsyncMock(return_value=validation_result)
+    expected_validation_update_doc = {
+        "filtering": [
+            {
+                "domain": DEFAULT_DOMAIN,
+                "draft": DRAFT_FILTERING_DEFAULT_DOMAIN
+                | {"validation": validation_result.to_dict()},
+                "active": DRAFT_FILTERING_DEFAULT_DOMAIN
+                | {"validation": validation_result.to_dict()},
+            },
+            FILTERING_OTHER_DOMAIN,
+        ]
+    }
+    # make reload method return `edited` filtering in the first call, and `valid` filtering in the second call
+    index.fetch_response_by_id = AsyncMock(
+        side_effect=[doc_source, deepcopy(DOC_SOURCE)]
+    )
+
+    connector = Connector(elastic_index=index, doc_source=doc_source)
+    await connector.validate_filtering(validator=validator)
+
+    validator.validate_filtering.assert_awaited()
+    index.update.assert_awaited_once_with(
+        doc_id=CONNECTOR_ID,
+        doc=expected_validation_update_doc,
+        if_seq_no=doc_source["_seq_no"],
+        if_primary_term=doc_source["_primary_term"],
+    )
 
 
 @pytest.mark.parametrize(
@@ -1267,13 +1586,14 @@ async def test_pending_jobs(get_all_docs, set_env):
             ]
         }
     }
+    expected_sort = [{"created_at": Sort.ASC.value}]
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
     jobs = [
         job async for job in sync_job_index.pending_jobs(connector_ids=connector_ids)
     ]
 
-    get_all_docs.assert_called_with(query=expected_query)
+    get_all_docs.assert_called_with(query=expected_query, sort=expected_sort)
     assert len(jobs) == 1
     assert jobs[0] == job
 

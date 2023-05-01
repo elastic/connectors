@@ -581,7 +581,7 @@ class SharepointDataSource(BaseDataSource):
                 "value": "",
             },
             "host_url": {
-                "label": "SharePoint host url",
+                "label": "SharePoint host",
                 "order": 8,
                 "type": "str",
                 "value": "http://127.0.0.1:8491",

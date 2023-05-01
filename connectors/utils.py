@@ -510,3 +510,74 @@ def get_pem_format(key, max_split=-1):
 def hash_id(_id):
     # Collision probability: 1.47*10^-29
     return hashlib.md5(_id.encode("utf8")).hexdigest()
+
+
+def truncate_id(_id):
+    """Truncate ID of an object.
+
+    We cannot guarantee that connector returns small IDs.
+    In some places in our code we log IDs and if the ID is
+    too big, these lines become unreadable.
+
+    This function can help - it truncates the ID to not
+    overwhelm the logging system and still have somewhat
+    readable error messages.
+
+    Args:
+    _id (str): ID of an object to truncate.
+    """
+
+    if len(_id) > 20:
+        return _id[:8] + "..." + _id[-8:]
+
+    return _id
+
+
+def has_duplicates(strings_list):
+    seen = set()
+    for string in strings_list:
+        if string in seen:
+            return True
+        seen.add(string)
+    return False
+
+
+def filter_nested_dict_by_keys(key_list, source_dict):
+    """Filters a nested dict by the keys of the sub-level dict.
+    This is used for checking if any configuration fields are missing properties.
+
+    Args:
+        key_list (list): list of keys to compare against nested dict keys
+        source_dict (dict): a nested dict
+
+    Returns a filtered nested dict.
+    """
+    filtered_dict = {}
+
+    for top_key, nested_dict in source_dict.items():
+        if key_list - nested_dict.keys():
+            filtered_dict[top_key] = nested_dict
+
+    return filtered_dict
+
+
+def deep_merge_dicts(base_dict, new_dict):
+    """Deep merges two nested dicts.
+
+    Args:
+        base_dict (dict): dict that will be overwritten
+        new_dict (dict): dict to be merged in
+
+    Returns a merged nested dict.
+    """
+    for key in new_dict:
+        if (
+            key in base_dict
+            and isinstance(base_dict[key], dict)
+            and isinstance(new_dict[key], dict)
+        ):
+            deep_merge_dicts(base_dict[key], new_dict[key])
+        else:
+            base_dict[key] = new_dict[key]
+
+    return base_dict

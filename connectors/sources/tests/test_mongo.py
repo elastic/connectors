@@ -25,6 +25,8 @@ def create_connector():
         database="db",
         collection="col",
         direct_connection=True,
+        user="foo",
+        password="password",
     )
 
 

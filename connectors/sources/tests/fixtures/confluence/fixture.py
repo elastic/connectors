@@ -24,7 +24,7 @@ class ConfluenceAPI:
         self.space_start_at = 0
         self.space_page_limit = 100
         self.total_spaces = 4000
-        self.total_content = 100
+        self.total_content = 50
         self.attachment_start_at = 1
         self.attachment_end_at = 6
 
@@ -98,11 +98,12 @@ class ConfluenceAPI:
         content = {
             "results": [],
             "start": 0,
-            "limit": 100,
-            "size": 100,
+            "limit": 50,
+            "size": 50,
             "_links": {"next": None},
         }
-        document_type = args.get("type", "page")
+        confluence_query = args.get("cql")
+        document_type = confluence_query.split("type=")[1]
         for content_count in range(self.total_content):
             content["results"].append(
                 {

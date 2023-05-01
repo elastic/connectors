@@ -6,11 +6,15 @@
 import asyncio
 import time
 
+import elasticsearch
+
 from connectors.byoc import JobStatus
 from connectors.byoei import ElasticServer
 from connectors.es import Mappings
+from connectors.es.client import with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
+from connectors.utils import truncate_id
 
 UTF_8 = "utf-8"
 
@@ -23,7 +27,7 @@ class SyncJobRunningError(Exception):
     pass
 
 
-class JobClaimError(Exception):
+class SyncJobStartError(Exception):
     pass
 
 
@@ -72,9 +76,7 @@ class SyncJobRunner:
         self.source_klass = source_klass
         self.data_provider = None
         self.sync_job = sync_job
-        self.job_id = self.sync_job.id
         self.connector = connector
-        self.connector_id = self.connector.id
         self.es_config = es_config
         self.elastic_server = None
         self.job_reporting_task = None
@@ -84,14 +86,14 @@ class SyncJobRunner:
 
     async def execute(self):
         if self.running:
-            raise SyncJobRunningError(f"Sync job {self.job_id} is already running.")
-
-        self.running = True
-        if not await self._claim_job():
-            logger.error(
-                f"Unable to claim job {self.job_id} for connector {self.connector_id}"
+            raise SyncJobRunningError(
+                f"Sync job {self.sync_job.id} is already running."
             )
-            raise JobClaimError
+        self.running = True
+
+        await self.sync_starts()
+        await self.sync_job.claim()
+        self._start_time = time.time()
 
         try:
             self.data_provider = self.source_klass(self.sync_job.configuration)
@@ -106,7 +108,7 @@ class SyncJobRunner:
             await self.data_provider.validate_config()
 
             logger.debug(
-                f"Syncing '{self.sync_job.service_type}' for connector '{self.connector_id}'"
+                f"Syncing '{self.sync_job.service_type}' for connector '{self.connector.id}'"
             )
             logger.debug(f"Pinging the {self.source_klass} backend")
             await self.data_provider.ping()
@@ -201,26 +203,36 @@ class SyncJobRunner:
             else:
                 await self.sync_job.done(ingestion_stats=ingestion_stats)
 
-            await self.reload_sync_job()
-
         if await self.reload_connector():
-            await self.connector.sync_done(self.sync_job)
+            await self.connector.sync_done(
+                self.sync_job if await self.reload_sync_job() else None
+            )
 
         logger.info(
-            f"[{self.job_id}] Sync done: {ingestion_stats.get('indexed_document_count')} indexed, "
+            f"[{self.sync_job.id}] Sync done: {ingestion_stats.get('indexed_document_count')} indexed, "
             f"{ingestion_stats.get('deleted_document_count')} deleted. "
             f"({int(time.time() - self._start_time)} seconds)"  # pyright: ignore
         )
 
-    async def _claim_job(self):
+    @with_concurrency_control()
+    async def sync_starts(self):
+        if not await self.reload_connector():
+            raise SyncJobStartError(f"Couldn't reload connector {self.connector.id}")
+
+        if self.connector.last_sync_status == JobStatus.IN_PROGRESS:
+            logger.debug(
+                f"A sync job is started for connector {self.connector.id} by another connector instance, skipping..."
+            )
+            raise SyncJobStartError(
+                f"A sync job is started for connector {self.connector.id} by another connector instance"
+            )
+
         try:
-            await self.sync_job.claim()
             await self.connector.sync_starts()
-            self._start_time = time.time()
-            return True
+        except elasticsearch.ConflictError:
+            raise
         except Exception as e:
-            logger.critical(e, exc_info=True)
-            return False
+            raise SyncJobStartError from e
 
     async def prepare_docs(self):
         logger.debug(f"Using pipeline {self.sync_job.pipeline}")
@@ -233,9 +245,7 @@ class SyncJobRunner:
 
             if doc_id_size > ES_ID_SIZE_LIMIT:
                 logger.debug(
-                    f"Document with id '{doc_id}' with a size of '{doc_id_size}' bytes could not be ingested. "
-                    f"Elasticsearch has an upper limit of '{ES_ID_SIZE_LIMIT}' bytes for the '_id' field.",
-                    "Hashing id...",
+                    f"Id '{truncate_id(doc_id)}' is too long: {doc_id_size} of maximum {ES_ID_SIZE_LIMIT} bytes, hashing"
                 )
 
                 hashed_id = self.source_klass.hash_id(doc_id)
@@ -275,33 +285,29 @@ class SyncJobRunner:
 
     async def check_job(self):
         if not await self.reload_connector():
-            raise ConnectorNotFoundError(self.connector_id)
+            raise ConnectorNotFoundError(self.connector.id)
 
         if not await self.reload_sync_job():
-            raise ConnectorJobNotFoundError(self.job_id)
+            raise ConnectorJobNotFoundError(self.sync_job.id)
 
         if self.sync_job.status == JobStatus.CANCELING:
             raise ConnectorJobCanceledError
 
         if self.sync_job.status != JobStatus.IN_PROGRESS:
-            raise ConnectorJobNotRunningError(self.job_id, self.sync_job.status)
+            raise ConnectorJobNotRunningError(self.sync_job.id, self.sync_job.status)
 
     async def reload_sync_job(self):
-        if self.sync_job is None:
-            return False
         try:
             await self.sync_job.reload()
+            return True
         except DocumentNotFoundError:
-            logger.error(f"Couldn't find sync job by id {self.job_id}")
-            self.sync_job = None
-        return self.sync_job is not None
+            logger.error(f"Couldn't find sync job by id {self.sync_job.id}")
+            return False
 
     async def reload_connector(self):
-        if self.connector is None:
-            return False
         try:
             await self.connector.reload()
+            return True
         except DocumentNotFoundError:
-            logger.error(f"Couldn't find connector by id {self.connector_id}")
-            self.connector = None
-        return self.connector is not None
+            logger.error(f"Couldn't find connector by id {self.connector.id}")
+            return False

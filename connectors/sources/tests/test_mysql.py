@@ -4,10 +4,12 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+import datetime
+from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import aiomysql
 import pytest
+from freezegun import freeze_time
 
 from connectors.byoc import Filter
 from connectors.filtering.validation import SyncRuleValidationResult
@@ -16,7 +18,9 @@ from connectors.sources.mysql import (
     MySQLAdvancedRulesValidator,
     MySQLClient,
     MySqlDataSource,
+    generate_id,
     parse_tables_string_to_list_of_tables,
+    row2doc,
 )
 from connectors.sources.tests.support import create_source
 from connectors.tests.commons import AsyncIterator
@@ -58,12 +62,19 @@ ACCESSIBLE = "accessible"
 INACCESSIBLE = "inaccessible"
 
 MYSQL = {
-    TABLE_ONE: {
+    frozenset([TABLE_ONE]): {
         TABLE_ONE_QUERY_ALL: [DOC_ONE, DOC_TWO],
         TABLE_ONE_QUERY_DOC_ONE: [DOC_ONE],
     },
-    TABLE_TWO: {TABLE_TWO_QUERY_ALL: [DOC_THREE, DOC_FOUR]},
+    frozenset([TABLE_TWO]): {TABLE_TWO_QUERY_ALL: [DOC_THREE, DOC_FOUR]},
 }
+
+ALICE = {"id": 1, "name": "Alice", "age": 30}
+BOB = {"id": 2, "name": "Bob", "age": 30}
+TIME = "2023-01-18T17:18:56.814003+00:00"
+TIMESTAMP = datetime.datetime(
+    year=2023, month=1, day=2, hour=5, second=10, microsecond=3
+)
 
 
 def future_with_result(result):
@@ -85,6 +96,12 @@ def wrap_mock_client_in_context_manager(mock_client):
 def patch_ping():
     with patch.object(MySqlDataSource, "ping", return_value=AsyncMock()) as ping:
         yield ping
+
+
+@pytest.fixture
+def patch_row2doc():
+    with patch("connectors.sources.mysql.row2doc", return_value=MagicMock()) as row2doc:
+        yield row2doc
 
 
 @pytest.fixture
@@ -271,23 +288,23 @@ async def test_client_get_tables(patch_connection_pool):
     "column_tuples, expected_column_names",
     [
         ([], []),
-        ([("id",)], [f"{TABLE_ONE}_id"]),
+        ([("id",)], ["id"]),
         (
             [("group",), ("class",), ("name",)],
             [
-                f"{TABLE_ONE}_group",
-                f"{TABLE_ONE}_class",
-                f"{TABLE_ONE}_name",
+                "group",
+                "class",
+                "name",
             ],
         ),
     ],
 )
 @pytest.mark.asyncio
-async def test_client_get_column_names(
+async def test_client_get_column_names_for_table(
     patch_connection_pool, column_tuples, expected_column_names
 ):
     mock_cursor = MagicMock(spec=aiomysql.Cursor)
-    mock_cursor.fetchall = AsyncMock(return_value=column_tuples)
+    mock_cursor.description = column_tuples
     mock_cursor.__aenter__.return_value = mock_cursor
 
     patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
@@ -295,8 +312,27 @@ async def test_client_get_column_names(
     client = await setup_mysql_client()
 
     async with client:
-        result = await client.get_column_names(TABLE_ONE)
+        result = await client.get_column_names_for_table(TABLE_ONE)
         assert result == expected_column_names
+
+
+@pytest.mark.asyncio
+async def test_client_get_column_names_for_query(patch_connection_pool):
+    columns = [("id",), ("class",)]
+
+    mock_cursor = MagicMock(spec=aiomysql.Cursor)
+    mock_cursor.description = columns
+    mock_cursor.__aenter__.return_value = mock_cursor
+
+    patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
+
+    client = await setup_mysql_client()
+
+    async with client:
+        result = await client.get_column_names_for_query("SELECT * FROM *")
+        expected_columns = list(map(lambda column: column[0], columns))
+
+        assert result == expected_columns
 
 
 @pytest.mark.asyncio
@@ -397,19 +433,65 @@ async def test_fetch_documents(patch_connection_pool):
     client = MagicMock()
     client.get_primary_key_column_names = AsyncMock(side_effect=[primary_key_col])
     client.get_last_update_time = AsyncMock(return_value=last_update_time)
-    client.get_column_names = AsyncMock(return_value=[column])
+    client.get_column_names_for_table = AsyncMock(return_value=[column])
+    client.yield_rows_for_table = AsyncIterator([document])
+
+    source = await setup_mysql_source(DATABASE)
+    source.mysql_client = wrap_mock_client_in_context_manager(client)
+
+    document_list = []
+    async for document in source.fetch_documents(tables=[TABLE_ONE]):
+        document_list.append(document)
+
+    assert document in document_list
+
+
+@pytest.mark.asyncio
+async def test_fetch_documents_when_used_custom_query_then_sort_pk_cols(
+    patch_connection_pool, patch_row2doc
+):
+    last_update_time = "2023-01-18 17:18:56"
+    primary_key_col = ["cd", "ab"]
+    column = "column"
+
+    document = {
+        "Table": "table_name",
+        "_id": "table_name_",
+        "_timestamp": last_update_time,
+        f"table_name_{column}": "table1",
+    }
+
+    patch_row2doc.return_value = document
+
+    client = MagicMock()
+    client.get_primary_key_column_names = AsyncMock(side_effect=[primary_key_col])
+    client.get_last_update_time = AsyncMock(return_value=last_update_time)
+    client.get_column_names_for_query = AsyncMock(return_value=[column])
     client.yield_rows_for_query = AsyncIterator([document])
 
     source = await setup_mysql_source(DATABASE)
     source.mysql_client = wrap_mock_client_in_context_manager(client)
 
-    query = "select * from table"
-
     document_list = []
-    async for document in source.fetch_documents(table="table_name", query=query):
+    async for document in source.fetch_documents(
+        tables=[TABLE_ONE], query="SELECT * FROM *"
+    ):
         document_list.append(document)
 
     assert document in document_list
+    assert patch_row2doc.call_args.kwargs == {
+        "row": {
+            "Table": "table_name",
+            "_id": "table_name_",
+            "_timestamp": "2023-01-18 17:18:56",
+            "table_name_column": "table1",
+        },
+        "column_names": ["column"],
+        # primary key columns are now sorted
+        "primary_key_columns": ["ab", "cd"],
+        "table": ["table1"],
+        "timestamp": "2023-01-18 17:18:56",
+    }
 
 
 @pytest.mark.asyncio
@@ -454,9 +536,11 @@ async def setup_mysql_source(database="", client=None):
 def setup_available_docs(advanced_snippet):
     available_docs = []
 
-    for table in advanced_snippet:
-        query = advanced_snippet[table]
-        available_docs += MYSQL[table][query]
+    for tables_query in advanced_snippet:
+        tables = tables_query["tables"]
+        query = tables_query["query"]
+
+        available_docs += MYSQL[frozenset(tables)][query]
 
     return available_docs
 
@@ -469,9 +553,7 @@ def setup_available_docs(advanced_snippet):
             Filter(
                 {
                     ADVANCED_SNIPPET: {
-                        "value": {
-                            TABLE_ONE: TABLE_ONE_QUERY_ALL,
-                        }
+                        "value": [{"tables": [TABLE_ONE], "query": TABLE_ONE_QUERY_ALL}]
                     }
                 }
             ),
@@ -479,7 +561,15 @@ def setup_available_docs(advanced_snippet):
         ),
         (
             # single table, single doc
-            Filter({ADVANCED_SNIPPET: {"value": {TABLE_ONE: TABLE_ONE_QUERY_DOC_ONE}}}),
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        "value": [
+                            {"tables": [TABLE_ONE], "query": TABLE_ONE_QUERY_DOC_ONE}
+                        ]
+                    }
+                }
+            ),
             {DOC_ONE},
         ),
         (
@@ -487,10 +577,10 @@ def setup_available_docs(advanced_snippet):
             Filter(
                 {
                     ADVANCED_SNIPPET: {
-                        "value": {
-                            TABLE_ONE: TABLE_ONE_QUERY_DOC_ONE,
-                            TABLE_TWO: TABLE_TWO_QUERY_ALL,
-                        }
+                        "value": [
+                            {"tables": [TABLE_ONE], "query": TABLE_ONE_QUERY_DOC_ONE},
+                            {"tables": [TABLE_TWO], "query": TABLE_TWO_QUERY_ALL},
+                        ]
                     }
                 }
             ),
@@ -520,52 +610,124 @@ async def test_validate_config_when_host_empty_then_raise_error():
 
 
 @pytest.mark.parametrize(
-    "datasource, advanced_rules, expected_validation_result",
+    "tables_present_in_source, advanced_rules, expected_validation_result",
     [
         (
-            {},
+            # valid: empty array should be valid
+            [],
+            [],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: empty object should also be valid -> default value in Kibana
+            [],
             {},
             SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
             ),
         ),
         (
-            {TABLE_ONE: {}},
-            {TABLE_ONE: {}},
+            # valid: one custom query
+            [TABLE_ONE],
+            [{"tables": [TABLE_ONE], "query": "SELECT * FROM *"}],
             SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
             ),
         ),
         (
-            {TABLE_ONE: {}, TABLE_TWO: {}},
-            {TABLE_ONE: {}, TABLE_TWO: {}},
+            # valid: two custom queries
+            [TABLE_ONE, TABLE_TWO],
+            [
+                {"tables": [TABLE_ONE], "query": "SELECT * FROM *"},
+                {"tables": [TABLE_ONE, TABLE_TWO], "query": "SELECT * FROM *"},
+            ],
             SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
             ),
         ),
         (
-            {},
-            {TABLE_ONE: {}},
+            # invalid: additional property present
+            [TABLE_ONE],
+            [
+                {
+                    "tables": [TABLE_ONE],
+                    "query": "SELECT * FROM *",
+                    "additional_property": True,
+                }
+            ],
             SyncRuleValidationResult(
-                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
-                validation_message=f"Tables not found or inaccessible: {TABLE_ONE}.",
+                validation_message=ANY,
             ),
         ),
         (
-            {},
-            {TABLE_ONE: {}, TABLE_TWO: {}},
+            # invalid: tables field missing
+            [TABLE_ONE],
+            [{"query": "SELECT * FROM *"}],
             SyncRuleValidationResult(
-                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
-                validation_message=f"Tables not found or inaccessible: {TABLE_ONE}, {TABLE_TWO}.",
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: query field missing
+            [TABLE_ONE],
+            [{"tables": [TABLE_ONE]}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: query empty
+            [TABLE_ONE],
+            [{"tables": [TABLE_ONE], "query": ""}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: tables empty
+            [TABLE_ONE],
+            [{"tables": [], "query": "SELECT * FROM *"}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: table missing in source
+            [TABLE_ONE],
+            [{"tables": [TABLE_ONE, TABLE_TWO], "query": "SELECT * FROM *"}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: array of arrays -> wrong type
+            [TABLE_ONE],
+            [[]],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
             ),
         ),
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_tables_validation(
-    datasource,
+async def test_advanced_rules_validation(
+    tables_present_in_source,
     advanced_rules,
     expected_validation_result,
     patch_ping,
@@ -573,7 +735,7 @@ async def test_advanced_rules_tables_validation(
     source = await setup_mysql_source()
 
     client = MagicMock()
-    client.get_all_table_names = AsyncMock(side_effect=[datasource.keys()])
+    client.get_all_table_names = AsyncMock(return_value=tables_present_in_source)
 
     source.mysql_client = wrap_mock_client_in_context_manager(client)
 
@@ -696,16 +858,82 @@ def test_parse_tables_string_to_list(tables_string, expected_tables_list):
 
 
 @pytest.mark.parametrize(
-    "row, primary_key_columns, expected_id",
+    "tables, row, primary_key_columns, expected_id",
     [
-        ({"key_1": 1, "key_2": 2}, ["key_1"], f"{TABLE_ONE}_1_"),
-        ({"key_1": 1, "key_2": 2}, ["key_1", "key_2"], f"{TABLE_ONE}_1_2_"),
-        ({"key_1": 1, "key_2": 2}, ["key_1", "key_3"], f"{TABLE_ONE}_1_"),
+        (TABLE_ONE, {"key_1": 1, "key_2": 2}, ["key_1"], f"{TABLE_ONE}_1"),
+        ([TABLE_ONE], {"key_1": 1, "key_2": 2}, ["key_1"], f"{TABLE_ONE}_1"),
+        (
+            [TABLE_ONE, TABLE_TWO],
+            {"key_1": 1, "key_2": 2},
+            ["key_1", "key_2"],
+            f"{TABLE_ONE}_{TABLE_TWO}_1_2",
+        ),
+        (
+            [TABLE_THREE, TABLE_ONE, TABLE_TWO],
+            {"key_1": 1, "key_2": 2},
+            ["key_1", "key_3"],
+            f"{TABLE_ONE}_{TABLE_TWO}_{TABLE_THREE}_1",
+        ),
+        (
+            [TABLE_ONE, TABLE_TWO, TABLE_THREE],
+            {"key_1": 1, "key_2": 2},
+            ["key_1", "key_3"],
+            f"{TABLE_ONE}_{TABLE_TWO}_{TABLE_THREE}_1",
+        ),
     ],
 )
-def test_generate_id(row, primary_key_columns, expected_id):
-    source = create_source(MySqlDataSource)
-
-    row_id = source._generate_id(TABLE_ONE, row, primary_key_columns)
+def test_generate_id(tables, row, primary_key_columns, expected_id):
+    row_id = generate_id(tables, row, primary_key_columns)
 
     assert row_id == expected_id
+
+
+@pytest.mark.parametrize(
+    "row, column_names, primary_key_columns, tables, timestamp, expected_doc",
+    [
+        (
+            (ALICE["id"], ALICE["name"], ALICE["age"]),
+            list(ALICE.keys()),
+            ["id"],
+            TABLE_ONE,
+            TIMESTAMP,
+            {
+                "_id": ANY,
+                "_timestamp": TIMESTAMP,
+                "id": ALICE["id"],
+                "name": ALICE["name"],
+                "age": ALICE["age"],
+                "Table": TABLE_ONE,
+            },
+        ),
+        (
+            # multiple tables, missing timestamp should be replaced by iso_utc()
+            (BOB["id"], BOB["name"], BOB["age"]),
+            list(BOB.keys()),
+            ["id"],
+            [TABLE_ONE, TABLE_TWO],
+            None,
+            {
+                "_id": ANY,
+                "_timestamp": TIME,
+                "id": BOB["id"],
+                "name": BOB["name"],
+                "age": BOB["age"],
+                "Table": [TABLE_ONE, TABLE_TWO],
+            },
+        ),
+    ],
+)
+@freeze_time(TIME)
+def test_row2doc(
+    row, column_names, primary_key_columns, tables, timestamp, expected_doc
+):
+    doc = row2doc(
+        row=row,
+        column_names=column_names,
+        primary_key_columns=primary_key_columns,
+        table=tables,
+        timestamp=timestamp,
+    )
+
+    assert doc == expected_doc

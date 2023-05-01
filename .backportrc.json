@@ -1,13 +1,14 @@
 {
   "targetBranchChoices": [
     { "name": "main", "checked": true },
+    "8.8",
     "8.7",
     "8.6"
   ],
   "fork": false,
   "targetPRLabels": ["backport"],
   "branchLabelMapping": {
-    "^v8.8.0$": "main",
+    "^v8.9.0$": "main",
     "^v(\\d+).(\\d+)(.\\d+)+$": "$1.$2"
   },
   "upstream": "elastic/connectors-python"

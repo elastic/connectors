@@ -256,14 +256,14 @@ class ConfluenceDataSource(BaseDataSource):
             },
             "spaces": {
                 "display": "textarea",
-                "label": "Confluence Space Keys",
+                "label": "Confluence space keys",
                 "order": 7,
                 "type": "list",
                 "value": "*",
             },
             "ssl_enabled": {
                 "display": "toggle",
-                "label": "Enable SSL verification",
+                "label": "Enable SSL",
                 "order": 8,
                 "type": "bool",
                 "value": False,
@@ -278,7 +278,7 @@ class ConfluenceDataSource(BaseDataSource):
             "retry_count": {
                 "default_value": 3,
                 "display": "numeric",
-                "label": "Maximum retries per request",
+                "label": "Retries per request",
                 "order": 10,
                 "required": False,
                 "type": "int",
