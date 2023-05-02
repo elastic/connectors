@@ -162,6 +162,28 @@ async def test_mem_queue(patch_logger):
     assert when[1] - when[0] > 0.1
 
 
+@pytest.mark.asyncio
+async def test_mem_queue_too_large_item():
+    """
+    When an item is added to the queue that is larger than the queue capacity then the item is discarded
+
+    Imagine that maximum queue size is 5MB and an item of 6MB is added inside.
+    Before the logic was to declare the queue full in this case, but it becomes deadlocked - queue is
+    trying to free some space up to fit a 6MB item, but it's not possible.
+
+    After a fix the item is discarded with a log line stating that the document is skipped.
+    """
+    queue = MemQueue(maxmemsize=1, refresh_interval=0.1, refresh_timeout=0.5)
+
+    # Does not raise an error - it'll be full after the item is added inside
+    await queue.put("lala" * 1000)
+
+    with pytest.raises(asyncio.QueueFull) as e:
+        await queue.put("x")
+
+    assert e is not None
+
+
 def test_get_base64_value():
     """This test verify get_base64_value method and convert encoded data into base64"""
     expected_result = get_base64_value("dummy".encode("utf-8"))
