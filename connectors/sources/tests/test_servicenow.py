@@ -333,3 +333,248 @@ async def test_filter_services_with_exception():
     ):
         with pytest.raises(Exception):
             await source.servicenow_client.filter_services()
+
+
+@pytest.mark.asyncio
+async def test_get_docs_with_skipping():
+    source = create_source(ServiceNowDataSource)
+
+    response_list = []
+    with mock.patch(
+        "connectors.sources.servicenow.DEFAULT_SERVICE_NAMES", ("incident",)
+    ):
+        with mock.patch.object(
+            ServiceNowClient,
+            "_api_call",
+            side_effect=[
+                AsyncIterator(
+                    [
+                        [
+                            {
+                                "sys_id": "id_1",
+                                "sys_updated_on": "1212-12-12 12:12:12",
+                                "sys_class_name": "incident",
+                                "sys_user": "admin",
+                                "type": "table_record",
+                            }
+                        ]
+                    ]
+                ),
+                Exception("Something went wrong"),
+            ],
+        ):
+            async for response in source.get_docs():
+                response_list.append(response)
+
+    assert (
+        {
+            "_id": "id_1",
+            "_timestamp": "1212-12-12T12:12:12",
+            "sys_id": "id_1",
+            "sys_updated_on": "1212-12-12 12:12:12",
+            "sys_class_name": "incident",
+            "sys_user": "admin",
+            "type": "table_record",
+        },
+        None,
+    ) in response_list
+
+
+@pytest.mark.asyncio
+async def test_get_docs_with_configured_services():
+    source = create_source(ServiceNowDataSource)
+    source.servicenow_client.services = ["custom"]
+
+    response_list = []
+    with mock.patch.object(
+        ServiceNowClient, "filter_services", return_value=(["custom"], [])
+    ):
+        with mock.patch.object(
+            ServiceNowClient,
+            "_api_call",
+            side_effect=[
+                AsyncIterator(
+                    [
+                        [
+                            {
+                                "sys_id": "id_1",
+                                "sys_updated_on": "1212-12-12 12:12:12",
+                                "sys_class_name": "custom",
+                                "sys_user": "user1",
+                                "type": "table_record",
+                            },
+                        ]
+                    ]
+                ),
+                AsyncIterator(
+                    [
+                        [
+                            {
+                                "sys_id": "id_2",
+                                "table_sys_id": "id_1",
+                                "sys_updated_on": "1212-12-12 12:12:12",
+                                "sys_class_name": "custom",
+                                "sys_user": "user1",
+                                "type": "attachment_metadata",
+                            },
+                        ]
+                    ]
+                ),
+            ],
+        ):
+            async for response in source.get_docs():
+                response_list.append(response)
+
+    assert (
+        {
+            "_id": "id_1",
+            "_timestamp": "1212-12-12T12:12:12",
+            "sys_id": "id_1",
+            "sys_updated_on": "1212-12-12 12:12:12",
+            "sys_class_name": "custom",
+            "sys_user": "user1",
+            "type": "table_record",
+        },
+        None,
+    ) in response_list
+
+
+@pytest.mark.asyncio
+async def test_fetch_attachment_content_with_doit():
+    source = create_source(ServiceNowDataSource)
+
+    with mock.patch.object(
+        ServiceNowClient,
+        "_api_call",
+        return_value=AsyncIterator(
+            [
+                MockResponse(
+                    res=b"Attachment Content",
+                    headers={},
+                )
+            ]
+        ),
+    ):
+        response = await source.servicenow_client.fetch_attachment_content(
+            metadata={
+                "id": "id_1",
+                "_timestamp": "1212-12-12 12:12:12",
+                "file_name": "file_1.txt",
+                "size_bytes": "2048",
+            },
+            doit=True,
+        )
+
+    assert response == {
+        "_id": "id_1",
+        "_timestamp": "1212-12-12 12:12:12",
+        "_attachment": "QXR0YWNobWVudCBDb250ZW50",
+    }
+
+
+@pytest.mark.asyncio
+async def test_fetch_attachment_content_without_doit():
+    source = create_source(ServiceNowDataSource)
+
+    with mock.patch.object(
+        ServiceNowClient,
+        "_api_call",
+        return_value=AsyncIterator(
+            [
+                MockResponse(
+                    res=b"Attachment Content",
+                    headers={},
+                )
+            ]
+        ),
+    ):
+        response = await source.servicenow_client.fetch_attachment_content(
+            metadata={
+                "id": "id_1",
+                "_timestamp": "1212-12-12 12:12:12",
+                "file_name": "file_1.txt",
+                "size_bytes": "2048",
+            }
+        )
+
+    assert response is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_attachment_content_with_exception():
+    source = create_source(ServiceNowDataSource)
+
+    with mock.patch.object(
+        ServiceNowClient,
+        "_api_call",
+        side_effect=Exception("Something went wrong"),
+    ):
+        response = await source.servicenow_client.fetch_attachment_content(
+            metadata={
+                "id": "id_1",
+                "_timestamp": "1212-12-12 12:12:12",
+                "file_name": "file_1.txt",
+                "size_bytes": "2048",
+            },
+            doit=True,
+        )
+
+    assert response is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_attachment_content_with_unsupported_file_type_then_skip():
+    source = create_source(ServiceNowDataSource)
+
+    with mock.patch.object(
+        ServiceNowClient,
+        "_api_call",
+        return_value=AsyncIterator(
+            [
+                MockResponse(
+                    res=b"Attachment Content",
+                    headers={},
+                )
+            ]
+        ),
+    ):
+        response = await source.servicenow_client.fetch_attachment_content(
+            metadata={
+                "id": "id_1",
+                "_timestamp": "1212-12-12 12:12:12",
+                "file_name": "file_1.png",
+                "size_bytes": "2048",
+            },
+            doit=True,
+        )
+
+    assert response is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_attachment_content_with_unsupported_file_size_then_skip():
+    source = create_source(ServiceNowDataSource)
+
+    with mock.patch.object(
+        ServiceNowClient,
+        "_api_call",
+        return_value=AsyncIterator(
+            [
+                MockResponse(
+                    res=b"Attachment Content",
+                    headers={},
+                )
+            ]
+        ),
+    ):
+        response = await source.servicenow_client.fetch_attachment_content(
+            metadata={
+                "id": "id_1",
+                "_timestamp": "1212-12-12 12:12:12",
+                "file_name": "file_1.txt",
+                "size_bytes": "10485761",
+            },
+            doit=True,
+        )
+
+    assert response is None
