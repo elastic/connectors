@@ -23,6 +23,7 @@ from connectors.byoc import (
     Filtering,
     JobStatus,
     JobTriggerMethod,
+    MalformedConfigurationError,
     Pipeline,
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
@@ -731,7 +732,7 @@ class Banana(BaseDataSource):
 
     @classmethod
     def get_default_configuration(cls):
-        return {"one": {"value": None}}
+        return {"one": {"value": None}, "two": {"value": None}}
 
 
 @pytest.mark.asyncio
@@ -748,6 +749,7 @@ async def test_connector_prepare_different_id():
     config = {
         "connector_id": "2",
         "service_type": "banana",
+        "sources": {},
     }
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
@@ -768,12 +770,44 @@ async def test_connector_prepare_with_prepared_connector():
         "_primary_term": primary_term,
         "_source": {
             "service_type": "banana",
-            "configuration": {"user": {}},
+            "configuration": {
+                "one": {
+                    "default_value": None,
+                    "depends_on": [],
+                    "display": "text",
+                    "label": "",
+                    "options": [],
+                    "order": 1,
+                    "required": True,
+                    "sensitive": False,
+                    "tooltip": None,
+                    "type": "str",
+                    "ui_restrictions": [],
+                    "validations": [],
+                    "value": "foobar",
+                },
+                "two": {
+                    "default_value": None,
+                    "depends_on": [],
+                    "display": "text",
+                    "label": "",
+                    "options": [],
+                    "order": 1,
+                    "required": True,
+                    "sensitive": False,
+                    "tooltip": None,
+                    "type": "str",
+                    "ui_restrictions": [],
+                    "validations": [],
+                    "value": "foobar",
+                },
+            },
         },
     }
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
+        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
     }
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
@@ -781,6 +815,91 @@ async def test_connector_prepare_with_prepared_connector():
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     await connector.prepare(config)
     index.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare_with_connector_missing_field_raises_error():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {
+            "service_type": "banana",
+            "configuration": {"two": "value"},
+        },
+    }
+    config = {
+        "connector_id": doc_id,
+        "service_type": "banana",
+        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    with pytest.raises(MalformedConfigurationError):
+        await connector.prepare(config)
+        index.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_prepare_with_connector_missing_field_properties_creates_them():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {
+            "service_type": "banana",
+            "configuration": {
+                "one": {"value": "hoho", "extra_property": "hehe"},
+                "two": {
+                    "default_value": None,
+                    "depends_on": [],
+                    "display": "text",
+                    "label": "",
+                    "options": [],
+                    "order": 1,
+                    "required": True,
+                    "sensitive": False,
+                    "tooltip": None,
+                    "type": "str",
+                    "ui_restrictions": [],
+                    "validations": [],
+                    "value": "foobar",
+                },
+            },
+        },
+    }
+    config = {
+        "connector_id": doc_id,
+        "service_type": "banana",
+        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+
+    expected = Banana.get_simple_configuration()
+
+    # only updates fields with missing properties
+    expected["one"]["value"] = "hoho"
+    expected["one"]["extra_property"] = "hehe"
+    del expected["two"]
+
+    await connector.prepare(config)
+    index.update.assert_called_once_with(
+        doc_id=doc_id,
+        doc={"configuration": expected},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
 
 
 @pytest.mark.asyncio
@@ -796,6 +915,7 @@ async def test_connector_prepare_with_service_type_not_configured():
     }
     config = {
         "connector_id": doc_id,
+        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
     }
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)

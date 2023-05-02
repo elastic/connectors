@@ -29,7 +29,9 @@ from connectors.utils import (
     MemQueue,
     RetryStrategy,
     convert_to_b64,
+    deep_merge_dicts,
     evaluate_timedelta,
+    filter_nested_dict_by_keys,
     get_base64_value,
     get_pem_format,
     get_size,
@@ -173,12 +175,24 @@ async def test_mem_queue():
 
 @pytest.mark.asyncio
 async def test_mem_queue_too_large_item():
-    queue = MemQueue(maxmemsize=10, refresh_interval=0, refresh_timeout=1)
+    """
+    When an item is added to the queue that is larger than the queue capacity then the item is discarded
+
+    Imagine that maximum queue size is 5MB and an item of 6MB is added inside.
+    Before the logic was to declare the queue full in this case, but it becomes deadlocked - queue is
+    trying to free some space up to fit a 6MB item, but it's not possible.
+
+    After a fix the item is discarded with a log line stating that the document is skipped.
+    """
+    queue = MemQueue(maxmemsize=1, refresh_interval=0.1, refresh_timeout=0.5)
+
+    # Does not raise an error - it'll be full after the item is added inside
+    await queue.put("lala" * 1000)
 
     with pytest.raises(asyncio.QueueFull) as e:
-        await queue.put_nowait("lala" * 1000)
+        await queue.put("x")
 
-    assert e.match("Queue is full")
+    assert e is not None
 
 
 def test_get_base64_value():
@@ -494,3 +508,61 @@ def test_truncate_id():
 )
 def test_has_duplicates(_list, should_have_duplicate):
     assert has_duplicates(_list) == should_have_duplicate
+
+
+@pytest.mark.parametrize(
+    "key_list, source_dict, expected_dict",
+    [
+        (["one", "two"], {"foo": {"one": 1, "two": 2}}, {}),
+        (
+            ["one", "two"],
+            {"foo": {"one": 1, "two": 2}, "bar": {"one": 1, "three": 3}},
+            {"bar": {"one": 1, "three": 3}},
+        ),
+        (
+            ["one", "two"],
+            {"foo": {}},
+            {"foo": {}},
+        ),
+        (
+            [],
+            {"foo": {"one": 1, "two": 2}, "bar": {"one": 1, "three": 3}},
+            {},
+        ),
+    ],
+)
+def test_filter_nested_dict_by_keys(key_list, source_dict, expected_dict):
+    assert filter_nested_dict_by_keys(key_list, source_dict) == expected_dict
+
+
+@pytest.mark.parametrize(
+    "base_dict, new_dict, expected_dict",
+    [
+        (
+            {"foo": {"one": 1, "two": 2}, "bar": {"one": 1, "two": 2}},
+            {"foo": {"one": 10}, "bar": {"three": 30}},
+            {"foo": {"one": 10, "two": 2}, "bar": {"one": 1, "two": 2, "three": 30}},
+        ),
+        (
+            {"foo": {}, "bar": {}},
+            {"foo": {"one": 1}, "bar": {"three": 3}},
+            {"foo": {"one": 1}, "bar": {"three": 3}},
+        ),
+        (
+            {
+                "foo": {"level2": {"level3": "fafa"}},
+                "bar": {"level2": {"level3": "fafa"}},
+            },
+            {
+                "foo": {"level2": {"level3": "foofoo"}},
+                "bar": {"level2": {"level4": "haha"}},
+            },
+            {
+                "foo": {"level2": {"level3": "foofoo"}},
+                "bar": {"level2": {"level3": "fafa", "level4": "haha"}},
+            },
+        ),
+    ],
+)
+def test_deep_merge_dicts(base_dict, new_dict, expected_dict):
+    assert deep_merge_dicts(base_dict, new_dict) == expected_dict

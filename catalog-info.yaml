@@ -1,0 +1,56 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/catalog-info.json
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: connectors-python
+
+spec:
+  type: service
+  owner: group:ingestion-team
+  system: buildkite
+  lifecycle: production
+
+---
+apiVersion: buildkite.elastic.dev/v1
+kind: Pipeline
+metadata:
+  description: Connectors Service in Python Nightly Tests
+  name: connectors-python-nightly
+spec:
+  pipeline_file: .buildkite/nightly.yml
+  provider_settings:
+    trigger_mode: none
+  repository: elastic/connectors-python
+  schedules:
+    Daily 8_7:
+      branch: '8.7'
+      cronline: '@daily'
+      message: Runs daily `8.7` e2e test
+    Daily 8_8:
+      branch: '8.8'
+      cronline: '@daily'
+      message: Runs daily `8.8` e2e test
+    Daily main:
+      branch: main
+      cronline: '@daily'
+      message: Runs daily `main` e2e test
+  teams:
+    everyone:
+      access_level: READ_ONLY
+    ingestion-team: {}
+
+---
+apiVersion: buildkite.elastic.dev/v1
+kind: Pipeline
+metadata:
+  description: Connectors Service in Python
+  name: connectors-python-pr
+spec:
+  pipeline_file: .buildkite/pipeline.yml
+  branch_configuration: main
+  repository: elastic/connectors-python
+  teams:
+    everyone:
+      access_level: READ_ONLY
+    ingestion-team: {}
