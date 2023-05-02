@@ -33,6 +33,7 @@ def _parser():
             "sync",
             "monitor",
             "get_num_docs",
+            "description",
         ],
     )
 
@@ -66,7 +67,7 @@ def _set_sync_now_flag():
 
 def _monitor_service(pid):
     es_client = _es_client()
-    timeout = 10 * 60  # 10 minutes timeout
+    timeout = 20 * 60  # 20 minutes timeout
     try:
         # we should have something like connectorIndex.search()[0].last_synced
         # once we have ConnectorIndex and Connector class ready
@@ -83,12 +84,12 @@ def _monitor_service(pid):
                 if lapsed > timeout:
                     print("Took too long to complete the sync job, give up!")
                 break
-            time.sleep(10)
+            time.sleep(1)
     except Exception as e:
         print(f"Failed to monitor the sync job. Something bad happened: {e}")
     finally:
         # the process should always be killed, no matter the monitor succeeds, times out or raises errors.
-        os.kill(pid, signal.SIGTERM)
+        os.kill(pid, signal.SIGINT)
         es_client.close()
 
 
@@ -136,6 +137,10 @@ def main(args=None):
                     print("1500")
                 case _:
                     print("3000")
+        elif args.action == "description":
+            print(
+                f'Running an e2e test for {args.name} with a {os.environ.get("DATA_SIZE", "medium")} corpus.'
+            )
         else:
             print(
                 f"Fixture {args.name} does not have an {args.action} action, skipping"
