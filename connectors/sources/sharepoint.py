@@ -295,7 +295,12 @@ class SharepointClient:
 
                 if getattr(exception, "status", None) == 429:
                     retry_after = int(
-                        exception.headers.get("Retry-After", 0)  # pyright: ignore
+                        exception.headers.get(  # pyright: ignore
+                            "Retry-After", RETRY_INTERVAL
+                        )
+                    )
+                    logger.warning(
+                        f"Rate limit exceeds. Retrying after {retry_after} seconds."
                     )
                 elif isinstance(
                     exception,
