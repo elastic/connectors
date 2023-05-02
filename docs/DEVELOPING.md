@@ -125,7 +125,7 @@ To perform E2E testing for the Confluence connector, run the following command:
 $ make ftest NAME=confluence
 ```
 
-ℹ️ Users can generate the performance report using an argument i.e. `PERF8=True`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
+ℹ️ Users can generate the performance report using an argument i.e. `PERF8=yes`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
 
 ℹ️ Users do not need to have a running Elasticsearch instance or a Confluence source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Confluence source using the docker image.
 
@@ -261,7 +261,7 @@ To perform E2E testing for Jira connector, run the following command:
 $ make ftest NAME=jira
 ```
 
-ℹ️ Users can generate the performance report using an argument i.e. `PERF8=True`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
+ℹ️ Users can generate the performance report using an argument i.e. `PERF8=yes`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
 
 ℹ️ Users do not need to have a running Elasticsearch instance or a Jira source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Jira source using the docker image.
 
