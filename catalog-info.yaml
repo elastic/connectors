@@ -13,9 +13,9 @@ metadata:
     github.com/project-slug: "elastic/connectors-python"
     github.com/team-slug: "elastic/ingestion-team"
     buildkite.com/project-slug: "elastic/connectors-python"
-tags:
-  - "python"
-  - "buildkite"
+  tags:
+    - "python"
+    - "buildkite"
 spec:
   type: "service"
   lifecycle: "production"
