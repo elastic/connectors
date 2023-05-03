@@ -212,8 +212,16 @@ class MemQueue(asyncio.Queue):
 
     def full(self, next_item_size=0):
         full_by_numbers = super().full()
+
         if full_by_numbers:
             return True
+
+        # Fun stuff here: if we don't have anything in-memory
+        # then it's okay to put any object inside - it's already in memory
+        # so we won't overload memory too much
+        if self._current_memsize == 0:
+            return False
+
         return self._current_memsize + next_item_size >= self.maxmemsize
 
     async def _putter_timeout(self, putter):
