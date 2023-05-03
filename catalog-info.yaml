@@ -32,7 +32,7 @@ spec:
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
 metadata:
-  name: "connectors-python"
+  name: "connectors-python-main-pipeline"
   description: "Lints and tests Python Connectors"
   links:
     - title: "connectors-python Main Pipeline"
