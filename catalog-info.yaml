@@ -1,6 +1,7 @@
 ################################################################################
 ###################### catalog-info for connectors-python ######################
 # Declare a Backstage Component for connectors-python
+# When doing changes validate them using https://backstage.elastic.dev/entity-validation
 ---
 # yaml-language-server: $schema=https://json.schemastore.org/catalog-info.json
 apiVersion: "backstage.io/v1alpha1"
