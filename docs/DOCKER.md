@@ -8,11 +8,11 @@ Windows users might have to run them in [Unix Subsystem](https://learn.microsoft
 
 Follow these steps:
 
-1. 
-2. [Create directory](#1-create-a-directory-to-be-mounted-into-the-docker-image)
-2. [Download config file](#2-download-sample-configuration-file-from-this-repository-into-newly-created-directory)
-3. [Update config file](#3-update-the-configuration-file-for-your-on-prem-connector)
-4. [Run the docker image](#4-run-the-docker-image)
+1. [Create network](#1-create-a-docker-network)
+2. [Create directory](#2-create-a-directory-to-be-mounted-into-the-docker-image)
+3. [Download config file](#3-download-sample-configuration-file-from-this-repository-into-newly-created-directory)
+4. [Update config file](#4-update-the-configuration-file-for-your-on-prem-connectorhttpswwwelasticcoguideenenterprise-searchcurrentbuild-connectorhtmlbuild-connector-usage)
+5. [Run the docker image](#5-run-the-docker-image)
 
 ## 1. Create a Docker network.
 
