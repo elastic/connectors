@@ -247,7 +247,7 @@ class SharepointClient:
             "_timestamp": document.get("_timestamp"),
             "_attachment": attachment_content,
         }
-    
+
     def _get_retry_after(self, retry, exception):
         """verify retry for SharePoint Server/Online
         Args:
@@ -337,6 +337,7 @@ class SharepointClient:
                 )
                 logger.debug(f"Retrying after {retry_seconds} seconds")
                 await self._sleeps.sleep(retry_seconds)
+
     async def _fetch_data_with_next_url(self, site_url, list_id, param_name):
         """Invokes a GET call to the SharePoint Server/Online for calling list and drive item API.
 
