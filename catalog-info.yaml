@@ -7,7 +7,7 @@
 apiVersion: "backstage.io/v1alpha1"
 kind: "Component"
 metadata:
-  name: "connectors-python"
+  name: "elastic-connectors-python"
   description: "Ingestion Service hosting connectors that can be used to ingest data into Elasticsearch"
   annotations:
     backstage.io/source-location: "url:https://github.com/elastic/connectors-python/"
@@ -32,7 +32,7 @@ spec:
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
 metadata:
-  name: "connectors-python-main-pipeline"
+  name: "connectors-python"
   description: "Lints and tests Python Connectors"
   links:
     - title: "connectors-python Main Pipeline"
