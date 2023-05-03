@@ -84,12 +84,34 @@ def future_with_result(result):
     return future
 
 
-def wrap_mock_client_in_context_manager(mock_client):
+def as_async_context_manager_mock(obj):
     context_manager = MagicMock()
-    context_manager.__aenter__.return_value = mock_client
+    context_manager.__aenter__.return_value = obj
     context_manager.__aexit__.return_value = None
 
     return MagicMock(return_value=context_manager)
+
+
+def mocked_mysql_client(
+    pk_cols=None,
+    table_cols=None,
+    last_update_times=None,
+    documents=None,
+    custom_query=False,
+):
+    client = MagicMock()
+
+    client.get_primary_key_column_names = AsyncMock(side_effect=pk_cols)
+    client.get_last_update_time = AsyncMock(side_effect=last_update_times)
+
+    if custom_query:
+        client.get_column_names_for_query = AsyncMock(return_value=table_cols)
+        client.yield_rows_for_query = AsyncIterator(documents)
+    else:
+        client.get_column_names_for_table = AsyncMock(return_value=table_cols)
+        client.yield_rows_for_table = AsyncIterator(documents)
+
+    return client
 
 
 @pytest.fixture
@@ -417,27 +439,28 @@ async def test_client_ping_negative(patch_logger):
             await client.ping()
 
 
+@freeze_time(TIME)
 @pytest.mark.asyncio
 async def test_fetch_documents(patch_connection_pool):
-    last_update_time = "2023-01-18 17:18:56"
     primary_key_col = "pk"
     column = "column"
 
     document = {
         "Table": "table_name",
         "_id": "table_name_",
-        "_timestamp": last_update_time,
+        "_timestamp": TIME,
         f"table_name_{column}": "table1",
     }
 
-    client = MagicMock()
-    client.get_primary_key_column_names = AsyncMock(side_effect=[primary_key_col])
-    client.get_last_update_time = AsyncMock(return_value=last_update_time)
-    client.get_column_names_for_table = AsyncMock(return_value=[column])
-    client.yield_rows_for_table = AsyncIterator([document])
-
     source = await setup_mysql_source(DATABASE)
-    source.mysql_client = wrap_mock_client_in_context_manager(client)
+    source.mysql_client = as_async_context_manager_mock(
+        mocked_mysql_client(
+            pk_cols=[primary_key_col],
+            table_cols=[column],
+            last_update_times=[TIME],
+            documents=[document],
+        )
+    )
 
     document_list = []
     async for document in source.fetch_documents(tables=[TABLE_ONE]):
@@ -446,31 +469,33 @@ async def test_fetch_documents(patch_connection_pool):
     assert document in document_list
 
 
+@freeze_time(TIME)
 @pytest.mark.asyncio
 async def test_fetch_documents_when_used_custom_query_then_sort_pk_cols(
     patch_connection_pool, patch_row2doc
 ):
-    last_update_time = "2023-01-18 17:18:56"
     primary_key_col = ["cd", "ab"]
     column = "column"
 
     document = {
         "Table": "table_name",
         "_id": "table_name_",
-        "_timestamp": last_update_time,
+        "_timestamp": TIME,
         f"table_name_{column}": "table1",
     }
 
     patch_row2doc.return_value = document
 
-    client = MagicMock()
-    client.get_primary_key_column_names = AsyncMock(side_effect=[primary_key_col])
-    client.get_last_update_time = AsyncMock(return_value=last_update_time)
-    client.get_column_names_for_query = AsyncMock(return_value=[column])
-    client.yield_rows_for_query = AsyncIterator([document])
-
     source = await setup_mysql_source(DATABASE)
-    source.mysql_client = wrap_mock_client_in_context_manager(client)
+    source.mysql_client = as_async_context_manager_mock(
+        mocked_mysql_client(
+            pk_cols=[primary_key_col],
+            table_cols=[column],
+            last_update_times=[TIME],
+            documents=[document],
+            custom_query=True,
+        )
+    )
 
     document_list = []
     async for document in source.fetch_documents(
@@ -483,14 +508,64 @@ async def test_fetch_documents_when_used_custom_query_then_sort_pk_cols(
         "row": {
             "Table": "table_name",
             "_id": "table_name_",
-            "_timestamp": "2023-01-18 17:18:56",
+            "_timestamp": TIME,
             "table_name_column": "table1",
         },
         "column_names": ["column"],
         # primary key columns are now sorted
         "primary_key_columns": ["ab", "cd"],
         "table": ["table1"],
-        "timestamp": "2023-01-18 17:18:56",
+        "timestamp": TIME,
+    }
+
+
+@freeze_time(TIME)
+@pytest.mark.asyncio
+async def test_fetch_documents_when_custom_query_used_and_update_time_none(
+    patch_connection_pool, patch_row2doc
+):
+    primary_key_col = ["cd", "ab"]
+    column = "column"
+
+    document = {
+        "Table": "table_name",
+        "_id": "table_name_",
+        "_timestamp": TIME,
+        f"table_name_{column}": "table1",
+    }
+
+    patch_row2doc.return_value = document
+
+    source = await setup_mysql_source(DATABASE)
+    source.mysql_client = as_async_context_manager_mock(
+        mocked_mysql_client(
+            pk_cols=[primary_key_col],
+            table_cols=[column],
+            last_update_times=[None],
+            documents=[document],
+            custom_query=True,
+        )
+    )
+
+    document_list = []
+    async for document in source.fetch_documents(
+        tables=[TABLE_ONE], query="SELECT * FROM *"
+    ):
+        document_list.append(document)
+
+    assert document in document_list
+    assert patch_row2doc.call_args.kwargs == {
+        "row": {
+            "Table": "table_name",
+            "_id": "table_name_",
+            "_timestamp": TIME,
+            "table_name_column": "table1",
+        },
+        "column_names": ["column"],
+        "primary_key_columns": ["ab", "cd"],
+        "table": ["table1"],
+        # Should be called with an empty timestamp without failing on a comparison needed for max(...)
+        "timestamp": None,
     }
 
 
@@ -737,7 +812,7 @@ async def test_advanced_rules_validation(
     client = MagicMock()
     client.get_all_table_names = AsyncMock(return_value=tables_present_in_source)
 
-    source.mysql_client = wrap_mock_client_in_context_manager(client)
+    source.mysql_client = as_async_context_manager_mock(client)
 
     validation_result = await MySQLAdvancedRulesValidator(source).validate(
         advanced_rules
@@ -755,7 +830,7 @@ async def test_get_tables_when_wildcard_configured_then_fetch_all_tables(tables)
     client = MagicMock()
     client.get_all_table_names = AsyncMock(return_value="table")
 
-    source.mysql_client = wrap_mock_client_in_context_manager(client)
+    source.mysql_client = as_async_context_manager_mock(client)
 
     await source.get_tables_to_fetch()
 
