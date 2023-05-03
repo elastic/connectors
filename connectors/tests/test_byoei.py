@@ -545,9 +545,7 @@ async def test_get_docs(
         # instances
         doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
 
-        fetcher = await setup_fetcher(
-            basic_rule_engine, queue, sync_rules_enabled
-        )
+        fetcher = await setup_fetcher(basic_rule_engine, queue, sync_rules_enabled)
 
         await fetcher.get_docs(doc_generator)
 
