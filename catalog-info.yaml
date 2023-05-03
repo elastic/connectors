@@ -32,7 +32,7 @@ spec:
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
 metadata:
-  name: "connectors-python-main-pipeline"
+  name: "connectors-python"
   description: "Lints and tests Python Connectors"
   links:
     - title: "connectors-python Main Pipeline"
@@ -62,7 +62,7 @@ spec:
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
 metadata:
-  name: "connectors-python-nightly-pipeline"
+  name: "connectors-python-nightly"
   description: "Nightly Connector Service Tests"
   links:
     - title: "connectors-python Nightly Buildkite Jobs"
