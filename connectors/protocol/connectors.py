@@ -740,8 +740,8 @@ class Connector(ESDocument):
         if self.id != configured_connector_id:
             # check configuration for native and other peripheral connectors
             if self.service_type not in config["sources"]:
-                logger.debug(
-                    f"Peripheral connector {self.id} has invalid service type {self.service_type}, cannot check configuration formatting."
+                self.log_debug(
+                    f"Peripheral connector has invalid service type {self.service_type}, cannot check configuration formatting."
                 )
                 return
 
@@ -752,9 +752,7 @@ class Connector(ESDocument):
             return
 
         if not configured_service_type:
-            logger.error(
-                f"Service type is not configured for connector {configured_connector_id}"
-            )
+            self.log_error("Service type is not configured")
             raise ServiceTypeNotConfiguredError("Service type is not configured.")
 
         if configured_service_type not in config["sources"]:
@@ -770,9 +768,7 @@ class Connector(ESDocument):
         doc = {}
         if self.service_type is None:
             doc["service_type"] = configured_service_type
-            logger.debug(
-                f"Populated service type {configured_service_type} for connector {self.id}"
-            )
+            self.log_debug(f"Populated service type {configured_service_type}")
 
         if self.configuration.is_empty():
             fqn = config["sources"][configured_service_type]
@@ -850,7 +846,7 @@ class Connector(ESDocument):
         try:
             source_klass = get_source_klass(fqn)
         except Exception as e:
-            logger.critical(e, exc_info=True)
+            self.log_critical(e, exc_info=True)
             raise DataSourceError(
                 f"Could not instantiate {fqn} for {service_type}"
             ) from e
@@ -881,8 +877,8 @@ class Connector(ESDocument):
         if not configs_missing_properties:
             return
 
-        logger.info(
-            f'Connector for {service_type}(id: "{self.id}") is missing configuration field properties. Generating defaults.'
+        self.log_info(
+            f"Connector for {service_type} is missing configuration field properties. Generating defaults."
         )
 
         # filter the default config by what fields we want to update, then merge the actual config into it
