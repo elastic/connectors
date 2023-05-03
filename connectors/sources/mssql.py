@@ -96,7 +96,7 @@ class MSSQLDataSource(GenericBaseDataSource):
                 },
                 "ssl_ca": {
                     "depends_on": [{"field": "ssl_enabled", "value": True}],
-                    "label": "Certificate data",
+                    "label": "SSL certificate",
                     "order": 11,
                     "type": "str",
                     "value": "",
