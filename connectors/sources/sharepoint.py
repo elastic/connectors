@@ -247,6 +247,26 @@ class SharepointClient:
             "_timestamp": document.get("_timestamp"),
             "_attachment": attachment_content,
         }
+    
+    def _get_retry_after(self, retry, exception):
+        """verify retry for SharePoint Server/Online
+        Args:
+            retry (int): Number of retry count.
+            exception(Exception/ClientResponseError/ServerDisconnectedError): Exception instance
+        Raises:
+            Exception: An instance of an Exception class.
+        Returns:
+            retry: Retry count
+            retry_seconds: Retry seconds
+        """
+        if retry > self.retry_count:
+            raise exception
+        logger.warning(
+            f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
+        )
+        retry += 1
+        retry_seconds = RETRY_INTERVAL**retry
+        return retry, retry_seconds
 
     async def _api_call(self, url_name, url="", **url_kwargs):
         """Make an API call to the SharePoint Server/Online
@@ -283,40 +303,40 @@ class SharepointClient:
                     else:
                         yield await result.json()
                     break
-            except Exception as exception:
-                if retry > self.retry_count:
-                    raise exception
-                logger.warning(
-                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
+            except ClientResponseError as exception:
+                retry, retry_seconds = self._get_retry_after(
+                    retry=retry, exception=exception
                 )
-                retry += 1
-
-                retry_after = RETRY_INTERVAL**retry
-
                 if getattr(exception, "status", None) == 429:
-                    retry_after = int(
-                        exception.headers.get(  # pyright: ignore
-                            "Retry-After", RETRY_INTERVAL
+                    logger.warning("Rate limit exceeded.")
+                    if "Retry-After" not in exception.headers:  # pyright: ignore
+                        logger.warning(
+                            "Exception status is 429 but it doesn't contain Retry-After header"
                         )
+                    retry_seconds = int(
+                        exception.headers.get("Retry-After", 30)  # pyright: ignore
                     )
-                    logger.warning(
-                        f"Rate limit exceeds. Retrying after {retry_after} seconds."
-                    )
-                elif isinstance(
-                    exception,
-                    ClientResponseError,
-                ) and "token has expired" in exception.headers.get(  # pyright: ignore
+                elif "token has expired" in exception.headers.get(  # pyright: ignore
                     "x-ms-diagnostics", ""
                 ):
                     await self._set_access_token()
-                elif isinstance(
-                    exception,
-                    ServerDisconnectedError,
-                ):
-                    await self.close_session()
+                logger.debug(f"Retrying after {retry_seconds} seconds")
+                await self._sleeps.sleep(retry_seconds)
 
-                await self._sleeps.sleep(retry_after)
+            except ServerDisconnectedError as exception:
+                retry, retry_seconds = self._get_retry_after(
+                    retry=retry, exception=exception
+                )
+                await self.close_session()
+                logger.debug(f"Retrying after {retry_seconds} seconds")
+                await self._sleeps.sleep(retry_seconds)
 
+            except Exception as exception:
+                retry, retry_seconds = self._get_retry_after(
+                    retry=retry, exception=exception
+                )
+                logger.debug(f"Retrying after {retry_seconds} seconds")
+                await self._sleeps.sleep(retry_seconds)
     async def _fetch_data_with_next_url(self, site_url, list_id, param_name):
         """Invokes a GET call to the SharePoint Server/Online for calling list and drive item API.
 
