@@ -180,6 +180,10 @@ def run(args):
         print("Cannot use the `list` action with other actions")
         return -1
 
+    if "config" in args.action:
+        print("Cannot use the `config` action with other actions")
+        return -1
+
     loop = get_event_loop(args.uvloop)
     coro = _start_service(args.action, config, loop)
 
