@@ -470,7 +470,7 @@ class GenericBaseDataSource(BaseDataSource):
             raise NotImplementedError
         return (
             map(
-                lambda table: table[0],
+                lambda table: table[0],  # type: ignore
                 await anext(
                     self.execute_query(
                         query=self.queries.all_tables(
