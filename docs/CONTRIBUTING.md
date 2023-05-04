@@ -153,10 +153,14 @@ If you want to add a new connector source, following requirements are mandatory 
 2. implement a class that implements **all methods** described in `connectors.source.BaseDataSource`
 3. add a unit test in [connectors/sources/tests](../connectors/sources/tests) with **+90% coverage**
 4. **declare your connector** in [config.yml](../config.yml) in the `sources` section
-5. **declare your dependencies** in [requirements.txt](../requirements.txt). Make sure you pin these dependencies
-6. make sure you use an **async lib** for your source. If not possible, make sure you don't block the loop
-7. when possible, provide a **docker image** that runs the backend service, so we can test the connector. If you can't provide a docker image, provide the credentials needed to run against an online service.
-8. the **test backend** needs to return more than **10k documents** due to 10k being a default size limit for Elasticsearch pagination. Having more than 10k documents returned from the test backend will help testing connector more deeply
+5. **declare your dependencies** in [requirements.txt](../requirements/framework.txt). Make sure you pin these dependencies
+6. For each dependency you are adding, including indirect dependencies, list all the licences and provide the list in your patch.
+7. make sure you use an **async lib** for your source. If not possible, make sure you don't block the loop
+8. when possible, provide a **docker image** that runs the backend service, so we can test the connector. If you can't provide a docker image, provide the credentials needed to run against an online service.
+9. the **test backend** needs to return more than **10k documents** due to 10k being a default size limit for Elasticsearch pagination. Having more than 10k documents returned from the test backend will help testing connector more deeply
+
+Before you start spending some time developing a connector, you should add an issue and reach out, to get an initial feedback on the
+connector and what libraries it will use. 
 
 ### Enhancements
 
