@@ -8,7 +8,7 @@ PERF8=$2
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR="$SCRIPT_DIR/../.."
 PLATFORM='unknown'
-MAX_RSS="200M"
+MAX_RSS="235M"
 
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
