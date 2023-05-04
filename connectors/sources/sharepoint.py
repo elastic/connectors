@@ -44,15 +44,19 @@ DRIVE_ITEM = "drive_item"
 LIST_ITEM = "list_item"
 ATTACHMENT_DATA = "attachment_data"
 DOCUMENT_LIBRARY = "document_library"
+LIST_BY_TITLE = "list_by_title"
+CLOUD_SELECTED_FIELDS = "Modified,Id,GUID,File,Folder"
+SERVER_SELECTED_FIELDS = "WikiField, Modified,Id,GUID,File,Folder"
 
 URLS = {
     PING: "{host_url}/sites/{site_collections}/_api/web/webs",
     SITES: "{host_url}{parent_site_url}/_api/web/webs?$skip={skip}&$top={top}",
     LISTS: "{host_url}{parent_site_url}/_api/web/lists?$skip={skip}&$top={top}&$expand=RootFolder&$filter=(Hidden eq false)",
     ATTACHMENT: "{host_url}{value}/_api/web/GetFileByServerRelativeUrl('{file_relative_url}')/$value",
-    DRIVE_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$select=Modified,Id,GUID,File,Folder&$expand=File,Folder&$top={top}",
+    DRIVE_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$select={selected_field}&$expand=File,Folder&$top={top}",
     LIST_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$expand=AttachmentFiles&$select=*,FileRef",
     ATTACHMENT_DATA: "{host_url}{parent_site_url}/_api/web/getfilebyserverrelativeurl('{file_relative_url}')",
+    LIST_BY_TITLE: "{host_url}{parent_site_url}/_api/web/lists/getbytitle('Site%20Pages')/items?$select=Title,CanvasContent1,FileLeafRef&$filter=FileLeafRef eq '{filename}'",
 }
 SCHEMA = {
     SITES: {
@@ -238,14 +242,106 @@ class SharepointClient:
             convert_to_b64,
             source=source_file_name,
         )
-        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            attachment_content = (await target_file.read()).strip()
-        await remove(source_file_name)  # pyright: ignore
         return {
             "_id": document.get("id"),
             "_timestamp": document.get("_timestamp"),
-            "_attachment": attachment_content,
+            "_attachment": await self.convert_file_to_b64(source_file_name),
+        }
+
+    async def get_site_page_for_online(self, site_url, filename):
+        """Get metadata of site pages for SharePoint Online
+
+        Args:
+            site_url (str): Site path of sharepoint
+            filename (str): Name of file
+
+        Returns:
+            data: API response
+        """
+        response = await anext(
+            self._api_call(
+                url_name=LIST_BY_TITLE,
+                host_url=self.host_url,
+                parent_site_url=site_url,
+                filename=filename,
+            )
+        )
+        return response["value"][0].get("CanvasContent1")  # pyright: ignore
+
+    async def convert_file_to_b64(self, source_file_name):
+        """This method converts the file content into b64
+        Args:
+            source_file_name: Name of source file
+        Returns:
+            attachment_content: Attachment content in b64
+        """
+        async with aiofiles.open(file=source_file_name) as target_file:
+            # base64 on macOS will add a EOL, so we strip() here
+            attachment_content = (await target_file.read()).strip()
+        try:
+            await remove(source_file_name)  # pyright: ignore
+        except Exception as exception:
+            logger.warning(
+                f"Could not remove file: {source_file_name}. Error: {exception}"
+            )
+        return attachment_content
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_site_pages_content(
+        self, document, site_url, list_response, timestamp=None, doit=False
+    ):
+        """Get content of site pages for SharePoint
+
+        Args:
+            document (dictionary): Modified document.
+            site_url (str): Site path of sharepoint
+            list_response (dict): Dictionary of list item response
+            timestamp (timestamp, optional): Timestamp of item last modified. Defaults to None.
+            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
+
+        Returns:
+            dictionary: Content document with id, timestamp & text.
+        """
+        document_size = int(document["size"])
+        if not (doit and document_size):
+            return
+
+        filename = (
+            document["title"] if document["type"] == "File" else document["file_name"]
+        )
+
+        if document_size > FILE_SIZE_LIMIT:
+            logger.warning(
+                f"File size {document_size} of file {filename} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
+            )
+            return
+
+        source_file_name = ""
+        if self.is_cloud:
+            response_data = await self.get_site_page_for_online(site_url, filename)
+        else:
+            response_data = list_response["WikiField"]
+
+        if response_data is None:
+            return
+
+        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+            await async_buffer.write(bytes(response_data, "utf-8"))
+
+            source_file_name = async_buffer.name
+
+        await asyncio.to_thread(
+            convert_to_b64,
+            source=source_file_name,
+        )
+        return {
+            "_id": document.get("id"),
+            "_timestamp": document.get("_timestamp"),
+            "_attachment": await self.convert_file_to_b64(source_file_name),
         }
 
     async def _api_call(self, url_name, url="", **url_kwargs):
@@ -305,13 +401,16 @@ class SharepointClient:
                 )
                 await self._sleeps.sleep(RETRY_INTERVAL**retry)
 
-    async def _fetch_data_with_next_url(self, site_url, list_id, param_name):
+    async def _fetch_data_with_next_url(
+        self, site_url, list_id, param_name, selected_field=""
+    ):
         """Invokes a GET call to the SharePoint Server/Online for calling list and drive item API.
 
         Args:
             site_url(string): site url to the SharePoint farm.
             list_id(string): Id of list item or drive item.
             param_name(string): parameter name whether it is DRIVE_ITEM, LIST_ITEM.
+            selected_field(string): Select query parameter for drive item.
         Yields:
             Response of the GET call.
         """
@@ -332,6 +431,7 @@ class SharepointClient:
                         list_id=list_id,
                         top=TOP,
                         host_url=self.host_url,
+                        selected_field=selected_field,
                     )
                 )
             response_result = response.get("value", [])  # pyright: ignore
@@ -406,7 +506,7 @@ class SharepointClient:
             site_url(string): Parent site relative path
             file_relative_url(string): Relative url of file
         Returns:
-            attachment_data(dictionary): Attachment metatdata
+            attachment_data(dictionary): Attachment metadata
         """
         return await anext(
             self._api_call(
@@ -417,7 +517,7 @@ class SharepointClient:
             )
         )
 
-    async def get_list_items(self, list_id, site_url, server_relative_url):
+    async def get_list_items(self, list_id, site_url, server_relative_url, **kwargs):
         """This method fetches items from all the lists in a collection.
 
         Args:
@@ -462,18 +562,22 @@ class SharepointClient:
 
                     yield result, file_relative_url
 
-    async def get_drive_items(self, list_id, site_url, server_relative_url):
+    async def get_drive_items(self, list_id, site_url, server_relative_url, **kwargs):
         """This method fetches items from all the drives in a collection.
 
         Args:
             list_id(string): List id.
             site_url(string): Site path.
             server_relative_url(string): Relative url of site
+            kwargs(string): Select query parameter for drive item.
         Yields:
             dictionary: dictionary containing meta-data of the drive item.
         """
         async for drive_items_data in self._fetch_data_with_next_url(
-            site_url=site_url, list_id=list_id, param_name=DRIVE_ITEM
+            site_url=site_url,
+            list_id=list_id,
+            selected_field=kwargs["selected_field"],
+            param_name=DRIVE_ITEM,
         ):
             for result in drive_items_data:
                 file_relative_url = None
@@ -636,7 +740,7 @@ class SharepointDataSource(BaseDataSource):
             )
             raise
 
-    def map_documet_with_schema(
+    def map_document_with_schema(
         self,
         document,
         item,
@@ -675,7 +779,7 @@ class SharepointDataSource(BaseDataSource):
             self.sharepoint_client.host_url, item["RootFolder"]["ServerRelativeUrl"]
         )
 
-        self.map_documet_with_schema(
+        self.map_document_with_schema(
             document=document, item=item, document_type=document_type
         )
         return document
@@ -691,7 +795,7 @@ class SharepointDataSource(BaseDataSource):
         """
         document = {"type": SITES}
 
-        self.map_documet_with_schema(document=document, item=item, document_type=SITES)
+        self.map_document_with_schema(document=document, item=item, document_type=SITES)
         return document
 
     def format_drive_item(
@@ -720,7 +824,7 @@ class SharepointDataSource(BaseDataSource):
                 "type": item_type,
             }
         )
-        self.map_documet_with_schema(
+        self.map_document_with_schema(
             document=document, item=item[item_type], document_type=DRIVE_ITEM
         )
 
@@ -749,7 +853,7 @@ class SharepointDataSource(BaseDataSource):
             }
         )
 
-        self.map_documet_with_schema(
+        self.map_document_with_schema(
             document=document, item=item, document_type=LIST_ITEM
         )
         return document
@@ -774,8 +878,14 @@ class SharepointDataSource(BaseDataSource):
         for site_url in server_relative_url:
             async for list_data in self.sharepoint_client.get_lists(site_url=site_url):
                 for result in list_data:
+                    is_site_page = False
+                    selected_field = CLOUD_SELECTED_FIELDS
                     # if BaseType value is 1 then it's document library else it's a list
                     if result.get("BaseType") == 1:
+                        if result.get("Title") == "Site Pages":
+                            is_site_page = True
+                            if not self.sharepoint_client.is_cloud:
+                                selected_field = SERVER_SELECTED_FIELDS
                         yield self.format_lists(
                             item=result, document_type=DOCUMENT_LIBRARY
                         ), None
@@ -792,15 +902,24 @@ class SharepointDataSource(BaseDataSource):
                         list_id=result.get("Id"),
                         site_url=result.get("ParentWebUrl"),
                         server_relative_url=server_url,
+                        selected_field=selected_field,
                     ):
                         document = format_document(item=item)
 
                         if file_relative_url is None:
                             yield document, None
                         else:
-                            yield document, partial(
-                                self.sharepoint_client.get_content,
-                                document,
-                                file_relative_url,
-                                site_url,
-                            )
+                            if is_site_page:
+                                yield document, partial(
+                                    self.sharepoint_client.get_site_pages_content,
+                                    document,
+                                    site_url,
+                                    item,
+                                )
+                            else:
+                                yield document, partial(
+                                    self.sharepoint_client.get_content,
+                                    document,
+                                    file_relative_url,
+                                    site_url,
+                                )
