@@ -62,20 +62,20 @@ class NASDataSource(BaseDataSource):
                 "value": "abc@123",
             },
             "server_ip": {
-                "label": "IP address",
+                "label": "SMB IP",
                 "order": 3,
                 "type": "str",
                 "value": "127.0.0.1",
             },
             "server_port": {
                 "display": "numeric",
-                "label": "Port",
+                "label": "SMB port",
                 "order": 4,
                 "type": "int",
                 "value": 445,
             },
             "drive_path": {
-                "label": "Shared folder/directory",
+                "label": "SMB path",
                 "order": 5,
                 "type": "str",
                 "value": "Folder1",

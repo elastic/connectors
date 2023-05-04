@@ -65,11 +65,10 @@ class ESIndex(ESClient):
         return resp.body
 
     async def index(self, doc):
-        resp = await self.client.index(index=self.index_name, document=doc)
-        return resp["_id"]
+        return await self.client.index(index=self.index_name, document=doc)
 
     async def update(self, doc_id, doc, if_seq_no=None, if_primary_term=None):
-        await self.client.update(
+        return await self.client.update(
             index=self.index_name,
             id=doc_id,
             doc=doc,
@@ -77,12 +76,20 @@ class ESIndex(ESClient):
             if_primary_term=if_primary_term,
         )
 
-    async def get_all_docs(self, query=None, page_size=DEFAULT_PAGE_SIZE):
+    async def update_by_script(self, doc_id, script):
+        return await self.client.update(
+            index=self.index_name,
+            id=doc_id,
+            script=script,
+        )
+
+    async def get_all_docs(self, query=None, sort=None, page_size=DEFAULT_PAGE_SIZE):
         """
         Lookup for elasticsearch documents using {query}
 
         Args:
             query (dict): Represents an Elasticsearch query
+            sort (list): A list of fields to sort the result
             page_size (int): Number of documents per query
         Returns:
             Iterator
@@ -100,6 +107,7 @@ class ESIndex(ESClient):
                 resp = await self.client.search(
                     index=self.index_name,
                     query=query,
+                    sort=sort,
                     from_=offset,
                     size=page_size,
                     expand_wildcards="hidden",

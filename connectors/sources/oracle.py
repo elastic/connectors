@@ -83,7 +83,7 @@ class OracleDataSource(GenericBaseDataSource):
             {
                 "oracle_protocol": {
                     "display": "dropdown",
-                    "label": "Oracle connection protocol (TCP/TCPS)",
+                    "label": "Oracle connection protocol",
                     "options": [
                         {"label": "TCP", "value": "TCP"},
                         {"label": "TCPS", "value": "TCPS"},
@@ -93,14 +93,18 @@ class OracleDataSource(GenericBaseDataSource):
                     "value": DEFAULT_PROTOCOL,
                 },
                 "oracle_home": {
+                    "default_value": DEFAULT_ORACLE_HOME,
                     "label": "Path of Oracle Service",
                     "order": 10,
+                    "required": False,
                     "type": "str",
                     "value": DEFAULT_ORACLE_HOME,
                 },
                 "wallet_configuration_path": {
-                    "label": "Path of oracle service configuration files",
+                    "default_value": "",
+                    "label": "Path of Oracle Service configuration files",
                     "order": 11,
+                    "required": False,
                     "type": "str",
                     "value": "",
                 },

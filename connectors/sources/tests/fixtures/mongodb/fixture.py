@@ -9,7 +9,7 @@ _SIZES = {"small": 750, "medium": 1500, "large": 3000}
 NUMBER_OF_RECORDS_TO_DELETE = 50
 
 fake = Faker()
-client = MongoClient("mongodb://127.0.0.1:27021")
+client = MongoClient("mongodb://admin:justtesting@127.0.0.1:27021")
 
 
 def setup():

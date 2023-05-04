@@ -117,7 +117,7 @@ class CursorSync:
             return [("2023-02-21T08:37:15+00:00",)]
 
 
-def test_get_configuration(patch_logger):
+def test_get_configuration():
     """Test get_configuration method of GenericBaseDataSource class"""
 
     # Setup
@@ -131,9 +131,9 @@ def test_get_configuration(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_validate_config_valid_fields(patch_logger):
+async def test_validate_config_valid_fields():
     # Setup
-    source = create_source(GenericBaseDataSource)
+    source = create_source(PostgreSQLDataSource)
 
     # Execute
     try:
@@ -146,7 +146,7 @@ async def test_validate_config_valid_fields(patch_logger):
     "field", ["host", "port", "username", "password", "database", "tables"]
 )
 @pytest.mark.asyncio
-async def test_validate_config_missing_fields(field, patch_logger):
+async def test_validate_config_missing_fields(field):
     # Setup
     source = create_source(GenericBaseDataSource)
     with pytest.raises(ConfigurableFieldValueError):
@@ -157,19 +157,7 @@ async def test_validate_config_missing_fields(field, patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_validate_config_port(patch_logger):
-    """Test validate_config method check port"""
-    # Setup
-    source = create_source(GenericBaseDataSource)
-    with pytest.raises(ConfigurableFieldValueError):
-        source.configuration.set_field(name="port", value="abcd")
-
-        # Execute
-        await source.validate_config()
-
-
-@pytest.mark.asyncio
-async def test_validate_config_ssl(patch_logger):
+async def test_validate_config_ssl():
     """Test validate_config method check ssl"""
     # Setup
     source = create_source(PostgreSQLDataSource)
@@ -181,14 +169,14 @@ async def test_validate_config_ssl(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_close(patch_logger):
-    """Test close method"""
+async def test_close():
     source = create_source(GenericBaseDataSource)
+
     await source.close()
 
 
 @pytest.mark.asyncio
-async def test_async_connect_negative(patch_logger):
+async def test_async_connect_negative():
     """Test _async_connect method with negative case"""
     source = create_source(GenericBaseDataSource)
     with patch.object(
@@ -202,7 +190,7 @@ async def test_async_connect_negative(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sync_connect_negative(patch_logger):
+async def test_sync_connect_negative():
     """Test _sync_connect method with negative case"""
     source = create_source(GenericBaseDataSource)
     with patch.object(
@@ -216,7 +204,7 @@ async def test_sync_connect_negative(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_execute_query_negative_for_internal_client_error(patch_logger):
+async def test_execute_query_negative_for_internal_client_error():
     """Test _execute_query method with negative case"""
     source = create_source(GenericBaseDataSource)
     with patch.object(
@@ -233,7 +221,7 @@ async def test_execute_query_negative_for_internal_client_error(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_fetch_documents_negative(patch_logger):
+async def test_fetch_documents_negative():
     """Test fetch_documents method with negative case"""
     source = create_source(GenericBaseDataSource)
     with patch.object(
@@ -270,7 +258,7 @@ async def test_execute_query_negative(patch_default_wait_multiplier):
 
 
 @pytest.mark.asyncio
-async def test_ping(patch_logger):
+async def test_ping():
     # Setup
     source = create_source(GenericBaseDataSource)
     source._create_engine = Mock()
@@ -282,7 +270,7 @@ async def test_ping(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_ping_negative(patch_logger):
+async def test_ping_negative():
     """Test ping method of GenericBaseDataSource class when connection is not established"""
     # Setup
     source = create_source(GenericBaseDataSource)
@@ -317,6 +305,20 @@ async def test_fetch_rows_with_zero_table():
         assert doc == []
         with pytest.raises(Exception):
             await anext(source.execute_query("select 1+1"))
+
+
+@pytest.mark.asyncio
+async def test_fetch_rows_with_msdb():
+    # Setup
+    source = create_source(GenericBaseDataSource)
+    source._create_engine = Mock()
+    source.queries = Mock()
+    source.execute_query = Mock(return_value=AsyncIterator([[]]))
+    source.database = "msdb"
+
+    # Execute and Assert
+    async for doc in source.fetch_rows():
+        assert doc == []
 
 
 @pytest.mark.parametrize(

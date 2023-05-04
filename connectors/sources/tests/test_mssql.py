@@ -7,12 +7,13 @@
 from unittest.mock import patch
 
 import pytest
+from freezegun import freeze_time
 
 from connectors.sources.mssql import MSSQLDataSource, MSSQLQueries
 from connectors.sources.tests.support import create_source
 from connectors.sources.tests.test_generic_database import ConnectionSync
 
-MSSQL_CONNECTION_STRING = "mssql+pyodbc://admin:Password_123@127.0.0.1:9090/xe?TrustServerCertificate=yes&driver=ODBC+Driver+18+for+SQL+Server"
+MSSQL_CONNECTION_STRING = "mssql+pytds://admin:Password_123@127.0.0.1:9090/xe"
 
 
 class MockEngine:
@@ -27,9 +28,11 @@ class MockEngine:
         return ConnectionSync(MSSQLQueries())
 
 
+@freeze_time("2023-01-24T04:07:19")
 @patch("connectors.sources.mssql.create_engine")
 @patch("connectors.sources.mssql.URL.create")
-def test_create_engine(mock_create_url, mock_create_engine):
+@pytest.mark.asyncio
+async def test_create_engine(mock_create_url, mock_create_engine):
     # Setup
     source = create_source(MSSQLDataSource)
     mock_create_engine.return_value = "Mock engine"
@@ -39,20 +42,30 @@ def test_create_engine(mock_create_url, mock_create_engine):
     source._create_engine()
 
     # Assert
-    mock_create_engine.assert_called_with(MSSQL_CONNECTION_STRING)
+    mock_create_engine.assert_called_with(MSSQL_CONNECTION_STRING, connect_args={})
 
     # Setup
-    source.secured_connection = True
+    source.ssl_enabled = True
+    source.ssl_ca = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
 
     # Execute
     source._create_engine()
 
     # Assert
-    mock_create_engine.assert_called_with(MSSQL_CONNECTION_STRING)
+    mock_create_engine.assert_called_with(
+        MSSQL_CONNECTION_STRING,
+        connect_args={
+            "cafile": source.certfile,
+            "validate_host": False,
+        },
+    )
+
+    # Cleanup
+    await source.close()
 
 
 @pytest.mark.asyncio
-async def test_get_docs_mssql(patch_logger):
+async def test_get_docs_mssql():
     # Setup
     source = create_source(MSSQLDataSource)
     source.engine = MockEngine()
@@ -84,3 +97,10 @@ async def test_get_docs_mssql(patch_logger):
 
     # Assert
     assert actual_response == expected_response
+
+
+@pytest.mark.asyncio
+async def test_close():
+    source = create_source(MSSQLDataSource)
+    source.create_pem_file()
+    await source.close()

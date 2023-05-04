@@ -161,6 +161,13 @@ class Bulker:
         )
 
     async def run(self):
+        try:
+            await self._run()
+        except asyncio.CancelledError:
+            logger.info("Task is canceled, stop Bulker...")
+            raise
+
+    async def _run(self):
         """Creates batches of bulk calls given a queue of items.
 
         An item is a (size, object) tuple. Exits when the
@@ -225,9 +232,9 @@ class Fetcher:
     This class runs a coroutine that puts docs in `queue`, given a document generator.
 
     Arguments:
+    - client: an instance of `connectors.es.ESClient`
     - queue: an `asyncio.Queue` to put docs in
     - index: the target Elasticsearch index
-    - existing_ids: a list of existing Elasticsearch document ids found in the index
     - filter_: an instance of `Filter` to apply on the fetched document -- default: `None`
     - sync_rules_enabled: if `True`, we apply rules -- default: `False`
     - content_extraction_enabled: if `True`, download content -- default `True`
@@ -237,9 +244,9 @@ class Fetcher:
 
     def __init__(
         self,
+        client,
         queue,
         index,
-        existing_ids,
         filter_=None,
         sync_rules_enabled=False,
         content_extraction_enabled=True,
@@ -248,12 +255,12 @@ class Fetcher:
     ):
         if filter_ is None:
             filter_ = Filter()
+        self.client = client
         self.queue = queue
         self.bulk_time = 0
         self.bulking = False
         self.index = index
         self.loop = asyncio.get_event_loop()
-        self.existing_ids = existing_ids
         self.sync_runs = False
         self.total_downloads = 0
         self.total_docs_updated = 0
@@ -276,6 +283,32 @@ class Fetcher:
             f"delete: {self.total_docs_deleted}>"
         )
 
+    async def _get_existing_ids(self):
+        """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
+
+
+        WARNING
+
+        This function will load all ids in memory -- on very large indices,
+        depending on the id length, it can be quite large.
+
+        300,000 ids will be around 50MiB
+        """
+        logger.debug(f"Scanning existing index {self.index}")
+        try:
+            await self.client.indices.get(index=self.index)
+        except ElasticNotFoundError:
+            return
+
+        async for doc in async_scan(
+            client=self.client,
+            index=self.index,
+            _source=["id", TIMESTAMP_FIELD],
+        ):
+            doc_id = doc["_source"].get("id", doc["_id"])
+            ts = doc["_source"].get(TIMESTAMP_FIELD)
+            yield doc_id, ts
+
     async def _deferred_index(self, lazy_download, doc_id, doc, operation):
         data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
 
@@ -295,6 +328,13 @@ class Fetcher:
         )
 
     async def run(self, generator):
+        try:
+            await self.get_docs(generator)
+        except asyncio.CancelledError:
+            logger.info("Task is canceled, stop Fetcher...")
+            raise
+
+    async def get_docs(self, generator):
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Bulker` to consume.
 
         A document might be discarded if its timestamp has not changed.
@@ -302,6 +342,16 @@ class Fetcher:
         """
         logger.info("Starting doc lookups")
         self.sync_runs = True
+
+        start = time.time()
+        existing_ids = {k: v async for (k, v) in self._get_existing_ids()}
+        logger.debug(
+            f"Found {len(existing_ids)} docs in {self.index} (duration "
+            f"{int(time.time() - start)} seconds) "
+        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Size of ids in memory is {get_mb_size(existing_ids)}MiB")
+
         count = 0
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
         try:
@@ -318,9 +368,9 @@ class Fetcher:
                 ):
                     continue
 
-                if doc_id in self.existing_ids:
-                    # pop out of self.existing_ids
-                    ts = self.existing_ids.pop(doc_id)
+                if doc_id in existing_ids:
+                    # pop out of existing_ids
+                    ts = existing_ids.pop(doc_id)
 
                     # If the doc has a timestamp, we can use it to see if it has
                     # been modified. This reduces the bulk size a *lot*
@@ -378,8 +428,8 @@ class Fetcher:
         # returned by the backend.
         #
         # Since we popped out every seen doc, existing_ids has now the ids to delete
-        logger.debug(f"Delete {len(self.existing_ids)} docs from Elasticsearch")
-        for doc_id in self.existing_ids.keys():
+        logger.debug(f"Delete {len(existing_ids)} docs from Elasticsearch")
+        for doc_id in existing_ids.keys():
             await self.queue.put(
                 {
                     "_op_type": OP_DELETE,
@@ -400,6 +450,10 @@ class ContentIndexNameInvalid(Exception):
     pass
 
 
+class AsyncBulkRunningError(Exception):
+    pass
+
+
 class ElasticServer(ESClient):
     """This class is the sync orchestrator.
 
@@ -415,6 +469,10 @@ class ElasticServer(ESClient):
         logger.debug(f"ElasticServer connecting to {elastic_config['host']}")
         super().__init__(elastic_config)
         self.loop = asyncio.get_event_loop()
+        self._fetcher = None
+        self._fetcher_task = None
+        self._bulker = None
+        self._bulker_task = None
 
     async def prepare_content_index(self, index, *, mappings=None):
         """Creates the index, given a mapping if it does not exists."""
@@ -451,31 +509,54 @@ class ElasticServer(ESClient):
         else:
             raise IndexMissing(f"Index {index} does not exist!")
 
-    async def get_existing_ids(self, index):
-        """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
+    def done(self):
+        if self._fetcher_task is not None and not self._fetcher_task.done():
+            return False
+        if self._bulker_task is not None and not self._bulker_task.done():
+            return False
+        return True
 
+    async def cancel(self):
+        if self._fetcher_task is not None and not self._fetcher_task.done():
+            self._fetcher_task.cancel()
+            try:
+                await self._fetcher_task
+            except asyncio.CancelledError:
+                logger.info("Fetcher is stopped.")
+        if self._bulker_task is not None and not self._bulker_task.done():
+            self._bulker_task.cancel()
+            try:
+                await self._bulker_task
+            except asyncio.CancelledError:
+                logger.info("Bulker is stopped.")
 
-        WARNING
+    def ingestion_stats(self):
+        stats = {}
+        if self._fetcher is not None:
+            stats.update(
+                {
+                    "doc_created": self._fetcher.total_docs_created,
+                    "attachment_extracted": self._fetcher.total_downloads,
+                    "doc_updated": self._fetcher.total_docs_updated,
+                    "doc_deleted": self._fetcher.total_docs_deleted,
+                }
+            )
+        if self._bulker is not None:
+            stats.update(
+                {
+                    "bulk_operations": dict(self._bulker.ops),
+                    "indexed_document_count": self._bulker.indexed_document_count,
+                    # return indexed_document_volume in number of MiB
+                    "indexed_document_volume": round(
+                        self._bulker.indexed_document_volume / (1024 * 1024)
+                    ),
+                    "deleted_document_count": self._bulker.deleted_document_count,
+                }
+            )
+        return stats
 
-        This function will load all ids in memory -- on very large indices,
-        depending on the id length, it can be quite large.
-
-        300,000 ids will be around 50MiB
-        """
-        logger.debug(f"Scanning existing index {index}")
-        try:
-            await self.client.indices.get(index=index)
-        except ElasticNotFoundError:
-            return
-
-        async for doc in async_scan(
-            client=self.client,
-            index=index,
-            _source=["id", TIMESTAMP_FIELD],
-        ):
-            doc_id = doc["_source"].get("id", doc["_id"])
-            ts = doc["_source"].get(TIMESTAMP_FIELD)
-            yield doc_id, ts
+    def fetch_error(self):
+        return None if self._fetcher is None else self._fetcher.fetch_error
 
     async def async_bulk(
         self,
@@ -498,6 +579,8 @@ class ElasticServer(ESClient):
         - content_extraction_enabled: if enabled, will download content -- default: `True`
         - options: dict of options (from `elasticsearch.bulk` in the config file)
         """
+        if self._fetcher_task is not None or self._bulker_task is not None:
+            raise AsyncBulkRunningError("Async bulk task has already started.")
         if filter_ is None:
             filter_ = Filter()
         if options is None:
@@ -512,31 +595,23 @@ class ElasticServer(ESClient):
             "concurrent_downloads", DEFAULT_CONCURRENT_DOWNLOADS
         )
 
-        start = time.time()
         stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
-        existing_ids = {k: v async for (k, v) in self.get_existing_ids(index)}
-        logger.debug(
-            f"Found {len(existing_ids)} docs in {index} (duration "
-            f"{int(time.time() - start)} seconds) "
-        )
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"Size of ids in memory is {get_mb_size(existing_ids)}MiB")
 
         # start the fetcher
-        fetcher = Fetcher(
+        self._fetcher = Fetcher(
+            self.client,
             stream,
             index,
-            existing_ids,
             filter_=filter_,
             sync_rules_enabled=sync_rules_enabled,
             content_extraction_enabled=content_extraction_enabled,
             display_every=display_every,
             concurrent_downloads=concurrent_downloads,
         )
-        fetcher_task = asyncio.create_task(fetcher.run(generator))
+        self._fetcher_task = asyncio.create_task(self._fetcher.run(generator))
 
         # start the bulker
-        bulker = Bulker(
+        self._bulker = Bulker(
             self.client,
             stream,
             chunk_size,
@@ -544,19 +619,4 @@ class ElasticServer(ESClient):
             chunk_mem_size=chunk_mem_size,
             max_concurrency=max_concurrency,
         )
-        bulker_task = asyncio.create_task(bulker.run())
-
-        await asyncio.gather(fetcher_task, bulker_task)
-
-        # we return a number for each operation type
-        return {
-            "bulk_operations": dict(bulker.ops),
-            "doc_created": fetcher.total_docs_created,
-            "attachment_extracted": fetcher.total_downloads,
-            "doc_updated": fetcher.total_docs_updated,
-            "doc_deleted": fetcher.total_docs_deleted,
-            "fetch_error": fetcher.fetch_error,
-            "indexed_document_count": bulker.indexed_document_count,
-            "indexed_document_volume": bulker.indexed_document_volume,
-            "deleted_document_count": bulker.deleted_document_count,
-        }
+        self._bulker_task = asyncio.create_task(self._bulker.run())
