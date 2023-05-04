@@ -94,11 +94,6 @@ The number of retry attempts after failed request to Confluence. Default value i
 
 The number of concurrent downloads for fetching the attachment content. This speeds up the content extraction of attachments. Defaults to `50`.
 
-
-#### Content Extraction
-
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
-
 ### Documents and syncs
 
 The connector syncs the following Confluence object types: 
@@ -284,44 +279,51 @@ The [Elastic SharePoint connector](../connectors/sources/sharepoint.py) is provi
 
 ### Availability and prerequisites
 
-⚠️ _Currently, this connector is available in **beta** starting in 8.8_.
-Features in beta are subject to change and are not covered by the service level agreement (SLA) of features that have reached general availability (GA).
+This connector is available as a **connector client** from the **Python connectors framework**. To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
 
-Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your deployment must include the Elasticsearch, Kibana, and Enterprise Search services.
+This connector is in **beta** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Beta features are not subject to the support SLA of official GA features.
 
-### Compatibility
+### Usage
 
-  Sharepoint Connector supports below Sharepoint Server versions:
-  - Sharepoint 2013
-  - Sharepoint 2016
-  - Sharepoint 2019
+To use this connector as a **connector client**, use the **build a connector** workflow. See [Connector clients and frameworks](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
 
+For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
 
-### Create an Administrator Account For SharePoint Online:
-  - To create an administrator account, join the Microsoft 365 Developer Program and get the Microsoft 365 developer subscription with a new administrator account for 90 days. Use this administrator account for signing into SharePoint Online and Azure AD to fetch more details.
-  - Register your app with Microsoft Azure AD
-  - To use the Microsoft identity platform endpoint, you must register your app using the Azure app registration portal. You can use either a Microsoft account or a work or school account to register an app.
-  - To configure an app to use the OAuth 2.0 authorization code grant flow, you'll need to save the following values when registering the app:
-    - Client Id: `Application(client) ID` which you can find inside App registrations from azure portal
-    - Client Secret: It is a `Value` which you need to create  form `Certificates and secrets` from azure portal
-    - Tenant Id: Dedicated instance of azure AD  which you can find inside App registrations from azure portal
-    - Tenant name: Name of domain
+### Configuring the SharePoint Online Connector:
+  You must configure the SharePoint connector before connecting the SharePoint Online service to Elastic Search. For this you must create an **OAuth App** in the SharePoint Online platform.
+
+  To get started, first log in to SharePoint Online and access your administrative dashboard.
+   
+   **Note:** Ensure you are logged in as the Azure Portal **service account**.
+  - Sign in to https://portal.azure.com/ and click on **Azure Active Directory**
+  - Locate **App Registrations** and Click **New Registration**.
+  - Give your app a name - like "Elastic  Search" - and make it multitenant.
+    
+    **Note:** Setting the app to single tenant will result in a degraded experience, and the connector will not sync content.
+    
+    Leave the Redirect URIs blank for now.
+  - Register the application
+  - Retrieve and keep the **Client ID** and **Tenant ID** handy - we'll need it within Elastic Search.
+  - Locate the **Client Secret** by navigating to **Certificates & Secrets**
+  - Pick a name for your client secret (for example, Elastic Search). Select 24 months as the expiration date
+  - Save the **Client Secret** value before leaving this screen - we'll need it within Elastic Search.
+  - We must now set up the permissions the Application will request from the Azure Portal service account. Navigate to **API Permissions** and click **Add Permission**. Add **delegated permissions** until the list resembles the following:
+    ```
+    User.Read
+    ```
+  - Finally, **Grant admin consent**.
+
+    Use the Grant Admin Consent link from the permissions screen.
+  - At last also save the tenant name (i.e. Domain name) of Azure platform
 
 
 ### SharePoint Online permissions required to run the connector:
 
    Refer to the following documentation for setting [SharePoint Permissions](https://learn.microsoft.com/en-us/sharepoint/dev/solution-guidance/security-apponly-azureacs)
 
-   - To set `DisableCustomAppAuthentication` to false we need to connect to SharePoint using Windows PowerShell and then run set-spotenant -DisableCustomAppAuthentication $false
-
-   - In azure portal > Azure Active Directory > App registrations > API permission
-        - Click Add a permission
-        - Click Microsoft Graph and complete the following steps:
-            - Click Application permissions.
-            - Select the User.Read permission.
-        - After adding permission Grant admin consent for tenant_name    
-   - To assign full permissions to the tenant in SharePoint Online, in your browser, go to the tenant URL. For example, go to `https://<office_365_tenant_URL>/_layouts/15/appinv.aspx`. The SharePoint admin center page appears.
-       - In the App ID box, enter the application ID that you recorded earlier, and then click Lookup.In the Title box, the name of the application appears.
+   - To set `DisableCustomAppAuthentication` to false we need to connect to SharePoint using Windows PowerShell and run set-spotenant -DisableCustomAppAuthentication $false
+   - To assign full permissions to the tenant in SharePoint Online, in your browser, go to the tenant URL. For example, go to `https://<office_365_admin_tenant_URL>/_layouts/15/appinv.aspx` such as `https://contoso-admin.sharepoint.com/_layouts/15/appinv.aspx`. The SharePoint admin center page appears.
+       - In the App ID box, enter the application ID that you recorded earlier, and then click Lookup. In the Title box, the name of the application appears.
        - In the App Domain box, type tenantname.onmicrosoft.com
        - In the App's Permission Request XML box, type the following XML string:
            ```
@@ -331,54 +333,34 @@ Elastic versions 8.6.0+ are compatible with Elastic connector frameworks. Your d
             </AppPermissionRequests>
             ```
 
-### Objects to be indexed
-  - Sites and Subsites
-  - Lists
-  - List Items and its attachment content
-  - Document Libraries and its attachment content(include Web Pages HTML content)
+### Compatibility
 
-### Setup and basic usage
+  Both SharePoint Online and SharePoint server are supported by the connector.
 
-Complete the following steps to deploy the connector:
+  For SharePoint server, below mentioned versions are compatible with Elastic connector frameworks:
+  - SharePoint 2013
+  - SharePoint 2016
+  - SharePoint 2019
 
-1. [Gather SharePoint details](#gather-sharepoint-details)
-2. [Configure SharePoint connector](#configure-sharepoint-connector)
-
-#### Gather SharePoint details
-
-Collect the information that is required to connect to your SharePoint instance:
-
-- The server host url where the SharePoint is hosted
-- Username for SharePoint Server
-- Password for SharePoint Server
-- Client Id for SharePoint Online
-- Client Secret for SharePoint Online
-- Tenant Name for SharePoint Online
-- Tenant Id for SharePoint Online
-- SSL certificate for a secure connection
-
-#### Configure SharePoint connector
+### Configuration
 
 The following configuration fields need to be provided for setting up the connector:
 
-Note: The given defaults are  for [E2E](https://github.com/elastic/connectors-python/tree/main/connectors/sources/tests/fixtures/sharepoint) testing purposes only
+##### `data_source`
 
-
-##### `is_cloud`
-
-Flag to determine the SharePoint platform type. `True` if SharePoint cloud and `False` if SharePoint Server. Default value is `False`.
+Determines the SharePoint platform type. `SHAREPOINT_ONLINE` if SharePoint cloud and `SHAREPOINT_SERVER` if SharePoint Server.
 
 ##### `username`
 
-The username of the account for SharePoint Server. Default value is `demo_user`.
+The username of the account for SharePoint Server.
 
-Note: `username` is not needed for SharePoint Online.
+**Note:** `username` is not needed for SharePoint Online.
 
 ##### `password`
 
-The password of the account to be used for the SharePoint Server. Default value is `abc@123`.
+The password of the account to be used for the SharePoint Server.
 
-Note: `password` is not needed for SharePoint Online.
+**Note:** `password` is not needed for SharePoint Online.
 
 ##### `client_id`
 
@@ -386,7 +368,7 @@ The client id to authenticate with SharePoint Online.
 
 ##### `client_secret`
 
-The secret id to authenticate with SharePoint Online.
+The secret value to authenticate with SharePoint Online.
 
 ##### `tenant`
 
@@ -398,14 +380,14 @@ The tenant id to authenticate with SharePoint Online.
 
 ##### `host_url`
 
-The server host url where the SharePoint is hosted. Default value is `http://127.0.0.1:8491`. Examples:
+The server host url where the SharePoint is hosted. Examples:
 
   - `https://192.158.1.38:8080`
   - `https://test_user.sharepoint.com`
 
 ##### `site_collections`
 
-The site collections to fetch sites from SharePoint(allow comma seprated collections also). Default value is `collection1`. Examples:
+The site collections to fetch sites from SharePoint(allow comma separated collections also). Examples:
   - `collection1`
   - `collection1, collection2`
 
@@ -415,9 +397,9 @@ Whether SSL verification will be enabled. Default value is `False`.
 
 ##### `ssl_ca`
 
-Content of SSL certificate needed for SharePoint Online. 
+Content of SSL certificate needed for SharePoint Server.
 
-Note: Keep this field empty, if `ssl_enabled` is set to `False`. Example certificate:
+**Note:** Keep this field empty, if `ssl_enabled` is set to `False` (Applicable on SharePoint Server only). Example certificate:
 
 
   - ```
@@ -432,23 +414,25 @@ Note: Keep this field empty, if `ssl_enabled` is set to `False`. Example certifi
 
 The number of retry attempts after failed request to the SharePoint. Default value is `3`.
 
-##### `enable_content_extraction`
+### Documents and syncs
+The connector syncs the following SharePoint object types: 
+  - Sites and Subsites
+  - Lists
+  - List Items and its attachment content
+  - Document Libraries and its attachment content(include Web Pages)
 
-Whether the connector should extract the content from SharePoint attachments. Default value is `True` i.e. the connector will try to extract file contents.
+### Sync rules
 
-#### Content Extraction
-
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
-
-### Connector Limitations
-
-- Files bigger than 10 MB won't be extracted.
-- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
+- Content of files bigger than 10 MB won't be extracted.
+- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elasticsearch Index.
 - Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
 
 ### E2E Tests
 
-The framework provides a way to test ingestion through a connector against a real data source. This is called a functional test. To execute a functional test for the SharePoint connector, run the following command:
+The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html#build-connector-testing) for more details.
+
+To perform E2E testing for the SharePoint connector, run the following command:
+
 ```shell
 $ make ftest NAME=sharepoint
 ```
@@ -457,7 +441,7 @@ $ make ftest NAME=sharepoint
 
 ℹ️ Users do not need to have a running Elasticsearch instance or a SharePoint source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock SharePoint source using the docker image.
 
-ℹ️ The e2e test uses default values defined in [Configure SharePoint connector](#configure-sharepoint-connector)
+ℹ️ The connector uses the Elastic [ingest attachment processor](https://www.elastic.co/guide/en/enterprise-search/current/ingest-pipelines.html) plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
 
 ## General Configuration
 
