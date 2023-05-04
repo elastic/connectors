@@ -53,6 +53,7 @@ TIKA_SUPPORTED_FILETYPES = [
     ".pptx",
     ".pdf",
     ".doc",
+    ".aspx",
 ]
 
 

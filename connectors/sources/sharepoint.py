@@ -45,7 +45,6 @@ LIST_ITEM = "list_item"
 ATTACHMENT_DATA = "attachment_data"
 DOCUMENT_LIBRARY = "document_library"
 LIST_BY_TITLE = "list_by_title"
-TIKA_SUPPORTED_FILETYPES.append(".aspx")
 CLOUD_SELECTED_FIELDS = "Modified,Id,GUID,File,Folder"
 SERVER_SELECTED_FIELDS = "WikiField, Modified,Id,GUID,File,Folder"
 
