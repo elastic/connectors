@@ -8,7 +8,6 @@ import datetime
 import re
 from enum import Enum
 
-import fastjsonschema
 from dateutil.parser import ParserError, parser
 
 from connectors.logger import logger
@@ -18,14 +17,15 @@ IS_BOOL_TRUE = re.compile("^(true|t|yes|y|on)$", re.I)
 
 
 def parse(basic_rules_json):
-    """
+    """Parse a basic rules json array to BasicRule objects.
 
-    *basic_rules_json*, an array of dicts or an empty array
+    Arguments:
+    - `basic_rules_json`: an array of dicts or an empty array
 
     The parser works in the following way:
       - Map every raw basic rule in the json array to the corresponding BasicRule object
       - Filter out every basic rule, which returns true for is_default_rule()
-      - Sort the result in descending order according to their basic rule order (rules are executed in descending order)
+      - Sort the result in ascending order according to their basic rule order (rules are executed in ascending order)
     """
     if not basic_rules_json:
         return []
@@ -45,7 +45,6 @@ def parse(basic_rules_json):
             )
         ),
         key=lambda basic_rule: basic_rule.order,
-        reverse=True,
     )
 
 
@@ -96,6 +95,11 @@ def try_coerce(value):
 
 
 class RuleMatchStats:
+    """RuleMatchStats records how many documents a basic rule matched and which policy it used.
+
+    It's an internal class and is not expected to be used outside the module.
+    """
+
     def __init__(self, policy, matches_count):
         self.policy = policy
         self.matches_count = matches_count
@@ -116,6 +120,15 @@ class RuleMatchStats:
 
 
 class BasicRuleEngine:
+    """BasicRuleEngine matches a document against a list of basic rules in order.
+
+    The main concern of the engine is to decide, whether a document should be ingested during a sync or not:
+        - If a document matches a basic rule and the basic rule uses the `INCLUDE` policy the document will be ingested
+        - If a document matches a basic rule and the basic rule uses the `EXCLUDE` policy the document won't be ingested
+
+    It also records stats, which basic rule matched how many documents with a certain policy.
+    """
+
     def __init__(self, rules):
         self.rules = rules
         self.rules_match_stats = {
@@ -123,6 +136,13 @@ class BasicRuleEngine:
         }
 
     def should_ingest(self, document):
+        """Check, whether a document should be ingested or not.
+
+        By default, the document will be ingested, if it doesn't match any rule.
+
+        Arguments:
+        - `document`: document matched against the basic rules
+        """
         if not self.rules:
             self.rules_match_stats[BasicRule.DEFAULT_RULE_ID] += 1
             return True
@@ -221,147 +241,9 @@ class Policy(Enum):
                 )
 
 
-class BasicRuleValidationResult:
-    def __init__(self, rule_id, is_valid, validation_message):
-        self.rule_id = rule_id
-        self.is_valid = is_valid
-        self.validation_message = validation_message
-
-    @classmethod
-    def valid_result(cls, rule_id):
-        return BasicRuleValidationResult(
-            rule_id=rule_id, is_valid=True, validation_message="Valid rule"
-        )
-
-
-class BasicRulesSetValidator:
-    @classmethod
-    def validate(cls, rules):
-        raise NotImplementedError
-
-
-class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
-    @classmethod
-    def validate(cls, rules):
-        rules_dict = {}
-
-        for rule in rules:
-            basic_rule = BasicRule.from_json(rule)
-
-            # we want to check whether another rule already uses the exact same values for 'field', 'rule' and 'value'
-            # to detect semantic duplicates
-            field_rule_value_hash = hash(
-                (basic_rule.field, basic_rule.rule, basic_rule.value)
-            )
-
-            if field_rule_value_hash in rules_dict:
-                semantic_duplicate = rules_dict[field_rule_value_hash]
-
-                return cls.semantic_duplicates_validation_results(
-                    basic_rule, semantic_duplicate
-                )
-
-            rules_dict[field_rule_value_hash] = basic_rule
-
-        return [
-            BasicRuleValidationResult.valid_result(rule_id=rule.id_)
-            for rule in rules_dict.values()
-        ]
-
-    @classmethod
-    def semantic_duplicates_validation_results(cls, basic_rule, semantic_duplicate):
-        def semantic_duplicate_msg(rule_one, rule_two):
-            return f"Rule with id '{rule_one}' is semantically equal to rule with id '{rule_two}'"
-
-        return [
-            # We need two error messages to highlight both rules in the UI
-            BasicRuleValidationResult(
-                rule_id=basic_rule.id_,
-                is_valid=False,
-                validation_message=semantic_duplicate_msg(
-                    basic_rule.id_, semantic_duplicate.id_
-                ),
-            ),
-            BasicRuleValidationResult(
-                rule_id=semantic_duplicate.id_,
-                is_valid=False,
-                validation_message=semantic_duplicate_msg(
-                    semantic_duplicate.id_, basic_rule.id_
-                ),
-            ),
-        ]
-
-
-class BasicRuleValidator:
-    @classmethod
-    def validate(cls, rule):
-        raise NotImplementedError
-
-
-class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
-    MATCH_ALL_REGEXPS = [".*", "(.*)"]
-
-    @classmethod
-    def validate(cls, basic_rule_json):
-        basic_rule = BasicRule.from_json(basic_rule_json)
-
-        # default rule uses match all regex, which is intended
-        if basic_rule.is_default_rule():
-            return BasicRuleValidationResult.valid_result(rule_id=basic_rule.id_)
-
-        if basic_rule.rule == Rule.REGEX and any(
-            match_all_regex == basic_rule.value
-            for match_all_regex in BasicRuleNoMatchAllRegexValidator.MATCH_ALL_REGEXPS
-        ):
-            return BasicRuleValidationResult(
-                rule_id=basic_rule.id_,
-                is_valid=False,
-                validation_message=f"Match all regexps: '{BasicRuleNoMatchAllRegexValidator.MATCH_ALL_REGEXPS}' are "
-                f"not allowed.",
-            )
-
-        return BasicRuleValidationResult.valid_result(rule_id=basic_rule.id_)
-
-
-class BasicRuleAgainstSchemaValidator(BasicRuleValidator):
-    SCHEMA_DEFINITION = {
-        "type": "object",
-        "properties": {
-            "id": {"type": "string", "minLength": 1},
-            "policy": {"format": "policy"},
-            "field": {"type": "string", "minLength": 1},
-            "rule": {"format": "rule"},
-            "value": {"type": "string", "minLength": 1},
-            "order": {"type": "number", "minLength": 1},
-        },
-        "required": ["id", "policy", "field", "rule", "value", "order"],
-    }
-
-    CUSTOM_FORMATS = {
-        "policy": lambda policy_string: Policy.is_string_policy(policy_string),
-        "rule": lambda rule_string: Rule.is_string_rule(rule_string),
-    }
-
-    SCHEMA = fastjsonschema.compile(
-        definition=SCHEMA_DEFINITION, formats=CUSTOM_FORMATS
-    )
-
-    @classmethod
-    def validate(cls, rule):
-        try:
-            BasicRuleAgainstSchemaValidator.SCHEMA(rule)
-
-            return BasicRuleValidationResult.valid_result(rule["id"])
-        except fastjsonschema.JsonSchemaValueException as e:
-            # id field could be missing
-            rule_id = rule["id"] if "id" in rule else None
-
-            return BasicRuleValidationResult(
-                rule_id=rule_id, is_valid=False, validation_message=e.message
-            )
-
-
 class BasicRule:
+    """A BasicRule is used to match documents based on different comparisons (see `matches` method)."""
+
     DEFAULT_RULE_ID = "DEFAULT"
 
     def __init__(self, id_, order, policy, field, rule, value):
@@ -395,6 +277,23 @@ class BasicRule:
         )
 
     def matches(self, document):
+        """Check whether a document matches the basic rule.
+
+        A basic rule matches or doesn't match a document based on the following comparisons:
+            - STARTS_WITH: Does the document's field value start with the basic rule's value?
+            - ENDS_WITH: Does the document's field value end with the basic rule's value?
+            - CONTAINS: Does the document's field value contain the basic rule's value?
+            - REGEX: Does the document's field value match the basic rule's regex?
+            - LESS_THAN: Is the document's field value less than the basic rule's value?
+            - GREATER_THAN: Is the document's field value greater than the basic rule's value?
+            - EQUALS: Is the document's field value equal to the basic rule's value?
+
+        If the basic rule is the default rule it's always a match (the default rule matches every document).
+        If the field is not in the document it's always a no match.
+
+        Arguments:
+        - `document`: document to check, if it matches
+        """
         if self.is_default_rule():
             return True
 
@@ -429,6 +328,14 @@ class BasicRule:
         return self.policy == Policy.INCLUDE
 
     def coerce_rule_value_based_on_document_value(self, doc_value):
+        """Coerce the value inside the basic rule.
+
+        This method tries to coerce the value inside the basic rule to the type used in the document.
+
+        Arguments:
+        - `doc_value`: value of the field in the document to coerce
+
+        """
         try:
             match doc_value:
                 case str():

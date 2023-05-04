@@ -7,7 +7,7 @@ services:
     environment:
       - cluster.name=docker-cluster
       - bootstrap.memory_lock=true
-      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g
       - ELASTIC_PASSWORD=changeme
       - xpack.security.enabled=true
       - xpack.security.authc.api_key.enabled=true
@@ -31,8 +31,6 @@ services:
     ports:
       - "445:445/tcp"
     restart: unless-stopped
-    volumes:
-      - /tmp/mnt:/mnt:z
     command: '-s "Folder1;/mnt;yes;no;yes;admin" -u "admin;abc@123" -p'
 
 

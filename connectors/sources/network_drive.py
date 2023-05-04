@@ -18,28 +18,27 @@ from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value, iso_utc
 
 MAX_CHUNK_SIZE = 65536
-DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_FILE_SIZE_LIMIT = 10485760
 
 
 class NASDataSource(BaseDataSource):
-    """Class to fetch documents from Network Drive"""
+    """Network Drive"""
 
-    def __init__(self, connector):
-        """Setup the connection to the Network Drive
+    name = "Network Drive"
+    service_type = "network_drive"
+
+    def __init__(self, configuration):
+        """Set up the connection to the Network Drive
 
         Args:
-            connector (BYOConnector): Object of the BYOConnector class
+            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
-        super().__init__(connector)
+        super().__init__(configuration=configuration)
         self.username = self.configuration["username"]
         self.password = self.configuration["password"]
         self.server_ip = self.configuration["server_ip"]
         self.port = self.configuration["server_port"]
         self.drive_path = self.configuration["drive_path"]
-        self.enable_content_extraction = self.configuration.get(
-            "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION
-        )
 
     @classmethod
     def get_default_configuration(cls):
@@ -50,39 +49,36 @@ class NASDataSource(BaseDataSource):
         """
         return {
             "username": {
-                "value": "admin",
-                "label": "SMB username",
+                "label": "Username",
+                "order": 1,
                 "type": "str",
+                "value": "admin",
             },
             "password": {
-                "value": "abc@123",
-                "label": "SMB password",
+                "label": "Password",
+                "order": 2,
+                "sensitive": True,
                 "type": "str",
+                "value": "abc@123",
             },
             "server_ip": {
-                "value": "127.0.0.1",
                 "label": "SMB IP",
+                "order": 3,
                 "type": "str",
+                "value": "127.0.0.1",
             },
             "server_port": {
-                "value": 445,
+                "display": "numeric",
                 "label": "SMB port",
+                "order": 4,
                 "type": "int",
+                "value": 445,
             },
             "drive_path": {
+                "label": "SMB path",
+                "order": 5,
+                "type": "str",
                 "value": "Folder1",
-                "label": "SMB shared folder/directory",
-                "type": "str",
-            },
-            "connector_name": {
-                "value": "Network Drive Connector",
-                "label": "Friendly name for the connector",
-                "type": "str",
-            },
-            "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Flag to check if content extraction is enabled or not",
-                "type": "bool",
             },
         }
 
@@ -169,8 +165,7 @@ class NASDataSource(BaseDataSource):
             dictionary: Content document with id, timestamp & text
         """
         if not (
-            self.enable_content_extraction
-            and doit
+            doit
             and os.path.splitext(file["title"])[-1] in TIKA_SUPPORTED_FILETYPES
             and file["size"]
         ):
@@ -195,7 +190,7 @@ class NASDataSource(BaseDataSource):
             "_attachment": get_base64_value(content=attachment),
         }
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
         """Executes the logic to fetch files and folders in async manner.
         Yields:
             dictionary: Dictionary containing the Network Drive files and folders as documents

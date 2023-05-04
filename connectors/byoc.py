@@ -6,61 +6,74 @@
 """
 Implementation of BYOC protocol.
 """
-import asyncio
-import time
+import socket
+from collections import UserDict
+from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 
-from connectors.es import DEFAULT_LANGUAGE, ESIndex, defaults_for
+from connectors.es import ESDocument, ESIndex
+from connectors.es.client import with_concurrency_control
+from connectors.filtering.validation import (
+    FilteringValidationState,
+    InvalidFilteringError,
+)
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, get_source_klass
-from connectors.utils import iso_utc, next_run
+from connectors.source import (
+    DEFAULT_CONFIGURATION,
+    DataSourceConfiguration,
+    get_source_klass,
+)
+from connectors.utils import (
+    deep_merge_dicts,
+    filter_nested_dict_by_keys,
+    iso_utc,
+    next_run,
+)
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
-PIPELINE = "ent-search-generic-ingestion"
-SYNC_DISABLED = -1
-DEFAULT_ANALYSIS_ICU = False
 
+JOB_NOT_FOUND_ERROR = "Couldn't find the job"
+UNKNOWN_ERROR = "unknown error"
 
-def e2str(entry):
-    return entry.name.lower()
+ALLOWED_INGESTION_STATS_KEYS = (
+    "indexed_document_count",
+    "indexed_document_volume",
+    "deleted_document_count",
+    "total_document_count",
+)
 
 
 class Status(Enum):
-    CREATED = 1
-    NEEDS_CONFIGURATION = 2
-    CONFIGURED = 3
-    CONNECTED = 4
-    ERROR = 5
+    CREATED = "created"
+    NEEDS_CONFIGURATION = "needs_configuration"
+    CONFIGURED = "configured"
+    CONNECTED = "connected"
+    ERROR = "error"
+    UNSET = None
 
 
 class JobStatus(Enum):
-    PENDING = 1
-    IN_PROGRESS = 2
-    CANCELING = 3
-    CANCELED = 4
-    SUSPENDED = 5
-    COMPLETED = 6
-    ERROR = 7
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    CANCELING = "canceling"
+    CANCELED = "canceled"
+    SUSPENDED = "suspended"
+    COMPLETED = "completed"
+    ERROR = "error"
+    UNSET = None
 
 
 class JobTriggerMethod(Enum):
-    ON_DEMAND = 1
-    SCHEDULED = 2
+    ON_DEMAND = "on_demand"
+    SCHEDULED = "scheduled"
+    UNSET = None
 
 
-CUSTOM_READ_ONLY_FIELDS = (
-    "is_native",
-    "api_key_id",
-    "pipeline",
-    "scheduling",
-)
-
-NATIVE_READ_ONLY_FIELDS = CUSTOM_READ_ONLY_FIELDS + (
-    "service_type",
-    "configuration",
-)
+class Sort(Enum):
+    ASC = "asc"
+    DESC = "desc"
 
 
 class ServiceTypeNotSupportedError(Exception):
@@ -71,52 +84,30 @@ class ServiceTypeNotConfiguredError(Exception):
     pass
 
 
-class ConnectorUpdateError(Exception):
-    pass
-
-
 class DataSourceError(Exception):
     pass
 
 
-class BYOIndex(ESIndex):
+class MalformedConfigurationError(Exception):
+    pass
+
+
+class ConnectorIndex(ESIndex):
     def __init__(self, elastic_config):
-        logger.debug(f"BYOIndex connecting to {elastic_config['host']}")
-        # initilize ESIndex instance
+        logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
+        # initialize ESIndex instance
         super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
-        # grab all bulk options
-        self.bulk_options = elastic_config.get("bulk", {})
-        self.language_code = elastic_config.get("language_code", DEFAULT_LANGUAGE)
-        self.analysis_icu = elastic_config.get("analysis_icu", DEFAULT_ANALYSIS_ICU)
 
-    async def save(self, connector):
-        # we never update the configuration
-        document = dict(connector.doc_source)
+    async def heartbeat(self, doc_id):
+        await self.update(doc_id=doc_id, doc={"last_seen": iso_utc()})
 
-        # read only we never update
-        for key in (
-            NATIVE_READ_ONLY_FIELDS if connector.native else CUSTOM_READ_ONLY_FIELDS
-        ):
-            if key in document:
-                del document[key]
-
-        return await self.client.update(
-            index=CONNECTORS_INDEX,
-            id=connector.id,
-            doc=document,
-        )
-
-    # @TODO move to ESIndex?
-    async def preflight(self):
-        await self.check_exists(indices=[CONNECTORS_INDEX, JOBS_INDEX])
-
-    def build_docs_query(self, native_service_types=None, connectors_ids=None):
+    async def supported_connectors(self, native_service_types=None, connector_ids=None):
         if native_service_types is None:
             native_service_types = []
-        if connectors_ids is None:
-            connectors_ids = []
+        if connector_ids is None:
+            connector_ids = []
 
-        if len(native_service_types) == 0 and len(connectors_ids) == 0:
+        if len(native_service_types) == 0 and len(connector_ids) == 0:
             return
 
         native_connectors_query = {
@@ -132,11 +123,11 @@ class BYOIndex(ESIndex):
             "bool": {
                 "filter": [
                     {"term": {"is_native": False}},
-                    {"terms": {"_id": connectors_ids}},
+                    {"terms": {"_id": connector_ids}},
                 ]
             }
         }
-        if len(native_service_types) > 0 and len(connectors_ids) > 0:
+        if len(native_service_types) > 0 and len(connector_ids) > 0:
             query = {
                 "bool": {"should": [native_connectors_query, custom_connectors_query]}
             }
@@ -145,402 +136,734 @@ class BYOIndex(ESIndex):
         else:
             query = custom_connectors_query
 
-        return query
+        async for connector in self.get_all_docs(query=query):
+            yield connector
 
     def _create_object(self, doc_source):
-        return BYOConnector(
+        return Connector(
             self,
-            doc_source["_id"],
-            doc_source["_source"],
-            bulk_options=self.bulk_options,
-            language_code=self.language_code,
-            analysis_icu=self.analysis_icu,
+            doc_source,
         )
 
-
-class SyncJob:
-    def __init__(self, connector_id, elastic_client):
-        self.connector_id = connector_id
-        self.client = elastic_client
-        self.created_at = datetime.now(timezone.utc)
-        self.completed_at = None
-        self.job_id = None
-        self.status = None
-
-    @property
-    def duration(self):
-        if self.completed_at is None:
-            return -1
-        msec = (self.completed_at - self.created_at).microseconds
-        return round(msec / 9, 2)
-
-    async def start(self, trigger_method=JobTriggerMethod.SCHEDULED):
-        self.status = JobStatus.IN_PROGRESS
-        job_def = {
-            "connector": {
-                "id": self.connector_id,
-            },
-            "trigger_method": e2str(trigger_method),
-            "status": e2str(self.status),
-            "error": None,
-            "deleted_document_count": 0,
-            "indexed_document_count": 0,
-            "created_at": iso_utc(self.created_at),
-            "completed_at": None,
-        }
-        resp = await self.client.index(index=JOBS_INDEX, document=job_def)
-        self.job_id = resp["_id"]
-        return self.job_id
-
-    async def done(self, indexed_count=0, deleted_count=0, exception=None):
-        self.completed_at = datetime.now(timezone.utc)
-
-        job_def = {
-            "deleted_document_count": deleted_count,
-            "indexed_document_count": indexed_count,
-            "completed_at": iso_utc(self.completed_at),
-        }
-
-        if exception is None:
-            self.status = JobStatus.COMPLETED
-            job_def["error"] = None
-        else:
-            self.status = JobStatus.ERROR
-            job_def["error"] = str(exception)
-
-        job_def["status"] = e2str(self.status)
-
-        return await self.client.update(index=JOBS_INDEX, id=self.job_id, doc=job_def)
+    async def all_connectors(self):
+        async for connector in self.get_all_docs():
+            yield connector
 
 
-class PipelineSettings:
-    def __init__(self, pipeline):
-        self.name = pipeline.get("name", "ent-search-generic-ingestion")
-        self.extract_binary_content = pipeline.get("extract_binary_content", True)
-        self.reduce_whitespace = pipeline.get("reduce_whitespace", True)
-        self.run_ml_inference = pipeline.get("run_ml_inference", True)
+def filter_ingestion_stats(ingestion_stats):
+    if ingestion_stats is None:
+        return {}
 
-    def __repr__(self):
-        return (
-            f"Pipeline {self.name} <binary: {self.extract_binary_content}, "
-            f"whitespace {self.reduce_whitespace}, ml inference {self.run_ml_inference}>"
-        )
+    return {
+        k: v for (k, v) in ingestion_stats.items() if k in ALLOWED_INGESTION_STATS_KEYS
+    }
 
 
-class BYOConnector:
-    """Represents one doc in `.elastic-connectors` and triggers sync.
-
-    The pattern to use it is:
-
-        await connector.prepare(config)
-        await connector.start_heartbeat(delay)
-        try:
-            await connector.sync(es)
-        finally:
-            await connector.close()
-    """
-
-    def __init__(
-        self,
-        elastic_index,
-        connector_id,
-        doc_source,
-        bulk_options,
-        language_code=DEFAULT_LANGUAGE,
-        analysis_icu=DEFAULT_ANALYSIS_ICU,
-    ):
-
-        self.doc_source = doc_source
-        self.id = connector_id
-        self.index = elastic_index
-        self._update_config(doc_source)
-        self._dirty = False
-        self.client = elastic_index.client
-        self.doc_source["last_seen"] = iso_utc()
-        self._heartbeat_started = self._syncing = False
-        self._closed = False
-        self._start_time = None
-        self._hb = None
-        self.bulk_options = bulk_options
-        self.language_code = language_code
-        self.analysis_icu = analysis_icu
-        self.source_klass = None
-        self.data_provider = None
-
-    def _update_config(self, doc_source):
-        self.status = doc_source["status"]
-        self.sync_now = doc_source.get("sync_now", False)
-        self.native = doc_source.get("is_native", False)
-        self._service_type = doc_source["service_type"]
-        self.index_name = doc_source["index_name"]
-        self._configuration = DataSourceConfiguration(doc_source["configuration"])
-        self.scheduling = doc_source["scheduling"]
-        self.pipeline = PipelineSettings(doc_source.get("pipeline", {}))
-        self._dirty = True
-
+class SyncJob(ESDocument):
     @property
     def status(self):
-        return self._status
+        return JobStatus(self.get("status"))
 
-    @status.setter
-    def status(self, value):
-        if isinstance(value, str):
-            value = Status[value.upper()]
-        if not isinstance(value, Status):
-            raise TypeError(value)
+    @property
+    def error(self):
+        return self.get("error")
 
-        self._status = value
-        self.doc_source["status"] = e2str(self._status)
+    @property
+    def connector_id(self):
+        return self.get("connector", "id")
+
+    @property
+    def index_name(self):
+        return self.get("connector", "index_name")
+
+    @property
+    def language(self):
+        return self.get("connector", "language")
 
     @property
     def service_type(self):
-        return self._service_type
-
-    @service_type.setter
-    def service_type(self, value):
-        self._service_type = self.doc_source["service_type"] = value
-        self._update_config(self.doc_source)
+        return self.get("connector", "service_type")
 
     @property
     def configuration(self):
-        return self._configuration
+        return DataSourceConfiguration(self.get("connector", "configuration"))
 
-    @configuration.setter
-    def configuration(self, value):
-        self.doc_source["configuration"] = value
-        status = (
-            Status.CONFIGURED
-            if all(
-                isinstance(value, dict) and value.get("value") is not None
-                for value in value.values()
+    @property
+    def filtering(self):
+        return Filter(self.get("connector", "filtering", default={}))
+
+    @property
+    def pipeline(self):
+        return Pipeline(self.get("connector", "pipeline"))
+
+    @property
+    def terminated(self):
+        return self.status in (JobStatus.ERROR, JobStatus.COMPLETED, JobStatus.CANCELED)
+
+    @property
+    def indexed_document_count(self):
+        return self.get("indexed_document_count", default=0)
+
+    @property
+    def indexed_document_volume(self):
+        return self.get("indexed_document_volume", default=0)
+
+    @property
+    def deleted_document_count(self):
+        return self.get("deleted_document_count", default=0)
+
+    @property
+    def total_document_count(self):
+        return self.get("total_document_count", default=0)
+
+    async def validate_filtering(self, validator):
+        validation_result = await validator.validate_filtering(self.filtering)
+
+        if validation_result.state != FilteringValidationState.VALID:
+            raise InvalidFilteringError(
+                f"Filtering in state {validation_result.state}, errors: {validation_result.errors}."
             )
-            else Status.NEEDS_CONFIGURATION
+
+    async def claim(self):
+        doc = {
+            "status": JobStatus.IN_PROGRESS.value,
+            "started_at": iso_utc(),
+            "last_seen": iso_utc(),
+            "worker_hostname": socket.gethostname(),
+        }
+        await self.index.update(doc_id=self.id, doc=doc)
+
+    async def update_metadata(self, ingestion_stats=None, connector_metadata=None):
+        ingestion_stats = filter_ingestion_stats(ingestion_stats)
+        if connector_metadata is None:
+            connector_metadata = {}
+
+        doc = {
+            "last_seen": iso_utc(),
+        }
+        doc.update(ingestion_stats)
+        if len(connector_metadata) > 0:
+            doc["metadata"] = connector_metadata
+        await self.index.update(doc_id=self.id, doc=doc)
+
+    async def done(self, ingestion_stats=None, connector_metadata=None):
+        await self._terminate(
+            JobStatus.COMPLETED, None, ingestion_stats, connector_metadata
         )
-        self.doc_source["status"] = e2str(status)
-        self._update_config(self.doc_source)
 
-    async def close(self):
-        self._closed = True
-        if self._heartbeat_started:
-            self._hb.cancel()
-            self._heartbeat_started = False
-        if self.data_provider is not None:
-            await self.data_provider.close()
-            self.data_provider = None
+    async def fail(self, message, ingestion_stats=None, connector_metadata=None):
+        await self._terminate(
+            JobStatus.ERROR, str(message), ingestion_stats, connector_metadata
+        )
 
-    async def sync_doc(self, force=True):
-        if not self._dirty and not force:
-            return
-        self.doc_source["last_seen"] = iso_utc()
-        await self.index.save(self)
-        self._dirty = False
+    async def cancel(self, ingestion_stats=None, connector_metadata=None):
+        await self._terminate(
+            JobStatus.CANCELED, None, ingestion_stats, connector_metadata
+        )
 
-    def start_heartbeat(self, delay):
-        if self._heartbeat_started:
-            return
-        self._heartbeat_started = True
+    async def suspend(self, ingestion_stats=None, connector_metadata=None):
+        await self._terminate(
+            JobStatus.SUSPENDED, None, ingestion_stats, connector_metadata
+        )
 
-        async def _heartbeat():
-            while not self._closed:
-                logger.info(f"*** Connector {self.id} HEARTBEAT")
-                if not self._syncing:
-                    self.doc_source["last_seen"] = iso_utc()
-                    await self.sync_doc()
-                await asyncio.sleep(delay)
+    async def _terminate(
+        self, status, error=None, ingestion_stats=None, connector_metadata=None
+    ):
+        ingestion_stats = filter_ingestion_stats(ingestion_stats)
+        if connector_metadata is None:
+            connector_metadata = {}
 
-        self._hb = asyncio.create_task(_heartbeat())
+        doc = {
+            "last_seen": iso_utc(),
+            "status": status.value,
+            "error": error,
+        }
+        if status in (JobStatus.ERROR, JobStatus.COMPLETED, JobStatus.CANCELED):
+            doc["completed_at"] = iso_utc()
+        if status == JobStatus.CANCELED:
+            doc["canceled_at"] = iso_utc()
+        doc.update(ingestion_stats)
+        if len(connector_metadata) > 0:
+            doc["metadata"] = connector_metadata
+        await self.index.update(doc_id=self.id, doc=doc)
+
+
+class Filtering:
+    DEFAULT_DOMAIN = "DEFAULT"
+
+    def __init__(self, filtering=None):
+        if filtering is None:
+            filtering = []
+
+        self.filtering = filtering
+
+    def get_active_filter(self, domain=DEFAULT_DOMAIN):
+        return self.get_filter(filter_state="active", domain=domain)
+
+    def get_draft_filter(self, domain=DEFAULT_DOMAIN):
+        return self.get_filter(filter_state="draft", domain=domain)
+
+    def get_filter(self, filter_state="active", domain=DEFAULT_DOMAIN):
+        return next(
+            (
+                Filter(filter_[filter_state])
+                for filter_ in self.filtering
+                if filter_["domain"] == domain
+            ),
+            Filter(),
+        )
+
+    def to_list(self):
+        return list(self.filtering)
+
+
+class Filter(dict):
+    def __init__(self, filter_=None):
+        if filter_ is None:
+            filter_ = {}
+
+        super().__init__(filter_)
+
+        self.advanced_rules = filter_.get("advanced_snippet", {})
+        self.basic_rules = filter_.get("rules", [])
+        self.validation = filter_.get(
+            "validation", {"state": FilteringValidationState.VALID.value, "errors": []}
+        )
+
+    def get_advanced_rules(self):
+        return self.advanced_rules.get("value", {})
+
+    def has_advanced_rules(self):
+        advanced_rules = self.get_advanced_rules()
+        return advanced_rules is not None and len(advanced_rules) > 0
+
+    def has_validation_state(self, validation_state):
+        return FilteringValidationState(self.validation["state"]) == validation_state
+
+    def transform_filtering(self):
+        """
+        Transform the filtering in .elastic-connectors to filtering ready-to-use in .elastic-connectors-sync-jobs
+        """
+        # deepcopy to not change the reference resulting in changing .elastic-connectors filtering
+        filtering = (
+            {"advanced_snippet": {}, "rules": []} if len(self) == 0 else deepcopy(self)
+        )
+
+        return filtering
+
+
+PIPELINE_DEFAULT = {
+    "name": "ent-search-generic-ingestion",
+    "extract_binary_content": True,
+    "reduce_whitespace": True,
+    "run_ml_inference": True,
+}
+
+
+class Pipeline(UserDict):
+    def __init__(self, data):
+        if data is None:
+            data = {}
+        default = PIPELINE_DEFAULT.copy()
+        default.update(data)
+        super().__init__(default)
+
+
+class Features:
+    BASIC_RULES_NEW = "basic_rules_new"
+    ADVANCED_RULES_NEW = "advanced_rules_new"
+
+    # keep backwards compatibility
+    BASIC_RULES_OLD = "basic_rules_old"
+    ADVANCED_RULES_OLD = "advanced_rules_old"
+
+    def __init__(self, features=None):
+        if features is None:
+            features = {}
+
+        self.features = features
+
+    def sync_rules_enabled(self):
+        return any(
+            [
+                self.feature_enabled(Features.BASIC_RULES_NEW),
+                self.feature_enabled(Features.BASIC_RULES_OLD),
+                self.feature_enabled(Features.ADVANCED_RULES_NEW),
+                self.feature_enabled(Features.ADVANCED_RULES_OLD),
+            ]
+        )
+
+    def feature_enabled(self, feature):
+        match feature:
+            case Features.BASIC_RULES_NEW:
+                return self._nested_feature_enabled(
+                    ["sync_rules", "basic", "enabled"], default=False
+                )
+            case Features.ADVANCED_RULES_NEW:
+                return self._nested_feature_enabled(
+                    ["sync_rules", "advanced", "enabled"], default=False
+                )
+            case Features.BASIC_RULES_OLD:
+                return self.features.get("filtering_rules", False)
+            case Features.ADVANCED_RULES_OLD:
+                return self.features.get("filtering_advanced_config", False)
+            case _:
+                return False
+
+    def _nested_feature_enabled(self, keys, default=None):
+        def nested_get(dictionary, keys_, default_=None):
+            if dictionary is None:
+                return default_
+
+            if not keys_:
+                return dictionary
+
+            if not isinstance(dictionary, dict):
+                return default_
+
+            return nested_get(dictionary.get(keys_[0]), keys_[1:], default_)
+
+        return nested_get(self.features, keys, default)
+
+
+class Connector(ESDocument):
+    @property
+    def status(self):
+        return Status(self.get("status"))
+
+    @property
+    def service_type(self):
+        return self.get("service_type")
+
+    @property
+    def last_seen(self):
+        last_seen = self.get("last_seen")
+        if last_seen is not None:
+            last_seen = datetime.fromisoformat(last_seen)  # pyright: ignore
+        return last_seen
+
+    @property
+    def native(self):
+        return self.get("is_native", default=False)
+
+    @property
+    def sync_now(self):
+        return self.get("sync_now", default=False)
+
+    @property
+    def scheduling(self):
+        return self.get("scheduling", default={})
+
+    @property
+    def configuration(self):
+        return DataSourceConfiguration(self.get("configuration"))
+
+    @property
+    def index_name(self):
+        return self.get("index_name")
+
+    @property
+    def language(self):
+        return self.get("language")
+
+    @property
+    def filtering(self):
+        return Filtering(self.get("filtering"))
+
+    @property
+    def pipeline(self):
+        return Pipeline(self.get("pipeline"))
+
+    @property
+    def features(self):
+        return Features(self.get("features"))
+
+    @property
+    def last_sync_status(self):
+        return JobStatus(self.get("last_sync_status"))
+
+    @property
+    def last_sync_scheduled_at(self):
+        last_sync_scheduled_at = self.get("last_sync_scheduled_at")
+        if last_sync_scheduled_at is not None:
+            last_sync_scheduled_at = datetime.fromisoformat(
+                last_sync_scheduled_at  # pyright: ignore
+            )
+        return last_sync_scheduled_at
+
+    async def heartbeat(self, interval):
+        if (
+            self.last_seen is None
+            or (datetime.now(timezone.utc) - self.last_seen).total_seconds() > interval
+        ):
+            logger.debug(f"Sending heartbeat for connector {self.id}")
+            await self.index.heartbeat(doc_id=self.id)
 
     def next_sync(self):
-        """Returns in seconds when the next sync should happen.
-
-        If the function returns SYNC_DISABLED, no sync is scheduled.
-        """
-        if self.sync_now:
-            logger.debug("sync_now is true, syncing!")
-            return 0
-        if not self.scheduling["enabled"]:
+        """Returns the datetime when the next sync will run, return None if it's disabled."""
+        if not self.scheduling.get("enabled", False):
             logger.debug("scheduler is disabled")
-            return SYNC_DISABLED
-        return next_run(self.scheduling["interval"])
+            return None
+        return next_run(self.scheduling.get("interval"))
 
-    async def _sync_starts(self):
-        job = SyncJob(self.id, self.client)
-        trigger_method = (
-            JobTriggerMethod.ON_DEMAND if self.sync_now else JobTriggerMethod.SCHEDULED
+    async def reset_sync_now_flag(self):
+        await self.index.update(
+            doc_id=self.id,
+            doc={"sync_now": False},
+            if_seq_no=self._seq_no,
+            if_primary_term=self._primary_term,
         )
-        job_id = await job.start(trigger_method)
 
-        self.sync_now = self.doc_source["sync_now"] = False
-        self.doc_source["last_sync_status"] = e2str(job.status)
-        self.status = Status.CONNECTED
-        await self.sync_doc()
+    async def update_last_sync_scheduled_at(self, new_ts):
+        await self.index.update(
+            doc_id=self.id,
+            doc={"last_sync_scheduled_at": new_ts.isoformat()},
+            if_seq_no=self._seq_no,
+            if_primary_term=self._primary_term,
+        )
 
-        self._start_time = time.time()
-        logger.info(f"Sync starts, Job id: {job_id}")
-        return job
+    async def sync_starts(self):
+        doc = {
+            "last_sync_status": JobStatus.IN_PROGRESS.value,
+            "last_sync_error": None,
+            "status": Status.CONNECTED.value,
+        }
+        await self.index.update(
+            doc_id=self.id,
+            doc=doc,
+            if_seq_no=self._seq_no,
+            if_primary_term=self._primary_term,
+        )
 
     async def error(self, error):
-        self.doc_source["error"] = str(error)
-        await self.sync_doc()
+        doc = {
+            "status": Status.ERROR.value,
+            "error": str(error),
+        }
+        await self.index.update(doc_id=self.id, doc=doc)
 
-    async def _sync_done(self, job, result, exception=None):
-        doc_updated = result.get("doc_updated", 0)
-        doc_created = result.get("doc_created", 0)
-        doc_deleted = result.get("doc_deleted", 0)
-        exception = result.get("fetch_error", exception)
-
-        indexed_count = doc_updated + doc_created
-
-        await job.done(indexed_count, doc_deleted, exception)
-
-        self.doc_source["last_sync_status"] = e2str(job.status)
-        if exception is None:
-            self.doc_source["last_sync_error"] = None
-            self.doc_source["error"] = None
-        else:
-            self.doc_source["last_sync_error"] = str(exception)
-            self.doc_source["error"] = str(exception)
-            self.status = Status.ERROR
-
-        self.doc_source["last_synced"] = iso_utc()
-        await self.sync_doc()
-        logger.info(
-            f"Sync done: {indexed_count} indexed, {doc_deleted} "
-            f" deleted. ({int(time.time() - self._start_time)} seconds)"
+    async def sync_done(self, job):
+        job_status = JobStatus.ERROR if job is None else job.status
+        job_error = JOB_NOT_FOUND_ERROR if job is None else job.error
+        if job_error is None and job_status == JobStatus.ERROR:
+            job_error = UNKNOWN_ERROR
+        connector_status = (
+            Status.ERROR if job_status == JobStatus.ERROR else Status.CONNECTED
         )
 
-    async def prepare_docs(self, data_provider):
-        logger.debug(f"Using pipeline {self.pipeline}")
+        doc = {
+            "last_sync_status": job_status.value,
+            "last_synced": iso_utc(),
+            "last_sync_error": job_error,
+            "status": connector_status.value,
+            "error": job_error,
+        }
 
-        async for doc, lazy_download in data_provider.get_docs():
-            # adapt doc for pipeline settings
-            doc["_extract_binary_content"] = self.pipeline.extract_binary_content
-            doc["_reduce_whitespace"] = self.pipeline.reduce_whitespace
-            doc["_run_ml_inference"] = self.pipeline.run_ml_inference
-            yield doc, lazy_download
+        if job is not None and job.terminated:
+            doc["last_indexed_document_count"] = job.indexed_document_count
+            doc["last_deleted_document_count"] = job.deleted_document_count
 
+        await self.index.update(doc_id=self.id, doc=doc)
+
+    @with_concurrency_control()
     async def prepare(self, config):
         """Prepares the connector, given a configuration
-
-        If the connector id and the service is in the config, we want to
+        If the connector id and the service type is in the config, we want to
         populate the service type and then sets the default configuration.
 
-        Returns the source class.
+        Also checks that the configuration structure is correct.
+        If a field is missing, raises an error. If a property is missing, add it.
         """
+        await self.reload()
+
         configured_connector_id = config.get("connector_id", "")
         configured_service_type = config.get("service_type", "")
 
-        if self.id == configured_connector_id and self.service_type is None:
-            if not configured_service_type:
-                logger.error(
-                    f"Service type is not configured for connector {configured_connector_id}"
+        if self.id != configured_connector_id:
+            # check configuration for native and other peripheral connectors
+            if self.service_type not in config["sources"]:
+                logger.debug(
+                    f"Peripheral connector {self.id} has invalid service type {self.service_type}, cannot check configuration formatting."
                 )
-                raise ServiceTypeNotConfiguredError("Service type is not configured.")
-            self.service_type = configured_service_type
-            logger.debug(f"Populated service type for connector {self.id}")
+                return
 
-        service_type = self.service_type
-        if service_type not in config["sources"]:
-            raise ServiceTypeNotSupportedError(service_type)
+            await self.validate_configuration_formatting(
+                config["sources"][self.service_type], self.service_type
+            )
 
-        fqn = config["sources"][service_type]
-        try:
-            source_klass = get_source_klass(fqn)
-            if self.configuration.is_empty():
-                self.configuration = source_klass.get_default_configuration()
-                logger.debug(f"Populated configuration for connector {self.id}")
+            return
 
-            # sync state if needed (when service type or configuration is updated)
+        if not configured_service_type:
+            logger.error(
+                f"Service type is not configured for connector {configured_connector_id}"
+            )
+            raise ServiceTypeNotConfiguredError("Service type is not configured.")
+
+        if configured_service_type not in config["sources"]:
+            raise ServiceTypeNotSupportedError(configured_service_type)
+
+        if self.service_type is not None and not self.configuration.is_empty():
+            await self.validate_configuration_formatting(
+                config["sources"][configured_service_type], configured_service_type
+            )
+
+            return
+
+        doc = {}
+        if self.service_type is None:
+            doc["service_type"] = configured_service_type
+            logger.debug(
+                f"Populated service type {configured_service_type} for connector {self.id}"
+            )
+
+        if self.configuration.is_empty():
+            fqn = config["sources"][configured_service_type]
             try:
-                await self.sync_doc(force=False)
+                source_klass = get_source_klass(fqn)
+
+                # sets the defaults and the flag to NEEDS_CONFIGURATION
+                doc["configuration"] = source_klass.get_simple_configuration()
+                doc["status"] = Status.NEEDS_CONFIGURATION.value
+                logger.debug(f"Populated configuration for connector {self.id}")
             except Exception as e:
                 logger.critical(e, exc_info=True)
-                raise ConnectorUpdateError(
-                    f"Could not update configuration for connector {self.id}"
+                raise DataSourceError(
+                    f"Could not instantiate {fqn} for {configured_service_type}"
                 )
+
+        await self.index.update(
+            doc_id=self.id,
+            doc=doc,
+            if_seq_no=self._seq_no,
+            if_primary_term=self._primary_term,
+        )
+        await self.reload()
+
+    @with_concurrency_control()
+    async def validate_filtering(self, validator):
+        await self.reload()
+        draft_filter = self.filtering.get_draft_filter()
+        if not draft_filter.has_validation_state(FilteringValidationState.EDITED):
+            logger.debug(
+                f"Filtering of connector {self.id} is in state {draft_filter.validation['state']}, skipping..."
+            )
+            return
+
+        logger.info(
+            f"Filtering of connector {self.id} is in state {FilteringValidationState.EDITED.value}, validating...)"
+        )
+        validation_result = await validator.validate_filtering(draft_filter)
+        logger.info(
+            f"Filtering validation result for connector {self.id}: {validation_result.state.value}"
+        )
+
+        filtering = self.filtering.to_list()
+        for filter_ in filtering:
+            if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
+                filter_.get("draft", {"validation": {}})[
+                    "validation"
+                ] = validation_result.to_dict()
+                if validation_result.state == FilteringValidationState.VALID:
+                    filter_["active"] = filter_.get("draft")
+
+        await self.index.update(
+            doc_id=self.id,
+            doc={"filtering": filtering},
+            if_seq_no=self._seq_no,
+            if_primary_term=self._primary_term,
+        )
+        await self.reload()
+
+    async def document_count(self):
+        await self.index.client.indices.refresh(
+            index=self.index_name, ignore_unavailable=True
+        )
+        result = await self.index.client.count(
+            index=self.index_name, ignore_unavailable=True
+        )
+        return result["count"]
+
+    async def validate_configuration_formatting(self, fqn, service_type):
+        """Wrapper function for validating configuration fields
+        and field properties.
+
+        Args:
+            fqn (string): the source fqn for a service, from config file
+            service_type (string): service type of the connector
+        """
+        try:
+            source_klass = get_source_klass(fqn)
         except Exception as e:
             logger.critical(e, exc_info=True)
             raise DataSourceError(f"Could not instantiate {fqn} for {service_type}")
 
-        self.source_klass = source_klass
+        default_config = source_klass.get_simple_configuration()
+        current_config = self.configuration.to_dict()
 
-    async def sync(self, elastic_server, idling, sync_now=False):
-        # If anything bad happens before we create a sync job
-        # (like bad scheduling config, etc)
-        #
-        # we will raise the error in the logs here and let Kibana knows
-        # by toggling the status and setting the error and status field
-        if self.source_klass is None:
-            raise Exception("Can't call `sync()` before `prepare()`")
+        self.validate_configuration_fields(service_type, default_config, current_config)
+        await self.add_missing_configuration_field_properties(
+            service_type, default_config, current_config
+        )
 
-        try:
-            service_type = self.service_type
-            if not sync_now:
-                next_sync = self.next_sync()
-                if next_sync == SYNC_DISABLED or next_sync - idling > 0:
-                    if next_sync == SYNC_DISABLED:
-                        logger.debug(f"Scheduling is disabled for {service_type}")
-                    else:
-                        logger.debug(
-                            f"Next sync for {service_type} due in {int(next_sync)} seconds"
-                        )
-                    # if we don't sync, we still want to make sure we tell kibana we are connected
-                    # if the status is different from comnected
-                    if self.status != Status.CONNECTED:
-                        self.status = Status.CONNECTED
-                        await self.sync_doc()
-                    return
-            else:
-                self.sync_now = True
-                logger.info("Sync forced")
+    def validate_configuration_fields(
+        self, service_type, default_config, current_config
+    ):
+        """Checks if any fields in a configuration are missing.
+        If a field is missing, raises an error.
+        Ignores additional non-standard fields.
 
-            try:
-                self.data_provider = self.source_klass(self)
-            except Exception as e:
-                logger.critical(e, exc_info=True)
-                raise DataSourceError(
-                    f"Could not instantiate {self.source_klass} for {service_type}"
-                )
+        Args:
+            service_type (string): service type of the connector
+            default_config (dict): the default configuration for the connector
+            current_config (dict): the currently existing configuration for the connector
+        """
+        missing_fields = list(set(default_config.keys()) - set(current_config.keys()))
 
-            if not await self.data_provider.changed():
-                logger.debug(f"No change in {service_type} data provider, skipping...")
-                return
-        except Exception as exc:
-            self.doc_source["error"] = str(exc)
-            self.status = Status.ERROR
-            await self.sync_doc()
-            raise
-
-        logger.debug(f"Syncing '{service_type}'")
-        self._syncing = True
-        job = await self._sync_starts()
-        try:
-            logger.debug(f"Pinging the {self.data_provider} backend")
-            await self.data_provider.ping()
-            await asyncio.sleep(0)
-
-            mappings, settings = defaults_for(
-                is_connectors_index=True,
-                language_code=self.language_code,
-                analysis_icu=self.analysis_icu,
+        if len(missing_fields) > 0:
+            raise MalformedConfigurationError(
+                f'Connector for {service_type}(id: "{self.id}") has missing configuration fields: {", ".join(missing_fields)}'
             )
-            logger.debug("Preparing the index")
-            await elastic_server.prepare_index(
-                self.index_name, mappings=mappings, settings=settings
-            )
-            await asyncio.sleep(0)
 
-            result = await elastic_server.async_bulk(
-                self.index_name,
-                self.prepare_docs(self.data_provider),
-                self.data_provider.connector.pipeline,
-                options=self.bulk_options,
-            )
-            await self._sync_done(job, result)
+        return
 
-        except Exception as e:
-            await self._sync_done(job, {}, exception=e)
-            raise
-        finally:
-            self._syncing = False
-            self._start_time = None
+    async def add_missing_configuration_field_properties(
+        self, service_type, default_config, current_config
+    ):
+        """Checks the field properties for every field in a configuration.
+        If a field is missing field properties, add those field properties
+        with default values.
+        If no field properties are missing, nothing is updated.
+
+        Args:
+            service_type (string): service type of the connector
+            default_config (dict): the default configuration for the connector
+            current_config (dict): the currently existing configuration for the connector
+        """
+        configs_missing_properties = filter_nested_dict_by_keys(
+            DEFAULT_CONFIGURATION.keys(), current_config
+        )
+        if not configs_missing_properties:
+            return
+
+        logger.info(
+            f'Connector for {service_type}(id: "{self.id}") is missing configuration field properties. Generating defaults.'
+        )
+
+        # filter the default config by what fields we want to update, then merge the actual config into it
+        filtered_default_config = {
+            key: value
+            for key, value in default_config.items()
+            if key in configs_missing_properties.keys()
+        }
+        doc = {
+            "configuration": deep_merge_dicts(
+                filtered_default_config, configs_missing_properties
+            )
+        }
+
+        await self.index.update(
+            doc_id=self.id,
+            doc=doc,
+            if_seq_no=self._seq_no,
+            if_primary_term=self._primary_term,
+        )
+        await self.reload()
+
+
+IDLE_JOBS_THRESHOLD = 60  # 60 seconds
+
+
+class SyncJobIndex(ESIndex):
+    """
+    Represents Elasticsearch index for sync jobs
+
+    Args:
+        elastic_config (dict): Elasticsearch configuration and credentials
+    """
+
+    def __init__(self, elastic_config):
+        super().__init__(index_name=JOBS_INDEX, elastic_config=elastic_config)
+
+    def _create_object(self, doc_source):
+        """
+        Args:
+            doc_source (dict): A raw Elasticsearch document
+        Returns:
+            SyncJob
+        """
+        return SyncJob(
+            self,
+            doc_source=doc_source,
+        )
+
+    async def create(self, connector, trigger_method):
+        filtering = connector.filtering.get_active_filter().transform_filtering()
+        job_def = {
+            "connector": {
+                "id": connector.id,
+                "filtering": filtering,
+                "index_name": connector.index_name,
+                "language": connector.language,
+                "pipeline": connector.pipeline.data,
+                "service_type": connector.service_type,
+                "configuration": connector.configuration.to_dict(),
+            },
+            "trigger_method": trigger_method.value,
+            "status": JobStatus.PENDING.value,
+            "indexed_document_count": 0,
+            "indexed_document_volume": 0,
+            "deleted_document_count": 0,
+            "created_at": iso_utc(),
+            "last_seen": iso_utc(),
+        }
+        await self.index(job_def)
+
+    async def pending_jobs(self, connector_ids):
+        query = {
+            "bool": {
+                "must": [
+                    {
+                        "terms": {
+                            "status": [
+                                JobStatus.PENDING.value,
+                                JobStatus.SUSPENDED.value,
+                            ]
+                        }
+                    },
+                    {"terms": {"connector.id": connector_ids}},
+                ]
+            }
+        }
+        sort = [{"created_at": Sort.ASC.value}]
+        async for job in self.get_all_docs(query=query, sort=sort):
+            yield job
+
+    async def orphaned_jobs(self, connector_ids):
+        query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
+        async for job in self.get_all_docs(query=query):
+            yield job
+
+    async def idle_jobs(self, connector_ids):
+        query = {
+            "bool": {
+                "filter": [
+                    {"terms": {"connector.id": connector_ids}},
+                    {
+                        "terms": {
+                            "status": [
+                                JobStatus.IN_PROGRESS.value,
+                                JobStatus.CANCELING.value,
+                            ]
+                        }
+                    },
+                    {"range": {"last_seen": {"lte": f"now-{IDLE_JOBS_THRESHOLD}s"}}},
+                ]
+            }
+        }
+
+        async for job in self.get_all_docs(query=query):
+            yield job
+
+    async def delete_jobs(self, job_ids):
+        query = {"terms": {"_id": job_ids}}
+        return await self.client.delete_by_query(index=self.index_name, query=query)

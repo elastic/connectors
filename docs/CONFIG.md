@@ -9,7 +9,8 @@ Configuration lives in [config.yml](../config.yml).
   - `api_key`: The API key for Elasticsearch connection. You can't set `api_key` when basic auth is used.
   - `ssl`: Whether SSL is used for the Elasticsearch connection.
   - `ca_certs`: Path to a CA bundle.
-  - `bulk`: Options for the Bulk API calls behavior
+  - `bulk`: Options for the Bulk API calls behavior - all options can be
+    overriden by each source class
     - `display_every`: The number of docs between each counters display. Defaults to 100.
     - `queue_max_size`: The max size of the bulk queue. Defaults to 1024.
     - `queue_max_mem_size`: The max size in MB of the bulk queue. When it's reached, the next put
@@ -18,14 +19,13 @@ Configuration lives in [config.yml](../config.yml).
        prepared reaches that size, the query is emitted even if `chunk_size` is not yet reached. Defaults to 5.
     - `chunk_size`: The max size of the bulk operation to Elasticsearch. Defaults to 500.
     - `max_concurrency`: Maximum number of concurrent bulk requests. Defaults to 5.
+    - `concurrent_downloads`: Maximum number of concurrent downloads in the backend. Default to 10.
   - `retry_on_timeout`: Whether to retry on request timeout. Defaults to `true`.
   - `request_timeout`: The request timeout to be passed to transport in options. Defaults to 120.
   - `max_wait_duration`: The maximum wait duration (in seconds) for the Elasticsearch connection. Defaults to 60.
   - `initial_backoff_duration`: The initial backoff duration (in seconds). Defaults to 5.
   - `backoff_multiplier`: The backoff multiplier. Defaults to 2.
   - `log_level`: Elasticsearch log level. Defaults to `INFO`.
-  - `language_code`: The language code used when creating a mapping for an index. Defaults to `en`.
-  - `analysis_icu`: The analysis_icu used when creating a mapping for an index. Defaults to `false`.
 - `service`: Connector service related configurations.
   - `idling`: The interval (in seconds) to poll connectors from Elasticsearch.
   - `heartbeat`: The interval (in seconds) to send a new heartbeat for a connector.
@@ -33,9 +33,12 @@ Configuration lives in [config.yml](../config.yml).
   - `preflight_idle`: The number of seconds to wait between each pre-flight check. Defaults to 30.
   - `max_errors`: The maximum number of errors allowed in one event loop.
   - `max_errors_span`: The number of seconds to reset `max_errors` count.
+  - `max_concurrent_syncs`: The maximum number of concurrent syncs. Defaults to 1.
+  - `job_cleanup_interval`: The interval (in seconds) to run job cleanup task.
+  - `log_level`: Connector service log level. Defaults to `INFO`.
 - `native_service_types`: An array of supported native connectors (in service type).
 - `connector_id`: The ID of the custom connector.
-- `servcie_type` The service type of the custom connector.
+- `service_type` The service type of the custom connector.
 - `sources`: A mapping/dictionary between service type and [Fully Qualified Name
 (FQN)](https://en.wikipedia.org/wiki/Fully_qualified_name). E.g. `mongodb: connectors.sources.mongo:MongoDataSource`.
 

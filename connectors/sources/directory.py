@@ -12,39 +12,40 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+from connectors.logger import logger
+from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
-HERE = os.path.dirname(__file__)
-DEFAULT_CONTENT_EXTRACTION = True
+DEFAULT_DIR = os.environ.get("SYSTEM_DIR", os.path.dirname(__file__))
 
 
-class DirectoryDataSource:
+class DirectoryDataSource(BaseDataSource):
     """Directory"""
 
-    def __init__(self, connector):
-        self.directory = connector.configuration["directory"]
-        self.pattern = connector.configuration["pattern"]
-        self.enable_content_extraction = connector.configuration.get(
-            "enable_content_extraction", DEFAULT_CONTENT_EXTRACTION
-        )
+    name = "System Directory"
+    service_type = "dir"
+
+    def __init__(self, configuration):
+        super().__init__(configuration=configuration)
+        self.directory = os.path.abspath(self.configuration["directory"])
+        self.pattern = self.configuration["pattern"]
 
     @classmethod
     def get_default_configuration(cls):
         return {
             "directory": {
-                "value": HERE,
-                "label": "Directory",
+                "label": "Directory path",
+                "order": 1,
                 "type": "str",
+                "validations": [],
+                "value": DEFAULT_DIR,
             },
             "pattern": {
-                "value": "**/*.py",
+                "display": "text",
                 "label": "File glob-like pattern",
+                "order": 2,
                 "type": "str",
-            },
-            "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Flag to check if content extraction is enabled or not",
-                "type": "bool",
+                "value": "**/*.*",
             },
         }
 
@@ -58,23 +59,21 @@ class DirectoryDataSource:
         return hashlib.md5(str(path).encode("utf8")).hexdigest()
 
     async def _download(self, path, timestamp=None, doit=None):
-        if not (
-            self.enable_content_extraction
-            and doit
-            and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES
-        ):
+        if not (doit and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES):
             return
 
-        print(f"Reading {path}")
+        logger.info(f"Reading {path}")
         with open(file=path, mode="rb") as f:
             return {
                 "_id": self.get_id(path),
-                "timestamp": timestamp,
+                "_timestamp": timestamp,
                 "_attachment": get_base64_value(f.read()),
             }
 
-    async def get_docs(self):
+    async def get_docs(self, filtering=None):
+        logger.debug(f"Reading {self.directory}...")
         root_directory = Path(self.directory)
+
         for path_object in root_directory.glob(self.pattern):
             if not path_object.is_file():
                 continue
@@ -83,13 +82,24 @@ class DirectoryDataSource:
             download_coro = functools.partial(self._download, str(path_object))
 
             # get the last modified value of the file
-            ts = path_object.stat().st_mtime
+            stat = path_object.stat()
+            ts = stat.st_mtime
             ts = datetime.fromtimestamp(ts, tz=timezone.utc)
 
             # send back as a doc
             doc = {
                 "path": str(path_object),
-                "timestamp": ts.isoformat(),
+                "last_modified_time": ts,
+                "inode_protection_mode": stat.st_mode,
+                "inode_number": stat.st_ino,
+                "device_inode_reside": stat.st_dev,
+                "number_of_links": stat.st_nlink,
+                "uid": stat.st_uid,
+                "gid": stat.st_gid,
+                "ctime": stat.st_ctime,
+                "last_access_time": stat.st_atime,
+                "size": stat.st_size,
+                "_timestamp": ts.isoformat(),
                 "_id": self.get_id(path_object),
             }
 

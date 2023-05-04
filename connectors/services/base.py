@@ -3,46 +3,138 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import os
+"""Provides:
 
-from envyaml import EnvYAML
+- `BaseService`: a base class for running a service in the CLI
+- `MultiService`: a meta-service that runs several services against the same
+  config
+- `get_services` and `get_service`: factories
+"""
+import asyncio
+import time
 
 from connectors.logger import logger
+from connectors.utils import CancellableSleeps
+
+__all__ = [
+    "MultiService",
+    "ServiceAlreadyRunningError",
+    "get_service",
+    "get_services",
+    "BaseService",
+]
 
 
-class BaseService:
-    def __init__(self, args):
-        self.args = args
-        config_file = args.config_file
-        self.config_file = config_file
-        if not os.path.exists(config_file):
-            raise IOError(f"{config_file} does not exist")
-        self.config = EnvYAML(config_file)
-        self.ent_search_config()
+class ServiceAlreadyRunningError(Exception):
+    pass
 
-    def ent_search_config(self):
-        if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
-            return
-        logger.info("Found ENT_SEARCH_CONFIG_PATH, loading ent-search config")
-        ent_search_config = EnvYAML(os.environ["ENT_SEARCH_CONFIG_PATH"])
-        for field in (
-            "elasticsearch.host",
-            "elasticsearch.username",
-            "elasticsearch.password",
-            "elasticsearch.headers",
-        ):
-            sub = field.split(".")[-1]
-            if field not in ent_search_config:
-                continue
-            logger.debug(f"Overriding {field}")
-            self.config["elasticsearch"][sub] = ent_search_config[field]
+
+_SERVICES = {}
+
+
+def get_services(names, config):
+    """Instantiates a list of services given their names and a config.
+
+    returns a `MultiService` instance.
+    """
+    return MultiService(*[get_service(name, config) for name in names])
+
+
+def get_service(name, config):
+    """Instantiates a service object given a name and a config"""
+    return _SERVICES[name](config)
+
+
+class _Registry(type):
+    """Metaclass used to register a service class in an internal registry."""
+
+    def __new__(cls, name, bases, dct):
+        service_name = dct.get("name")
+        class_instance = super().__new__(cls, name, bases, dct)
+        if service_name is not None:
+            _SERVICES[service_name] = class_instance
+        return class_instance
+
+
+class BaseService(metaclass=_Registry):
+    """Base class for creating a service.
+
+    Any class deriving from this class will get added to the registry,
+    given its `name` class attribute (unless it's not set).
+
+    A concrete service class needs to implement `_run`.
+    """
+
+    name = None  # using None here avoids registring this class
+
+    def __init__(self, config):
+        self.config = config
+        self.service_config = self.config["service"]
+        self.es_config = self.config["elasticsearch"]
+        self.running = False
+        self._sleeps = CancellableSleeps()
+        self.errors = [0, time.time()]
 
     def stop(self):
+        self.running = False
+        self._sleeps.cancel()
+
+    async def _run(self):
         raise NotImplementedError()
 
     async def run(self):
-        raise NotImplementedError()
+        """Runs the service"""
+        if self.running:
+            raise ServiceAlreadyRunningError(
+                f"{self.__class__.__name__} is already running."
+            )
+
+        self.running = True
+        try:
+            await self._run()
+        finally:
+            self.stop()
+
+    def raise_if_spurious(self, exception):
+        errors, first = self.errors
+        errors += 1
+
+        # if we piled up too many errors we raise and quit
+        if errors > self.service_config["max_errors"]:
+            raise exception
+
+        # we re-init every ten minutes
+        if time.time() - first > self.service_config["max_errors_span"]:
+            first = time.time()
+            errors = 0
+
+        self.errors[0] = errors
+        self.errors[1] = first
+
+
+class MultiService:
+    """Wrapper class to run multiple services against the same config."""
+
+    def __init__(self, *services):
+        self._services = services
+
+    async def run(self):
+        """Runs every service in a task and wait for all tasks."""
+        tasks = [asyncio.create_task(service.run()) for service in self._services]
+
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
+
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                logger.error("Service did not handle cancellation gracefully.")
 
     def shutdown(self, sig):
-        logger.info(f"Caught {sig.name}. Graceful shutdown.")
-        self.stop()
+        logger.info(f"Caught {sig}. Graceful shutdown.")
+
+        for service in self._services:
+            logger.debug(f"Shutting down {service.__class__.__name__}...")
+            service.stop()
+            logger.debug(f"Done shutting down {service.__class__.__name__}...")
