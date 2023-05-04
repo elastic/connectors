@@ -37,7 +37,7 @@ def _parser():
         "--action",
         type=str,
         default=["schedule", "execute", "cleanup"],
-        choices=["schedule", "execute", "list", "default_configuration", "cleanup"],
+        choices=["schedule", "execute", "list", "config", "cleanup"],
         nargs="+",
         help="What elastic-ingest should do",
     )
@@ -84,7 +84,7 @@ def _parser():
         "--service-type",
         type=str,
         default=None,
-        help="Service type to get default configuration for if action is default_configuration",
+        help="Service type to get default configuration for if action is config",
     )
 
     parser.add_argument(
@@ -162,13 +162,15 @@ def run(args):
         print("Bye")
         return 0
 
-    if args.action == ["default_configuration"]:
+    if args.action == ["config"]:
         service_type = args.service_type
         print(f"Getting default configuration for service type {service_type}")
+
         source_list = config["sources"]
         if service_type not in source_list:
             print(f"Could not find a connector for service type {service_type}")
-            return 0
+            return -1
+
         source_klass = get_source_klass(source_list[service_type])
         print(json.dumps(source_klass.get_simple_configuration(), indent=2))
         print("Bye")
