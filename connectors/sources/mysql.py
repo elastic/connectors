@@ -585,9 +585,12 @@ class MySqlDataSource(BaseDataSource):
             )
             return
 
-        last_update_times = [
-            await client.get_last_update_time(table) for table in tables
-        ]
+        last_update_times = list(
+            filter(
+                lambda update_time: update_time is not None,
+                [await client.get_last_update_time(table) for table in tables],
+            )
+        )
         column_names = await client.get_column_names_for_query(query=query)
 
         async for row in client.yield_rows_for_query(query):
@@ -596,7 +599,7 @@ class MySqlDataSource(BaseDataSource):
                 column_names=column_names,
                 primary_key_columns=primary_key_columns,
                 table=tables,
-                timestamp=max(last_update_times),
+                timestamp=max(last_update_times) if len(last_update_times) else None,
             )
 
     async def get_tables_to_fetch(self):
