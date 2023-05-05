@@ -27,6 +27,18 @@ config_mappings = {
     "log_level": "service.log_level",
 }
 
+# Enterprise Search uses Ruby and is in lower case always, so hacking it here for now
+# Ruby-supported log levels: 'debug', 'info', 'warn', 'error', 'fatal', 'unknown'
+# Python-supported log levels: 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL', 'NOTSET'
+log_level_mappings = {
+    "debug": "DEBUG",
+    "info": "INFO",
+    "warn": "WARNING",
+    "error": "ERROR",
+    "fatal": "CRITICAL",
+    "unknown": "NOTSET",
+}
+
 
 def _ent_search_config(configuration):
     if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
@@ -41,8 +53,11 @@ def _ent_search_config(configuration):
         es_field_value = ent_search_config[es_field]
 
         if es_field == "log_level":
-            # Enterprise Search uses Ruby and is in lower case always, so hacking it here for now
-            es_field_value = es_field_value.upper()
+            if es_field_value not in log_level_mappings:
+                raise ValueError(
+                    f"Unexpected log level: {es_field_value}. Allowed values: {', '.join(log_level_mappings.keys())}"
+                )
+            es_field_value = log_level_mappings[es_field_value]
 
         _update_config_field(configuration, connector_field, es_field_value)
 
