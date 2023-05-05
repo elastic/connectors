@@ -38,10 +38,13 @@ def _ent_search_config(configuration):
             continue
 
         connector_field = config_mappings[es_field]
+        es_field_value = ent_search_config[es_field]
 
-        _update_config_field(
-            configuration, connector_field, ent_search_config[es_field]
-        )
+        if es_field == "log_level":
+            # Enterprise Search uses Ruby and is in lower case always, so hacking it here for now
+            es_field_value = es_field_value.upper()
+
+        _update_config_field(configuration, connector_field, es_field_value)
 
         logger.debug(f"Overridden {connector_field}")
 
