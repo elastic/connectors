@@ -11,7 +11,7 @@ from unittest.mock import ANY, Mock, call
 
 import pytest
 
-from connectors.byoc import Pipeline
+from connectors.db import Pipeline
 from connectors.byoei import (
     AsyncBulkRunningError,
     Bulker,

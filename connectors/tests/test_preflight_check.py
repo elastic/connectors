@@ -6,7 +6,7 @@
 
 import pytest
 
-from connectors.byoc import CONNECTORS_INDEX, JOBS_INDEX
+from connectors.db import CONNECTORS_INDEX, JOBS_INDEX
 from connectors.preflight_check import PreflightCheck
 
 headers = {"X-Elastic-Product": "Elasticsearch"}

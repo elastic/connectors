@@ -8,7 +8,7 @@ import time
 
 import elasticsearch
 
-from connectors.byoc import JobStatus
+from connectors.db import JobStatus
 from connectors.byoei import ElasticServer
 from connectors.es import Mappings
 from connectors.es.client import with_concurrency_control

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from connectors.byoc import Filter
+from connectors.db import Filter
 from connectors.filtering.basic_rule import BasicRule
 from connectors.filtering.validation import (
     AdvancedRulesValidator,

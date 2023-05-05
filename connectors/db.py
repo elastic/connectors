@@ -4,7 +4,13 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """
-Implementation of BYOC protocol.
+Database for connectors - see docs/CONNECTOR_PROTOCOL.md indices.
+
+Main classes are :
+
+- ConnectorIndex: represents a document in `.elastic-connectors`
+- SyncJob: represents a document in `.elastic-connectors-sync-jobs`
+
 """
 import socket
 from collections import UserDict

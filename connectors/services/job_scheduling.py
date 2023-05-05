@@ -12,7 +12,7 @@ Event loop
 """
 from datetime import datetime
 
-from connectors.byoc import (
+from connectors.db import (
     ConnectorIndex,
     DataSourceError,
     JobTriggerMethod,

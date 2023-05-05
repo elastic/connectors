@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from elasticsearch import ConflictError
 
-from connectors.byoc import (
+from connectors.db import (
     DataSourceError,
     JobTriggerMethod,
     ServiceTypeNotConfiguredError,

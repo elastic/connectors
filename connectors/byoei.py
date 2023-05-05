@@ -29,7 +29,7 @@ from collections import defaultdict
 from elasticsearch import NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan
 
-from connectors.byoc import Filter
+from connectors.db import Filter
 from connectors.es import ESClient
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger

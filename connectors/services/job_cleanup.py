@@ -7,7 +7,7 @@
 A task periodically clean up orphaned and idle jobs.
 """
 
-from connectors.byoc import ConnectorIndex, SyncJobIndex
+from connectors.db import ConnectorIndex, SyncJobIndex
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.services.base import BaseService
