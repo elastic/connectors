@@ -24,3 +24,7 @@ If you are looking for the implementation in Ruby, See [connectors-ruby](https:/
 - [Connector Protocol](https://github.com/elastic/connectors-python/blob/main/docs/CONNECTOR_PROTOCOL.md)
 - [Configuration](docs/CONFIG.md)
 - [Contribution guide](docs/CONTRIBUTING.md)
+
+### Advanced sync rules
+
+- [MySQL](docs/sync-rules/MYSQL.md)
