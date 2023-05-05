@@ -318,7 +318,7 @@ class SharepointClient:
                         )
                         retry_seconds = DEFAULT_RETRY_SECONDS
                     logger.warning(
-                        f"Rate Limited: have {response_headers['RateLimit-Remaining']} of {response_headers['RateLimit-Limit']} left, opportunity to retry in {retry_seconds} seconds"
+                        f"Rate Limited by Sharepoint: have {response_headers['RateLimit-Remaining']} of {response_headers['RateLimit-Limit']} left, opportunity to retry in {retry_seconds} seconds"
                     )
                 elif "token has expired" in response_headers.get(  # pyright: ignore
                     "x-ms-diagnostics", ""
