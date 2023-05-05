@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from connectors.db import JobStatus
 from connectors.config import load_config
+from connectors.db import JobStatus
 from connectors.es.index import DocumentNotFoundError
 from connectors.services.job_execution import JobExecutionService
 from connectors.tests.commons import AsyncIterator

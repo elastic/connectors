@@ -11,7 +11,6 @@ from unittest.mock import ANY, Mock, call
 
 import pytest
 
-from connectors.db import Pipeline
 from connectors.byoei import (
     AsyncBulkRunningError,
     Bulker,
@@ -20,6 +19,7 @@ from connectors.byoei import (
     Fetcher,
     IndexMissing,
 )
+from connectors.db import Pipeline
 from connectors.tests.commons import AsyncIterator
 
 INDEX = "some-index"

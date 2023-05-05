@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from elasticsearch import ConflictError
 
+from connectors.config import load_config
 from connectors.db import (
     DataSourceError,
     JobTriggerMethod,
@@ -18,7 +19,6 @@ from connectors.db import (
     ServiceTypeNotSupportedError,
     Status,
 )
-from connectors.config import load_config
 from connectors.es.index import DocumentNotFoundError
 from connectors.services.job_scheduling import JobSchedulingService
 from connectors.source import DataSourceConfiguration
