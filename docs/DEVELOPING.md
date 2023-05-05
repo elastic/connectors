@@ -297,15 +297,13 @@ For additional operations, see [Usage](https://www.elastic.co/guide/en/enterpris
    **Note:** Ensure you are logged in as the Azure Portal **service account**.
   - Sign in to https://portal.azure.com/ and click on **Azure Active Directory**
   - Locate **App Registrations** and Click **New Registration**.
-  - Give your app a name - like "Elastic  Search" - and make it multitenant.
-    
-    **Note:** Setting the app to single tenant will result in a degraded experience, and the connector will not sync content.
+  - Give your app a name - like "Elastic  Search".
     
     Leave the Redirect URIs blank for now.
   - Register the application
-  - Retrieve and keep the **Client ID** and **Tenant ID** handy - we'll need it within Elastic Search.
-  - Locate the **Client Secret** by navigating to **Certificates & Secrets**
-  - Pick a name for your client secret (for example, Elastic Search). Select 24 months as the expiration date
+  - Retrieve and keep the **Application (client) ID** and **Directory (tenant) ID** handy - we'll need it within Elastic Search.
+  - Locate the **Client Secret** by navigating to **Client credentials: Certificates & Secrets**
+  - Pick a name for your client secret (for example, Elastic Search). Select an expiration date. (**Note:** at the end of this expiration date, you will need to generate a new secret and update your connector configuration with it.)
   - Save the **Client Secret** value before leaving this screen - we'll need it within Elastic Search.
   - We must now set up the permissions the Application will request from the Azure Portal service account. Navigate to **API Permissions** and click **Add Permission**. Add **delegated permissions** until the list resembles the following:
     ```
@@ -324,7 +322,7 @@ For additional operations, see [Usage](https://www.elastic.co/guide/en/enterpris
    - To set `DisableCustomAppAuthentication` to false we need to connect to SharePoint using Windows PowerShell and run set-spotenant -DisableCustomAppAuthentication $false
    - To assign full permissions to the tenant in SharePoint Online, in your browser, go to the tenant URL. For example, go to `https://<office_365_admin_tenant_URL>/_layouts/15/appinv.aspx` such as `https://contoso-admin.sharepoint.com/_layouts/15/appinv.aspx`. The SharePoint admin center page appears.
        - In the App ID box, enter the application ID that you recorded earlier, and then click Lookup. In the Title box, the name of the application appears.
-       - In the App Domain box, type tenantname.onmicrosoft.com
+       - In the App Domain box, type <tenant_name>.onmicrosoft.com
        - In the App's Permission Request XML box, type the following XML string:
            ```
             <AppPermissionRequests AllowAppOnlyPolicy="true">
@@ -383,7 +381,7 @@ The tenant id to authenticate with SharePoint Online.
 The server host url where the SharePoint is hosted. Examples:
 
   - `https://192.158.1.38:8080`
-  - `https://test_user.sharepoint.com`
+  - `https://<tenant_name>.sharepoint.com`
 
 ##### `site_collections`
 
