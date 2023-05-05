@@ -341,6 +341,7 @@ async def test_get_list_items():
         list_id="620070a1-ee50-4585-b6a7-0f6210b1a69d",
         site_url="/sites/enterprise/ctest",
         server_relative_url="/sites/enterprise/site1",
+        selected_field="",
     ):
         expected_response.append(item)
     # Assert
@@ -430,6 +431,7 @@ async def test_get_drive_items():
         list_id="620070a1-ee50-4585-b6a7-0f6210b1a69d",
         site_url="/sites/enterprise/ctest",
         server_relative_url=None,
+        selected_field="",
     ):
         expected_response.append(item)
     # Assert
@@ -1029,3 +1031,131 @@ def test_get_session():
     first_instance = source.sharepoint_client._get_session()
     second_instance = source.sharepoint_client._get_session()
     assert first_instance is second_instance
+
+
+@pytest.mark.asyncio
+async def test_get_site_pages_content():
+    # Setup
+    source = create_source(SharepointDataSource)
+    EXPECTED_ATTACHMENT = {
+        "id": 1,
+        "server_relative_url": "/url",
+        "_timestamp": "2022-06-20T10:37:44Z",
+        "size": "11",
+        "type": "sites",
+        "file_name": "dummy.pdf",
+    }
+    RESPONSE_DATA = {"WikiField": "This is a dummy sharepoint body response"}
+    EXPECTED_CONTENT = {
+        "_id": 1,
+        "_attachment": "VGhpcyBpcyBhIGR1bW15IHNoYXJlcG9pbnQgYm9keSByZXNwb25zZQ==",
+        "_timestamp": "2022-06-20T10:37:44Z",
+    }
+    # Execute
+    response_content = await source.sharepoint_client.get_site_pages_content(
+        document=EXPECTED_ATTACHMENT,
+        site_url="/site",
+        list_response=RESPONSE_DATA,
+        doit=True,
+    )
+    # Assert
+    assert response_content == EXPECTED_CONTENT
+
+
+async def coroutine_generator(item):
+    """create a method for returning fake coroutine value for
+    Args:
+        item: Value for converting into coroutine
+    """
+    return item
+
+
+@pytest.mark.asyncio
+async def test_get_site_pages_content_when_canvascontent_is_not_none():
+    # Setup
+    source = create_source(SharepointDataSource)
+    source.sharepoint_client.is_cloud = True
+    EXPECTED_ATTACHMENT = {
+        "id": 1,
+        "server_relative_url": "/url",
+        "_timestamp": "2022-06-20T10:37:44Z",
+        "size": "11",
+        "type": "sites",
+        "file_name": "dummy.pdf",
+    }
+    source.sharepoint_client.get_site_page_for_online = Mock(
+        return_value=coroutine_generator("<div>dummy</div>")
+    )
+    # Execute
+    response_content = await source.sharepoint_client.get_site_pages_content(
+        document=EXPECTED_ATTACHMENT,
+        site_url="/site",
+        list_response={"CanvasContent1": None},
+        doit=True,
+    )
+    # Assert
+    assert response_content["_attachment"] == "PGRpdj5kdW1teTwvZGl2Pg=="
+
+
+@pytest.mark.asyncio
+async def test_get_site_pages_content_when_canvascontent_is_none():
+    # Setup
+    source = create_source(SharepointDataSource)
+    source.sharepoint_client.is_cloud = True
+    EXPECTED_ATTACHMENT = {
+        "title": "Home.aspx",
+        "type": "File",
+        "size": "10000000",
+    }
+    source.sharepoint_client.get_site_page_for_online = Mock(
+        return_value=coroutine_generator(None)
+    )
+    # Execute
+    response_content = await source.sharepoint_client.get_site_pages_content(
+        document=EXPECTED_ATTACHMENT,
+        site_url="/site",
+        list_response={"CanvasContent1": None},
+        doit=True,
+    )
+    # Assert
+    assert response_content is None
+
+
+@pytest.mark.asyncio
+async def test_get_site_pages_content_for_is_cloud_when_size_big():
+    """Test the get site pages content method when is_cloud True when size is greater than 10MB"""
+    # Setup
+    source = create_source(SharepointDataSource)
+    source.sharepoint_client.is_cloud = True
+    async_response = {"value": [{"CanvasContent1": None}]}
+    EXPECTED_ATTACHMENT = {
+        "title": "Home.aspx",
+        "type": "File",
+        "size": "1000000000",
+    }
+    source.sharepoint_client._api_call = Mock(return_value=AsyncIter(async_response))
+    # Execute
+    response_content = await source.sharepoint_client.get_site_pages_content(
+        document=EXPECTED_ATTACHMENT,
+        site_url="/site",
+        list_response={},
+        doit=True,
+    )
+    # Assert
+    assert response_content is None
+
+
+@pytest.mark.asyncio
+async def test_get_site_pages_content_for_wikifiled_none():
+    # Setup
+    source = create_source(SharepointDataSource)
+    EXPECTED_ATTACHMENT = {"title": "Home.aspx", "type": "File", "size": "1000000"}
+    # Execute
+    response_content = await source.sharepoint_client.get_site_pages_content(
+        document=EXPECTED_ATTACHMENT,
+        site_url="/site",
+        list_response={"WikiField": None},
+        doit=True,
+    )
+    # Assert
+    assert response_content is None

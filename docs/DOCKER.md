@@ -133,8 +133,11 @@ native_service_types:
   - azure_blob_storage
   - postgresql
   - oracle
+  - confluence
   - dir
+  - sharepoint
   - mssql
+  - jira
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
@@ -146,7 +149,10 @@ sources:
   azure_blob_storage: connectors.sources.azure_blob_storage:AzureBlobStorageDataSource
   postgresql: connectors.sources.postgresql:PostgreSQLDataSource
   oracle: connectors.sources.oracle:OracleDataSource
+  sharepoint: connectors.sources.sharepoint:SharepointDataSource
   mssql: connectors.sources.mssql:MSSQLDataSource
+  jira: connectors.sources.jira:JiraDataSource
+  confluence: connectors.sources.confluence:ConfluenceDataSource
 ```
 
 After that, you can build your own Docker image to run:
