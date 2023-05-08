@@ -32,6 +32,7 @@ from connectors.utils import (
 )
 
 RETRY_INTERVAL = 2
+DEFAULT_RETRY_SECONDS = 30
 RETRIES = 3
 FILE_SIZE_LIMIT = 10485760
 CHUNK_SIZE = 1024
@@ -344,6 +345,26 @@ class SharepointClient:
             "_attachment": await self.convert_file_to_b64(source_file_name),
         }
 
+    def _get_retry_after(self, retry, exception):
+        """verify retry for SharePoint Server/Online
+        Args:
+            retry (int): Number of retry count.
+            exception(Exception/ClientResponseError/ServerDisconnectedError): Exception instance
+        Raises:
+            Exception: An instance of an Exception class.
+        Returns:
+            retry: Retry count
+            retry_seconds: Retry seconds
+        """
+        if retry > self.retry_count:
+            raise exception
+        logger.warning(
+            f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
+        )
+        retry += 1
+        retry_seconds = RETRY_INTERVAL**retry
+        return retry, retry_seconds
+
     async def _api_call(self, url_name, url="", **url_kwargs):
         """Make an API call to the SharePoint Server/Online
 
@@ -357,7 +378,7 @@ class SharepointClient:
         Yields:
             data: API response.
         """
-        retry = 0
+        retry = 1
         # If pagination happens for list and drive items then next pagination url comes in response which will be passed in url field.
         if url == "":
             url = URLS[url_name].format(**url_kwargs)
@@ -379,27 +400,43 @@ class SharepointClient:
                     else:
                         yield await result.json()
                     break
-            except Exception as exception:
-                if isinstance(
-                    exception,
-                    ClientResponseError,
-                ) and "token has expired" in exception.headers.get(  # pyright: ignore
+            except ClientResponseError as exception:
+                retry, retry_seconds = self._get_retry_after(
+                    retry=retry, exception=exception
+                )
+                response_headers = exception.headers or {}
+                if exception.status == 429:
+                    if "Retry-After" in response_headers:
+                        retry_seconds = int(response_headers["Retry-After"])
+                    else:
+                        logger.warning(
+                            "Response Code from Sharepoint Server is 429 but Retry-After header is not found"
+                        )
+                        retry_seconds = DEFAULT_RETRY_SECONDS
+                    logger.warning(
+                        f"Rate Limited by Sharepoint: have {response_headers['RateLimit-Remaining']} of {response_headers['RateLimit-Limit']} left, opportunity to retry in {retry_seconds} seconds"
+                    )
+                elif "token has expired" in response_headers.get(  # pyright: ignore
                     "x-ms-diagnostics", ""
                 ):
                     await self._set_access_token()
-                elif isinstance(
-                    exception,
-                    ServerDisconnectedError,
-                ):
-                    await self.close_session()
-                if retry >= self.retry_count:
-                    raise exception
-                retry += 1
+                logger.debug(f"Will retry in {retry_seconds} seconds")
+                await self._sleeps.sleep(retry_seconds)
 
-                logger.warning(
-                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
+            except ServerDisconnectedError as exception:
+                retry, retry_seconds = self._get_retry_after(
+                    retry=retry, exception=exception
                 )
-                await self._sleeps.sleep(RETRY_INTERVAL**retry)
+                await self.close_session()
+                logger.debug(f"Will retry in {retry_seconds} seconds")
+                await self._sleeps.sleep(retry_seconds)
+
+            except Exception as exception:
+                retry, retry_seconds = self._get_retry_after(
+                    retry=retry, exception=exception
+                )
+                logger.debug(f"Will retry in {retry_seconds} seconds")
+                await self._sleeps.sleep(retry_seconds)
 
     async def _fetch_data_with_next_url(
         self, site_url, list_id, param_name, selected_field=""
