@@ -1,3 +1,4 @@
+
 elasticsearch:
   host: http://nowhere.com:9200
   user: elastic
@@ -6,4 +7,4 @@ elasticsearch:
     X-Elastic-Auth: SomeYeahValue
     X-Something: 1
 
-log_level: debug
+log_level: WHAT
