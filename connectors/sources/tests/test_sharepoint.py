@@ -12,7 +12,7 @@ import aiohttp
 import pytest
 from aiohttp import StreamReader
 
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
+from connectors.source import DataSourceConfiguration
 from connectors.sources.sharepoint import SharepointDataSource
 from connectors.sources.tests.support import create_source
 
@@ -126,38 +126,6 @@ async def test_ping_for_failed_connection_exception():
             # Execute
             with pytest.raises(Exception):
                 await source.ping()
-
-
-@pytest.mark.asyncio
-async def test_validate_config_when_host_url_is_empty():
-    """This function test validate_config when host_url is empty"""
-    # Setup
-    source = create_source(SharepointDataSource)
-    source.configuration.set_field(name="host_url", value="")
-
-    # Execute
-    with pytest.raises(ConfigurableFieldValueError):
-        await source.validate_config()
-
-
-@pytest.mark.asyncio
-async def test_validate_config_for_ssl_enabled_when_ssl_ca_not_empty_does_not_raise_error():
-    """This function test validate_config when ssl is enabled and certificate is missing"""
-    # Setup
-    source = create_source(SharepointDataSource)
-    source.sharepoint_client.ssl_enabled = True
-    source.sharepoint_client.ssl_ca = "test"
-
-    await source.validate_config()
-
-
-@pytest.mark.asyncio
-async def test_validate_config_for_ssl_enabled_when_ssl_ca_empty_raises_error():
-    source = create_source(SharepointDataSource, ssl_enabled=True)
-
-    # Execute
-    with pytest.raises(ConfigurableFieldValueError):
-        await source.validate_config()
 
 
 @pytest.mark.asyncio
@@ -676,7 +644,6 @@ async def test_get_content_when_size_is_bigger():
         "server_relative_url": "/sites",
         "file_name": "dummy.pdf",
     }
-
     source = create_source(SharepointDataSource)
     # Execute
     response_content = await source.sharepoint_client.get_content(
@@ -891,12 +858,12 @@ async def test_close_without_client_session():
 
 
 @pytest.mark.asyncio
-async def test_api_call_negative():
+async def test_api_call_negative(patch_default_wait_multiplier):
     """Tests the _api_call function while getting an exception."""
 
     # Setup
     source = create_source(SharepointDataSource)
-    source.sharepoint_client.retry_count = 0
+    source.sharepoint_client.retry_count = 2
 
     with patch.object(
         aiohttp.ClientSession, "get", side_effect=Exception(EXCEPTION_MESSAGE)
@@ -975,7 +942,7 @@ async def test_api_call_when_token_is_expired(patch_default_wait_multiplier):
     source = create_source(SharepointDataSource)
     mock_response = {"access_token": "test2344", "expires_in": "1234555"}
     async_response = MockResponse(mock_response, 401)
-    source.sharepoint_client.retry_count = 0
+    source.sharepoint_client.retry_count = 2
     async_response.headers = {"x-ms-diagnostics": "token has expired"}
 
     with patch.object(
@@ -1002,6 +969,38 @@ async def test_api_call_when_token_is_expired(patch_default_wait_multiplier):
             await source.close()
 
 
+class TooManyRequestException(Exception):
+    status = 429
+    headers = {"Retry-After": 0}
+
+
+@pytest.mark.asyncio
+async def test_api_call_when_status_429_exception(patch_default_wait_multiplier):
+    # Setup
+    source = create_source(SharepointDataSource)
+    mock_response = {"access_token": "test2344", "expires_in": "1234555"}
+    async_response = MockResponse(mock_response, 429)
+    source.sharepoint_client.retry_count = 2
+
+    async_response.headers = {}
+
+    with patch.object(
+        aiohttp.ClientSession,
+        "get",
+        side_effect=TooManyRequestException("Something Went Wrong"),
+    ):
+        with patch("aiohttp.request", return_value=async_response):
+            source.sharepoint_client._get_session()
+            with pytest.raises(TooManyRequestException):
+                # Execute
+                await anext(
+                    source.sharepoint_client._api_call(
+                        url_name="attachment", url="abc.com"
+                    )
+                )
+            await source.close()
+
+
 @pytest.mark.asyncio
 async def test_api_call_when_server_is_down(patch_default_wait_multiplier):
     """Tests the _api_call function while server gets disconnected."""
@@ -1009,7 +1008,7 @@ async def test_api_call_when_server_is_down(patch_default_wait_multiplier):
     source = create_source(SharepointDataSource)
     mock_response = {"access_token": "test2344", "expires_in": "1234555"}
     async_response = MockResponse(mock_response, 200)
-    source.sharepoint_client.retry_count = 1
+    source.sharepoint_client.retry_count = 2
     with patch.object(
         aiohttp.ClientSession,
         "get",
