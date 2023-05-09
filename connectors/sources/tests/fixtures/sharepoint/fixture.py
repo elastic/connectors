@@ -13,12 +13,13 @@ import string
 from flask import Flask, request
 
 app = Flask(__name__)
-start_lists, end_lists = 0, 4500
+start_lists, end_lists = 0, 100
 DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
 _SIZES = {"small": 1000000, "medium": 2000000, "large": 6000000}
 FILE_SIZE = _SIZES[DATA_SIZE]
 LARGE_DATA = "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
 DOC_ID_SIZE = 36
+DOC_ID_FILLING_CHAR = '0' # used to fill in missing symbols for IDs
 
 def adjust_document_id_size(id):
     """
@@ -30,8 +31,8 @@ def adjust_document_id_size(id):
     if bytesize >= DOC_ID_SIZE:
         return id
 
-    addition = "".join(['0' for _ in range(DOC_ID_SIZE-bytesize)])
-    return f"{id}{addition}"
+    addition = "".join(['0' for _ in range(DOC_ID_SIZE-bytesize-1)])
+    return f"{id}-{addition}"
 
 
 @app.route("/sites/<string:site_collections>/_api/web/webs", methods=["GET"])
@@ -122,7 +123,7 @@ def get_lists(parent_site_url, site):
             ]
         )
     # Removing the data for the second sync
-    end_lists -= 50
+    # end_lists -= 50
     return lists
 
 
@@ -152,7 +153,7 @@ def get_list_and_items(parent_site_url, list_id):
                         }
                     ],
                     "Created": "2023-01-30T10:02:39Z",
-                    "GUID": adjust_document_id_size(f"list-item-att-{parent_site_url}-{list_id}"),
+                    "GUID": f"list-item-att-{parent_site_url}-{list_id}",
                     "FileRef": parent_site_url,
                     "Modified": "2023-01-30T10:02:40Z",
                     "EditorId": "aabb-112c",
@@ -237,7 +238,7 @@ def get_attachment_data(parent_site_url, file_relative_url):
         "ServerRelativeUrl": f"{parent_site_url}/dummy",
         "TimeCreated": "2023-01-30T10:02:40Z",
         "TimeLastModified": "2023-01-30T10:02:40Z",
-        "UniqueId": adjust_document_id_size(f"attachment-{parent_site_url}"),
+        "UniqueId": f"attachment-{parent_site_url}",
     }
 
 
