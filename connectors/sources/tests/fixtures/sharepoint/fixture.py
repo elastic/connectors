@@ -30,7 +30,7 @@ def adjust_document_id_size(id):
     if bytesize >= DOC_ID_SIZE:
         return id
 
-    addition = "".join([random.choice(string.ascii_letters) for _ in range(DOC_ID_SIZE-bytesize)])
+    addition = "".join(['0' for _ in range(DOC_ID_SIZE-bytesize)])
     return f"{id}{addition}"
 
 
