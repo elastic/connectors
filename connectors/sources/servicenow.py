@@ -30,7 +30,7 @@ from connectors.utils import (
 RETRIES = 3
 RETRY_INTERVAL = 2
 QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
-FILE_SIZE_LIMIT = 10485760
+FILE_SIZE_LIMIT = 10485760  # Size in Bytes
 FETCH_SIZE = 1000
 MAX_CONCURRENCY_SUPPORT = 10
 
@@ -39,7 +39,7 @@ RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
 
-DEFAULT_QUERY = "ORDERBYsys_created_on^"
+ORDER_BY_CREATION_DATE_QUERY = "ORDERBYsys_created_on^"
 ENDPOINTS = {
     "TABLE": "/api/now/table/{table}",
     "ATTACHMENT": "/api/now/attachment",
@@ -55,12 +55,6 @@ DEFAULT_SERVICE_NAMES = (
 
 
 class InvalidResponse(Exception):
-    """Raise when retrieving invalid response.
-
-    Args:
-        Exception (InvalidResponse): Invalid response exception.
-    """
-
     pass
 
 
@@ -128,7 +122,7 @@ class ServiceNowClient:
         offset = 0
 
         if not is_attachment:
-            query = DEFAULT_QUERY
+            query = ORDER_BY_CREATION_DATE_QUERY
             if "sysparm_query" in params.keys():
                 query += params["sysparm_query"]
             params.update({"sysparm_query": query, "sysparm_limit": FETCH_SIZE})
@@ -217,7 +211,7 @@ class ServiceNowClient:
             logger.exception(f"Error while filtering services. Exception: {exception}.")
             raise
 
-    async def fetch_data(self, url, params):
+    async def _fetch_data(self, url, params):
         """Hit API call and iterate over the fetched response.
 
         Args:
@@ -227,16 +221,17 @@ class ServiceNowClient:
         Yields:
             dict: Formatted document.
         """
+        async for response in self._api_call(url=url, params=params):
+            for record in response:  # pyright: ignore
+                yield record
 
-        try:
-            async for response in self._api_call(url=url, params=params):
-                for record in response:  # pyright: ignore
-                    yield record
+    async def get_table_data(self, url):
+        async for table_data in self._fetch_data(url=url, params={}):
+            yield table_data
 
-        except Exception as exception:
-            logger.warning(
-                f"Skipping data for {url} with {params}. Exception: {exception}."
-            )
+    async def get_attachment_data(self, url, params):
+        async for attachment_data in self._fetch_data(url=url, params=params):
+            yield attachment_data
 
     async def fetch_attachment_content(self, metadata, timestamp=None, doit=False):
         """Fetch attachment content via metadata.
@@ -255,8 +250,16 @@ class ServiceNowClient:
             return
 
         attachment_name = metadata["file_name"]
-        if os.path.splitext(attachment_name)[-1] not in TIKA_SUPPORTED_FILETYPES:
-            logger.warning(f"{attachment_name} is not supported by TIKA, skipping.")
+        attachment_extension = os.path.splitext(attachment_name)[-1]
+        if attachment_extension == "":
+            logger.warning(
+                f"Files without extension are not supported by TIKA, skipping {attachment_name}."
+            )
+            return
+        elif attachment_extension not in TIKA_SUPPORTED_FILETYPES:
+            logger.warning(
+                f"Files with the extension {attachment_extension} are not supported by TIKA, skipping {attachment_name}."
+            )
             return
 
         if attachment_size > FILE_SIZE_LIMIT:
@@ -291,7 +294,14 @@ class ServiceNowClient:
 
         async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
             document["_attachment"] = (await async_buffer.read()).strip()
-        await remove(temp_filename)
+
+        try:
+            await remove(temp_filename)
+        except Exception as exception:
+            logger.warning(
+                f"Error while deleting the file: {temp_filename} from disk. Error: {exception}"
+            )
+
         return document
 
     async def ping(self):
@@ -329,8 +339,8 @@ class ServiceNowDataSource(BaseDataSource):
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
         self.servicenow_client = ServiceNowClient(configuration=configuration)
 
-        self.valid_services = None
-        self.invalid_services = None
+        self.valid_services = []
+        self.invalid_services = []
 
         self.task_count = 0
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
@@ -403,7 +413,7 @@ class ServiceNowDataSource(BaseDataSource):
             ConfigurableFieldValueError: Unavailable services error.
         """
 
-        if self.servicenow_client.services != ["*"] and self.invalid_services is None:
+        if self.servicenow_client.services != ["*"] and self.invalid_services == []:
             (
                 self.valid_services,
                 self.invalid_services,
@@ -459,21 +469,28 @@ class ServiceNowDataSource(BaseDataSource):
         Args:
             table_sys_id (str): Table Id for fetching attachment metadata.
         """
-
-        async for attachment_metadata in self.servicenow_client.fetch_data(
-            url=ENDPOINTS["ATTACHMENT"], params={"table_sys_id": table_sys_id}
-        ):
-            formatted_attachment_metadata = await asyncio.to_thread(
-                self._format_doc, data=attachment_metadata
-            )
-            await self.queue.put(
-                (  # pyright: ignore
-                    formatted_attachment_metadata,
-                    partial(
-                        self.servicenow_client.fetch_attachment_content,
-                        formatted_attachment_metadata,
-                    ),
+        try:
+            async for attachment_metadata in self.servicenow_client.get_attachment_data(
+                url=ENDPOINTS["ATTACHMENT"], params={"table_sys_id": table_sys_id}
+            ):
+                formatted_attachment_metadata = self._format_doc(
+                    data=attachment_metadata
                 )
+                serialized_attachment_metadata = self.serialize(
+                    doc=formatted_attachment_metadata
+                )
+                await self.queue.put(
+                    (  # pyright: ignore
+                        serialized_attachment_metadata,
+                        partial(
+                            self.servicenow_client.fetch_attachment_content,
+                            serialized_attachment_metadata,
+                        ),
+                    )
+                )
+        except Exception as exception:
+            logger.warning(
+                f"Skipping attachment data for {table_sys_id}. Exception: {exception}."
             )
 
         await self.queue.put(END_SIGNAL)  # pyright: ignore
@@ -486,21 +503,26 @@ class ServiceNowDataSource(BaseDataSource):
         """
 
         logger.debug(f"Fetching {service_name} data")
-        async for table_data in self.servicenow_client.fetch_data(
-            url=ENDPOINTS["TABLE"].format(table=service_name), params={}
-        ):
-            formatted_table_data = await asyncio.to_thread(
-                self._format_doc, data=table_data
-            )
-            await self.fetchers.put(
-                partial(
-                    self._attachment_fetcher,
-                    formatted_table_data["_id"],
+        try:
+            async for table_data in self.servicenow_client.get_table_data(
+                url=ENDPOINTS["TABLE"].format(table=service_name)
+            ):
+                formatted_table_data = self._format_doc(data=table_data)
+                serialized_table_data = self.serialize(doc=formatted_table_data)
+                await self.fetchers.put(
+                    partial(
+                        self._attachment_fetcher,
+                        serialized_table_data["_id"],
+                    )
                 )
-            )
-            self.task_count += 1
+                self.task_count += 1
 
-            await self.queue.put((formatted_table_data, None))  # pyright: ignore
+                await self.queue.put((serialized_table_data, None))  # pyright: ignore
+        except Exception as exception:
+            logger.warning(
+                f"Skipping table data for {service_name}. Exception: {exception}."
+            )
+
         await self.queue.put(END_SIGNAL)  # pyright: ignore
 
     async def _consumer(self):
@@ -529,7 +551,7 @@ class ServiceNowDataSource(BaseDataSource):
         """
 
         logger.info("Fetching ServiceNow data")
-        if self.servicenow_client.services != ["*"] and self.valid_services is None:
+        if self.servicenow_client.services != ["*"] and self.valid_services == []:
             (
                 self.valid_services,
                 self.invalid_services,

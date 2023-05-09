@@ -336,7 +336,28 @@ async def test_filter_services_with_exception():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_skipping():
+async def test_get_docs_with_skipping_table_data():
+    source = create_source(ServiceNowDataSource)
+
+    response_list = []
+    with mock.patch(
+        "connectors.sources.servicenow.DEFAULT_SERVICE_NAMES", ("incident",)
+    ):
+        with mock.patch.object(
+            ServiceNowClient,
+            "_api_call",
+            side_effect=[
+                Exception("Something went wrong"),
+            ],
+        ):
+            async for response in source.get_docs():
+                response_list.append(response)
+
+    assert response_list == []
+
+
+@pytest.mark.asyncio
+async def test_get_docs_with_skipping_attachment_data():
     source = create_source(ServiceNowDataSource)
 
     response_list = []
@@ -423,20 +444,28 @@ async def test_get_docs_with_configured_services():
             ],
         ):
             async for response in source.get_docs():
-                response_list.append(response)
-
-    assert (
+                response_list.append(response[0])
+    assert [
         {
-            "_id": "id_1",
-            "_timestamp": "1212-12-12T12:12:12",
             "sys_id": "id_1",
             "sys_updated_on": "1212-12-12 12:12:12",
             "sys_class_name": "custom",
             "sys_user": "user1",
             "type": "table_record",
+            "_id": "id_1",
+            "_timestamp": "1212-12-12T12:12:12",
         },
-        None,
-    ) in response_list
+        {
+            "sys_id": "id_2",
+            "table_sys_id": "id_1",
+            "sys_updated_on": "1212-12-12 12:12:12",
+            "sys_class_name": "custom",
+            "sys_user": "user1",
+            "type": "attachment_metadata",
+            "_id": "id_2",
+            "_timestamp": "1212-12-12T12:12:12",
+        },
+    ] == response_list
 
 
 @pytest.mark.asyncio
@@ -523,7 +552,7 @@ async def test_fetch_attachment_content_with_exception():
 
 
 @pytest.mark.asyncio
-async def test_fetch_attachment_content_with_unsupported_file_type_then_skip():
+async def test_fetch_attachment_content_with_unsupported_extension_then_skip():
     source = create_source(ServiceNowDataSource)
 
     with mock.patch.object(
@@ -543,6 +572,35 @@ async def test_fetch_attachment_content_with_unsupported_file_type_then_skip():
                 "id": "id_1",
                 "_timestamp": "1212-12-12 12:12:12",
                 "file_name": "file_1.png",
+                "size_bytes": "2048",
+            },
+            doit=True,
+        )
+
+    assert response is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_attachment_content_without_extension_then_skip():
+    source = create_source(ServiceNowDataSource)
+
+    with mock.patch.object(
+        ServiceNowClient,
+        "_api_call",
+        return_value=AsyncIterator(
+            [
+                MockResponse(
+                    res=b"Attachment Content",
+                    headers={},
+                )
+            ]
+        ),
+    ):
+        response = await source.servicenow_client.fetch_attachment_content(
+            metadata={
+                "id": "id_1",
+                "_timestamp": "1212-12-12 12:12:12",
+                "file_name": "file_1",
                 "size_bytes": "2048",
             },
             doit=True,
