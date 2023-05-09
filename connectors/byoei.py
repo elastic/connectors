@@ -99,7 +99,7 @@ class Bulker:
         self.indexed_document_count = 0
         self.indexed_document_volume = 0
         self.deleted_document_count = 0
-        self.statsd_client = statsd.StatsClient("localhost", 514)
+        self.statsd_client = statsd.StatsClient("localhost", 7777)
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
