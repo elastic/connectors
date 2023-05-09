@@ -26,6 +26,7 @@ import logging
 import time
 from collections import defaultdict
 
+import statsd
 from elasticsearch import NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan
 
@@ -98,6 +99,7 @@ class Bulker:
         self.indexed_document_count = 0
         self.indexed_document_volume = 0
         self.deleted_document_count = 0
+        self.statsd_client = statsd.StatsClient("localhost", 514)
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -123,6 +125,8 @@ class Bulker:
             logger.debug(
                 f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
             )
+
+        self.statsd_client.incr("bulk", len(operations))
         start = time.time()
         try:
             res = await self.client.bulk(
