@@ -19,7 +19,7 @@ from connectors.byoei import (
     Fetcher,
     IndexMissing,
 )
-from connectors.db import Pipeline
+from connectors.protocol import Pipeline
 from connectors.tests.commons import AsyncIterator
 
 INDEX = "some-index"

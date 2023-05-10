@@ -37,6 +37,30 @@ from connectors.utils import (
     next_run,
 )
 
+__all__ = [
+    "CONNECTORS_INDEX",
+    "JOBS_INDEX",
+    "ConnectorIndex",
+    "Filter",
+    "SyncJobIndex",
+    "DataSourceError",
+    "JobStatus",
+    "Pipeline",
+    "JobTriggerMethod",
+    "ServiceTypeNotConfiguredError",
+    "ServiceTypeNotSupportedError",
+    "Status",
+    "IDLE_JOBS_THRESHOLD",
+    "JOB_NOT_FOUND_ERROR",
+    "Connector",
+    "Features",
+    "Filtering",
+    "MalformedConfigurationError",
+    "Sort",
+    "SyncJob",
+]
+
+
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 

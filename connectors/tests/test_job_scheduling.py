@@ -12,14 +12,14 @@ import pytest
 from elasticsearch import ConflictError
 
 from connectors.config import load_config
-from connectors.db import (
+from connectors.es.index import DocumentNotFoundError
+from connectors.protocol import (
     DataSourceError,
     JobTriggerMethod,
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
     Status,
 )
-from connectors.es.index import DocumentNotFoundError
 from connectors.services.job_scheduling import JobSchedulingService
 from connectors.source import DataSourceConfiguration
 from connectors.tests.commons import AsyncIterator

@@ -9,11 +9,11 @@ import time
 import elasticsearch
 
 from connectors.byoei import ElasticServer
-from connectors.db import JobStatus
 from connectors.es import Mappings
 from connectors.es.client import with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
+from connectors.protocol import JobStatus
 from connectors.utils import truncate_id
 
 UTF_8 = "utf-8"
