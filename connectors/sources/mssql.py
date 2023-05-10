@@ -10,7 +10,6 @@ from tempfile import NamedTemporaryFile
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 
-from connectors.logger import logger
 from connectors.sources.generic_database import GenericBaseDataSource, Queries
 from connectors.utils import get_pem_format
 
@@ -56,13 +55,14 @@ class MSSQLDataSource(GenericBaseDataSource):
     name = "Microsoft SQL Server"
     service_type = "mssql"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, logger_=None):
         """Setup connection to the Microsoft SQL database-server configured by user
 
         Args:
             configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
+            logger_ (DocumentLogger): Object of DocumentLogger class.
         """
-        super().__init__(configuration=configuration)
+        super().__init__(configuration=configuration, logger_=logger_)
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.ssl_ca = self.configuration["ssl_ca"]
         self.validate_host = self.configuration["validate_host"]
@@ -137,7 +137,7 @@ class MSSQLDataSource(GenericBaseDataSource):
             try:
                 os.remove(self.certfile)
             except Exception as exception:
-                logger.warning(
+                self._logger.warning(
                     f"Something went wrong while removing temporary certificate file. Exception: {exception}"
                 )
         if self.connection is None:

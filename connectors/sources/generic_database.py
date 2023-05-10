@@ -11,7 +11,6 @@ from asyncpg.exceptions._base import InternalClientError
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 
-from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import iso_utc
 
@@ -93,13 +92,14 @@ class Queries(ABC):
 class GenericBaseDataSource(BaseDataSource):
     """Class contains common functionalities for Generic Database connector"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, logger_=None):
         """Setup connection to the database-server configured by user
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
+            logger_ (DocumentLogger): Object of DocumentLogger class.
         """
-        super().__init__(configuration=configuration)
+        super().__init__(configuration=configuration, logger_=logger_)
 
         # Connector configurations
         self.retry_count = self.configuration["retry_count"]
@@ -248,7 +248,7 @@ class GenericBaseDataSource(BaseDataSource):
             except (InternalClientError, ProgrammingError):
                 raise
             except Exception as exception:
-                logger.warning(
+                self._logger.warning(
                     f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
                 )
                 if retry == self.retry_count:
@@ -272,7 +272,7 @@ class GenericBaseDataSource(BaseDataSource):
                 cursor = await connection.execute(text(query))
                 return cursor
         except Exception as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Something went wrong while executing query. Exception: {exception}"
             )
             raise
@@ -306,7 +306,7 @@ class GenericBaseDataSource(BaseDataSource):
             )
             return cursor
         except Exception as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Something went wrong while executing query. Exception: {exception}"
             )
             raise
@@ -317,7 +317,7 @@ class GenericBaseDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with the database-server configured by user"""
-        logger.info("Validating the Connector Configuration...")
+        self._logger.info("Validating the Connector Configuration...")
         try:
             if self.queries is None:
                 raise NotImplementedError
@@ -327,7 +327,7 @@ class GenericBaseDataSource(BaseDataSource):
                     query=self.queries.ping(),
                 )
             )
-            logger.info(f"Successfully connected to {self.dialect}.")
+            self._logger.info(f"Successfully connected to {self.dialect}.")
         except Exception as e:
             raise Exception(f"Can't connect to {self.dialect} on {self.host}") from e
 
@@ -390,7 +390,9 @@ class GenericBaseDataSource(BaseDataSource):
                         )
                         last_update_time = last_update_time[0][0]
                     except Exception:
-                        logger.warning(f"Unable to fetch last_updated_time for {table}")
+                        self._logger.warning(
+                            f"Unable to fetch last_updated_time for {table}"
+                        )
                         last_update_time = None
                     streamer = self.execute_query(
                         query=self.queries.table_data(
@@ -425,13 +427,13 @@ class GenericBaseDataSource(BaseDataSource):
                             row["schema"] = schema
                         yield self.serialize(doc=row)
                 else:
-                    logger.warning(
+                    self._logger.warning(
                         f"Skipping {table} table from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
                     )
             else:
-                logger.warning(f"No rows found for {table}.")
+                self._logger.warning(f"No rows found for {table}.")
         except (InternalClientError, ProgrammingError) as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Something went wrong while fetching document for table {table}. Error: {exception}"
             )
 
@@ -450,7 +452,7 @@ class GenericBaseDataSource(BaseDataSource):
                 *(set(tables_to_fetch) - set(self.tables_to_skip[self.database]))
             ]
         for table in tables_to_fetch:
-            logger.debug(f"Found table: {table} in database: {self.database}.")
+            self._logger.debug(f"Found table: {table} in database: {self.database}.")
             async for row in self.fetch_documents(
                 table=table,
                 schema=schema,
@@ -458,11 +460,13 @@ class GenericBaseDataSource(BaseDataSource):
                 yield row
         else:
             if schema:
-                logger.warning(
+                self._logger.warning(
                     f"Fetched 0 tables for schema: {schema} and database: {self.database}"
                 )
             else:
-                logger.warning(f"Fetched 0 tables for the database: {self.database}")
+                self._logger.warning(
+                    f"Fetched 0 tables for the database: {self.database}"
+                )
 
     async def get_tables_to_fetch(self, schema):
         tables = configured_tables(self.tables)

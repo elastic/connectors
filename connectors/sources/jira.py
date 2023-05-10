@@ -65,9 +65,10 @@ JIRA_SERVER = "jira_server"
 class JiraClient:
     """Jira client to handle API calls made to Jira"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, logger_=None):
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
+        self._logger = logger_ or logger
         self.is_cloud = self.configuration["data_source"] == JIRA_CLOUD
         self.host_url = self.configuration["jira_url"]
         self.projects = self.configuration["projects"]
@@ -153,7 +154,7 @@ class JiraClient:
                 retry += 1
                 if retry > self.retry_count:
                     raise exception
-                logger.warning(
+                self._logger.warning(
                     f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
                 )
                 await self._sleeps.sleep(RETRY_INTERVAL**retry)
@@ -185,7 +186,7 @@ class JiraClient:
                         return
                     start_at += FETCH_SIZE
             except Exception as exception:
-                logger.warning(
+                self._logger.warning(
                     f"Skipping data for type: {url_name}, query params: jql={jql}, startAt={start_at}, maxResults={FETCH_SIZE}. Error: {exception}."
                 )
                 break
@@ -197,15 +198,16 @@ class JiraDataSource(BaseDataSource):
     name = "Jira"
     service_type = "jira"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, logger_=None):
         """Setup the connection to the Jira
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
+            logger_ (DocumentLogger): Object of DocumentLogger class.
         """
-        super().__init__(configuration=configuration)
+        super().__init__(configuration=configuration, logger_=logger_)
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
-        self.jira_client = JiraClient(configuration=configuration)
+        self.jira_client = JiraClient(configuration=configuration, logger_=self._logger)
 
         self.tasks = 0
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
@@ -346,16 +348,18 @@ class JiraDataSource(BaseDataSource):
 
         attachment_name = attachment["filename"]
         if os.path.splitext(attachment_name)[-1] not in TIKA_SUPPORTED_FILETYPES:
-            logger.warning(f"{attachment_name} is not supported by TIKA, skipping")
+            self._logger.warning(
+                f"{attachment_name} is not supported by TIKA, skipping"
+            )
             return
 
         if attachment_size > FILE_SIZE_LIMIT:
-            logger.warning(
+            self._logger.warning(
                 f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
             )
             return
 
-        logger.debug(f"Downloading {attachment_name}")
+        self._logger.debug(f"Downloading {attachment_name}")
 
         document = {
             "_id": f"{issue_key}-{attachment['id']}",
@@ -375,7 +379,7 @@ class JiraDataSource(BaseDataSource):
                     await async_buffer.write(data)
                 temp_filename = str(async_buffer.name)
 
-        logger.debug(f"Calling convert_to_b64 for file : {attachment_name}")
+        self._logger.debug(f"Calling convert_to_b64 for file : {attachment_name}")
         await asyncio.to_thread(convert_to_b64, source=temp_filename)
         async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
             # base64 on macOS will add a EOL, so we strip() here
@@ -383,7 +387,7 @@ class JiraDataSource(BaseDataSource):
         try:
             await remove(temp_filename)
         except Exception as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Could not remove file from: {temp_filename}. Error: {exception}"
             )
         return document
@@ -392,9 +396,9 @@ class JiraDataSource(BaseDataSource):
         """Verify the connection with Jira"""
         try:
             await anext(self.jira_client.api_call(url_name=PING))
-            logger.debug("Successfully connected to the Jira")
+            self._logger.debug("Successfully connected to the Jira")
         except Exception:
-            logger.exception("Error while connecting to the Jira")
+            self._logger.exception("Error while connecting to the Jira")
             raise
 
     async def _verify_projects(self):
@@ -468,7 +472,9 @@ class JiraDataSource(BaseDataSource):
                         await self._put_projects(project=project, timestamp=timestamp)
             await self.queue.put("FINISHED")  # pyright: ignore
         except Exception as exception:
-            logger.warning(f"Skipping data for type: {PROJECT}. Error: {exception}")
+            self._logger.warning(
+                f"Skipping data for type: {PROJECT}. Error: {exception}"
+            )
 
     async def _put_issue(self, issue):
         """Put specific issue as per the given issue_key in a queue
@@ -496,7 +502,9 @@ class JiraDataSource(BaseDataSource):
                     )
             await self.queue.put("FINISHED")  # pyright: ignore
         except Exception as exception:
-            logger.warning(f"Skipping data for type: {ISSUE_DATA}. Error: {exception}")
+            self._logger.warning(
+                f"Skipping data for type: {ISSUE_DATA}. Error: {exception}"
+            )
 
     async def _get_issues(self, custom_query=""):
         """Get issues with the help of REST APIs

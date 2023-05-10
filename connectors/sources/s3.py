@@ -40,8 +40,9 @@ else:
 class S3Client:
     """Amazon S3 client to handle method calls made to S3"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, logger_=None):
         self.configuration = configuration
+        self._logger = logger_ or logger
         self.session = aioboto3.Session()
         set_extra_logger(aws_logger, log_level=logging.DEBUG, prefix="S3")
         set_extra_logger("aioboto3.resources", log_level=logging.INFO, prefix="S3")
@@ -64,7 +65,7 @@ class S3Client:
             return self.clients[region_name]
 
         if AWS_ENDPOINT is not None:
-            logger.debug(f"Creating a session against {AWS_ENDPOINT}")
+            self._logger.debug(f"Creating a session against {AWS_ENDPOINT}")
 
         # AsyncExitStack, supports asynchronous context managers, used to create client using enter_async_context and
         # these context manager will be stored in client_context list also client will be stored in clients dict with their region
@@ -130,7 +131,7 @@ class S3Client:
                 async for obj_summary in bucket_obj.objects.page_size(page_size):
                     yield obj_summary, s3_client
             except Exception as exception:
-                logger.warning(
+                self._logger.warning(
                     f"Something went wrong while fetching documents from {bucket}. Error: {exception}"
                 )
 
@@ -149,7 +150,7 @@ class S3Client:
             )
             region = response.get("LocationConstraint")
         except ClientError:
-            logger.warning(f"Unable to fetch the region for {bucket_name}")
+            self._logger.warning(f"Unable to fetch the region for {bucket_name}")
 
         return region
 
@@ -170,16 +171,16 @@ class S3Client:
             return
         filename = doc["filename"]
         if os.path.splitext(filename)[-1] not in TIKA_SUPPORTED_FILETYPES:
-            logger.debug(f"{filename} can't be extracted")
+            self._logger.debug(f"{filename} can't be extracted")
             return
         if doc["size_in_bytes"] > DEFAULT_MAX_FILE_SIZE:
-            logger.warning(
+            self._logger.warning(
                 f"File size for {filename} is larger than {DEFAULT_MAX_FILE_SIZE} bytes. Discarding the file content"
             )
             return
 
         bucket = doc["bucket"]
-        logger.debug(f"Downloading {filename}")
+        self._logger.debug(f"Downloading {filename}")
         document = {
             "_id": doc["id"],
             "_timestamp": doc["_timestamp"],
@@ -198,23 +199,25 @@ class S3Client:
             async with aiofiles.open(file=source_file_name, mode="r") as async_buffer:
                 document["_attachment"] = (await async_buffer.read()).strip()
 
-            logger.debug(f"Downloaded {filename} for {doc['size_in_bytes']} bytes ")
+            self._logger.debug(
+                f"Downloaded {filename} for {doc['size_in_bytes']} bytes "
+            )
             return document
         except ClientError as exception:
             if (
                 getattr(exception, "response", {}).get("Error", {}).get("Code")
                 == "InvalidObjectState"
             ):
-                logger.warning(
+                self._logger.warning(
                     f"{filename} of {bucket} is archived and inaccessible until restored. Error: {exception}"
                 )
             else:
-                logger.error(
+                self._logger.error(
                     f"Something went wrong while extracting data from {filename} of {bucket}. Error: {exception}"
                 )
                 raise
         except (ServerTimeoutError, AioReadTimeoutError) as exception:
-            logger.error(
+            self._logger.error(
                 f"Something went wrong while extracting data from {filename} of {bucket}. Error: {exception}"
             )
             raise
@@ -228,22 +231,23 @@ class S3DataSource(BaseDataSource):
     name = "Amazon S3"
     service_type = "s3"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, logger_=None):
         """Set up the connection to the Amazon S3.
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
+            logger_ (DocumentLogger): Object of DocumentLogger class.
         """
-        super().__init__(configuration=configuration)
-        self.s3_client = S3Client(configuration=configuration)
+        super().__init__(configuration=configuration, logger_=logger_)
+        self.s3_client = S3Client(configuration=configuration, logger_=self._logger)
 
     async def ping(self):
         """Verify the connection with AWS"""
         try:
             await self.s3_client.fetch_buckets()
-            logger.info("Successfully connected to AWS.")
+            self._logger.info("Successfully connected to AWS.")
         except Exception:
-            logger.exception("Error while connecting to AWS.")
+            self._logger.exception("Error while connecting to AWS.")
             raise
 
     async def format_document(self, bucket_name, bucket_object):

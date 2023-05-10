@@ -13,7 +13,6 @@ from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClient
 
-from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
 
@@ -36,13 +35,14 @@ class AzureBlobStorageDataSource(BaseDataSource):
     name = "Azure Blob Storage"
     service_type = "azure_blob_storage"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, logger_=None):
         """Set up the connection to the azure base client
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
+            logger_ (DocumentLogger): Object of DocumentLogger class.
         """
-        super().__init__(configuration=configuration)
+        super().__init__(configuration=configuration, logger_=logger_)
         self.connection_string = None
         self.retry_count = self.configuration["retry_count"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
@@ -120,16 +120,16 @@ class AzureBlobStorageDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Azure Blob Storage"""
-        logger.info("Generating connection string...")
+        self._logger.info("Generating connection string...")
         self.connection_string = self._configure_connection_string()
         try:
             async with BlobServiceClient.from_connection_string(
                 conn_str=self.connection_string, retry_total=self.retry_count
             ) as azure_base_client:
                 await azure_base_client.get_account_information()
-                logger.info("Successfully connected to the Azure Blob Storage.")
+                self._logger.info("Successfully connected to the Azure Blob Storage.")
         except Exception:
-            logger.exception("Error while connecting to the Azure Blob Storage.")
+            self._logger.exception("Error while connecting to the Azure Blob Storage.")
             raise
 
     def prepare_blob_doc(self, blob, container_metadata):
@@ -172,15 +172,17 @@ class AzureBlobStorageDataSource(BaseDataSource):
 
         blob_name = blob["title"]
         if os.path.splitext(blob_name)[-1] not in TIKA_SUPPORTED_FILETYPES:
-            logger.warning(f"{blob_name} can't be extracted")
+            self._logger.warning(f"{blob_name} can't be extracted")
             return
 
         if blob["tier"] == "Archive":
-            logger.warning(f"{blob_name} can't be downloaded as blob tier is archive")
+            self._logger.warning(
+                f"{blob_name} can't be downloaded as blob tier is archive"
+            )
             return
 
         if blob_size > DEFAULT_FILE_SIZE_LIMIT:
-            logger.warning(
+            self._logger.warning(
                 f"File size {blob_size} of file {blob_name} is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
             )
             return
@@ -199,7 +201,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 temp_filename = async_buffer.name
                 async for content in data.chunks():
                     await async_buffer.write(content)
-            logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
+            self._logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
             await asyncio.to_thread(convert_to_b64, source=temp_filename)
             async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
                 # base64 on macOS will add a EOL, so we strip() here

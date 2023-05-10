@@ -12,7 +12,6 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
@@ -25,8 +24,8 @@ class DirectoryDataSource(BaseDataSource):
     name = "System Directory"
     service_type = "dir"
 
-    def __init__(self, configuration):
-        super().__init__(configuration=configuration)
+    def __init__(self, configuration, logger_=None):
+        super().__init__(configuration=configuration, logger_=logger_)
         self.directory = os.path.abspath(self.configuration["directory"])
         self.pattern = self.configuration["pattern"]
 
@@ -62,7 +61,7 @@ class DirectoryDataSource(BaseDataSource):
         if not (doit and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES):
             return
 
-        logger.info(f"Reading {path}")
+        self._logger.info(f"Reading {path}")
         with open(file=path, mode="rb") as f:
             return {
                 "_id": self.get_id(path),
@@ -71,7 +70,7 @@ class DirectoryDataSource(BaseDataSource):
             }
 
     async def get_docs(self, filtering=None):
-        logger.debug(f"Reading {self.directory}...")
+        self._logger.debug(f"Reading {self.directory}...")
         root_directory = Path(self.directory)
 
         for path_object in root_directory.glob(self.pattern):

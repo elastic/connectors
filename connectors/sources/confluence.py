@@ -65,9 +65,10 @@ WILDCARD = "*"
 class ConfluenceClient:
     """Confluence client to handle API calls made to Confluence"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, logger_=None):
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
+        self._logger = logger_ or logger
         self.is_cloud = self.configuration["data_source"] == CONFLUENCE_CLOUD
         self.host_url = self.configuration["confluence_url"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
@@ -149,7 +150,7 @@ class ConfluenceClient:
                 retry_counter += 1
                 if retry_counter > self.retry_count:
                     raise exception
-                logger.warning(
+                self._logger.warning(
                     f"Retry count: {retry_counter} out of {self.retry_count}. Exception: {exception}"
                 )
                 await self._sleeps.sleep(RETRY_INTERVAL**retry_counter)
@@ -177,7 +178,7 @@ class ConfluenceClient:
                         links.get("next")[1:],
                     )
             except Exception as exception:
-                logger.warning(
+                self._logger.warning(
                     f"Skipping data for type {url_name} from {url}. Exception: {exception}."
                 )
                 break
@@ -189,16 +190,19 @@ class ConfluenceDataSource(BaseDataSource):
     name = "Confluence"
     service_type = "confluence"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, logger_=None):
         """Setup the connection to Confluence
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
+            logger_ (DocumentLogger): Object of DocumentLogger class.
         """
-        super().__init__(configuration=configuration)
+        super().__init__(configuration=configuration, logger_=logger_)
         self.spaces = self.configuration["spaces"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
-        self.confluence_client = ConfluenceClient(configuration)
+        self.confluence_client = ConfluenceClient(
+            configuration=configuration, logger_=self._logger
+        )
 
         self.queue = MemQueue(maxsize=QUEUE_SIZE, maxmemsize=QUEUE_MEM_SIZE)
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
@@ -353,9 +357,9 @@ class ConfluenceDataSource(BaseDataSource):
                     url=os.path.join(self.confluence_client.host_url, PING_URL),
                 )
             )
-            logger.info("Successfully connected to Confluence")
+            self._logger.info("Successfully connected to Confluence")
         except Exception:
-            logger.exception("Error while connecting to Confluence")
+            self._logger.exception("Error while connecting to Confluence")
             raise
 
     async def fetch_spaces(self):
@@ -519,15 +523,17 @@ class ConfluenceDataSource(BaseDataSource):
         attachment_name = attachment["title"]
         file_extension = os.path.splitext(attachment_name)[-1]
         if file_extension not in TIKA_SUPPORTED_FILETYPES:
-            logger.warning(f"{attachment_name} can't be extracted")
+            self._logger.warning(f"{attachment_name} can't be extracted")
             return
 
         if attachment_size > FILE_SIZE_LIMIT:
-            logger.warning(
+            self._logger.warning(
                 f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
             )
             return
-        logger.debug(f"Downloading {attachment_name} of size {attachment_size} bytes")
+        self._logger.debug(
+            f"Downloading {attachment_name} of size {attachment_size} bytes"
+        )
         document = {"_id": attachment["_id"], "_timestamp": attachment["_timestamp"]}
         source_file_name = ""
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
@@ -538,7 +544,7 @@ class ConfluenceDataSource(BaseDataSource):
                     await async_buffer.write(data)
             source_file_name = str(async_buffer.name)
 
-        logger.debug(
+        self._logger.debug(
             f"Download completed for file: {attachment_name}. Calling convert_to_b64"
         )
         await asyncio.to_thread(
@@ -549,7 +555,7 @@ class ConfluenceDataSource(BaseDataSource):
             # base64 on macOS will add a EOL, so we strip() here
             document["_attachment"] = (await target_file.read()).strip()
         await remove(source_file_name)
-        logger.debug(f"Downloaded {attachment_name} for {attachment_size} bytes ")
+        self._logger.debug(f"Downloaded {attachment_name} for {attachment_size} bytes ")
         return document
 
     async def _attachment_coro(self, document):

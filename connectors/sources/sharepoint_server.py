@@ -93,9 +93,10 @@ SCHEMA = {
 class SharepointServerClient:
     """SharePoint client to handle API calls made to SharePoint"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, logger_=None):
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
+        self._logger = logger_ or logger
         self.host_url = self.configuration["host_url"]
         self.certificate = self.configuration["ssl_ca"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
@@ -116,7 +117,7 @@ class SharepointServerClient:
         """
         if self.session:
             return self.session
-        logger.info("Generating aiohttp Client Session...")
+        self._logger.info("Generating aiohttp Client Session...")
         request_headers = {
             "accept": "application/json",
             "content-type": "application/json",
@@ -187,7 +188,7 @@ class SharepointServerClient:
             return
 
         if document_size > FILE_SIZE_LIMIT:
-            logger.warning(
+            self._logger.warning(
                 f"File size {document_size} of file {filename} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
             )
             return
@@ -231,7 +232,7 @@ class SharepointServerClient:
         try:
             await remove(source_file_name)  # pyright: ignore
         except Exception as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Could not remove file: {source_file_name}. Error: {exception}"
             )
         return attachment_content
@@ -264,7 +265,7 @@ class SharepointServerClient:
         )
 
         if document_size > FILE_SIZE_LIMIT:
-            logger.warning(
+            self._logger.warning(
                 f"File size {document_size} of file {filename} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
             )
             return
@@ -304,7 +305,7 @@ class SharepointServerClient:
         """
         if retry > self.retry_count:
             raise exception
-        logger.warning(
+        self._logger.warning(
             f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
         )
         retry += 1
@@ -352,7 +353,7 @@ class SharepointServerClient:
                 retry, retry_seconds = self._get_retry_after(
                     retry=retry, exception=exception
                 )
-                logger.debug(f"Will retry in {retry_seconds} seconds")
+                self._logger.debug(f"Will retry in {retry_seconds} seconds")
                 await self._sleeps.sleep(retry_seconds)
 
     async def _fetch_data_with_next_url(
@@ -665,11 +666,11 @@ class SharepointServerDataSource(BaseDataSource):
         """Verify the connection with SharePoint"""
         try:
             await self.sharepoint_client.ping()
-            logger.debug(
+            self._logger.debug(
                 f"Successfully connected to the SharePoint via {self.sharepoint_client.host_url}"
             )
         except Exception:
-            logger.exception(
+            self._logger.exception(
                 f"Error while connecting to the SharePoint via {self.sharepoint_client.host_url}"
             )
             raise
