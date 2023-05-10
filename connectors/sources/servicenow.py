@@ -54,7 +54,7 @@ DEFAULT_SERVICE_NAMES = (
 )
 
 
-class END_SIGNAL(Enum):
+class EndSignal(Enum):
     SERVICE = "SERVICE_TASK_FINISHED"
     RECORD = "RECORD_TASK_FINISHED"
 
@@ -498,7 +498,7 @@ class ServiceNowDataSource(BaseDataSource):
                 f"Skipping attachment data for {table_sys_id}. Exception: {exception}."
             )
 
-        await self.queue.put(END_SIGNAL.RECORD)  # pyright: ignore
+        await self.queue.put(EndSignal.RECORD)  # pyright: ignore
 
     async def _producer(self, service_name):
         """Fetch data for configured service name.
@@ -528,7 +528,7 @@ class ServiceNowDataSource(BaseDataSource):
                 f"Skipping table data for {service_name}. Exception: {exception}."
             )
 
-        await self.queue.put(END_SIGNAL.SERVICE)  # pyright: ignore
+        await self.queue.put(EndSignal.SERVICE)  # pyright: ignore
 
     async def _consumer(self):
         """Consume the queue for the documents.
@@ -540,7 +540,7 @@ class ServiceNowDataSource(BaseDataSource):
         while self.task_count > 0:
             _, item = await self.queue.get()
 
-            if isinstance(item, END_SIGNAL):
+            if isinstance(item, EndSignal):
                 self.task_count -= 1
             else:
                 yield item
