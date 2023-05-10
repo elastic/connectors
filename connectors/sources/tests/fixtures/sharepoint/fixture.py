@@ -13,7 +13,7 @@ import string
 from flask import Flask, request
 
 app = Flask(__name__)
-start_lists, end_lists = 0, 100
+start_lists, end_lists = 0, 450
 DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
 _SIZES = {"small": 1000000, "medium": 2000000, "large": 6000000}
 FILE_SIZE = _SIZES[DATA_SIZE]
