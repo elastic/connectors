@@ -33,8 +33,28 @@ This is our main communication index, used to communicate the connector's config
   api_key_id: string;   -> ID of the current API key in use
   configuration: {
     [key]: {
-      label: string     -> The label to be displayed for the field in Kibana
-      value: string,    -> The value of the field configured in Kibana
+      default_value: any;   -> The value used if `value` is empty (only for non-required fields)
+      depends_on: [         -> Array of dependencies, field will not be validated unless dependencies are met
+        field: string;      -> The key for the field that this will depend on
+        value: string | number | boolean;   -> The value required to have this dependency met
+      ];
+      display: string;      -> What UI element this field should use
+      label: string;        -> The label to be displayed for the field in Kibana
+      options: [                -> Array of options for list-type fields, used for Kibana inputs
+        label: string;          -> Option label for UI element
+        value: string | number; -> Option value for UI element
+      ];
+      order: number;        -> The order the configurable field will appear in the UI
+      required: boolean;    -> Whether or not the field needs a value
+      sensitive: boolean;   -> Whether or not to obfuscate the field in Kibana
+      tooltip: string;      -> Text for populating the Kibana tooltip element
+      type: string;         -> The field value type (str, int, bool, list)
+      ui_restrictions: string[];    -> List of places in the UI to restrict the field to
+      validations: [                -> Array of rules to validate the field's value against
+        type: string;               -> The validation type
+        constraint: string | number -> The rule to use for this validation
+      ];
+      value: any;           -> The value of the field configured in Kibana
     }
   };                    -> Definition and values of configurable
                            fields
