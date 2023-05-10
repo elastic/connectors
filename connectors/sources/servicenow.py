@@ -7,6 +7,7 @@
 import asyncio
 import json
 import os
+from enum import Enum
 from functools import cached_property, partial
 
 import aiofiles
@@ -34,7 +35,6 @@ FILE_SIZE_LIMIT = 10485760  # Size in Bytes
 FETCH_SIZE = 1000
 MAX_CONCURRENCY_SUPPORT = 10
 
-END_SIGNAL = "TASK_FINISHED"
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
@@ -52,6 +52,11 @@ DEFAULT_SERVICE_NAMES = (
     "kb_knowledge",
     "change_request",
 )
+
+
+class END_SIGNAL(Enum):
+    SERVICE = "SERVICE_TASK_FINISHED"
+    RECORD = "RECORD_TASK_FINISHED"
 
 
 class InvalidResponse(Exception):
@@ -493,7 +498,7 @@ class ServiceNowDataSource(BaseDataSource):
                 f"Skipping attachment data for {table_sys_id}. Exception: {exception}."
             )
 
-        await self.queue.put(END_SIGNAL)  # pyright: ignore
+        await self.queue.put(END_SIGNAL.RECORD)  # pyright: ignore
 
     async def _producer(self, service_name):
         """Fetch data for configured service name.
@@ -523,7 +528,7 @@ class ServiceNowDataSource(BaseDataSource):
                 f"Skipping table data for {service_name}. Exception: {exception}."
             )
 
-        await self.queue.put(END_SIGNAL)  # pyright: ignore
+        await self.queue.put(END_SIGNAL.SERVICE)  # pyright: ignore
 
     async def _consumer(self):
         """Consume the queue for the documents.
@@ -535,7 +540,7 @@ class ServiceNowDataSource(BaseDataSource):
         while self.task_count > 0:
             _, item = await self.queue.get()
 
-            if item == END_SIGNAL:
+            if isinstance(item, END_SIGNAL):
                 self.task_count -= 1
             else:
                 yield item
