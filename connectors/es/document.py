@@ -15,6 +15,9 @@ class DocumentLogger:
         self._prefix = prefix
         self._extra = extra
 
+    def isEnabledFor(self, level):
+        return logger.isEnabledFor(level)
+
     def debug(self, msg, *args, **kwargs):
         logger.debug(
             msg,
