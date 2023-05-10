@@ -10,6 +10,76 @@ class InvalidDocumentSourceError(Exception):
     pass
 
 
+class DocumentLogger:
+    def __init__(self, prefix, extra):
+        self._prefix = prefix
+        self._extra = extra
+
+    def debug(self, msg, *args, **kwargs):
+        logger.debug(
+            msg,
+            *args,
+            prefix=self._prefix,  # pyright: ignore
+            extra=self._extra,
+            **kwargs,
+        )
+
+    def info(self, msg, *args, **kwargs):
+        logger.info(
+            msg,
+            *args,
+            prefix=self._prefix,  # pyright: ignore
+            extra=self._extra,
+            **kwargs,
+        )
+
+    def warning(self, msg, *args, **kwargs):
+        logger.warning(
+            msg,
+            *args,
+            prefix=self._prefix,  # pyright: ignore
+            extra=self._extra,
+            **kwargs,
+        )
+
+    def error(self, msg, *args, **kwargs):
+        logger.error(
+            msg,
+            *args,
+            prefix=self._prefix,  # pyright: ignore
+            extra=self._extra,
+            **kwargs,
+        )
+
+    def exception(self, msg, *args, exc_info=True, **kwargs):
+        logger.exception(
+            msg,
+            *args,
+            prefix=self._prefix,  # pyright: ignore
+            extra=self._extra,
+            exc_info=exc_info,
+            **kwargs,
+        )
+
+    def critical(self, msg, *args, **kwargs):
+        logger.critical(
+            msg,
+            *args,
+            prefix=self._prefix,  # pyright: ignore
+            extra=self._extra,
+            **kwargs,
+        )
+
+    def fatal(self, msg, *args, **kwargs):
+        logger.fatal(
+            msg,
+            *args,
+            prefix=self._prefix,  # pyright: ignore
+            extra=self._extra,
+            **kwargs,
+        )
+
+
 class ESDocument:
     """
     Represents a document in an Elasticsearch index.
@@ -33,6 +103,7 @@ class ESDocument:
             raise InvalidDocumentSourceError(
                 f"Invalid type found for source: {type(self._source).__name__}, expected: {dict.__name__}"
             )
+        self.logger = DocumentLogger(prefix=self._prefix(), extra=self._extra())
 
     def get(self, *keys, default=None):
         value = self._source
@@ -51,66 +122,52 @@ class ESDocument:
         self._source = doc_source.get("_source", {})
 
     def log_debug(self, msg, *args, **kwargs):
-        logger.debug(
+        self.logger.debug(
             msg,
             *args,
-            prefix=self._prefix(),  # pyright: ignore
-            extra=self._extra(),
             **kwargs,
         )
 
     def log_info(self, msg, *args, **kwargs):
-        logger.info(
+        self.logger.info(
             msg,
             *args,
-            prefix=self._prefix(),  # pyright: ignore
-            extra=self._extra(),
             **kwargs,
         )
 
     def log_warning(self, msg, *args, **kwargs):
-        logger.warning(
+        self.logger.warning(
             msg,
             *args,
-            prefix=self._prefix(),  # pyright: ignore
-            extra=self._extra(),
             **kwargs,
         )
 
     def log_error(self, msg, *args, **kwargs):
-        logger.error(
+        self.logger.error(
             msg,
             *args,
-            prefix=self._prefix(),  # pyright: ignore
-            extra=self._extra(),
             **kwargs,
         )
 
     def log_exception(self, msg, *args, exc_info=True, **kwargs):
-        logger.exception(
+        self.logger.exception(
             msg,
             *args,
             exc_info=exc_info,
-            prefix=self._prefix(),  # pyright: ignore
-            extra=self._extra(),
             **kwargs,
         )
 
     def log_critical(self, msg, *args, **kwargs):
-        logger.critical(
+        self.logger.critical(
             msg,
             *args,
-            prefix=self._prefix(),  # pyright: ignore
-            extra=self._extra(),
             **kwargs,
         )
 
     def log_fatal(self, msg, *args, **kwargs):
-        logger.fatal(
+        self.logger.fatal(
             msg,
             *args,
-            prefix=self._prefix(),  # pyright: ignore
-            extra=self._extra(),
             **kwargs,
         )
 
