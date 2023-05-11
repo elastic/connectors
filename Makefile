@@ -60,6 +60,9 @@ ftest: bin/pytest bin/elastic-ingest
 run: install
 	bin/elastic-ingest
 
+default-config: install
+	bin/elastic-ingest --action config --service-type $(SERVICE_TYPE)
+
 docker-build:
 	docker build -t docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT .
 

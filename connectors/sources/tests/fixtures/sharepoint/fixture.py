@@ -18,6 +18,22 @@ DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
 _SIZES = {"small": 1000000, "medium": 2000000, "large": 6000000}
 FILE_SIZE = _SIZES[DATA_SIZE]
 LARGE_DATA = "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
+DOC_ID_SIZE = 36
+DOC_ID_FILLING_CHAR = "0"  # used to fill in missing symbols for IDs
+
+
+def adjust_document_id_size(id):
+    """
+    This methods make sure that all the documemts ids are min 36 bytes like in Sharepoint
+    """
+
+    bytesize = len(id)
+
+    if bytesize >= DOC_ID_SIZE:
+        return id
+
+    addition = "".join(["0" for _ in range(DOC_ID_SIZE - bytesize - 1)])
+    return f"{id}-{addition}"
 
 
 @app.route("/sites/<string:site_collections>/_api/web/webs", methods=["GET"])
@@ -37,7 +53,7 @@ def get_sites(site_collections):
         sites["value"].append(
             {
                 "Created": "2023-01-30T10:02:39",
-                "Id": "sites-0",
+                "Id": adjust_document_id_size("sites-0"),
                 "LastItemModifiedDate": "2023-02-16T06:48:30Z",
                 "ServerRelativeUrl": "/sites/site1",
                 "Title": "site1",
@@ -49,7 +65,7 @@ def get_sites(site_collections):
             "value": [
                 {
                     "Created": "2023-01-30T10:02:39",
-                    "Id": "ping-1aaabbb",
+                    "Id": adjust_document_id_size("ping-1aaabbb"),
                     "LastItemModifiedDate": "2023-02-16T06:48:30Z",
                     "ServerRelativeUrl": "/sites/collection1/site1",
                     "Title": "site1",
@@ -78,7 +94,7 @@ def get_lists(parent_site_url, site):
                 {
                     "BaseType": 0,
                     "Created": "2023-01-30T10:02:39Z",
-                    "Id": f"lists-{site}-{lists_count}",
+                    "Id": adjust_document_id_size(f"lists-{site}-{lists_count}"),
                     "LastItemModifiedDate": "2023-01-30T10:02:40Z",
                     "ParentWebUrl": f"/{parent_site_url}",
                     "Title": "List1",
@@ -93,7 +109,9 @@ def get_lists(parent_site_url, site):
                 {
                     "BaseType": 1,
                     "Created": "2023-01-30T10:02:39Z",
-                    "Id": f"document-library-{site}-{lists_count}",
+                    "Id": adjust_document_id_size(
+                        f"document-library-{site}-{lists_count}"
+                    ),
                     "LastItemModifiedDate": "2023-01-30T10:02:40Z",
                     "ParentWebUrl": f"/{parent_site_url}",
                     "Title": f"{site}-List2",
@@ -108,7 +126,7 @@ def get_lists(parent_site_url, site):
             ]
         )
     # Removing the data for the second sync
-    end_lists -= 50
+    # end_lists -= 50
     return lists
 
 
@@ -152,23 +170,25 @@ def get_list_and_items(parent_site_url, list_id):
                 {
                     "Attachments": False,
                     "Created": "2023-01-30T10:02:39Z",
-                    "GUID": f"list-item-{parent_site_url}-{list_id}",
+                    "GUID": adjust_document_id_size(
+                        f"list-item-{parent_site_url}-{list_id}"
+                    ),
                     "FileRef": parent_site_url,
                     "Modified": "2023-01-30T10:02:40Z",
                     "EditorId": "aabb-112c",
                     "Title": f"list-item-{list_id}",
-                    "Id": f"list-id1-{list_id}",
+                    "Id": adjust_document_id_size(f"list-id1-{list_id}"),
                     "ContentTypeId": f"123-{list_id}",
                 },
                 {
                     "Attachments": False,
                     "Created": "2023-01-30T10:02:39Z",
-                    "GUID": f"list-item-{list_id}",
+                    "GUID": adjust_document_id_size(f"list-item-{list_id}"),
                     "FileRef": parent_site_url,
                     "Modified": "2023-01-30T10:02:40Z",
                     "EditorId": "aabb-112c",
                     "Title": f"list-item-{list_id}",
-                    "Id": f"list-id2-{list_id}",
+                    "Id": adjust_document_id_size(f"list-id2-{list_id}"),
                     "ContentTypeId": f"456-{list_id}",
                 },
             ]
@@ -184,7 +204,9 @@ def get_list_and_items(parent_site_url, list_id):
                         "TimeLastModified": "2023-02-13T10:24:36Z",
                     },
                     "Modified": "2023-02-13T10:24:36Z",
-                    "GUID": f"drive-folder-{parent_site_url}-{list_id}",
+                    "GUID": adjust_document_id_size(
+                        f"drive-folder-{parent_site_url}-{list_id}"
+                    ),
                 },
                 {
                     "File": {
@@ -197,7 +219,9 @@ def get_list_and_items(parent_site_url, list_id):
                         "UniqueId": "6f885b24-af40-44e0-bd53-82e76e634cf6",
                     },
                     "Modified": "2023-01-30T10:02:39Z",
-                    "GUID": f"drive-file-{parent_site_url}-{list_id}",
+                    "GUID": adjust_document_id_size(
+                        f"drive-file-{parent_site_url}-{list_id}"
+                    ),
                 },
             ]
         }
