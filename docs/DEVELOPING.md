@@ -441,6 +441,97 @@ $ make ftest NAME=sharepoint
 
 ℹ️ The connector uses the Elastic [ingest attachment processor](https://www.elastic.co/guide/en/enterprise-search/current/ingest-pipelines.html) plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
 
+## ServiceNow Connector
+
+The [Elastic ServiceNow connector](../connectors/sources/servicenow.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+
+### Availability and prerequisites
+
+This connector is available as a **connector client** from the **Python connectors framework**. To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
+
+This connector is in **beta** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Beta features are not subject to the support SLA of official GA features.
+
+### Usage
+
+To use this connector as a **connector client**, use the **Customized connector** workflow.
+
+For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
+
+### Compatibility
+
+ServiceNow "Tokyo", "San Diego" & "Rome" versions are compatible with Elastic connector frameworks.
+
+### Configuration
+
+The following configuration fields need to be provided for setting up the connector:
+
+##### `url`
+
+The host url of the account for ServiceNow.
+
+##### `username`
+
+The username of the account for ServiceNow.
+
+##### `password`
+
+The password of the account to be used for the ServiceNow.
+
+##### `services`
+
+Comma-separated list of Services to fetch data from ServiceNow. If the value is `*`, the connector will fetch data from list of basic services provided by ServiceNow: `Users`, `Incidents`, `Request Items`, `Knowledge Articles`, `Change Requests`. Default value is `*`. Examples:
+
+  - `Incident, User`
+  - `*`
+
+##### `retry_count`
+
+The number of retry attempts after failed request to ServiceNow. Default value is `3`.
+
+##### `concurrent_downloads`
+
+The number of concurrent downloads for fetching the attachment content. This speeds up the content extraction of attachments. Defaults to `10`.
+
+### Documents and syncs
+
+The connector syncs the following ServiceNow object types: 
+- **Records**
+- **Attachments**
+
+### Sync rules
+
+- Content of files bigger than 10 MB won't be extracted.
+- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
+- Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
+
+### Connector Client operations
+
+#### End-to-end Testing
+
+The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html#build-connector-testing) for more details.
+
+To perform E2E testing for the ServiceNow connector, run the following command:
+
+```shell
+$ make ftest NAME=servicenow
+```
+
+ℹ️ Users can generate the performance report using an argument i.e. `PERF8=yes`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
+
+ℹ️ Users do not need to have a running Elasticsearch instance or a ServiceNow source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock ServiceNow source using the docker image.
+
+### Known issues
+
+There are no known issues for this connector. Refer to [Known issues](https://www.elastic.co/guide/en/enterprise-search/master/connectors-known-issues.html) for a list of known issues for all connectors.
+
+### Troubleshooting
+
+See [Troubleshooting](https://www.elastic.co/guide/en/enterprise-search/master/connectors-troubleshooting.html).
+
+### Security
+
+See [security](https://www.elastic.co/guide/en/enterprise-search/master/connectors-security.html).
+
 ## General Configuration
 
 The details of Elastic instance and other relevant fields such as `service` and `source` needs to be provided in the [config.yml](https://github.com/elastic/connectors-python/blob/8.6/config.yml) file. For more details check out the following [documentation](https://github.com/elastic/connectors-python/blob/8.6/docs/CONFIG.md).
