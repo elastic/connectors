@@ -58,13 +58,13 @@ async def run_service_with_stop_after(service, stop_after):
 
 
 @pytest.mark.asyncio
-@patch("connectors.byoc.SyncJobIndex.delete_jobs")
-@patch("connectors.byoc.SyncJobIndex.delete_indices")
-@patch("connectors.byoc.SyncJobIndex.idle_jobs")
-@patch("connectors.byoc.SyncJobIndex.orphaned_jobs")
-@patch("connectors.byoc.ConnectorIndex.fetch_by_id")
-@patch("connectors.byoc.ConnectorIndex.supported_connectors")
-@patch("connectors.byoc.ConnectorIndex.all_connectors")
+@patch("connectors.protocol.SyncJobIndex.delete_jobs")
+@patch("connectors.protocol.SyncJobIndex.delete_indices")
+@patch("connectors.protocol.SyncJobIndex.idle_jobs")
+@patch("connectors.protocol.SyncJobIndex.orphaned_jobs")
+@patch("connectors.protocol.ConnectorIndex.fetch_by_id")
+@patch("connectors.protocol.ConnectorIndex.supported_connectors")
+@patch("connectors.protocol.ConnectorIndex.all_connectors")
 async def test_cleanup_jobs(
     all_connectors,
     supported_connectors,

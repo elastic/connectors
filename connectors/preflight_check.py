@@ -4,9 +4,9 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-from connectors.byoc import CONNECTORS_INDEX, JOBS_INDEX
 from connectors.es import ESClient
 from connectors.logger import logger
+from connectors.protocol import CONNECTORS_INDEX, JOBS_INDEX
 from connectors.utils import CancellableSleeps
 
 

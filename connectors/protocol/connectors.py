@@ -4,7 +4,13 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """
-Implementation of BYOC protocol.
+Database for connectors - see docs/CONNECTOR_PROTOCOL.md indices.
+
+Main classes are :
+
+- ConnectorIndex: represents a document in `.elastic-connectors`
+- SyncJob: represents a document in `.elastic-connectors-sync-jobs`
+
 """
 import socket
 from collections import UserDict
@@ -30,6 +36,30 @@ from connectors.utils import (
     iso_utc,
     next_run,
 )
+
+__all__ = [
+    "CONNECTORS_INDEX",
+    "JOBS_INDEX",
+    "ConnectorIndex",
+    "Filter",
+    "SyncJobIndex",
+    "DataSourceError",
+    "JobStatus",
+    "Pipeline",
+    "JobTriggerMethod",
+    "ServiceTypeNotConfiguredError",
+    "ServiceTypeNotSupportedError",
+    "Status",
+    "IDLE_JOBS_THRESHOLD",
+    "JOB_NOT_FOUND_ERROR",
+    "Connector",
+    "Features",
+    "Filtering",
+    "MalformedConfigurationError",
+    "Sort",
+    "SyncJob",
+]
+
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"

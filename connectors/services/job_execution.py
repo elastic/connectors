@@ -3,9 +3,9 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from connectors.byoc import ConnectorIndex, DataSourceError, JobStatus, SyncJobIndex
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
+from connectors.protocol import ConnectorIndex, DataSourceError, JobStatus, SyncJobIndex
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass
 from connectors.sync_job_runner import SyncJobRunner

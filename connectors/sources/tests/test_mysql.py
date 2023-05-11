@@ -11,8 +11,8 @@ import aiomysql
 import pytest
 from freezegun import freeze_time
 
-from connectors.byoc import Filter
 from connectors.filtering.validation import SyncRuleValidationResult
+from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.mysql import (
     MySQLAdvancedRulesValidator,

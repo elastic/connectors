@@ -9,9 +9,9 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 import pytest
 from elasticsearch import ConflictError
 
-from connectors.byoc import Filter, JobStatus, Pipeline
 from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import InvalidFilteringError
+from connectors.protocol import Filter, JobStatus, Pipeline
 from connectors.sync_job_runner import SyncJobRunner, SyncJobStartError
 from connectors.tests.commons import AsyncIterator
 

@@ -6,8 +6,8 @@
 
 import pytest
 
-from connectors.byoc import CONNECTORS_INDEX, JOBS_INDEX
 from connectors.preflight_check import PreflightCheck
+from connectors.protocol import CONNECTORS_INDEX, JOBS_INDEX
 
 headers = {"X-Elastic-Product": "Elasticsearch"}
 host = "http://localhost:9200"
