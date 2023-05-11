@@ -24,6 +24,9 @@ from pympler import asizeof
 
 from connectors.logger import logger
 
+DEFAULT_RETRIES = 3
+DEFAULT_RETRY_INTERVAL = 1.0
+
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_QUEUE_SIZE = 1024
 DEFAULT_DISPLAY_EVERY = 100
@@ -389,7 +392,32 @@ class UnknownRetryStrategyError(Exception):
     pass
 
 
-def retryable(retries=3, interval=1.0, strategy=RetryStrategy.LINEAR_BACKOFF):
+def retryable_wrapper(
+    func,
+    retries=DEFAULT_RETRIES,
+    interval=DEFAULT_RETRY_INTERVAL,
+    strategy=RetryStrategy.LINEAR_BACKOFF,
+):
+    def dynamic_wrapper(
+        *args, retries=retries, interval=interval, strategy=strategy, **kwargs
+    ):
+        if inspect.isasyncgenfunction(func):
+            return retryable_async_generator(func, retries, interval, strategy)(
+                *args, **kwargs
+            )
+        else:
+            return retryable_async_function(func, retries, interval, strategy)(
+                *args, **kwargs
+            )
+
+    return dynamic_wrapper
+
+
+def retryable(
+    retries=DEFAULT_RETRIES,
+    interval=DEFAULT_RETRY_INTERVAL,
+    strategy=RetryStrategy.LINEAR_BACKOFF,
+):
     def wrapper(func):
         if inspect.isasyncgenfunction(func):
             return retryable_async_generator(func, retries, interval, strategy)

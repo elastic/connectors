@@ -40,6 +40,7 @@ from connectors.utils import (
     is_expired,
     next_run,
     retryable,
+    retryable_wrapper,
     ssl_context,
     truncate_id,
     url_encode,
@@ -412,6 +413,79 @@ async def test_exponential_backoff_retry():
 
     # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
     await does_not_raise()
+
+
+@pytest.mark.fail_slow(1)
+@pytest.mark.asyncio
+async def test_exponential_backoff_retryable_wrapper():
+    mock_func = Mock()
+    num_retries = 10
+
+    async def raises():
+        mock_func()
+        raise CustomException()
+
+    with pytest.raises(CustomException):
+        await retryable_wrapper(
+            raises,
+            retries=num_retries,
+            interval=0,
+            strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        )()
+
+    # retried 10 times
+    assert mock_func.call_count == num_retries
+
+    # would lead to roughly ~ 50 seconds of retrying
+    async def does_not_raise():
+        pass
+
+    # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
+    await retryable_wrapper(
+        does_not_raise, retries=10, interval=5, strategy=RetryStrategy.LINEAR_BACKOFF
+    )()
+
+
+@pytest.mark.fail_slow(1)
+@pytest.mark.asyncio
+async def test_exponential_backoff_retry_wrapper_async_generator():
+    mock_gen = Mock()
+    num_retries = 10
+
+    async def raises_async_generator():
+        for _ in range(3):
+            mock_gen()
+            raise CustomGeneratorException()
+            yield 1
+
+    with pytest.raises(CustomGeneratorException):
+        async for _ in retryable_wrapper(
+            raises_async_generator,
+            retries=num_retries,
+            interval=0,
+            strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        )():
+            pass
+
+    # retried 10 times
+    assert mock_gen.call_count == num_retries
+
+    # would lead to roughly ~ 50 seconds of retrying
+    async def does_not_raise_async_generator():
+        for _ in range(3):
+            yield 1
+
+    # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
+    items = []
+    async for item in retryable_wrapper(
+        does_not_raise_async_generator,
+        retries=10,
+        interval=5,
+        strategy=RetryStrategy.LINEAR_BACKOFF,
+    )():
+        items.append(item)
+
+    assert items == [1, 1, 1]
 
 
 class MockSSL:
