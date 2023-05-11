@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from connectors.byoei import ElasticServer
+from connectors.es.sink import ElasticServer
 from connectors.kibana import main, upsert_index
 
 HERE = os.path.dirname(__file__)

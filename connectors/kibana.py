@@ -13,8 +13,8 @@ from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 import elasticsearch
 from envyaml import EnvYAML
 
-from connectors.byoei import ElasticServer
 from connectors.es.settings import DEFAULT_LANGUAGE, Mappings, Settings
+from connectors.es.sink import ElasticServer
 from connectors.logger import logger, set_logger
 from connectors.source import get_source_klass
 from connectors.utils import validate_index_name
