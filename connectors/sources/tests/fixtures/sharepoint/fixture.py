@@ -11,8 +11,22 @@ import random
 import string
 
 from flask import Flask, request
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
+
+THROTTLING = os.environ.get("THROTTLING", False)
+
+if THROTTLING:
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        storage_uri="memory://",
+        application_limits=["6 per minute", "6000000 per day"], # Sharepoint 50k+ licences limits
+        retry_after='delta_seconds',
+        headers_enabled=True
+    )
 
 # Number of Sharepoint lists
 start_lists, end_lists = 0, 450
@@ -301,6 +315,7 @@ def get_attachment_data(parent_site_url, file_relative_url):
     "/<string:parent_url>/<string:site>/_api/web/GetFileByServerRelativeUrl('<string:server_url>')/$value",
     methods=["GET"],
 )
+
 def download(parent_url, site, server_url):
     """Function to extract content of a attachment on the sharepoint
     Args:
