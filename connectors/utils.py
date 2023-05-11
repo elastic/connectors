@@ -54,6 +54,8 @@ TIKA_SUPPORTED_FILETYPES = [
     ".pdf",
     ".doc",
     ".aspx",
+    ".xlsb",
+    ".xlsm",
 ]
 
 
