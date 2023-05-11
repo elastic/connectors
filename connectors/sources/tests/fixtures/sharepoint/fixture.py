@@ -50,7 +50,11 @@ for k, v in FILE_SIZES_DISTRIBUTION.items():
     i = i + v
 
 # Generate data for different sizes
+<<<<<<< HEAD
 for k in FILE_SIZES_DISTRIBUTION.keys():
+=======
+for k, _v in FILE_SIZES_DISTRIBUTION.items():
+>>>>>>> f65bec15 (Add comments and fix lint issues)
     print(f"Generating '{k}' size data")
     GENERATED_DATA[k] = "".join(
         [random.choice(string.ascii_letters) for _ in range(SIZES[k])]
