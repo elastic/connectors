@@ -182,6 +182,26 @@ If you need changes in the framework, or you are not sure about how to do someth
 For 6, you can look at [Developing with asyncio](https://docs.python.org/3/library/asyncio-dev.html). Asynchronous programming in Python is very concise and produces nice looking code once you understand how it works, but it requires a bit of practice.
 
 
+### Log verbosity
+
+Logging is important to get insights on what's happening in the service. However, we should be careful not
+to pile up logs that are not adding value in our systems.
+
+A few tips per log level:
+
+- CRITICAL (50) -- anything that stops the service, if you want to add more details on why.
+- ERROR (40) -- all Python exceptions will use that level, but you can call it specifically to add details
+- WARNING (30) -- any unexpected behavior that the system knows how to handle, but that should be notified (network retries, deprecation)
+- INFO (20) -- normal operations feedback. These should not be verbose so we don't pile logs overtime for nothing.
+- DEBUG (10) -- like info but with as many details as possible
+- NOTSET (0) -- never used
+
+
+When running on cloud, the service is running at the `INFO` level. You can activate
+the `DEBUG` level locally with `--debug`
+
+
+
 ## Testing the connector
 
 To test the connector, we'll run:
