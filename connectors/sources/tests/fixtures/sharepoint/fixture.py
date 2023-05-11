@@ -18,10 +18,10 @@ app = Flask(__name__)
 start_lists, end_lists = 0, 450
 
 SIZES = {
-    "extra_small": 1048576,
-    "small": 10485760,
-    "medium": 20971520,
-    "large": 99614720,
+    "extra_small": 1048576,  # 1MB
+    "small": 10485760,  # 10MB
+    "medium": 20971520,  # 20MB
+    "large": 99614720,  # 95MB
 }
 DOC_ID_SIZE = 36
 DOC_ID_FILLING_CHAR = "0"  # used to fill in missing symbols for IDs
@@ -50,7 +50,7 @@ for k, v in FILE_SIZES_DISTRIBUTION.items():
     i = i + v
 
 # Generate data for different sizes
-for k, v in FILE_SIZES_DISTRIBUTION.items():
+for k, _v in FILE_SIZES_DISTRIBUTION.items():
     print(f"Generating '{k}' size data")
     GENERATED_DATA[k] = "".join(
         [random.choice(string.ascii_letters) for _ in range(SIZES[k])]
