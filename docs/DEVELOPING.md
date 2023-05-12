@@ -467,7 +467,7 @@ The following configuration fields need to be provided for setting up the connec
 
 ##### `url`
 
-The host url of the account for ServiceNow.
+The host url of the ServiceNow instance.
 
 ##### `username`
 
@@ -475,18 +475,18 @@ The username of the account for ServiceNow.
 
 ##### `password`
 
-The password of the account to be used for the ServiceNow.
+The password of the account used for ServiceNow.
 
 ##### `services`
 
-Comma-separated list of Services to fetch data from ServiceNow. If the value is `*`, the connector will fetch data from list of basic services provided by ServiceNow: `Users`, `Incidents`, `Request Items`, `Knowledge Articles`, `Change Requests`. Default value is `*`. Examples:
+Comma-separated list of services to fetch data from ServiceNow. If the value is `*`, the connector will fetch data from the list of basic services provided by ServiceNow: `Users`, `Incidents`, `Request Items`, `Knowledge Articles`, `Change Requests`. Default value is `*`. Examples:
 
   - `Incident, User`
   - `*`
 
 ##### `retry_count`
 
-The number of retry attempts after failed request to ServiceNow. Default value is `3`.
+The number of retry attempts after a failed request to ServiceNow. Default value is `3`.
 
 ##### `concurrent_downloads`
 
@@ -502,7 +502,7 @@ The connector syncs the following ServiceNow object types:
 
 - Content of files bigger than 10 MB won't be extracted.
 - Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
-- Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
+- Advanced sync rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
 
 ### Connector Client operations
 
