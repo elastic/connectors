@@ -842,17 +842,17 @@ async def test_connector_prepare_with_connector_missing_field_raises_error():
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     with pytest.raises(MalformedConfigurationError):
         await connector.prepare(config)
-        index.update.assert_called_once_with(
-            doc_id=doc_id,
-            doc={
-                "last_seen": ANY,
-                "status": "error",
-                "error": "Configuration fields are missing: one.",
-            },
-            if_seq_no=seq_no,
-            if_primary_term=primary_term,
-        )
-        index.update.assert_not_awaited()
+
+    index.update.assert_called_once_with(
+        doc_id=doc_id,
+        doc={
+            "last_seen": ANY,
+            "status": "error",
+            "error": "Configuration fields are missing: one.",
+        },
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
 
 
 
