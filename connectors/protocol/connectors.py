@@ -730,12 +730,14 @@ class Connector(ESDocument):
         default_config = source_klass.get_simple_configuration()
         current_config = self.configuration.to_dict()
 
-        self.validate_configuration_fields(service_type, default_config, current_config)
+        await self.validate_configuration_fields(
+            service_type, default_config, current_config
+        )
         await self.add_missing_configuration_field_properties(
             service_type, default_config, current_config
         )
 
-    def validate_configuration_fields(
+    async def validate_configuration_fields(
         self, service_type, default_config, current_config
     ):
         """Checks if any fields in a configuration are missing.
@@ -750,6 +752,19 @@ class Connector(ESDocument):
         missing_fields = list(set(default_config.keys()) - set(current_config.keys()))
 
         if len(missing_fields) > 0:
+            doc = {
+                "last_seen": iso_utc(),
+                "status": "error",
+                "error": f'Configuration fields are missing: {", ".join(missing_fields)}.',
+            }
+            await self.index.update(
+                doc_id=self.id,
+                doc=doc,
+                if_seq_no=self._seq_no,
+                if_primary_term=self._primary_term,
+            )
+            await self.reload()
+
             raise MalformedConfigurationError(
                 f'Connector for {service_type}(id: "{self.id}") has missing configuration fields: {", ".join(missing_fields)}'
             )
