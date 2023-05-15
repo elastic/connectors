@@ -11,7 +11,7 @@ from unittest.mock import Mock
 import pytest
 from bson.decimal128 import Decimal128
 
-from connectors.byoc import Filter
+from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.mongo import MongoAdvancedRulesValidator, MongoDataSource
 from connectors.sources.tests.support import create_source

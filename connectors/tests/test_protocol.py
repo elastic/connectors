@@ -12,7 +12,14 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 import pytest
 from elasticsearch import ConflictError
 
-from connectors.byoc import (
+from connectors.config import load_config
+from connectors.filtering.validation import (
+    FilteringValidationResult,
+    FilteringValidationState,
+    FilterValidationError,
+    InvalidFilteringError,
+)
+from connectors.protocol import (
     IDLE_JOBS_THRESHOLD,
     JOB_NOT_FOUND_ERROR,
     Connector,
@@ -31,17 +38,10 @@ from connectors.byoc import (
     Status,
     SyncJob,
     SyncJobIndex,
-    iso_utc,
-)
-from connectors.config import load_config
-from connectors.filtering.validation import (
-    FilteringValidationResult,
-    FilteringValidationState,
-    FilterValidationError,
-    InvalidFilteringError,
 )
 from connectors.source import BaseDataSource
 from connectors.tests.commons import AsyncIterator
+from connectors.utils import iso_utc
 
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
 
@@ -517,7 +517,7 @@ mock_next_run = iso_utc()
         (True, mock_next_run),
     ],
 )
-@patch("connectors.byoc.next_run")
+@patch("connectors.protocol.connectors.next_run")
 async def test_connector_next_sync(next_run, scheduling_enabled, expected_next_sync):
     connector_doc = {
         "_id": "1",
@@ -807,7 +807,7 @@ async def test_connector_prepare_with_prepared_connector():
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
+        "sources": {"banana": "connectors.tests.test_protocol:Banana"},
     }
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
@@ -834,7 +834,7 @@ async def test_connector_prepare_with_connector_missing_field_raises_error():
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
+        "sources": {"banana": "connectors.tests.test_protocol:Banana"},
     }
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
@@ -879,7 +879,7 @@ async def test_connector_prepare_with_connector_missing_field_properties_creates
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
+        "sources": {"banana": "connectors.tests.test_protocol:Banana"},
     }
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
@@ -915,7 +915,7 @@ async def test_connector_prepare_with_service_type_not_configured():
     }
     config = {
         "connector_id": doc_id,
-        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
+        "sources": {"banana": "connectors.tests.test_protocol:Banana"},
     }
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
@@ -990,7 +990,7 @@ async def test_connector_prepare():
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
+        "sources": {"banana": "connectors.tests.test_protocol:Banana"},
     }
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
@@ -1023,7 +1023,7 @@ async def test_connector_prepare_with_race_condition():
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {"banana": "connectors.tests.test_byoc:Banana"},
+        "sources": {"banana": "connectors.tests.test_protocol:Banana"},
     }
     connector_doc_after_update = connector_doc | {
         "_source": {
@@ -1537,7 +1537,7 @@ def test_nested_get(nested_dict, keys, default, expected):
         JobTriggerMethod.SCHEDULED,
     ],
 )
-@patch("connectors.byoc.SyncJobIndex.index")
+@patch("connectors.protocol.SyncJobIndex.index")
 async def test_create_job(index_method, trigger_method, set_env):
     connector = Mock()
     connector.id = "id"
@@ -1565,7 +1565,7 @@ async def test_create_job(index_method, trigger_method, set_env):
 
 
 @pytest.mark.asyncio
-@patch("connectors.byoc.SyncJobIndex.get_all_docs")
+@patch("connectors.protocol.SyncJobIndex.get_all_docs")
 async def test_pending_jobs(get_all_docs, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
@@ -1599,7 +1599,7 @@ async def test_pending_jobs(get_all_docs, set_env):
 
 
 @pytest.mark.asyncio
-@patch("connectors.byoc.SyncJobIndex.get_all_docs")
+@patch("connectors.protocol.SyncJobIndex.get_all_docs")
 async def test_orphaned_jobs(get_all_docs, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
@@ -1618,7 +1618,7 @@ async def test_orphaned_jobs(get_all_docs, set_env):
 
 
 @pytest.mark.asyncio
-@patch("connectors.byoc.SyncJobIndex.get_all_docs")
+@patch("connectors.protocol.SyncJobIndex.get_all_docs")
 async def test_idle_jobs(get_all_docs, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])

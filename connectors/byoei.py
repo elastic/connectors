@@ -29,10 +29,10 @@ from collections import defaultdict
 from elasticsearch import NotFoundError as ElasticNotFoundError
 from elasticsearch.helpers import async_scan
 
-from connectors.byoc import Filter
 from connectors.es import ESClient
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger
+from connectors.protocol import Filter
 from connectors.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,

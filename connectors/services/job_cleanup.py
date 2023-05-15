@@ -7,9 +7,9 @@
 A task periodically clean up orphaned and idle jobs.
 """
 
-from connectors.byoc import ConnectorIndex, SyncJobIndex
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
+from connectors.protocol import ConnectorIndex, SyncJobIndex
 from connectors.services.base import BaseService
 
 IDLE_JOB_ERROR = "The job has not seen any update for some time."

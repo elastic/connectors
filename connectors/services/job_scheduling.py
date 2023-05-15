@@ -12,7 +12,10 @@ Event loop
 """
 from datetime import datetime
 
-from connectors.byoc import (
+from connectors.es.client import with_concurrency_control
+from connectors.es.index import DocumentNotFoundError
+from connectors.logger import logger
+from connectors.protocol import (
     ConnectorIndex,
     DataSourceError,
     JobTriggerMethod,
@@ -21,9 +24,6 @@ from connectors.byoc import (
     Status,
     SyncJobIndex,
 )
-from connectors.es.client import with_concurrency_control
-from connectors.es.index import DocumentNotFoundError
-from connectors.logger import logger
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass
 
