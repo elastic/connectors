@@ -34,7 +34,7 @@ if DATA_SIZE and DATA_SIZE in SIZES:
 else:
     FILE_SIZES_DISTRIBUTION = {
         "extra_small": 70,
-        "small": 0,
+        "small": 15,
         "medium": 10,
         "large": 5,
     }  # sum has to be 100
