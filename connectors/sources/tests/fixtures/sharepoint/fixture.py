@@ -23,9 +23,12 @@ if THROTTLING:
         get_remote_address,
         app=app,
         storage_uri="memory://",
-        application_limits=["6000 per minute", "6000000 per day"], # Sharepoint 50k+ licences limits
-        retry_after='delta_seconds',
-        headers_enabled=True
+        application_limits=[
+            "6000 per minute",
+            "6000000 per day",
+        ],  # Sharepoint 50k+ licences limits
+        retry_after="delta_seconds",
+        headers_enabled=True,
     )
 
 # Number of Sharepoint lists
@@ -315,7 +318,6 @@ def get_attachment_data(parent_site_url, file_relative_url):
     "/<string:parent_url>/<string:site>/_api/web/GetFileByServerRelativeUrl('<string:server_url>')/$value",
     methods=["GET"],
 )
-
 def download(parent_url, site, server_url):
     """Function to extract content of a attachment on the sharepoint
     Args:
