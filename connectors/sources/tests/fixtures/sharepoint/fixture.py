@@ -23,7 +23,7 @@ if THROTTLING:
         get_remote_address,
         app=app,
         storage_uri="memory://",
-        application_limits=["6 per minute", "6000000 per day"], # Sharepoint 50k+ licences limits
+        application_limits=["6000 per minute", "6000000 per day"], # Sharepoint 50k+ licences limits
         retry_after='delta_seconds',
         headers_enabled=True
     )
