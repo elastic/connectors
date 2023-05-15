@@ -19,6 +19,7 @@ from connectors.byoei import (
     Fetcher,
     IndexMissing,
 )
+from connectors.es.settings import TEXT_FIELD_MAPPING
 from connectors.protocol import Pipeline
 from connectors.tests.commons import AsyncIterator
 
@@ -84,7 +85,17 @@ async def test_prepare_content_index(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     # prepare-index, with mappings
-    mappings = {"properties": {"name": {"type": "keyword"}}}
+    dynamic_templates = {
+        "data": {
+            "match_mapping_type": "string",
+            "mapping": TEXT_FIELD_MAPPING,
+        }
+    }
+    mappings = {
+        "dynamic": True,
+        "dynamic_templates": dynamic_templates,
+        "properties": {"name": {"type": "keyword"}},
+    }
     mock_responses.head(
         "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
         headers=headers,
@@ -97,13 +108,31 @@ async def test_prepare_content_index(mock_responses):
     mock_responses.put(
         "http://nowhere.com:9200/search-new-index/_mapping?expand_wildcards=open",
         headers=headers,
+        payload=mappings,
     )
 
     es = ElasticServer(config)
+    put_mappings_result = asyncio.Future()
+    put_mappings_result.set_result({"acknowledged": True})
+    with mock.patch.object(
+        es.client.indices,
+        "put_mapping",
+        return_value=put_mappings_result,
+    ) as put_mapping_mock:
+        index_name = "search-new-index"
+        await es.prepare_content_index(index_name, mappings=mappings)
 
-    await es.prepare_content_index("search-new-index", mappings=mappings)
+        await es.close()
 
-    await es.close()
+        expected_params = {
+            "index": index_name,
+            "dynamic": mappings["dynamic"],
+            "dynamic_templates": mappings["dynamic_templates"],
+            "properties": mappings["properties"],
+            "expand_wildcards": "open",
+        }
+
+        put_mapping_mock.assert_called_with(**expected_params)
 
 
 def set_responses(mock_responses, ts=None):
