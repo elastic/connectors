@@ -13,13 +13,59 @@ import string
 from flask import Flask, request
 
 app = Flask(__name__)
+
+# Number of Sharepoint lists
 start_lists, end_lists = 0, 450
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
-_SIZES = {"small": 1000000, "medium": 2000000, "large": 6000000}
-FILE_SIZE = _SIZES[DATA_SIZE]
-LARGE_DATA = "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
+
+SIZES = {
+    "extra_small": 1048576,  # 1MB
+    "small": 10485760,  # 10MB
+    "medium": 20971520,  # 20MB
+    "large": 99614720,  # 95MB
+}
 DOC_ID_SIZE = 36
 DOC_ID_FILLING_CHAR = "0"  # used to fill in missing symbols for IDs
+
+DATA_SIZE = os.environ.get("DATA_SIZE")
+
+# if DATA_SIZE is passed then use only one file size
+if DATA_SIZE and DATA_SIZE in SIZES:
+    FILE_SIZES_DISTRIBUTION = {DATA_SIZE: 100}
+else:
+    FILE_SIZES_DISTRIBUTION = {
+        "extra_small": 70,
+        "small": 15,
+        "medium": 10,
+        "large": 5,
+    }  # sum has to be 100
+
+
+GENERATED_DATA = {}
+
+# Generate range distribution (e.g. [range(0,2), range(2, 15), ...])
+DISTRIBUTION_RANGES = {}
+i = 0
+for k, v in FILE_SIZES_DISTRIBUTION.items():
+    DISTRIBUTION_RANGES[k] = range(i, i + v)
+    i = i + v
+
+# Generate data for different sizes
+for k in FILE_SIZES_DISTRIBUTION.keys():
+    print(f"Generating '{k}' size data")
+    GENERATED_DATA[k] = "".join(
+        [random.choice(string.ascii_letters) for _ in range(SIZES[k])]
+    )
+
+
+def generate_attachment_data():
+    rnd = random.randrange(100)
+
+    for k, v in DISTRIBUTION_RANGES.items():
+        if rnd in v:
+            return io.BytesIO(bytes(GENERATED_DATA[k], encoding="utf-8"))
+
+    # fallback to extra_small
+    return io.BytesIO(bytes(GENERATED_DATA["extra_small"], encoding="utf-8"))
 
 
 def adjust_document_id_size(id):
@@ -265,7 +311,7 @@ def download(parent_url, site, server_url):
     Returns:
         data_reader (io.BytesIO): object of io.BytesIO.
     """
-    return io.BytesIO(bytes(LARGE_DATA, encoding="utf-8"))
+    return generate_attachment_data()
 
 
 if __name__ == "__main__":
