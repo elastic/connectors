@@ -413,7 +413,9 @@ class BaseDataSource:
         """Execute all basic rule and advanced rule validators."""
 
         return await FilteringValidator(
-            self.basic_rules_validators(), self.advanced_rules_validators()
+            self.basic_rules_validators(),
+            self.advanced_rules_validators(),
+            self._logger,
         ).validate(filtering)
 
     def advanced_rules_validators(self):
