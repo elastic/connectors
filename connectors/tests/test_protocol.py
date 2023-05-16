@@ -855,7 +855,6 @@ async def test_connector_prepare_with_connector_missing_field_raises_error():
     )
 
 
-
 @pytest.mark.asyncio
 async def test_connector_prepare_with_connector_missing_field_properties_creates_them():
     doc_id = "1"
