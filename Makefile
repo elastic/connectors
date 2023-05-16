@@ -6,6 +6,7 @@ PERF8?=no
 SLOW_TEST_THRESHOLD=1 # seconds
 VERSION=$(shell cat connectors/VERSION)
 
+
 bin/python:
 	$(PYTHON) -m venv .
 	bin/pip install --upgrade pip
