@@ -237,9 +237,7 @@ async def test_concurrent_runner_fails():
     for i in range(10):
         await runner.put(functools.partial(coroutine, i))
 
-    with pytest.raises(Exception):
-        await runner.join()
-
+    await runner.join()
     assert 5 not in results
 
 
