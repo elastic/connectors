@@ -55,7 +55,6 @@ __all__ = [
     "Connector",
     "Features",
     "Filtering",
-    "MalformedConfigurationError",
     "Sort",
     "SyncJob",
 ]
@@ -115,10 +114,6 @@ class ServiceTypeNotConfiguredError(Exception):
 
 
 class DataSourceError(Exception):
-    pass
-
-
-class MalformedConfigurationError(Exception):
     pass
 
 
@@ -714,8 +709,7 @@ class Connector(ESDocument):
         return result["count"]
 
     async def validate_configuration_formatting(self, fqn, service_type):
-        """Wrapper function for validating configuration fields
-        and field properties.
+        """Wrapper function for validating configuration field properties.
 
         Args:
             fqn (string): the source fqn for a service, from config file
@@ -730,31 +724,9 @@ class Connector(ESDocument):
         default_config = source_klass.get_simple_configuration()
         current_config = self.configuration.to_dict()
 
-        self.validate_configuration_fields(service_type, default_config, current_config)
         await self.add_missing_configuration_field_properties(
             service_type, default_config, current_config
         )
-
-    def validate_configuration_fields(
-        self, service_type, default_config, current_config
-    ):
-        """Checks if any fields in a configuration are missing.
-        If a field is missing, raises an error.
-        Ignores additional non-standard fields.
-
-        Args:
-            service_type (string): service type of the connector
-            default_config (dict): the default configuration for the connector
-            current_config (dict): the currently existing configuration for the connector
-        """
-        missing_fields = list(set(default_config.keys()) - set(current_config.keys()))
-
-        if len(missing_fields) > 0:
-            raise MalformedConfigurationError(
-                f'Connector for {service_type}(id: "{self.id}") has missing configuration fields: {", ".join(missing_fields)}'
-            )
-
-        return
 
     async def add_missing_configuration_field_properties(
         self, service_type, default_config, current_config

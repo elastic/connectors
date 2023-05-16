@@ -30,7 +30,6 @@ from connectors.protocol import (
     Filtering,
     JobStatus,
     JobTriggerMethod,
-    MalformedConfigurationError,
     Pipeline,
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
@@ -815,34 +814,6 @@ async def test_connector_prepare_with_prepared_connector():
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     await connector.prepare(config)
     index.update.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_connector_prepare_with_connector_missing_field_raises_error():
-    doc_id = "1"
-    seq_no = 1
-    primary_term = 2
-    connector_doc = {
-        "_id": doc_id,
-        "_seq_no": seq_no,
-        "_primary_term": primary_term,
-        "_source": {
-            "service_type": "banana",
-            "configuration": {"two": "value"},
-        },
-    }
-    config = {
-        "connector_id": doc_id,
-        "service_type": "banana",
-        "sources": {"banana": "connectors.tests.test_protocol:Banana"},
-    }
-    index = Mock()
-    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
-    index.update = AsyncMock()
-    connector = Connector(elastic_index=index, doc_source=connector_doc)
-    with pytest.raises(MalformedConfigurationError):
-        await connector.prepare(config)
-        index.update.assert_not_awaited()
 
 
 @pytest.mark.asyncio
