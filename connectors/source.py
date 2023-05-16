@@ -431,6 +431,28 @@ class BaseDataSource:
         """
         self.configuration.check_valid()
 
+    def validate_config_fields(self):
+        """ "Checks if any fields in a configuration are missing.
+        If a field is missing, raises an error.
+        Ignores additional non-standard fields.
+
+        Args:
+            default_config (dict): the default configuration for the connector
+            current_config (dict): the currently existing configuration for the connector
+        """
+
+        default_config = self.get_simple_configuration()
+        current_config = self.configuration.to_dict()
+
+        missing_fields = list(set(default_config.keys()) - set(current_config.keys()))
+
+        if len(missing_fields) > 0:
+            raise MalformedConfigurationError(
+                f'Connector has missing configuration fields: {", ".join(missing_fields)}'
+            )
+
+        return
+
     async def ping(self):
         """When called, pings the backend
 
@@ -541,4 +563,8 @@ class ConfigurableFieldValueError(Exception):
 
 
 class ConfigurableFieldDependencyError(Exception):
+    pass
+
+
+class MalformedConfigurationError(Exception):
     pass
