@@ -5,7 +5,7 @@ ARCH=$(shell uname -m)
 PERF8?=no
 SLOW_TEST_THRESHOLD=1 # seconds
 VERSION=$(shell cat connectors/VERSION)
-BRANCH=$(shell git branch --show-current)
+BRANCH=$(shell python3 extract.py)
 
 bin/python:
 	$(PYTHON) -m venv .
