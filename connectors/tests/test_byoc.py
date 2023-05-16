@@ -23,7 +23,6 @@ from connectors.byoc import (
     Filtering,
     JobStatus,
     JobTriggerMethod,
-    MalformedConfigurationError,
     Pipeline,
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,

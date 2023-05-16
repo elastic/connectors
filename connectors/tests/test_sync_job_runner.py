@@ -61,6 +61,7 @@ def create_runner(
     data_provider = Mock()
     data_provider.tweak_bulk_options = Mock()
     data_provider.changed = AsyncMock(return_value=source_changed)
+    data_provider.validate_config_fields = Mock()
     data_provider.validate_config = AsyncMock(side_effect=validate_config_exception)
     data_provider.ping = AsyncMock()
     if not source_available:

@@ -21,6 +21,7 @@ from connectors.source import (
     ConfigurableFieldValueError,
     DataSourceConfiguration,
     Field,
+    MalformedConfigurationError,
     ValidationTypes,
     get_source_klass,
     get_source_klasses,
@@ -831,3 +832,48 @@ async def test_serialize(raw_doc, expected_doc):
 
         for serialized_doc_key, expected_doc_key in zip(serialized_doc, expected_doc):
             assert serialized_doc[serialized_doc_key] == expected_doc[expected_doc_key]
+
+
+@pytest.mark.asyncio
+async def test_validate_config_fields_when_valid_no_errors_raised():
+    configuration = {
+        "host": {
+            "value": "127.0.0.1",
+            "type": "str",
+        },
+        "port": {
+            "value": 3306,
+            "type": "int",
+        },
+        "direct": {
+            "value": True,
+            "type": "bool",
+        },
+        "user": {
+            "value": "root",
+            "type": "str",
+        },
+    }
+    ds = DataSource(configuration=DataSourceConfiguration(configuration))
+    ds.validate_config_fields()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_fields_when_invalid_raises_error():
+    configuration = {
+        "host": {
+            "value": "127.0.0.1",
+            "type": "str",
+        },
+        "port": {
+            "value": 3306,
+            "type": "int",
+        },
+        "direct": {
+            "value": True,
+            "type": "bool",
+        },
+    }
+    ds = DataSource(configuration=DataSourceConfiguration(configuration))
+    with pytest.raises(MalformedConfigurationError):
+        ds.validate_config_fields()
