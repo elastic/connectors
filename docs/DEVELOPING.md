@@ -479,7 +479,7 @@ The password of the account used for ServiceNow.
 
 ##### `services`
 
-Comma-separated list of services to fetch data from ServiceNow. If the value is `*`, the connector will fetch data from the list of basic services provided by ServiceNow: `Users`, `Incidents`, `Request Items`, `Knowledge Articles`, `Change Requests`. Default value is `*`. Examples:
+Comma-separated list of services to fetch data from ServiceNow. If the value is `*`, the connector will fetch data from the list of basic services provided by ServiceNow: `User`, `Incident`, `Requested Item`, `Knowledge`, `Change Request`. Default value is `*`. Examples:
 
   - `Incident, User`
   - `*`
