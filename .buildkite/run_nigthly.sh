@@ -11,4 +11,6 @@ make install
 export PIP=$ROOT/bin/pip
 
 $PIP install py-spy
-PERF8=yes NAME=$1 DATA_SIZE=small make ftest
+DATA_SIZE="${2:-small}"
+
+PERF8=yes NAME=$1 DATA_SIZE=$DATA_SIZE make ftest
