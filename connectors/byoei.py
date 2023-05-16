@@ -499,6 +499,8 @@ class ElasticServer(ESClient):
                 )
                 await self.client.indices.put_mapping(
                     index=index,
+                    dynamic=mappings.get("dynamic", False),
+                    dynamic_templates=mappings.get("dynamic_templates", []),
                     properties=mappings.get("properties", {}),
                     expand_wildcards=expand_wildcards,
                 )
