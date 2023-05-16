@@ -5,7 +5,7 @@ ARCH=$(shell uname -m)
 PERF8?=no
 SLOW_TEST_THRESHOLD=1 # seconds
 VERSION=$(shell cat connectors/VERSION)
-
+BRANCH=$(shell git rev-parse --abbrev-ref HEAD)
 
 bin/python:
 	$(PYTHON) -m venv .
@@ -64,7 +64,7 @@ default-config: install
 	bin/elastic-ingest --action config --service-type $(SERVICE_TYPE)
 
 docker-build:
-	docker build -t docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT .
+	docker build --build-arg BRANCH=$(BRANCH) -t docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT .
 
 docker-run:
 	docker run -v $(PWD):/config docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT /app/bin/elastic-ingest -c /config/config.yml --log-level=DEBUG
