@@ -5,7 +5,7 @@ ARCH=$(shell uname -m)
 PERF8?=no
 SLOW_TEST_THRESHOLD=1 # seconds
 VERSION=$(shell cat connectors/VERSION)
-BRANCH=$(shell git rev-parse --abbrev-ref HEAD)
+BRANCH=$(shell git branch --show-current)
 
 bin/python:
 	$(PYTHON) -m venv .
