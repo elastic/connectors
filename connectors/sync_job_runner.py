@@ -105,6 +105,7 @@ class SyncJobRunner:
                 return
 
             logger.debug(f"Validating configuration for {self.data_provider}")
+            self.data_provider.validate_config_fields()
             await self.data_provider.validate_config()
 
             logger.debug(
