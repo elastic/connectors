@@ -323,7 +323,9 @@ class ConcurrentTasks:
         self.tasks.remove(task)
         self._task_over.set()
         if task.exception():
-            raise task.exception()
+            logger.error(
+                f"Exception found for task {task.get_name()}: {task.exception()}"
+            )
         if result_callback is not None:
             result_callback(task.result())
         # global callback
@@ -352,7 +354,7 @@ class ConcurrentTasks:
 
     async def join(self):
         """Wait for all tasks to finish."""
-        await asyncio.gather(*self.tasks)
+        await asyncio.gather(*self.tasks, return_exceptions=True)
 
     def cancel(self):
         """Cancels all tasks"""
