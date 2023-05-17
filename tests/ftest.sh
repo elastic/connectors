@@ -6,7 +6,7 @@ NAME=$1
 PERF8=$2
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-ROOT_DIR="$SCRIPT_DIR/../.."
+ROOT_DIR="$SCRIPT_DIR/.."
 PLATFORM='unknown'
 MAX_RSS="200M"
 MAX_DURATION=600
@@ -28,7 +28,7 @@ elif [[ "$unamestr" == 'Darwin' ]]; then
 fi
 
 
-cd $ROOT_DIR/connectors/sources/tests/fixtures
+cd $ROOT_DIR/tests/sources/fixtures
 
 if [ -f "$NAME/.env" ]; then
   echo "Loading env for $NAME"
