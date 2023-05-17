@@ -55,7 +55,7 @@ release: install
 	bin/python setup.py sdist
 
 ftest: bin/pytest bin/elastic-ingest
-	connectors/tests/ftest.sh $(NAME) $(PERF8)
+	tests/ftest.sh $(NAME) $(PERF8)
 
 run: install
 	bin/elastic-ingest
