@@ -15,7 +15,7 @@ from botocore.exceptions import ClientError, HTTPClientError
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.s3 import S3DataSource
-from connectors.sources.tests.support import assert_basics, create_source
+from tests.sources.support import assert_basics, create_source
 
 
 @pytest.fixture(scope="session", autouse=True)

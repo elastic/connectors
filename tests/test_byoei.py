@@ -21,7 +21,7 @@ from connectors.byoei import (
 )
 from connectors.es.settings import TEXT_FIELD_MAPPING
 from connectors.protocol import Pipeline
-from connectors.tests.commons import AsyncIterator
+from tests.commons import AsyncIterator
 
 INDEX = "some-index"
 TIMESTAMP = datetime.datetime(year=2023, month=1, day=1)

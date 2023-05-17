@@ -20,9 +20,9 @@ from connectors.sources.confluence import (
     ConfluenceClient,
     ConfluenceDataSource,
 )
-from connectors.sources.tests.support import create_source
-from connectors.tests.commons import AsyncIterator
 from connectors.utils import ssl_context
+from tests.commons import AsyncIterator
+from tests.sources.support import create_source
 
 HOST_URL = "http://127.0.0.1:5000"
 CONTENT_QUERY = "limit=1&expand=children.attachment,history.lastUpdated,body.storage"

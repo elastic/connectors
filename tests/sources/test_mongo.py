@@ -14,8 +14,8 @@ from bson.decimal128 import Decimal128
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.mongo import MongoAdvancedRulesValidator, MongoDataSource
-from connectors.sources.tests.support import create_source
-from connectors.tests.commons import AsyncIterator
+from tests.commons import AsyncIterator
+from tests.sources.support import create_source
 
 
 def create_connector():

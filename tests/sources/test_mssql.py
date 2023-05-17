@@ -10,8 +10,8 @@ import pytest
 from freezegun import freeze_time
 
 from connectors.sources.mssql import MSSQLDataSource, MSSQLQueries
-from connectors.sources.tests.support import create_source
-from connectors.sources.tests.test_generic_database import ConnectionSync
+from tests.sources.support import create_source
+from tests.sources.test_generic_database import ConnectionSync
 
 MSSQL_CONNECTION_STRING = "mssql+pytds://admin:Password_123@127.0.0.1:9090/xe"
 

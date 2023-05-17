@@ -12,6 +12,7 @@ from connectors.byoei import ElasticServer
 from connectors.kibana import main, upsert_index
 
 HERE = os.path.dirname(__file__)
+FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))
 
 
 def mock_index_creation(index, mock_responses, hidden=True):
@@ -56,13 +57,13 @@ def test_main(patch_logger, mock_responses):
         main(
             [
                 "--config-file",
-                os.path.join(HERE, "config.yml"),
+                os.path.join(FIXTURES_DIR, "config.yml"),
                 "--service-type",
                 "fake",
                 "--index-name",
                 "data",
                 "--connector-definition",
-                os.path.join(HERE, "connector.json"),
+                os.path.join(FIXTURES_DIR, "connector.json"),
             ]
         )
         == 0

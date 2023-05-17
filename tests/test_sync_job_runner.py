@@ -13,7 +13,7 @@ from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import InvalidFilteringError
 from connectors.protocol import Filter, JobStatus, Pipeline
 from connectors.sync_job_runner import SyncJobRunner, SyncJobStartError
-from connectors.tests.commons import AsyncIterator
+from tests.commons import AsyncIterator
 
 total_document_count = 100
 

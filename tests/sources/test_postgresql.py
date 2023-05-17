@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
 from connectors.sources.postgresql import PostgreSQLDataSource, PostgreSQLQueries
-from connectors.sources.tests.support import create_source
+from tests.sources.support import create_source
 
 POSTGRESQL_CONNECTION_STRING = (
     "postgresql+asyncpg://admin:changme@127.0.0.1:5432/testdb"

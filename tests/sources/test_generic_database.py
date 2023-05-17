@@ -20,8 +20,8 @@ from connectors.sources.generic_database import (
     is_wildcard,
 )
 from connectors.sources.postgresql import PostgreSQLDataSource
-from connectors.sources.tests.support import create_source
-from connectors.tests.commons import AsyncIterator
+from tests.commons import AsyncIterator
+from tests.sources.support import create_source
 
 POSTGRESQL_CONNECTION_STRING = (
     "postgresql+asyncpg://admin:changme@127.0.0.1:5432/testdb"

@@ -49,7 +49,7 @@ autoformat: bin/python bin/black bin/elastic-ingest
 	bin/black scripts
 
 test:	bin/pytest bin/elastic-ingest
-	bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv connectors/tests connectors/sources/tests
+	bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
 release: install
 	bin/python setup.py sdist
