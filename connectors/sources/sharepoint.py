@@ -36,7 +36,10 @@ DEFAULT_RETRY_SECONDS = 30
 RETRIES = 3
 FILE_SIZE_LIMIT = 10485760
 CHUNK_SIZE = 1024
-TOP = 5000
+if "RUNNING_FTEST" in os.environ:
+    TOP = 100
+else:
+    TOP = 5000
 PING = "ping"
 SITES = "sites"
 LISTS = "lists"

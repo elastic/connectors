@@ -14,14 +14,16 @@ from flask import Flask, request
 
 app = Flask(__name__)
 
+# Number of Sharepoint subsites
+total_subsites = 201
 # Number of Sharepoint lists
-start_lists, end_lists = 0, 450
+total_lists = 1000
 
 SIZES = {
-    "extra_small": 1048576,  # 1MB
-    "small": 10485760,  # 10MB
-    "medium": 20971520,  # 20MB
-    "large": 99614720,  # 95MB
+    "extra_small": 250000,  # 0.25MB
+    "small": 500000,  # 0.5MB
+    "medium": 1000000,  # 1MB
+    "large": 3000000,  # 3MB
 }
 DOC_ID_SIZE = 36
 DOC_ID_FILLING_CHAR = "0"  # used to fill in missing symbols for IDs
@@ -90,21 +92,27 @@ def get_sites(site_collections):
     Returns:
         sites (str): Path of server site
     """
-    args = request.args
+    skip = request.args.get("$skip")
     sites = {"value": []}
-    if request.path == "/sites/site1/_api/web/webs":
+    if "/sites/site1" in request.path:
         return sites
-    elif args.get("$skip"):
-        sites["value"].append(
-            {
-                "Created": "2023-01-30T10:02:39",
-                "Id": adjust_document_id_size("sites-0"),
-                "LastItemModifiedDate": "2023-02-16T06:48:30Z",
-                "ServerRelativeUrl": "/sites/site1",
-                "Title": "site1",
-                "Url": f"http://127.0.0.1:8000/sites/{site_collections}/site1",
-            }
-        )
+    if skip:
+        skip_start = int(skip)
+        if skip_start + 100 >= total_subsites:
+            skip_end = total_subsites
+        else:
+            skip_end = skip_start + 100
+        for site in range(skip_start, skip_end):
+            sites["value"].append(
+                {
+                    "Created": "2023-01-30T10:02:39",
+                    "Id": adjust_document_id_size(f"sites-{site}"),
+                    "LastItemModifiedDate": "2023-02-16T06:48:30Z",
+                    "ServerRelativeUrl": f"/sites/site1_{site}",
+                    "Title": f"site1_{site}",
+                    "Url": f"http://127.0.0.1:8000/sites/{site_collections}/site1_{site}",
+                }
+            )
     else:
         sites = {
             "value": [
@@ -131,32 +139,15 @@ def get_lists(parent_site_url, site):
     Returns:
         lists (dict): Dictionary of lists
     """
-    global start_lists, end_lists
+    global total_lists
     lists = {"value": []}
-    for lists_count in range(start_lists, end_lists):
+    if "site1" in site:
         lists["value"].extend(
             [
                 {
-                    "BaseType": 0,
-                    "Created": "2023-01-30T10:02:39Z",
-                    "Id": adjust_document_id_size(f"lists-{site}-{lists_count}"),
-                    "LastItemModifiedDate": "2023-01-30T10:02:40Z",
-                    "ParentWebUrl": f"/{parent_site_url}",
-                    "Title": "List1",
-                    "RootFolder": {
-                        "Name": "Shared Documents",
-                        "ServerRelativeUrl": f"/{parent_site_url}/{site}",
-                        "TimeCreated": "2023-02-08T06:03:10Z",
-                        "TimeLastModified": "2023-02-16T06:48:36Z",
-                        "UniqueId": "52e62bcf-de67-4bbc-b399-b8b28bc97449",
-                    },
-                },
-                {
                     "BaseType": 1,
                     "Created": "2023-01-30T10:02:39Z",
-                    "Id": adjust_document_id_size(
-                        f"document-library-{site}-{lists_count}"
-                    ),
+                    "Id": adjust_document_id_size(f"document-library-{site}"),
                     "LastItemModifiedDate": "2023-01-30T10:02:40Z",
                     "ParentWebUrl": f"/{parent_site_url}",
                     "Title": f"{site}-List2",
@@ -170,8 +161,36 @@ def get_lists(parent_site_url, site):
                 },
             ]
         )
-    # Removing the data for the second sync
-    # end_lists -= 50
+    else:
+        skip_start = int(request.args.get("$skip"))
+        if skip_start + 100 >= total_lists:
+            skip_end = total_lists
+            # Removing the data for the second sync
+            total_lists -= 50
+        else:
+            skip_end = skip_start + 100
+
+        for lists_count in range(skip_start, skip_end):
+            lists["value"].extend(
+                [
+                    {
+                        "BaseType": 0,
+                        "Created": "2023-01-30T10:02:39Z",
+                        "Id": adjust_document_id_size(f"lists-{site}-{lists_count}"),
+                        "LastItemModifiedDate": "2023-01-30T10:02:40Z",
+                        "ParentWebUrl": f"/{parent_site_url}",
+                        "Title": f"{site}-List1",
+                        "RootFolder": {
+                            "Name": "Shared Documents",
+                            "ServerRelativeUrl": f"/{parent_site_url}/{site}",
+                            "TimeCreated": "2023-02-08T06:03:10Z",
+                            "TimeLastModified": "2023-02-16T06:48:36Z",
+                            "UniqueId": "52e62bcf-de67-4bbc-b399-b8b28bc97449",
+                        },
+                    },
+                ]
+            )
+
     return lists
 
 
