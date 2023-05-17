@@ -6,7 +6,7 @@
 import pytest
 
 from connectors.sources.directory import DEFAULT_DIR, DirectoryDataSource
-from connectors.sources.tests.support import assert_basics, create_source
+from tests.sources.support import assert_basics, create_source
 
 
 @pytest.mark.asyncio

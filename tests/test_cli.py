@@ -16,7 +16,9 @@ import pytest
 from connectors import __version__
 from connectors.cli import main, run
 
-CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
+HERE = os.path.dirname(__file__)
+FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))
+CONFIG = os.path.join(FIXTURES_DIR, "config.yml")
 
 
 def test_main(catch_stdout):

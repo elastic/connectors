@@ -12,10 +12,13 @@ from envyaml import EnvYAML
 
 from connectors.config import _update_config_field, load_config
 
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yml")
-ES_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "entsearch.yml")
+HERE = os.path.dirname(__file__)
+FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))
+
+CONFIG_FILE = os.path.join(FIXTURES_DIR, "config.yml")
+ES_CONFIG_FILE = os.path.join(FIXTURES_DIR, "entsearch.yml")
 ES_CONFIG_INVALID_LOG_LEVEL_FILE = os.path.join(
-    os.path.dirname(__file__), "entsearch_invalid_log_level.yml"
+    FIXTURES_DIR, "entsearch_invalid_log_level.yml"
 )
 
 

@@ -22,9 +22,9 @@ from connectors.sources.mysql import (
     parse_tables_string_to_list_of_tables,
     row2doc,
 )
-from connectors.sources.tests.support import create_source
-from connectors.tests.commons import AsyncIterator
 from connectors.utils import iso_utc
+from tests.commons import AsyncIterator
+from tests.sources.support import create_source
 
 
 def immutable_doc(**kwargs):

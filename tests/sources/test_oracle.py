@@ -11,8 +11,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
 from connectors.sources.oracle import OracleDataSource, OracleQueries
-from connectors.sources.tests.support import create_source
-from connectors.sources.tests.test_generic_database import ConnectionSync
+from tests.sources.support import create_source
+from tests.sources.test_generic_database import ConnectionSync
 
 DSN = "oracle+oracledb://admin:Password_123@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=9090))(CONNECT_DATA=(SID=xe)))"
 

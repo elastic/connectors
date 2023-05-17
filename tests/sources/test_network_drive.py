@@ -16,7 +16,7 @@ from smbprotocol.exceptions import LogonFailure, SMBOSError
 
 from connectors.source import DataSourceConfiguration
 from connectors.sources.network_drive import NASDataSource
-from connectors.sources.tests.support import create_source
+from tests.sources.support import create_source
 
 READ_COUNT = 0
 MAX_CHUNK_SIZE = 65536

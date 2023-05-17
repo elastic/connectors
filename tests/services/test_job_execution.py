@@ -13,9 +13,11 @@ from connectors.config import load_config
 from connectors.es.index import DocumentNotFoundError
 from connectors.protocol import JobStatus
 from connectors.services.job_execution import JobExecutionService
-from connectors.tests.commons import AsyncIterator
+from tests.commons import AsyncIterator
 
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yml")
+HERE = os.path.dirname(__file__)
+FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "..", "fixtures"))
+CONFIG_FILE = os.path.join(FIXTURES_DIR, "config.yml")
 
 
 def create_service(config_file):

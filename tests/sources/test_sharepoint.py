@@ -14,7 +14,7 @@ from aiohttp import StreamReader
 
 from connectors.source import DataSourceConfiguration
 from connectors.sources.sharepoint import SharepointDataSource
-from connectors.sources.tests.support import create_source
+from tests.sources.support import create_source
 
 EXCEPTION_MESSAGE = "Something went wrong"
 HOST_URL = "http://127.0.0.1:8491"

@@ -22,9 +22,11 @@ from connectors.protocol import (
 )
 from connectors.services.job_scheduling import JobSchedulingService
 from connectors.source import DataSourceConfiguration
-from connectors.tests.commons import AsyncIterator
+from tests.commons import AsyncIterator
 
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yml")
+HERE = os.path.dirname(__file__)
+FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "..", "fixtures"))
+CONFIG_FILE = os.path.join(FIXTURES_DIR, "config.yml")
 
 
 def create_service(config_file):

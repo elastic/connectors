@@ -13,6 +13,8 @@ import traceback
 import pytest
 from aioresponses import aioresponses
 
+import connectors
+
 
 class Logger:
     def __init__(self, silent=True):

@@ -39,10 +39,13 @@ from connectors.protocol import (
     SyncJobIndex,
 )
 from connectors.source import BaseDataSource
-from connectors.tests.commons import AsyncIterator
 from connectors.utils import iso_utc
+from tests.commons import AsyncIterator
 
-CONFIG = os.path.join(os.path.dirname(__file__), "config.yml")
+HERE = os.path.dirname(__file__)
+FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "..", "fixtures"))
+
+CONFIG = os.path.join(FIXTURES_DIR, "config.yml")
 
 DEFAULT_DOMAIN = "DEFAULT"
 
@@ -806,7 +809,7 @@ async def test_connector_prepare_with_prepared_connector():
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {"banana": "connectors.tests.test_protocol:Banana"},
+        "sources": {"banana": "tests.protocol.test_connectors:Banana"},
     }
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
@@ -850,7 +853,7 @@ async def test_connector_prepare_with_connector_missing_field_properties_creates
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {"banana": "connectors.tests.test_protocol:Banana"},
+        "sources": {"banana": "tests.protocol.test_connectors:Banana"},
     }
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
@@ -886,7 +889,7 @@ async def test_connector_prepare_with_service_type_not_configured():
     }
     config = {
         "connector_id": doc_id,
-        "sources": {"banana": "connectors.tests.test_protocol:Banana"},
+        "sources": {"banana": "tests.protocol.test_connectors:Banana"},
     }
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
@@ -961,7 +964,7 @@ async def test_connector_prepare():
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {"banana": "connectors.tests.test_protocol:Banana"},
+        "sources": {"banana": "tests.protocol.test_connectors:Banana"},
     }
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
@@ -994,7 +997,7 @@ async def test_connector_prepare_with_race_condition():
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {"banana": "connectors.tests.test_protocol:Banana"},
+        "sources": {"banana": "tests.protocol.test_connectors:Banana"},
     }
     connector_doc_after_update = connector_doc | {
         "_source": {
