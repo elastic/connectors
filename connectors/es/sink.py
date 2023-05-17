@@ -4,14 +4,14 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """
-`ElasticServer` is orchestrating a sync by:
+`SyncOrchestrator` is orchestrating a sync by:
 
 - creating a queue
 - launching a `Extractor`, a wrapper on the top of the documents' generator
 - launching a `Sink`, a class that aggregates documents and run the bulk API
 
 
-                  ElasticServer.async_bulk(generator)
+                  SyncOrchestrator.async_bulk(generator)
                                |
                                |
 Elasticsearch <== Sink <== queue <== Extractor <== generator
@@ -45,7 +45,7 @@ from connectors.utils import (
     iso_utc,
 )
 
-__all__ = ["ElasticServer"]
+__all__ = ["SyncOrchestrator"]
 
 OP_INDEX = "index"
 OP_UPSERT = "update"
@@ -452,7 +452,7 @@ class AsyncBulkRunningError(Exception):
     pass
 
 
-class ElasticServer(ESClient):
+class SyncOrchestrator(ESClient):
     """This class is the sync orchestrator.
 
     It does the following in `async_bulk`
@@ -464,7 +464,7 @@ class ElasticServer(ESClient):
     """
 
     def __init__(self, elastic_config):
-        logger.debug(f"ElasticServer connecting to {elastic_config['host']}")
+        logger.debug(f"SyncOrchestrator connecting to {elastic_config['host']}")
         super().__init__(elastic_config)
         self.loop = asyncio.get_event_loop()
         self._extractor = None

@@ -83,7 +83,7 @@ def create_runner(
 
 @pytest.fixture(autouse=True)
 def elastic_server_mock():
-    with patch("connectors.sync_job_runner.ElasticServer") as elastic_server_klass_mock:
+    with patch("connectors.sync_job_runner.SyncOrchestrator") as elastic_server_klass_mock:
         elastic_server_mock = Mock()
         elastic_server_mock.prepare_content_index = AsyncMock()
         elastic_server_mock.async_bulk = AsyncMock()

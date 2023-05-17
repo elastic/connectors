@@ -14,7 +14,7 @@ import pytest
 from connectors.es.sink import (
     AsyncBulkRunningError,
     ContentIndexNameInvalid,
-    ElasticServer,
+    SyncOrchestrator,
     Extractor,
     IndexMissing,
     Sink,
@@ -46,7 +46,7 @@ CONTENT_EXTRACTION_DISABLED = False
 @pytest.mark.asyncio
 async def test_prepare_content_index_raise_error_when_index_name_invalid():
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    es = ElasticServer(config)
+    es = SyncOrchestrator(config)
 
     with pytest.raises(ContentIndexNameInvalid):
         await es.prepare_content_index("lalalalalalalala woohooo")
@@ -72,7 +72,7 @@ async def test_prepare_content_index_raise_error_when_index_does_not_exist(
         headers=headers,
     )
 
-    es = ElasticServer(config)
+    es = SyncOrchestrator(config)
 
     with pytest.raises(IndexMissing):
         await es.prepare_content_index("search-new-index")
@@ -111,7 +111,7 @@ async def test_prepare_content_index(mock_responses):
         payload=mappings,
     )
 
-    es = ElasticServer(config)
+    es = SyncOrchestrator(config)
     put_mappings_result = asyncio.Future()
     put_mappings_result.set_result({"acknowledged": True})
     with mock.patch.object(
@@ -221,7 +221,7 @@ async def test_get_existing_ids(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses)
 
-    es = ElasticServer(config)
+    es = SyncOrchestrator(config)
     extractor = Extractor(es.client, None, "search-some-index")
     ids = []
     async for doc_id, ts in extractor._get_existing_ids():
@@ -236,7 +236,7 @@ async def test_async_bulk(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses)
 
-    es = ElasticServer(config)
+    es = SyncOrchestrator(config)
     pipeline = Pipeline({})
 
     async def get_docs():
@@ -769,7 +769,7 @@ async def test_elastic_server_done(
         sink_task.done.return_value = sink_task_done
 
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    es = ElasticServer(config)
+    es = SyncOrchestrator(config)
     es._extractor_task = extractor_task
     es._sink_task = sink_task
 
