@@ -27,15 +27,7 @@ ENDPOINTS = {
 
 
 class GitHubClient:
-    """GitHub Client"""
-
     def __init__(self, configuration):
-        """Setup the GitHub client.
-
-        Args:
-            configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
-        """
-
         self.session = None
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
@@ -43,27 +35,17 @@ class GitHubClient:
         self.github_token = self.configuration["github_token"]
         self.headers = {"Authorization": f"Bearer {self.github_token}"}
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def execute_getitem(self, request):
+    async def get_item(self, resource):
         """Execute request using getitem method of GitHubAPI.
 
         Args:
-            request (str): API for the request
+            resource (str): API to get the response
 
         Returns:
             list: Response of the request
         """
-        return await self._get_session.getitem(url=request)
+        return await self._get_client.getitem(url=resource)
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
     async def execute_request(self, method, url):
         """Execute request using _request method of GitHubAPI.
 
@@ -73,7 +55,7 @@ class GitHubClient:
         Returns:
             list: Response of the request
         """
-        status_code, response_headers, data = await self._get_session._request(
+        status_code, response_headers, data = await self._get_client._request(
             method="get", url=USER_API, headers=self.headers
         )
         if status_code == 200:
@@ -84,53 +66,27 @@ class GitHubClient:
             f"Something went wrong while executing request Exception: {message['message']}"
         )
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def execute_getiter(self, request):
+    async def get_resource(self, resource):
         """Execute request using getiter method of GitHubAPI.
 
         Args:
-            request (str): API for the request
+            resource (str): API to get the response
 
         Yields:
             dict: Response of the request
         """
-        async for response in self._get_session.getiter(url=request):
+        async for response in self._get_client.getiter(url=resource):
             yield response
 
-    async def filter_repos(self):
-        try:
-            logger.debug("Filtering repositories")
-            public_repos, configured_repos, users_repos = [], [], []
-            for repo in self.repos:
-                if "/" in repo:
-                    public_repos.append(repo)
-                else:
-                    configured_repos.append(repo)
+    async def get_user_repos(self):
+        async for response in self.get_resource(resource=ENDPOINTS["ALL_REPOS"]):
+            yield response
 
-            async for response in self.execute_getiter(request=ENDPOINTS["ALL_REPOS"]):
-                users_repos.append(response["name"])
-            invalid_repo = list(set(configured_repos) - set(users_repos))
-
-            for repo in public_repos:
-                try:
-                    await self.execute_getitem(
-                        request=ENDPOINTS["REPO"].format(repo_name=repo)
-                    )
-                except BadRequest:
-                    invalid_repo.append(repo)
-            return invalid_repo
-        except Exception as exception:
-            logger.exception(
-                f"Error while filtering repositories. Exception: {exception}."
-            )
-            raise
+    async def get_foreign_repos(self, repo):
+        return await self.get_item(resource=ENDPOINTS["REPO"].format(repo_name=repo))
 
     @cached_property
-    def _get_session(self):
+    def _get_client(self):
         self.session = aiohttp.ClientSession(headers=self.headers)
         return GitHubAPI(
             self.session,
@@ -139,14 +95,13 @@ class GitHubClient:
         )
 
     async def ping(self):
-        await self.execute_getitem(request=ENDPOINTS["USER"])
+        await self.get_item(resource=ENDPOINTS["USER"])
 
-    async def close_session(self):
+    async def close(self):
         self._sleeps.cancel()
-        if self.session is None:
-            return
-        await self.session.close()
-        del self._get_session
+        if self.session is not None:
+            await self.session.close()
+            del self._get_client
 
 
 class GitHubDataSource(BaseDataSource):
@@ -162,7 +117,6 @@ class GitHubDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self._sleeps = CancellableSleeps()
         self.github_client = GitHubClient(configuration=configuration)
 
     @classmethod
@@ -176,14 +130,14 @@ class GitHubDataSource(BaseDataSource):
             "github_token": {
                 "label": "GitHub Token",
                 "sensitive": True,
-                "order": 1,
+                "order": 2,
                 "type": "str",
                 "value": "changeme",
             },
             "repositories": {
                 "display": "textarea",
                 "label": "List of repositories",
-                "order": 2,
+                "order": 3,
                 "type": "list",
                 "value": "*",
             },
@@ -191,7 +145,7 @@ class GitHubDataSource(BaseDataSource):
                 "display_value": RETRIES,
                 "display": "numeric",
                 "label": "Maximum retries per request",
-                "order": 3,
+                "order": 4,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -200,6 +154,37 @@ class GitHubDataSource(BaseDataSource):
             },
         }
 
+    async def get_invalid_repos(self):
+        try:
+            logger.debug("Filtering repositories")
+            foreign_repos, configured_repos, users_repos = [], [], []
+            for repo in self.github_client.repos:
+                if "/" in repo:
+                    foreign_repos.append(repo)
+                else:
+                    configured_repos.append(repo)
+
+            async for repo in self.github_client.get_user_repos():
+                users_repos.append(repo["name"])
+            invalid_repos = list(set(configured_repos) - set(users_repos))
+
+            for repo in foreign_repos:
+                try:
+                    await self.github_client.get_foreign_repos(repo)
+                except BadRequest:
+                    invalid_repos.append(repo)
+            return invalid_repos
+        except Exception as exception:
+            logger.exception(
+                f"Error while filtering repositories. Exception: {exception}."
+            )
+            raise
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
     async def _remote_validation(self):
         """Validate scope of the configured Token and accessibility of repositories
 
@@ -214,7 +199,7 @@ class GitHubDataSource(BaseDataSource):
                 "Configured token does not have required rights to fetch the content"
             )
         if self.github_client.repos != ["*"]:
-            invalid_repos = await self.github_client.filter_repos()
+            invalid_repos = await self.get_invalid_repos()
             if invalid_repos:
                 raise ConfigurableFieldValueError(
                     f"Inaccessible repositories '{', '.join(invalid_repos)}'."
@@ -228,15 +213,20 @@ class GitHubDataSource(BaseDataSource):
         await self._remote_validation()
 
     async def close(self):
-        await self.github_client.close_session()
+        await self.github_client.close()
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
     async def ping(self):
         try:
             await self.github_client.ping()
-            logger.debug("Successfully connected to the GitHub.")
+            logger.debug("Successfully connected to GitHub.")
 
         except Exception:
-            logger.exception("Error while connecting to the GitHub.")
+            logger.exception("Error while connecting to GitHub.")
             raise
 
     async def get_docs(self, filtering=None):
