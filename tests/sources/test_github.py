@@ -13,8 +13,8 @@ from gidgethub import BadRequest
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources import github
 from connectors.sources.github import GitHubDataSource
-from connectors.sources.tests.support import create_source
-from connectors.tests.commons import AsyncIterator
+from tests.commons import AsyncIterator
+from tests.sources.support import create_source
 
 
 def test_get_default_configuration():
