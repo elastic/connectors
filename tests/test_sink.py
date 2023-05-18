@@ -11,15 +11,15 @@ from unittest.mock import ANY, Mock, call
 
 import pytest
 
+from connectors.es.settings import TEXT_FIELD_MAPPING
 from connectors.es.sink import (
     AsyncBulkRunningError,
     ContentIndexNameInvalid,
-    SyncOrchestrator,
     Extractor,
     IndexMissing,
     Sink,
+    SyncOrchestrator,
 )
-from connectors.es.settings import TEXT_FIELD_MAPPING
 from connectors.protocol import Pipeline
 from tests.commons import AsyncIterator
 
