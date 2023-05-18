@@ -221,17 +221,17 @@ class GenericBaseDataSource(BaseDataSource):
                         if kwargs["schema"] is not None:
                             yield [
                                 f"{kwargs['schema']}_{kwargs['table']}_{column}".lower()
-                                for column in cursor.keys()
+                                for column in cursor.keys()  # pyright: ignore
                             ]
                         else:
                             yield [
                                 f"{kwargs['table']}_{column}".lower()
-                                for column in cursor.keys()
+                                for column in cursor.keys()  # pyright: ignore
                             ]
                         yield_once = False
 
                     while True:
-                        rows = cursor.fetchmany(size=size)
+                        rows = cursor.fetchmany(size=size)  # pyright: ignore
                         rows_length = len(rows)
 
                         if not rows_length:
@@ -243,7 +243,7 @@ class GenericBaseDataSource(BaseDataSource):
                         rows_fetched += rows_length
                         await asyncio.sleep(0)
                 else:
-                    yield cursor.fetchall()
+                    yield cursor.fetchall()  # pyright: ignore
                 break
             except (InternalClientError, ProgrammingError):
                 raise
