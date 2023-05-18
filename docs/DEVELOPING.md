@@ -1,445 +1,22 @@
 # Connectors Developer's Guide
 
-ℹ️ Find documentation for the following connector clients in the Elastic Enterprise Search docs:
-
-- [Azure Blob Storage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-azure-blob.html)
-- [Google Cloud Storage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-google-cloud.html)
-- [Microsoft SQL](https://www.elastic.co/guide/en/enterprise-search/master/connectors-ms-sql.html)
-- [MongoDB](https://www.elastic.co/guide/en/enterprise-search/master/connectors-mongodb.html)
-- [MySQL](https://www.elastic.co/guide/en/enterprise-search/master/connectors-mysql.html)
-- [Network drive](https://www.elastic.co/guide/en/enterprise-search/master/connectors-network-drive.html)
-- [Oracle](https://www.elastic.co/guide/en/enterprise-search/master/connectors-oracle.html)
-- [PostgreSQL](https://www.elastic.co/guide/en/enterprise-search/master/connectors-postgresql.html)
-- [S3](https://www.elastic.co/guide/en/enterprise-search/master/connectors-s3.html)
-
-## Confluence Connector
-
-The [Elastic Confluence connector](../connectors/sources/confluence.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
-
-### Availability and prerequisites
-
-This connector is available as a **connector client** from the **Python connectors framework**. To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
-
-This connector is in **beta** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Beta features are not subject to the support SLA of official GA features.
-
-### Usage
-
-To use this connector as a **connector client**, use the **build a connector** workflow. See [Connector clients and frameworks](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
-
-For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
-
-### Compatibility
-
-Confluence Cloud or Confluence Server versions 7 or later are compatible with Elastic connector frameworks. Confluence Data Center editions are not currently supported.
-
-### Configuration
-
-The following configuration fields need to be provided for setting up the connector:
-
-##### `data_source`
-
-Dropdown to determine the Confluence platform type: `Confluence Cloud` or `Confluence Server`. Default value is `Confluence Server`.
-
-##### `username`
-
-The username of the account for Confluence server.
-
-##### `password`
-
-The password of the account to be used for the Confluence server.
-
-##### `account_email`
-
-The account email for the Confluence cloud.
-
-##### `api_token`
-
-The API Token to authenticate with Confluence cloud.
-
-##### `confluence_url`
-
-The domain where the Confluence is hosted. Examples:
-
-  - `https://192.158.1.38:8080/`
-  - `https://test_user.atlassian.net/`
-
-##### `spaces`
-
-Comma-separated list of [Space Keys](https://confluence.atlassian.com/doc/space-keys-829076188.html) to fetch data from Confluence server or cloud. If the value is `*`, the connector will fetch data from all spaces present in the configured `spaces` . Default value is `*`. Examples:
-
-  - `EC, TP`
-  - `*`
-
-##### `ssl_enabled`
-
-Whether SSL verification will be enabled. Default value is `False`.
-
-##### `ssl_ca`
-
-Content of SSL certificate. Note: In case of ssl_enabled is `False`, keep `ssl_ca` field empty. Example certificate:
-
-  - ```
-    -----BEGIN CERTIFICATE-----
-    MIID+jCCAuKgAwIBAgIGAJJMzlxLMA0GCSqGSIb3DQEBCwUAMHoxCzAJBgNVBAYT
-    ...
-    7RhLQyWn2u00L7/9Omw=
-    -----END CERTIFICATE-----
-    ```
-
-##### `retry_count`
-
-The number of retry attempts after failed request to Confluence. Default value is `3`.
-
-##### `concurrent_downloads`
-
-The number of concurrent downloads for fetching the attachment content. This speeds up the content extraction of attachments. Defaults to `50`.
-
-### Documents and syncs
-
-The connector syncs the following Confluence object types: 
-- **Pages**
-- **Spaces**
-- **Blog Posts**
-- **Attachments**
-
-### Sync rules
-
-- Content of files bigger than 10 MB won't be extracted.
-- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
-- Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
-
-### Connector Client operations
-
-#### End-to-end Testing
-
-The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html#build-connector-testing) for more details.
-
-To perform E2E testing for the Confluence connector, run the following command:
-
-```shell
-$ make ftest NAME=confluence
-```
-
-ℹ️ Users can generate the performance report using an argument i.e. `PERF8=yes`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
-
-ℹ️ Users do not need to have a running Elasticsearch instance or a Confluence source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Confluence source using the docker image.
-
-ℹ️ The e2e test uses default values defined in [Configure Confluence connector](#configure-confluence-connector)
-
-### Known issues
-
-There are no known issues for this connector. Refer to [Known issues](https://www.elastic.co/guide/en/enterprise-search/master/connectors-known-issues.html) for a list of known issues for all connectors.
-
-### Troubleshooting
-
-See [Troubleshooting](https://www.elastic.co/guide/en/enterprise-search/master/connectors-troubleshooting.html).
-
-### Security
-
-See [security](https://www.elastic.co/guide/en/enterprise-search/master/connectors-security.html).
-
-## Jira Connector
-
-The [Elastic Jira connector](../connectors/sources/jira.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
-
-### Availability and prerequisites
-
-This connector is available as a **connector client** from the **Python connectors framework**.  This connector is in **beta** and is subject to change. To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
-
-This connector is in **beta** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Beta features are not subject to the support SLA of official GA features.
-
-### Usage
-
-To use this connector as a **connector client**, use the **build a connector** workflow. See [Connector clients and frameworks](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
-
-For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
-
-### Compatibility
-
-Jira Cloud or Jira Server versions 7 or later are compatible with Elastic connector frameworks. Jira Data Center editions are not currently supported.
-
-### Configuration
-
-#### Configure Jira connector
-
-The following configuration fields need to be provided for setting up the connector:
-
-##### `data_source`
-
-Dropdown to determine Jira platform type: `Jira Cloud` or `Jira Server`. Default value is `Jira Cloud`.
-
-##### `username`
-
-The username of the account for Jira server.
-
-##### `password`
-
-The password of the account to be used for Jira server.
-
-##### `account_email`
-
-The account email for Jira cloud.
-
-##### `api_token`
-
-The API Token to authenticate with Jira cloud.
-
-##### `jira_url`
-
-The domain where Jira is hosted. Examples:
-
-  - `https://192.158.1.38:8080/`
-  - `https://test_user.atlassian.net/`
-
-##### `projects`
-
-Comma-separated list of [Project Keys](https://support.atlassian.com/jira-software-cloud/docs/what-is-an-issue/#Workingwithissues-Projectkeys) to fetch data from Jira server or cloud. If the value is `*` the connector will fetch data from all projects present in the configured `projects` . Default value is `*`. Examples:
-
-  - `EC, TP`
-  - `*`
-
-##### `ssl_enabled`
-
-Whether SSL verification will be enabled. Default value is `False`.
-
-##### `ssl_ca`
-
-Content of SSL certificate. Note: In case of ssl_enabled is `False`, keep `ssl_ca` field empty. Example certificate:
-
-  - ```
-    -----BEGIN CERTIFICATE-----
-    MIID+jCCAuKgAwIBAgIGAJJMzlxLMA0GCSqGSIb3DQEBCwUAMHoxCzAJBgNVBAYT
-    ...
-    7RhLQyWn2u00L7/9Omw=
-    -----END CERTIFICATE-----
-    ```
-
-##### `retry_count`
-
-The number of retry attempts after failed request to Jira. Default value is `3`.
-
-##### `concurrent_downloads`
-
-The number of concurrent downloads for fetching the attachment content. This speeds up the content extraction of attachments. Defaults to `100`.
-
-#### Content Extraction
-
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
-
-### Documents and Sync
-
-The connector syncs the following objects and entities:
-- **Projects**
-  - Includes metadata such as description, project key, project type, lead name, etc.
-- **Issues**
-  - All types of issues including Task, Bug, Sub-task, Enhancement, Story, etc.
-  - Includes metadata such as issue type, parent issue details, fix versions, affected versions, resolution, attachments, comments, sub-task details, priority, custom fields, etc.
-- **Attachments**
-
-**Note:** Archived projects and issues are not indexed.
-
-### Sync rules
-
-- Files bigger than 10 MB won't be extracted
-- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
-- Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
-
-### Connector Client operations
-
-#### End-to-end Testing
-
-The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html#build-connector-testing) for more details.
-
-To perform E2E testing for Jira connector, run the following command:
-
-```shell
-$ make ftest NAME=jira
-```
-
-ℹ️ Users can generate the performance report using an argument i.e. `PERF8=yes`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
-
-ℹ️ Users do not need to have a running Elasticsearch instance or a Jira source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Jira source using the docker image.
-
-### Known issues
-
-There are no known issues for this connector. Refer to [Known issues](https://www.elastic.co/guide/en/enterprise-search/master/connectors-known-issues.html) for a list of known issues for all connectors.
-
-### Troubleshooting
-
-See [Troubleshooting](https://www.elastic.co/guide/en/enterprise-search/master/connectors-troubleshooting.html).
-
-### Security
-
-See [security](https://www.elastic.co/guide/en/enterprise-search/master/connectors-security.html).
-
-
-## SharePoint Connector
-
-The [Elastic SharePoint connector](../connectors/sources/sharepoint.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
-
-### Availability and prerequisites
-
-This connector is available as a **connector client** from the **Python connectors framework**. To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
-
-This connector is in **technical preview** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Beta features are not subject to the support SLA of official GA features.
-
-### Usage
-
-To use this connector as a **connector client**, use the **build a connector** workflow. See [Connector clients and frameworks](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
-
-For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
-
-### Configuring the SharePoint Online Connector:
-  You must configure the SharePoint connector before connecting the SharePoint Online service to Elastic Search. For this you must create an **OAuth App** in the SharePoint Online platform.
-
-  To get started, first log in to SharePoint Online and access your administrative dashboard.
-   
-   **Note:** Ensure you are logged in as the Azure Portal **service account**.
-  - Sign in to https://portal.azure.com/ and click on **Azure Active Directory**
-  - Locate **App Registrations** and Click **New Registration**.
-  - Give your app a name - like "Elastic  Search".
-    
-    Leave the Redirect URIs blank for now.
-  - Register the application
-  - Retrieve and keep the **Application (client) ID** and **Directory (tenant) ID** handy - we'll need it within Elastic Search.
-  - Locate the **Client Secret** by navigating to **Client credentials: Certificates & Secrets**
-  - Pick a name for your client secret (for example, Elastic Search). Select an expiration date. (**Note:** at the end of this expiration date, you will need to generate a new secret and update your connector configuration with it.)
-  - Save the **Client Secret** value before leaving this screen - we'll need it within Elastic Search.
-  - We must now set up the permissions the Application will request from the Azure Portal service account. Navigate to **API Permissions** and click **Add Permission**. Add **delegated permissions** until the list resembles the following:
-    ```
-    User.Read
-    ```
-  - Finally, **Grant admin consent**.
-
-    Use the Grant Admin Consent link from the permissions screen.
-  - At last also save the tenant name (i.e. Domain name) of Azure platform
-
-
-### SharePoint Online permissions required to run the connector:
-
-   Refer to the following documentation for setting [SharePoint Permissions](https://learn.microsoft.com/en-us/sharepoint/dev/solution-guidance/security-apponly-azureacs)
-
-   - To set `DisableCustomAppAuthentication` to false we need to connect to SharePoint using Windows PowerShell and run set-spotenant -DisableCustomAppAuthentication $false
-   - To assign full permissions to the tenant in SharePoint Online, in your browser, go to the tenant URL. For example, go to `https://<office_365_admin_tenant_URL>/_layouts/15/appinv.aspx` such as `https://contoso-admin.sharepoint.com/_layouts/15/appinv.aspx`. The SharePoint admin center page appears.
-       - In the App ID box, enter the application ID that you recorded earlier, and then click Lookup. In the Title box, the name of the application appears.
-       - In the App Domain box, type <tenant_name>.onmicrosoft.com
-       - In the App's Permission Request XML box, type the following XML string:
-           ```
-            <AppPermissionRequests AllowAppOnlyPolicy="true">
-              <AppPermissionRequest Scope="http://sharepoint/content/tenant" Right="FullControl" />
-              <AppPermissionRequest Scope="http://sharepoint/social/tenant" Right="Read" />
-            </AppPermissionRequests>
-            ```
-
-### Compatibility
-
-  Both SharePoint Online and SharePoint server are supported by the connector.
-
-  For SharePoint server, below mentioned versions are compatible with Elastic connector frameworks:
-  - SharePoint 2013
-  - SharePoint 2016
-  - SharePoint 2019
-
-### Configuration
-
-The following configuration fields need to be provided for setting up the connector:
-
-##### `data_source`
-
-Determines the SharePoint platform type. `SHAREPOINT_ONLINE` if SharePoint cloud and `SHAREPOINT_SERVER` if SharePoint Server.
-
-##### `username`
-
-The username of the account for SharePoint Server.
-
-**Note:** `username` is not needed for SharePoint Online.
-
-##### `password`
-
-The password of the account to be used for the SharePoint Server.
-
-**Note:** `password` is not needed for SharePoint Online.
-
-##### `client_id`
-
-The client id to authenticate with SharePoint Online.
-
-##### `client_secret`
-
-The secret value to authenticate with SharePoint Online.
-
-##### `tenant`
-
-The tenant name to authenticate with SharePoint Online.
-
-##### `tenant_id`
-
-The tenant id to authenticate with SharePoint Online.
-
-##### `host_url`
-
-The server host url where the SharePoint is hosted. Examples:
-
-  - `https://192.158.1.38:8080`
-  - `https://<tenant_name>.sharepoint.com`
-
-##### `site_collections`
-
-The site collections to fetch sites from SharePoint(allow comma separated collections also). Examples:
-  - `collection1`
-  - `collection1, collection2`
-
-##### `ssl_enabled`
-
-Whether SSL verification will be enabled. Default value is `False`.
-
-##### `ssl_ca`
-
-Content of SSL certificate needed for SharePoint Server.
-
-**Note:** Keep this field empty, if `ssl_enabled` is set to `False` (Applicable on SharePoint Server only). Example certificate:
-
-
-  - ```
-    -----BEGIN CERTIFICATE-----
-    MIID+jCCAuKgAwIBAgIGAJJMzlxLMA0GCSqGSIb3DQEBCwUAMHoxCzAJBgNVBAYT
-    ...
-    AlVTMQwwCgYDVQQKEwNJQk0xFjAUBgNVBAsTDURlZmF1bHROb2RlMDExFjAUBgNV
-    -----END CERTIFICATE-----
-    ```
-
-##### `retry_count`
-
-The number of retry attempts after failed request to the SharePoint. Default value is `3`.
-
-### Documents and syncs
-The connector syncs the following SharePoint object types: 
-  - Sites and Subsites
-  - Lists
-  - List Items and its attachment content
-  - Document Libraries and its attachment content(include Web Pages)
-
-### Sync rules
-
-- Content of files bigger than 10 MB won't be extracted.
-- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elasticsearch Index.
-- Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
-
-### E2E Tests
-
-The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html#build-connector-testing) for more details.
-
-To perform E2E testing for the SharePoint connector, run the following command:
-
-```shell
-$ make ftest NAME=sharepoint
-```
-
-ℹ️ Users can generate the [perf8](https://github.com/elastic/perf8) report using an argument i.e. `PERF8=True`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
-
-ℹ️ Users do not need to have a running Elasticsearch instance or a SharePoint source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock SharePoint source using the docker image.
-
-ℹ️ The connector uses the Elastic [ingest attachment processor](https://www.elastic.co/guide/en/enterprise-search/current/ingest-pipelines.html) plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
+- [General Configuration](#general-configuration)
+- [Installation](#installation)
+- [Architecture](#architecture)
+- [Syncing](#syncing)
+  - [Sync Strategy](#sync-strategy)
+  - [How a sync works](#how-a-sync-works)
+- [Runtime dependecies](#runtime-dependencies)
+- [Implementing a new source](#implementing-a-new-source)
+  - [Sync rules](#sync-rules)
+    - [Basic rules vs advanced rules](#basic-rules-vs-advanced-rules)
+    - [How to implement advanced rules](#how-to-implement-advanced-rules)
+    - [How to validate advanced rules](#how-to-validate-advanced-rules)
+    - [How to provide custom basic rule validation](#how-to-provide-custom-basic-rule-validation)
+  - [Testing the connector](#testing-the-connector)
+    - [Unit tests](#unit-tests)
+    - [Integration tests](#integration-tests)
+- [Async vs Sync](#async-vs-sync)
 
 ## General Configuration
 
@@ -447,11 +24,9 @@ The details of Elastic instance and other relevant fields such as `service` and 
 
 ## Installation
 
-Provides a CLI to ingest documents into Elasticsearch, following the [connector protocol](https://github.com/elastic/connectors-python/blob/main/docs/CONNECTOR_PROTOCOL.md).
-
-To install the CLI, run:
+To install, run:
 ```shell
-$ make install
+$ make clean install
 ```
 
 The `elastic-ingest` CLI will be installed on your system:
@@ -475,7 +50,7 @@ options:
 
 Users can execute `make run` command to run the elastic-ingest process in `debug` mode. For more details check out the following [documentation](./CONFIG.md)
 
-# Architecture
+## Architecture
 
 The CLI runs the [ConnectorService](../connectors/runner.py) which is an asynchronous event loop. It calls Elasticsearch on a regular basis to see if some syncs need to happen.
 
@@ -510,24 +85,16 @@ sources:
 
 And that source will be available in Kibana.
 
-# Sync strategy
+## Syncing
+### Sync strategy
 
-In Workplace Search we have the four following syncs:
-
-- **Full sync** (runs every 72 hours by default): This synchronization job synchronizes all the data from the content source ensuring full data parity.
-- **Incremental sync** (runs every 2 hours by default): This synchronization job synchronizes updates to the data at the content source ensuring high data freshness.
-- **Deletion sync** (runs every 6 hours by default): This synchronization job synchronizes document deletions from the content source ensuring regular removal of stale data.
-- **Permissions sync** (runs every 5 minutes by default, when Document Level Permissions are enabled): This synchronization job synchronizes document permissions from the content sources ensuring secure access to documents on Workplace Search.
-
-In Elastic Python connectors we are implementing for now just **Full sync**, which ensures full data parity (including deletion).
+In Elastic Python connectors we implement a **Full sync**, which ensures full data parity (including deletion).
 
 This sync strategy is good enough for some sources like MongoDB where 100,000 documents can be fully synced in less than 30 seconds.
 
 We will introduce more sophisticated syncs as we add new sources, in order to achieve the same level of freshness we have in Workplace Search.
 
-The **Permissions sync** will be included later as well once we have designed how Document-Level Permission works in the new architecture.
-
-# How a sync works
+### How a sync works
 
 Syncing a backend consists of reconciliating an Elasticsearch index with an external data source. It's a read-only mirror of the data located in the 3rd party data source.
 
@@ -543,6 +110,169 @@ To sync both sides, the CLI uses these steps:
 - `bulk` calls are emitted every 500 operations (this is configurable for slow networks).
 
 To implement a new source, check [CONTRIBUTE.rst](./CONTRIBUTING.md)
+
+
+## Implementing a new source
+
+Implementing a new source is done by creating a new class which responsibility is to send back documents from the targeted source.
+
+Source classes are not required to use any base class as long as it follows the API signature defined in [BaseDataSource](../connectors/source.py).
+
+Check out an example in [directory.py](../connectors/sources/directory.py) for a basic example.
+
+Take a look at the [MongoDB connector](../connectors/sources/mongo.py) for more inspiration. It's pretty straightforward and has that nice little extra feature some other connectors can't implement easily: the [Changes](https://www.mongodb.com/docs/manual/changeStreams/) stream API allows it to detect when something has changed in the MongoDB collection. After a first sync, and as long as the connector runs, it will skip any sync if nothing changed.
+
+Each connector will have their own specific behaviors and implementations. When a connector is loaded, it stays in memory, so you can come up with any strategy you want to make it more efficient. You just need to be careful not to blow memory.
+
+### Sync rules
+
+#### Basic rules vs advanced rules
+
+Sync rules are made up of basic and advanced rules.
+Basic rules are implemented generically on the framework-level and work out-of-the-box for every new connector.
+Advanced rules are specific to each data source.
+Learn more about sync rules [in the Enterprise Search documentation](https://www.elastic.co/guide/en/enterprise-search/current/sync-rules.html).
+
+Example:
+
+For MySQL we've implemented advanced rules to pass custom SQL queries directly to the corresponding MySQL instance.
+This offloads a lot of the filtering to the data source, which helps reduce data transfer size.
+Also, data sources usually have highly optimized and specific filtering capabilities you may want to expose to the users of your connector.
+Take a look at the `get_docs` method in the [MySQL connector](../connectors/sources/mysql.py) to see an advanced rules implementation.
+
+#### How to implement advanced rules
+
+When implementing a new connector follow the API of the [BaseDataSource](../connectors/source.py).
+The custom implementation for advanced rules is usually located inside the `get_docs` function:
+
+```python
+async def get_docs(self, filtering=None):
+    if filtering and filtering.has_advanced_rules():
+        advanced_rules = filtering.get_advanced_rules()
+        # your custom advanced rules implementation
+    else:
+        # default fetch all data implementation 
+```
+
+For example, here you could pass custom queries to a database.
+The structure of the advanced rules depends on your implementation and your concrete use case.
+For MySQL the advanced rules structure looks like this:
+You specify databases on the top level, which contain tables, which specify a custom query.
+
+Example:
+
+```json
+{
+  "database_1": {
+    "table_1": "SELECT ... FROM ...;",
+    "table_2": "SELECT ... FROM ...;"
+  },
+  "database_2": {
+    "table_1": "SELECT ... FROM ...;"
+  }
+}
+```
+
+Note that the framework calls `get_docs` with the parameter `filtering` of type `Filter`, which is located in [byoc.py](../connectors/byoc.py).
+The `Filter` class provides convenient methods to extract advanced rules from the filter and to check whether advanced rules are present.
+
+#### How to validate advanced rules
+
+To validate advanced rules the framework takes the list of validators returned by the method `advanced_rules_validators` and calls them in the order they appear in that list.
+By default, this list is empty in the [BaseDataSource](../connectors/source.py) as advanced rules are always specific to the connector implementation.
+Plug in custom validators by implementing a class containing a `validate` method, which accepts one parameter.
+The framework expects the custom validators to return a `SyncRuleValidationResult`, which can be found in [validation.py](../connectors/filtering/validation.py).
+
+```python
+class MyValidator(AdvancedRulesValidator):
+    
+    def validate(self, advanced_rules):
+        # custom validation logic
+        return SyncRuleValidationResult(...)
+```
+
+Note that the framework will call `validate` with the parameter `advanced_rules` of type `dict`.
+Now you can return a list of validator instances in `advanced_rules_validators`:
+
+```python
+class MyDataSource(BaseDataSource):
+
+    def advanced_rules_validators(self):
+        return [MyValidator()]
+```
+
+The framework will handle the rest: scheduling validation, calling the custom validators and storing the corresponding results.
+
+#### How to provide custom basic rule validation
+
+We don't recommend fully overriding `basic_rule_validators`, because you'll lose the default validations.
+
+The framework already provides default validations for basic rules.
+To extend the default validation, provide custom basic rules validators.
+There are two possible ways to validate basic rules:
+- **Every rule gets validated in isolation**. Extend the class `BasicRuleValidator` located in [validation.py](../connectors/filtering/validation.py):
+    ```python
+    class MyBasicRuleValidator(BasicRuleValidator):
+        
+        @classmethod
+        def validate(cls, rule):
+            # custom validation logic
+            return SyncRuleValidationResult(...)
+    ```
+- **Validate the whole set of basic rules**. If you want to validate constraints on the set of rules, for example to detect duplicate or conflicting rules. Extend the class `BasicRulesSetValidator` located in [validation.py](../connectors/filtering/validation.py):
+    ```python
+    class MyBasicRulesSetValidator(BasicRulesSetValidator):
+        
+        @classmethod
+        def validate(cls, set_of_rules):
+            # custom validation logic
+            return SyncRuleValidationResult(...)
+    ```
+
+To preserve the default basic rule validations and extend these with your custom logic, override `basic_rules_validators` like this:
+```python
+class MyDataSource(BaseDataSource):
+
+    @classmethod
+    def basic_rules_validators(self):
+        return BaseDataSource.basic_rule_validators() 
+                + [MyBasicRuleValidator, MyBasicRulesSetValidator]
+```
+
+Again the framework will handle the rest: scheduling validation, calling the custom validators and storing the corresponding results.
+
+### Testing the connector
+
+#### Unit Tests
+To test the connectors, run:
+```shell
+make test
+```
+
+We require all connectors to have unit tests and to have a 90% coverage reported by this command
+
+#### Integration Tests
+If the above tests pass, start your Docker instance or configure your backend, then run:
+```shell
+make ftest NAME={service type}
+```
+
+This will configure the connector in Elasticsearch to run a full sync. The script will verify that the Elasticsearch index receives documents.
+
+
+## Async vs Sync
+
+The CLI uses `asyncio` and makes the assumption that all the code that has been called should not block the event loop. This makes syncs extremely fast with no memory overhead. In order to achieve this asynchronicity, source classes should use async libs for their backend.
+
+When not possible, the class should use [run_in_executor](https://docs.python.org/3/library/asyncio-eventloop.html#executing-code-in-thread-or-process-pools) and run the blocking code in another thread or process.
+
+When you send work in the background, you will have two options:
+
+- if the work is I/O-bound, the class should use threads
+- if there's some heavy CPU-bound computation (encryption work, etc), processes should be used to avoid [GIL contention](https://realpython.com/python-gil/)
+
+When building async I/O-bound connectors, make sure that you provide a way to recycle connections and that you can throttle calls to the backends. This is very important to avoid file descriptors exhaustion and hammering the backend service.
+
 
 ## Runtime dependencies
 
