@@ -51,7 +51,10 @@ RUNNING_FTEST = (
 )  # Flag to check if a connector is run for ftest or not.
 DEFAULT_PEM_FILE = os.path.join(
     os.path.dirname(__file__),
+    "..",
+    "..",
     "tests",
+    "sources",
     "fixtures",
     "google_cloud_storage",
     "service_account_dummy_cert.pem",
@@ -173,7 +176,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             "type": "service_account",
             "project_id": "dummy_project_id",
             "private_key_id": "abc",
-            "private_key": open(DEFAULT_PEM_FILE).read(),
+            "private_key": open(
+                os.path.abspath(DEFAULT_PEM_FILE)
+            ).read(),  # TODO: change this and provide meaningful defaults
             "client_email": "123-abc@developer.gserviceaccount.com",
             "client_id": "123-abc.apps.googleusercontent.com",
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
