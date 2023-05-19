@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from connectors.byoei import ElasticServer
+from connectors.es.sink import SyncOrchestrator
 from connectors.kibana import main, upsert_index
 
 HERE = os.path.dirname(__file__)
@@ -89,7 +89,7 @@ async def test_upsert_index(mock_responses):
         headers=headers,
     )
 
-    es = ElasticServer(config)
+    es = SyncOrchestrator(config)
 
     await upsert_index(es, "search-new-index")
 
