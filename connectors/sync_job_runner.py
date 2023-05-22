@@ -8,10 +8,10 @@ import time
 
 import elasticsearch
 
-from connectors.byoei import ElasticServer
 from connectors.es import Mappings
 from connectors.es.client import with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
+from connectors.es.sink import SyncOrchestrator
 from connectors.logger import logger
 from connectors.protocol import JobStatus
 from connectors.utils import truncate_id
@@ -122,7 +122,7 @@ class SyncJobRunner:
                 is_connectors_index=True,
             )
 
-            self.elastic_server = ElasticServer(self.es_config)
+            self.elastic_server = SyncOrchestrator(self.es_config)
 
             logger.debug("Preparing the content index")
             await self.elastic_server.prepare_content_index(

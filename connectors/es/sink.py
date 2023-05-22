@@ -4,19 +4,17 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """
-Implementation of BYOEI protocol (+some ids collecting)
-
-`ElasticServer` is orchestrating a sync by:
+`SyncOrchestrator` is orchestrating a sync by:
 
 - creating a queue
-- launching a `Fetcher`, a wrapper on the top of the documents' generator
-- launching a `Bulker`, a class that aggregates documents and run the bulk API
+- launching a `Extractor`, a wrapper on the top of the documents' generator
+- launching a `Sink`, a class that aggregates documents and run the bulk API
 
 
-                  ElasticServer.async_bulk(generator)
+                  SyncOrchestrator.async_bulk(generator)
                                |
                                |
-Elasticsearch <== Bulker <== queue <== Fetcher <== generator
+Elasticsearch <== Sink <== queue <== Extractor <== generator
 
 """
 import asyncio
@@ -47,7 +45,7 @@ from connectors.utils import (
     iso_utc,
 )
 
-__all__ = ["ElasticServer"]
+__all__ = ["SyncOrchestrator"]
 
 OP_INDEX = "index"
 OP_UPSERT = "update"
@@ -60,7 +58,7 @@ def get_mb_size(ob):
     return round(get_size(ob) / (1024 * 1024), 2)
 
 
-class Bulker:
+class Sink:
     """Send bulk operations in batches by consuming a queue.
 
     This class runs a coroutine that gets operations out of a `queue` and collects them to
@@ -157,14 +155,14 @@ class Bulker:
         self.deleted_document_count += len(stats[OP_DELETE])
 
         logger.debug(
-            f"Bulker stats - no. of docs indexed: {self.indexed_document_count}, volume of docs indexed: {round(self.indexed_document_volume)} bytes, no. of docs deleted: {self.deleted_document_count}"
+            f"Sink stats - no. of docs indexed: {self.indexed_document_count}, volume of docs indexed: {round(self.indexed_document_volume)} bytes, no. of docs deleted: {self.deleted_document_count}"
         )
 
     async def run(self):
         try:
             await self._run()
         except asyncio.CancelledError:
-            logger.info("Task is canceled, stop Bulker...")
+            logger.info("Task is canceled, stop Sink...")
             raise
 
     async def _run(self):
@@ -226,7 +224,7 @@ class Bulker:
             await self._batch_bulk(batch, stats)
 
 
-class Fetcher:
+class Extractor:
     """Grabs data and adds them in the queue for the bulker.
 
     This class runs a coroutine that puts docs in `queue`, given a document generator.
@@ -277,7 +275,7 @@ class Fetcher:
 
     def __str__(self):
         return (
-            "Fetcher <"
+            "Extractor <"
             f"create: {self.total_docs_created} |"
             f"update: {self.total_docs_updated} |"
             f"delete: {self.total_docs_deleted}>"
@@ -331,11 +329,11 @@ class Fetcher:
         try:
             await self.get_docs(generator)
         except asyncio.CancelledError:
-            logger.info("Task is canceled, stop Fetcher...")
+            logger.info("Task is canceled, stop Extractor...")
             raise
 
     async def get_docs(self, generator):
-        """Iterate on a generator of documents to fill a queue of bulk operations for the `Bulker` to consume.
+        """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
 
         A document might be discarded if its timestamp has not changed.
         Extraction happens in a separate task, when a document contains files.
@@ -454,25 +452,25 @@ class AsyncBulkRunningError(Exception):
     pass
 
 
-class ElasticServer(ESClient):
+class SyncOrchestrator(ESClient):
     """This class is the sync orchestrator.
 
     It does the following in `async_bulk`
 
     - grabs all ids on Elasticsearch for the index
     - creates a MemQueue to hold documents to stream
-    - runs a `Fetcher` (producer) and a `Bulker` (consumer) against the queue
+    - runs a `Extractor` (producer) and a `Sink` (consumer) against the queue
     - once they are both over, returns totals
     """
 
     def __init__(self, elastic_config):
-        logger.debug(f"ElasticServer connecting to {elastic_config['host']}")
+        logger.debug(f"SyncOrchestrator connecting to {elastic_config['host']}")
         super().__init__(elastic_config)
         self.loop = asyncio.get_event_loop()
-        self._fetcher = None
-        self._fetcher_task = None
-        self._bulker = None
-        self._bulker_task = None
+        self._extractor = None
+        self._extractor_task = None
+        self._sink = None
+        self._sink_task = None
 
     async def prepare_content_index(self, index, *, mappings=None):
         """Creates the index, given a mapping if it does not exists."""
@@ -512,53 +510,53 @@ class ElasticServer(ESClient):
             raise IndexMissing(f"Index {index} does not exist!")
 
     def done(self):
-        if self._fetcher_task is not None and not self._fetcher_task.done():
+        if self._extractor_task is not None and not self._extractor_task.done():
             return False
-        if self._bulker_task is not None and not self._bulker_task.done():
+        if self._sink_task is not None and not self._sink_task.done():
             return False
         return True
 
     async def cancel(self):
-        if self._fetcher_task is not None and not self._fetcher_task.done():
-            self._fetcher_task.cancel()
+        if self._extractor_task is not None and not self._extractor_task.done():
+            self._extractor_task.cancel()
             try:
-                await self._fetcher_task
+                await self._extractor_task
             except asyncio.CancelledError:
-                logger.info("Fetcher is stopped.")
-        if self._bulker_task is not None and not self._bulker_task.done():
-            self._bulker_task.cancel()
+                logger.info("Extractor is stopped.")
+        if self._sink_task is not None and not self._sink_task.done():
+            self._sink_task.cancel()
             try:
-                await self._bulker_task
+                await self._sink_task
             except asyncio.CancelledError:
-                logger.info("Bulker is stopped.")
+                logger.info("Sink is stopped.")
 
     def ingestion_stats(self):
         stats = {}
-        if self._fetcher is not None:
+        if self._extractor is not None:
             stats.update(
                 {
-                    "doc_created": self._fetcher.total_docs_created,
-                    "attachment_extracted": self._fetcher.total_downloads,
-                    "doc_updated": self._fetcher.total_docs_updated,
-                    "doc_deleted": self._fetcher.total_docs_deleted,
+                    "doc_created": self._extractor.total_docs_created,
+                    "attachment_extracted": self._extractor.total_downloads,
+                    "doc_updated": self._extractor.total_docs_updated,
+                    "doc_deleted": self._extractor.total_docs_deleted,
                 }
             )
-        if self._bulker is not None:
+        if self._sink is not None:
             stats.update(
                 {
-                    "bulk_operations": dict(self._bulker.ops),
-                    "indexed_document_count": self._bulker.indexed_document_count,
+                    "bulk_operations": dict(self._sink.ops),
+                    "indexed_document_count": self._sink.indexed_document_count,
                     # return indexed_document_volume in number of MiB
                     "indexed_document_volume": round(
-                        self._bulker.indexed_document_volume / (1024 * 1024)
+                        self._sink.indexed_document_volume / (1024 * 1024)
                     ),
-                    "deleted_document_count": self._bulker.deleted_document_count,
+                    "deleted_document_count": self._sink.deleted_document_count,
                 }
             )
         return stats
 
     def fetch_error(self):
-        return None if self._fetcher is None else self._fetcher.fetch_error
+        return None if self._extractor is None else self._extractor.fetch_error
 
     async def async_bulk(
         self,
@@ -581,7 +579,7 @@ class ElasticServer(ESClient):
         - content_extraction_enabled: if enabled, will download content -- default: `True`
         - options: dict of options (from `elasticsearch.bulk` in the config file)
         """
-        if self._fetcher_task is not None or self._bulker_task is not None:
+        if self._extractor_task is not None or self._sink_task is not None:
             raise AsyncBulkRunningError("Async bulk task has already started.")
         if filter_ is None:
             filter_ = Filter()
@@ -600,7 +598,7 @@ class ElasticServer(ESClient):
         stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
 
         # start the fetcher
-        self._fetcher = Fetcher(
+        self._extractor = Extractor(
             self.client,
             stream,
             index,
@@ -610,10 +608,10 @@ class ElasticServer(ESClient):
             display_every=display_every,
             concurrent_downloads=concurrent_downloads,
         )
-        self._fetcher_task = asyncio.create_task(self._fetcher.run(generator))
+        self._extractor_task = asyncio.create_task(self._extractor.run(generator))
 
         # start the bulker
-        self._bulker = Bulker(
+        self._sink = Sink(
             self.client,
             stream,
             chunk_size,
@@ -621,4 +619,4 @@ class ElasticServer(ESClient):
             chunk_mem_size=chunk_mem_size,
             max_concurrency=max_concurrency,
         )
-        self._bulker_task = asyncio.create_task(self._bulker.run())
+        self._sink_task = asyncio.create_task(self._sink.run())
