@@ -25,7 +25,7 @@ def unset_logger():
 def test_logger():
     with unset_logger():
         logger = set_logger(logging.DEBUG)
-        assert logger.level == logging.DEBUG
+        assert logger.logger.level == logging.DEBUG
 
 
 def test_logger_filebeat():
@@ -36,7 +36,7 @@ def test_logger_filebeat():
         def _w(msg):
             logs.append(msg)
 
-        logger.handlers[0].stream.write = _w
+        logger.logger.handlers[0].stream.write = _w
         logger.debug("filbeat")
         ecs_log = logs[0]
 

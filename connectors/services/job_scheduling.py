@@ -151,7 +151,7 @@ class JobSchedulingService(BaseService):
             try:
                 await connector.reload()
             except DocumentNotFoundError:
-                logger.error(f"Couldn't reload connector {connector.id}")
+                logger.error("Couldn't reload connector", connector=connector)
                 return False
 
             if not connector.sync_now:
@@ -161,7 +161,7 @@ class JobSchedulingService(BaseService):
             return True
 
         if await _should_schedule_on_demand_sync():
-            logger.info(f"Creating an on demand sync for connector {connector.id}...")
+            logger.info("Creating an on demand sync...", connector=connector)
             await self.sync_job_index.create(
                 connector=connector, trigger_method=JobTriggerMethod.ON_DEMAND
             )
@@ -172,7 +172,7 @@ class JobSchedulingService(BaseService):
             try:
                 await connector.reload()
             except DocumentNotFoundError:
-                logger.error(f"Couldn't reload connector {connector.id}")
+                logger.error("Couldn't reload connector", connector=connector)
                 return False
 
             now = datetime.utcnow()
@@ -193,13 +193,14 @@ class JobSchedulingService(BaseService):
                 return False
 
             if next_sync is None:
-                logger.debug(f"Scheduling is disabled for connector {connector.id}")
+                logger.debug("Scheduling is disabled", connector=connector)
                 return False
 
             next_sync_due = (next_sync - now).total_seconds()
             if next_sync_due - self.idling > 0:
                 logger.debug(
-                    f"Next sync for connector {connector.id} due in {int(next_sync_due)} seconds"
+                    f"Next sync due in {int(next_sync_due)} seconds",
+                    connector=connector,
                 )
                 return False
 
@@ -207,7 +208,7 @@ class JobSchedulingService(BaseService):
             return True
 
         if await _should_schedule_scheduled_sync():
-            logger.info(f"Creating a scheduled sync for connector {connector.id}...")
+            logger.info("Creating a scheduled sync...", connector=connector)
             await self.sync_job_index.create(
                 connector=connector, trigger_method=JobTriggerMethod.SCHEDULED
             )
