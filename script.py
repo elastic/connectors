@@ -86,7 +86,7 @@ def load_site_collections(access_token):
     dump("site-collections", graph_data['value'])
 
 def load_sites(access_token, sharepoint_token):
-    select = "id,siteCollection,webUrl"
+    select = ""
 
     graph_data = call_graph(f"sites/?search=*&$select={select}", access_token)
 
@@ -95,6 +95,7 @@ def load_sites(access_token, sharepoint_token):
         load_site_pages(sharepoint_token, site)
         load_site_drives(access_token, site)
         load_site_lists(access_token, site)
+        break
 
 def load_site_pages(sharepoint_token, site):
     site_url = site['webUrl']
@@ -106,7 +107,7 @@ def load_site_pages(sharepoint_token, site):
     dump(f"site-{site['id']}-pages", graph_data['value'])
 
 def load_site_drives(access_token, site):
-    select = "Id,Owner,Name,DriveType"
+    select = ""
     
     graph_data = call_graph(f"sites/{site['id']}/drives?$select={select}", access_token)
 
