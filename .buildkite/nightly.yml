@@ -50,7 +50,7 @@ steps:
       - "perf8-report-*/**/*"
   - label: "🔨 Sharepoint"
     command:
-      - ".buildkite/run_nigthly.sh sharepoint"
+      - ".buildkite/run_nigthly.sh sharepoint extra_small"
     artifact_paths:
       - "perf8-report-*/**/*"
   - label: "🔨 Microsoft SQL"

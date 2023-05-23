@@ -19,6 +19,7 @@ If you are looking for the implementation in Ruby, See [connectors-ruby](https:/
 - [Getting Support](docs/SUPPORT.md)
 - [Releasing](docs/RELEASING.md)
 - [Developer guide](docs/DEVELOPING.md)
+- [Connectors Reference](docs/REFERENCE.md)
 - [Security Policy](docs/SECURITY.md)
 - [Elastic-internal guide](docs/INTERNAL.md)
 - [Connector Protocol](https://github.com/elastic/connectors-python/blob/main/docs/CONNECTOR_PROTOCOL.md)

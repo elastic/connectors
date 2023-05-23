@@ -552,6 +552,7 @@ class Connector(ESDocument):
             "last_sync_status": JobStatus.IN_PROGRESS.value,
             "last_sync_error": None,
             "status": Status.CONNECTED.value,
+            "error": None,
         }
         await self.index.update(
             doc_id=self.id,
