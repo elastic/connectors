@@ -1,6 +1,6 @@
 # Upgrading
 
-Unlike some other Elastic products, connectors-python is intentionally designed to be utilized outside of strict release windows.
+Connectors-python is intentionally de-coupled from the Elasticsearch release cycle.
 It can be forked, modified, and connected to an Elasticsearch deployment, and continue to be modified while the Elasticsearch version stays static.
 
 This gives the product a great capability to adapt to bugs or sudden 3rd-party API changes flexibly and without delay.

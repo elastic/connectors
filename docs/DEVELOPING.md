@@ -186,7 +186,7 @@ Site Collection
          |--- Site Page
 ```
 
-Unfortunately, some of the features available in the Sharepoint REST API are yet not available in Graph API - namely access to Page content.
+Unfortunately, some of the features available in the Sharepoint REST API are not yet available in Graph API - namely access to Page content.
 By going through this exercise, we have now identified that we'll need to utilize two different APIs in order to fetch our data.
 
 ##### What credentials will a client need?
@@ -289,7 +289,7 @@ Sometimes downloading large files encounter packet loss, and while the response 
 All of these are operations that may make sense to retry a time or two.
 
 A note on retries - do not retry infinitely, and use backoff.
-Hammering a 3rd-party API with obstinate retries is a good way to block both your connector and their service from functioning properly.
+A service may block your connector or specific features if you retry too aggressively.
 
 ##### What is the permission model used by the 3rd-party?
 
@@ -316,7 +316,7 @@ Or to have two fields, one for "individuals" and one for "groups".
 #### What is the expected performance for the connector?
 
 There are no hard-and-fast rules here, unless you're building a connector with a specific customer in mind, who has specific requirements.
-However, it is good to ensure that any connector you build has comperable performance to that of other connectors.
+However, it is good to ensure that any connector you build has comparable performance to that of other connectors.
 To measure this, you can simply utilize the `make ftest` (functional tests) and look at the generated performance dashboards to compare apples-to-apples.
 Pay particular attention to memory, CPU, and file handle metrics.
 
