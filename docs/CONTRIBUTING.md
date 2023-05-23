@@ -17,6 +17,7 @@ Each time you make a valid contribution, you’ll earn points that increase your
   - [Proper async usage](#proper-async-usage)
   - [Log verbosity](#log-verbosity)
   - [Linting](#linting)
+  - [Testing](#testing)
   - [Backport labels](#backport-labels)
 - [Pull request etiquette](#pull-request-etiquette)
   - [Why do we use a pull request workflow?](#why-do-we-use-a-pull-request-workflow)
@@ -114,6 +115,15 @@ Code style is important in shared codebases, as it helps ensure that everyone ca
 In order to enforce code style, our CI jobs apply a linter, and will fail to build (and block merging of) non-complient changes.
 
 You can run the linter locally with `make lint` to ensure that your changes do not introduce any issues.
+
+### Testing
+
+Tests not only verify and demonstrate that a new feature does what it is supposed to, but they also protect the codebase from unintentional future regressions.
+For this reason, it is important to both add tests when contributing new code, and to ensure that all tests (old and new) are passing.
+
+Our goal is to maintain 90% test coverage for each connector.
+
+Be sure to read about our [unit tests](./DEVELOPING.md#unit-tests) and [integration tests](./DEVELOPING.md#integration-tests).
 
 ### Backport labels
 
