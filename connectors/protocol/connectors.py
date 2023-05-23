@@ -510,9 +510,7 @@ class Connector(ESDocument):
     def _property_as_datetime(self, key):
         value = self.get(key)
         if value is not None:
-            value = datetime.fromisoformat(
-                value  # pyright: ignore
-            )
+            value = datetime.fromisoformat(value)  # pyright: ignore
         return value
 
     @property
