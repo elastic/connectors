@@ -1,12 +1,22 @@
 # How to contribute connectors
 
+Connectors-python is a free and open project, and we love to receive contributions from our community — you!
+There are many ways to contribute, from writing tutorials or blog posts, improving the documentation, submitting bug reports and feature requests or writing code which can be incorporated into connectors-python itself.
+
+If you want to be rewarded for your contributions, sign up for the [Elastic Contributor Program](https://www.elastic.co/community/contributor).
+Each time you make a valid contribution, you’ll earn points that increase your chances of winning prizes and being recognized as a top contributor.
+
+- [Reporting issues](#reporting-issues)
+- [Getting help](#getting-help)
 - [Types of contributions](#types-of-contributions)
   - [Initial contribution](#initial-contribution)
   - [Enhancements](#enhancements)
   - [Other](#other)
 - [Contribution Checklist](#contribution-checklist)
+  - [Correct code organization](#correct-codefile-organization)
   - [Proper async usage](#proper-async-usage)
   - [Log verbosity](#log-verbosity)
+  - [Linting](#linting)
   - [Backport labels](#backport-labels)
 - [Pull request etiquette](#pull-request-etiquette)
   - [Why do we use a pull request workflow?](#why-do-we-use-a-pull-request-workflow)
@@ -20,6 +30,14 @@
   - [We are all reviewers](#we-are-all-reviewers)
   - [Don't add to the PR as a reviewer](#dont-add-to-the-pr-as-a-reviewer)
 
+## Reporting issues
+If something is not working as expected, please open an [issue](https://github.com/elastic/connectors-python/issues/new).
+
+## Getting help
+The Ingestion team at Elastic maintains this repository and is happy to help.
+Try posting your question to the [Elastic discuss forums](https://discuss.elastic.co/c/enterprise-search/84).
+Be sure to mention that you're using Connectors and also let us know what service type you're trying to use, and any errors/issues you are encountering.
+You can also find us in the `#enterprise-search` channel of the [Elastic Community Slack](http://elasticstack.slack.com).
 
 ## Types of contributions
 ### Initial contribution
@@ -59,6 +77,14 @@ If you need changes in the framework, or you are not sure about how to do someth
 
 ## Contribution Checklist
 
+### Correct code/file organization
+Any contribution should follow established patterns of code organization within the repository.
+For example, a new concrete extension of `BaseDataSource` should live in [connectors/sources](../connectors/sources), and its tests should live in [tests/sources](../tests/sources).
+If that new data source is named `FooDataSource` the files should be `foo.py` and `test_foo.py`, respectively.
+Clients should live in the same module as the data sources that they support.
+
+If you are unsure of where a file/class should go - ask.
+
 ### Proper async usage
 You should familiarize yourself with [Developing with asyncio](https://docs.python.org/3/library/asyncio-dev.html).
 Asynchronous programming in Python is very concise and produces nice looking code once you understand how it works, but it requires a bit of practice.
@@ -81,6 +107,13 @@ A few tips per log level:
 
 When running on cloud, the service is running at the `INFO` level. You can activate
 the `DEBUG` level locally with `--debug`
+
+### Linting
+
+Code style is important in shared codebases, as it helps ensure that everyone can read and understand code that they didn't write.
+In order to enforce code style, our CI jobs apply a linter, and will fail to build (and block merging of) non-complient changes.
+
+You can run the linter locally with `make lint` to ensure that your changes do not introduce any issues.
 
 ### Backport labels
 
