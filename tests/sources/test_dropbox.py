@@ -121,10 +121,12 @@ async def test_validate_configuration_with_invalid_refresh_token_then_raise_exce
 @pytest.mark.asyncio
 async def test_ping():
     source = create_source(DropboxDataSource)
-    source.dropbox_client._create_connection.users_get_current_account = AsyncMock(
-        return_value="Mock..."
-    )
-    await source.ping()
+    with patch.object(
+        source.dropbox_client._create_connection,
+        "users_get_current_account",
+        return_value=AsyncMock(return_value="Mock..."),
+    ):
+        await source.ping()
 
 
 @pytest.mark.asyncio
