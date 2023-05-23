@@ -508,12 +508,12 @@ class Connector(ESDocument):
         return JobStatus(self.get("last_sync_status"))
 
     def _property_as_datetime(self, key):
-        last_sync_scheduled_at = self.get(key)
-        if last_sync_scheduled_at is not None:
-            last_sync_scheduled_at = datetime.fromisoformat(
-                last_sync_scheduled_at  # pyright: ignore
+        value = self.get(key)
+        if value is not None:
+            value = datetime.fromisoformat(
+                value  # pyright: ignore
             )
-        return last_sync_scheduled_at
+        return value
 
     @property
     def last_sync_scheduled_at(self):
