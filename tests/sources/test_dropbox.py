@@ -11,7 +11,7 @@ from dropbox.exceptions import ApiError, AuthError, BadInputError
 
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.dropbox import DropboxDataSource
-from connectors.sources.tests.support import create_source
+from tests.sources.support import create_source
 
 PATH = "/"
 DUMMY_VALUES = "abc#123"
