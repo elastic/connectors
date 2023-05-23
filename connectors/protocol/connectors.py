@@ -510,7 +510,9 @@ class Connector(ESDocument):
     def _property_as_datetime(self, key):
         last_sync_scheduled_at = self.get(key)
         if last_sync_scheduled_at is not None:
-            last_sync_scheduled_at = datetime.fromisoformat(last_sync_scheduled_at)
+            last_sync_scheduled_at = datetime.fromisoformat(
+                last_sync_scheduled_at
+            )  # pyright: ignore
         return last_sync_scheduled_at
 
     @property
