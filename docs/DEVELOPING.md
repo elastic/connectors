@@ -6,7 +6,7 @@
 - [Syncing](#syncing)
   - [Sync Strategy](#sync-strategy)
   - [How a sync works](#how-a-sync-works)
-- [Runtime dependecies](#runtime-dependencies)
+- [Runtime dependencies](#runtime-dependencies)
 - [Implementing a new source](#implementing-a-new-source)
   - [Common patterns](#common-patterns)
     - [Source/Client](#sourceclient)

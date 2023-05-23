@@ -20,6 +20,7 @@ See the [official end-user documentation](https://www.elastic.co/guide/en/enterp
 - [Connector Protocol](docs/CONNECTOR_PROTOCOL.md)
 - [Configuration](docs/CONFIG.md)
 - [Contribution guide](docs/CONTRIBUTING.md)
+- [Upgrading](docs/UPGRADING.md)
 
 ### Advanced sync rules
 
