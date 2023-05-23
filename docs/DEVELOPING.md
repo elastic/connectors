@@ -443,7 +443,7 @@ $ make ftest NAME=sharepoint
 
 ## ServiceNow Connector
 
-The [Elastic ServiceNow connector](../connectors/sources/servicenow.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic ServiceNow connector](../connectors/sources/servicenow.py) is provided in the Elastic connectors python framework and can be used as a [connector client](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ### Availability and prerequisites
 
@@ -463,7 +463,7 @@ ServiceNow "Tokyo", "San Diego" & "Rome" versions are compatible with Elastic co
 
 ### Configuration
 
-The following configuration fields need to be provided for setting up the connector:
+The following configuration fields are required to set up the connector:
 
 ##### `url`
 
@@ -516,7 +516,7 @@ To perform E2E testing for the ServiceNow connector, run the following command:
 $ make ftest NAME=servicenow
 ```
 
-ℹ️ Users can generate the performance report using an argument i.e. `PERF8=yes`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
+ℹ️ Users can generate the performance report using an argument e.g. `PERF8=yes`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
 
 ℹ️ Users do not need to have a running Elasticsearch instance or a ServiceNow source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock ServiceNow source using the docker image.
 
