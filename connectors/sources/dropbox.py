@@ -29,7 +29,6 @@ class DropboxClient:
             if self.configuration["path"] in ["/", None]
             else self.configuration["path"]
         )
-        self.include_deleted_files = self.configuration["include_deleted_files"]
         self.retry_count = self.configuration["retry_count"]
         self._session = None
 
@@ -110,19 +109,11 @@ class DropboxDataSource(BaseDataSource):
                 "type": "str",
                 "value": "abc#123",
             },
-            "include_deleted_files": {
-                "label": "Include Deleted Files",
-                "order": 5,
-                "required": False,
-                "type": "bool",
-                "value": False,
-                "default_value": False,
-            },
             "retry_count": {
                 "default_value": RETRY_COUNT,
                 "display": "numeric",
                 "label": "Maximum retries for failed requests",
-                "order": 6,
+                "order": 5,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],

@@ -37,13 +37,12 @@ async def test_configuration():
     assert config["app_key"] == DUMMY_VALUES
     assert config["app_secret"] == DUMMY_VALUES
     assert config["refresh_token"] == DUMMY_VALUES
-    assert config["include_deleted_files"] is False
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "field",
-    ["path", "app_key", "app_secret", "refresh_token", "include_deleted_files"],
+    ["path", "app_key", "app_secret", "refresh_token"],
 )
 async def test_validate_configuration_with_empty_fields_then_raise_exception(field):
     source = create_source(DropboxDataSource)
