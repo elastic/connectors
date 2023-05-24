@@ -472,7 +472,7 @@ class BaseDataSource:
 
         Each document is a dictionary containing permission data indexed into a corresponding permissions index.
         """
-        return []
+        raise NotImplementedError
 
     async def get_docs(self, filtering=None):
         """Returns an iterator on all documents present in the backend

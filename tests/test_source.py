@@ -773,6 +773,9 @@ async def test_base_class():
     with pytest.raises(NotImplementedError):
         await ds.get_docs()
 
+    with pytest.raises(NotImplementedError):
+        await ds.get_permissions()
+
     # default rule validators for every data source (order matters)
     assert BaseDataSource.basic_rules_validators() == [
         BasicRuleAgainstSchemaValidator,
@@ -782,8 +785,6 @@ async def test_base_class():
 
     # should be empty as advanced rules are specific to a data source
     assert not len(DataSource(configuration=configuration).advanced_rules_validators())
-
-    assert not len(await ds.get_permissions())
 
 
 @pytest.mark.parametrize(
