@@ -474,7 +474,6 @@ async def test_verify_projects():
 
 @pytest.mark.asyncio
 async def test_verify_projects_with_unavailable_project_keys():
-    """Test _verify_projects method with unavailable project keys"""
     source = create_source(JiraDataSource)
     source.jira_client.projects = ["TP", "AP"]
 

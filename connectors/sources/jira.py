@@ -496,18 +496,18 @@ class JiraDataSource(BaseDataSource):
         except Exception as exception:
             logger.warning(f"Skipping data for type: {ISSUE_DATA}. Error: {exception}")
 
-    async def _get_issues(self, query=""):
+    async def _get_issues(self, custom_query=""):
         """Get issues with the help of REST APIs
 
         Yields:
             Dictionary: Jira issue to get indexed
             issue (dict): Issue response to fetch the attachments
         """
+        wildcard_query = ""
+        projects_query = f"project in ({','.join(self.jira_client.projects)})"
 
-        jql = query or (
-            ""
-            if self.jira_client.projects == ["*"]
-            else f"project in ({','.join(self.jira_client.projects)})"
+        jql = custom_query or (
+            wildcard_query if self.jira_client.projects == ["*"] else projects_query
         )
 
         async for response in self.jira_client.paginated_api_call(
