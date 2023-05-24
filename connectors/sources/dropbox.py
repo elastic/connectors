@@ -15,7 +15,7 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import CancellableSleeps, iso_utc
 
-RETRIES = 3
+RETRY_COUNT = 3
 
 
 class DropboxClient:
@@ -25,7 +25,9 @@ class DropboxClient:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self.path = (
-            "" if self.configuration["path"] == "/" else self.configuration["path"]
+            ""
+            if self.configuration["path"] in ["/", None]
+            else self.configuration["path"]
         )
         self.include_deleted_files = self.configuration["include_deleted_files"]
         self.retry_count = self.configuration["retry_count"]
@@ -49,12 +51,11 @@ class DropboxClient:
     def check_path(self):
         return self._create_connection.files_get_metadata(path=self.path)
 
-    def close_connection(self):
+    def close(self):
         self._sleeps.cancel()
-        if self._session is None:
-            return
-        self._session.close()
-        del self._session
+        if self._session is not None:
+            self._create_connection.close()
+            del self._session
 
 
 class DropboxDataSource(BaseDataSource):
@@ -118,14 +119,14 @@ class DropboxDataSource(BaseDataSource):
                 "default_value": False,
             },
             "retry_count": {
-                "default_value": RETRIES,
+                "default_value": RETRY_COUNT,
                 "display": "numeric",
                 "label": "Maximum retries for failed requests",
                 "order": 6,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": RETRIES,
+                "value": RETRY_COUNT,
                 "validations": [{"type": "less_than", "constraint": 10}],
             },
         }
@@ -147,19 +148,33 @@ class DropboxDataSource(BaseDataSource):
             )
         except AuthError:
             raise ConfigurableFieldValueError("Configured Refresh Token is invalid")
-        except ApiError:
-            raise ConfigurableFieldValueError(
-                f"Configured Path: {self.dropbox_client.path} is invalid"
-            )
-        except Exception:
-            raise
+        except ApiError as err:
+            if err.error.is_path() and err.error.get_path().is_not_found():
+                raise ConfigurableFieldValueError(
+                    f"Configured Path: {self.dropbox_client.path} is invalid"
+                )
+            else:
+                raise Exception(
+                    f"Error while validating the configured path. Error: {err}"
+                )
+        except Exception as exception:
+            raise Exception(f"Something went wrong. Error: {exception}")
 
     async def close(self):
-        self.dropbox_client.close_connection()
+        self.dropbox_client.close()
 
     async def ping(self):
-        self.dropbox_client.ping()
-        logger.debug("Successfully connected to the Dropbox")
+        try:
+            self.dropbox_client.ping()
+            logger.debug("Successfully connected to Dropbox")
+        except BadInputError:
+            raise ConfigurableFieldValueError(
+                "Configured App Key or App Secret is invalid"
+            )
+        except AuthError:
+            raise ConfigurableFieldValueError("Configured Refresh Token is invalid")
+        except Exception as exception:
+            raise Exception(f"Something went wrong. Error: {exception}")
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch dropbox objects in async manner

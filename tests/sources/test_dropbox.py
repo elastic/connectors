@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Tests the Dropbox database source class methods"""
+"""Tests the Dropbox source class methods"""
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -16,14 +16,16 @@ from tests.sources.support import create_source
 PATH = "/"
 DUMMY_VALUES = "abc#123"
 
+class MockError:
+    def is_path(self):
+        return True
 
-class mock_ssl:
-    """This class contains methods which returns dummy ssl context"""
+    def get_path(self):
+        return LookupError()
 
-    def load_verify_locations(self, cadata):
-        """This method verify locations"""
-        pass
-
+class LookupError:
+    def is_not_found(self):
+        return True
 
 @pytest.mark.asyncio
 async def test_configuration():
@@ -74,7 +76,7 @@ async def test_validate_configuration_with_invalid_path_then_raise_exception():
         "files_get_metadata",
         side_effect=ApiError(
             request_id=1,
-            error="Api Error",
+            error=MockError(),
             user_message_text="Api Error Occurred",
             user_message_locale=None,
         ),
@@ -138,6 +140,32 @@ async def test_ping_for_failed_connection_exception_then_raise_exception():
         side_effect=Exception("Something went wrong"),
     ):
         with pytest.raises(Exception):
+            await source.ping()
+
+
+@pytest.mark.asyncio
+async def test_ping_for_incorrect_app_key_and_app_secret_then_raise_exception():
+    source = create_source(DropboxDataSource)
+    with patch.object(
+        source.dropbox_client._create_connection,
+        "users_get_current_account",
+        side_effect=BadInputError(request_id=2, message="Bad Input Error"),
+    ):
+        with pytest.raises(
+            Exception, match="Configured App Key or App Secret is invalid"
+        ):
+            await source.ping()
+
+
+@pytest.mark.asyncio
+async def test_ping_for_incorrect_refresh_token_then_raise_exception():
+    source = create_source(DropboxDataSource)
+    with patch.object(
+        source.dropbox_client._create_connection,
+        "users_get_current_account",
+        side_effect=AuthError(request_id=3, error="Auth Error"),
+    ):
+        with pytest.raises(Exception, match="Configured Refresh Token is invalid"):
             await source.ping()
 
 
