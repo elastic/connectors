@@ -33,7 +33,7 @@ class DropboxClient:
         self._session = None
 
     @cached_property
-    def _create_connection(self):
+    def _connection(self):
         self._session = requests.Session()
         return dropbox.Dropbox(  # pyright: ignore
             app_key=self.configuration["app_key"],
@@ -45,15 +45,15 @@ class DropboxClient:
         )
 
     def ping(self):
-        self._create_connection.users_get_current_account()
+        self._connection.users_get_current_account()
 
     def check_path(self):
-        return self._create_connection.files_get_metadata(path=self.path)
+        return self._connection.files_get_metadata(path=self.path)
 
     def close(self):
         self._sleeps.cancel()
         if self._session is not None:
-            self._create_connection.close()
+            self._connection.close()
             del self._session
 
 

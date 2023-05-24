@@ -58,7 +58,7 @@ async def test_validate_configuration_for_valid_path():
     source.dropbox_client.configuration.set_field(name="path", value="/shared")
 
     with patch.object(
-        source.dropbox_client._create_connection,
+        source.dropbox_client._connection,
         "files_get_metadata",
         return_value=AsyncMock(),
     ):
@@ -71,7 +71,7 @@ async def test_validate_configuration_with_invalid_path_then_raise_exception():
     source.dropbox_client.path = "/abc"
 
     with patch.object(
-        source.dropbox_client._create_connection,
+        source.dropbox_client._connection,
         "files_get_metadata",
         side_effect=ApiError(
             request_id=1,
@@ -92,7 +92,7 @@ async def test_validate_configuration_with_invalid_app_key_and_app_secret_then_r
     source.dropbox_client.path = "/abc"
 
     with patch.object(
-        source.dropbox_client._create_connection,
+        source.dropbox_client._connection,
         "files_get_metadata",
         side_effect=BadInputError(request_id=2, message="Bad Input Error"),
     ):
@@ -109,7 +109,7 @@ async def test_validate_configuration_with_invalid_refresh_token_then_raise_exce
     source.dropbox_client.path = "/abc"
 
     with patch.object(
-        source.dropbox_client._create_connection,
+        source.dropbox_client._connection,
         "files_get_metadata",
         side_effect=AuthError(request_id=3, error="Auth Error"),
     ):
@@ -123,7 +123,7 @@ async def test_validate_configuration_with_invalid_refresh_token_then_raise_exce
 async def test_ping():
     source = create_source(DropboxDataSource)
     with patch.object(
-        source.dropbox_client._create_connection,
+        source.dropbox_client._connection,
         "users_get_current_account",
         return_value=AsyncMock(return_value="Mock..."),
     ):
@@ -134,7 +134,7 @@ async def test_ping():
 async def test_ping_for_failed_connection_exception_then_raise_exception():
     source = create_source(DropboxDataSource)
     with patch.object(
-        source.dropbox_client._create_connection,
+        source.dropbox_client._connection,
         "users_get_current_account",
         side_effect=Exception("Something went wrong"),
     ):
@@ -146,7 +146,7 @@ async def test_ping_for_failed_connection_exception_then_raise_exception():
 async def test_ping_for_incorrect_app_key_and_app_secret_then_raise_exception():
     source = create_source(DropboxDataSource)
     with patch.object(
-        source.dropbox_client._create_connection,
+        source.dropbox_client._connection,
         "users_get_current_account",
         side_effect=BadInputError(request_id=2, message="Bad Input Error"),
     ):
@@ -160,7 +160,7 @@ async def test_ping_for_incorrect_app_key_and_app_secret_then_raise_exception():
 async def test_ping_for_incorrect_refresh_token_then_raise_exception():
     source = create_source(DropboxDataSource)
     with patch.object(
-        source.dropbox_client._create_connection,
+        source.dropbox_client._connection,
         "users_get_current_account",
         side_effect=AuthError(request_id=3, error="Auth Error"),
     ):
@@ -171,10 +171,10 @@ async def test_ping_for_incorrect_refresh_token_then_raise_exception():
 @pytest.mark.asyncio
 async def test_close_with_client_session():
     source = create_source(DropboxDataSource)
-    source.dropbox_client._create_connection
+    source.dropbox_client._connection
 
     await source.close()
-    assert hasattr(source.dropbox_client.__dict__, "_create_connection") is False
+    assert hasattr(source.dropbox_client.__dict__, "_connection") is False
 
 
 @pytest.mark.asyncio
