@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import partial
 
 import aiofiles
@@ -29,13 +29,96 @@ def profile_time(f):
 
     return wrapper
 
-
-class SharepointOnlineClient:
+class GraphAPIToken:
     def __init__(self, tenant_id, tenant_name, client_id, client_secret):
         self._tenant_id = tenant_id
         self._tenant_name = tenant_name
         self._client_id = client_id
         self._client_secret = client_secret
+
+        self._access_token = None
+        self._token_expiration_date = None
+
+    def get(self):
+        if self._token_expiration_date and self._token_expiration_date > datetime.now() - timedelta(30):  # TODO: make 30 a constant
+            if self._access_token:
+                return self._access_token
+
+        # MSAL is not async, sigh
+        authority = f"https://login.microsoftonline.com/{self._tenant_id}"
+        scope = "https://graph.microsoft.com/.default"
+
+        app = msal.ConfidentialClientApplication(
+            client_id=self._client_id,
+            client_credential=self._client_secret,
+            authority=authority,
+        )
+        now = datetime.now() 
+        result = app.acquire_token_for_client(scopes=[scope])
+
+        if "access_token" in result:
+            print(result)
+            access_token = result["access_token"]
+            expires_in = result["expires_in"]
+        
+            self._access_token = access_token
+            self._token_expiration_date = now + timedelta(expires_in)
+            return access_token
+        else:
+            raise Exception(result.get("error"))
+
+class GraphAPISession:
+    BASE_URL = "https://graph.microsoft.com/v1.0/"
+
+    def __init__(self, http_session, graph_api_token):
+        self._http_session = http_session
+        self._graph_api_token = graph_api_token
+
+    async def fetch(self, relative_url):
+        absolute_url = f"{self.BASE_URL}/{relative_url}"
+
+        return await self._get_json(absolute_url)
+
+    async def pipe(self, relative_url, stream):
+        absolute_url = f"{self.BASE_URL}/{relative_url}"
+
+        headers = {"authorization": f"Bearer {self._graph_api_token.get()}"}
+
+        async with self._http_session.get(
+            absolute_url,
+            headers=headers,
+        ) as resp:
+            async for data in resp.content.iter_chunked(1024 * 1024):
+                await stream.write(data)
+
+    async def scroll(self, relative_url):
+        scroll_url = f"{self.BASE_URL}/{relative_url}"
+
+        while True:
+            graph_data = await self._get_json(scroll_url)
+            # We're yielding the whole page here, not one item
+            yield graph_data["value"] 
+
+            if "@odata.nextLink" in graph_data:
+                scroll_url = graph_data["@odata.nextLink"]
+            else:
+                break
+
+    async def _get_json(self, absolute_url):
+        headers = {"authorization": f"Bearer {self._graph_api_token.get()}"}
+
+        async with self._http_session.get(
+            absolute_url,
+            headers=headers,
+        ) as resp:
+            return await resp.json()
+
+
+class SharepointOnlineClient:
+    def __init__(self, tenant_id, tenant_name, client_id, client_secret):
+        self._tenant_id = tenant_id
+        self._tenant_name = tenant_name
+        self._graph_api_token = GraphAPIToken(tenant_id, tenant_name, client_id, client_secret)
 
         # Clients
         self._http_session = aiohttp.ClientSession(
@@ -47,142 +130,76 @@ class SharepointOnlineClient:
             raise_for_status=True,
         )
 
+        self._graph_api_client = GraphAPISession(self._http_session, self._graph_api_token)
+
     @profile_time
     async def site_collections(self):
         filter_ = url_encode("siteCollection/root ne null")
         select = "siteCollection,webUrl"
 
-        headers = {"authorization": f"Bearer {self._graph_token()}"}
-
-        fetch_link = f"https://graph.microsoft.com/v1.0/sites/?$filter={filter_}&$select={select}"
-
-        while fetch_link:
-            async with self._http_session.get(
-                fetch_link,
-                headers=headers,
-            ) as resp:
-                graph_data = await resp.json()
-                if "@odata.nextLink" in graph_data:
-                    fetch_link = graph_data["@odata.nextLink"]
-                else:
-                    fetch_link = None
-                for item in graph_data["value"]:
-                    yield item
+        async for page in self._graph_api_client.scroll(f"sites/?$filter={filter_}&$select={select}"):
+            for site_collection in page:
+                yield site_collection
 
     @profile_time
     async def sites(self, site_collection):
         filter_ = ""
         select = ""
 
-        headers = {"authorization": f"Bearer {self._graph_token()}"}
-
-        async with self._http_session.get(
-            f"https://graph.microsoft.com/v1.0/sites/{site_collection}/sites?$filter={filter_}&search=*&$select={select}",
-            headers=headers,
-        ) as resp:
-            graph_data = await resp.json()
-
-        for site in graph_data["value"]:
-            yield site
+        async for page in self._graph_api_client.scroll(f"sites/{site_collection}/sites?$filter={filter_}&search=*&$select={select}"):
+            for site in page:
+                yield site
 
     @profile_time
     async def site_drives(self, site_id):
         select = ""
 
-        headers = {"authorization": f"Bearer {self._graph_token()}"}
-
-        async with self._http_session.get(
-            f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives?$select={select}",
-            headers=headers,
-        ) as resp:
-            graph_data = await resp.json()
-
-            for site_drive in graph_data["value"]:
+        async for page in self._graph_api_client.scroll(f"sites/{site_id}/drives?$select={select}"):
+            for site_drive in page:
                 yield site_drive
 
     @profile_time
     async def drive_items(self, drive_id):
         select = ""
 
-        headers = {"authorization": f"Bearer {self._graph_token()}"}
-
         directory_stack = []
 
-        async with self._http_session.get(
-            f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root?$select={select}",
-            headers=headers,
-        ) as resp:
-            root_graph_data = await resp.json()
-            directory_stack.append(root_graph_data["id"])
-            yield root_graph_data
+        root = await self._graph_api_client.fetch(f"drives/{drive_id}/root?$select={select}")
+
+        directory_stack.append(root["id"])
+        yield root
 
         while len(directory_stack):
             folder_id = directory_stack.pop()
 
-            fetch_link = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{folder_id}/children?$select={select}"
-
-            while fetch_link:
-                async with self._http_session.get(
-                    fetch_link,
-                    headers=headers,
-                ) as resp:
-                    graph_data = await resp.json()
-                    if "@odata.nextLink" in graph_data:
-                        fetch_link = graph_data["@odata.nextLink"]
-                    else:
-                        fetch_link = None
-                    children_graph_data = await resp.json()
-                    for child_item in children_graph_data["value"]:
-                        if "folder" in child_item:
-                            directory_stack.append(child_item["id"])
-                        yield child_item
+            async for page in self._graph_api_client.scroll(f"drives/{drive_id}/items/{folder_id}/children?$select={select}"):
+                for drive_item in page:
+                    if "folder" in drive_item:
+                        directory_stack.append(drive_item["id"])
+                    yield drive_item
 
     @profile_time
     async def download_drive_item(self, drive_id, item_id, async_buffer):
-        headers = {
-            "authorization": f"Bearer {self._graph_token()}",
-            "content-type": "text/plain",
-        }
-
-        async with self._http_session.get(
-            f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{item_id}/content",
-            headers=headers,
-        ) as resp:
-            async for data in resp.content.iter_chunked(1024 * 1024):
-                await async_buffer.write(data)
+        await self._graph_api_client.pipe(f"drives/{drive_id}/items/{item_id}/content", async_buffer)
 
     @profile_time
     async def site_lists(self, site_id):
         select = ""
 
-        headers = {"authorization": f"Bearer {self._graph_token()}"}
-
-        async with self._http_session.get(
-            f"https://graph.microsoft.com/v1.0/sites/{site_id}/lists?$select={select}",
-            headers=headers,
-        ) as resp:
-            graph_data = await resp.json()
-
-            for site_list in graph_data["value"]:
+        async for page in self._graph_api_client.scroll(f"sites/{site_id}/lists?$select={select}"):
+            for site_list in page:
                 yield site_list
 
+    @profile_time
     async def site_list_items(self, site_id, list_id):
         select = ""
         expand = "fields"
 
-        headers = {"authorization": f"Bearer {self._graph_token()}"}
+        async for page in self._graph_api_client.scroll(f"sites/{site_id}/lists/{list_id}/items?$select={select}&$expand={expand}"):
+            for site_list in page:
+                yield site_list
 
-        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/lists/{list_id}/items?$select={select}&$expand={expand}"
-
-        async with self._http_session.get(
-            url,
-            headers=headers,
-        ) as resp:
-            graph_data = await resp.json()
-
-            for site_list_item in graph_data["value"]:
-                yield site_list_item
-
+    @profile_time
     async def site_page(self, site_url, filename):
         select = "Title,CanvasContent1,FileLeafRef"
 
@@ -197,25 +214,6 @@ class SharepointOnlineClient:
 
             for site_page in graph_data["value"]:
                 yield site_page
-
-    def _graph_token(self):
-        # MSAL is not async, sigh
-        authority = f"https://login.microsoftonline.com/{self._tenant_id}"
-        scope = "https://graph.microsoft.com/.default"
-
-        app = msal.ConfidentialClientApplication(
-            client_id=self._client_id,
-            client_credential=self._client_secret,
-            authority=authority,
-        )
-
-        result = app.acquire_token_for_client(scopes=[scope])
-
-        if "access_token" in result:
-            access_token = result["access_token"]
-            return access_token
-        else:
-            raise Exception(result.get("error"))
 
     async def _sharepoint_rest_token(self):
         # GUID in resource is always a constant used to create access token
