@@ -73,7 +73,7 @@ The source class is declared with its [Fully Qualified Name(FQN)](https://en.wik
 
 Source classes can be located in this project or any other Python project, as long as it can be imported.
 
-For example, if the project `mycompany-foo` implements the source `GoogleDriveDataSource` in the package `gdrive`, we should be able to run:
+For example, if the project `mycompany-foo` implements the source `GoogleDriveDataSource` in the package `gdrive`, run:
 
 ```shell
 $ pip install mycompany-foo
@@ -91,11 +91,11 @@ And that source will be available in Kibana.
 ## Syncing
 ### Sync strategy
 
-In Elastic Python connectors we implement a **Full sync**, which ensures full data parity (including deletion).
+In Elastic `connectors-python` a **Full sync** ensures full data parity (including deletion).
 
 This sync strategy is good enough for some sources like MongoDB where 100,000 documents can be fully synced in less than 30 seconds.
 
-We will introduce more sophisticated syncs as we add new sources, in order to achieve the same level of freshness we have in Workplace Search.
+As new sources are added, more sophisticated syncs may be introduced in order to achieve the same level of freshness available in Workplace Search.
 
 ### How a sync works
 
@@ -187,7 +187,7 @@ Site Collection
 ```
 
 Unfortunately, some of the features available in the Sharepoint REST API are not yet available in Graph API - namely access to Page content.
-By going through this exercise, we have now identified that we'll need to utilize two different APIs in order to fetch our data.
+Going through this exercise allows you to identify the need to utilize two different APIs in order to fetch data.
 
 ##### What credentials will a client need?
 
@@ -231,10 +231,10 @@ Handling these errors so that they display in Kibana like, `"Your configured cre
 Even better than that is to not issue an error at all, but to instead automatically refresh the credentails and retry.
 
 Sharepoint Online, using the OAuth2 Client Credentials Flow, expects the `access_token` to frequently expire.
-When it does, we can catch the relevant exception, ensure that the root cause is an expired access_token, refresh the token using the configured credentials, and then retry any requests that have failed in the mean time.
+When it does, the relevant exception can be caught, analyzed to ensure that the root cause is an expired access_token, the token can be refreshed using the configured credentials, and then any requests that have failed in the mean time can be retried.
 
-If the `client_secret` is revoked however, we cannot automatically recover.
-Instead, we can catch the relevant exception, ensure that refreshing the `access_token` is not possible, and raise an error with an actionable error message that an operator will see in Kibana and/or the logs.
+If the `client_secret` is revoked, however, automatic recovery is not possible.
+Instead, you should catch the relevant exception, ensure that refreshing the `access_token` is not possible, and raise an error with an actionable error message that an operator will see in Kibana and/or the logs.
 
 
 ##### Does the API have rate limits/throttling/quotas that the connector will need to respect?
@@ -263,8 +263,8 @@ These quotas are shared between Graph API and Sharepoint REST API - the latter c
 
 If the quotas are exceeded, some endpoints return 503 responses which contain the `Retry-After` header, and are used instead of 429 codes.
 
-Putting all this together, we know that we must specially handle 503 and 429 responses, looking for `Retry-After` headers,
-and design our connector knowing that we must make the absolute most out of each request, since we will nearly always run up on the per-minute and per-day limits.
+Putting all this together, you now know that you must specially handle 503 and 429 responses, looking for `Retry-After` headers,
+and design your connector knowing that you must make the absolute most out of each request, since you will nearly always run up on the per-minute and per-day limits.
 
 ##### What is the API's default page size?
 
@@ -429,7 +429,7 @@ The framework will handle the rest: scheduling validation, calling the custom va
 
 #### How to provide custom basic rule validation
 
-We don't recommend fully overriding `basic_rule_validators`, because you'll lose the default validations.
+Overriding `basic_rule_validators` is not recommended, because you'll lose the default validations.
 
 The framework already provides default validations for basic rules.
 To extend the default validation, provide custom basic rules validators.
@@ -473,7 +473,7 @@ To test the connectors, run:
 make test
 ```
 
-We require all connectors to have unit tests and to have a 90% coverage reported by this command
+All connectors are required to have unit tests and to have a 90% coverage reported by this command
 
 #### Integration Tests
 If the above tests pass, start your Docker instance or configure your backend, then run:
