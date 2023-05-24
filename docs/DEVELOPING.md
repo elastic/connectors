@@ -339,6 +339,11 @@ In Sharepoint Online, the object sizes could be thought of like:
 Therefore, if you have binary content extraction disabled and are seeing this connector take up GB of memory, there's likely a bug.
 Conversely, if you are processing and downloading many binary files, it is perfectly reasonable to see memory spike in proportion to the size of said files.
 
+It's also important to note that connectors will store all IDs in memory while performing a sync.
+This allows the connector to then remove any documents from the Elasticsearch index which were not part of the batch just ingested.
+On large scale syncs, these IDs can consume a significant amount of RAM, especially if they are large.
+Be careful to design your document IDs to not be longer than necessary.
+
 ##### Will it require local file (disk) caching?
 
 Some connectors require writing to disk in order to utilize OS-level utils (base64, for example), or to buffer large structures to avoid holding them all in memory.
