@@ -14,12 +14,12 @@ import pytest
 from aiohttp import StreamReader
 from freezegun import freeze_time
 
-from connectors.byoc import Filter
+from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.jira import JiraClient, JiraDataSource
-from connectors.sources.tests.support import create_source
-from connectors.tests.commons import AsyncIterator
 from connectors.utils import ssl_context
+from tests.commons import AsyncIterator
+from tests.sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
 
