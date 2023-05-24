@@ -395,6 +395,8 @@ class Pipeline(UserDict):
 
 
 class Features:
+    DOCUMENT_LEVEL_SECURITY = "document_level_security"
+
     BASIC_RULES_NEW = "basic_rules_new"
     ADVANCED_RULES_NEW = "advanced_rules_new"
 
@@ -432,6 +434,10 @@ class Features:
                 return self.features.get("filtering_rules", False)
             case Features.ADVANCED_RULES_OLD:
                 return self.features.get("filtering_advanced_config", False)
+            case Features.DOCUMENT_LEVEL_SECURITY:
+                return self._nested_feature_enabled(
+                    ["document_level_security", "enabled"], default=False
+                )
             case _:
                 return False
 
