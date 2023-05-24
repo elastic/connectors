@@ -480,6 +480,10 @@ class Connector(ESDocument):
         return self.get("scheduling", default={})
 
     @property
+    def permissions_scheduling(self):
+        return self.scheduling.get("permissions", {})
+
+    @property
     def configuration(self):
         return DataSourceConfiguration(self.get("configuration"))
 
