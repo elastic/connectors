@@ -187,12 +187,12 @@ Site Collection
 ```
 
 Unfortunately, some of the features available in the Sharepoint REST API are not yet available in Graph API - namely access to Page content.
-Going through this exercise allows you to identify the need to utilize two different APIs in order to fetch data.
+Going through this exercise allows you to identify the need to use two different APIs in order to fetch data.
 
 ##### What credentials will a client need?
 
 3rd-party APIs nearly always require authentication.
-This authentication can differ between the username/password used by a human interacting with the software through a user experience built by the 3rd-party and the programmatic credentials necessary to utilize their API.
+This authentication can differ between the username/password used by a human interacting with the software through a user experience built by the 3rd-party and the programmatic credentials necessary to use their API.
 Understanding if the connector will use basic auth, API keys, OAuth, or something else, is critical to deciding what types of configuration options need to be exposed in Kibana.
 
 Sharepoint Online uses an OAuth2 Client Credentials Flow.

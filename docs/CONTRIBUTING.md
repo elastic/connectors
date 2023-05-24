@@ -112,7 +112,7 @@ the `DEBUG` level locally with `--debug`
 ### Linting
 
 Code style is important in shared codebases, as it helps ensure that everyone can read and understand code that they didn't write.
-In order to enforce code style, our CI jobs apply a linter, and will fail to build (and block merging of) non-complient changes.
+In order to enforce code style, our CI jobs apply a linter, and will fail to build (and block merging of) non-compliant changes.
 
 You can run the linter locally with `make lint` to ensure that your changes do not introduce any issues.
 
