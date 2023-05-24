@@ -94,6 +94,11 @@ class JobStatus(Enum):
     UNSET = None
 
 
+class JobType(Enum):
+    PERMISSIONS = "permissions"
+    UNSET = None
+
+
 class JobTriggerMethod(Enum):
     ON_DEMAND = "on_demand"
     SCHEDULED = "scheduled"
@@ -240,6 +245,10 @@ class SyncJob(ESDocument):
     @property
     def total_document_count(self):
         return self.get("total_document_count", default=0)
+
+    @property
+    def job_type(self):
+        return JobType(self.get("job_type"))
 
     async def validate_filtering(self, validator):
         validation_result = await validator.validate_filtering(self.filtering)
