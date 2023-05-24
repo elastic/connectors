@@ -123,6 +123,8 @@ For this reason, it is important to both add tests when contributing new code, a
 
 Our goal is to maintain 90% test coverage for each connector.
 
+You can run the tests locally with `make test`.
+
 Be sure to read about our [unit tests](./DEVELOPING.md#unit-tests) and [integration tests](./DEVELOPING.md#integration-tests).
 
 ### Backport labels
