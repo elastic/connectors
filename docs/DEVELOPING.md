@@ -451,6 +451,8 @@ This connector is available as a **connector client** from the **Python connecto
 
 This connector is in **beta** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Beta features are not subject to the support SLA of official GA features.
 
+All those services and records, user has access to, will be indexed according to the configurations provided.
+
 ### Usage
 
 To use this connector as a **connector client**, use the **Customized connector** workflow.
@@ -479,7 +481,7 @@ The password of the account used for ServiceNow.
 
 ##### `services`
 
-Comma-separated list of services to fetch data from ServiceNow. If the value is `*`, the connector will fetch data from the list of basic services provided by ServiceNow: `User`, `Incident`, `Requested Item`, `Knowledge`, `Change Request`. Default value is `*`. Examples:
+Comma-separated list of services to fetch data from ServiceNow. If the value is `*`, the connector will fetch data from the list of basic services provided by ServiceNow: [Users](https://docs.servicenow.com/bundle/utah-platform-administration/page/administer/roles/concept/user.html), [Incidents](https://docs.servicenow.com/bundle/tokyo-it-service-management/page/product/incident-management/concept/c_IncidentManagement.html), [Request Items](https://docs.servicenow.com/bundle/tokyo-servicenow-platform/page/use/service-catalog-requests/task/t_AddNewRequestItems.html), [Knowledge Articles](https://docs.servicenow.com/bundle/tokyo-customer-service-management/page/product/customer-service-management/task/t_SearchTheKnowledgeBase.html), [Change Requests](https://docs.servicenow.com/bundle/tokyo-it-service-management/page/product/change-management/task/t_CreateAChange.html). Default value is `*`. Examples:
 
   - `Incident, User`
   - `*`
