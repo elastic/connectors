@@ -1,9 +1,12 @@
+from contextlib import asynccontextmanager
+
 import asyncio
 from datetime import datetime, timedelta
-from functools import partial
+from functools import partial, wraps
 
 import aiofiles
 import aiohttp
+from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
 import msal
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
@@ -82,11 +85,8 @@ class GraphAPISession:
     async def pipe(self, relative_url, stream):
         absolute_url = f"{self.BASE_URL}/{relative_url}"
 
-        headers = {"authorization": f"Bearer {self._graph_api_token.get()}"}
-
-        async with self._http_session.get(
-            absolute_url,
-            headers=headers,
+        async with self._call_api(
+            absolute_url
         ) as resp:
             async for data in resp.content.iter_chunked(1024 * 1024):
                 await stream.write(data)
@@ -105,13 +105,48 @@ class GraphAPISession:
                 break
 
     async def _get_json(self, absolute_url):
-        headers = {"authorization": f"Bearer {self._graph_api_token.get()}"}
-
-        async with self._http_session.get(
-            absolute_url,
-            headers=headers,
+        async with self._call_api(
+            absolute_url
         ) as resp:
             return await resp.json()
+
+    @asynccontextmanager
+    async def _call_api(self, absolute_url):
+        while True:
+            try:
+                headers = {"authorization": f"Bearer {self._graph_api_token.get()}"}
+
+                async with self._http_session.get(
+                    absolute_url,
+                    headers=headers,
+                ) as resp:
+                    yield resp
+                    return
+            except ClientResponseError as e:
+                print(f"Got {e.status}")
+                if e.status == 429 or e.status == 503:
+                    print(e.headers)
+                    response_headers = e.headers or {}
+                    retry_seconds = None
+                    if "Retry-After" in response_headers:
+                        retry_seconds = int(response_headers["Retry-After"])
+                    else:
+                        print(
+                            "Response Code from Sharepoint Server is 429 but Retry-After header is not found"
+                        )
+                        retry_seconds = 30
+                    print(
+                        f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
+                    )
+
+                    await asyncio.sleep(retry_seconds)
+                else:
+                    print(e)
+                    raise
+            except Exception as e:
+                print("Got something else")
+                print(e)
+                raise
 
 
 class SharepointOnlineClient:
