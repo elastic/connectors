@@ -322,12 +322,18 @@ async def test_connector_properties():
             "index_name": "search-some-index",
             "configuration": {},
             "language": "en",
-            "scheduling": {},
+            "scheduling": {
+                "permissions": {
+                    "enabled": True,
+                    "interval": "* * * * *"
+                }
+            },
             "status": "created",
             "last_seen": iso_utc(),
             "last_sync_status": "completed",
             "pipeline": {},
             "last_sync_scheduled_at": iso_utc(),
+            "last_permissions_sync_scheduled_at": iso_utc()
         },
     }
 
@@ -343,11 +349,14 @@ async def test_connector_properties():
     assert connector.index_name == "search-some-index"
     assert connector.language == "en"
     assert connector.last_sync_status == JobStatus.COMPLETED
+    assert connector.permissions_scheduling["enabled"]
+    assert connector.permissions_scheduling["interval"] == "* * * * *"
     assert isinstance(connector.last_seen, datetime)
     assert isinstance(connector.filtering, Filtering)
     assert isinstance(connector.pipeline, Pipeline)
     assert isinstance(connector.features, Features)
     assert isinstance(connector.last_sync_scheduled_at, datetime)
+    assert isinstance(connector.last_permissions_sync_scheduled_at, datetime)
 
 
 @pytest.mark.asyncio
