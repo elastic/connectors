@@ -2,6 +2,7 @@
         "name": "mongodb",
         "service_type": "mongodb",
         "index_name": "search-mongodb",
+        "sync_cursor": null,
         "sync_now": true,
         "is_native": true,
         "api_key_id": null,
