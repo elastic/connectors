@@ -121,6 +121,7 @@ This is our main communication index, used to communicate the connector's config
   last_sync_status: string;  -> Status of the last job, or null if no job has been executed
   last_synced: date;    -> Date/time of last job (UTC)
   last_sync_scheduled_at: date;    -> Date/time when the last job is scheduled (UTC)
+  last_permissions_sync_scheduled_at: date;    -> Date/time when the last permissions sync job is scheduled (UTC)
   name: string; -> the name to use for the connector
   pipeline: {
     extract_binary_content: boolean; -> Whether the `request_pipeline` should handle binary data
