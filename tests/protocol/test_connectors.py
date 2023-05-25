@@ -316,6 +316,7 @@ async def test_all_connectors(mock_responses):
 
 @pytest.mark.asyncio
 async def test_connector_properties():
+    sync_cursor = {"foo": "bar"}
     connector_src = {
         "_id": "test",
         "_source": {
@@ -334,7 +335,8 @@ async def test_connector_properties():
             "last_sync_status": "completed",
             "pipeline": {},
             "last_sync_scheduled_at": iso_utc(),
-            "last_permissions_sync_scheduled_at": iso_utc()
+            "last_permissions_sync_scheduled_at": iso_utc(),
+            "sync_cursor": sync_cursor,
         },
     }
 
@@ -352,6 +354,7 @@ async def test_connector_properties():
     assert connector.last_sync_status == JobStatus.COMPLETED
     assert connector.permissions_scheduling["enabled"]
     assert connector.permissions_scheduling["interval"] == "* * * * *"
+    assert connector.sync_cursor == sync_cursor
     assert isinstance(connector.last_seen, datetime)
     assert isinstance(connector.filtering, Filtering)
     assert isinstance(connector.pipeline, Pipeline)
