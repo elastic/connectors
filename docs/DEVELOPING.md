@@ -451,7 +451,7 @@ This connector is available as a **connector client** from the **Python connecto
 
 This connector is in **beta** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Beta features are not subject to the support SLA of official GA features.
 
-All those services and records, user has access to, will be indexed according to the configurations provided.
+All services and records the user has access to will be indexed according to the configurations provided.
 
 ### Usage
 
