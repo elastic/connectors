@@ -481,7 +481,14 @@ The password of the account used for ServiceNow.
 
 ##### `services`
 
-Comma-separated list of services to fetch data from ServiceNow. If the value is `*`, the connector will fetch data from the list of basic services provided by ServiceNow: [Users](https://docs.servicenow.com/bundle/utah-platform-administration/page/administer/roles/concept/user.html), [Incidents](https://docs.servicenow.com/bundle/tokyo-it-service-management/page/product/incident-management/concept/c_IncidentManagement.html), [Request Items](https://docs.servicenow.com/bundle/tokyo-servicenow-platform/page/use/service-catalog-requests/task/t_AddNewRequestItems.html), [Knowledge Articles](https://docs.servicenow.com/bundle/tokyo-customer-service-management/page/product/customer-service-management/task/t_SearchTheKnowledgeBase.html), [Change Requests](https://docs.servicenow.com/bundle/tokyo-it-service-management/page/product/change-management/task/t_CreateAChange.html). Default value is `*`. Examples:
+Comma-separated list of services to fetch data from ServiceNow. If the value is `*`, the connector will fetch data from the list of basic services provided by ServiceNow: 
+- [Users](https://docs.servicenow.com/bundle/utah-platform-administration/page/administer/roles/concept/user.html)
+- [Incidents](https://docs.servicenow.com/bundle/tokyo-it-service-management/page/product/incident-management/concept/c_IncidentManagement.html)
+- [Request Items](https://docs.servicenow.com/bundle/tokyo-servicenow-platform/page/use/service-catalog-requests/task/t_AddNewRequestItems.html)
+- [Knowledge Articles](https://docs.servicenow.com/bundle/tokyo-customer-service-management/page/product/customer-service-management/task/t_SearchTheKnowledgeBase.html)
+- [Change Requests](https://docs.servicenow.com/bundle/tokyo-it-service-management/page/product/change-management/task/t_CreateAChange.html)
+
+Default value is `*`. Examples:
 
   - `Incident, User`
   - `*`
