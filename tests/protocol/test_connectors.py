@@ -38,6 +38,7 @@ from connectors.protocol import (
     SyncJob,
     SyncJobIndex,
 )
+from connectors.protocol.connectors import JobType
 from connectors.source import BaseDataSource
 from connectors.utils import iso_utc
 from tests.commons import AsyncIterator
@@ -549,6 +550,7 @@ async def test_sync_job_properties():
         "_id": "test",
         "_source": {
             "status": "error",
+            "job_type": "permissions",
             "error": "something wrong",
             "indexed_document_count": 10,
             "indexed_document_volume": 20,
@@ -581,8 +583,12 @@ async def test_sync_job_properties():
     assert sync_job.indexed_document_volume == 20
     assert sync_job.deleted_document_count == 30
     assert sync_job.total_document_count == 100
+
     assert isinstance(sync_job.filtering, Filter)
     assert isinstance(sync_job.pipeline, Pipeline)
+
+    assert sync_job.job_type == JobType.PERMISSIONS
+    assert isinstance(sync_job.job_type, JobType)
 
 
 @pytest.mark.asyncio
