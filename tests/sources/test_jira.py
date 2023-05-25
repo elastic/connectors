@@ -14,11 +14,14 @@ import pytest
 from aiohttp import StreamReader
 from freezegun import freeze_time
 
+from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.jira import JiraClient, JiraDataSource
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+
+ADVANCED_SNIPPET = "advanced_snippet"
 
 HOST_URL = "http://127.0.0.1:8080"
 MOCK_MYSELF = {
@@ -81,6 +84,51 @@ EXPECTED_ISSUE = {
             }
         ],
     },
+}
+
+MOCK_ISSUE_TYPE_BUG = {
+    "id": "1234",
+    "key": "TP-2",
+    "fields": {
+        "project": {"name": "test_project"},
+        "updated": "2023-02-01T01:02:20",
+        "issuetype": {"name": "Bug"},
+        "attachment": [
+            {
+                "id": 10001,
+                "filename": "test_file.txt",
+                "created": "2023-02-01T01:02:20",
+                "size": 200,
+            }
+        ],
+    },
+}
+EXPECTED_ISSUE_TYPE_BUG = {
+    "_id": "test_project-TP-2",
+    "_timestamp": "2023-02-01T01:02:20",
+    "Type": "Bug",
+    "Issue": {
+        "project": {"name": "test_project"},
+        "updated": "2023-02-01T01:02:20",
+        "issuetype": {"name": "Bug"},
+        "attachment": [
+            {
+                "id": 10001,
+                "filename": "test_file.txt",
+                "created": "2023-02-01T01:02:20",
+                "size": 200,
+            }
+        ],
+    },
+}
+
+EXPECTED_ATTACHMENT_TYPE_BUG = {
+    "_id": "TP-2-10001",
+    "title": "test_file.txt",
+    "Type": "Attachment",
+    "issue": "TP-2",
+    "_timestamp": "2023-02-01T01:02:20",
+    "size": 200,
 }
 
 MOCK_ATTACHMENT = [
@@ -160,6 +208,14 @@ def side_effect_function(url, ssl):
         return get_json_mock(mock_response=MOCK_MYSELF)
     elif url == f"{HOST_URL}/rest/api/2/project?expand=description,lead,url":
         return get_json_mock(mock_response=MOCK_PROJECT)
+    elif url == f"{HOST_URL}/rest/api/2/search?jql=type=bug&maxResults=100&startAt=0":
+        mocked_issue_data_bug = {"issues": [MOCK_ISSUE_TYPE_BUG], "total": 1}
+        return get_json_mock(mock_response=mocked_issue_data_bug)
+    elif url == f"{HOST_URL}/rest/api/2/issue/TP-2":
+        return get_json_mock(mock_response=MOCK_ISSUE_TYPE_BUG)
+    elif url == f"{HOST_URL}/rest/api/2/search?jql=type=task&maxResults=100&startAt=0":
+        mocked_issue_data_task = {"issues": [MOCK_ISSUE], "total": 1}
+        return get_json_mock(mock_response=mocked_issue_data_task)
 
 
 @pytest.mark.asyncio
@@ -418,7 +474,6 @@ async def test_verify_projects():
 
 @pytest.mark.asyncio
 async def test_verify_projects_with_unavailable_project_keys():
-    """Test _verify_projects method with unavaiable project keys"""
     source = create_source(JiraDataSource)
     source.jira_client.projects = ["TP", "AP"]
 
@@ -563,3 +618,39 @@ async def test_get_docs():
     ):
         async for item, _ in source.get_docs():
             assert item in EXPECTED_RESPONSES
+
+
+@pytest.mark.parametrize(
+    "filtering, expected_docs",
+    [
+        (
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        "value": [{"query": "type=task"}, {"query": "type=bug"}]
+                    }
+                }
+            ),
+            [
+                EXPECTED_ISSUE,
+                EXPECTED_ATTACHMENT,
+                EXPECTED_ISSUE_TYPE_BUG,
+                EXPECTED_ATTACHMENT_TYPE_BUG,
+            ],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules(filtering, expected_docs):
+    source = create_source(JiraDataSource)
+
+    source.get_content = Mock(return_value=EXPECTED_ATTACHMENT_TYPE_BUG)
+
+    yielded_docs = []
+    with mock.patch.object(
+        source.jira_client._get_session(), "get", side_effect=side_effect_function
+    ):
+        async for item, _ in source.get_docs(filtering):
+            yielded_docs.append(item)
+
+    assert yielded_docs == expected_docs
