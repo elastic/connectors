@@ -6,8 +6,12 @@
 - [Syncing](#syncing)
   - [Sync Strategy](#sync-strategy)
   - [How a sync works](#how-a-sync-works)
-- [Runtime dependecies](#runtime-dependencies)
+- [Runtime dependencies](#runtime-dependencies)
 - [Implementing a new source](#implementing-a-new-source)
+  - [Common patterns](#common-patterns)
+    - [Source/Client](#sourceclient)
+    - [Async](#async)
+  - [Other considerations](#other-considerations)
   - [Sync rules](#sync-rules)
     - [Basic rules vs advanced rules](#basic-rules-vs-advanced-rules)
     - [How to implement advanced rules](#how-to-implement-advanced-rules)
@@ -16,7 +20,6 @@
   - [Testing the connector](#testing-the-connector)
     - [Unit tests](#unit-tests)
     - [Integration tests](#integration-tests)
-- [Async vs Sync](#async-vs-sync)
 
 ## General Configuration
 
@@ -70,7 +73,7 @@ The source class is declared with its [Fully Qualified Name(FQN)](https://en.wik
 
 Source classes can be located in this project or any other Python project, as long as it can be imported.
 
-For example, if the project `mycompany-foo` implements the source `GoogleDriveDataSource` in the package `gdrive`, we should be able to run:
+For example, if the project `mycompany-foo` implements the source `GoogleDriveDataSource` in the package `gdrive`, run:
 
 ```shell
 $ pip install mycompany-foo
@@ -88,11 +91,11 @@ And that source will be available in Kibana.
 ## Syncing
 ### Sync strategy
 
-In Elastic Python connectors we implement a **Full sync**, which ensures full data parity (including deletion).
+In Elastic `connectors-python` a **Full sync** ensures full data parity (including deletion).
 
 This sync strategy is good enough for some sources like MongoDB where 100,000 documents can be fully synced in less than 30 seconds.
 
-We will introduce more sophisticated syncs as we add new sources, in order to achieve the same level of freshness we have in Workplace Search.
+As new sources are added, more sophisticated syncs may be introduced in order to achieve the same level of freshness available in Workplace Search.
 
 ### How a sync works
 
@@ -123,6 +126,232 @@ Check out an example in [directory.py](../connectors/sources/directory.py) for a
 Take a look at the [MongoDB connector](../connectors/sources/mongo.py) for more inspiration. It's pretty straightforward and has that nice little extra feature some other connectors can't implement easily: the [Changes](https://www.mongodb.com/docs/manual/changeStreams/) stream API allows it to detect when something has changed in the MongoDB collection. After a first sync, and as long as the connector runs, it will skip any sync if nothing changed.
 
 Each connector will have their own specific behaviors and implementations. When a connector is loaded, it stays in memory, so you can come up with any strategy you want to make it more efficient. You just need to be careful not to blow memory.
+
+### Common Patterns
+
+#### Source/Client
+
+Many connector implementations will need to interface with some 3rd-party API in order to retrieve data from a remote system.
+In most instances, it is helpful to separate concerns inside your connector code into two classes.
+One class for the business logic of the connector (this class usually extends `BaseDataSource`), and one class (usually called something like `<3rd-party>Client`) for the API interactions with the 3rd-party.
+By keeping a `Client` class separate, it is much easier to read the business logic of your connector, without having to get hung up on extraneous details like  authentication, request headers, error response handling, retries, pagination, etc.
+
+#### Async
+
+The CLI uses `asyncio` and makes the assumption that all the code that has been called should not block the event loop. This makes syncs extremely fast with no memory overhead. In order to achieve this asynchronicity, source classes should use async libs for their backend.
+
+When not possible, the class should use [run_in_executor](https://docs.python.org/3/library/asyncio-eventloop.html#executing-code-in-thread-or-process-pools) and run the blocking code in another thread or process.
+
+When you send work in the background, you will have two options:
+
+- if the work is I/O-bound, the class should use threads
+- if there's some heavy CPU-bound computation (encryption work, etc), processes should be used to avoid [GIL contention](https://realpython.com/python-gil/)
+
+When building async I/O-bound connectors, make sure that you provide a way to recycle connections and that you can throttle calls to the backends. This is very important to avoid file descriptors exhaustion and hammering the backend service.
+
+### Other considerations
+
+When creating a new connector, there are a number of topics to thoughtfully consider before you begin coding.
+Below, we'll walk through each with the example of Sharepoint Online.
+However, the answers to these topics will differ from connector to connector.
+Do not just assume! Always consider each of the below for every new connector you develop.
+
+- [How is the data fetched from the 3rd-party?](#how-is-the-data-fetched-from-the-3rd-party)
+  - [what credentials will a client need?](#what-credentials-will-a-client-need)
+    - [if these credentials expire, how will they be refreshed?](#if-these-credentials-expire-how-will-they-be-refreshed)
+  - [does the API have rate limits/throttling/quotas that the connector will need to respect?](#does-the-api-have-rate-limitsthrottlingquotas-that-the-connector-will-need-to-respect)
+  - [What is the API's default page size?](#what-is-the-apis-default-page-size)
+  - [When should failure responses be retried?](#when-should-failure-responses-be-retried)
+  - [What is the permission model used by the 3rd-party?](#what-is-the-permission-model-used-by-the-3rd-party)
+- [What is the expected performance for the connector?](#what-is-the-expected-performance-for-the-connector)
+  - [how much memory should it require?](#how-much-memory-should-it-require)
+  - [will it require local file (disk) caching?](#will-it-require-local-file--disk--caching)
+
+#### How is the data fetched from the 3rd-party?
+Perhaps there is one main "documents API" that returns all the data.
+This type of API is common for document stores that are relatively flat, or for APIs that are focused on time-series data.
+Other APIs are more graph-like, where a top-level list of entities must be retrieved, and then the children of each of those must be retrieved.
+This type of API can sometimes be treated as a kind of recursive graph traversal.
+Other times, each type of entity needs to be explicitly retrieved and handled with separate logic.
+
+In the case of Sharepoint Online, the data inside is a tree structure:
+
+```
+Site Collection
+    |--- Site
+         |--- Drive
+              |--- Drive Item
+         |--- List
+              |--- List Item
+         |--- Site Page
+```
+
+Unfortunately, some of the features available in the Sharepoint REST API are not yet available in Graph API - namely access to Page content.
+Going through this exercise allows you to identify the need to use two different APIs in order to fetch data.
+
+##### What credentials will a client need?
+
+3rd-party APIs nearly always require authentication.
+This authentication can differ between the username/password used by a human interacting with the software through a user experience built by the 3rd-party and the programmatic credentials necessary to use their API.
+Understanding if the connector will use basic auth, API keys, OAuth, or something else, is critical to deciding what types of configuration options need to be exposed in Kibana.
+
+Sharepoint Online uses an OAuth2 Client Credentials Flow.
+This requires initial values for:
+- `client_id`
+- `client_secret`
+- `tenant_id`
+- `scopes`
+
+so that these can be exchanged for an OAuth2 Access Token with logic like:
+
+```python
+    authority = f"https://login.microsoftonline.com/{tenant_id}"
+
+    app = msal.ConfidentialClientApplication(
+        client_id=client_id,
+        client_credential=client_secret,
+        authority=authority)
+
+    result = app.acquire_token_for_client(scopes=scopes)
+
+    access_token = result["access_token"]
+```
+
+`scopes` is a value that will not change from one connection to another, so it can be hardcoded in the connector.
+All the others, however, will need to be exposed to the customer as configurations, and will need to be treated sensitively.
+Do not log the values of credentials!
+
+###### If these credentials expire, how will they be refreshed?
+
+It is modern best-practice to assume that any credential can and will be revoked.
+Even passwords in basic-auth _should_ be rotated on occasion.
+Connectors should be designed to accomodate this.
+Find out what types of errors the 3rd-party will raise if invalid or expired credentials are submitted, and be sure to recognize these types of errors for what they are.
+Handling these errors so that they display in Kibana like, `"Your configured credentials have expired, please re-configure"` is significantly preferable over, `"Sync failed, see logs for details: Error: 401 Unauthorized"`.
+Even better than that is to not issue an error at all, but to instead automatically refresh the credentails and retry.
+
+Sharepoint Online, using the OAuth2 Client Credentials Flow, expects the `access_token` to frequently expire.
+When it does, the relevant exception can be caught, analyzed to ensure that the root cause is an expired access_token, the token can be refreshed using the configured credentials, and then any requests that have failed in the mean time can be retried.
+
+If the `client_secret` is revoked, however, automatic recovery is not possible.
+Instead, you should catch the relevant exception, ensure that refreshing the `access_token` is not possible, and raise an error with an actionable error message that an operator will see in Kibana and/or the logs.
+
+
+##### Does the API have rate limits/throttling/quotas that the connector will need to respect?
+
+Often times, 3rd-party APIs (especially those of SaaS products) have API "quotas" or "rate limits" which prevent a given client from issuing too many requests too fast.
+This protects the service's general health and responsiveness, and can be a security practice to protect against bad actors.
+
+When writing your connector, this is important to keep in mind, that non-200 responses _may not mean_ that anything is wrong, but merely that you're sending too many requests, too fast.
+
+There are two things you should do to deal with this:
+1. Be as efficient in your traffic as possible.
+  - Use bulk requests over individual requests
+  - Increase your page sizes
+  - Cache records in-memory rather than looking them up multiple times
+2. Respect the rate limit errors
+  - handle (don't crash on) 429 errors
+  - read the `Retry-After` header
+  - know if the API uses mechanisms other than 429 codes and `Retry-After`
+
+For Sharepoint Online, there are two important limits for the Sharepoint API:
+
+- Per minute app can consume between 1,200 to 6,000 Resource Units.
+- Per day app can consume between 1,200,000 to 6,000,000 Resource Units.
+
+These quotas are shared between Graph API and Sharepoint REST API - the latter consumes more resource units.
+
+If the quotas are exceeded, some endpoints return 503 responses which contain the `Retry-After` header, and are used instead of 429 codes.
+
+Putting all this together, you now know that you must specially handle 503 and 429 responses, looking for `Retry-After` headers,
+and design your connector knowing that you must make the absolute most out of each request, since you will nearly always run up on the per-minute and per-day limits.
+
+##### What is the API's default page size?
+
+Related to the above section, many developers are surprised at how small default page sizes may be.
+If your goal is to reduce the number of requests you make to a 3rd-party, page sizes of 10 or 20 rarely make sense.
+
+However, page sizes of 1,000,000,000,000 likely aren't a good idea either, no matter how small a given record is.
+It's important to consider how large of a response payload you can reasonably handle at once, and craft your page size accordingly.
+
+Sharepoint Online has a default page size of 100.
+For smaller-payload resources like Users and Groups, this can probably be safely increased by an order of magnitude or more.
+
+##### When should failure responses be retried?
+
+As discussed above, many APIs utilize rate limits and will issue 429 responses for requests that should be retried later.
+However, sometimes there are other cases that warrant retries. 
+
+Some services experience frequent-but-transient timeout issues.
+Some services experiencing a large volume of write operations may sometimes respond with 409 "conflict" codes.
+Sometimes downloading large files encounter packet loss, and while the response is a 200 OK, the checksum of the downloaded file does not match.
+
+All of these are operations that may make sense to retry a time or two.
+
+A note on retries - do not retry infinitely, and use backoff.
+A service may block your connector or specific features if you retry too aggressively.
+
+##### What is the permission model used by the 3rd-party?
+
+Whether or not you plan to support Document Level Security with your connector, it is important to understand how the 3rd-party system protects data and restricts access.
+This allows you to ensure that synced documents contain the relevant metadata to indicate ownership/permissions so that any consumer of your connector can choose to implement their own DLS if they so desire.
+
+For Sharepoint Online, for example, this involves syncing the groups and users that own a document or to whom a document has been shared to.
+Sometimes these ownership models can be complex.
+For Sharepoint Online, you must consider:
+- the individual creator of the document
+- the "owners" of any site where the document lives
+- the "members" of any site where the document lives
+- the "visitors" of any site where the document lives
+- Any Office365 groups that this document has been shared with
+- Any Sharepoint groups that this document has been shared with
+- Any Azure AD groups that this document has been shared with
+- Any individuals (email addresses) that this document has been shared with
+
+How this information is serialized onto a document is less important than ensuring that it _is_ included.
+One common pattern is to put all permissions information in an `_allow_permissions` field with an array of text values.
+But it would be equally valid to split each of the above bullets into their own fields.
+Or to have two fields, one for "individuals" and one for "groups".
+
+#### What is the expected performance for the connector?
+
+There are no hard-and-fast rules here, unless you're building a connector with a specific customer in mind, who has specific requirements.
+However, it is good to ensure that any connector you build has comparable performance to that of other connectors.
+To measure this, you can simply utilize the `make ftest` (functional tests) and look at the generated performance dashboards to compare apples-to-apples.
+Pay particular attention to memory, CPU, and file handle metrics.
+
+See [Integration tests](#integration-tests) for more details.
+
+##### How much memory should it require?
+
+In order to understand if your connector is consuming more memory than it really should, you need to understand how big various objects are when they are retrieved from a 3rd-party.
+
+In Sharepoint Online, the object sizes could be thought of like:
+
+- Site Collection - small objects less than a KB
+- Site - small objects less than a KB
+- Drive - small objects less than a KB
+- Drive Item - small objects less than a KB, but require binary download + subextraction and binary content can be as large as file systems allow
+- List - small objects less than a KB
+- List Item - small objects less than a KB
+- Site Page - various size HTML objects that can get large
+
+Therefore, if you have binary content extraction disabled and are seeing this connector take up GB of memory, there's likely a bug.
+Conversely, if you are processing and downloading many binary files, it is perfectly reasonable to see memory spike in proportion to the size of said files.
+
+It's also important to note that connectors will store all IDs in memory while performing a sync.
+This allows the connector to then remove any documents from the Elasticsearch index which were not part of the batch just ingested.
+On large scale syncs, these IDs can consume a significant amount of RAM, especially if they are large.
+Be careful to design your document IDs to not be longer than necessary.
+
+##### Will it require local file (disk) caching?
+
+Some connectors require writing to disk in order to utilize OS-level utils (base64, for example), or to buffer large structures to avoid holding them all in memory.
+Understanding these requirements can help you to anticipate how many file handles a connector might reasonably need to maintain.
+
+Sharepoint Online, for example, needs to download Site Page and Drive Item objects.
+This results in a relatively high number of overall file handles being utilized during the sync, but should not lead to an ever-increasing number of currently active file handles.
+Seeing any of none, ever-decreasing, or ever-increasing file handles while monitoring a sync would be indicative of a bug in this case.
 
 ### Sync rules
 
@@ -205,7 +434,7 @@ The framework will handle the rest: scheduling validation, calling the custom va
 
 #### How to provide custom basic rule validation
 
-We don't recommend fully overriding `basic_rule_validators`, because you'll lose the default validations.
+Overriding `basic_rule_validators` is not recommended, because you'll lose the default validations.
 
 The framework already provides default validations for basic rules.
 To extend the default validation, provide custom basic rules validators.
@@ -249,7 +478,7 @@ To test the connectors, run:
 make test
 ```
 
-We require all connectors to have unit tests and to have a 90% coverage reported by this command
+All connectors are required to have unit tests and to have a 90% coverage reported by this command
 
 #### Integration Tests
 If the above tests pass, start your Docker instance or configure your backend, then run:
@@ -258,21 +487,6 @@ make ftest NAME={service type}
 ```
 
 This will configure the connector in Elasticsearch to run a full sync. The script will verify that the Elasticsearch index receives documents.
-
-
-## Async vs Sync
-
-The CLI uses `asyncio` and makes the assumption that all the code that has been called should not block the event loop. This makes syncs extremely fast with no memory overhead. In order to achieve this asynchronicity, source classes should use async libs for their backend.
-
-When not possible, the class should use [run_in_executor](https://docs.python.org/3/library/asyncio-eventloop.html#executing-code-in-thread-or-process-pools) and run the blocking code in another thread or process.
-
-When you send work in the background, you will have two options:
-
-- if the work is I/O-bound, the class should use threads
-- if there's some heavy CPU-bound computation (encryption work, etc), processes should be used to avoid [GIL contention](https://realpython.com/python-gil/)
-
-When building async I/O-bound connectors, make sure that you provide a way to recycle connections and that you can throttle calls to the backends. This is very important to avoid file descriptors exhaustion and hammering the backend service.
-
 
 ## Runtime dependencies
 
