@@ -1399,6 +1399,7 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
                 Features.ADVANCED_RULES_NEW: False,
                 Features.BASIC_RULES_OLD: False,
                 Features.ADVANCED_RULES_OLD: False,
+                Features.DOCUMENT_LEVEL_SECURITY: False
             },
         ),
         (
@@ -1408,8 +1409,29 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
                 Features.ADVANCED_RULES_NEW: False,
                 Features.BASIC_RULES_OLD: False,
                 Features.ADVANCED_RULES_OLD: False,
+                Features.DOCUMENT_LEVEL_SECURITY: False
             },
         ),
+        (
+            {
+                "document_level_security": {
+                    "enabled": True
+                }
+            },
+            {
+                Features.DOCUMENT_LEVEL_SECURITY: True
+            }
+        ),
+        (
+            {
+                "document_level_security": {
+                    "enabled": False
+                }
+            },
+            {
+                Features.DOCUMENT_LEVEL_SECURITY: False
+            }
+        )
     ],
 )
 def test_feature_enabled(features_json, feature_enabled):
