@@ -232,7 +232,7 @@ mongo = {
     ],
 )
 async def test_supported_connectors(
-        native_service_types, connector_ids, expected_connector_count, mock_responses
+    native_service_types, connector_ids, expected_connector_count, mock_responses
 ):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     native_connectors_query = {
@@ -369,9 +369,9 @@ async def test_connector_properties():
     [
         (60, None, True),
         (
-                60,
-                iso_utc(),
-                False,
+            60,
+            iso_utc(),
+            False,
         ),
         (60, iso_utc(datetime.now(timezone.utc) - timedelta(seconds=70)), True),
     ],
@@ -437,9 +437,9 @@ async def test_connector_error():
 
 
 def mock_job(
-        status=JobStatus.COMPLETED,
-        error=None,
-        terminated=True,
+    status=JobStatus.COMPLETED,
+    error=None,
+    terminated=True,
 ):
     job = Mock()
     job.status = status
@@ -455,60 +455,60 @@ def mock_job(
     "job, expected_doc_source_update",
     [
         (
-                None,
-                {
-                    "last_sync_status": JobStatus.ERROR.value,
-                    "last_synced": ANY,
-                    "last_sync_error": JOB_NOT_FOUND_ERROR,
-                    "status": Status.ERROR.value,
-                    "error": JOB_NOT_FOUND_ERROR,
-                },
+            None,
+            {
+                "last_sync_status": JobStatus.ERROR.value,
+                "last_synced": ANY,
+                "last_sync_error": JOB_NOT_FOUND_ERROR,
+                "status": Status.ERROR.value,
+                "error": JOB_NOT_FOUND_ERROR,
+            },
         ),
         (
-                mock_job(status=JobStatus.ERROR, error="something wrong"),
-                {
-                    "last_sync_status": JobStatus.ERROR.value,
-                    "last_synced": ANY,
-                    "last_sync_error": "something wrong",
-                    "status": Status.ERROR.value,
-                    "error": "something wrong",
-                    "last_indexed_document_count": 0,
-                    "last_deleted_document_count": 0,
-                },
+            mock_job(status=JobStatus.ERROR, error="something wrong"),
+            {
+                "last_sync_status": JobStatus.ERROR.value,
+                "last_synced": ANY,
+                "last_sync_error": "something wrong",
+                "status": Status.ERROR.value,
+                "error": "something wrong",
+                "last_indexed_document_count": 0,
+                "last_deleted_document_count": 0,
+            },
         ),
         (
-                mock_job(status=JobStatus.CANCELED),
-                {
-                    "last_sync_status": JobStatus.CANCELED.value,
-                    "last_synced": ANY,
-                    "last_sync_error": None,
-                    "status": Status.CONNECTED.value,
-                    "error": None,
-                    "last_indexed_document_count": 0,
-                    "last_deleted_document_count": 0,
-                },
+            mock_job(status=JobStatus.CANCELED),
+            {
+                "last_sync_status": JobStatus.CANCELED.value,
+                "last_synced": ANY,
+                "last_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+                "last_indexed_document_count": 0,
+                "last_deleted_document_count": 0,
+            },
         ),
         (
-                mock_job(status=JobStatus.SUSPENDED, terminated=False),
-                {
-                    "last_sync_status": JobStatus.SUSPENDED.value,
-                    "last_synced": ANY,
-                    "last_sync_error": None,
-                    "status": Status.CONNECTED.value,
-                    "error": None,
-                },
+            mock_job(status=JobStatus.SUSPENDED, terminated=False),
+            {
+                "last_sync_status": JobStatus.SUSPENDED.value,
+                "last_synced": ANY,
+                "last_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+            },
         ),
         (
-                mock_job(),
-                {
-                    "last_sync_status": JobStatus.COMPLETED.value,
-                    "last_synced": ANY,
-                    "last_sync_error": None,
-                    "status": Status.CONNECTED.value,
-                    "error": None,
-                    "last_indexed_document_count": 0,
-                    "last_deleted_document_count": 0,
-                },
+            mock_job(),
+            {
+                "last_sync_status": JobStatus.COMPLETED.value,
+                "last_synced": ANY,
+                "last_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+                "last_indexed_document_count": 0,
+                "last_deleted_document_count": 0,
+            },
         ),
     ],
 )
@@ -599,19 +599,19 @@ async def test_sync_job_properties():
     "validation_result_state, validation_result_errors, should_raise_exception",
     [
         (
-                FilteringValidationState.VALID,
-                [],
-                False,
+            FilteringValidationState.VALID,
+            [],
+            False,
         ),
         (
-                FilteringValidationState.INVALID,
-                ["something wrong"],
-                True,
+            FilteringValidationState.INVALID,
+            ["something wrong"],
+            True,
         ),
     ],
 )
 async def test_sync_job_validate_filtering(
-        validation_result_state, validation_result_errors, should_raise_exception
+    validation_result_state, validation_result_errors, should_raise_exception
 ):
     source = {"_id": "1"}
     index = Mock()
@@ -659,11 +659,11 @@ async def test_sync_job_update_metadata():
     }
     connector_metadata = {"foo": "bar"}
     expected_doc_source_update = (
-            {
-                "last_seen": ANY,
-            }
-            | ingestion_stats
-            | {"metadata": connector_metadata}
+        {
+            "last_seen": ANY,
+        }
+        | ingestion_stats
+        | {"metadata": connector_metadata}
     )
 
     sync_job = SyncJob(elastic_index=index, doc_source=source)
@@ -1130,7 +1130,7 @@ async def test_connector_validate_filtering_invalid():
             {
                 "domain": DEFAULT_DOMAIN,
                 "draft": DRAFT_FILTERING_DEFAULT_DOMAIN
-                         | {"validation": validation_result.to_dict()},
+                | {"validation": validation_result.to_dict()},
                 "active": ACTIVE_FILTERING_DEFAULT_DOMAIN,
             },
             FILTERING_OTHER_DOMAIN,
@@ -1163,9 +1163,9 @@ async def test_connector_validate_filtering_valid():
             {
                 "domain": DEFAULT_DOMAIN,
                 "draft": DRAFT_FILTERING_DEFAULT_DOMAIN
-                         | {"validation": validation_result.to_dict()},
+                | {"validation": validation_result.to_dict()},
                 "active": DRAFT_FILTERING_DEFAULT_DOMAIN
-                          | {"validation": validation_result.to_dict()},
+                | {"validation": validation_result.to_dict()},
             },
             FILTERING_OTHER_DOMAIN,
         ]
@@ -1196,9 +1196,9 @@ async def test_connector_validate_filtering_with_race_condition():
             {
                 "domain": DEFAULT_DOMAIN,
                 "draft": DRAFT_FILTERING_DEFAULT_DOMAIN
-                         | {"validation": validation_result.to_dict()},
+                | {"validation": validation_result.to_dict()},
                 "active": DRAFT_FILTERING_DEFAULT_DOMAIN
-                          | {"validation": validation_result.to_dict()},
+                | {"validation": validation_result.to_dict()},
             },
             FILTERING_OTHER_DOMAIN,
         ]
@@ -1224,16 +1224,16 @@ async def test_connector_validate_filtering_with_race_condition():
     "filtering_json, filter_state, domain, expected_filter",
     [
         (
-                FILTERING,
-                ACTIVE_FILTER_STATE,
-                Filtering.DEFAULT_DOMAIN,
-                ACTIVE_FILTERING_DEFAULT_DOMAIN,
+            FILTERING,
+            ACTIVE_FILTER_STATE,
+            Filtering.DEFAULT_DOMAIN,
+            ACTIVE_FILTERING_DEFAULT_DOMAIN,
         ),
         (
-                FILTERING,
-                DRAFT_FILTER_STATE,
-                Filtering.DEFAULT_DOMAIN,
-                DRAFT_FILTERING_DEFAULT_DOMAIN,
+            FILTERING,
+            DRAFT_FILTER_STATE,
+            Filtering.DEFAULT_DOMAIN,
+            DRAFT_FILTERING_DEFAULT_DOMAIN,
         ),
         (FILTERING, ACTIVE_FILTER_STATE, OTHER_DOMAIN_ONE, EMPTY_FILTER),
         (FILTERING, ACTIVE_FILTER_STATE, OTHER_DOMAIN_TWO, EMPTY_FILTER),
@@ -1288,12 +1288,12 @@ def test_get_draft_filter(domain, expected_filter):
     "filtering, expected_transformed_filtering",
     [
         (
-                {"advanced_snippet": {"value": {"query": {}}}, "rules": []},
-                {"advanced_snippet": {"value": {"query": {}}}, "rules": []},
+            {"advanced_snippet": {"value": {"query": {}}}, "rules": []},
+            {"advanced_snippet": {"value": {"query": {}}}, "rules": []},
         ),
         (
-                {"advanced_snippet": {"value": {}}, "rules": []},
-                {"advanced_snippet": {"value": {}}, "rules": []},
+            {"advanced_snippet": {"value": {}}, "rules": []},
+            {"advanced_snippet": {"value": {}}, "rules": []},
         ),
         ({"advanced_snippet": {}, "rules": []}, {"advanced_snippet": {}, "rules": []}),
         ({}, {"advanced_snippet": {}, "rules": []}),
@@ -1302,8 +1302,8 @@ def test_get_draft_filter(domain, expected_filter):
 )
 def test_transform_filtering(filtering, expected_transformed_filtering):
     assert (
-            Filter(filter_=filtering).transform_filtering()
-            == expected_transformed_filtering
+        Filter(filter_=filtering).transform_filtering()
+        == expected_transformed_filtering
     )
 
 
@@ -1311,129 +1311,129 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
     "features_json, feature_enabled",
     [
         (
-                {
-                    "sync_rules": {
-                        "basic": {"enabled": True},
-                        "advanced": {"enabled": True},
-                    }
-                },
-                {
-                    Features.BASIC_RULES_NEW: True,
-                    Features.ADVANCED_RULES_NEW: True,
-                    Features.BASIC_RULES_OLD: False,
-                    Features.ADVANCED_RULES_OLD: False,
-                },
-        ),
-        (
-                {
-                    "sync_rules": {
-                        "basic": {"enabled": True},
-                        "advanced": {"enabled": False},
-                    }
-                },
-                {
-                    Features.BASIC_RULES_NEW: True,
-                    Features.ADVANCED_RULES_NEW: False,
-                    Features.BASIC_RULES_OLD: False,
-                    Features.ADVANCED_RULES_OLD: False,
-                },
-        ),
-        (
-                {
-                    "sync_rules": {
-                        "basic": {"enabled": False},
-                        "advanced": {"enabled": False},
-                    }
-                },
-                {
-                    Features.BASIC_RULES_NEW: False,
-                    Features.ADVANCED_RULES_NEW: False,
-                    Features.BASIC_RULES_OLD: False,
-                    Features.ADVANCED_RULES_OLD: False,
-                },
-        ),
-        (
-                {"filtering_advanced_config": True, "filtering_rules": True},
-                {
-                    Features.BASIC_RULES_NEW: False,
-                    Features.ADVANCED_RULES_NEW: False,
-                    Features.BASIC_RULES_OLD: True,
-                    Features.ADVANCED_RULES_OLD: True,
-                },
-        ),
-        (
-                {"filtering_advanced_config": False, "filtering_rules": False},
-                {
-                    Features.BASIC_RULES_NEW: False,
-                    Features.ADVANCED_RULES_NEW: False,
-                    Features.BASIC_RULES_OLD: False,
-                    Features.ADVANCED_RULES_OLD: False,
-                },
-        ),
-        (
-                {"filtering_advanced_config": True, "filtering_rules": False},
-                {
-                    Features.BASIC_RULES_NEW: False,
-                    Features.ADVANCED_RULES_NEW: False,
-                    Features.BASIC_RULES_OLD: False,
-                    Features.ADVANCED_RULES_OLD: True,
-                },
-        ),
-        (
-                {
-                    "sync_rules": {
-                        "basic": {"enabled": True},
-                        "advanced": {"enabled": True},
-                    },
-                    "filtering_advanced_config": True,
-                    "filtering_rules": True,
-                },
-                {
-                    Features.BASIC_RULES_NEW: True,
-                    Features.ADVANCED_RULES_NEW: True,
-                    Features.BASIC_RULES_OLD: True,
-                    Features.ADVANCED_RULES_OLD: True,
-                },
-        ),
-        (
-                None,
-                {
-                    Features.BASIC_RULES_NEW: False,
-                    Features.ADVANCED_RULES_NEW: False,
-                    Features.BASIC_RULES_OLD: False,
-                    Features.ADVANCED_RULES_OLD: False,
-                    Features.DOCUMENT_LEVEL_SECURITY: False
-                },
-        ),
-        (
-                {},
-                {
-                    Features.BASIC_RULES_NEW: False,
-                    Features.ADVANCED_RULES_NEW: False,
-                    Features.BASIC_RULES_OLD: False,
-                    Features.ADVANCED_RULES_OLD: False,
-                    Features.DOCUMENT_LEVEL_SECURITY: False
-                },
-        ),
-        (
-                {
-                    "document_level_security": {
-                        "enabled": True
-                    }
-                },
-                {
-                    Features.DOCUMENT_LEVEL_SECURITY: True
+            {
+                "sync_rules": {
+                    "basic": {"enabled": True},
+                    "advanced": {"enabled": True},
                 }
+            },
+            {
+                Features.BASIC_RULES_NEW: True,
+                Features.ADVANCED_RULES_NEW: True,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
         ),
         (
-                {
-                    "document_level_security": {
-                        "enabled": False
-                    }
-                },
-                {
-                    Features.DOCUMENT_LEVEL_SECURITY: False
+            {
+                "sync_rules": {
+                    "basic": {"enabled": True},
+                    "advanced": {"enabled": False},
                 }
+            },
+            {
+                Features.BASIC_RULES_NEW: True,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": False},
+                    "advanced": {"enabled": False},
+                }
+            },
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
+        ),
+        (
+            {"filtering_advanced_config": True, "filtering_rules": True},
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: True,
+                Features.ADVANCED_RULES_OLD: True,
+            },
+        ),
+        (
+            {"filtering_advanced_config": False, "filtering_rules": False},
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+            },
+        ),
+        (
+            {"filtering_advanced_config": True, "filtering_rules": False},
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: True,
+            },
+        ),
+        (
+            {
+                "sync_rules": {
+                    "basic": {"enabled": True},
+                    "advanced": {"enabled": True},
+                },
+                "filtering_advanced_config": True,
+                "filtering_rules": True,
+            },
+            {
+                Features.BASIC_RULES_NEW: True,
+                Features.ADVANCED_RULES_NEW: True,
+                Features.BASIC_RULES_OLD: True,
+                Features.ADVANCED_RULES_OLD: True,
+            },
+        ),
+        (
+            None,
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+                Features.DOCUMENT_LEVEL_SECURITY: False
+            },
+        ),
+        (
+            {},
+            {
+                Features.BASIC_RULES_NEW: False,
+                Features.ADVANCED_RULES_NEW: False,
+                Features.BASIC_RULES_OLD: False,
+                Features.ADVANCED_RULES_OLD: False,
+                Features.DOCUMENT_LEVEL_SECURITY: False
+            },
+        ),
+        (
+            {
+                "document_level_security": {
+                    "enabled": True
+                }
+            },
+            {
+                Features.DOCUMENT_LEVEL_SECURITY: True
+            }
+        ),
+        (
+            {
+                "document_level_security": {
+                    "enabled": False
+                }
+            },
+            {
+                Features.DOCUMENT_LEVEL_SECURITY: False
+            }
         )
     ],
 )
@@ -1452,59 +1452,59 @@ def test_feature_enabled(features_json, feature_enabled):
     "features_json, sync_rules_enabled",
     [
         (
-                {
-                    "sync_rules": {
-                        "basic": {"enabled": True},
-                        "advanced": {"enabled": False},
-                    },
-                    "filtering_advanced_config": False,
-                    "filtering_rules": False,
+            {
+                "sync_rules": {
+                    "basic": {"enabled": True},
+                    "advanced": {"enabled": False},
                 },
-                True,
+                "filtering_advanced_config": False,
+                "filtering_rules": False,
+            },
+            True,
         ),
         (
-                {
-                    "sync_rules": {
-                        "basic": {"enabled": False},
-                        "advanced": {"enabled": True},
-                    },
-                    "filtering_advanced_config": False,
-                    "filtering_rules": False,
+            {
+                "sync_rules": {
+                    "basic": {"enabled": False},
+                    "advanced": {"enabled": True},
                 },
-                True,
+                "filtering_advanced_config": False,
+                "filtering_rules": False,
+            },
+            True,
         ),
         (
-                {
-                    "sync_rules": {
-                        "basic": {"enabled": False},
-                        "advanced": {"enabled": False},
-                    },
-                    "filtering_advanced_config": True,
-                    "filtering_rules": False,
+            {
+                "sync_rules": {
+                    "basic": {"enabled": False},
+                    "advanced": {"enabled": False},
                 },
-                True,
+                "filtering_advanced_config": True,
+                "filtering_rules": False,
+            },
+            True,
         ),
         (
-                {
-                    "sync_rules": {
-                        "basic": {"enabled": False},
-                        "advanced": {"enabled": False},
-                    },
-                    "filtering_advanced_config": False,
-                    "filtering_rules": True,
+            {
+                "sync_rules": {
+                    "basic": {"enabled": False},
+                    "advanced": {"enabled": False},
                 },
-                True,
+                "filtering_advanced_config": False,
+                "filtering_rules": True,
+            },
+            True,
         ),
         (
-                {
-                    "sync_rules": {
-                        "basic": {"enabled": False},
-                        "advanced": {"enabled": False},
-                    },
-                    "filtering_advanced_config": False,
-                    "filtering_rules": False,
+            {
+                "sync_rules": {
+                    "basic": {"enabled": False},
+                    "advanced": {"enabled": False},
                 },
-                False,
+                "filtering_advanced_config": False,
+                "filtering_rules": False,
+            },
+            False,
         ),
         ({"other_feature": True}, False),
         (None, False),
@@ -1523,18 +1523,18 @@ def test_sync_rules_enabled(features_json, sync_rules_enabled):
         # extract True
         ({"a": {"b": {"c": True}}}, ["a", "b", "c"], False, True),
         (
-                {"a": {"b": {"c": True}}},
-                # "d" doesn't exist -> fall back to False
-                ["a", "b", "c", "d"],
-                False,
-                False,
+            {"a": {"b": {"c": True}}},
+            # "d" doesn't exist -> fall back to False
+            ["a", "b", "c", "d"],
+            False,
+            False,
         ),
         (
-                {"a": {"b": {"c": True}}},
-                # "wrong_key" doesn't exist -> fall back to False
-                ["wrong_key", "b", "c"],
-                False,
-                False,
+            {"a": {"b": {"c": True}}},
+            # "wrong_key" doesn't exist -> fall back to False
+            ["wrong_key", "b", "c"],
+            False,
+            False,
         ),
         # fallback to True
         (None, ["a", "b", "c"], True, True),
@@ -1689,11 +1689,11 @@ def test_advanced_rules_present(filtering, should_advanced_rules_be_present):
     ],
 )
 def test_has_validation_state(
-        filtering, validation_state, has_expected_validation_state
+    filtering, validation_state, has_expected_validation_state
 ):
     assert (
-            Filter(filtering).has_validation_state(validation_state)
-            == has_expected_validation_state
+        Filter(filtering).has_validation_state(validation_state)
+        == has_expected_validation_state
     )
 
 
