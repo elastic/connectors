@@ -540,6 +540,10 @@ class Connector(ESDocument):
     def last_permissions_sync_scheduled_at(self):
         return self._property_as_datetime("last_permissions_sync_scheduled_at")
 
+    @property
+    def sync_cursor(self):
+        return self.get("sync_cursor")
+
     async def heartbeat(self, interval):
         if (
             self.last_seen is None
