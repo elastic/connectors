@@ -68,7 +68,7 @@ When you have an Enterprise Search deployment on Elastic Cloud post 8.5.0, the c
    2. `elasticsearch.api_key`: Configure the API key generated in step 2. Make sure `elasticsearch.username` is not configured.
    3. `connector_id`: You can find the `connector_id` in step 3 `Deploy a connector` under `Configuration` tab in Kibana.
    4. `service_type`: Configure it to the service type of your new connector.
-   5. Leave `native_service_types` empty, unless you want to sync any native connectors with this connector service instance. In such case, make sure the API key configured in step 2 has the proper privileges, or you can option to use basic auth (`username` and `password`) with proper privileges.
+   5. Leave `native_service_types` empty, unless you want to sync any native connectors with this connector service instance. In such a case, make sure the API key configured in step 2 has the proper privileges, or you can choose to use basic auth (`username` and `password`) with the proper privileges.
 4. Run the connector service application with
     ```shell
     make run
@@ -77,5 +77,5 @@ When you have an Enterprise Search deployment on Elastic Cloud post 8.5.0, the c
 ### Run the connector service for a converted native connector
 
 1. Follow the instructions in [Run the connector service in native mode](#run-the-connector-service-in-native-mode) to create a native connector.
-2. Go to `Configuration` tab and convert it to a customized connector via `Convert connector`.
+2. Go to the `Configuration` tab and convert it to a customized connector via `Convert connector`.
 3. Follow the instructions in [Run the connector service for a custom connector](#run-the-connector-service-for-a-custom-connector) to run the connector service.
