@@ -18,6 +18,7 @@ from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.sources.atlassian import AtlassianAdvancedRulesValidator
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -34,16 +35,19 @@ SPACE = "space"
 ATTACHMENT = "attachment"
 CONTENT = "content"
 DOWNLOAD = "download"
+SEARCH = "search"
 SPACE_QUERY = "limit=100"
 ATTACHMENT_QUERY = "limit=100&expand=version"
 CONTENT_QUERY = (
     "limit=50&expand=children.attachment,history.lastUpdated,body.storage,space"
 )
+SEARCH_QUERY = "limit=100&expand=content.extensions,content.container,content.space,space.description"
 
 URLS = {
     SPACE: "rest/api/space?{api_query}",
     CONTENT: "rest/api/content/search?{api_query}",
     ATTACHMENT: "rest/api/content/{id}/child/attachment?{api_query}",
+    SEARCH: "rest/api/search?cql={query}",
 }
 PING_URL = "rest/api/space?limit=1"
 MAX_CONCURRENT_DOWNLOADS = 50  # Max concurrent download supported by confluence
@@ -304,6 +308,9 @@ class ConfluenceDataSource(BaseDataSource):
         """Closes unclosed client session"""
         await self.confluence_client.close_session()
 
+    def advanced_rules_validators(self):
+        return [AtlassianAdvancedRulesValidator(self)]
+
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by Confluence
 
@@ -442,6 +449,58 @@ class ConfluenceDataSource(BaseDataSource):
                     "url": attachment_url,
                 }, attachment["_links"]["download"]
 
+    async def search_by_query(self, query):
+        async for response in self.confluence_client.paginated_api_call(
+            url_name=SEARCH,
+            query=f"{query}&{SEARCH_QUERY}",
+        ):
+            results = response.get("results", [])
+            for entity in results:
+                # entity can be space or content
+                entity_details = entity.get(SPACE) or entity.get(CONTENT)
+
+                if (
+                    entity_details["type"] == "attachment"
+                    and entity_details["container"].get("title") is None
+                ):
+                    continue
+
+                document = {
+                    "_id": entity_details.get("id"),
+                    "title": entity.get("title"),
+                    "_timestamp": entity.get("lastModified"),
+                    "body": entity.get("excerpt"),
+                    "type": entity.get("entityType"),
+                    "url": os.path.join(
+                        self.confluence_client.host_url, entity.get("url")[1:]
+                    ),
+                }
+                download_url = None
+                if document["type"] == "content":
+                    document.update(
+                        {
+                            "type": entity_details.get("type"),
+                            "space": entity_details.get("space", {}).get("name"),
+                        }
+                    )
+
+                    if document["type"] == "attachment":
+                        container = entity_details.get("container", {}).get("type")
+                        document.update(
+                            {
+                                "size": entity_details.get("extensions", {}).get(
+                                    "fileSize"
+                                ),
+                                container: entity_details.get("container", {}).get(
+                                    "title"
+                                ),
+                            }
+                        )
+                        document.pop("body")
+                        download_url = entity_details.get("_links", {}).get("download")
+
+                yield document, download_url
+
     async def download_attachment(self, url, attachment, timestamp=None, doit=False):
         """Downloads the content of the given attachment in chunks using REST API call
 
@@ -557,25 +616,42 @@ class ConfluenceDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the content.
         """
-        if self.spaces == ["*"]:
-            configured_spaces_query = "cql=type="
-        else:
-            quoted_spaces = "','".join(self.spaces)
-            configured_spaces_query = f"cql=space in ('{quoted_spaces}') AND type="
-        await self.fetchers.put(self._space_coro)
-        await self.fetchers.put(
-            partial(
-                self._page_blog_coro,
-                f"{configured_spaces_query}blogpost&{CONTENT_QUERY}",
-            )
-        )
-        await self.fetchers.put(
-            partial(
-                self._page_blog_coro, f"{configured_spaces_query}page&{CONTENT_QUERY}"
-            )
-        )
-        self.fetcher_count += 3
+        if filtering and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
+            for query_info in advanced_rules:
+                query = query_info.get("query")
+                logger.debug(f"Fetching content using custom query: {query}")
+                async for document, download_link in self.search_by_query(query):
+                    if download_link:
+                        yield document, partial(
+                            self.download_attachment,
+                            download_link[1:],
+                            copy(document),
+                        )
+                    else:
+                        yield document, None
 
-        async for item in self._consumer():
-            yield item
-        await self.fetchers.join()
+        else:
+            if self.spaces == ["*"]:
+                configured_spaces_query = "cql=type="
+            else:
+                quoted_spaces = "','".join(self.spaces)
+                configured_spaces_query = f"cql=space in ('{quoted_spaces}') AND type="
+            await self.fetchers.put(self._space_coro)
+            await self.fetchers.put(
+                partial(
+                    self._page_blog_coro,
+                    f"{configured_spaces_query}blogpost&{CONTENT_QUERY}",
+                )
+            )
+            await self.fetchers.put(
+                partial(
+                    self._page_blog_coro,
+                    f"{configured_spaces_query}page&{CONTENT_QUERY}",
+                )
+            )
+            self.fetcher_count += 3
+
+            async for item in self._consumer():
+                yield item
+            await self.fetchers.join()
