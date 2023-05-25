@@ -21,6 +21,7 @@ from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
+from connectors.sources.atlassian import AtlassianAdvancedRulesValidator
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -310,6 +311,9 @@ class JiraDataSource(BaseDataSource):
             },
         }
 
+    def advanced_rules_validators(self):
+        return [AtlassianAdvancedRulesValidator(self)]
+
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by jira
 
@@ -492,15 +496,20 @@ class JiraDataSource(BaseDataSource):
         except Exception as exception:
             logger.warning(f"Skipping data for type: {ISSUE_DATA}. Error: {exception}")
 
-    async def _get_issues(self):
+    async def _get_issues(self, custom_query=""):
         """Get issues with the help of REST APIs
 
         Yields:
             Dictionary: Jira issue to get indexed
             issue (dict): Issue response to fetch the attachments
         """
-        query = f"project in ({','.join(self.jira_client.projects)})"
-        jql = "" if self.jira_client.projects == ["*"] else query
+        wildcard_query = ""
+        projects_query = f"project in ({','.join(self.jira_client.projects)})"
+
+        jql = custom_query or (
+            wildcard_query if self.jira_client.projects == ["*"] else projects_query
+        )
+
         async for response in self.jira_client.paginated_api_call(
             url_name=ISSUES, jql=jql
         ):
@@ -558,11 +567,21 @@ class JiraDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the files.
         """
-        await self._verify_projects()
+        if filtering and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
 
-        await self.fetchers.put(self._get_projects)
-        await self.fetchers.put(self._get_issues)
-        self.tasks += 2
+            for rule in advanced_rules:
+                await self.fetchers.put(
+                    partial(self._get_issues, rule.get("query", ""))
+                )
+                self.tasks += 1
+
+        else:
+            await self._verify_projects()
+
+            await self.fetchers.put(self._get_projects)
+            await self.fetchers.put(self._get_issues)
+            self.tasks += 2
 
         async for item in self._consumer():
             yield item
