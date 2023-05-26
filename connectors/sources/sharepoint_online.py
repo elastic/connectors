@@ -20,7 +20,9 @@ from connectors.utils import (
     CacheWithTimeout
 )
 
+GRAPH_API_URL = "https://graph.microsoft.com/v1.0"
 DEFAULT_RETRY_SECONDS = 30
+FILE_WRITE_CHUNK_SIZE = 1024
 
 
 class MSToken:
@@ -73,28 +75,23 @@ class GraphAPIToken(MSToken):
             raise Exception(result.get("error"))
 
 
-class GraphAPISession:
-    BASE_URL = "https://graph.microsoft.com/v1.0"
 
+class MicrosoftAPISession:
     def __init__(self, http_session, graph_api_token):
         self._http_session = http_session
         self._graph_api_token = graph_api_token
 
-    async def fetch(self, relative_url):
-        absolute_url = f"{self.BASE_URL}/{relative_url}"
+    async def fetch(self, url):
+        return await self._get_json(url)
 
-        return await self._get_json(absolute_url)
-
-    async def pipe(self, relative_url, stream):
-        absolute_url = f"{self.BASE_URL}/{relative_url}"
-
-        async with self._call_api(absolute_url) as resp:
-            async for data in resp.content.iter_chunked(1024 * 1024):
+    async def pipe(self, url, stream):
+        async with self._call_api(url) as resp:
+            async for data in resp.content.iter_chunked(FILE_WRITE_CHUNK_SIZE):
                 await stream.write(data)
 
-    async def scroll(self, relative_url):
-        scroll_url = f"{self.BASE_URL}/{relative_url}"
-
+    async def scroll(self, url):
+        scroll_url = url
+        
         while True:
             graph_data = await self._get_json(scroll_url)
             # We're yielding the whole page here, not one item
@@ -172,55 +169,6 @@ class RestAPIToken(MSToken):
             return access_token, expires_in
 
 
-class RestAPISession:
-    def __init__(self, http_session, token, tenant_name):
-        self._http_session = http_session
-        self._rest_api_token = token
-
-        self._host_url = f"https://{tenant_name}.sharepoint.com"
-
-    async def get_list_item_attachments(self, site_web_url, list_title, list_item_id):
-        url = f"{site_web_url}/_api/lists/getByTitle('{list_title}')/items({list_item_id})?$expand=AttachmentFiles"
-        token = await self._rest_api_token.get()
-
-        headers = {"authorization": f"Bearer {token}"}
-
-        try:
-            async with self._http_session.get(url, headers=headers) as resp:
-                js = await resp.json()
-
-                yield js["AttachmentFiles"]
-        except Exception as ex:
-            print(ex)
-            pass
-
-    async def download_attachment(self, attachment_url, stream):
-        url = f"{attachment_url}/$value"
-        token = await self._rest_api_token.get()
-
-        headers = {"authorization": f"Bearer {token}"}
-
-        async with self._http_session.get(url, headers=headers) as resp:
-            async for data in resp.content.iter_chunked(1024 * 1024):
-                await stream.write(data)
-
-    async def get_site_pages(self, site_web_url):
-        # select = "Title,CanvasContent1,FileLeafRef"
-        select = ""
-        url = f"{site_web_url}/_api/web/lists/getbytitle('Site%20Pages')/items?$select={select}"
-        token = await self._rest_api_token.get()
-
-        headers = {"authorization": f"Bearer {token}"}
-
-        async with self._http_session.get(
-            url,
-            headers=headers,
-        ) as resp:
-            js = await resp.json()
-
-            yield js["value"]
-
-
 class SharepointOnlineClient:
     def __init__(self, tenant_id, tenant_name, client_id, client_secret):
         self._http_session = aiohttp.ClientSession(
@@ -242,11 +190,11 @@ class SharepointOnlineClient:
             self._http_session, tenant_id, tenant_name, client_id, client_secret
         )
 
-        self._graph_api_client = GraphAPISession(
+        self._graph_api_client = MicrosoftAPISession(
             self._http_session, self._graph_api_token
         )
-        self._rest_api_client = RestAPISession(
-            self._http_session, self._rest_api_token, tenant_name
+        self._rest_api_client = MicrosoftAPISession(
+            self._http_session, self._rest_api_token
         )
 
     async def site_collections(self):
@@ -254,7 +202,7 @@ class SharepointOnlineClient:
         select = "siteCollection,webUrl"
 
         async for page in self._graph_api_client.scroll(
-            f"sites/?$filter={filter_}&$select={select}"
+            f"{GRAPH_API_URL}/sites/?$filter={filter_}&$select={select}"
         ):
             for site_collection in page:
                 yield site_collection
@@ -264,7 +212,7 @@ class SharepointOnlineClient:
         select = ""
 
         async for page in self._graph_api_client.scroll(
-            f"sites/{site_collection}/sites?$filter={filter_}&search=*&$select={select}"
+            f"{GRAPH_API_URL}/sites/{site_collection}/sites?$filter={filter_}&search=*&$select={select}"
         ):
             for site in page:
                 yield site
@@ -273,7 +221,7 @@ class SharepointOnlineClient:
         select = ""
 
         async for page in self._graph_api_client.scroll(
-            f"sites/{site_id}/drives?$select={select}"
+            f"{GRAPH_API_URL}/sites/{site_id}/drives?$select={select}"
         ):
             for site_drive in page:
                 yield site_drive
@@ -284,7 +232,7 @@ class SharepointOnlineClient:
         directory_stack = []
 
         root = await self._graph_api_client.fetch(
-            f"drives/{drive_id}/root?$select={select}"
+            f"{GRAPH_API_URL}/drives/{drive_id}/root?$select={select}"
         )
 
         directory_stack.append(root["id"])
@@ -294,7 +242,7 @@ class SharepointOnlineClient:
             folder_id = directory_stack.pop()
 
             async for page in self._graph_api_client.scroll(
-                f"drives/{drive_id}/items/{folder_id}/children?$select={select}"
+                f"{GRAPH_API_URL}/drives/{drive_id}/items/{folder_id}/children?$select={select}"
             ):
                 for drive_item in page:
                     if "folder" in drive_item:
@@ -303,14 +251,14 @@ class SharepointOnlineClient:
 
     async def download_drive_item(self, drive_id, item_id, async_buffer):
         await self._graph_api_client.pipe(
-            f"drives/{drive_id}/items/{item_id}/content", async_buffer
+            f"{GRAPH_API_URL}/drives/{drive_id}/items/{item_id}/content", async_buffer
         )
 
     async def site_lists(self, site_id):
         select = ""
 
         async for page in self._graph_api_client.scroll(
-            f"sites/{site_id}/lists?$select={select}"
+            f"{GRAPH_API_URL}/sites/{site_id}/lists?$select={select}"
         ):
             for site_list in page:
                 yield site_list
@@ -320,27 +268,34 @@ class SharepointOnlineClient:
         expand = "fields"
 
         async for page in self._graph_api_client.scroll(
-            f"sites/{site_id}/lists/{list_id}/items?$select={select}&$expand={expand}"
+            f"{GRAPH_API_URL}/sites/{site_id}/lists/{list_id}/items?$select={select}&$expand={expand}"
         ):
             for site_list in page:
                 yield site_list
 
-    async def site_list_item_attachments(self, site_web_url, list_name, list_item_id):
+    async def site_list_item_attachments(self, site_web_url, list_title, list_item_id):
         select = ""
 
-        async for page in self._rest_api_client.get_list_item_attachments(
-            site_web_url, list_name, list_item_id
-        ):
-            for attachment in page:
-                yield attachment
+        url = f"{site_web_url}/_api/lists/getByTitle('{list_title}')/items({list_item_id})?$expand=AttachmentFiles"
+
+        list_item = await self._rest_api_client.fetch(
+            url
+        )
+
+        for attachment in list_item["AttachmentFiles"]:
+            yield attachment
+
 
     async def download_attachment(self, attachment_absolute_path, async_buffer):
-        await self._rest_api_client.download_attachment(
+        await self._rest_api_client.pipe(
             attachment_absolute_path, async_buffer
         )
 
     async def site_pages(self, site_web_url):
-        async for page in self._rest_api_client.get_site_pages(site_web_url):
+        select = ""
+        url = f"{site_web_url}/_api/web/lists/getbytitle('Site%20Pages')/items?$top=5&$select={select}"
+
+        async for page in self._rest_api_client.scroll(url):
             for site_page in page:
                 yield site_page
 
@@ -464,6 +419,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                         list_item["_id"] = list_item["id"]
                         list_item["object_type"] = "list_item"
                         content_type = list_item["contentType"]["name"]
+
+                        if content_type == 'Web Template Extensions':
+                            continue
 
                         if content_type not in list_item_types:
                             list_item_types[content_type] = 0
