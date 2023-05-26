@@ -136,3 +136,22 @@ Absolutely! Graph API supports several mechanisms, but the one that's good for u
 It might not be perfect for nested queries - e.g. changing a drive item does not update drive, thus we still need to collect drive items for drive even if the drive was not updated. Some additional investigation is needed.
 
 ## What kind of data is useful for us?
+
+## What configuration is required from user to make connector sync data that he needs?
+
+Pretty much only autentication credentials
+
+## What optional configuration can help user with connector?
+
+Sites to sync - not to sync too many sites. Otherwise connector will sync everything, and that's not something that everyone will need.
+
+## What configuration can be validated by the connector so that user will get meaningful error messages?
+
+It's possible to validate that:
+
+1. User provided correct credentials (client_id, client_secret, tenant_id, tenant_name)
+2. User provided proper site_collections by iterating over site_collections on the server
+
+
+Also during connector run-time we can raise meaningful errors that explain that access is denied to certain entities
+ 
