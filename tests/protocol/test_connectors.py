@@ -333,6 +333,7 @@ async def test_connector_properties():
             "status": "created",
             "last_seen": iso_utc(),
             "last_sync_status": "completed",
+            "last_permissions_sync_status": "pending",
             "pipeline": {},
             "last_sync_scheduled_at": iso_utc(),
             "last_permissions_sync_scheduled_at": iso_utc(),
@@ -352,6 +353,7 @@ async def test_connector_properties():
     assert connector.index_name == "search-some-index"
     assert connector.language == "en"
     assert connector.last_sync_status == JobStatus.COMPLETED
+    assert connector.last_permissions_sync_status == JobStatus.PENDING
     assert connector.permissions_scheduling["enabled"]
     assert connector.permissions_scheduling["interval"] == "* * * * *"
     assert connector.sync_cursor == sync_cursor
