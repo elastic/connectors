@@ -9,6 +9,7 @@
         "status": "configured",
         "language": "en",
         "last_sync_status": null,
+        "last_permissions_sync_status": null,
         "last_sync_error": null,
         "last_synced": null,
         "last_seen": null,
