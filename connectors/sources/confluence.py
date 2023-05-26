@@ -59,6 +59,7 @@ END_SIGNAL = "FINISHED_TASK"
 
 CONFLUENCE_CLOUD = "confluence_cloud"
 CONFLUENCE_SERVER = "confluence_server"
+WILDCARD = "*"
 
 
 class ConfluenceClient:
@@ -263,7 +264,7 @@ class ConfluenceDataSource(BaseDataSource):
                 "label": "Confluence space keys",
                 "order": 7,
                 "type": "list",
-                "value": "*",
+                "value": WILDCARD,
             },
             "ssl_enabled": {
                 "display": "toggle",
@@ -330,7 +331,7 @@ class ConfluenceDataSource(BaseDataSource):
         await self._remote_validation()
 
     async def _remote_validation(self):
-        if self.spaces == ["*"]:
+        if self.spaces == [WILDCARD]:
             return
         space_keys = []
         async for response in self.confluence_client.paginated_api_call(
@@ -370,7 +371,7 @@ class ConfluenceDataSource(BaseDataSource):
                 space_url = os.path.join(
                     self.confluence_client.host_url, space["_links"]["webui"][1:]
                 )
-                if (self.spaces == ["*"]) or (space["key"] in self.spaces):
+                if (self.spaces == [WILDCARD]) or (space["key"] in self.spaces):
                     yield {
                         "_id": space["id"],
                         "type": "Space",
@@ -485,17 +486,15 @@ class ConfluenceDataSource(BaseDataSource):
                     )
 
                     if document["type"] == "attachment":
-                        container = entity_details.get("container", {}).get("type")
-                        document.update(
-                            {
-                                "size": entity_details.get("extensions", {}).get(
-                                    "fileSize"
-                                ),
-                                container: entity_details.get("container", {}).get(
-                                    "title"
-                                ),
-                            }
+                        container_type = entity_details.get("container", {}).get("type")
+                        container_title = entity_details.get("container", {}).get(
+                            "title"
                         )
+                        file_size = entity_details.get("extensions", {}).get("fileSize")
+                        document.update(
+                            {"size": file_size, container_type: container_title}
+                        )
+                        # Removing body as attachment will be downloaded lazily
                         document.pop("body")
                         download_url = entity_details.get("_links", {}).get("download")
 
@@ -620,7 +619,7 @@ class ConfluenceDataSource(BaseDataSource):
             advanced_rules = filtering.get_advanced_rules()
             for query_info in advanced_rules:
                 query = query_info.get("query")
-                logger.debug(f"Fetching content using custom query: {query}")
+                logger.debug(f"Fetching confluence content using custom query: {query}")
                 async for document, download_link in self.search_by_query(query):
                     if download_link:
                         yield document, partial(
@@ -632,7 +631,7 @@ class ConfluenceDataSource(BaseDataSource):
                         yield document, None
 
         else:
-            if self.spaces == ["*"]:
+            if self.spaces == [WILDCARD]:
                 configured_spaces_query = "cql=type="
             else:
                 quoted_spaces = "','".join(self.spaces)
