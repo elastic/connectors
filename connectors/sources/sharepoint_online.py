@@ -10,14 +10,14 @@ from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
 
-from connectors.source import BaseDataSource
 from connectors.logger import logger
+from connectors.source import BaseDataSource
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
+    CacheWithTimeout,
     convert_to_b64,
     get_pem_format,
     url_encode,
-    CacheWithTimeout
 )
 
 GRAPH_API_URL = "https://graph.microsoft.com/v1.0"
@@ -40,7 +40,9 @@ class MSToken:
         if cached_value:
             return cached_value
 
-        now = datetime.now()  # We measure now before request to be on a pessimistic side
+        now = (
+            datetime.now()
+        )  # We measure now before request to be on a pessimistic side
         access_token, expires_in = await self._fetch_token()
         self._token_cache.set(access_token, now + timedelta(expires_in))
 
@@ -75,7 +77,6 @@ class GraphAPIToken(MSToken):
             raise Exception(result.get("error"))
 
 
-
 class MicrosoftAPISession:
     def __init__(self, http_session, graph_api_token):
         self._http_session = http_session
@@ -91,7 +92,7 @@ class MicrosoftAPISession:
 
     async def scroll(self, url):
         scroll_url = url
-        
+
         while True:
             graph_data = await self._get_json(scroll_url)
             # We're yielding the whole page here, not one item
@@ -278,18 +279,13 @@ class SharepointOnlineClient:
 
         url = f"{site_web_url}/_api/lists/getByTitle('{list_title}')/items({list_item_id})?$expand=AttachmentFiles"
 
-        list_item = await self._rest_api_client.fetch(
-            url
-        )
+        list_item = await self._rest_api_client.fetch(url)
 
         for attachment in list_item["AttachmentFiles"]:
             yield attachment
 
-
     async def download_attachment(self, attachment_absolute_path, async_buffer):
-        await self._rest_api_client.pipe(
-            attachment_absolute_path, async_buffer
-        )
+        await self._rest_api_client.pipe(attachment_absolute_path, async_buffer)
 
     async def site_pages(self, site_web_url):
         select = ""
@@ -373,7 +369,6 @@ class SharepointOnlineDataSource(BaseDataSource):
             site_collection["object_type"] = "site_collection"
             yield site_collection, None
 
-
             async for site in self._client.sites(
                 site_collection["siteCollection"]["hostname"]
             ):
@@ -420,7 +415,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         list_item["object_type"] = "list_item"
                         content_type = list_item["contentType"]["name"]
 
-                        if content_type == 'Web Template Extensions':
+                        if content_type == "Web Template Extensions":
                             continue
 
                         if content_type not in list_item_types:

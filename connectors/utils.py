@@ -607,6 +607,7 @@ class CacheWithTimeout:
     sleep(5)
     value = cache.get() # None
     """
+
     def __init__(self):
         self._value = None
         self._expiration_date = None
@@ -631,4 +632,3 @@ class CacheWithTimeout:
         """
         self._value = value
         self._expiration_date = expiration_date
-
