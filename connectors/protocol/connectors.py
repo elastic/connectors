@@ -527,8 +527,8 @@ class Connector(ESDocument):
         return JobStatus(self.get("last_sync_status"))
 
     @property
-    def last_permissions_sync_status(self):
-        return JobStatus(self.get("last_permissions_sync_status"))
+    def last_access_control_sync_status(self):
+        return JobStatus(self.get("last_access_control_sync_status"))
 
     def _property_as_datetime(self, key):
         value = self.get(key)
