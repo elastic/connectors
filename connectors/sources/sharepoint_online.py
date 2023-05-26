@@ -1,24 +1,17 @@
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from functools import partial, wraps
+from functools import partial
 
 import aiofiles
 import aiohttp
 import msal
-from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
-    CacheWithTimeout,
-    convert_to_b64,
-    get_pem_format,
-    url_encode,
-)
+from connectors.utils import CacheWithTimeout, convert_to_b64, url_encode
 
 GRAPH_API_URL = "https://graph.microsoft.com/v1.0"
 DEFAULT_RETRY_SECONDS = 30
@@ -275,8 +268,6 @@ class SharepointOnlineClient:
                 yield site_list
 
     async def site_list_item_attachments(self, site_web_url, list_title, list_item_id):
-        select = ""
-
         url = f"{site_web_url}/_api/lists/getByTitle('{list_title}')/items({list_item_id})?$expand=AttachmentFiles"
 
         list_item = await self._rest_api_client.fetch(url)
