@@ -3,12 +3,16 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import asyncio
 import json
 import logging
+import time
 from contextlib import contextmanager
 
+import pytest
+
 import connectors.logger
-from connectors.logger import logger, set_logger
+from connectors.logger import TracedAsyncGenerator, logger, set_logger, tracer
 
 
 @contextmanager
@@ -43,3 +47,86 @@ def test_logger_filebeat():
         # make sure it's JSON and we have service.type
         data = json.loads(ecs_log)
         assert data["service"]["type"] == "connectors-python"
+
+
+def test_tracer():
+    with unset_logger():
+        logger = set_logger(logging.DEBUG, filebeat=True)
+        logs = []
+
+        def _w(msg):
+            logs.append(msg)
+
+        logger.handlers[0].stream.write = _w
+
+        @tracer.start_as_current_span("trace me")
+        def traceable():
+            time.sleep(.1)
+
+        traceable()
+        ecs_log = logs[0]
+
+        # make sure it's JSON and we have service.type
+        data = json.loads(ecs_log)
+
+        assert data['message'].startswith(
+        'trace me traceable took 0.1'
+        )
+
+
+
+@pytest.mark.asyncio
+async def test_async_tracer():
+
+    with unset_logger():
+        logger = set_logger(logging.DEBUG, filebeat=True)
+        logs = []
+
+        def _w(msg):
+            logs.append(msg)
+
+        logger.handlers[0].stream.write = _w
+
+        @tracer.start_as_current_span("trace me", "special")
+        async def traceable():
+            time.sleep(.1)
+
+        await traceable()
+        ecs_log = logs[0]
+
+        # make sure it's JSON and we have service.type
+        data = json.loads(ecs_log)
+        assert data['message'].startswith(
+        'trace me special took 0.1'
+        )
+
+
+@pytest.mark.asyncio
+async def test_trace_async_gen():
+    with unset_logger():
+        logger = set_logger(logging.DEBUG, filebeat=True)
+        logs = []
+
+        def _w(msg):
+            logs.append(msg)
+
+        logger.handlers[0].stream.write = _w
+
+        async def gen():
+            yield '1'
+            yield '2'
+            yield '3'
+
+        gen = TracedAsyncGenerator(gen(), 'one')
+        async for i in gen:
+            pass
+
+        assert len(logs) == 4
+
+        ecs_log = logs[0]
+
+        # make sure it's JSON and we have service.type
+        data = json.loads(ecs_log)
+        assert data['message'].startswith(
+        'one took '
+        )

@@ -6,6 +6,7 @@
 """
 Logger -- sets the logging and provides a `logger` global object.
 """
+import inspect
 import logging
 import time
 from datetime import datetime
@@ -49,6 +50,7 @@ def set_logger(log_level=logging.INFO, filebeat=False):
     if logger is None:
         logging.setLoggerClass(ExtraLogger)
         logger = logging.getLogger("connectors")
+        logger.handlers.clear()
         handler = logging.StreamHandler()
         logger.addHandler(handler)
 
@@ -83,20 +85,39 @@ class CustomTracer:
     # spans as decorators, https://opentelemetry.io/docs/instrumentation/python/manual/#creating-spans-with-decorators
     def start_as_current_span(self, name, func_name=None):
         def _wrapped(func):
-            @wraps(func)
-            def __wrapped(*args, **kw):
-                nonlocal func_name
+            if inspect.iscoroutinefunction(func):
 
-                start = time.time()
-                try:
-                    return func(*args, **kw)
-                finally:
-                    delta = time.time() - start
-                    if func_name is None:
-                        func_name = func.__name__
-                    logger.debug(f"{name} {func_name} took {delta} seconds.")
+                @wraps(func)
+                async def __wrapped(*args, **kw):
+                    nonlocal func_name
 
-            return __wrapped
+                    start = time.time()
+                    try:
+                        return await func(*args, **kw)
+                    finally:
+                        delta = time.time() - start
+                        if func_name is None:
+                            func_name = func.__name__
+                        logger.debug(f"{name} {func_name} took {delta} seconds.")
+
+                return __wrapped
+
+            else:
+
+                @wraps(func)
+                def __wrapped(*args, **kw):
+                    nonlocal func_name
+
+                    start = time.time()
+                    try:
+                        return func(*args, **kw)
+                    finally:
+                        delta = time.time() - start
+                        if func_name is None:
+                            func_name = func.__name__
+                        logger.debug(f"{name} {func_name} took {delta} seconds.")
+
+                return __wrapped
 
         return _wrapped
 
