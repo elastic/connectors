@@ -2,6 +2,7 @@
         "name": "mysql",
         "index_name": "search-mysql",
         "service_type": "mysql",
+        "sync_cursor": null,
         "sync_now": true,
         "is_native": true,
         "api_key_id": null,

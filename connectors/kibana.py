@@ -216,6 +216,7 @@ async def prepare(service_type, index_name, config, connector_definition=None):
                 "reduce_whitespace": True,
                 "run_ml_inference": True,
             },
+            "sync_cursor": None,
             "sync_now": False,
             "is_native": True,
         }
