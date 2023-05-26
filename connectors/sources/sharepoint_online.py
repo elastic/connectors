@@ -358,7 +358,7 @@ class SharepointOnlineClient:
             yield attachment
 
     async def download_attachment(self, attachment_absolute_path, async_buffer):
-        await self._rest_api_client.pipe(attachment_absolute_path, async_buffer)
+        await self._rest_api_client.pipe(f"{attachment_absolute_path}/$value", async_buffer)
 
     async def site_pages(self, site_web_url):
         select = ""
