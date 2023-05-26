@@ -88,7 +88,7 @@ class CustomTracer:
             if inspect.iscoroutinefunction(func):
 
                 @wraps(func)
-                async def __wrapped(*args, **kw):
+                async def _awrapped(*args, **kw):
                     nonlocal func_name
 
                     start = time.time()
@@ -100,7 +100,7 @@ class CustomTracer:
                             func_name = func.__name__
                         logger.debug(f"{name} {func_name} took {delta} seconds.")
 
-                return __wrapped
+                return _awrapped
 
             else:
 
