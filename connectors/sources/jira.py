@@ -417,7 +417,7 @@ class JiraDataSource(BaseDataSource):
         except Exception as exception:
             raise Exception(
                 f"Unable to verify projects: {self.jira_client.projects}. Error: {exception}"
-            )
+            ) from exception
 
     async def _get_timezone(self):
         """Returns the timezone of the Jira deployment"""
