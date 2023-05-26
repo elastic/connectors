@@ -347,7 +347,7 @@ In addition to the connector index `.elastic-connectors`, we have an additional 
 **Possible values for `job_type`**
 - `full` -> A full sync job to sync all data.
 - `incremental` -> An incremental sync job to sync changes from the last sync job.
-- `permissions` -> A permission sync job to sync identities.
+- `permissions` -> A permissions sync job to sync identities.
 
 #### Elasticsearch mappings for `.elastic-connectors-sync-jobs`:
 ```
