@@ -316,6 +316,7 @@ async def test_all_connectors(mock_responses):
 
 @pytest.mark.asyncio
 async def test_connector_properties():
+    sync_cursor = {"foo": "bar"}
     connector_src = {
         "_id": "test",
         "_source": {
@@ -334,7 +335,8 @@ async def test_connector_properties():
             "last_sync_status": "completed",
             "pipeline": {},
             "last_sync_scheduled_at": iso_utc(),
-            "last_permissions_sync_scheduled_at": iso_utc()
+            "last_permissions_sync_scheduled_at": iso_utc(),
+            "sync_cursor": sync_cursor,
         },
     }
 
@@ -352,6 +354,7 @@ async def test_connector_properties():
     assert connector.last_sync_status == JobStatus.COMPLETED
     assert connector.permissions_scheduling["enabled"]
     assert connector.permissions_scheduling["interval"] == "* * * * *"
+    assert connector.sync_cursor == sync_cursor
     assert isinstance(connector.last_seen, datetime)
     assert isinstance(connector.filtering, Filtering)
     assert isinstance(connector.pipeline, Pipeline)
@@ -1090,6 +1093,31 @@ async def test_connector_update_last_sync_scheduled_at():
     index.update.assert_awaited_once_with(
         doc_id=doc_id,
         doc={"last_sync_scheduled_at": new_ts.isoformat()},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.asyncio
+async def test_connector_update_last_permissions_sync_scheduled_at():
+    doc_id = "2"
+    seq_no = 2
+    primary_term = 1
+    new_ts = datetime.utcnow() + timedelta(seconds=30)
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    index = Mock()
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.update_last_permissions_sync_scheduled_at(new_ts)
+
+    index.update.assert_awaited_once_with(
+        doc_id=doc_id,
+        doc={"last_permissions_sync_scheduled_at": new_ts.isoformat()},
         if_seq_no=seq_no,
         if_primary_term=primary_term,
     )

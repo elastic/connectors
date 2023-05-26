@@ -540,6 +540,10 @@ class Connector(ESDocument):
     def last_permissions_sync_scheduled_at(self):
         return self._property_as_datetime("last_permissions_sync_scheduled_at")
 
+    @property
+    def sync_cursor(self):
+        return self.get("sync_cursor")
+
     async def heartbeat(self, interval):
         if (
             self.last_seen is None
@@ -567,6 +571,14 @@ class Connector(ESDocument):
         await self.index.update(
             doc_id=self.id,
             doc={"last_sync_scheduled_at": new_ts.isoformat()},
+            if_seq_no=self._seq_no,
+            if_primary_term=self._primary_term,
+        )
+
+    async def update_last_permissions_sync_scheduled_at(self, new_ts):
+        await self.index.update(
+            doc_id=self.id,
+            doc={"last_permissions_sync_scheduled_at": new_ts.isoformat()},
             if_seq_no=self._seq_no,
             if_primary_term=self._primary_term,
         )

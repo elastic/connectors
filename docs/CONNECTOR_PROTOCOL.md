@@ -135,6 +135,7 @@ This is our main communication index, used to communicate the connector's config
   };
   service_type: string; -> Service type of the connector
   status: string;       -> Connector status Enum, see below
+  sync_cursor: object;  -> Cursor object of the last sync job, used to run incremental sync
   sync_now: boolean;    -> Flag to signal user wants to initiate a job
 }
 ```
@@ -270,6 +271,7 @@ This is our main communication index, used to communicate the connector's config
     },
     "service_type" : { "type" : "keyword" },
     "status" : { "type" : "keyword" },
+    "sync_cursor" : { "type" : "object" },
     "sync_now" : { "type" : "boolean" }
   }
 }

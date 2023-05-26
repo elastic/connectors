@@ -2,16 +2,11 @@
 
 ![logo](logo-enterprise-search.png)
 
-The home of Elastic connector service and native connectors in Python language. This repository contains the framework for customizing Elastic native connectors, or writing your own connectors for advanced use cases.
-
-If you are looking for the implementation in Ruby, See [connectors-ruby](https://github.com/elastic/connectors-ruby).
+The home of Elastic connector service and native connectors written in Python. This repository contains the framework for customizing Elastic native connectors, or writing your own connectors for advanced use cases.
 
 **The connector will be operated by an administrative user from within Kibana.**
 
-> Note: The connector framework is a beta feature. Beta
-> features are subject to change and are not covered by the support SLA of
-> general release (GA) features. Elastic plans to promote this feature to GA in
-> a future release.
+See the [official end-user documentation](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ## Guides
 
@@ -22,9 +17,10 @@ If you are looking for the implementation in Ruby, See [connectors-ruby](https:/
 - [Connectors Reference](docs/REFERENCE.md)
 - [Security Policy](docs/SECURITY.md)
 - [Elastic-internal guide](docs/INTERNAL.md)
-- [Connector Protocol](https://github.com/elastic/connectors-python/blob/main/docs/CONNECTOR_PROTOCOL.md)
+- [Connector Protocol](docs/CONNECTOR_PROTOCOL.md)
 - [Configuration](docs/CONFIG.md)
 - [Contribution guide](docs/CONTRIBUTING.md)
+- [Upgrading](docs/UPGRADING.md)
 
 ### Advanced sync rules
 
