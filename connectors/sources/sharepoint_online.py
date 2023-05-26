@@ -8,6 +8,7 @@ import aiohttp
 import msal
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
+from bs4 import BeautifulSoup
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
@@ -517,6 +518,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                 async for site_page in self._client.site_pages(site["webUrl"]):
                     site_page["_id"] = site_page["GUID"]
                     site_page["object_type"] = "site_page"
+                    if "LayoutWebpartsContent" in site_page and site_page["LayoutWebpartsContent"]:
+                        site_page["LayoutWebpartsContent"] = BeautifulSoup(site_page["LayoutWebpartsContent"], features="html.parser").get_text()
+                    if "CanvasContent1" in site_page and site_page["CanvasContent1"]:
+                        site_page["CanvasContent1"] = BeautifulSoup(site_page["CanvasContent1"], features="html.parser").get_text()
                     yield site_page, None
 
     async def get_attachment(self, attachment, timestamp=None, doit=False):
