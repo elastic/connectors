@@ -81,16 +81,20 @@ def set_extra_logger(logger, log_level=logging.INFO, prefix="BYOC", filebeat=Fal
 # we will use the otel API and exporter
 class CustomTracer:
     # spans as decorators, https://opentelemetry.io/docs/instrumentation/python/manual/#creating-spans-with-decorators
-    def start_as_current_span(self, name):
+    def start_as_current_span(self, name, func_name=None):
         def _wrapped(func):
             @wraps(func)
             def __wrapped(*args, **kw):
+                nonlocal func_name
+
                 start = time.time()
                 try:
                     return func(*args, **kw)
                 finally:
                     delta = time.time() - start
-                    logger.debug(f"{name} {func.__name__} took {delta} seconds.")
+                    if func_name is None:
+                        func_name = func.__name__
+                    logger.debug(f"{name} {func_name} took {delta} seconds.")
 
             return __wrapped
 
@@ -98,6 +102,23 @@ class CustomTracer:
 
 
 tracer = CustomTracer()
+
+
+class TracedAsyncGenerator:
+    def __init__(self, generator, name):
+        self.gen = generator
+        self.name = name
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        start = time.time()
+        try:
+            return await self.gen.__anext__()
+        finally:
+            delta = time.time() - start
+            logger.debug(f"{self.name} took {delta} seconds.")
 
 
 set_logger()

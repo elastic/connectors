@@ -29,7 +29,7 @@ from elasticsearch.helpers import async_scan
 
 from connectors.es import ESClient
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
-from connectors.logger import logger, tracer
+from connectors.logger import TracedAsyncGenerator, logger, tracer
 from connectors.protocol import Filter
 from connectors.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
@@ -340,6 +340,8 @@ class Extractor:
         Extraction happens in a separate task, when a document contains files.
         """
         logger.info("Starting doc lookups")
+        generator = TracedAsyncGenerator(generator, "get a doc")
+
         self.sync_runs = True
 
         start = time.time()
