@@ -9,7 +9,7 @@ import asyncio
 import os
 from datetime import datetime
 from functools import partial
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 import aiofiles
 import aiohttp
@@ -322,8 +322,12 @@ class SharepointClient:
             return
 
         source_file_name = ""
+        format_filename = filename.replace("'", "''")
+
         if self.is_cloud:
-            response_data = await self.get_site_page_for_online(site_url, filename)
+            response_data = await self.get_site_page_for_online(
+                site_url, quote(format_filename)
+            )
         else:
             response_data = list_response["WikiField"]
 
@@ -570,7 +574,7 @@ class SharepointClient:
         ):
             for result in list_items_data:
                 if not result.get("Attachments"):
-                    url = f"{self.host_url}{server_relative_url}/DispForm.aspx?ID={result['Id']}&Source={self.host_url}{server_relative_url}/AllItems.aspx&ContentTypeId={result['ContentTypeId']}"
+                    url = f"{self.host_url}{quote(server_relative_url)}/DispForm.aspx?ID={result['Id']}&Source={self.host_url}{quote(server_relative_url)}/AllItems.aspx&ContentTypeId={result['ContentTypeId']}"
                     result["url"] = url
                     yield result, file_relative_url
                     continue
@@ -813,7 +817,8 @@ class SharepointDataSource(BaseDataSource):
         document = {"type": document_type}
 
         document["url"] = urljoin(
-            self.sharepoint_client.host_url, item["RootFolder"]["ServerRelativeUrl"]
+            self.sharepoint_client.host_url,
+            quote(item["RootFolder"]["ServerRelativeUrl"]),
         )
 
         self.map_document_with_schema(
@@ -856,7 +861,7 @@ class SharepointDataSource(BaseDataSource):
                 "size": item.get("File", {}).get("Length", 0),
                 "url": urljoin(
                     self.sharepoint_client.host_url,
-                    item[item_type]["ServerRelativeUrl"],
+                    quote(item[item_type]["ServerRelativeUrl"]),
                 ),
                 "type": item_type,
             }
