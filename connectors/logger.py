@@ -7,7 +7,9 @@
 Logger -- sets the logging and provides a `logger` global object.
 """
 import logging
+import time
 from datetime import datetime
+from functools import wraps
 
 import ecs_logging
 
@@ -70,6 +72,32 @@ def set_extra_logger(logger, log_level=logging.INFO, prefix="BYOC", filebeat=Fal
     handler.setLevel(log_level)
     logger.addHandler(handler)
     logger.setLevel(log_level)
+
+
+#
+# metrics APIs that follow the open-telemetry APIs
+#
+# For now everything is dropped into the logger, but later on
+# we will use the otel API and exporter
+class CustomTracer:
+    # spans as decorators, https://opentelemetry.io/docs/instrumentation/python/manual/#creating-spans-with-decorators
+    def start_as_current_span(self, name):
+        def _wrapped(func):
+            @wraps(func)
+            def __wrapped(*args, **kw):
+                start = time.time()
+                try:
+                    return func(*args, **kw)
+                finally:
+                    delta = time.time() - start
+                    logger.debug(f"{name} {func.__name__} took {delta} seconds.")
+
+            return __wrapped
+
+        return _wrapped
+
+
+tracer = CustomTracer()
 
 
 set_logger()
