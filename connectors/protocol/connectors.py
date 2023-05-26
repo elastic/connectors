@@ -575,6 +575,14 @@ class Connector(ESDocument):
             if_primary_term=self._primary_term,
         )
 
+    async def update_last_permissions_sync_scheduled_at(self, new_ts):
+        await self.index.update(
+            doc_id=self.id,
+            doc={"last_permissions_sync_scheduled_at": new_ts.isoformat()},
+            if_seq_no=self._seq_no,
+            if_primary_term=self._primary_term,
+        )
+
     async def sync_starts(self):
         doc = {
             "last_sync_status": JobStatus.IN_PROGRESS.value,
