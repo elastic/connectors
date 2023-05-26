@@ -23,8 +23,7 @@ from connectors.utils import (
 DEFAULT_RETRY_SECONDS = 30
 
 
-
-class GraphAPIToken:
+class MSToken:
     def __init__(self, tenant_id, tenant_name, client_id, client_secret):
         self._tenant_id = tenant_id
         self._tenant_name = tenant_name
@@ -33,12 +32,27 @@ class GraphAPIToken:
 
         self._token_cache = CacheWithTimeout()
 
-    def get(self):
+    async def get(self):
         cached_value = self._token_cache.get()
 
         if cached_value:
             return cached_value
 
+        now = datetime.now()  # We measure now before request to be on a pessimistic side
+        access_token, expires_in = await self._fetch_token()
+        self._token_cache.set(access_token, now + timedelta(expires_in))
+
+        return access_token
+
+    async def _fetch_token(self):
+        raise NotImplementedError
+
+
+class GraphAPIToken(MSToken):
+    def __init__(self, tenant_id, tenant_name, client_id, client_secret):
+        super().__init__(tenant_id, tenant_name, client_id, client_secret)
+
+    async def _fetch_token(self):
         # MSAL is not async, sigh
         authority = f"https://login.microsoftonline.com/{self._tenant_id}"
         scope = "https://graph.microsoft.com/.default"
@@ -48,15 +62,13 @@ class GraphAPIToken:
             client_credential=self._client_secret,
             authority=authority,
         )
-        now = datetime.now()
         result = app.acquire_token_for_client(scopes=[scope])
 
         if "access_token" in result:
             access_token = result["access_token"]
-            expires_in = result["expires_in"]
+            expires_in = int(result["expires_in"])
 
-            self._token_cache.set(access_token, now + timedelta(expires_in))
-            return access_token
+            return access_token, expires_in
         else:
             raise Exception(result.get("error"))
 
@@ -101,7 +113,8 @@ class GraphAPISession:
     async def _call_api(self, absolute_url):
         while True:
             try:
-                headers = {"authorization": f"Bearer {self._graph_api_token.get()}"}
+                token = await self._graph_api_token.get()
+                headers = {"authorization": f"Bearer {token}"}
 
                 async with self._http_session.get(
                     absolute_url,
@@ -135,23 +148,12 @@ class GraphAPISession:
                 raise
 
 
-class RestAPIToken:
+class RestAPIToken(MSToken):
     def __init__(self, http_session, tenant_id, tenant_name, client_id, client_secret):
+        super().__init__(tenant_id, tenant_name, client_id, client_secret)
         self._http_session = http_session
 
-        self._tenant_id = tenant_id
-        self._tenant_name = tenant_name
-        self._client_id = client_id
-        self._client_secret = client_secret
-
-        self._token_cache = CacheWithTimeout()
-
-    async def get(self):
-        cached_value = self._token_cache.get()
-
-        if cached_value:
-            return cached_value
-
+    async def _fetch_token(self):
         url = f"https://accounts.accesscontrol.windows.net/{self._tenant_id}/tokens/OAuth/2"
         # GUID in resource is always a constant used to create access token
         data = {
@@ -162,15 +164,12 @@ class RestAPIToken:
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-        now = datetime.now()
         async with self._http_session.post(url, headers=headers, data=data) as resp:
             json_response = await resp.json()
             access_token = json_response["access_token"]
             expires_in = int(json_response["expires_in"])
 
-            self._token_cache.set(access_token, now + timedelta(expires_in))
-
-            return access_token
+            return access_token, expires_in
 
 
 class RestAPISession:
