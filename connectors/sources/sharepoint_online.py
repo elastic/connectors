@@ -18,7 +18,28 @@ DEFAULT_RETRY_SECONDS = 30
 FILE_WRITE_CHUNK_SIZE = 1024
 
 
-class MSToken:
+class MicrosoftSecurityToken:
+    """Abstract token for connecting to one of Microsoft Azure services.
+
+    This class is an abstract base class for getting auth token.
+
+    It takes care of caching the token and asking for new token once the
+    token expires.
+
+    Classes that inherit from this class need to implement `async def _fetch_token(self)` method
+    that needs to return a tuple: access_token<str> and expires_in<int>.
+
+    To read more about tenants and authentication, see:
+        - https://learn.microsoft.com/en-us/azure/active-directory/develop/quickstart-create-new-tenant
+        - https://learn.microsoft.com/en-us/azure/active-directory/develop/quickstart-register-app
+
+    Args:
+        tenant_id (str): Azure AD Tenant Id
+        tenant_name (str): Azure AD Tenant Name
+        client_id (str): Azure App Client Id
+        client_secret (str): Azure App Client Secret Value
+    """
+
     def __init__(self, tenant_id, tenant_name, client_id, client_secret):
         self._tenant_id = tenant_id
         self._tenant_name = tenant_name
@@ -26,6 +47,16 @@ class MSToken:
         self._client_secret = client_secret
 
         self._token_cache = CacheWithTimeout()
+
+    """Get bearer token for provided credentials.
+
+    If token has been retrieved, it'll be taken from the cache.
+    Otherwise, call to `_fetch_token` is made to fetch the token
+    from 3rd-party service.
+
+    Returns:
+        str: bearer token for one of Microsoft services
+    """
 
     async def get(self):
         cached_value = self._token_cache.get()
@@ -41,13 +72,38 @@ class MSToken:
 
         return access_token
 
+    """Fetch token from Microsoft service.
+
+    This method needs to be implemented in the class that inherits MicrosoftSecurityToken.
+
+    Returns:
+        (str, int) - a tuple containing access token as a string and number of seconds it will be valid for as an integer
+    """
+
     async def _fetch_token(self):
         raise NotImplementedError
 
 
-class GraphAPIToken(MSToken):
+class GraphAPIToken(MicrosoftSecurityToken):
+    """Bearer token to connect to Graph API
+
+    We use Graph API to retrieve as much as possible due to higher rate limiting thresholds.
+
+    Args:
+        tenant_id (str): Azure AD Tenant Id
+        tenant_name (str): Azure AD Tenant Name
+        client_id (str): Azure App Client Id
+        client_secret (str): Azure App Client Secret Value
+    """
+
     def __init__(self, tenant_id, tenant_name, client_id, client_secret):
         super().__init__(tenant_id, tenant_name, client_id, client_secret)
+
+    """Fetch API token for usage with Graph API
+
+    Returns:
+        (str, int) - a tuple containing access token as a string and number of seconds it will be valid for as an integer
+    """
 
     async def _fetch_token(self):
         # MSAL is not async, sigh
@@ -70,10 +126,61 @@ class GraphAPIToken(MSToken):
             raise Exception(result.get("error"))
 
 
+class SharepointRestAPIToken(MicrosoftSecurityToken):
+    """Bearer token to connect to Sharepoint REST API
+
+    We use REST API to retrieve information that is not available in Graph API yet.
+
+    When Graph API will have all features we'll stop using this API.
+
+    Args:
+        http_session (aiohttp.ClientSession): HTTP Client Session
+        tenant_id (str): Azure AD Tenant Id
+        tenant_name (str): Azure AD Tenant Name
+        client_id (str): Azure App Client Id
+        client_secret (str): Azure App Client Secret Value
+    """
+
+    def __init__(self, http_session, tenant_id, tenant_name, client_id, client_secret):
+        super().__init__(tenant_id, tenant_name, client_id, client_secret)
+        self._http_session = http_session
+
+    """Fetch API token for usage with Sharepoint REST API
+
+    Returns:
+        (str, int) - a tuple containing access token as a string and number of seconds it will be valid for as an integer
+    """
+
+    async def _fetch_token(self):
+        url = f"https://accounts.accesscontrol.windows.net/{self._tenant_id}/tokens/OAuth/2"
+        # GUID in resource is always a constant used to create access token
+        data = {
+            "grant_type": "client_credentials",
+            "resource": f"00000003-0000-0ff1-ce00-000000000000/{self._tenant_name}.sharepoint.com@{self._tenant_id}",
+            "client_id": f"{self._client_id}@{self._tenant_id}",
+            "client_secret": self._client_secret,
+        }
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+        async with self._http_session.post(url, headers=headers, data=data) as resp:
+            json_response = await resp.json()
+            access_token = json_response["access_token"]
+            expires_in = int(json_response["expires_in"])
+
+            return access_token, expires_in
+
+
 class MicrosoftAPISession:
-    def __init__(self, http_session, graph_api_token):
+    def __init__(self, http_session, graph_api_token, scroll_field):
         self._http_session = http_session
         self._graph_api_token = graph_api_token
+
+        # So, Graph API and Sharepoint API scroll over slightly different fields:
+        # - odata.nextPage for Sharepoint REST API uses
+        # - @odata.nextPage for Graph API uses - notice the @ glyph
+        # Therefore for flexibility I made it a field passed in the initializer,
+        # but this abstraction can be better.
+        self._scroll_field = scroll_field
 
     async def fetch(self, url):
         return await self._get_json(url)
@@ -91,8 +198,8 @@ class MicrosoftAPISession:
             # We're yielding the whole page here, not one item
             yield graph_data["value"]
 
-            if "@odata.nextLink" in graph_data:
-                scroll_url = graph_data["@odata.nextLink"]
+            if self._scroll_field in graph_data:
+                scroll_url = graph_data[self._scroll_field]
             else:
                 break
 
@@ -114,7 +221,6 @@ class MicrosoftAPISession:
                     yield resp
                     return
             except ClientResponseError as e:
-                print(f"Got {e.status}")
                 if e.status == 429 or e.status == 503:
                     response_headers = e.headers or {}
                     retry_seconds = None
@@ -131,36 +237,12 @@ class MicrosoftAPISession:
 
                     await asyncio.sleep(retry_seconds)
                 else:
-                    print(e)
+                    print(e)  # TODO: fix
                     raise
             except Exception as e:
-                print("Got something else")
-                print(e)
+                print("Got something else")  # TODO: fix
+                print(e)  # TODO: fix
                 raise
-
-
-class RestAPIToken(MSToken):
-    def __init__(self, http_session, tenant_id, tenant_name, client_id, client_secret):
-        super().__init__(tenant_id, tenant_name, client_id, client_secret)
-        self._http_session = http_session
-
-    async def _fetch_token(self):
-        url = f"https://accounts.accesscontrol.windows.net/{self._tenant_id}/tokens/OAuth/2"
-        # GUID in resource is always a constant used to create access token
-        data = {
-            "grant_type": "client_credentials",
-            "resource": f"00000003-0000-0ff1-ce00-000000000000/{self._tenant_name}.sharepoint.com@{self._tenant_id}",
-            "client_id": f"{self._client_id}@{self._tenant_id}",
-            "client_secret": self._client_secret,
-        }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
-        async with self._http_session.post(url, headers=headers, data=data) as resp:
-            json_response = await resp.json()
-            access_token = json_response["access_token"]
-            expires_in = int(json_response["expires_in"])
-
-            return access_token, expires_in
 
 
 class SharepointOnlineClient:
@@ -180,15 +262,15 @@ class SharepointOnlineClient:
         self._graph_api_token = GraphAPIToken(
             tenant_id, tenant_name, client_id, client_secret
         )
-        self._rest_api_token = RestAPIToken(
+        self._rest_api_token = SharepointRestAPIToken(
             self._http_session, tenant_id, tenant_name, client_id, client_secret
         )
 
         self._graph_api_client = MicrosoftAPISession(
-            self._http_session, self._graph_api_token
+            self._http_session, self._graph_api_token, "@odata.nextLink"
         )
         self._rest_api_client = MicrosoftAPISession(
-            self._http_session, self._rest_api_token
+            self._http_session, self._rest_api_token, "odata.nextLink"
         )
 
     async def site_collections(self):
@@ -280,7 +362,7 @@ class SharepointOnlineClient:
 
     async def site_pages(self, site_web_url):
         select = ""
-        url = f"{site_web_url}/_api/web/lists/getbytitle('Site%20Pages')/items?$top=5&$select={select}"
+        url = f"{site_web_url}/_api/web/lists/getbytitle('Site%20Pages')/items?$select={select}"
 
         async for page in self._rest_api_client.scroll(url):
             for site_page in page:
@@ -319,7 +401,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "str",
                 "value": "",
             },
-            "tenant_name": {  # TODO: actually call graph api for this
+            "tenant_name": {  # TODO: when Tenant API is going out of Beta, we can remove this field
                 "label": "Tenant Name",
                 "order": 2,
                 "type": "str",
@@ -354,7 +436,6 @@ class SharepointOnlineDataSource(BaseDataSource):
         pass
 
     async def get_docs(self, filtering=None):
-        list_item_types = {}
         async for site_collection in self._client.site_collections():
             site_collection["_id"] = site_collection["webUrl"]
             site_collection["object_type"] = "site_collection"
@@ -406,12 +487,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                         list_item["object_type"] = "list_item"
                         content_type = list_item["contentType"]["name"]
 
-                        if content_type == "Web Template Extensions":
+                        if (
+                            content_type == "Web Template Extensions"
+                        ):  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
                             continue
-
-                        if content_type not in list_item_types:
-                            list_item_types[content_type] = 0
-                        list_item_types[content_type] += 1
 
                         if "Attachments" in list_item["fields"]:
                             async for list_item_attachment in self._client.site_list_item_attachments(
@@ -439,8 +518,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                     site_page["_id"] = site_page["GUID"]
                     site_page["object_type"] = "site_page"
                     yield site_page, None
-
-        print(list_item_types)
 
     async def get_attachment(self, attachment, timestamp=None, doit=False):
         if not doit:
