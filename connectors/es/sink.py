@@ -113,7 +113,7 @@ class Sink:
 
         raise TypeError(operation)
 
-    @tracer.start_as_current_span("_bulk API call")
+    @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
         # TODO: treat result to retry errors like in async_streaming_bulk
         task_num = len(self.bulk_tasks)

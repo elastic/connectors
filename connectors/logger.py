@@ -83,22 +83,27 @@ def set_extra_logger(logger, log_level=logging.INFO, prefix="BYOC", filebeat=Fal
 # we will use the otel API and exporter
 class CustomTracer:
     # spans as decorators, https://opentelemetry.io/docs/instrumentation/python/manual/#creating-spans-with-decorators
-    def start_as_current_span(self, name, func_name=None):
+    def start_as_current_span(self, name, func_name=None, slow_log=None):
         def _wrapped(func):
             if inspect.iscoroutinefunction(func):
 
                 @wraps(func)
                 async def _awrapped(*args, **kw):
                     nonlocal func_name
+                    nonlocal slow_log
 
                     start = time.time()
                     try:
                         return await func(*args, **kw)
                     finally:
                         delta = time.time() - start
-                        if func_name is None:
-                            func_name = func.__name__
-                        logger.debug(f"{name} {func_name} took {delta} seconds.")
+
+                        if slow_log is None or (
+                            slow_log is not None and delta > slow_log
+                        ):
+                            if func_name is None:
+                                func_name = func.__name__
+                            logger.debug(f"{name} {func_name} took {delta} seconds.")
 
                 return _awrapped
 
@@ -113,9 +118,12 @@ class CustomTracer:
                         return func(*args, **kw)
                     finally:
                         delta = time.time() - start
-                        if func_name is None:
-                            func_name = func.__name__
-                        logger.debug(f"{name} {func_name} took {delta} seconds.")
+                        if slow_log is None or (
+                            slow_log is not None and delta > slow_log
+                        ):
+                            if func_name is None:
+                                func_name = func.__name__
+                            logger.debug(f"{name} {func_name} took {delta} seconds.")
 
                 return __wrapped
 

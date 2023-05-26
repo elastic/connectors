@@ -102,6 +102,33 @@ async def test_async_tracer():
 
 
 @pytest.mark.asyncio
+async def test_async_tracer_slow():
+
+    with unset_logger():
+        logger = set_logger(logging.DEBUG, filebeat=True)
+        logs = []
+
+        def _w(msg):
+            logs.append(msg)
+
+        logger.handlers[0].stream.write = _w
+
+        @tracer.start_as_current_span("trace me", "special", slow_log=10)
+        async def traceable():
+            time.sleep(.1)
+
+        await traceable()
+        assert(len(logs)) == 0
+
+        @tracer.start_as_current_span("trace me", "special", slow_log=0.01)
+        async def traceable_slow():
+            time.sleep(.1)
+
+        await traceable_slow()
+        assert(len(logs)) == 1
+
+
+@pytest.mark.asyncio
 async def test_trace_async_gen():
     with unset_logger():
         logger = set_logger(logging.DEBUG, filebeat=True)
