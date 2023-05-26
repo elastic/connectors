@@ -38,6 +38,7 @@ from connectors.protocol import (
     SyncJob,
     SyncJobIndex,
 )
+from connectors.protocol.connectors import JobType
 from connectors.source import BaseDataSource
 from connectors.utils import iso_utc
 from tests.commons import AsyncIterator
@@ -315,6 +316,7 @@ async def test_all_connectors(mock_responses):
 
 @pytest.mark.asyncio
 async def test_connector_properties():
+    sync_cursor = {"foo": "bar"}
     connector_src = {
         "_id": "test",
         "_source": {
@@ -333,7 +335,8 @@ async def test_connector_properties():
             "last_sync_status": "completed",
             "pipeline": {},
             "last_sync_scheduled_at": iso_utc(),
-            "last_permissions_sync_scheduled_at": iso_utc()
+            "last_permissions_sync_scheduled_at": iso_utc(),
+            "sync_cursor": sync_cursor,
         },
     }
 
@@ -351,6 +354,7 @@ async def test_connector_properties():
     assert connector.last_sync_status == JobStatus.COMPLETED
     assert connector.permissions_scheduling["enabled"]
     assert connector.permissions_scheduling["interval"] == "* * * * *"
+    assert connector.sync_cursor == sync_cursor
     assert isinstance(connector.last_seen, datetime)
     assert isinstance(connector.filtering, Filtering)
     assert isinstance(connector.pipeline, Pipeline)
@@ -549,6 +553,7 @@ async def test_sync_job_properties():
         "_id": "test",
         "_source": {
             "status": "error",
+            "job_type": "permissions",
             "error": "something wrong",
             "indexed_document_count": 10,
             "indexed_document_volume": 20,
@@ -581,8 +586,12 @@ async def test_sync_job_properties():
     assert sync_job.indexed_document_volume == 20
     assert sync_job.deleted_document_count == 30
     assert sync_job.total_document_count == 100
+
     assert isinstance(sync_job.filtering, Filter)
     assert isinstance(sync_job.pipeline, Pipeline)
+
+    assert sync_job.job_type == JobType.PERMISSIONS
+    assert isinstance(sync_job.job_type, JobType)
 
 
 @pytest.mark.asyncio
@@ -1418,6 +1427,7 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
                 Features.ADVANCED_RULES_NEW: False,
                 Features.BASIC_RULES_OLD: False,
                 Features.ADVANCED_RULES_OLD: False,
+                Features.DOCUMENT_LEVEL_SECURITY: False
             },
         ),
         (
@@ -1427,8 +1437,29 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
                 Features.ADVANCED_RULES_NEW: False,
                 Features.BASIC_RULES_OLD: False,
                 Features.ADVANCED_RULES_OLD: False,
+                Features.DOCUMENT_LEVEL_SECURITY: False
             },
         ),
+        (
+            {
+                "document_level_security": {
+                    "enabled": True
+                }
+            },
+            {
+                Features.DOCUMENT_LEVEL_SECURITY: True
+            }
+        ),
+        (
+            {
+                "document_level_security": {
+                    "enabled": False
+                }
+            },
+            {
+                Features.DOCUMENT_LEVEL_SECURITY: False
+            }
+        )
     ],
 )
 def test_feature_enabled(features_json, feature_enabled):
