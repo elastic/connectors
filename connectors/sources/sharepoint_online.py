@@ -11,50 +11,17 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
 
 from connectors.source import BaseDataSource
+from connectors.logger import logger
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     convert_to_b64,
     get_pem_format,
     url_encode,
+    CacheWithTimeout
 )
 
+DEFAULT_RETRY_SECONDS = 30
 
-def profile_time(f):
-    def wrapper(*args, **kargs):
-        before = datetime.now()
-        result = f(*args, **kargs)
-        after = datetime.now()
-        print(
-            f"Took {(after - before).total_seconds() * 1000} milliseconds to call {f.__name__}"
-        )
-        return result
-
-    return wrapper
-
-
-class CacheWithTimeout:
-    def __init__(self, default_expiration_time):
-        self._default_expiration_time = default_expiration_time  # in seconds
-
-        self._value = None
-        self._expiration_date = None
-
-    def get(self):
-        if self._value:
-            if (
-                self._expiration_date
-                and self._expiration_date
-                > datetime.now() - timedelta(self._default_expiration_time)
-            ):
-                return self._value
-
-        self._value = None
-
-        return None
-
-    def set(self, value, expiration_date):
-        self._value = value
-        self._expiration_date = expiration_date
 
 
 class GraphAPIToken:
@@ -64,7 +31,7 @@ class GraphAPIToken:
         self._client_id = client_id
         self._client_secret = client_secret
 
-        self._token_cache = CacheWithTimeout(30)  # TODO: make a constant
+        self._token_cache = CacheWithTimeout()
 
     def get(self):
         cached_value = self._token_cache.get()
@@ -95,7 +62,7 @@ class GraphAPIToken:
 
 
 class GraphAPISession:
-    BASE_URL = "https://graph.microsoft.com/v1.0/"
+    BASE_URL = "https://graph.microsoft.com/v1.0"
 
     def __init__(self, http_session, graph_api_token):
         self._http_session = http_session
@@ -145,16 +112,15 @@ class GraphAPISession:
             except ClientResponseError as e:
                 print(f"Got {e.status}")
                 if e.status == 429 or e.status == 503:
-                    print(e.headers)
                     response_headers = e.headers or {}
                     retry_seconds = None
                     if "Retry-After" in response_headers:
                         retry_seconds = int(response_headers["Retry-After"])
                     else:
-                        print(
-                            "Response Code from Sharepoint Server is 429 but Retry-After header is not found"
+                        logger.warning(
+                            "Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
                         )
-                        retry_seconds = 30
+                        retry_seconds = DEFAULT_RETRY_SECONDS
                     print(
                         f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
                     )
@@ -178,7 +144,7 @@ class RestAPIToken:
         self._client_id = client_id
         self._client_secret = client_secret
 
-        self._token_cache = CacheWithTimeout(30)  # TODO: make a constant
+        self._token_cache = CacheWithTimeout()
 
     async def get(self):
         cached_value = self._token_cache.get()
@@ -284,7 +250,6 @@ class SharepointOnlineClient:
             self._http_session, self._rest_api_token, tenant_name
         )
 
-    @profile_time
     async def site_collections(self):
         filter_ = url_encode("siteCollection/root ne null")
         select = "siteCollection,webUrl"
@@ -295,7 +260,6 @@ class SharepointOnlineClient:
             for site_collection in page:
                 yield site_collection
 
-    @profile_time
     async def sites(self, site_collection):
         filter_ = ""
         select = ""
@@ -306,7 +270,6 @@ class SharepointOnlineClient:
             for site in page:
                 yield site
 
-    @profile_time
     async def site_drives(self, site_id):
         select = ""
 
@@ -316,7 +279,6 @@ class SharepointOnlineClient:
             for site_drive in page:
                 yield site_drive
 
-    @profile_time
     async def drive_items(self, drive_id):
         select = ""
 
@@ -340,13 +302,11 @@ class SharepointOnlineClient:
                         directory_stack.append(drive_item["id"])
                     yield drive_item
 
-    @profile_time
     async def download_drive_item(self, drive_id, item_id, async_buffer):
         await self._graph_api_client.pipe(
             f"drives/{drive_id}/items/{item_id}/content", async_buffer
         )
 
-    @profile_time
     async def site_lists(self, site_id):
         select = ""
 
@@ -356,7 +316,6 @@ class SharepointOnlineClient:
             for site_list in page:
                 yield site_list
 
-    @profile_time
     async def site_list_items(self, site_id, list_id):
         select = ""
         expand = "fields"
@@ -367,7 +326,6 @@ class SharepointOnlineClient:
             for site_list in page:
                 yield site_list
 
-    @profile_time
     async def site_list_item_attachments(self, site_web_url, list_name, list_item_id):
         select = ""
 
@@ -382,11 +340,7 @@ class SharepointOnlineClient:
             attachment_absolute_path, async_buffer
         )
 
-    @profile_time
     async def site_pages(self, site_web_url):
-        # select = "Title,CanvasContent1,FileLeafRef"
-        select = ""
-
         async for page in self._rest_api_client.get_site_pages(site_web_url):
             for site_page in page:
                 yield site_page
@@ -412,6 +366,8 @@ class SharepointOnlineDataSource(BaseDataSource):
         self._client = SharepointOnlineClient(
             tenant_id, tenant_name, client_id, client_secret
         )
+
+        self.site_collections_to_sync = self.configuration["site_collections"]
 
     @classmethod
     def get_default_configuration(cls):
@@ -444,6 +400,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "value": "",
                 "required": False,
             },
+            "site_collections": {
+                "display": "textarea",
+                "label": "Comma-separated list of SharePoint site collections to index",
+                "order": 5,
+                "type": "list",
+                "value": "",
+            },
         }
 
     async def validate_config(self):
@@ -456,9 +419,14 @@ class SharepointOnlineDataSource(BaseDataSource):
             site_collection["object_type"] = "site_collection"
             yield site_collection, None
 
+
             async for site in self._client.sites(
                 site_collection["siteCollection"]["hostname"]
             ):
+                # TODO: simplify and eliminate root call
+                if site["name"] not in self.site_collections_to_sync:
+                    continue
+
                 site["_id"] = site["id"]
                 site["object_type"] = "site"
                 yield site, None
