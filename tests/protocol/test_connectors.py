@@ -1819,4 +1819,3 @@ def test_pipeline_properties(key, value, default_value):
 )
 def test_get_advanced_rules(filtering, expected_advanced_rules):
     assert Filter(filtering).get_advanced_rules() == expected_advanced_rules
-    
