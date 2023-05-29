@@ -149,6 +149,7 @@ async def prepare(service_type, index_name, config, connector_definition=None):
             "language": "en",
             # Last sync
             "last_sync_status": None,
+            "last_permissions_sync_status": None,
             "last_sync_error": None,
             "last_sync_scheduled_at": None,
             "last_permissions_sync_scheduled_at": None,
@@ -216,6 +217,7 @@ async def prepare(service_type, index_name, config, connector_definition=None):
                 "reduce_whitespace": True,
                 "run_ml_inference": True,
             },
+            "sync_cursor": None,
             "sync_now": False,
             "is_native": True,
         }
