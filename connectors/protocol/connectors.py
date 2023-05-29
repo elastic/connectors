@@ -95,6 +95,8 @@ class JobStatus(Enum):
 
 
 class JobType(Enum):
+    FULL = "full"
+    INCREMENTAL = "incremental"
     PERMISSIONS = "permissions"
     UNSET = None
 

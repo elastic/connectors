@@ -328,6 +328,7 @@ In addition to the connector index `.elastic-connectors`, we have an additional 
   error: string; -> Optional error message
   indexed_document_count: number; -> Number of documents indexed in the job
   indexed_document_volume: number; -> The volume (in MiB) of documents indexed in the job
+  job_type; -> The job type of the sync job
   last_seen: date; -> Connector writes check-in date-time regularly (UTC)
   metadata: object; -> Connector-specific metadata
   started_at: date; -> The date/time when the job is started
@@ -346,6 +347,11 @@ In addition to the connector index `.elastic-connectors`, we have an additional 
 - `suspended` -> A job is successfully started.
 - `completed` -> A job is successfully completed.
 - `error` -> A job failed.
+
+**Possible values for `job_type`**
+- `full` -> A full sync job to sync all data.
+- `incremental` -> An incremental sync job to sync changes from the last sync job.
+- `permissions` -> A permissions sync job to sync identities.
 
 #### Elasticsearch mappings for `.elastic-connectors-sync-jobs`:
 ```
@@ -410,6 +416,7 @@ In addition to the connector index `.elastic-connectors`, we have an additional 
     "error" : { "type" : "keyword" },
     "indexed_document_count" : { "type" : "integer" },
     "indexed_document_volume" : { "type" : "integer" },
+    "job_type" : { "type" : "keyword" },
     "last_seen" : { "type" : "date" },
     "metadata" : { "type" : "object" },
     "started_at" : { "type" : "date" },
