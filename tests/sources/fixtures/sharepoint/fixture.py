@@ -115,10 +115,11 @@ def get_sites(site_collections):
         return sites
     if skip:
         skip_start = int(skip)
-        if skip_start + 100 >= total_subsites:
+        top = int(request.args.get("$top"))
+        if skip_start + top >= total_subsites:
             skip_end = total_subsites
         else:
-            skip_end = skip_start + 100
+            skip_end = skip_start + top
         for site in range(skip_start, skip_end):
             sites["value"].append(
                 {
@@ -180,12 +181,13 @@ def get_lists(parent_site_url, site):
         )
     else:
         skip_start = int(request.args.get("$skip"))
-        if skip_start + 100 >= total_lists:
+        top = int(request.args.get("$top"))
+        if skip_start + top >= total_lists:
             skip_end = total_lists
             # Removing the data for the second sync
             total_lists -= 50
         else:
-            skip_end = skip_start + 100
+            skip_end = skip_start + top
 
         for lists_count in range(skip_start, skip_end):
             lists["value"].extend(
