@@ -36,10 +36,10 @@ lint: bin/python bin/black bin/elastic-ingest
 	bin/isort --check . --sp .isort.cfg
 	bin/black --check connectors
 	bin/black --check setup.py
-	bin/flake8 connectors
-	bin/flake8 setup.py
+	bin/ruff connectors
+	bin/ruff setup.py
 	bin/black --check scripts
-	bin/flake8 scripts
+	bin/ruff scripts
 	bin/pyright connectors
 
 autoformat: bin/python bin/black bin/elastic-ingest

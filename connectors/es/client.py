@@ -127,8 +127,8 @@ class ESClient:
             logger.debug(f"Checking for pipeline {pipeline} presence")
             try:
                 await self.client.ingest.get_pipeline(id=pipeline)
-            except NotFoundError:
-                raise PreflightCheckError(f"Could not find pipeline {pipeline}")
+            except NotFoundError as e:
+                raise PreflightCheckError(f"Could not find pipeline {pipeline}") from e
 
     async def delete_indices(self, indices):
         await self.client.indices.delete(index=indices, ignore_unavailable=True)

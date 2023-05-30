@@ -703,7 +703,7 @@ class Connector(ESDocument):
                 logger.critical(e, exc_info=True)
                 raise DataSourceError(
                     f"Could not instantiate {fqn} for {configured_service_type}"
-                )
+                ) from e
 
         await self.index.update(
             doc_id=self.id,
@@ -768,7 +768,9 @@ class Connector(ESDocument):
             source_klass = get_source_klass(fqn)
         except Exception as e:
             logger.critical(e, exc_info=True)
-            raise DataSourceError(f"Could not instantiate {fqn} for {service_type}")
+            raise DataSourceError(
+                f"Could not instantiate {fqn} for {service_type}"
+            ) from e
 
         default_config = source_klass.get_simple_configuration()
         current_config = self.configuration.to_dict()
