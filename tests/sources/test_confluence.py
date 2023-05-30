@@ -158,6 +158,83 @@ EXPECTED_BLOG_ATTACHMENT = {
     "url": f"{HOST_URL}/pages/viewpageattachments.action?pageId=1113&preview=demo.py",
 }
 
+RESPONSE_SEARCH_RESULT = {
+    "results": [
+        {
+            "content": {
+                "id": "983046",
+                "type": "page",
+                "space": {"name": "Software Development"},
+            },
+            "title": "Product Details",
+            "excerpt": "Confluence Connector currently supports below objects for ingestion of data in ElasticSearch.\nBlogs\nAttachments\nPages\nSpaces",
+            "url": "/spaces/SD/pages/983046/Product+Details",
+            "lastModified": "2022-12-19T13:06:18.000Z",
+            "entityType": "content",
+        },
+        {
+            "content": {
+                "id": "att4587521",
+                "type": "attachment",
+                "extensions": {
+                    "mediaType": "application/pdf",
+                    "fileSize": 1119256,
+                },
+                "space": {"name": "Software Development"},
+                "container": {"type": "page", "title": "Product Details"},
+                "_links": {"download": "/download/attachments/196717/Potential.pdf"},
+            },
+            "title": "Potential.pdf",
+            "excerpt": "Evaluation Overview",
+            "url": "/pages/viewpageattachments.action?pageId=196717&preview=%2F196717%2F4587521%2FPotential.pdf",
+            "lastModified": "2023-01-24T03:34:38.000Z",
+            "entityType": "content",
+        },
+        {
+            "space": {
+                "id": 196612,
+                "key": "SD",
+                "type": "global",
+            },
+            "title": "Software Development",
+            "excerpt": "",
+            "url": "/spaces/SD",
+            "lastModified": "2022-12-13T09:49:01.000Z",
+            "entityType": "space",
+        },
+    ]
+}
+
+EXPECTED_SEARCH_RESULT = [
+    {
+        "_id": "983046",
+        "title": "Product Details",
+        "_timestamp": "2022-12-19T13:06:18.000Z",
+        "body": "Confluence Connector currently supports below objects for ingestion of data in ElasticSearch.\nBlogs\nAttachments\nPages\nSpaces",
+        "type": "page",
+        "space": "Software Development",
+        "url": f"{HOST_URL}/spaces/SD/pages/983046/Product+Details",
+    },
+    {
+        "_id": "att4587521",
+        "title": "Potential.pdf",
+        "_timestamp": "2023-01-24T03:34:38.000Z",
+        "type": "attachment",
+        "url": f"{HOST_URL}/pages/viewpageattachments.action?pageId=196717&preview=%2F196717%2F4587521%2FPotential.pdf",
+        "space": "Software Development",
+        "size": 1119256,
+        "page": "Product Details",
+    },
+    {
+        "_id": 196612,
+        "title": "Software Development",
+        "_timestamp": "2022-12-13T09:49:01.000Z",
+        "body": "",
+        "type": "space",
+        "url": f"{HOST_URL}/spaces/SD",
+    },
+]
+
 
 class JSONAsyncMock(AsyncMock):
     def __init__(self, json, *args, **kwargs):
@@ -479,6 +556,22 @@ async def test_fetch_attachments():
             parent_type="page",
         ):
             assert response == EXPECTED_ATTACHMENT
+
+
+@pytest.mark.asyncio
+async def test_search_by_query():
+    source = create_source(ConfluenceDataSource)
+    async_response = AsyncMock()
+    async_response.__aenter__ = AsyncMock(
+        return_value=JSONAsyncMock(RESPONSE_SEARCH_RESULT)
+    )
+    documents = []
+    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+        async for response, _ in source.search_by_query(
+            query="type in ('space', 'page', 'attachment') AND space.key ='SD'"
+        ):
+            documents.append(response)
+    assert documents == EXPECTED_SEARCH_RESULT
 
 
 @pytest.mark.asyncio

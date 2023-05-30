@@ -38,6 +38,7 @@ from connectors.protocol import (
     SyncJob,
     SyncJobIndex,
 )
+from connectors.protocol.connectors import JobType
 from connectors.source import BaseDataSource
 from connectors.utils import iso_utc
 from tests.commons import AsyncIterator
@@ -187,6 +188,8 @@ ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
     "rules": RULES,
 }
 
+SYNC_CURSOR = {"foo": "bar"}
+
 
 def test_utc():
     # All dates are in ISO 8601 UTC so we can serialize them
@@ -322,12 +325,19 @@ async def test_connector_properties():
             "index_name": "search-some-index",
             "configuration": {},
             "language": "en",
-            "scheduling": {},
+            "scheduling": {
+                "permissions": {
+                    "enabled": True,
+                    "interval": "* * * * *"
+                }
+            },
             "status": "created",
             "last_seen": iso_utc(),
             "last_sync_status": "completed",
             "pipeline": {},
             "last_sync_scheduled_at": iso_utc(),
+            "last_permissions_sync_scheduled_at": iso_utc(),
+            "sync_cursor": SYNC_CURSOR,
         },
     }
 
@@ -343,11 +353,15 @@ async def test_connector_properties():
     assert connector.index_name == "search-some-index"
     assert connector.language == "en"
     assert connector.last_sync_status == JobStatus.COMPLETED
+    assert connector.permissions_scheduling["enabled"]
+    assert connector.permissions_scheduling["interval"] == "* * * * *"
+    assert connector.sync_cursor == SYNC_CURSOR
     assert isinstance(connector.last_seen, datetime)
     assert isinstance(connector.filtering, Filtering)
     assert isinstance(connector.pipeline, Pipeline)
     assert isinstance(connector.features, Features)
     assert isinstance(connector.last_sync_scheduled_at, datetime)
+    assert isinstance(connector.last_permissions_sync_scheduled_at, datetime)
 
 
 @pytest.mark.asyncio
@@ -394,6 +408,7 @@ async def test_sync_starts():
         "last_sync_status": JobStatus.IN_PROGRESS.value,
         "last_sync_error": None,
         "status": Status.CONNECTED.value,
+        "error": None,
     }
 
     connector = Connector(elastic_index=index, doc_source=connector_doc)
@@ -539,6 +554,7 @@ async def test_sync_job_properties():
         "_id": "test",
         "_source": {
             "status": "error",
+            "job_type": "permissions",
             "error": "something wrong",
             "indexed_document_count": 10,
             "indexed_document_volume": 20,
@@ -552,6 +568,7 @@ async def test_sync_job_properties():
                 "language": "en",
                 "filtering": {},
                 "pipeline": {},
+                "sync_cursor": SYNC_CURSOR,
             },
         },
     }
@@ -567,12 +584,17 @@ async def test_sync_job_properties():
     assert sync_job.configuration.is_empty()
     assert sync_job.index_name == "search-some-index"
     assert sync_job.language == "en"
+    assert sync_job.sync_cursor == SYNC_CURSOR
     assert sync_job.indexed_document_count == 10
     assert sync_job.indexed_document_volume == 20
     assert sync_job.deleted_document_count == 30
     assert sync_job.total_document_count == 100
+
     assert isinstance(sync_job.filtering, Filter)
     assert isinstance(sync_job.pipeline, Pipeline)
+
+    assert sync_job.job_type == JobType.PERMISSIONS
+    assert isinstance(sync_job.job_type, JobType)
 
 
 @pytest.mark.asyncio
@@ -620,10 +642,11 @@ async def test_sync_job_claim():
         "started_at": ANY,
         "last_seen": ANY,
         "worker_hostname": ANY,
+        "connector.sync_cursor": SYNC_CURSOR,
     }
 
     sync_job = SyncJob(elastic_index=index, doc_source=source)
-    await sync_job.claim()
+    await sync_job.claim(sync_cursor=SYNC_CURSOR)
 
     index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
 
@@ -1080,6 +1103,56 @@ async def test_connector_update_last_sync_scheduled_at():
 
 
 @pytest.mark.asyncio
+async def test_connector_update_last_incremental_sync_scheduled_at():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    new_ts = datetime.utcnow() + timedelta(seconds=20)
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    index = Mock()
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.update_last_incremental_sync_scheduled_at(new_ts)
+
+    index.update.assert_awaited_once_with(
+        doc_id=doc_id,
+        doc={"last_incremental_sync_scheduled_at": new_ts.isoformat()},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.asyncio
+async def test_connector_update_last_permissions_sync_scheduled_at():
+    doc_id = "2"
+    seq_no = 2
+    primary_term = 1
+    new_ts = datetime.utcnow() + timedelta(seconds=30)
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    index = Mock()
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.update_last_permissions_sync_scheduled_at(new_ts)
+
+    index.update.assert_awaited_once_with(
+        doc_id=doc_id,
+        doc={"last_permissions_sync_scheduled_at": new_ts.isoformat()},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.asyncio
 async def test_connector_validate_filtering_not_edited():
     index = Mock()
     index.update = AsyncMock()
@@ -1383,6 +1456,7 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
                 Features.ADVANCED_RULES_NEW: False,
                 Features.BASIC_RULES_OLD: False,
                 Features.ADVANCED_RULES_OLD: False,
+                Features.DOCUMENT_LEVEL_SECURITY: False
             },
         ),
         (
@@ -1392,8 +1466,29 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
                 Features.ADVANCED_RULES_NEW: False,
                 Features.BASIC_RULES_OLD: False,
                 Features.ADVANCED_RULES_OLD: False,
+                Features.DOCUMENT_LEVEL_SECURITY: False
             },
         ),
+        (
+            {
+                "document_level_security": {
+                    "enabled": True
+                }
+            },
+            {
+                Features.DOCUMENT_LEVEL_SECURITY: True
+            }
+        ),
+        (
+            {
+                "document_level_security": {
+                    "enabled": False
+                }
+            },
+            {
+                Features.DOCUMENT_LEVEL_SECURITY: False
+            }
+        )
     ],
 )
 def test_feature_enabled(features_json, feature_enabled):
