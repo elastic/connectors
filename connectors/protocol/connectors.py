@@ -544,6 +544,10 @@ class Connector(ESDocument):
         return self._property_as_datetime("last_sync_scheduled_at")
 
     @property
+    def last_incremental_sync_scheduled_at(self):
+        return self._property_as_datetime("last_incremental_sync_scheduled_at")
+
+    @property
     def last_permissions_sync_scheduled_at(self):
         return self._property_as_datetime("last_permissions_sync_scheduled_at")
 
@@ -574,21 +578,22 @@ class Connector(ESDocument):
             if_primary_term=self._primary_term,
         )
 
-    async def update_last_sync_scheduled_at(self, new_ts):
+    async def _update_datetime(self, field, new_ts):
         await self.index.update(
             doc_id=self.id,
-            doc={"last_sync_scheduled_at": new_ts.isoformat()},
+            doc={field: new_ts.isoformat()},
             if_seq_no=self._seq_no,
             if_primary_term=self._primary_term,
         )
 
+    async def update_last_sync_scheduled_at(self, new_ts):
+        await self._update_datetime("last_sync_scheduled_at", new_ts)
+
+    async def update_last_incremental_sync_scheduled_at(self, new_ts):
+        await self._update_datetime("last_incremental_sync_scheduled_at", new_ts)
+
     async def update_last_permissions_sync_scheduled_at(self, new_ts):
-        await self.index.update(
-            doc_id=self.id,
-            doc={"last_permissions_sync_scheduled_at": new_ts.isoformat()},
-            if_seq_no=self._seq_no,
-            if_primary_term=self._primary_term,
-        )
+        await self._update_datetime("last_permissions_sync_scheduled_at", new_ts)
 
     async def sync_starts(self):
         doc = {

@@ -115,13 +115,14 @@ This is our main communication index, used to communicate the connector's config
   is_native: boolean;   -> Whether this is a native connector
   language: string;     -> the language used for the analyzer
   last_deleted_document_count: number;    -> How many documents were deleted in the last job
+  last_incremental_sync_scheduled_at: date; -> Date/time when the last incremental sync job is scheduled (UTC)
   last_indexed_document_count: number;    -> How many documents were indexed in the last job  
   last_seen: date;      -> Connector writes check-in date-time regularly (UTC)
   last_sync_error: string;   -> Optional last job error message
   last_sync_status: string;  -> Status of the last content sync job, or null if no job has been executed
   last_permissions_sync_status: string:  -> Status of the last permissions sync job, or null if no job has been executed
   last_synced: date;    -> Date/time of last job (UTC)
-  last_sync_scheduled_at: date;    -> Date/time when the last job is scheduled (UTC)
+  last_sync_scheduled_at: date;    -> Date/time when the last full sync job is scheduled (UTC)
   last_permissions_sync_scheduled_at: date;    -> Date/time when the last permissions sync job is scheduled (UTC)
   name: string; -> the name to use for the connector
   pipeline: {
@@ -249,6 +250,7 @@ This is our main communication index, used to communicate the connector's config
     "is_native" : { "type" : "boolean" },
     "language" : { "type" : "keyword" },
     "last_deleted_document_count" : { "type" : "long" },
+    "last_incremental_sync_scheduled_at" : { "type" : "date" },
     "last_indexed_document_count" : { "type" : "long" },
     "last_seen" : { "type" : "date" },
     "last_sync_error" : { "type" : "keyword" },
