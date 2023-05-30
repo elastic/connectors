@@ -321,6 +321,7 @@ In addition to the connector index `.elastic-connectors`, we have an additional 
         run_ml_inference: boolean;
       };
       service_type: string;   -> Service type of the connector
+      sync_cursor: object;    -> The sync cursor used to start the job
     }
   ];
   created_at: date; -> The date/time when the job is created
@@ -408,7 +409,8 @@ In addition to the connector index `.elastic-connectors`, we have an additional 
             "run_ml_inference" : { "type" : "boolean" }
           }
         },
-        "service_type" : { "type" : "keyword" }
+        "service_type" : { "type" : "keyword" },
+        "sync_cursor" : { "type" : "object" }
       }
     },
     "created_at" : { "type" : "date" },
