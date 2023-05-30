@@ -35,3 +35,7 @@ See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
   }
 ]
 ```
+
+### Limitations
+
+- Syncing the recently created/updated items in Confluence may be delayed when using Advanced Sync Rules since the search endpoint used with cql query returns stale results in the response. For more details refer the following issue: https://jira.atlassian.com/browse/CONFCLOUD-73997
