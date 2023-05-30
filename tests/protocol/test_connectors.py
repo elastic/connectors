@@ -329,6 +329,14 @@ async def test_connector_properties():
                 "access_control": {
                     "enabled": True,
                     "interval": "* * * * *"
+                },
+                "full": {
+                    "enabled": True,
+                    "interval": "* * * * *"
+                },
+                "incremental": {
+                    "enabled": True,
+                    "interval": "* * * * *"
                 }
             },
             "status": "created",
@@ -357,6 +365,10 @@ async def test_connector_properties():
     assert connector.last_access_control_sync_status == JobStatus.PENDING
     assert connector.access_control_scheduling["enabled"]
     assert connector.access_control_scheduling["interval"] == "* * * * *"
+    assert connector.full_sync_scheduling["enabled"]
+    assert connector.full_sync_scheduling["interval"] == "* * * * *"
+    assert connector.incremental_sync_scheduling["enabled"]
+    assert connector.incremental_sync_scheduling["interval"] == "* * * * *"
     assert connector.sync_cursor == SYNC_CURSOR
     assert isinstance(connector.last_seen, datetime)
     assert isinstance(connector.filtering, Filtering)
