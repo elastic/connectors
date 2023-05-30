@@ -229,6 +229,10 @@ class SyncJob(ESDocument):
         return Pipeline(self.get("connector", "pipeline"))
 
     @property
+    def sync_cursor(self):
+        return self.get("connector", "sync_cursor")
+
+    @property
     def terminated(self):
         return self.status in (JobStatus.ERROR, JobStatus.COMPLETED, JobStatus.CANCELED)
 
@@ -260,12 +264,13 @@ class SyncJob(ESDocument):
                 f"Filtering in state {validation_result.state}, errors: {validation_result.errors}."
             )
 
-    async def claim(self):
+    async def claim(self, sync_cursor=None):
         doc = {
             "status": JobStatus.IN_PROGRESS.value,
             "started_at": iso_utc(),
             "last_seen": iso_utc(),
             "worker_hostname": socket.gethostname(),
+            "connector.sync_cursor": sync_cursor,
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
