@@ -139,7 +139,7 @@ Make sure to include the appropriate backport labels, if your PR needs to be bac
 ### Why do we use a Pull Request workflow?
 
 PRs are a great way of sharing information, and can help us be aware of the
-changes that are occuring in our codebase. They are also an excellent way of
+changes that are occurring in our codebase. They are also an excellent way of
 getting peer review on the work that we do, without the cost of working in
 direct pairs.
 
@@ -171,7 +171,7 @@ A good PR should be able to flow through a peer review system easily and quickly
 
 PRs are a Github workflow tool, so it's important to understand that the PR
 title, summary and eventual discussion are not as trackable as the the commit
-history. If we ever move away from Github, we'll likely lose this infomation.
+history. If we ever move away from Github, we'll likely lose this information.
 
 That said however, they are a very useful aid in ensuring that PRs are handled
 quickly and effectively.

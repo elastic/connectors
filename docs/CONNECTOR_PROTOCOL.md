@@ -285,7 +285,7 @@ This is our main communication index, used to communicate the connector's config
 In addition to the connector index `.elastic-connectors`, we have an additional index to log all jobs run by connectors. This is the `.elastic-connectors-sync-jobs` index. Each JSON document will have the following structure:
 ```
 {
-  cancelation_requested_at: date; -> The date/time when the cancelation of the job is requested
+  cancelation_requested_at: date; -> The date/time when the cancellation of the job is requested
   canceled_at: date; -> The date/time when the job is canceled
   completed_at: date; -> The data/time when the job is completed
   connector: {              -> Connector snapshot
@@ -345,7 +345,7 @@ In addition to the connector index `.elastic-connectors`, we have an additional 
 **Possible values for `status`**
 - `pending` -> A job is just enqueued.
 - `in_progress` -> A job is successfully started.
-- `canceling` -> The cancelation of the job is initiated.
+- `canceling` -> The cancellation of the job is initiated.
 - `canceled` -> A job is canceled.
 - `suspended` -> A job is successfully started.
 - `completed` -> A job is successfully completed.
