@@ -553,7 +553,7 @@ async def test_connector_next_sync(next_run, scheduling_enabled, expected_next_s
     connector_doc = {
         "_id": "1",
         "_source": {
-            "scheduling": {"enabled": scheduling_enabled, "interval": "1 * * * * *"},
+            "scheduling": {"full": {"enabled": scheduling_enabled, "interval": "1 * * * * *"}},
         },
     }
     index = Mock()
