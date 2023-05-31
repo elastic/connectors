@@ -301,7 +301,7 @@ class MySQLClient:
 
 
 def row2doc(row, column_names, primary_key_columns, table, timestamp):
-    row = dict(zip(column_names, row))
+    row = dict(zip(column_names, row, strict=True))
     row.update(
         {
             "_id": generate_id(table, row, primary_key_columns),
@@ -468,10 +468,10 @@ class MySqlDataSource(BaseDataSource):
     async def _validate_database_accessible(self, cursor):
         try:
             await cursor.execute(f"USE {self.database};")
-        except aiomysql.Error:
+        except aiomysql.Error as e:
             raise ConfigurableFieldValueError(
                 f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['user']}'."
-            )
+            ) from e
 
     async def _validate_tables_accessible(self, cursor):
         non_accessible_tables = []

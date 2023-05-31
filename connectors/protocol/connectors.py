@@ -95,6 +95,8 @@ class JobStatus(Enum):
 
 
 class JobType(Enum):
+    FULL = "full"
+    INCREMENTAL = "incremental"
     PERMISSIONS = "permissions"
     UNSET = None
 
@@ -227,6 +229,10 @@ class SyncJob(ESDocument):
         return Pipeline(self.get("connector", "pipeline"))
 
     @property
+    def sync_cursor(self):
+        return self.get("connector", "sync_cursor")
+
+    @property
     def terminated(self):
         return self.status in (JobStatus.ERROR, JobStatus.COMPLETED, JobStatus.CANCELED)
 
@@ -258,12 +264,13 @@ class SyncJob(ESDocument):
                 f"Filtering in state {validation_result.state}, errors: {validation_result.errors}."
             )
 
-    async def claim(self):
+    async def claim(self, sync_cursor=None):
         doc = {
             "status": JobStatus.IN_PROGRESS.value,
             "started_at": iso_utc(),
             "last_seen": iso_utc(),
             "worker_hostname": socket.gethostname(),
+            "connector.sync_cursor": sync_cursor,
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
@@ -419,6 +426,11 @@ class Features:
 
         self.features = features
 
+    def incremental_sync_enabled(self):
+        return self._nested_feature_enabled(
+            ["incremental_sync", "enabled"], default=False
+        )
+
     def sync_rules_enabled(self):
         return any(
             [
@@ -541,6 +553,10 @@ class Connector(ESDocument):
         return self._property_as_datetime("last_sync_scheduled_at")
 
     @property
+    def last_incremental_sync_scheduled_at(self):
+        return self._property_as_datetime("last_incremental_sync_scheduled_at")
+
+    @property
     def last_permissions_sync_scheduled_at(self):
         return self._property_as_datetime("last_permissions_sync_scheduled_at")
 
@@ -571,21 +587,22 @@ class Connector(ESDocument):
             if_primary_term=self._primary_term,
         )
 
-    async def update_last_sync_scheduled_at(self, new_ts):
+    async def _update_datetime(self, field, new_ts):
         await self.index.update(
             doc_id=self.id,
-            doc={"last_sync_scheduled_at": new_ts.isoformat()},
+            doc={field: new_ts.isoformat()},
             if_seq_no=self._seq_no,
             if_primary_term=self._primary_term,
         )
 
+    async def update_last_sync_scheduled_at(self, new_ts):
+        await self._update_datetime("last_sync_scheduled_at", new_ts)
+
+    async def update_last_incremental_sync_scheduled_at(self, new_ts):
+        await self._update_datetime("last_incremental_sync_scheduled_at", new_ts)
+
     async def update_last_permissions_sync_scheduled_at(self, new_ts):
-        await self.index.update(
-            doc_id=self.id,
-            doc={"last_permissions_sync_scheduled_at": new_ts.isoformat()},
-            if_seq_no=self._seq_no,
-            if_primary_term=self._primary_term,
-        )
+        await self._update_datetime("last_permissions_sync_scheduled_at", new_ts)
 
     async def sync_starts(self):
         doc = {
@@ -695,7 +712,7 @@ class Connector(ESDocument):
                 logger.critical(e, exc_info=True)
                 raise DataSourceError(
                     f"Could not instantiate {fqn} for {configured_service_type}"
-                )
+                ) from e
 
         await self.index.update(
             doc_id=self.id,
@@ -760,7 +777,9 @@ class Connector(ESDocument):
             source_klass = get_source_klass(fqn)
         except Exception as e:
             logger.critical(e, exc_info=True)
-            raise DataSourceError(f"Could not instantiate {fqn} for {service_type}")
+            raise DataSourceError(
+                f"Could not instantiate {fqn} for {service_type}"
+            ) from e
 
         default_config = source_klass.get_simple_configuration()
         current_config = self.configuration.to_dict()

@@ -188,6 +188,8 @@ ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
     "rules": RULES,
 }
 
+SYNC_CURSOR = {"foo": "bar"}
+
 
 def test_utc():
     # All dates are in ISO 8601 UTC so we can serialize them
@@ -316,7 +318,6 @@ async def test_all_connectors(mock_responses):
 
 @pytest.mark.asyncio
 async def test_connector_properties():
-    sync_cursor = {"foo": "bar"}
     connector_src = {
         "_id": "test",
         "_source": {
@@ -337,7 +338,7 @@ async def test_connector_properties():
             "pipeline": {},
             "last_sync_scheduled_at": iso_utc(),
             "last_permissions_sync_scheduled_at": iso_utc(),
-            "sync_cursor": sync_cursor,
+            "sync_cursor": SYNC_CURSOR,
         },
     }
 
@@ -356,7 +357,7 @@ async def test_connector_properties():
     assert connector.last_access_control_sync_status == JobStatus.PENDING
     assert connector.permissions_scheduling["enabled"]
     assert connector.permissions_scheduling["interval"] == "* * * * *"
-    assert connector.sync_cursor == sync_cursor
+    assert connector.sync_cursor == SYNC_CURSOR
     assert isinstance(connector.last_seen, datetime)
     assert isinstance(connector.filtering, Filtering)
     assert isinstance(connector.pipeline, Pipeline)
@@ -569,6 +570,7 @@ async def test_sync_job_properties():
                 "language": "en",
                 "filtering": {},
                 "pipeline": {},
+                "sync_cursor": SYNC_CURSOR,
             },
         },
     }
@@ -584,6 +586,7 @@ async def test_sync_job_properties():
     assert sync_job.configuration.is_empty()
     assert sync_job.index_name == "search-some-index"
     assert sync_job.language == "en"
+    assert sync_job.sync_cursor == SYNC_CURSOR
     assert sync_job.indexed_document_count == 10
     assert sync_job.indexed_document_volume == 20
     assert sync_job.deleted_document_count == 30
@@ -641,10 +644,11 @@ async def test_sync_job_claim():
         "started_at": ANY,
         "last_seen": ANY,
         "worker_hostname": ANY,
+        "connector.sync_cursor": SYNC_CURSOR,
     }
 
     sync_job = SyncJob(elastic_index=index, doc_source=source)
-    await sync_job.claim()
+    await sync_job.claim(sync_cursor=SYNC_CURSOR)
 
     index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
 
@@ -1101,6 +1105,31 @@ async def test_connector_update_last_sync_scheduled_at():
 
 
 @pytest.mark.asyncio
+async def test_connector_update_last_incremental_sync_scheduled_at():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    new_ts = datetime.utcnow() + timedelta(seconds=20)
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {},
+    }
+    index = Mock()
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.update_last_incremental_sync_scheduled_at(new_ts)
+
+    index.update.assert_awaited_once_with(
+        doc_id=doc_id,
+        doc={"last_incremental_sync_scheduled_at": new_ts.isoformat()},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.asyncio
 async def test_connector_update_last_permissions_sync_scheduled_at():
     doc_id = "2"
     seq_no = 2
@@ -1542,6 +1571,42 @@ def test_sync_rules_enabled(features_json, sync_rules_enabled):
     features = Features(features_json)
 
     assert features.sync_rules_enabled() == sync_rules_enabled
+
+
+@pytest.mark.parametrize(
+    "features_json, incremental_sync_enabled",
+    [
+        (
+            {
+                "incremental_sync": {
+                    "enabled": True,
+                },
+            },
+            True,
+        ),
+        (
+            {
+                "incremental_sync": {
+                    "enabled": False,
+                },
+            },
+            False,
+        ),
+        (
+            {
+                "incremental_sync": {}
+            },
+            False,
+        ),
+        ({"other_feature": True}, False),
+        (None, False),
+        ({}, False),
+    ],
+)
+def test_incremental_sync_enabled(features_json, incremental_sync_enabled):
+    features = Features(features_json)
+
+    assert features.incremental_sync_enabled() == incremental_sync_enabled
 
 
 @pytest.mark.parametrize(
