@@ -12,6 +12,7 @@ import pytest
 from connectors.config import load_config
 from connectors.es.index import DocumentNotFoundError
 from connectors.protocol import JobStatus
+from connectors.protocol.connectors import JobType
 from connectors.services.job_execution import JobExecutionService
 from tests.commons import AsyncIterator
 
@@ -117,6 +118,7 @@ def mock_sync_job(service_type="fake"):
     sync_job = Mock()
     sync_job.service_type = service_type
     sync_job.connector_id = "1"
+    sync_job.job_type = JobType.FULL
 
     return sync_job
 
