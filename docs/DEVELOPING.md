@@ -178,12 +178,12 @@ In the case of Sharepoint Online, the data inside is a tree structure:
 
 ```
 Site Collection
-    |--- Site
-         |--- Drive
-              |--- Drive Item
-         |--- List
-              |--- List Item
-         |--- Site Page
+    └── Site
+         ├─── Drive
+         │    └── Drive Item - - - Drive Item (recursive, optional)
+         ├─── List
+         │    └── List Item - - - Drive Item (optional)
+         └── Site Page
 ```
 
 Unfortunately, some of the features available in the Sharepoint REST API are not yet available in Graph API - namely access to Page content.
