@@ -1572,6 +1572,42 @@ def test_sync_rules_enabled(features_json, sync_rules_enabled):
 
 
 @pytest.mark.parametrize(
+    "features_json, incremental_sync_enabled",
+    [
+        (
+            {
+                "incremental_sync": {
+                    "enabled": True,
+                },
+            },
+            True,
+        ),
+        (
+            {
+                "incremental_sync": {
+                    "enabled": False,
+                },
+            },
+            False,
+        ),
+        (
+            {
+                "incremental_sync": {}
+            },
+            False,
+        ),
+        ({"other_feature": True}, False),
+        (None, False),
+        ({}, False),
+    ],
+)
+def test_incremental_sync_enabled(features_json, incremental_sync_enabled):
+    features = Features(features_json)
+
+    assert features.incremental_sync_enabled() == incremental_sync_enabled
+
+
+@pytest.mark.parametrize(
     "nested_dict, keys, default, expected",
     [
         # extract True

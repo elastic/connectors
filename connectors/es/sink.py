@@ -29,7 +29,7 @@ from elasticsearch.helpers import async_scan
 
 from connectors.es import ESClient
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
-from connectors.logger import logger
+from connectors.logger import TracedAsyncGenerator, logger, tracer
 from connectors.protocol import Filter
 from connectors.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
@@ -113,6 +113,7 @@ class Sink:
 
         raise TypeError(operation)
 
+    @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
         # TODO: treat result to retry errors like in async_streaming_bulk
         task_num = len(self.bulk_tasks)
@@ -339,6 +340,8 @@ class Extractor:
         Extraction happens in a separate task, when a document contains files.
         """
         logger.info("Starting doc lookups")
+        generator = TracedAsyncGenerator(generator, "get a doc")
+
         self.sync_runs = True
 
         start = time.time()
