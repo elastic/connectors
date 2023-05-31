@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 from base64io import Base64IO
+from bs4 import BeautifulSoup
 from cstriggers.core.trigger import QuartzCron
 from pympler import asizeof
 
@@ -632,3 +633,11 @@ class CacheWithTimeout:
         """
         self._value = value
         self._expiration_date = expiration_date
+
+
+async def html_to_text(html):
+    # TODO: actually properly implement the function
+    if not html:
+        return html
+
+    return BeautifulSoup(html, features="html.parser").get_text()
