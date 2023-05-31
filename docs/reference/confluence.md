@@ -99,6 +99,7 @@ Advanced Sync Rules are now available in elastic 8.9 version.
 
 - Users can add [CQL queries](https://developer.atlassian.com/cloud/confluence/advanced-searching-using-cql/) for syncing the source.
 - All the data returned by the CQL queries will be indexed.
+- The valid format for adding sync rules can be referred from [CONFLUENCE.md](../connectors/docs/sync-rules/CONFLUENCE.md). Any errors encountered, will be presented to the user visually in the sync rules overview.
 
 **Note:** “spaces” configuration field will be overridden by the advanced rules.
 

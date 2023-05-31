@@ -109,6 +109,7 @@ Advanced Sync Rules are now available in elastic 8.9 version.
 
 - Users can add [JQL queries](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/) for syncing the source.
 - All the data returned by JQL queries will be indexed.
+- The valid format for adding sync rules can be referred from [JIRA.md](../connectors/docs/sync-rules/JIRA.md). Any errors encountered, will be presented to the user visually in the sync rules overview.
 
 **Note:** "projects" configuration field will be overridden by the advanced rules.
 
