@@ -29,7 +29,7 @@ from elasticsearch.helpers import async_scan
 
 from connectors.es import ESClient
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
-from connectors.logger import TracedAsyncGenerator, logger, tracer
+from connectors.logger import logger, tracer
 from connectors.protocol import Filter
 from connectors.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
@@ -333,6 +333,12 @@ class Extractor:
             logger.info("Task is canceled, stop Extractor...")
             raise
 
+    @tracer.start_as_current_span("get_doc call", slow_log=1.0)
+    async def _wrap_generator(self, generator):
+        """Wrapper for metrics"""
+        async for doc in generator:
+            yield doc
+
     async def get_docs(self, generator):
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
 
@@ -340,7 +346,7 @@ class Extractor:
         Extraction happens in a separate task, when a document contains files.
         """
         logger.info("Starting doc lookups")
-        generator = TracedAsyncGenerator(generator, "get a doc")
+        generator = self._wrap_generator(generator)
 
         self.sync_runs = True
 

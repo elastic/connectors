@@ -6,11 +6,13 @@
 """
 Logger -- sets the logging and provides a `logger` global object.
 """
+import contextlib
 import inspect
 import logging
 import time
 from datetime import datetime
 from functools import wraps
+from typing import AsyncGenerator
 
 import ecs_logging
 
@@ -81,6 +83,53 @@ def set_extra_logger(logger, log_level=logging.INFO, prefix="BYOC", filebeat=Fal
 #
 # For now everything is dropped into the logger, but later on
 # we will use the otel API and exporter
+
+
+@contextlib.contextmanager
+def timed_execution(name, func_name, slow_log=None, canceled=None):
+    """Context manager to log time execution in DEBUG
+
+    - name: prefix used for the log message
+    - func_name: additional prefix for the function name
+    - slow_log: if given a treshold time in seconds. if it runs faster, no log
+      is emited
+    - canceled: if provided a callable to cancel the timer. Used in nested
+      calls.
+    """
+    start = time.time()
+    try:
+        yield
+    finally:
+        do_not_track = canceled is not None and canceled()
+        if not do_not_track:
+            delta = time.time() - start
+            if slow_log is None or (slow_log is not None and delta > slow_log):
+                logger.debug(  # pyright: ignore
+                    f"[{name}] {func_name} took {delta} seconds."
+                )
+
+
+class _TracedAsyncGenerator:
+    def __init__(self, generator, name, func_name, slow_log=None):
+        self.gen = generator
+        self.name = name
+        self.slow_log = slow_log
+        self.func_name = func_name
+        self.counter = 0
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            with timed_execution(
+                self.name, f"{self.counter}-{self.func_name}", self.slow_log
+            ):
+                return await self.gen.__anext__()
+        finally:
+            self.counter += 1
+
+
 class CustomTracer:
     # spans as decorators, https://opentelemetry.io/docs/instrumentation/python/manual/#creating-spans-with-decorators
     def start_as_current_span(self, name, func_name=None, slow_log=None):
@@ -92,18 +141,11 @@ class CustomTracer:
                     nonlocal func_name
                     nonlocal slow_log
 
-                    start = time.time()
-                    try:
-                        return await func(*args, **kw)
-                    finally:
-                        delta = time.time() - start
+                    if func_name is None:
+                        func_name = func.__name__
 
-                        if slow_log is None or (
-                            slow_log is not None and delta > slow_log
-                        ):
-                            if func_name is None:
-                                func_name = func.__name__
-                            logger.debug(f"{name} {func_name} took {delta} seconds.")
+                    with timed_execution(name, func_name, slow_log):
+                        return await func(*args, **kw)
 
                 return _awrapped
 
@@ -113,17 +155,22 @@ class CustomTracer:
                 def __wrapped(*args, **kw):
                     nonlocal func_name
 
-                    start = time.time()
-                    try:
-                        return func(*args, **kw)
-                    finally:
-                        delta = time.time() - start
-                        if slow_log is None or (
-                            slow_log is not None and delta > slow_log
-                        ):
-                            if func_name is None:
-                                func_name = func.__name__
-                            logger.debug(f"{name} {func_name} took {delta} seconds.")
+                    if func_name is None:
+                        func_name = func.__name__
+
+                    _canceled = False
+
+                    def canceled():
+                        return _canceled
+
+                    with timed_execution(name, func_name, slow_log, canceled):
+                        res = func(*args, **kw)
+
+                        # if it's an async generator we return it wrapped
+                        if isinstance(res, AsyncGenerator):
+                            _canceled = True
+                            return _TracedAsyncGenerator(res, name, func_name, slow_log)
+                        return res
 
                 return __wrapped
 
@@ -131,23 +178,4 @@ class CustomTracer:
 
 
 tracer = CustomTracer()
-
-
-class TracedAsyncGenerator:
-    def __init__(self, generator, name):
-        self.gen = generator
-        self.name = name
-
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self):
-        start = time.time()
-        try:
-            return await self.gen.__anext__()
-        finally:
-            delta = time.time() - start
-            logger.debug(f"{self.name} took {delta} seconds.")
-
-
 set_logger()
