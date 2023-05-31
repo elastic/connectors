@@ -426,6 +426,11 @@ class Features:
 
         self.features = features
 
+    def incremental_sync_enabled(self):
+        return self._nested_feature_enabled(
+            ["incremental_sync", "enabled"], default=False
+        )
+
     def sync_rules_enabled(self):
         return any(
             [
