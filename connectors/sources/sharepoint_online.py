@@ -5,14 +5,19 @@ from functools import partial
 
 import aiofiles
 import aiohttp
+import fastjsonschema
 import msal
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
-from bs4 import BeautifulSoup
+from fastjsonschema import JsonSchemaValueException
 
+from connectors.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import CacheWithTimeout, convert_to_b64, url_encode
+from connectors.utils import CacheWithTimeout, convert_to_b64, html_to_text, url_encode
 
 GRAPH_API_URL = "https://graph.microsoft.com/v1.0"
 DEFAULT_RETRY_SECONDS = 30
@@ -214,6 +219,7 @@ class MicrosoftAPISession:
             try:
                 token = await self._graph_api_token.get()
                 headers = {"authorization": f"Bearer {token}"}
+                logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
 
                 async with self._http_session.get(
                     absolute_url,
@@ -248,7 +254,7 @@ class MicrosoftAPISession:
 
 class SharepointOnlineClient:
     def __init__(self, tenant_id, tenant_name, client_id, client_secret):
-        self._http_session = aiohttp.ClientSession(
+        self._http_session = aiohttp.ClientSession(  # TODO: lazy create this
             headers={
                 "accept": "application/json",
                 "content-type": "application/json",
@@ -284,12 +290,29 @@ class SharepointOnlineClient:
             for site_collection in page:
                 yield site_collection
 
-    async def sites(self, site_collection):
-        filter_ = ""
+    async def discover_sites(
+        self, site_collection, allowed_root_sites, fetch_private_sites=False
+    ):
+        sites = []
+        root_site_ids = []
+
+        async for site in self.sites(site_collection):
+            if site["name"] not in allowed_root_sites:
+                continue
+
+            yield site
+
+            async for subsite in self.sites(site["id"]):
+                if subsite["id"] == site["id"]:
+                    continue  # API returns self too
+
+                yield subsite
+
+    async def sites(self, parent_site_id, fetch_private_sites=False):
         select = ""
 
         async for page in self._graph_api_client.scroll(
-            f"{GRAPH_API_URL}/sites/{site_collection}/sites?$filter={filter_}&search=*&$select={select}"
+            f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?search=*&$select={select}"
         ):
             for site in page:
                 yield site
@@ -359,7 +382,9 @@ class SharepointOnlineClient:
             yield attachment
 
     async def download_attachment(self, attachment_absolute_path, async_buffer):
-        await self._rest_api_client.pipe(f"{attachment_absolute_path}/$value", async_buffer)
+        await self._rest_api_client.pipe(
+            f"{attachment_absolute_path}/$value", async_buffer
+        )
 
     async def site_pages(self, site_web_url):
         select = ""
@@ -371,6 +396,37 @@ class SharepointOnlineClient:
 
     async def close(self):
         await self._http_session.close()
+
+
+class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
+    """
+    Validate advanced rules for MongoDB, so that they're adhering to the motor asyncio API (see: https://motor.readthedocs.io/en/stable/api-asyncio/asyncio_motor_collection.html)
+    """
+
+    SCHEMA_DEFINITION = {
+        "type": "object",
+        "properties": {
+            "allowPrivateSites": {"type": "boolean"},
+            "maxDataAge": {"type": "integer"},
+        },
+        "additionalProperties": False,
+    }
+
+    SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
+
+    async def validate(self, advanced_rules):
+        try:
+            SharepointOnlineAdvancedRulesValidator.SCHEMA(advanced_rules)
+
+            return SyncRuleValidationResult.valid_result(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES
+            )
+        except JsonSchemaValueException as e:
+            return SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=f"{e.message}. Make sure advanced filtering rules follow the following schema: {SharepointOnlineAdvancedRulesValidator.SCHEMA_DEFINITION['properties']}",
+            )
 
 
 class SharepointOnlineDataSource(BaseDataSource):
@@ -437,18 +493,24 @@ class SharepointOnlineDataSource(BaseDataSource):
         pass
 
     async def get_docs(self, filtering=None):
+        allow_private_sites = True
+        max_data_age = None
+
+        if filtering is not None and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
+            allow_private_sites = advanced_rules["allowPrivateSites"]
+            max_data_age = advanced_rules["maxDataAge"]
+
         async for site_collection in self._client.site_collections():
             site_collection["_id"] = site_collection["webUrl"]
             site_collection["object_type"] = "site_collection"
             yield site_collection, None
 
-            async for site in self._client.sites(
-                site_collection["siteCollection"]["hostname"]
-            ):
-                # TODO: simplify and eliminate root call
-                if site["name"] not in self.site_collections_to_sync:
-                    continue
-
+            async for site in self._client.discover_sites(
+                site_collection["siteCollection"]["hostname"],
+                self.site_collections_to_sync,
+                fetch_private_sites=allow_private_sites,
+            ):  # TODO: simplify and eliminate root call
                 site["_id"] = site["id"]
                 site["object_type"] = "site"
                 yield site, None
@@ -460,18 +522,29 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                     async for drive_item in self._client.drive_items(site_drive["id"]):
                         drive_item["_id"] = drive_item["id"]
-                        drive_item["_timestamp"] = drive_item["lastModifiedDateTime"]
                         drive_item["object_type"] = "drive_item"
+                        drive_item["_timestamp"] = drive_item["lastModifiedDateTime"]
 
                         download_func = None
 
                         if "@microsoft.graph.downloadUrl" in drive_item:
-                            if "size" in drive_item and drive_item["size"] < 10485760:
-                                download_func = partial(self.get_content, drive_item)
-                            else:
-                                print(
+                            modified_date = datetime.strptime(
+                                drive_item["lastModifiedDateTime"], "%Y-%m-%dT%H:%M:%SZ"
+                            )
+                            if (
+                                max_data_age
+                                and modified_date
+                                < datetime.now() - timedelta(max_data_age)
+                            ):
+                                logger.warning(
+                                    f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
+                                )
+                            elif drive_item["size"] > 10485760:
+                                logger.warning(
                                     f"Not downloading file {drive_item['name']} of size {drive_item['size']}"
                                 )
+                            else:
+                                download_func = partial(self.get_content, drive_item)
 
                         yield drive_item, download_func
 
@@ -518,10 +591,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                 async for site_page in self._client.site_pages(site["webUrl"]):
                     site_page["_id"] = site_page["GUID"]
                     site_page["object_type"] = "site_page"
-                    if "LayoutWebpartsContent" in site_page and site_page["LayoutWebpartsContent"]:
-                        site_page["LayoutWebpartsContent"] = BeautifulSoup(site_page["LayoutWebpartsContent"], features="html.parser").get_text()
-                    if "CanvasContent1" in site_page and site_page["CanvasContent1"]:
-                        site_page["CanvasContent1"] = BeautifulSoup(site_page["CanvasContent1"], features="html.parser").get_text()
+
+                    for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:
+                        if html_field in site_page:
+                            site_page[html_field] = await html_to_text(
+                                site_page[html_field]
+                            )
+
                     yield site_page, None
 
     async def get_attachment(self, attachment, timestamp=None, doit=False):
@@ -587,3 +663,6 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     async def close(self):
         await self._client.close()
+
+    def advanced_rules_validators(self):
+        return [SharepointOnlineAdvancedRulesValidator()]
