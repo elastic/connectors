@@ -214,10 +214,10 @@ class GoogleCloudStorageDataSource(BaseDataSource):
 
         try:
             json.loads(self.configuration["service_account_credentials"])
-        except ValueError:
+        except ValueError as e:
             raise ConfigurableFieldValueError(
                 "Google Cloud service account is not a valid JSON."
-            )
+            ) from e
 
     @cached_property
     def _google_storage_client(self):

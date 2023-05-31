@@ -94,6 +94,13 @@ class JobStatus(Enum):
     UNSET = None
 
 
+class JobType(Enum):
+    FULL = "full"
+    INCREMENTAL = "incremental"
+    PERMISSIONS = "permissions"
+    UNSET = None
+
+
 class JobTriggerMethod(Enum):
     ON_DEMAND = "on_demand"
     SCHEDULED = "scheduled"
@@ -222,6 +229,10 @@ class SyncJob(ESDocument):
         return Pipeline(self.get("connector", "pipeline"))
 
     @property
+    def sync_cursor(self):
+        return self.get("connector", "sync_cursor")
+
+    @property
     def terminated(self):
         return self.status in (JobStatus.ERROR, JobStatus.COMPLETED, JobStatus.CANCELED)
 
@@ -241,6 +252,10 @@ class SyncJob(ESDocument):
     def total_document_count(self):
         return self.get("total_document_count", default=0)
 
+    @property
+    def job_type(self):
+        return JobType(self.get("job_type"))
+
     async def validate_filtering(self, validator):
         validation_result = await validator.validate_filtering(self.filtering)
 
@@ -249,12 +264,13 @@ class SyncJob(ESDocument):
                 f"Filtering in state {validation_result.state}, errors: {validation_result.errors}."
             )
 
-    async def claim(self):
+    async def claim(self, sync_cursor=None):
         doc = {
             "status": JobStatus.IN_PROGRESS.value,
             "started_at": iso_utc(),
             "last_seen": iso_utc(),
             "worker_hostname": socket.gethostname(),
+            "connector.sync_cursor": sync_cursor,
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
@@ -395,6 +411,8 @@ class Pipeline(UserDict):
 
 
 class Features:
+    DOCUMENT_LEVEL_SECURITY = "document_level_security"
+
     BASIC_RULES_NEW = "basic_rules_new"
     ADVANCED_RULES_NEW = "advanced_rules_new"
 
@@ -407,6 +425,11 @@ class Features:
             features = {}
 
         self.features = features
+
+    def incremental_sync_enabled(self):
+        return self._nested_feature_enabled(
+            ["incremental_sync", "enabled"], default=False
+        )
 
     def sync_rules_enabled(self):
         return any(
@@ -432,6 +455,10 @@ class Features:
                 return self.features.get("filtering_rules", False)
             case Features.ADVANCED_RULES_OLD:
                 return self.features.get("filtering_advanced_config", False)
+            case Features.DOCUMENT_LEVEL_SECURITY:
+                return self._nested_feature_enabled(
+                    ["document_level_security", "enabled"], default=False
+                )
             case _:
                 return False
 
@@ -480,6 +507,10 @@ class Connector(ESDocument):
         return self.get("scheduling", default={})
 
     @property
+    def permissions_scheduling(self):
+        return self.scheduling.get("permissions", {})
+
+    @property
     def configuration(self):
         return DataSourceConfiguration(self.get("configuration"))
 
@@ -508,13 +539,30 @@ class Connector(ESDocument):
         return JobStatus(self.get("last_sync_status"))
 
     @property
+    def last_access_control_sync_status(self):
+        return JobStatus(self.get("last_access_control_sync_status"))
+
+    def _property_as_datetime(self, key):
+        value = self.get(key)
+        if value is not None:
+            value = datetime.fromisoformat(value)  # pyright: ignore
+        return value
+
+    @property
     def last_sync_scheduled_at(self):
-        last_sync_scheduled_at = self.get("last_sync_scheduled_at")
-        if last_sync_scheduled_at is not None:
-            last_sync_scheduled_at = datetime.fromisoformat(
-                last_sync_scheduled_at  # pyright: ignore
-            )
-        return last_sync_scheduled_at
+        return self._property_as_datetime("last_sync_scheduled_at")
+
+    @property
+    def last_incremental_sync_scheduled_at(self):
+        return self._property_as_datetime("last_incremental_sync_scheduled_at")
+
+    @property
+    def last_permissions_sync_scheduled_at(self):
+        return self._property_as_datetime("last_permissions_sync_scheduled_at")
+
+    @property
+    def sync_cursor(self):
+        return self.get("sync_cursor")
 
     async def heartbeat(self, interval):
         if (
@@ -539,19 +587,29 @@ class Connector(ESDocument):
             if_primary_term=self._primary_term,
         )
 
-    async def update_last_sync_scheduled_at(self, new_ts):
+    async def _update_datetime(self, field, new_ts):
         await self.index.update(
             doc_id=self.id,
-            doc={"last_sync_scheduled_at": new_ts.isoformat()},
+            doc={field: new_ts.isoformat()},
             if_seq_no=self._seq_no,
             if_primary_term=self._primary_term,
         )
+
+    async def update_last_sync_scheduled_at(self, new_ts):
+        await self._update_datetime("last_sync_scheduled_at", new_ts)
+
+    async def update_last_incremental_sync_scheduled_at(self, new_ts):
+        await self._update_datetime("last_incremental_sync_scheduled_at", new_ts)
+
+    async def update_last_permissions_sync_scheduled_at(self, new_ts):
+        await self._update_datetime("last_permissions_sync_scheduled_at", new_ts)
 
     async def sync_starts(self):
         doc = {
             "last_sync_status": JobStatus.IN_PROGRESS.value,
             "last_sync_error": None,
             "status": Status.CONNECTED.value,
+            "error": None,
         }
         await self.index.update(
             doc_id=self.id,
@@ -654,7 +712,7 @@ class Connector(ESDocument):
                 logger.critical(e, exc_info=True)
                 raise DataSourceError(
                     f"Could not instantiate {fqn} for {configured_service_type}"
-                )
+                ) from e
 
         await self.index.update(
             doc_id=self.id,
@@ -719,7 +777,9 @@ class Connector(ESDocument):
             source_klass = get_source_klass(fqn)
         except Exception as e:
             logger.critical(e, exc_info=True)
-            raise DataSourceError(f"Could not instantiate {fqn} for {service_type}")
+            raise DataSourceError(
+                f"Could not instantiate {fqn} for {service_type}"
+            ) from e
 
         default_config = source_klass.get_simple_configuration()
         current_config = self.configuration.to_dict()

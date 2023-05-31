@@ -13,8 +13,8 @@ from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 import elasticsearch
 from envyaml import EnvYAML
 
-from connectors.byoei import ElasticServer
 from connectors.es.settings import DEFAULT_LANGUAGE, Mappings, Settings
+from connectors.es.sink import SyncOrchestrator
 from connectors.logger import logger, set_logger
 from connectors.source import get_source_klass
 from connectors.utils import validate_index_name
@@ -92,7 +92,7 @@ DEFAULT_PIPELINE = {
 
 async def prepare(service_type, index_name, config, connector_definition=None):
     klass = get_source_klass(config["sources"][service_type])
-    es = ElasticServer(config["elasticsearch"])
+    es = SyncOrchestrator(config["elasticsearch"])
 
     # add a dummy pipeline
     try:
@@ -149,8 +149,10 @@ async def prepare(service_type, index_name, config, connector_definition=None):
             "language": "en",
             # Last sync
             "last_sync_status": None,
+            "last_permissions_sync_status": None,
             "last_sync_error": None,
             "last_sync_scheduled_at": None,
+            "last_permissions_sync_scheduled_at": None,
             "last_synced": None,
             # Written by connector on each operation,
             # used by Kibana to hint to user about status of connector
@@ -215,6 +217,7 @@ async def prepare(service_type, index_name, config, connector_definition=None):
                 "reduce_whitespace": True,
                 "run_ml_inference": True,
             },
+            "sync_cursor": None,
             "sync_now": False,
             "is_native": True,
         }

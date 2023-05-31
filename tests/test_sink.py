@@ -11,15 +11,15 @@ from unittest.mock import ANY, Mock, call
 
 import pytest
 
-from connectors.byoei import (
-    AsyncBulkRunningError,
-    Bulker,
-    ContentIndexNameInvalid,
-    ElasticServer,
-    Fetcher,
-    IndexMissing,
-)
 from connectors.es.settings import TEXT_FIELD_MAPPING
+from connectors.es.sink import (
+    AsyncBulkRunningError,
+    ContentIndexNameInvalid,
+    Extractor,
+    IndexMissing,
+    Sink,
+    SyncOrchestrator,
+)
 from connectors.protocol import Pipeline
 from tests.commons import AsyncIterator
 
@@ -46,7 +46,7 @@ CONTENT_EXTRACTION_DISABLED = False
 @pytest.mark.asyncio
 async def test_prepare_content_index_raise_error_when_index_name_invalid():
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    es = ElasticServer(config)
+    es = SyncOrchestrator(config)
 
     with pytest.raises(ContentIndexNameInvalid):
         await es.prepare_content_index("lalalalalalalala woohooo")
@@ -72,7 +72,7 @@ async def test_prepare_content_index_raise_error_when_index_does_not_exist(
         headers=headers,
     )
 
-    es = ElasticServer(config)
+    es = SyncOrchestrator(config)
 
     with pytest.raises(IndexMissing):
         await es.prepare_content_index("search-new-index")
@@ -111,7 +111,7 @@ async def test_prepare_content_index(mock_responses):
         payload=mappings,
     )
 
-    es = ElasticServer(config)
+    es = SyncOrchestrator(config)
     put_mappings_result = asyncio.Future()
     put_mappings_result.set_result({"acknowledged": True})
     with mock.patch.object(
@@ -221,10 +221,10 @@ async def test_get_existing_ids(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses)
 
-    es = ElasticServer(config)
-    fetcher = Fetcher(es.client, None, "search-some-index")
+    es = SyncOrchestrator(config)
+    extractor = Extractor(es.client, None, "search-some-index")
     ids = []
-    async for doc_id, ts in fetcher._get_existing_ids():
+    async for doc_id, ts in extractor._get_existing_ids():
         ids.append(doc_id)
 
     assert ids == ["1", "2"]
@@ -236,7 +236,7 @@ async def test_async_bulk(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses)
 
-    es = ElasticServer(config)
+    es = SyncOrchestrator(config)
     pipeline = Pipeline({})
 
     async def get_docs():
@@ -355,7 +355,7 @@ async def lazy_downloads_mock():
     return lazy_downloads
 
 
-async def setup_fetcher(
+async def setup_extractor(
     basic_rule_engine,
     queue,
     sync_rules_enabled,
@@ -364,15 +364,15 @@ async def setup_fetcher(
     # filtering content doesn't matter as the BasicRuleEngine behavior is mocked
     filter_mock = Mock()
     filter_mock.get_active_filter = Mock(return_value={})
-    fetcher = Fetcher(
+    extractor = Extractor(
         None,
         queue,
         INDEX,
         filter_=filter_mock,
         content_extraction_enabled=content_extraction_enabled,
     )
-    fetcher.basic_rule_engine = basic_rule_engine if sync_rules_enabled else None
-    return fetcher
+    extractor.basic_rule_engine = basic_rule_engine if sync_rules_enabled else None
+    return extractor
 
 
 @pytest.mark.parametrize(
@@ -600,7 +600,7 @@ async def setup_fetcher(
         ),
     ],
 )
-@mock.patch("connectors.byoei.Fetcher._get_existing_ids")
+@mock.patch("connectors.es.sink.Extractor._get_existing_ids")
 @pytest.mark.asyncio
 async def test_get_docs(
     get_existing_ids,
@@ -629,19 +629,19 @@ async def test_get_docs(
         # instances
         doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
 
-        fetcher = await setup_fetcher(
+        extractor = await setup_extractor(
             basic_rule_engine,
             queue,
             sync_rules_enabled,
             content_extraction_enabled,
         )
 
-        await fetcher.run(doc_generator)
+        await extractor.run(doc_generator)
 
-        assert fetcher.total_docs_updated == expected_total_docs_updated
-        assert fetcher.total_docs_created == expected_total_docs_created
-        assert fetcher.total_docs_deleted == expected_total_docs_deleted
-        assert fetcher.total_downloads == expected_total_downloads
+        assert extractor.total_docs_updated == expected_total_docs_updated
+        assert extractor.total_docs_created == expected_total_docs_created
+        assert extractor.total_docs_deleted == expected_total_docs_deleted
+        assert extractor.total_downloads == expected_total_downloads
 
         assert queue_called_with_operations(queue, expected_queue_operations)
 
@@ -730,7 +730,7 @@ FAILED_DELETE_ITEM = {"delete": {"_id": "3"}}
     ],
 )
 def test_bulk_populate_stats(res, expected_result):
-    bulker = Bulker(
+    sink = Sink(
         client=None,
         queue=None,
         chunk_size=0,
@@ -738,15 +738,15 @@ def test_bulk_populate_stats(res, expected_result):
         chunk_mem_size=0,
         max_concurrency=0,
     )
-    bulker._populate_stats(deepcopy(STATS), res)
+    sink._populate_stats(deepcopy(STATS), res)
 
-    assert bulker.indexed_document_count == expected_result["indexed_document_count"]
-    assert bulker.indexed_document_volume == expected_result["indexed_document_volume"]
-    assert bulker.deleted_document_count == expected_result["deleted_document_count"]
+    assert sink.indexed_document_count == expected_result["indexed_document_count"]
+    assert sink.indexed_document_volume == expected_result["indexed_document_volume"]
+    assert sink.deleted_document_count == expected_result["deleted_document_count"]
 
 
 @pytest.mark.parametrize(
-    "fetcher_task, fetcher_task_done, bulker_task, bulker_task_done, expected_result",
+    "extractor_task, extractor_task_done, sink_task, sink_task_done, expected_result",
     [
         (None, False, None, False, True),
         (Mock(), False, None, False, False),
@@ -761,17 +761,17 @@ def test_bulk_populate_stats(res, expected_result):
 )
 @pytest.mark.asyncio
 async def test_elastic_server_done(
-    fetcher_task, fetcher_task_done, bulker_task, bulker_task_done, expected_result
+    extractor_task, extractor_task_done, sink_task, sink_task_done, expected_result
 ):
-    if fetcher_task is not None:
-        fetcher_task.done.return_value = fetcher_task_done
-    if bulker_task is not None:
-        bulker_task.done.return_value = bulker_task_done
+    if extractor_task is not None:
+        extractor_task.done.return_value = extractor_task_done
+    if sink_task is not None:
+        sink_task.done.return_value = sink_task_done
 
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    es = ElasticServer(config)
-    es._fetcher_task = fetcher_task
-    es._bulker_task = bulker_task
+    es = SyncOrchestrator(config)
+    es._extractor_task = extractor_task
+    es._sink_task = sink_task
 
     assert es.done() == expected_result
 
