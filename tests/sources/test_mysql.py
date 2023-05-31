@@ -444,13 +444,7 @@ async def test_client_ping_negative(patch_logger):
 async def test_fetch_documents(patch_connection_pool):
     primary_key_col = "pk"
     column = "column"
-
-    document = {
-        "Table": "table_name",
-        "_id": "table_name_",
-        "_timestamp": TIME,
-        f"table_name_{column}": "table1",
-    }
+    document = ["table1"]
 
     source = await setup_mysql_source(DATABASE)
     source.mysql_client = as_async_context_manager_mock(
