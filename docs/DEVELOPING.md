@@ -225,7 +225,7 @@ Do not log the values of credentials!
 
 It is modern best-practice to assume that any credential can and will be revoked.
 Even passwords in basic-auth _should_ be rotated on occasion.
-Connectors should be designed to accomodate this.
+Connectors should be designed to accommodate this.
 Find out what types of errors the 3rd-party will raise if invalid or expired credentials are submitted, and be sure to recognize these types of errors for what they are.
 Handling these errors so that they display in Kibana like, `"Your configured credentials have expired, please re-configure"` is significantly preferable over, `"Sync failed, see logs for details: Error: 401 Unauthorized"`.
 Even better than that is to not issue an error at all, but to instead automatically refresh the credentails and retry.

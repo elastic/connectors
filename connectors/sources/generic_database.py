@@ -328,8 +328,8 @@ class GenericBaseDataSource(BaseDataSource):
                 )
             )
             logger.info(f"Successfully connected to {self.dialect}.")
-        except Exception:
-            raise Exception(f"Can't connect to {self.dialect} on {self.host}")
+        except Exception as e:
+            raise Exception(f"Can't connect to {self.dialect} on {self.host}") from e
 
     async def fetch_documents(self, table, schema=None):
         """Fetches all the table entries and format them in Elasticsearch documents
@@ -403,7 +403,7 @@ class GenericBaseDataSource(BaseDataSource):
                     )
                     column_names = await anext(streamer)
                     async for row in streamer:
-                        row = dict(zip(column_names, row))
+                        row = dict(zip(column_names, row, strict=True))
                         keys_value = ""
                         for key in keys:
                             keys_value += (
