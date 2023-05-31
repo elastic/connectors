@@ -538,6 +538,10 @@ class Connector(ESDocument):
     def last_sync_status(self):
         return JobStatus(self.get("last_sync_status"))
 
+    @property
+    def last_access_control_sync_status(self):
+        return JobStatus(self.get("last_access_control_sync_status"))
+
     def _property_as_datetime(self, key):
         value = self.get(key)
         if value is not None:
