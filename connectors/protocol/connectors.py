@@ -507,8 +507,8 @@ class Connector(ESDocument):
         return self.get("scheduling", default={})
 
     @property
-    def permissions_scheduling(self):
-        return self.scheduling.get("permissions", {})
+    def access_control_scheduling(self):
+        return self.scheduling.get("access_control", {})
 
     @property
     def configuration(self):
