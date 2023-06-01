@@ -553,7 +553,7 @@ async def test_sync_job_properties():
         "_id": "test",
         "_source": {
             "status": "error",
-            "job_type": "permissions",
+            "job_type": "access_control",
             "error": "something wrong",
             "indexed_document_count": 10,
             "indexed_document_volume": 20,
@@ -590,7 +590,7 @@ async def test_sync_job_properties():
     assert isinstance(sync_job.filtering, Filter)
     assert isinstance(sync_job.pipeline, Pipeline)
 
-    assert sync_job.job_type == JobType.PERMISSIONS
+    assert sync_job.job_type == JobType.ACCESS_CONTROL
     assert isinstance(sync_job.job_type, JobType)
 
 

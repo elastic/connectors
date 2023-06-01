@@ -95,7 +95,7 @@ class JobStatus(Enum):
 
 
 class JobType(Enum):
-    PERMISSIONS = "permissions"
+    ACCESS_CONTROL = "access_control"
     UNSET = None
 
 
