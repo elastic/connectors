@@ -326,7 +326,7 @@ async def test_connector_properties():
             "configuration": {},
             "language": "en",
             "scheduling": {
-                "permissions": {
+                "access_control": {
                     "enabled": True,
                     "interval": "* * * * *"
                 }
@@ -334,6 +334,7 @@ async def test_connector_properties():
             "status": "created",
             "last_seen": iso_utc(),
             "last_sync_status": "completed",
+            "last_access_control_sync_status": "pending",
             "pipeline": {},
             "last_sync_scheduled_at": iso_utc(),
             "last_permissions_sync_scheduled_at": iso_utc(),
@@ -353,8 +354,9 @@ async def test_connector_properties():
     assert connector.index_name == "search-some-index"
     assert connector.language == "en"
     assert connector.last_sync_status == JobStatus.COMPLETED
-    assert connector.permissions_scheduling["enabled"]
-    assert connector.permissions_scheduling["interval"] == "* * * * *"
+    assert connector.last_access_control_sync_status == JobStatus.PENDING
+    assert connector.access_control_scheduling["enabled"]
+    assert connector.access_control_scheduling["interval"] == "* * * * *"
     assert connector.sync_cursor == SYNC_CURSOR
     assert isinstance(connector.last_seen, datetime)
     assert isinstance(connector.filtering, Filtering)
