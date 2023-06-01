@@ -3,10 +3,9 @@ import os
 
 _AGENTS = """\
 agents:
-  provider: "gcp"
-  machineType: "t2a-standard-8"
-  useVault: true
-  image: "ubuntu-2204"
+  provider: aws
+  instanceType: m6g.xlarge
+  imagePrefix: ci-amazonlinux-2-aarch64
 """
 
 # image: family/enterprise-search-ubuntu-2204-connectors-py
