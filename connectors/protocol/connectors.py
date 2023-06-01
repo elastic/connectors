@@ -503,12 +503,16 @@ class Connector(ESDocument):
         return self.get("sync_now", default=False)
 
     @property
-    def scheduling(self):
-        return self.get("scheduling", default={})
+    def full_sync_scheduling(self):
+        return self.get("scheduling", "full", default={})
+
+    @property
+    def incremental_sync_scheduling(self):
+        return self.get("scheduling", "incremental", default={})
 
     @property
     def access_control_scheduling(self):
-        return self.scheduling.get("access_control", {})
+        return self.get("scheduling", "access_control", default={})
 
     @property
     def configuration(self):
@@ -574,10 +578,10 @@ class Connector(ESDocument):
 
     def next_sync(self):
         """Returns the datetime when the next sync will run, return None if it's disabled."""
-        if not self.scheduling.get("enabled", False):
+        if not self.full_sync_scheduling.get("enabled", False):
             logger.debug("scheduler is disabled")
             return None
-        return next_run(self.scheduling.get("interval"))
+        return next_run(self.full_sync_scheduling.get("interval"))
 
     async def reset_sync_now_flag(self):
         await self.index.update(
@@ -625,7 +629,7 @@ class Connector(ESDocument):
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
-    async def sync_done(self, job):
+    async def sync_done(self, job, cursor=None):
         job_status = JobStatus.ERROR if job is None else job.status
         job_error = JOB_NOT_FOUND_ERROR if job is None else job.error
         if job_error is None and job_status == JobStatus.ERROR:
@@ -641,6 +645,10 @@ class Connector(ESDocument):
             "status": connector_status.value,
             "error": job_error,
         }
+
+        # only update sync cursor after a successful sync job
+        if job_status == JobStatus.COMPLETED:
+            doc["sync_cursor"] = cursor
 
         if job is not None and job.terminated:
             doc["last_indexed_document_count"] = job.indexed_document_count

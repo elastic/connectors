@@ -100,7 +100,7 @@
                         }
                 }
         ],
-        "scheduling": {"enabled": true, "interval": "1 * * * * *"},
+        "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
         "pipeline": {
                 "extract_binary_content": true,
                 "name": "ent-search-generic-ingestion",
