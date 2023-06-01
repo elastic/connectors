@@ -5,12 +5,8 @@ _AGENTS = """\
 agents:
   provider: aws
   instanceType: m6g.xlarge
-  image: family/enterprise-search-ubuntu-2204-connectors-py
+  image: family/enterprise-search-ubuntu-2204-aarch64-connectors-py
 """
-
-#   imagePrefix: ci-amazonlinux-2-aarch64
-# image: family/enterprise-search-ubuntu-2204-connectors-py
-
 
 with open(os.path.join(os.path.dirname(__file__), 'nightly_steps.yml')) as f:
     steps = f.read().strip()
