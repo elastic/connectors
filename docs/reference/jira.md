@@ -102,7 +102,16 @@ The connector syncs the following objects and entities:
 
 - Files bigger than 10 MB won't be extracted
 - Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
-- Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
+
+## Advanced Sync Rules
+
+Advanced Sync Rules are now available in elastic 8.9 version.
+
+- Users can add [JQL queries](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/) for syncing the source.
+- All the data returned by JQL queries will be indexed.
+- You can refer to [JIRA.md](../connectors/docs/sync-rules/JIRA.md) for the correct format to add sync rules. Any errors encountered, will be presented to the user visually in the sync rules overview.
+
+**Note:** "projects" configuration field will be overridden by the advanced rules.
 
 ## Connector Client operations
 
