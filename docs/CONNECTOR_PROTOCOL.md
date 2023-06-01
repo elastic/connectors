@@ -132,7 +132,7 @@ This is our main communication index, used to communicate the connector's config
     run_ml_inference: boolean; -> Whether the `request_pipeline` should run the ML Inference pipeline
   }
   scheduling: {
-    [job_type]: {       -> Can one of access_control, incremental or full
+    [job_type]: {       -> Can be one of access_control, incremental or full
       enabled: boolean; -> Whether job schedule is enabled
       interval: string; -> Quartz Cron syntax
     }
