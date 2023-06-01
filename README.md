@@ -25,3 +25,6 @@ See the [official end-user documentation](https://www.elastic.co/guide/en/enterp
 ### Advanced sync rules
 
 - [MySQL](docs/sync-rules/MYSQL.md)
+- [JIRA](docs/sync-rules/JIRA.md)
+- [CONFLUENCE](docs/sync-rules/CONFLUENCE.md)
+

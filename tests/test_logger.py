@@ -12,7 +12,7 @@ from contextlib import contextmanager
 import pytest
 
 import connectors.logger
-from connectors.logger import TracedAsyncGenerator, logger, set_logger, tracer
+from connectors.logger import logger, set_logger, tracer
 
 
 @contextmanager
@@ -70,7 +70,7 @@ def test_tracer():
         data = json.loads(ecs_log)
 
         assert data['message'].startswith(
-        'trace me traceable took 0.1'
+            '[trace me] traceable took 0.1'
         )
 
 
@@ -97,7 +97,7 @@ async def test_async_tracer():
         # make sure it's JSON and we have service.type
         data = json.loads(ecs_log)
         assert data['message'].startswith(
-        'trace me special took 0.1'
+            '[trace me] special took 0.1'
         )
 
 
@@ -139,21 +139,19 @@ async def test_trace_async_gen():
 
         logger.handlers[0].stream.write = _w
 
+        @tracer.start_as_current_span("trace me", "special")
         async def gen():
             yield '1'
             yield '2'
             yield '3'
 
-        gen = TracedAsyncGenerator(gen(), 'one')
-        async for i in gen:
+        async for i in gen():
             pass
 
         assert len(logs) == 4
 
-        ecs_log = logs[0]
-
-        # make sure it's JSON and we have service.type
-        data = json.loads(ecs_log)
-        assert data['message'].startswith(
-        'one took '
-        )
+        for i, log in enumerate(logs):
+            data = json.loads(log)
+            assert data['message'].startswith(
+                f'[trace me] {i}-special took'
+            )
