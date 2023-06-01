@@ -625,7 +625,7 @@ class Connector(ESDocument):
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
-    async def sync_done(self, job):
+    async def sync_done(self, job, cursor=None):
         job_status = JobStatus.ERROR if job is None else job.status
         job_error = JOB_NOT_FOUND_ERROR if job is None else job.error
         if job_error is None and job_status == JobStatus.ERROR:
@@ -641,6 +641,10 @@ class Connector(ESDocument):
             "status": connector_status.value,
             "error": job_error,
         }
+
+        # only update sync cursor after a successful sync job
+        if job_status == JobStatus.COMPLETED:
+            doc["sync_cursor"] = cursor
 
         if job is not None and job.terminated:
             doc["last_indexed_document_count"] = job.indexed_document_count

@@ -509,6 +509,7 @@ def mock_job(
                 "last_sync_error": None,
                 "status": Status.CONNECTED.value,
                 "error": None,
+                "sync_cursor": SYNC_CURSOR,
                 "last_indexed_document_count": 0,
                 "last_deleted_document_count": 0,
             },
@@ -521,7 +522,7 @@ async def test_sync_done(job, expected_doc_source_update):
     index.update = AsyncMock(return_value=1)
 
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.sync_done(job=job)
+    await connector.sync_done(job=job, cursor=SYNC_CURSOR)
     index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
 
 
