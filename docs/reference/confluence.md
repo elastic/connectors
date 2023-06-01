@@ -92,7 +92,16 @@ The connector syncs the following Confluence object types:
 
 - Content of files bigger than 10 MB won't be extracted.
 - Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
-- Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
+
+## Advanced Sync Rules
+
+Advanced Sync Rules are now available in elastic 8.9 version.
+
+- Users can add [CQL queries](https://developer.atlassian.com/cloud/confluence/advanced-searching-using-cql/) for syncing the source.
+- All the data returned by the CQL queries will be indexed.
+- You can refer to [CONFLUENCE.md](../connectors/docs/sync-rules/CONFLUENCE.md) for the correct format to add sync rules. Any errors encountered, will be presented to the user visually in the sync rules overview.
+
+**Note:** “spaces” configuration field will be overridden by the advanced rules.
 
 ## Connector Client operations
 

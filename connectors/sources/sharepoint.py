@@ -590,6 +590,7 @@ class SharepointClient:
                         attachment_file.get("ServerRelativeUrl"),
                     )
                     result["file_name"] = attachment_file.get("FileName")
+                    result["server_relative_url"] = attachment_file["ServerRelativeUrl"]
 
                     if (
                         os.path.splitext(attachment_file["FileName"])[-1]
@@ -815,6 +816,7 @@ class SharepointDataSource(BaseDataSource):
         document["url"] = urljoin(
             self.sharepoint_client.host_url, item["RootFolder"]["ServerRelativeUrl"]
         )
+        document["server_relative_url"] = item["RootFolder"]["ServerRelativeUrl"]
 
         self.map_document_with_schema(
             document=document, item=item, document_type=document_type
@@ -858,6 +860,7 @@ class SharepointDataSource(BaseDataSource):
                     self.sharepoint_client.host_url,
                     item[item_type]["ServerRelativeUrl"],
                 ),
+                "server_relative_url": item[item_type]["ServerRelativeUrl"],
                 "type": item_type,
             }
         )
@@ -889,6 +892,9 @@ class SharepointDataSource(BaseDataSource):
                 "url": item["url"],
             }
         )
+        server_url = item.get("server_relative_url")
+        if server_url:
+            document["server_relative_url"] = server_url
 
         self.map_document_with_schema(
             document=document, item=item, document_type=LIST_ITEM

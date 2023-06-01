@@ -208,8 +208,10 @@ async def prepare(service_type, index_name, config, connector_definition=None):
             ],
             # Scheduling intervals
             "scheduling": {
-                "enabled": False,
-                "interval": "1 * * * * *",
+                "full": {
+                    "enabled": False,
+                    "interval": "1 * * * * *",
+                },
             },  # quartz syntax
             "pipeline": {
                 "extract_binary_content": True,
