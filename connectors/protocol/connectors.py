@@ -578,7 +578,7 @@ class Connector(ESDocument):
             await self.index.heartbeat(doc_id=self.id)
 
     def next_sync(self, job_type):
-        """Returns the datetime when the next sync will run, return None if it's disabled."""
+        """Returns the datetime when the next sync for a given job type will run, return None if it's disabled."""
 
         match job_type:
             case JobType.ACCESS_CONTROL:
