@@ -513,6 +513,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             ):  # TODO: simplify and eliminate root call
                 site["_id"] = site["id"]
                 site["object_type"] = "site"
+
                 yield site, None
 
                 async for site_drive in self._client.site_drives(site["id"]):
@@ -594,9 +595,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                     for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:
                         if html_field in site_page:
-                            site_page[html_field] = await html_to_text(
-                                site_page[html_field]
-                            )
+                            site_page[html_field] = html_to_text(site_page[html_field])
 
                     yield site_page, None
 
