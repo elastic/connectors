@@ -5,9 +5,10 @@ _AGENTS = """\
 agents:
   provider: aws
   instanceType: m6g.xlarge
-  imagePrefix: ci-amazonlinux-2-aarch64
+  image: family/enterprise-search-ubuntu-2204-connectors-py
 """
 
+#   imagePrefix: ci-amazonlinux-2-aarch64
 # image: family/enterprise-search-ubuntu-2204-connectors-py
 
 
