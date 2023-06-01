@@ -102,3 +102,51 @@ spec:
         everyone:
           access_level: "READ_ONLY"
         ingestion-team: {}
+
+
+############################# Nightly Test Suites #############################
+# Declare daily/nightly aarch64 tests pipeline
+---
+apiVersion: "backstage.io/v1alpha1"
+kind: "Resource"
+metadata:
+  name: "connectors-python-nightlyi-aarch64"
+  description: "Nightly Connector Service Tests"
+  links:
+    - title: "connectors-python Nightly Buildkite Jobs"
+      url: "https://buildkite.com/elastic/connectors-python"
+spec:
+  type: "buildkite-pipeline"
+  owner: "group:ingestion-team"
+  system: "buildkite"
+  implementation:
+    apiVersion: "buildkite.elastic.dev/v1"
+    kind: "Pipeline"
+    metadata:
+      name: "connectors-python-nightly-aarch64"
+      description: "Connectors Service in Python Nightly Tests"
+      links:
+        - title: "Connector Service Nightly Pipeline"
+          url: "https://buildkite.com/elastic/connectors-python-nightly-aarch64"
+    spec:
+      pipeline_file: ".buildkite/nightly_aarch64.py"
+      provider_settings:
+        trigger_mode: "none"
+      repository: "elastic/connectors-python"
+      schedules:
+        Daily 8_7:
+          branch: '8.7'
+          cronline: '@daily'
+          message: "Runs daily `8.7` e2e aarch64 test"
+        Daily 8_8:
+          branch: '8.8'
+          cronline: '@daily'
+          message: "Runs daily `8.8` e2e aarch64 test"
+        Daily main:
+          branch: main
+          cronline: '@daily'
+          message: "Runs daily `main` e2e aarch64 test"
+      teams:
+        everyone:
+          access_level: "READ_ONLY"
+        ingestion-team: {}
