@@ -22,6 +22,7 @@ from connectors.utils import CacheWithTimeout, convert_to_b64, html_to_text, url
 GRAPH_API_URL = "https://graph.microsoft.com/v1.0"
 DEFAULT_RETRY_SECONDS = 30
 FILE_WRITE_CHUNK_SIZE = 1024
+MAX_DOCUMENT_SIZE = 10485760
 
 
 class MicrosoftSecurityToken:
@@ -538,7 +539,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 logger.warning(
                                     f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
                                 )
-                            elif drive_item["size"] > 10485760:
+                            elif drive_item["size"] > MAX_DOCUMENT_SIZE:
                                 logger.warning(
                                     f"Not downloading file {drive_item['name']} of size {drive_item['size']}"
                                 )
@@ -628,7 +629,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         if not (doit and document_size):
             return
 
-        if document_size > 10485760:
+        if document_size > MAX_DOCUMENT_SIZE:
             return
 
         result = {
