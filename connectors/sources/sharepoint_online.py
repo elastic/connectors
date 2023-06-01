@@ -291,11 +291,8 @@ class SharepointOnlineClient:
                 yield site_collection
 
     async def discover_sites(
-        self, site_collection, allowed_root_sites, fetch_private_sites=False
+        self, site_collection, allowed_root_sites
     ):
-        sites = []
-        root_site_ids = []
-
         async for site in self.sites(site_collection):
             if site["name"] not in allowed_root_sites:
                 continue
@@ -308,7 +305,7 @@ class SharepointOnlineClient:
 
                 yield subsite
 
-    async def sites(self, parent_site_id, fetch_private_sites=False):
+    async def sites(self, parent_site_id):
         select = ""
 
         async for page in self._graph_api_client.scroll(
@@ -406,7 +403,6 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
     SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {
-            "allowPrivateSites": {"type": "boolean"},
             "maxDataAge": {"type": "integer"},
         },
         "additionalProperties": False,
@@ -438,16 +434,21 @@ class SharepointOnlineDataSource(BaseDataSource):
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
 
-        tenant_id = self.configuration["tenant_id"]
-        tenant_name = self.configuration["tenant_name"]
-        client_id = self.configuration["client_id"]
-        client_secret = self.configuration["secret_value"]
+        self._client = None
 
-        self._client = SharepointOnlineClient(
-            tenant_id, tenant_name, client_id, client_secret
-        )
+    @property
+    def client(self):
+        if not self._client:
+            tenant_id = self.configuration["tenant_id"]
+            tenant_name = self.configuration["tenant_name"]
+            client_id = self.configuration["client_id"]
+            client_secret = self.configuration["secret_value"]
 
-        self.site_collections_to_sync = self.configuration["site_collections"]
+            self._client = SharepointOnlineClient(
+                tenant_id, tenant_name, client_id, client_secret
+            )
+
+        return self._client
 
     @classmethod
     def get_default_configuration(cls):
@@ -493,35 +494,32 @@ class SharepointOnlineDataSource(BaseDataSource):
         pass
 
     async def get_docs(self, filtering=None):
-        allow_private_sites = True
         max_data_age = None
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            allow_private_sites = advanced_rules["allowPrivateSites"]
             max_data_age = advanced_rules["maxDataAge"]
 
-        async for site_collection in self._client.site_collections():
+        async for site_collection in self.client.site_collections():
             site_collection["_id"] = site_collection["webUrl"]
             site_collection["object_type"] = "site_collection"
             yield site_collection, None
 
-            async for site in self._client.discover_sites(
+            async for site in self.client.discover_sites(
                 site_collection["siteCollection"]["hostname"],
-                self.site_collections_to_sync,
-                fetch_private_sites=allow_private_sites,
+                self.configuration["site_collections"],
             ):  # TODO: simplify and eliminate root call
                 site["_id"] = site["id"]
                 site["object_type"] = "site"
 
                 yield site, None
 
-                async for site_drive in self._client.site_drives(site["id"]):
+                async for site_drive in self.client.site_drives(site["id"]):
                     site_drive["_id"] = site_drive["id"]
                     site_drive["object_type"] = "site_drive"
                     yield site_drive, None
 
-                    async for drive_item in self._client.drive_items(site_drive["id"]):
+                    async for drive_item in self.client.drive_items(site_drive["id"]):
                         drive_item["_id"] = drive_item["id"]
                         drive_item["object_type"] = "drive_item"
                         drive_item["_timestamp"] = drive_item["lastModifiedDateTime"]
@@ -549,13 +547,13 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                         yield drive_item, download_func
 
-                async for site_list in self._client.site_lists(site["id"]):
+                async for site_list in self.client.site_lists(site["id"]):
                     site_list["_id"] = site_list["id"]
                     site_list["object_type"] = "site_list"
 
                     yield site_list, None
 
-                    async for list_item in self._client.site_list_items(
+                    async for list_item in self.client.site_list_items(
                         site["id"], site_list["id"]
                     ):
                         list_item["_id"] = list_item["id"]
@@ -568,7 +566,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             continue
 
                         if "Attachments" in list_item["fields"]:
-                            async for list_item_attachment in self._client.site_list_item_attachments(
+                            async for list_item_attachment in self.client.site_list_item_attachments(
                                 site["webUrl"], site_list["name"], list_item["id"]
                             ):
                                 list_item_attachment["_id"] = list_item_attachment[
@@ -589,7 +587,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                         yield list_item, download_func
 
-                async for site_page in self._client.site_pages(site["webUrl"]):
+                async for site_page in self.client.site_pages(site["webUrl"]):
                     site_page["_id"] = site_page["GUID"]
                     site_page["object_type"] = "site_page"
 
@@ -610,7 +608,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         source_file_name = ""
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            await self._client.download_attachment(attachment["odata.id"], async_buffer)
+            await self.client.download_attachment(attachment["odata.id"], async_buffer)
 
             source_file_name = async_buffer.name
 
@@ -640,7 +638,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         source_file_name = ""
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            await self._client.download_drive_item(
+            await self.client.download_drive_item(
                 drive_item["parentReference"]["driveId"], drive_item["id"], async_buffer
             )
 
@@ -661,7 +659,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         pass
 
     async def close(self):
-        await self._client.close()
+        await self.client.close()
 
     def advanced_rules_validators(self):
         return [SharepointOnlineAdvancedRulesValidator()]
