@@ -132,7 +132,7 @@ This is our main communication index, used to communicate the connector's config
     run_ml_inference: boolean; -> Whether the `request_pipeline` should run the ML Inference pipeline
   }
   scheduling: {
-    [job_type]: {       -> Can one of incremental, full or permissions
+    [job_type]: {       -> Can one of access_control, incremental or full
       enabled: boolean; -> Whether job schedule is enabled
       interval: string; -> Quartz Cron syntax
     }
@@ -290,6 +290,12 @@ This is our main communication index, used to communicate the connector's config
     },
     "scheduling" : {
       "properties" : {
+        "access_control": {
+          "properties" : {
+            "enabled" : { "type" : "boolean" },
+            "interval" : { "type" : "text" }
+          }
+        },
         "incremental": {
           "properties" : {
             "enabled" : { "type" : "boolean" },
@@ -297,12 +303,6 @@ This is our main communication index, used to communicate the connector's config
           }
         },
         "full": {
-          "properties" : {
-            "enabled" : { "type" : "boolean" },
-            "interval" : { "type" : "text" }
-          }
-        },
-        "permissions": {
           "properties" : {
             "enabled" : { "type" : "boolean" },
             "interval" : { "type" : "text" }
