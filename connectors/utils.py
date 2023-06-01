@@ -18,9 +18,11 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
+import lxml.html
 from base64io import Base64IO
 from bs4 import BeautifulSoup
 from cstriggers.core.trigger import QuartzCron
+from lxml import etree
 from pympler import asizeof
 
 from connectors.logger import logger
@@ -635,9 +637,15 @@ class CacheWithTimeout:
         self._expiration_date = expiration_date
 
 
-async def html_to_text(html):
+def html_to_text(html):
     # TODO: actually properly implement the function
     if not html:
         return html
-
-    return BeautifulSoup(html, features="html.parser").get_text()
+    try:
+        document = lxml.html.document_fromstring(html)
+        return "\n".join(
+            etree.XPath("//text()")(document)
+        )  # document.text_content() eats line breaks :(
+    except LxmlError as e:
+        # we actually don't want to raise, just fall back to bs4
+        return BeautifulSoup(html, features="html.parser").get_text(separator="\n")
