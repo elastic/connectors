@@ -301,7 +301,7 @@ class MySQLClient:
 
 
 def row2doc(row, column_names, primary_key_columns, table, timestamp):
-    row = dict(zip(column_names, row))
+    row = dict(zip(column_names, row, strict=True))
     row.update(
         {
             "_id": generate_id(table, row, primary_key_columns),
@@ -329,6 +329,22 @@ def generate_id(tables, row, primary_key_columns):
         f"{'_'.join(sorted(tables))}_"
         f"{'_'.join([str(pk_value) for pk in primary_key_columns if (pk_value := row.get(pk)) is not None])}"
     )
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_last_update_time(self, table):
+        async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+            await cursor.execute(self.queries.table_last_update_time(table))
+
+            result = await cursor.fetchone()
+
+            if result is not None:
+                return result[0]
+
+            return None
 
 
 class MySqlDataSource(BaseDataSource):
@@ -468,10 +484,10 @@ class MySqlDataSource(BaseDataSource):
     async def _validate_database_accessible(self, cursor):
         try:
             await cursor.execute(f"USE {self.database};")
-        except aiomysql.Error:
+        except aiomysql.Error as e:
             raise ConfigurableFieldValueError(
                 f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['user']}'."
-            )
+            ) from e
 
     async def _validate_tables_accessible(self, cursor):
         non_accessible_tables = []
