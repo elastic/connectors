@@ -257,7 +257,7 @@ class MemQueue(asyncio.Queue):
             #
             # self._putter is a deque used as a FIFO queue by asyncio.Queue.
             #
-            # Everytime a item is to be added in a full queue, a future (putter)
+            # Every time a item is to be added in a full queue, a future (putter)
             # is added at the end of that deque. A `get` call on the queue will remove the
             # fist element in that deque and set the future result, and this
             # will unlock the corresponding put() call here.
@@ -307,7 +307,7 @@ class ConcurrentTasks:
     concurrency value.
 
     - `max_concurrency`: max concurrent tasks allowed, default: 5
-    - `results_callback`: when provided, synchronous funciton called with the result of each task.
+    - `results_callback`: when provided, synchronous function called with the result of each task.
     """
 
     def __init__(self, max_concurrency=5, results_callback=None):

@@ -2,12 +2,14 @@
         "name": "mysql",
         "index_name": "search-mysql",
         "service_type": "mysql",
+        "sync_cursor": null,
         "sync_now": true,
         "is_native": true,
         "api_key_id": null,
         "status": "configured",
         "language": "en",
         "last_sync_status": "canceled",
+        "last_permissions_sync_status": null,
         "last_sync_error": null,
         "last_synced": null,
         "last_seen": null,
@@ -140,7 +142,7 @@
                 }
 
         ],
-        "scheduling": {"enabled": true, "interval": "1 * * * * *"},
+        "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
         "pipeline": {
                 "extract_binary_content": true,
                 "name": "ent-search-generic-ingestion",

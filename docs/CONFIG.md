@@ -10,7 +10,7 @@ Configuration lives in [config.yml](../config.yml).
   - `ssl`: Whether SSL is used for the Elasticsearch connection.
   - `ca_certs`: Path to a CA bundle.
   - `bulk`: Options for the Bulk API calls behavior - all options can be
-    overriden by each source class
+    overridden by each source class
     - `display_every`: The number of docs between each counters display. Defaults to 100.
     - `queue_max_size`: The max size of the bulk queue. Defaults to 1024.
     - `queue_max_mem_size`: The max size in MB of the bulk queue. When it's reached, the next put
@@ -61,7 +61,7 @@ When you have an Enterprise Search deployment on Elastic Cloud post 8.5.0, the c
 
 1. Go to Kibana, _Enterprise Search_ > _Create an Elasticsearch index_. Use the `Build a connector` option for an ingestion method to create an index.
 2. Create an API key to work with the connector. It should be done using the `Generate API key` button under `Configuration` tab.
-3. Configure your connector service application. You need to configure the followings fields, and leave the rest as default.
+3. Configure your connector service application. You need to configure the following fields, and leave the rest as default.
    1. `elasticsearch.host`: Configure this to the Elasticsearch endpoint.
    2. `elasticsearch.api_key`: Configure the API key generated in step 2. Make sure `elasticsearch.username` is not configured.
    3. `connector_id`: You can find the `connector_id` in step 3 `Deploy a connector` under `Configuration` tab in Kibana.

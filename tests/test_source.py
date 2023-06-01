@@ -773,6 +773,9 @@ async def test_base_class():
     with pytest.raises(NotImplementedError):
         await ds.get_docs()
 
+    with pytest.raises(NotImplementedError):
+        await ds.get_permissions()
+
     # default rule validators for every data source (order matters)
     assert BaseDataSource.basic_rules_validators() == [
         BasicRuleAgainstSchemaValidator,
