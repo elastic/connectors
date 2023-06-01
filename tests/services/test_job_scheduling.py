@@ -16,11 +16,12 @@ from connectors.es.index import DocumentNotFoundError
 from connectors.protocol import (
     DataSourceError,
     JobTriggerMethod,
+    JobType,
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
     Status,
 )
-from connectors.services.job_scheduling import JobSchedulingService
+from connectors.services.job_scheduling import SUPPORTED_JOB_TYPES, JobSchedulingService
 from connectors.source import DataSourceConfiguration
 from tests.commons import AsyncIterator
 
@@ -99,6 +100,7 @@ def mock_connector(
     sync_now=False,
     prepare_exception=None,
     last_sync_scheduled_at=None,
+    last_access_control_sync_scheduled_at=None
 ):
     connector = Mock()
     connector.native = True
@@ -107,6 +109,7 @@ def mock_connector(
     connector.configuration = DataSourceConfiguration({})
     connector.sync_now = sync_now
     connector.last_sync_scheduled_at = last_sync_scheduled_at
+    connector.last_access_control_sync_scheduled_at = last_access_control_sync_scheduled_at
 
     connector.features.sync_rules_enabled = Mock(return_value=True)
     connector.validate_filtering = AsyncMock()
@@ -118,6 +121,7 @@ def mock_connector(
     connector.error = AsyncMock()
     connector.reset_sync_now_flag = AsyncMock()
     connector.update_last_sync_scheduled_at = AsyncMock()
+    connector.update_last_access_control_sync_scheduled_at = AsyncMock()
 
     return connector
 
@@ -189,14 +193,20 @@ async def test_connector_ready_to_sync(
     await create_and_run_service()
 
     connector.prepare.assert_awaited()
-    connector.heartbeat.assert_awaited
+    connector.heartbeat.assert_awaited()
     connector.reset_sync_now_flag.assert_not_awaited()
     connector.update_last_sync_scheduled_at.assert_awaited()
-    sync_job_index_mock.create.assert_awaited_once_with(
-        connector=connector, trigger_method=JobTriggerMethod.SCHEDULED
-    )
+    connector.update_last_access_control_sync_scheduled_at.assert_awaited()
+
+    for job_type in SUPPORTED_JOB_TYPES:
+        sync_job_index_mock.create.assert_any_await(
+            connector=connector, trigger_method=JobTriggerMethod.SCHEDULED, job_type=job_type
+        )
+
+    assert sync_job_index_mock.create.await_count == len(SUPPORTED_JOB_TYPES)
 
 
+@patch("connectors.services.job_scheduling.SUPPORTED_JOB_TYPES", [JobType.FULL])
 @pytest.mark.asyncio
 async def test_connector_ready_to_sync_with_race_condition(
     connector_index_mock,
@@ -220,7 +230,7 @@ async def test_connector_ready_to_sync_with_race_condition(
     await create_and_run_service()
 
     connector.prepare.assert_awaited()
-    connector.heartbeat.assert_awaited
+    connector.heartbeat.assert_awaited()
     connector.reset_sync_now_flag.assert_not_awaited()
     connector.update_last_sync_scheduled_at.assert_awaited()
     sync_job_index_mock.create.assert_not_awaited()
@@ -252,16 +262,23 @@ async def test_connector_both_on_demand_and_scheduled(
     await create_and_run_service()
 
     connector.prepare.assert_awaited()
-    connector.heartbeat.assert_awaited
+    connector.heartbeat.assert_awaited()
     connector.reset_sync_now_flag.assert_awaited()
+
     connector.update_last_sync_scheduled_at.assert_awaited()
+    connector.update_last_access_control_sync_scheduled_at.assert_awaited()
+
     sync_job_index_mock.create.assert_any_await(
         connector=connector, trigger_method=JobTriggerMethod.ON_DEMAND
     )
-    sync_job_index_mock.create.assert_any_await(
-        connector=connector, trigger_method=JobTriggerMethod.SCHEDULED
-    )
-    assert sync_job_index_mock.create.await_count == 2
+
+    for job_type in SUPPORTED_JOB_TYPES:
+        sync_job_index_mock.create.assert_any_await(
+            connector=connector, trigger_method=JobTriggerMethod.SCHEDULED, job_type=job_type
+        )
+
+    # one call for on-demand syncs and one call per job type
+    assert sync_job_index_mock.create.await_count == 1 + len(SUPPORTED_JOB_TYPES)
 
 
 @pytest.mark.asyncio

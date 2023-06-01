@@ -46,6 +46,7 @@ __all__ = [
     "DataSourceError",
     "JobStatus",
     "Pipeline",
+    "JobType",
     "JobTriggerMethod",
     "ServiceTypeNotConfiguredError",
     "ServiceTypeNotSupportedError",
@@ -511,7 +512,7 @@ class Connector(ESDocument):
         return self.get("scheduling", "incremental", default={})
 
     @property
-    def access_control_scheduling(self):
+    def access_control_sync_scheduling(self):
         return self.get("scheduling", "access_control", default={})
 
     @property
@@ -576,12 +577,23 @@ class Connector(ESDocument):
             logger.debug(f"Sending heartbeat for connector {self.id}")
             await self.index.heartbeat(doc_id=self.id)
 
-    def next_sync(self):
+    def next_sync(self, job_type):
         """Returns the datetime when the next sync will run, return None if it's disabled."""
-        if not self.full_sync_scheduling.get("enabled", False):
-            logger.debug("scheduler is disabled")
+
+        match job_type:
+            case JobType.ACCESS_CONTROL:
+                scheduling_property = self.access_control_sync_scheduling
+            case JobType.INCREMENTAL:
+                scheduling_property = self.incremental_sync_scheduling
+            case JobType.FULL:
+                scheduling_property = self.full_sync_scheduling
+            case _:
+                raise ValueError(f"Unknown job type: {job_type}")
+
+        if not scheduling_property.get("enabled", False):
+            logger.debug(f"'{job_type.value}' sync scheduling is disabled")
             return None
-        return next_run(self.full_sync_scheduling.get("interval"))
+        return next_run(scheduling_property.get("interval"))
 
     async def reset_sync_now_flag(self):
         await self.index.update(
@@ -604,9 +616,6 @@ class Connector(ESDocument):
 
     async def update_last_incremental_sync_scheduled_at(self, new_ts):
         await self._update_datetime("last_incremental_sync_scheduled_at", new_ts)
-
-    async def update_last_permissions_sync_scheduled_at(self, new_ts):
-        await self._update_datetime("last_permissions_sync_scheduled_at", new_ts)
 
     async def update_last_access_control_sync_scheduled_at(self, new_ts):
         await self._update_datetime("last_access_control_sync_scheduled_at", new_ts)
@@ -869,7 +878,7 @@ class SyncJobIndex(ESIndex):
             doc_source=doc_source,
         )
 
-    async def create(self, connector, trigger_method):
+    async def create(self, connector, trigger_method, job_type):
         filtering = connector.filtering.get_active_filter().transform_filtering()
         job_def = {
             "connector": {
@@ -888,6 +897,7 @@ class SyncJobIndex(ESIndex):
             "deleted_document_count": 0,
             "created_at": iso_utc(),
             "last_seen": iso_utc(),
+            "job_type": job_type.value,
         }
         await self.index(job_def)
 

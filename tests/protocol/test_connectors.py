@@ -363,8 +363,8 @@ async def test_connector_properties():
     assert connector.language == "en"
     assert connector.last_sync_status == JobStatus.COMPLETED
     assert connector.last_access_control_sync_status == JobStatus.PENDING
-    assert connector.access_control_scheduling["enabled"]
-    assert connector.access_control_scheduling["interval"] == "* * * * *"
+    assert connector.access_control_sync_scheduling["enabled"]
+    assert connector.access_control_sync_scheduling["interval"] == "* * * * *"
     assert connector.full_sync_scheduling["enabled"]
     assert connector.full_sync_scheduling["interval"] == "* * * * *"
     assert connector.incremental_sync_scheduling["enabled"]
@@ -543,24 +543,44 @@ mock_next_run = iso_utc()
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "scheduling_enabled, expected_next_sync",
+    "scheduling_enabled, expected_next_sync, job_type",
     [
-        (False, None),
-        (True, mock_next_run),
+        (False, None, JobType.ACCESS_CONTROL),
+        (True, mock_next_run, JobType.ACCESS_CONTROL),
+        (False, None, JobType.FULL),
+        (True, mock_next_run, JobType.FULL),
+        (False, None, JobType.INCREMENTAL),
+        (True, mock_next_run, JobType.INCREMENTAL)
     ],
 )
 @patch("connectors.protocol.connectors.next_run")
-async def test_connector_next_sync(next_run, scheduling_enabled, expected_next_sync):
+async def test_connector_next_sync(next_run, scheduling_enabled, expected_next_sync, job_type):
     connector_doc = {
         "_id": "1",
         "_source": {
-            "scheduling": {"full": {"enabled": scheduling_enabled, "interval": "1 * * * * *"}},
+            "scheduling": {
+                "enabled": scheduling_enabled,
+                "interval": "1 * * * * *",
+                "access_control": {
+                    "enabled": scheduling_enabled,
+                    "interval": "1 * * * * *",
+                },
+                "full": {
+                    "enabled": scheduling_enabled,
+                    "interval": "1 * * * * *",
+                },
+                "incremental": {
+                    "enabled": scheduling_enabled,
+                    "interval": "1 * * * * *"
+                }
+            },
         },
     }
     index = Mock()
     next_run.return_value = mock_next_run
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    assert connector.next_sync() == expected_next_sync
+
+    assert connector.next_sync(job_type) == expected_next_sync
 
 
 @pytest.mark.asyncio
@@ -1676,10 +1696,11 @@ async def test_create_job(index_method, trigger_method, set_env):
         "deleted_document_count": 0,
         "created_at": ANY,
         "last_seen": ANY,
+        "job_type": JobType.FULL.value
     }
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    await sync_job_index.create(connector=connector, trigger_method=trigger_method)
+    await sync_job_index.create(connector=connector, trigger_method=trigger_method, job_type=JobType.FULL)
 
     index_method.assert_called_with(expected_index_doc)
 
