@@ -132,8 +132,10 @@ This is our main communication index, used to communicate the connector's config
     run_ml_inference: boolean; -> Whether the `request_pipeline` should run the ML Inference pipeline
   }
   scheduling: {
-    enabled: boolean; -> Whether job schedule is enabled
-    interval: string; -> Quartz Cron syntax
+    [job_type]: {       -> Can be one of access_control, incremental or full
+      enabled: boolean; -> Whether job schedule is enabled
+      interval: string; -> Quartz Cron syntax
+    }
   };
   service_type: string; -> Service type of the connector
   status: string;       -> Connector status Enum, see below
@@ -288,8 +290,24 @@ This is our main communication index, used to communicate the connector's config
     },
     "scheduling" : {
       "properties" : {
-        "enabled" : { "type" : "boolean" },
-        "interval" : { "type" : "text" }
+        "access_control": {
+          "properties" : {
+            "enabled" : { "type" : "boolean" },
+            "interval" : { "type" : "text" }
+          }
+        },
+        "incremental": {
+          "properties" : {
+            "enabled" : { "type" : "boolean" },
+            "interval" : { "type" : "text" }
+          }
+        },
+        "full": {
+          "properties" : {
+            "enabled" : { "type" : "boolean" },
+            "interval" : { "type" : "text" }
+          }
+        }
       }
     },
     "service_type" : { "type" : "keyword" },
