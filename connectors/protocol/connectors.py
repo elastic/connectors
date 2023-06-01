@@ -97,7 +97,7 @@ class JobStatus(Enum):
 class JobType(Enum):
     FULL = "full"
     INCREMENTAL = "incremental"
-    PERMISSIONS = "permissions"
+    ACCESS_CONTROL = "access_control"
     UNSET = None
 
 
@@ -561,8 +561,8 @@ class Connector(ESDocument):
         return self._property_as_datetime("last_incremental_sync_scheduled_at")
 
     @property
-    def last_permissions_sync_scheduled_at(self):
-        return self._property_as_datetime("last_permissions_sync_scheduled_at")
+    def last_access_control_sync_scheduled_at(self):
+        return self._property_as_datetime("last_access_control_sync_scheduled_at")
 
     @property
     def sync_cursor(self):
@@ -607,6 +607,9 @@ class Connector(ESDocument):
 
     async def update_last_permissions_sync_scheduled_at(self, new_ts):
         await self._update_datetime("last_permissions_sync_scheduled_at", new_ts)
+
+    async def update_last_access_control_sync_scheduled_at(self, new_ts):
+        await self._update_datetime("last_access_control_sync_scheduled_at", new_ts)
 
     async def sync_starts(self):
         doc = {

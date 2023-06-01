@@ -345,7 +345,7 @@ async def test_connector_properties():
             "last_access_control_sync_status": "pending",
             "pipeline": {},
             "last_sync_scheduled_at": iso_utc(),
-            "last_permissions_sync_scheduled_at": iso_utc(),
+            "last_access_control_sync_scheduled_at": iso_utc(),
             "sync_cursor": SYNC_CURSOR,
         },
     }
@@ -375,7 +375,7 @@ async def test_connector_properties():
     assert isinstance(connector.pipeline, Pipeline)
     assert isinstance(connector.features, Features)
     assert isinstance(connector.last_sync_scheduled_at, datetime)
-    assert isinstance(connector.last_permissions_sync_scheduled_at, datetime)
+    assert isinstance(connector.last_access_control_sync_scheduled_at, datetime)
 
 
 @pytest.mark.asyncio
@@ -569,7 +569,7 @@ async def test_sync_job_properties():
         "_id": "test",
         "_source": {
             "status": "error",
-            "job_type": "permissions",
+            "job_type": "access_control",
             "error": "something wrong",
             "indexed_document_count": 10,
             "indexed_document_volume": 20,
@@ -608,7 +608,7 @@ async def test_sync_job_properties():
     assert isinstance(sync_job.filtering, Filter)
     assert isinstance(sync_job.pipeline, Pipeline)
 
-    assert sync_job.job_type == JobType.PERMISSIONS
+    assert sync_job.job_type == JobType.ACCESS_CONTROL
     assert isinstance(sync_job.job_type, JobType)
 
 
@@ -1143,7 +1143,7 @@ async def test_connector_update_last_incremental_sync_scheduled_at():
 
 
 @pytest.mark.asyncio
-async def test_connector_update_last_permissions_sync_scheduled_at():
+async def test_connector_update_last_access_control_sync_scheduled_at():
     doc_id = "2"
     seq_no = 2
     primary_term = 1
@@ -1157,11 +1157,11 @@ async def test_connector_update_last_permissions_sync_scheduled_at():
     index = Mock()
     index.update = AsyncMock()
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.update_last_permissions_sync_scheduled_at(new_ts)
+    await connector.update_last_access_control_sync_scheduled_at(new_ts)
 
     index.update.assert_awaited_once_with(
         doc_id=doc_id,
-        doc={"last_permissions_sync_scheduled_at": new_ts.isoformat()},
+        doc={"last_access_control_sync_scheduled_at": new_ts.isoformat()},
         if_seq_no=seq_no,
         if_primary_term=primary_term,
     )

@@ -114,6 +114,8 @@ This is our main communication index, used to communicate the connector's config
   index_name: string;   -> The name of the content index where data will be written to
   is_native: boolean;   -> Whether this is a native connector
   language: string;     -> the language used for the analyzer
+  last_access_control_sync_scheduled_at: date;    -> Date/time when the last access control sync job is scheduled (UTC)
+  last_access_control_sync_status: string:  -> Status of the last access control sync job, or null if no job has been executed
   last_deleted_document_count: number;    -> How many documents were deleted in the last job
   last_incremental_sync_scheduled_at: date; -> Date/time when the last incremental sync job is scheduled (UTC)
   last_indexed_document_count: number;    -> How many documents were indexed in the last job  
@@ -123,7 +125,6 @@ This is our main communication index, used to communicate the connector's config
   last_permissions_sync_status: string:  -> Status of the last permissions sync job, or null if no job has been executed
   last_synced: date;    -> Date/time of last job (UTC)
   last_sync_scheduled_at: date;    -> Date/time when the last full sync job is scheduled (UTC)
-  last_permissions_sync_scheduled_at: date;    -> Date/time when the last permissions sync job is scheduled (UTC)
   name: string; -> the name to use for the connector
   pipeline: {
     extract_binary_content: boolean; -> Whether the `request_pipeline` should handle binary data
@@ -270,6 +271,8 @@ This is our main communication index, used to communicate the connector's config
     "index_name" : { "type" : "keyword" },
     "is_native" : { "type" : "boolean" },
     "language" : { "type" : "keyword" },
+    "last_access_control_sync_scheduled_at": { "type": "date" },
+    "last_access_control_sync_status" : { "type" : "keyword" },
     "last_deleted_document_count" : { "type" : "long" },
     "last_incremental_sync_scheduled_at" : { "type" : "date" },
     "last_indexed_document_count" : { "type" : "long" },
@@ -277,7 +280,6 @@ This is our main communication index, used to communicate the connector's config
     "last_sync_error" : { "type" : "keyword" },
     "last_sync_scheduled_at" : { "type" : "date" },
     "last_sync_status" : { "type" : "keyword" },
-    "last_permissions_sync_status" : { "type" : "keyword" },
     "last_synced" : { "type" : "date" },
     "name" : { "type" : "keyword" },
     "pipeline" : {
@@ -391,7 +393,7 @@ In addition to the connector index `.elastic-connectors`, we have an additional 
 **Possible values for `job_type`**
 - `full` -> A full sync job to sync all data.
 - `incremental` -> An incremental sync job to sync changes from the last sync job.
-- `permissions` -> A permissions sync job to sync identities.
+- `access_control` -> An access control sync job to sync identities.
 
 #### Elasticsearch mappings for `.elastic-connectors-sync-jobs`:
 ```
