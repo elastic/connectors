@@ -3,10 +3,9 @@ import os
 
 _AGENTS = """\
 agents:
-  provider: "gcp"
-  machineType: "t2a-standard-8"
-  useVault: true
-  image: family/enterprise-search-ubuntu-2204-connectors-py
+  provider: aws
+  instanceType: m6g.xlarge
+  imagePrefix: enterprise-search-ubuntu-2204-aarch64-connectors-py
 """
 
 with open(os.path.join(os.path.dirname(__file__), 'nightly_steps.yml')) as f:
