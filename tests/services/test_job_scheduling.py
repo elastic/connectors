@@ -99,8 +99,7 @@ def mock_connector(
     next_sync=default_next_sync,
     sync_now=False,
     prepare_exception=None,
-    last_sync_scheduled_at=None,
-    last_access_control_sync_scheduled_at=None
+    last_sync_scheduled_at_by_job_type=None
 ):
     connector = Mock()
     connector.native = True
@@ -108,8 +107,7 @@ def mock_connector(
     connector.status = status
     connector.configuration = DataSourceConfiguration({})
     connector.sync_now = sync_now
-    connector.last_sync_scheduled_at = last_sync_scheduled_at
-    connector.last_access_control_sync_scheduled_at = last_access_control_sync_scheduled_at
+    connector.last_sync_scheduled_at_by_job_type.return_value = last_sync_scheduled_at_by_job_type
 
     connector.features.sync_rules_enabled = Mock(return_value=True)
     connector.validate_filtering = AsyncMock()
@@ -120,8 +118,7 @@ def mock_connector(
     connector.reload = AsyncMock()
     connector.error = AsyncMock()
     connector.reset_sync_now_flag = AsyncMock()
-    connector.update_last_sync_scheduled_at = AsyncMock()
-    connector.update_last_access_control_sync_scheduled_at = AsyncMock()
+    connector.update_last_sync_scheduled_at_by_job_type = AsyncMock()
 
     return connector
 
@@ -147,7 +144,7 @@ async def test_connector_sync_now(
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
     connector.reset_sync_now_flag.assert_awaited()
-    connector.update_last_sync_scheduled_at.assert_not_awaited()
+    connector.update_last_sync_scheduled_at_by_job_type.assert_not_awaited()
     sync_job_index_mock.create.assert_awaited_once_with(
         connector=connector, trigger_method=JobTriggerMethod.ON_DEMAND, job_type=JobType.FULL
     )
@@ -178,7 +175,7 @@ async def test_connector_sync_now_with_race_condition(
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
     connector.reset_sync_now_flag.assert_awaited()
-    connector.update_last_sync_scheduled_at.assert_not_awaited()
+    connector.update_last_sync_scheduled_at_by_job_type.assert_not_awaited()
     sync_job_index_mock.create.assert_not_awaited()
 
 
@@ -195,8 +192,7 @@ async def test_connector_ready_to_sync(
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
     connector.reset_sync_now_flag.assert_not_awaited()
-    connector.update_last_sync_scheduled_at.assert_awaited()
-    connector.update_last_access_control_sync_scheduled_at.assert_awaited()
+    connector.update_last_sync_scheduled_at_by_job_type.assert_awaited()
 
     for job_type in SUPPORTED_JOB_TYPES:
         sync_job_index_mock.create.assert_any_await(
@@ -216,12 +212,12 @@ async def test_connector_ready_to_sync_with_race_condition(
     connector = mock_connector(next_sync=datetime.utcnow())
 
     # Do nothing in the first call(in _should_schedule_on_demand_sync) and second call(in _should_schedule_scheduled_sync), and the last_sync_scheduled_at is updated by another instance in the subsequent calls
-    def _reset_last_sync_scheduled_at():
+    def _reset_last_sync_scheduled_at_by_job_type():
         if connector.reload.await_count > 2:
-            connector.last_sync_scheduled_at = datetime.utcnow() + timedelta(seconds=20)
+            connector.last_sync_scheduled_at_by_job_type = datetime.utcnow() + timedelta(seconds=20)
 
-    connector.reload.side_effect = _reset_last_sync_scheduled_at
-    connector.update_last_sync_scheduled_at.side_effect = ConflictError(
+    connector.reload.side_effect = _reset_last_sync_scheduled_at_by_job_type
+    connector.update_last_sync_scheduled_at_by_job_type.side_effect = ConflictError(
         message="This is an error message from test_connector_ready_to_sync_with_race_condition",
         meta=None,
         body={},
@@ -232,7 +228,7 @@ async def test_connector_ready_to_sync_with_race_condition(
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
     connector.reset_sync_now_flag.assert_not_awaited()
-    connector.update_last_sync_scheduled_at.assert_awaited()
+    connector.update_last_sync_scheduled_at_by_job_type.assert_awaited()
     sync_job_index_mock.create.assert_not_awaited()
 
 
@@ -247,7 +243,7 @@ async def test_connector_sync_disabled(
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
     connector.reset_sync_now_flag.assert_not_awaited()
-    connector.update_last_sync_scheduled_at.assert_not_awaited()
+    connector.update_last_sync_scheduled_at_by_job_type.assert_not_awaited()
     sync_job_index_mock.create.assert_not_awaited()
 
 
@@ -265,8 +261,7 @@ async def test_connector_both_on_demand_and_scheduled(
     connector.heartbeat.assert_awaited()
     connector.reset_sync_now_flag.assert_awaited()
 
-    connector.update_last_sync_scheduled_at.assert_awaited()
-    connector.update_last_access_control_sync_scheduled_at.assert_awaited()
+    connector.update_last_sync_scheduled_at_by_job_type.assert_awaited()
 
     sync_job_index_mock.create.assert_any_await(
         connector=connector, trigger_method=JobTriggerMethod.ON_DEMAND, job_type=JobType.FULL
@@ -299,7 +294,7 @@ async def test_connector_not_configured(
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
     connector.reset_sync_now_flag.assert_not_awaited()
-    connector.update_last_sync_scheduled_at.assert_not_awaited()
+    connector.update_last_sync_scheduled_at_by_job_type.assert_not_awaited()
     sync_job_index_mock.create.assert_not_awaited()
 
 
@@ -326,7 +321,7 @@ async def test_connector_prepare_failed(
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_not_awaited()
     connector.reset_sync_now_flag.assert_not_awaited()
-    connector.update_last_sync_scheduled_at.assert_not_awaited()
+    connector.update_last_sync_scheduled_at_by_job_type.assert_not_awaited()
     sync_job_index_mock.create.assert_not_awaited()
 
 

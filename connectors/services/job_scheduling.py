@@ -11,13 +11,11 @@ Event loop
 - mirrors an Elasticsearch index with a collection of documents
 """
 from datetime import datetime
-from enum import Enum
 
 from connectors.es.client import with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.protocol import (
-    Connector,
     ConnectorIndex,
     DataSourceError,
     JobTriggerMethod,
@@ -30,43 +28,7 @@ from connectors.protocol import (
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass
 
-
-class LastSyncTimeMethods(Enum):
-    LAST_SYNC_TIME_GETTER = "last_sync_time_getter"
-    LAST_SYNC_TIME_SETTER = "last_sync_time_setter"
-    UNSET = None
-
-
-JOB_TYPE_TO_CONNECTOR_METHODS = {
-    JobType.FULL: {
-        LastSyncTimeMethods.LAST_SYNC_TIME_GETTER: Connector.last_sync_scheduled_at,
-        LastSyncTimeMethods.LAST_SYNC_TIME_SETTER: Connector.update_last_sync_scheduled_at,
-    },
-    JobType.ACCESS_CONTROL: {
-        LastSyncTimeMethods.LAST_SYNC_TIME_GETTER: Connector.last_access_control_sync_scheduled_at,
-        LastSyncTimeMethods.LAST_SYNC_TIME_SETTER: Connector.update_last_access_control_sync_scheduled_at,
-    },
-}
-
-SUPPORTED_JOB_TYPES = JOB_TYPE_TO_CONNECTOR_METHODS.keys()
-
-
-def last_sync_time_property(connector, job_type):
-    return getattr(
-        connector,
-        JOB_TYPE_TO_CONNECTOR_METHODS[job_type][
-            LastSyncTimeMethods.LAST_SYNC_TIME_GETTER
-        ].fget.__name__,
-    )
-
-
-def last_sync_time_update_method(connector, job_type):
-    return getattr(
-        connector,
-        JOB_TYPE_TO_CONNECTOR_METHODS[job_type][
-            LastSyncTimeMethods.LAST_SYNC_TIME_SETTER
-        ].__name__,
-    )
+SUPPORTED_JOB_TYPES = [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
 
 
 class JobSchedulingService(BaseService):
@@ -221,8 +183,8 @@ class JobSchedulingService(BaseService):
             job_type_value = job_type.value
             now = datetime.utcnow()
             if (
-                last_sync_time_property(connector, job_type) is not None
-                and last_sync_time_property(connector, job_type) > now
+                connector.last_sync_scheduled_at_by_job_type(job_type) is not None
+                and connector.last_sync_scheduled_at_by_job_type(job_type) > now
             ):
                 logger.debug(
                     f"A scheduled '{job_type_value}' sync is created by another connector instance, skipping..."
@@ -249,7 +211,10 @@ class JobSchedulingService(BaseService):
                 )
                 return False
 
-            await last_sync_time_update_method(connector, job_type)(next_sync)
+            await connector.update_last_sync_scheduled_at_by_job_type(
+                job_type, next_sync
+            )
+
             return True
 
         for job_type in SUPPORTED_JOB_TYPES:

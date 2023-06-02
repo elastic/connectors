@@ -1112,58 +1112,16 @@ async def test_connector_reset_sync_now_flag():
     )
 
 
+@pytest.mark.parametrize(
+    "job_type, date_field_to_update",
+    [
+        (JobType.FULL, "last_sync_scheduled_at"),
+        (JobType.INCREMENTAL, "last_incremental_sync_scheduled_at"),
+        (JobType.ACCESS_CONTROL, "last_access_control_sync_scheduled_at"),
+    ]
+)
 @pytest.mark.asyncio
-async def test_connector_update_last_sync_scheduled_at():
-    doc_id = "1"
-    seq_no = 1
-    primary_term = 2
-    new_ts = datetime.utcnow() + timedelta(seconds=20)
-    connector_doc = {
-        "_id": doc_id,
-        "_seq_no": seq_no,
-        "_primary_term": primary_term,
-        "_source": {},
-    }
-    index = Mock()
-    index.update = AsyncMock()
-    connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.update_last_sync_scheduled_at(new_ts)
-
-    index.update.assert_awaited_once_with(
-        doc_id=doc_id,
-        doc={"last_sync_scheduled_at": new_ts.isoformat()},
-        if_seq_no=seq_no,
-        if_primary_term=primary_term,
-    )
-
-
-@pytest.mark.asyncio
-async def test_connector_update_last_incremental_sync_scheduled_at():
-    doc_id = "1"
-    seq_no = 1
-    primary_term = 2
-    new_ts = datetime.utcnow() + timedelta(seconds=20)
-    connector_doc = {
-        "_id": doc_id,
-        "_seq_no": seq_no,
-        "_primary_term": primary_term,
-        "_source": {},
-    }
-    index = Mock()
-    index.update = AsyncMock()
-    connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.update_last_incremental_sync_scheduled_at(new_ts)
-
-    index.update.assert_awaited_once_with(
-        doc_id=doc_id,
-        doc={"last_incremental_sync_scheduled_at": new_ts.isoformat()},
-        if_seq_no=seq_no,
-        if_primary_term=primary_term,
-    )
-
-
-@pytest.mark.asyncio
-async def test_connector_update_last_access_control_sync_scheduled_at():
+async def test_connector_update_last_sync_scheduled_at_by_job_type(job_type, date_field_to_update):
     doc_id = "2"
     seq_no = 2
     primary_term = 1
@@ -1177,11 +1135,11 @@ async def test_connector_update_last_access_control_sync_scheduled_at():
     index = Mock()
     index.update = AsyncMock()
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.update_last_access_control_sync_scheduled_at(new_ts)
+    await connector.update_last_sync_scheduled_at_by_job_type(job_type, new_ts)
 
     index.update.assert_awaited_once_with(
         doc_id=doc_id,
-        doc={"last_access_control_sync_scheduled_at": new_ts.isoformat()},
+        doc={date_field_to_update: new_ts.isoformat()},
         if_seq_no=seq_no,
         if_primary_term=primary_term,
     )
