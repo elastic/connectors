@@ -1,7 +1,8 @@
 import asyncio
-from contextlib import asynccontextmanager
+import re
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta
-from functools import partial
+from functools import partial, wraps
 
 import aiofiles
 import aiohttp
@@ -113,16 +114,7 @@ class GraphAPIToken(MicrosoftSecurityToken):
     """
 
     async def _fetch_token(self):
-        # MSAL is not async, sigh
-        authority = f"https://login.microsoftonline.com/{self._tenant_id}"
-        scope = "https://graph.microsoft.com/.default"
-
-        app = msal.ConfidentialClientApplication(
-            client_id=self._client_id,
-            client_credential=self._client_secret,
-            authority=authority,
-        )
-        result = app.acquire_token_for_client(scopes=[scope])
+        result = self._call_msal()
 
         if "access_token" in result:
             access_token = result["access_token"]
@@ -130,7 +122,33 @@ class GraphAPIToken(MicrosoftSecurityToken):
 
             return access_token, expires_in
         else:
-            raise Exception(result.get("error"))
+            match result["error"]:
+                case "invalid_client":
+                    raise Exception(f"Invalid Secret Value provided for application with client_id=\"{self._client_id}\". Ensure the Secret Value setting is the client secret value, not the client secret ID.")
+                case "unauthorized_client":
+                    raise Exception(f"Application with client_id=\"{self._client_id}\" was not found for tenant with id=\"{self._tenant_id}\".")
+                case _:
+                    raise Exception(result.get("error_description"))
+
+    def _call_msal(self):
+        # MSAL is not async, sigh. Anyway, better call MSAL!
+        authority = f"https://login.microsoftonline.com/{self._tenant_id}"
+        scope = "https://graph.microsoft.com/.default"
+
+        try:
+            app = msal.ConfidentialClientApplication(
+                client_id=self._client_id,
+                client_credential=self._client_secret,
+                authority=authority,
+            )
+
+            return app.acquire_token_for_client(scopes=[scope])
+        except ValueError as e:
+            # Weirdly enough, Value Error most likely is not a VALUE error, but configuration error.
+
+            logger.error(e)
+
+            raise Exception(f"Failed to authenticate to tenant {self._tenant_id}. Make sure that provided Tenant Id and Tenant Name are correct.")
 
 
 class SharepointRestAPIToken(MicrosoftSecurityToken):
@@ -169,18 +187,32 @@ class SharepointRestAPIToken(MicrosoftSecurityToken):
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-        async with self._http_session.post(url, headers=headers, data=data) as resp:
-            json_response = await resp.json()
-            access_token = json_response["access_token"]
-            expires_in = int(json_response["expires_in"])
+        try:
+            async with self._http_session.post(url, headers=headers, data=data) as resp:
+                json_response = await resp.json()
+                access_token = json_response["access_token"]
+                expires_in = int(json_response["expires_in"])
 
-            return access_token, expires_in
+                return access_token, expires_in
+        except ClientResponseError as e:
+            # Sharepont REST API is not very talkative about reasons
+            match e.status:
+                case 400:
+                    raise Exception("Failed to authorize to Sharepoint REST API. Please verify, that provided Tenant Id, Tenant Name and Client ID are valid.") from e
+                case 401:
+                    raise Exception("Failed to authorize to Sharepoint REST API. Please verify, that provided Secret Value is valid.") from e
+                case _:
+                    raise Exception(f"Failed to authorize to Shareoint REST API. Response Status: {e.status}, Message: {e.message}") from e
+
+
+class PermissionsMissing(Exception):
+    pass
 
 
 class MicrosoftAPISession:
     def __init__(self, http_session, graph_api_token, scroll_field):
         self._http_session = http_session
-        self._graph_api_token = graph_api_token
+        self.graph_api_token = graph_api_token
 
         # So, Graph API and Sharepoint API scroll over slightly different fields:
         # - odata.nextPage for Sharepoint REST API uses
@@ -218,7 +250,7 @@ class MicrosoftAPISession:
     async def _call_api(self, absolute_url):
         while True:
             try:
-                token = await self._graph_api_token.get()
+                token = await self.graph_api_token.get()
                 headers = {"authorization": f"Bearer {token}"}
                 logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
 
@@ -244,13 +276,12 @@ class MicrosoftAPISession:
                     )
 
                     await asyncio.sleep(retry_seconds)
+                elif e.status == 403 or e.status == 401: # Might work weird, but Graph returns 403 and REST returns 401
+                    raise PermissionsMissing(
+                        f"Received Unauthorized response for {absolute_url}.\nVerify that Graph API [Sites.Read.All, Files.Read All] and Sharepoint [Sites.Read.All] permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
+                    ) from e
                 else:
-                    print(e)  # TODO: fix
                     raise
-            except Exception as e:
-                print("Got something else")  # TODO: fix
-                print(e)  # TODO: fix
-                raise
 
 
 class SharepointOnlineClient:
@@ -266,19 +297,20 @@ class SharepointOnlineClient:
 
         self._tenant_id = tenant_id
         self._tenant_name = tenant_name
+        self._tenant_name_pattern = re.compile("https://(.*).sharepoint.com")  # Used later for url validation
 
-        self._graph_api_token = GraphAPIToken(
+        self.graph_api_token = GraphAPIToken(
             tenant_id, tenant_name, client_id, client_secret
         )
-        self._rest_api_token = SharepointRestAPIToken(
+        self.rest_api_token = SharepointRestAPIToken(
             self._http_session, tenant_id, tenant_name, client_id, client_secret
         )
 
         self._graph_api_client = MicrosoftAPISession(
-            self._http_session, self._graph_api_token, "@odata.nextLink"
+            self._http_session, self.graph_api_token, "@odata.nextLink"
         )
         self._rest_api_client = MicrosoftAPISession(
-            self._http_session, self._rest_api_token, "odata.nextLink"
+            self._http_session, self.rest_api_token, "odata.nextLink"
         )
 
     async def site_collections(self):
@@ -291,9 +323,7 @@ class SharepointOnlineClient:
             for site_collection in page:
                 yield site_collection
 
-    async def discover_sites(
-        self, site_collection, allowed_root_sites
-    ):
+    async def discover_sites(self, site_collection, allowed_root_sites):
         async for site in self.sites(site_collection):
             if site["name"] not in allowed_root_sites:
                 continue
@@ -372,6 +402,8 @@ class SharepointOnlineClient:
                 yield site_list
 
     async def site_list_item_attachments(self, site_web_url, list_title, list_item_id):
+        self._validate_sharepoint_rest_url(site_web_url)
+
         url = f"{site_web_url}/_api/lists/getByTitle('{list_title}')/items({list_item_id})?$expand=AttachmentFiles"
 
         list_item = await self._rest_api_client.fetch(url)
@@ -380,17 +412,28 @@ class SharepointOnlineClient:
             yield attachment
 
     async def download_attachment(self, attachment_absolute_path, async_buffer):
+        self._validate_sharepoint_rest_url(attachment_absolute_path)
+
         await self._rest_api_client.pipe(
             f"{attachment_absolute_path}/$value", async_buffer
         )
 
     async def site_pages(self, site_web_url):
+        self._validate_sharepoint_rest_url(site_web_url)
+
         select = ""
         url = f"{site_web_url}/_api/web/lists/getbytitle('Site%20Pages')/items?$select={select}"
 
         async for page in self._rest_api_client.scroll(url):
             for site_page in page:
                 yield site_page
+
+    def _validate_sharepoint_rest_url(self, url):
+        # I haven't found a better way to validate tenant name for now.
+        actual_tenant_name = self._tenant_name_pattern.findall(url)[0]
+
+        if self._tenant_name != actual_tenant_name:
+            raise Exception(f"Unable to call Sharepoint REST API - tenant name is invalid. Authenticated for tenant name: {self._tenant_name}, actual tenant name for the service: {actual_tenant_name}.")
 
     async def close(self):
         await self._http_session.close()
@@ -492,7 +535,15 @@ class SharepointOnlineDataSource(BaseDataSource):
         }
 
     async def validate_config(self):
-        pass
+        # Check that we can log in into Graph API
+        await self.client.graph_api_token.get()
+
+        # Check that we can log in into Sharepoint REST API
+        await self.client.rest_api_token.get()
+
+        # Check that we at least have permissions to fetch sites
+        async for site_collection in self.client.site_collections():
+            pass
 
     async def get_docs(self, filtering=None):
         max_data_age = None
@@ -561,9 +612,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                         list_item["object_type"] = "list_item"
                         content_type = list_item["contentType"]["name"]
 
-                        if (
-                            content_type == "Web Template Extensions"
-                        ):  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
+                        if content_type in [
+                            "Web Template Extensions"
+                        ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
                             continue
 
                         if "Attachments" in list_item["fields"]:
