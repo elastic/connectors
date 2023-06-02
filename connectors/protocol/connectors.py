@@ -915,7 +915,6 @@ class SyncJobIndex(ESIndex):
             "deleted_document_count": 0,
             "created_at": iso_utc(),
             "last_seen": iso_utc(),
-            "job_type": job_type.value,
         }
         await self.index(job_def)
 
