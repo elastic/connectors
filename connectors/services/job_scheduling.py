@@ -24,6 +24,7 @@ from connectors.protocol import (
     Status,
     SyncJobIndex,
 )
+from connectors.protocol.connectors import JobType
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass
 
@@ -163,7 +164,9 @@ class JobSchedulingService(BaseService):
         if await _should_schedule_on_demand_sync():
             logger.info(f"Creating an on demand sync for connector {connector.id}...")
             await self.sync_job_index.create(
-                connector=connector, trigger_method=JobTriggerMethod.ON_DEMAND
+                connector=connector,
+                trigger_method=JobTriggerMethod.ON_DEMAND,
+                job_type=JobType.FULL,
             )
 
     async def _scheduled_sync(self, connector):
@@ -209,5 +212,7 @@ class JobSchedulingService(BaseService):
         if await _should_schedule_scheduled_sync():
             logger.info(f"Creating a scheduled sync for connector {connector.id}...")
             await self.sync_job_index.create(
-                connector=connector, trigger_method=JobTriggerMethod.SCHEDULED
+                connector=connector,
+                trigger_method=JobTriggerMethod.SCHEDULED,
+                job_type=JobType.FULL,
             )

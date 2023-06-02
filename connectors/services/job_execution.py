@@ -6,6 +6,7 @@
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.protocol import ConnectorIndex, DataSourceError, JobStatus, SyncJobIndex
+from connectors.protocol.connectors import JobType
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass
 from connectors.sync_job_runner import SyncJobRunner
@@ -46,11 +47,15 @@ class JobExecutionService(BaseService):
             logger.error(f"Couldn't find connector by id {sync_job.connector_id}")
             return
 
-        if connector.last_sync_status == JobStatus.IN_PROGRESS:
-            logger.debug(
-                f"Connector {connector.id} is still syncing, skip the job {sync_job.id}..."
-            )
-            return
+        if (
+            sync_job.job_type == JobType.FULL
+            or sync_job.job_type == JobType.INCREMENTAL
+        ):
+            if connector.last_sync_status == JobStatus.IN_PROGRESS:
+                logger.debug(
+                    f"Connector {connector.id} is still syncing, skip the job {sync_job.id}..."
+                )
+                return
 
         sync_job_runner = SyncJobRunner(
             source_klass=source_klass,
