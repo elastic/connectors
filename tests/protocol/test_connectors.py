@@ -1648,17 +1648,17 @@ async def test_create_job(index_method, trigger_method, set_env):
     expected_index_doc = {
         "connector": ANY,
         "trigger_method": trigger_method.value,
+        "job_type": JobType.INCREMENTAL.value,
         "status": JobStatus.PENDING.value,
         "indexed_document_count": 0,
         "indexed_document_volume": 0,
         "deleted_document_count": 0,
         "created_at": ANY,
         "last_seen": ANY,
-        "job_type": JobType.FULL.value
     }
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    await sync_job_index.create(connector=connector, trigger_method=trigger_method, job_type=JobType.FULL)
+    await sync_job_index.create(connector=connector, trigger_method=trigger_method, job_type=JobType.INCREMENTAL)
 
     index_method.assert_called_with(expected_index_doc)
 

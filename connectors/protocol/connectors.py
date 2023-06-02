@@ -908,6 +908,7 @@ class SyncJobIndex(ESIndex):
                 "configuration": connector.configuration.to_dict(),
             },
             "trigger_method": trigger_method.value,
+            "job_type": job_type.value,
             "status": JobStatus.PENDING.value,
             "indexed_document_count": 0,
             "indexed_document_volume": 0,
