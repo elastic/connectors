@@ -4,6 +4,8 @@ set -exuo pipefail
 BASEDIR=$(realpath $(dirname $0))
 ROOT=$(realpath $BASEDIR/../)
 
+sudo apt-get -y install liblz4-dev
+
 cd $ROOT
 
 make install
