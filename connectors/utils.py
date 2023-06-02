@@ -18,6 +18,7 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
+import aiohttp
 import lxml.html
 from base64io import Base64IO
 from bs4 import BeautifulSoup
@@ -597,6 +598,36 @@ def deep_merge_dicts(base_dict, new_dict):
             base_dict[key] = new_dict[key]
 
     return base_dict
+
+
+async def send_to_tika(filename):
+    """TODO docstring"""
+    headers = {"Accept": "application/json", "content-type": ""}
+
+    # TODO remove this
+    filename = "sample.rtf"
+
+    async with aiohttp.ClientSession(headers=headers) as session:
+        async with session.put(
+            f"http://127.0.0.1:8090/extract_local_file_text/?local_file_path={filename}"
+        ) as resp:
+            content = await resp.text()
+            logger.info(resp.status)
+            logger.info(content)
+
+            if resp.status != 200:
+                if resp.status == 422:
+                    logger.info(
+                        f"Tika could not parse {os.path.basename(filename)}, discarding"
+                    )
+                else:
+                    raise Exception(resp)
+            if len(content) > 20971520:
+                logger.warning(
+                    f"We got more than 20MiB out of Tika for {os.path.basename(filename)} -- keeping only 20MiB"
+                )
+                content = content[:20971520]
+            return content
 
 
 class CacheWithTimeout:

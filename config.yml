@@ -26,6 +26,12 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
+extraction_service:
+  host: http://localhost:8090
+  text_extraction:
+    enabled: true
+    method: 'tika'
+
 native_service_types:
   - mongodb
   - mysql
@@ -44,8 +50,8 @@ native_service_types:
 
 
 # Connector client settings
-#connector_id: 'changeme'
-#service_type: 'changeme'
+connector_id: "VLlCd4gBK7NuTwCyPeP-"
+service_type: 'sharepoint'
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource

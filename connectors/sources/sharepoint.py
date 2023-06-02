@@ -27,6 +27,7 @@ from connectors.utils import (
     evaluate_timedelta,
     is_expired,
     retryable,
+    send_to_tika,
     ssl_context,
     url_encode,
 )
@@ -239,14 +240,37 @@ class SharepointClient:
 
             source_file_name = async_buffer.name
 
+        # TODO here is where to send to tika,
+        #  need to determine if necessary or not using config yaml settings
+        logger.info("**********")
+        logger.info("starting tika extraction...")
+
+        try:
+            result = await send_to_tika(source_file_name)
+        except Exception as e:
+            logger.warn(f"Failed to ask tika to extract {source_file_name}")
+            logger.warn(str(e))
+            return {
+                "_id": document.get("id"),
+                "_timestamp": document.get("_timestamp"),
+                "attachment": "",
+            }
+        finally:
+            await remove(source_file_name)  # pyright: ignore
+
         await asyncio.to_thread(
             convert_to_b64,
             source=source_file_name,
         )
+
+        logger.info(result)
+        logger.info("**********")
+
+        # TODO: attachment should be on body if already parsed by tika
         return {
             "_id": document.get("id"),
             "_timestamp": document.get("_timestamp"),
-            "_attachment": await self.convert_file_to_b64(source_file_name),
+            "body": result["extracted_text"],
         }
 
     async def get_site_page_for_online(self, site_url, filename):

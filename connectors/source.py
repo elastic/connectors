@@ -217,8 +217,11 @@ class Field:
 class DataSourceConfiguration:
     """Holds the configuration needed by the source class"""
 
-    def __init__(self, config):
-        self._raw_config = config
+    def __init__(
+        self,
+        configuration,
+    ):
+        self._raw_config = configuration
         self._config = {}
         self._defaults = {}
         if self._raw_config is not None:

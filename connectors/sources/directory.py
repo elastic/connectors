@@ -14,7 +14,7 @@ from pathlib import Path
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, send_to_tikat
 
 DEFAULT_DIR = os.environ.get("SYSTEM_DIR", os.path.dirname(__file__))
 
@@ -61,6 +61,23 @@ class DirectoryDataSource(BaseDataSource):
     async def _download(self, path, timestamp=None, doit=None):
         if not (doit and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES):
             return
+
+        # TODO check config
+
+        # TODO include method in extraction
+        target = os.path.join(DROP_DIR, self.get_id(path))
+        shutil.copyfile(path, target)
+        logger.debug(f"Sending {target} to tika")
+        try:
+            result = await send_to_tika(target)
+        finally:
+            os.remove(target)
+        logger.debug(f"Got back {len(result) * 2} bytes.")
+        return {
+            "_id": self.get_id(path),
+            "_timestamp": timestamp,
+            "attachment": result,
+        }
 
         logger.info(f"Reading {path}")
         with open(file=path, mode="rb") as f:

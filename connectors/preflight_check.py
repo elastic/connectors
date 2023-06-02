@@ -14,7 +14,10 @@ class PreflightCheck:
     def __init__(self, config):
         self.elastic_config = config["elasticsearch"]
         self.service_config = config["service"]
+        self.extraction_service_config = config["extraction_service"]
+
         self.es_client = ESClient(self.elastic_config)
+
         self.preflight_max_attempts = int(
             self.service_config.get("preflight_max_attempts", 10)
         )
