@@ -20,9 +20,6 @@ agents:
   image: family/enterprise-search-ubuntu-2204-connectors-py
 """
 
-#imagePrefix: enterprise-search-ubuntu-2204-aarch64-connectors-py
-#imagePrefix: drivah-ubuntu-2204-aarch64
-#
 with open(os.path.join(os.path.dirname(__file__), "nightly_steps.yml")) as f:
     steps = f.read().strip()
 
