@@ -20,6 +20,7 @@ from connectors.protocol import (
     ServiceTypeNotSupportedError,
     Status,
 )
+from connectors.protocol.connectors import JobType
 from connectors.services.job_scheduling import JobSchedulingService
 from connectors.source import DataSourceConfiguration
 from tests.commons import AsyncIterator
@@ -145,7 +146,7 @@ async def test_connector_sync_now(
     connector.reset_sync_now_flag.assert_awaited()
     connector.update_last_sync_scheduled_at.assert_not_awaited()
     sync_job_index_mock.create.assert_awaited_once_with(
-        connector=connector, trigger_method=JobTriggerMethod.ON_DEMAND
+        connector=connector, trigger_method=JobTriggerMethod.ON_DEMAND, job_type=JobType.FULL,
     )
 
 
@@ -193,7 +194,7 @@ async def test_connector_ready_to_sync(
     connector.reset_sync_now_flag.assert_not_awaited()
     connector.update_last_sync_scheduled_at.assert_awaited()
     sync_job_index_mock.create.assert_awaited_once_with(
-        connector=connector, trigger_method=JobTriggerMethod.SCHEDULED
+        connector=connector, trigger_method=JobTriggerMethod.SCHEDULED, job_type=JobType.FULL,
     )
 
 
@@ -256,10 +257,10 @@ async def test_connector_both_on_demand_and_scheduled(
     connector.reset_sync_now_flag.assert_awaited()
     connector.update_last_sync_scheduled_at.assert_awaited()
     sync_job_index_mock.create.assert_any_await(
-        connector=connector, trigger_method=JobTriggerMethod.ON_DEMAND
+        connector=connector, trigger_method=JobTriggerMethod.ON_DEMAND, job_type=JobType.FULL,
     )
     sync_job_index_mock.create.assert_any_await(
-        connector=connector, trigger_method=JobTriggerMethod.SCHEDULED
+        connector=connector, trigger_method=JobTriggerMethod.SCHEDULED, job_type=JobType.FULL,
     )
     assert sync_job_index_mock.create.await_count == 2
 

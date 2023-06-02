@@ -869,7 +869,7 @@ class SyncJobIndex(ESIndex):
             doc_source=doc_source,
         )
 
-    async def create(self, connector, trigger_method, job_type=JobType.FULL):
+    async def create(self, connector, trigger_method, job_type):
         filtering = connector.filtering.get_active_filter().transform_filtering()
         job_def = {
             "connector": {
