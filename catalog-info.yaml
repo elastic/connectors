@@ -81,7 +81,7 @@ spec:
         - title: "Connector Service Nightly Pipeline"
           url: "https://buildkite.com/elastic/connectors-python-nightly"
     spec:
-      pipeline_file: ".buildkite/nightly.yml"
+      pipeline_file: ".buildkite/nightly.py"
       provider_settings:
         trigger_mode: "none"
       repository: "elastic/connectors-python"
