@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 import os
 
-
 _AGENTS = """\
 agents:
   provider: aws
