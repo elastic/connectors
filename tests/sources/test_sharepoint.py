@@ -165,6 +165,7 @@ def test_prepare_drive_items_doc():
         "creation_time": "2023-01-30T12:48:31Z",
         "_timestamp": "2023-01-30T12:48:31Z",
         "url": f"{HOST_URL}/site",
+        "server_relative_url": "/site",
     }
 
     # Execute
@@ -186,6 +187,7 @@ def test_prepare_list_items_doc():
         "FileRef": "/site",
         "url": f"{HOST_URL}/site",
         "file_name": "filename",
+        "server_relative_url": "/site",
     }
     expected_response = {
         "type": "list_item",
@@ -197,6 +199,7 @@ def test_prepare_list_items_doc():
         "creation_time": "2023-01-30T12:48:31Z",
         "_timestamp": "2023-01-30T12:48:31Z",
         "url": f"{HOST_URL}/site",
+        "server_relative_url": "/site",
     }
 
     # Execute
@@ -313,6 +316,7 @@ async def test_get_list_items():
             "_id": "1",
             "url": "http://127.0.0.1:8491/sites/collection1/ctest/Lists/ctestlist/Attachments/1/v4.txt",
             "file_name": "s3 queries.txt",
+            "server_relative_url": "/sites/collection1/ctest/Lists/ctestlist/Attachments/1/v4.txt",
         },
         {
             "AttachmentFiles": {},
