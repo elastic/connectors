@@ -4,7 +4,7 @@ set -exuo pipefail
 BASEDIR=$(realpath $(dirname $0))
 ROOT=$(realpath $BASEDIR/../)
 
-sudo apt-get -y install liblz4-dev
+sudo apt-get -y install liblz4-dev libunwind-dev
 
 cd $ROOT
 
