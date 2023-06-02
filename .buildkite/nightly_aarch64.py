@@ -9,7 +9,7 @@ if machine in ("arm64", "aarch64"):
 agents:
   provider: aws
   instanceType: m6g.xlarge
-  imagePrefix: drivah-ubuntu-2204-aarch64
+  imagePrefix: enterprise-search-ubuntu-2204-aarch64-connectors-py
 """
 else:
     _AGENTS = """\
@@ -21,7 +21,8 @@ agents:
 """
 
 #imagePrefix: enterprise-search-ubuntu-2204-aarch64-connectors-py
-
+#imagePrefix: drivah-ubuntu-2204-aarch64
+#
 with open(os.path.join(os.path.dirname(__file__), "nightly_steps.yml")) as f:
     steps = f.read().strip()
 
