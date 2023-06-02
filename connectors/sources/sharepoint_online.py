@@ -24,7 +24,10 @@ GRAPH_API_URL = "https://graph.microsoft.com/v1.0"
 DEFAULT_RETRY_SECONDS = 30
 FILE_WRITE_CHUNK_SIZE = 1024
 MAX_DOCUMENT_SIZE = 10485760
+WILDCARD = "*"
 
+class NotFound(Exception):
+    pass
 
 class MicrosoftSecurityToken:
     """Abstract token for connecting to one of Microsoft Azure services.
@@ -222,11 +225,12 @@ class PermissionsMissing(Exception):
 
 
 class MicrosoftAPISession:
-    def __init__(self, http_session, graph_api_token, scroll_field):
+    def __init__(self, http_session, api_token, scroll_field):
         self._http_session = http_session
-        self.graph_api_token = graph_api_token
+        self._api_token = api_token
+        self._semaphore = asyncio.Semaphore(10)  # TODO: make configurable, that's a scary property
 
-        # So, Graph API and Sharepoint API scroll over slightly different fields:
+        # Graph API and Sharepoint API scroll over slightly different fields:
         # - odata.nextPage for Sharepoint REST API uses
         # - @odata.nextPage for Graph API uses - notice the @ glyph
         # Therefore for flexibility I made it a field passed in the initializer,
@@ -260,9 +264,15 @@ class MicrosoftAPISession:
 
     @asynccontextmanager
     async def _call_api(self, absolute_url):
-        while True:
+        while True:  # TODO: do 3 retries
             try:
-                token = await self.graph_api_token.get()
+                # Sharepoint / Graph API has quite strict throttling policies
+                # If connector is overzealous, it can be banned for not respecting throttling policies
+                # However if connector has a low setting for the semaphore, then it'll just be slow.
+                # Change the value at your own risk
+                await self._semaphore.acquire()
+
+                token = await self._api_token.get()
                 headers = {"authorization": f"Bearer {token}"}
                 logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
 
@@ -283,7 +293,7 @@ class MicrosoftAPISession:
                             "Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
                         )
                         retry_seconds = DEFAULT_RETRY_SECONDS
-                    print(
+                    logger.debug(
                         f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
                     )
 
@@ -294,8 +304,12 @@ class MicrosoftAPISession:
                     raise PermissionsMissing(
                         f"Received Unauthorized response for {absolute_url}.\nVerify that Graph API [Sites.Read.All, Files.Read All] and Sharepoint [Sites.Read.All] permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
                     ) from e
+                elif e.status == 404:
+                    raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
                 else:
                     raise
+            finally:
+                self._semaphore.release()
 
 
 class SharepointOnlineClient:
@@ -341,8 +355,11 @@ class SharepointOnlineClient:
 
     async def discover_sites(self, site_collection, allowed_root_sites):
         async for site in self.sites(site_collection):
-            if site["name"] not in allowed_root_sites:
+            # If WILDCARD, then fetch all, otherwise only the ones in the list
+            if WILDCARD not in allowed_root_sites and site["name"] not in allowed_root_sites:
                 continue
+
+            logger.info(f"Processing site: {site['name']}")
 
             yield site
 
@@ -422,10 +439,15 @@ class SharepointOnlineClient:
 
         url = f"{site_web_url}/_api/lists/getByTitle('{list_title}')/items({list_item_id})?$expand=AttachmentFiles"
 
-        list_item = await self._rest_api_client.fetch(url)
+        try:
+            list_item = await self._rest_api_client.fetch(url)
 
-        for attachment in list_item["AttachmentFiles"]:
-            yield attachment
+            for attachment in list_item["AttachmentFiles"]:
+                yield attachment
+        except NotFound:
+            # We can safely ignore cause Sharepoint can return 404 in case List Item is of specific types that do not support/have attachments
+            # Yes, makes no sense to me either.
+            return
 
     async def download_attachment(self, attachment_absolute_path, async_buffer):
         self._validate_sharepoint_rest_url(attachment_absolute_path)
@@ -530,10 +552,8 @@ class SharepointOnlineDataSource(BaseDataSource):
             "client_id": {
                 "label": "Client Id",
                 "order": 3,
-                "sensitive": True,
                 "type": "str",
                 "value": "",
-                "required": False,
             },
             "secret_value": {
                 "label": "Secret Value",
@@ -541,11 +561,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "sensitive": True,
                 "type": "str",
                 "value": "",
-                "required": False,
             },
             "site_collections": {
                 "display": "textarea",
                 "label": "Comma-separated list of SharePoint site collections to index",
+                "tooltip": "Site names are expected in this field. Providing \"*\" will make the connector fetch all sites on the tenant.",
                 "order": 5,
                 "type": "list",
                 "value": "",
@@ -559,9 +579,27 @@ class SharepointOnlineDataSource(BaseDataSource):
         # Check that we can log in into Sharepoint REST API
         await self.client.rest_api_token.get()
 
+        configured_root_sites = self.configuration["site_collections"]
+
+        remote_sites = []
+
         # Check that we at least have permissions to fetch sites
         async for site_collection in self.client.site_collections():
-            pass
+            async for site in self.client.sites(site_collection["siteCollection"]["hostname"]):
+                remote_sites.append(site["name"])
+
+        if WILDCARD in configured_root_sites:
+            return
+
+        intersection = [value for value in remote_sites if value in configured_root_sites]
+
+        missing = [x for x in configured_root_sites if x not in remote_sites]
+
+        truncated_available_sites = remote_sites[:10]
+
+        if missing:
+            raise Exception(f"Unable to find sites: [{', '.join(missing)}]. Some available sites are: [{', '.join(truncated_available_sites)}]")
+
 
     async def get_docs(self, filtering=None):
         max_data_age = None
@@ -631,7 +669,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                         content_type = list_item["contentType"]["name"]
 
                         if content_type in [
-                            "Web Template Extensions"
+                            "Web Template Extensions",
+                            "Client Side Component Manifests",
                         ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
                             continue
 
