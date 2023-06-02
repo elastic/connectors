@@ -124,9 +124,13 @@ class GraphAPIToken(MicrosoftSecurityToken):
         else:
             match result["error"]:
                 case "invalid_client":
-                    raise Exception(f"Invalid Secret Value provided for application with client_id=\"{self._client_id}\". Ensure the Secret Value setting is the client secret value, not the client secret ID.")
+                    raise Exception(
+                        f'Invalid Secret Value provided for application with client_id="{self._client_id}". Ensure the Secret Value setting is the client secret value, not the client secret ID.'
+                    )
                 case "unauthorized_client":
-                    raise Exception(f"Application with client_id=\"{self._client_id}\" was not found for tenant with id=\"{self._tenant_id}\".")
+                    raise Exception(
+                        f'Application with client_id="{self._client_id}" was not found for tenant with id="{self._tenant_id}".'
+                    )
                 case _:
                     raise Exception(result.get("error_description"))
 
@@ -148,7 +152,9 @@ class GraphAPIToken(MicrosoftSecurityToken):
 
             logger.error(e)
 
-            raise Exception(f"Failed to authenticate to tenant {self._tenant_id}. Make sure that provided Tenant Id and Tenant Name are correct.")
+            raise Exception(
+                f"Failed to authenticate to tenant {self._tenant_id}. Make sure that provided Tenant Id and Tenant Name are correct."
+            )
 
 
 class SharepointRestAPIToken(MicrosoftSecurityToken):
@@ -198,11 +204,17 @@ class SharepointRestAPIToken(MicrosoftSecurityToken):
             # Sharepont REST API is not very talkative about reasons
             match e.status:
                 case 400:
-                    raise Exception("Failed to authorize to Sharepoint REST API. Please verify, that provided Tenant Id, Tenant Name and Client ID are valid.") from e
+                    raise Exception(
+                        "Failed to authorize to Sharepoint REST API. Please verify, that provided Tenant Id, Tenant Name and Client ID are valid."
+                    ) from e
                 case 401:
-                    raise Exception("Failed to authorize to Sharepoint REST API. Please verify, that provided Secret Value is valid.") from e
+                    raise Exception(
+                        "Failed to authorize to Sharepoint REST API. Please verify, that provided Secret Value is valid."
+                    ) from e
                 case _:
-                    raise Exception(f"Failed to authorize to Shareoint REST API. Response Status: {e.status}, Message: {e.message}") from e
+                    raise Exception(
+                        f"Failed to authorize to Shareoint REST API. Response Status: {e.status}, Message: {e.message}"
+                    ) from e
 
 
 class PermissionsMissing(Exception):
@@ -276,7 +288,9 @@ class MicrosoftAPISession:
                     )
 
                     await asyncio.sleep(retry_seconds)
-                elif e.status == 403 or e.status == 401: # Might work weird, but Graph returns 403 and REST returns 401
+                elif (
+                    e.status == 403 or e.status == 401
+                ):  # Might work weird, but Graph returns 403 and REST returns 401
                     raise PermissionsMissing(
                         f"Received Unauthorized response for {absolute_url}.\nVerify that Graph API [Sites.Read.All, Files.Read All] and Sharepoint [Sites.Read.All] permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
                     ) from e
@@ -297,7 +311,9 @@ class SharepointOnlineClient:
 
         self._tenant_id = tenant_id
         self._tenant_name = tenant_name
-        self._tenant_name_pattern = re.compile("https://(.*).sharepoint.com")  # Used later for url validation
+        self._tenant_name_pattern = re.compile(
+            "https://(.*).sharepoint.com"
+        )  # Used later for url validation
 
         self.graph_api_token = GraphAPIToken(
             tenant_id, tenant_name, client_id, client_secret
@@ -433,7 +449,9 @@ class SharepointOnlineClient:
         actual_tenant_name = self._tenant_name_pattern.findall(url)[0]
 
         if self._tenant_name != actual_tenant_name:
-            raise Exception(f"Unable to call Sharepoint REST API - tenant name is invalid. Authenticated for tenant name: {self._tenant_name}, actual tenant name for the service: {actual_tenant_name}.")
+            raise Exception(
+                f"Unable to call Sharepoint REST API - tenant name is invalid. Authenticated for tenant name: {self._tenant_name}, actual tenant name for the service: {actual_tenant_name}."
+            )
 
     async def close(self):
         await self._http_session.close()
