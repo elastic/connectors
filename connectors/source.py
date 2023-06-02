@@ -339,6 +339,7 @@ class BaseDataSource:
 
     name = None
     service_type = None
+    support_incremental_sync = False
 
     def __init__(self, configuration):
         if not isinstance(configuration, DataSourceConfiguration):
@@ -399,11 +400,6 @@ class BaseDataSource:
         """
 
         return hash_id(_id)
-
-    @classmethod
-    def support_incremental_sync(cls):
-        """Indicates whether the data source supports incremental sync"""
-        return False
 
     async def validate_filtering(self, filtering):
         """Execute all basic rule and advanced rule validators."""

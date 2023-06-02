@@ -765,7 +765,7 @@ async def test_base_class():
     }
     assert ds.get_simple_configuration() == expected
 
-    assert not ds.support_incremental_sync()
+    assert not DataSource.support_incremental_sync
 
     with pytest.raises(NotImplementedError):
         await ds.ping()
