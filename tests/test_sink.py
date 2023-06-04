@@ -21,6 +21,7 @@ from connectors.es.sink import (
     SyncOrchestrator,
 )
 from connectors.protocol import Pipeline
+from connectors.protocol.connectors import JobType
 from tests.commons import AsyncIterator
 
 INDEX = "some-index"
@@ -636,7 +637,7 @@ async def test_get_docs(
             content_extraction_enabled,
         )
 
-        await extractor.run(doc_generator)
+        await extractor.run(doc_generator, JobType.FULL)
 
         assert extractor.total_docs_updated == expected_total_docs_updated
         assert extractor.total_docs_created == expected_total_docs_created

@@ -31,6 +31,7 @@ from connectors.es import ESClient
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter
+from connectors.protocol.connectors import JobType
 from connectors.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
@@ -56,6 +57,10 @@ TIMESTAMP_FIELD = "_timestamp"
 def get_mb_size(ob):
     """Returns the size of ob in MiB"""
     return round(get_size(ob) / (1024 * 1024), 2)
+
+
+class UnsupportedJobType(Exception):
+    pass
 
 
 class Sink:
@@ -326,9 +331,14 @@ class Extractor:
             }
         )
 
-    async def run(self, generator):
+    async def run(self, generator, job_type):
         try:
-            await self.get_docs(generator)
+            if job_type == JobType.FULL:
+                await self.get_docs(generator)
+            elif job_type == JobType.INCREMENTAL:
+                await self.get_docs_incrementally(generator)
+            else:
+                raise UnsupportedJobType
         except asyncio.CancelledError:
             logger.info("Task is canceled, stop Extractor...")
             raise
@@ -447,6 +457,76 @@ class Extractor:
             self.total_docs_deleted += 1
 
         await self.queue.put("END_DOCS")
+
+    async def get_docs_incrementally(self, generator):
+        """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
+
+        A document might be discarded if its timestamp has not changed.
+        Extraction happens in a separate task, when a document contains files.
+        """
+        logger.info("Starting doc lookups")
+        generator = self._wrap_generator(generator)
+
+        self.sync_runs = True
+
+        count = 0
+        lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
+        try:
+            async for doc in generator:
+                doc, lazy_download, operation = doc
+                count += 1
+                if count % self.display_every == 0:
+                    logger.info(str(self))
+
+                doc_id = doc["id"] = doc.pop("_id")
+
+                if self.basic_rule_engine and not self.basic_rule_engine.should_ingest(
+                    doc
+                ):
+                    continue
+
+                if operation == OP_INDEX:
+                    self.total_docs_created += 1
+                elif operation == OP_UPSERT:
+                    self.total_docs_updated += 1
+                elif operation == OP_DELETE:
+                    self.total_docs_deleted += 1
+                else:
+                    logger.error(f"unsupported operation {operation} for doc {doc_id}")
+
+                if TIMESTAMP_FIELD not in doc:
+                    doc[TIMESTAMP_FIELD] = iso_utc()
+
+                # if we need to call lazy_download we push it in lazy_downloads
+                if self.content_extraction_enabled and lazy_download is not None:
+                    await lazy_downloads.put(
+                        functools.partial(
+                            self._deferred_index, lazy_download, doc_id, doc, operation
+                        )
+                    )
+
+                else:
+                    # we can push into the queue right away
+                    item = {
+                        "_op_type": operation,
+                        "_index": self.index,
+                        "_id": doc_id,
+                        "doc": doc,
+                    }
+                    if operation == OP_INDEX or operation == OP_UPSERT:
+                        item["doc"] = doc
+                    await self.queue.put(item)
+
+                await asyncio.sleep(0)
+        except Exception as e:
+            logger.critical("The document fetcher failed", exc_info=True)
+            await self.queue.put("FETCH_ERROR")
+            self.fetch_error = e
+            return
+        finally:
+            # wait for all downloads to be finished
+            await lazy_downloads.join()
+            await self.queue.put("END_DOCS")
 
 
 class IndexMissing(Exception):
@@ -576,6 +656,7 @@ class SyncOrchestrator(ESClient):
         sync_rules_enabled=False,
         content_extraction_enabled=True,
         options=None,
+        job_type=JobType.FULL,
     ):
         """Performs a batch of `_bulk` calls, given a generator of documents
 
@@ -617,7 +698,9 @@ class SyncOrchestrator(ESClient):
             display_every=display_every,
             concurrent_downloads=concurrent_downloads,
         )
-        self._extractor_task = asyncio.create_task(self._extractor.run(generator))
+        self._extractor_task = asyncio.create_task(
+            self._extractor.run(generator, job_type)
+        )
 
         # start the bulker
         self._sink = Sink(

@@ -14,6 +14,7 @@ from connectors.es.index import DocumentNotFoundError
 from connectors.es.sink import SyncOrchestrator
 from connectors.logger import logger
 from connectors.protocol import JobStatus
+from connectors.protocol.connectors import JobType
 from connectors.utils import truncate_id
 
 UTF_8 = "utf-8"
@@ -238,11 +239,18 @@ class SyncJobRunner:
     async def prepare_docs(self):
         logger.debug(f"Using pipeline {self.sync_job.pipeline}")
 
-        async for doc, lazy_download in self.data_provider.get_docs(
-            filtering=self.sync_job.filtering
-        ):
+        if self.sync_job.job_type == JobType.FULL:
+            generator = self.data_provider.get_docs(filtering=self.sync_job.filtering)
+        elif self.sync_job.job_type == JobType.INCREMENTAL:
+            generator = self.data_provider.get_docs_incrementally(
+                sync_cursor=self.connector.sync_cursor,
+                filtering=self.sync_job.filtering,
+            )
+
+        async for doc, lazy_download, *operation in generator:
             doc_id = str(doc.get("_id", ""))
             doc_id_size = len(doc_id.encode(UTF_8))
+            operation = operation[0] if operation else "index"
 
             if doc_id_size > ES_ID_SIZE_LIMIT:
                 logger.debug(
@@ -267,7 +275,7 @@ class SyncJobRunner:
             ]
             doc["_reduce_whitespace"] = self.sync_job.pipeline["reduce_whitespace"]
             doc["_run_ml_inference"] = self.sync_job.pipeline["run_ml_inference"]
-            yield doc, lazy_download
+            yield doc, lazy_download, operation
 
     async def update_ingestion_stats(self, interval):
         while True:
