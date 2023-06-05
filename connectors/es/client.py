@@ -85,17 +85,26 @@ class ESClient:
 
     async def has_license_enabled(self, license_):
         license_info = await self.client.license.get()
-        license_enabled = license_info.get("license", {}).get("type").lower()
+        license_type = license_info.get("license", {}).get("type").lower()
+
+        license_order = [
+            License.TRIAL.value,
+            License.BASIC.value,
+            License.PLATINUM.value,
+            License.ENTERPRISE.value
+        ]
+
+        license_index = license_order.index(license_type)
 
         match license_:
             case License.ENTERPRISE:
-                return license_enabled == "enterprise", license_enabled
+                return license_type == License.ENTERPRISE.value, license_type
             case License.PLATINUM:
-                return license_enabled == "platinum", license_enabled
+                return license_order.index(License.PLATINUM.value) <= license_index, license_type
             case License.BASIC:
-                return license_enabled == "basic", license_enabled
+                return license_order.index(License.BASIC.value) <= license_index, license_type
             case License.TRIAL:
-                return license_enabled == "trial", license_enabled
+                return license_order.index(License.TRIAL.value) <= license_index, license_type
             case _:
                 raise ValueError(f"Unknown license: {license_}")
 
