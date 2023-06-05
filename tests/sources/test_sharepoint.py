@@ -193,7 +193,7 @@ def test_prepare_list_items_doc():
         "type": "list_item",
         "_id": 1,
         "file_name": "filename",
-        "size": 0,
+        "size": "0",
         "title": "dummy",
         "author_id": "123",
         "creation_time": "2023-01-30T12:48:31Z",

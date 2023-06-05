@@ -84,7 +84,6 @@ SCHEMA = {
     },
     LIST_ITEM: {
         "title": "Title",
-        "author_id": "EditorId",
         "creation_time": "Created",
         "_timestamp": "Modified",
     },
@@ -855,7 +854,7 @@ class SharepointDataSource(BaseDataSource):
         document.update(
             {
                 "_id": item["GUID"],
-                "size": item.get("File", {}).get("Length", 0),
+                "size": item.get("File", {}).get("Length", "0"),
                 "url": urljoin(
                     self.sharepoint_client.host_url,
                     item[item_type]["ServerRelativeUrl"],
@@ -882,13 +881,13 @@ class SharepointDataSource(BaseDataSource):
         Returns:
             dictionary: Modified document with the help of adapter schema.
         """
-        document = {"type": LIST_ITEM}
+        document = {"type": LIST_ITEM, "author_id": str(item["EditorId"])}
 
         document.update(
             {
                 "_id": item["_id"] if "_id" in item.keys() else item["GUID"],
-                "file_name": item.get("file_name"),
-                "size": item.get("Length", 0),
+                "file_name": item.get("file_name", ""),
+                "size": item.get("Length", "0"),
                 "url": item["url"],
             }
         )
