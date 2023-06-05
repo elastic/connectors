@@ -106,14 +106,13 @@ def sync_job_runner_mock():
         yield sync_job_runner_mock
 
 
-def mock_connector(job_type=JobType.FULL, last_sync_status=JobStatus.COMPLETED):
+def mock_connector(job_type=JobType.FULL, last_sync_status=JobStatus.COMPLETED, last_access_control_sync_status=JobStatus.COMPLETED):
     connector = Mock()
     connector.id = "1"
+    connector.job_type=job_type
 
-    if job_type in [JobType.FULL, JobType.INCREMENTAL]:
-        connector.last_sync_status = last_sync_status
-    else:
-        connector.last_access_control_sync_status = last_sync_status
+    connector.last_sync_status = last_sync_status
+    connector.last_access_control_sync_status = last_access_control_sync_status
 
     return connector
 
@@ -228,7 +227,7 @@ async def test_access_control_job_execution_with_connector_still_syncing(
     sync_job_runner_mock,
     set_env,
 ):
-    connector = mock_connector(job_type=JobType.ACCESS_CONTROL, last_sync_status=JobStatus.IN_PROGRESS)
+    connector = mock_connector(job_type=JobType.ACCESS_CONTROL, last_access_control_sync_status=JobStatus.IN_PROGRESS)
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
     sync_job = mock_sync_job(job_type=JobType.ACCESS_CONTROL)
