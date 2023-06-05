@@ -173,7 +173,7 @@ class JobSchedulingService(BaseService):
                 job_type=JobType.FULL,
             )
 
-    async def _scheduled_sync(self, connector, job_type=None):
+    async def _scheduled_sync(self, connector, job_type):
         @with_concurrency_control()
         async def _should_schedule_scheduled_sync(job_type):
             try:
