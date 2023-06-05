@@ -373,7 +373,7 @@ class Extractor:
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
         try:
             async for doc in generator:
-                doc, lazy_download = doc
+                doc, lazy_download, operation = doc
                 count += 1
                 if count % self.display_every == 0:
                     logger.info(str(self))
@@ -403,11 +403,8 @@ class Extractor:
                             await lazy_download(doit=False)
                         continue
 
-                    # the doc exists, but we are still overwriting it with `index`
-                    operation = OP_INDEX
                     self.total_docs_updated += 1
                 else:
-                    operation = OP_INDEX
                     self.total_docs_created += 1
                     if TIMESTAMP_FIELD not in doc:
                         doc[TIMESTAMP_FIELD] = iso_utc()
@@ -668,6 +665,7 @@ class SyncOrchestrator(ESClient):
         - sync_rules_enabled: if enabled, applies rules -- default: `False`
         - content_extraction_enabled: if enabled, will download content -- default: `True`
         - options: dict of options (from `elasticsearch.bulk` in the config file)
+        - job_type: the job type of the sync job
         """
         if self._extractor_task is not None or self._sink_task is not None:
             raise AsyncBulkRunningError("Async bulk task has already started.")

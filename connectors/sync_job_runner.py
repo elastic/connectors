@@ -144,6 +144,7 @@ class SyncJobRunner:
                     "extract_binary_content"
                 ],
                 options=bulk_options,
+                job_type=self.sync_job.job_type,
             )
 
             self.job_reporting_task = asyncio.create_task(
