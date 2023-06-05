@@ -249,8 +249,8 @@ async def test_async_bulk(mock_responses):
                 return
             return {"TEXT": "DATA", "_timestamp": timestamp, "_id": "1"}
 
-        yield {"_id": "1", "_timestamp": datetime.datetime.now().isoformat()}, _dl
-        yield {"_id": "3"}, _dl_none
+        yield {"_id": "1", "_timestamp": datetime.datetime.now().isoformat()}, _dl, "index"
+        yield {"_id": "3"}, _dl_none, "index"
 
     await es.async_bulk("search-some-index", get_docs(), pipeline)
     while not es.done():
@@ -383,7 +383,7 @@ async def setup_extractor(
         (
             # no docs exist, data source has doc 1 -> ingest doc 1
             [],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
@@ -409,7 +409,7 @@ async def setup_extractor(
         (
             # doc 2 is present, data source only returns doc 1 -> delete doc 2 and ingest doc 1
             [DOC_TWO],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
@@ -422,7 +422,7 @@ async def setup_extractor(
         (
             # doc 1 is present, data source also has doc 1 with the same timestamp -> nothing happens
             [DOC_ONE],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
@@ -435,7 +435,7 @@ async def setup_extractor(
         (
             # doc 1 is present, data source has doc 1 with different timestamp -> doc is updated
             [DOC_ONE],
-            [(DOC_ONE_DIFFERENT_TIMESTAMP, None)],
+            [(DOC_ONE_DIFFERENT_TIMESTAMP, None, "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
@@ -451,7 +451,7 @@ async def setup_extractor(
         ),
         (
             [],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             # filter out doc 1
             (False,),
             SYNC_RULES_ENABLED,
@@ -468,7 +468,7 @@ async def setup_extractor(
         (
             # doc 1 is present, data source has doc 1, doc 1 should be filtered -> delete doc 1
             [DOC_ONE],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             # filter out doc 1
             (False,),
             SYNC_RULES_ENABLED,
@@ -485,7 +485,7 @@ async def setup_extractor(
         (
             # doc 1 is present, data source has doc 1 (different timestamp), doc 1 should be filtered -> delete doc 1
             [DOC_ONE],
-            [(DOC_ONE_DIFFERENT_TIMESTAMP, None)],
+            [(DOC_ONE_DIFFERENT_TIMESTAMP, None, "index")],
             # still filter out doc 1
             (False,),
             SYNC_RULES_ENABLED,
@@ -498,7 +498,7 @@ async def setup_extractor(
         ),
         (
             [],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             # filtering throws exception
             [Exception()],
             SYNC_RULES_ENABLED,
@@ -512,7 +512,7 @@ async def setup_extractor(
         (
             [],
             # no doc present, lazy download for doc 1 specified -> index and increment the downloads counter
-            [(DOC_ONE, lazy_download_fake(DOC_ONE))],
+            [(DOC_ONE, lazy_download_fake(DOC_ONE), "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
@@ -525,7 +525,7 @@ async def setup_extractor(
         (
             # doc 1 present, data source has doc 1 -> no lazy download if timestamps are the same for the docs
             [DOC_ONE],
-            [(DOC_ONE, lazy_download_fake(DOC_ONE))],
+            [(DOC_ONE, lazy_download_fake(DOC_ONE), "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
@@ -543,6 +543,7 @@ async def setup_extractor(
                 (
                     DOC_ONE_DIFFERENT_TIMESTAMP,
                     lazy_download_fake(DOC_ONE_DIFFERENT_TIMESTAMP),
+                    "index",
                 )
             ],
             NO_FILTERING,
@@ -556,7 +557,7 @@ async def setup_extractor(
         ),
         (
             [],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             # filter out doc 1
             (False,),
             SYNC_RULES_DISABLED,
@@ -575,7 +576,7 @@ async def setup_extractor(
             # content_extraction_enabled is false and no download is provided,
             # indexing should still work, but nothing should be downloaded
             [],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_DISABLED,
@@ -589,7 +590,7 @@ async def setup_extractor(
             # content_extraction_enabled is false but a download is also provided,
             # indexing should still work, but nothing should be downloaded
             [],
-            [(DOC_ONE, lazy_download_fake(DOC_ONE))],
+            [(DOC_ONE, lazy_download_fake(DOC_ONE), "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_DISABLED,

@@ -12,6 +12,7 @@ from elasticsearch import ConflictError
 from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import InvalidFilteringError
 from connectors.protocol import Filter, JobStatus, Pipeline
+from connectors.protocol.connectors import JobType
 from connectors.sync_job_runner import SyncJobRunner, SyncJobStartError
 from tests.commons import AsyncIterator
 
@@ -23,6 +24,7 @@ def mock_connector():
     connector.id = "1"
     connector.last_sync_status = JobStatus.COMPLETED
     connector.features.sync_rules_enabled.return_value = True
+    connector.sync_cursor = None
     connector.document_count = AsyncMock(return_value=total_document_count)
     connector.sync_starts = AsyncMock(return_value=True)
     connector.sync_done = AsyncMock()
@@ -38,6 +40,7 @@ def mock_sync_job():
     sync_job.service_type = "mysql"
     sync_job.index_name = "search-mysql"
     sync_job.status = JobStatus.IN_PROGRESS
+    sync_job.job_type = JobType.FULL
     sync_job.pipeline = Pipeline({})
     sync_job.filtering = Filter()
     sync_job.claim = AsyncMock()
@@ -322,7 +325,7 @@ async def test_prepare_docs_when_original_id_and_hashed_id_too_long_then_skip_do
     sync_job_runner.source_klass.hash_id.return_value = _id_too_long
 
     docs = []
-    async for doc, _ in sync_job_runner.prepare_docs():
+    async for doc, _, _ in sync_job_runner.prepare_docs():
         docs.append(doc)
 
     assert len(docs) == 0
@@ -337,7 +340,7 @@ async def test_prepare_docs_when_original_id_below_limit_then_yield_doc_with_ori
     sync_job_runner = create_runner_yielding_docs(docs=[({"_id": _id}, None)])
 
     docs = []
-    async for doc, _ in sync_job_runner.prepare_docs():
+    async for doc, _, _ in sync_job_runner.prepare_docs():
         docs.append(doc)
 
     assert len(docs) == 1
@@ -354,7 +357,7 @@ async def test_prepare_docs_when_original_id_above_limit_and_hashed_id_below_lim
     sync_job_runner.source_klass.hash_id.return_value = hashed_id
 
     docs = []
-    async for doc, _ in sync_job_runner.prepare_docs():
+    async for doc, _, _ in sync_job_runner.prepare_docs():
         docs.append(doc)
 
     assert len(docs) == 1

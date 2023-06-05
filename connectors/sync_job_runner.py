@@ -11,7 +11,7 @@ import elasticsearch
 from connectors.es import Mappings
 from connectors.es.client import with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
-from connectors.es.sink import SyncOrchestrator
+from connectors.es.sink import SyncOrchestrator, UnsupportedJobType
 from connectors.logger import logger
 from connectors.protocol import JobStatus
 from connectors.protocol.connectors import JobType
@@ -247,6 +247,8 @@ class SyncJobRunner:
                 sync_cursor=self.connector.sync_cursor,
                 filtering=self.sync_job.filtering,
             )
+        else:
+            raise UnsupportedJobType
 
         async for doc, lazy_download, *operation in generator:
             doc_id = str(doc.get("_id", ""))
