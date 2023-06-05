@@ -81,7 +81,7 @@ spec:
         - title: "Connector Service Nightly Pipeline"
           url: "https://buildkite.com/elastic/connectors-python-nightly"
     spec:
-      pipeline_file: ".buildkite/nightly.yml"
+      pipeline_file: ".buildkite/nightly.py"
       provider_settings:
         trigger_mode: "none"
       repository: "elastic/connectors-python"
@@ -146,6 +146,52 @@ spec:
           branch: main
           cronline: '@daily'
           message: "Runs daily `main` e2e aarch64 test"
+      teams:
+        everyone:
+          access_level: "READ_ONLY"
+        ingestion-team: {}
+
+############################# Nightly Test Suites #############################
+---
+apiVersion: "backstage.io/v1alpha1"
+kind: "Resource"
+metadata:
+  name: "connectors-python-nightly-dockers"
+  description: "Connectors Service Nightly Dockers"
+  links:
+    - title: "connectors-python Nightly Buildkite Jobs"
+      url: "https://buildkite.com/elastic/connectors-python"
+spec:
+  type: "buildkite-pipeline"
+  owner: "group:ingestion-team"
+  system: "buildkite"
+  implementation:
+    apiVersion: "buildkite.elastic.dev/v1"
+    kind: "Pipeline"
+    metadata:
+      name: "connectors-python-nightly-dockers"
+      description: "Connectors Service Nightly Dockers"
+      links:
+        - title: "Connector Service Nightly Pipeline"
+          url: "https://buildkite.com/elastic/connectors-python-nightly"
+    spec:
+      pipeline_file: ".buildkite/nightly_docker.yml"
+      provider_settings:
+        trigger_mode: "none"
+      repository: "elastic/connectors-python"
+      schedules:
+        Daily 8_7:
+          branch: '8.7'
+          cronline: '@daily'
+          message: "Runs daily `8.7` docker"
+        Daily 8_8:
+          branch: '8.8'
+          cronline: '@daily'
+          message: "Runs daily `8.8` docker"
+        Daily main:
+          branch: main
+          cronline: '@daily'
+          message: "Runs daily `main` docker"
       teams:
         everyone:
           access_level: "READ_ONLY"
