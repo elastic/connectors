@@ -559,8 +559,6 @@ async def test_connector_next_sync(next_run, scheduling_enabled, expected_next_s
         "_id": "1",
         "_source": {
             "scheduling": {
-                "enabled": scheduling_enabled,
-                "interval": "1 * * * * *",
                 "access_control": {
                     "enabled": scheduling_enabled,
                     "interval": "1 * * * * *",
