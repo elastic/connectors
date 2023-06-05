@@ -27,9 +27,9 @@ services:
   mockserver:
     image: mockserver/mockserver:5.15.0
     user: root
-    command: -serverPort 443
+    command: -serverPort 8443
     ports:
-      - 443:443
+      - 8443:8443
     environment:
       MOCKSERVER_WATCH_INITIALIZATION_JSON: "true"
       MOCKSERVER_PROPERTY_FILE: /google_cloud_storage/mockserver.properties
