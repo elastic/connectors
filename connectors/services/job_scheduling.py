@@ -182,10 +182,11 @@ class JobSchedulingService(BaseService):
 
             job_type_value = job_type.value
             now = datetime.utcnow()
-            if (
-                connector.last_sync_scheduled_at_by_job_type(job_type) is not None
-                and connector.last_sync_scheduled_at_by_job_type(job_type) > now
-            ):
+            last_sync_scheduled_at = connector.last_sync_scheduled_at_by_job_type(
+                job_type
+            )
+
+            if last_sync_scheduled_at is not None and last_sync_scheduled_at > now:
                 logger.debug(
                     f"A scheduled '{job_type_value}' sync is created by another connector instance, skipping..."
                 )
