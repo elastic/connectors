@@ -185,9 +185,9 @@ def test_prepare_list_items_doc():
         "Modified": "2023-01-30T12:48:31Z",
         "GUID": 1,
         "FileRef": "/site",
-        "url": f"{HOST_URL}/site",
+        "url": f"{HOST_URL}/site%5E",
         "file_name": "filename",
-        "server_relative_url": "/site",
+        "server_relative_url": "/site^",
     }
     expected_response = {
         "type": "list_item",
@@ -198,8 +198,8 @@ def test_prepare_list_items_doc():
         "author_id": "123",
         "creation_time": "2023-01-30T12:48:31Z",
         "_timestamp": "2023-01-30T12:48:31Z",
-        "url": f"{HOST_URL}/site",
-        "server_relative_url": "/site",
+        "url": "http://127.0.0.1:8491/site%5E",
+        "server_relative_url": "/site^",
     }
 
     # Execute
@@ -329,7 +329,7 @@ async def test_get_list_items():
             "EditorId": 1073741823,
             "Attachments": False,
             "GUID": "111111122222222-adfa-4e4f-93c4-bfedddda8510",
-            "url": "http://127.0.0.1:8491/sites/enterprise/site1/DispForm.aspx?ID=1&Source=http://127.0.0.1:8491/sites/enterprise/site1/AllItems.aspx&ContentTypeId=12345",
+            "url": "http://127.0.0.1:8491/sites/enterprise/site1%5E/DispForm.aspx?ID=1&Source=http://127.0.0.1:8491/sites/enterprise/site1%5E/AllItems.aspx&ContentTypeId=12345",
         },
     ]
     attachment_response = {"UniqueId": "1"}
@@ -344,7 +344,7 @@ async def test_get_list_items():
     async for item, _ in source.sharepoint_client.get_list_items(
         list_id="620070a1-ee50-4585-b6a7-0f6210b1a69d",
         site_url="/sites/enterprise/ctest",
-        server_relative_url="/sites/enterprise/site1",
+        server_relative_url="/sites/enterprise/site1^",
         selected_field="",
     ):
         expected_response.append(item)
@@ -1122,6 +1122,39 @@ async def test_get_site_pages_content_when_canvascontent_is_none():
         doit=True,
     )
     # Assert
+    assert response_content is None
+
+
+@pytest.mark.asyncio
+async def test_get_site_page_for_online():
+    source = create_source(SharepointDataSource)
+    site_page_response = {"value":[
+        {
+            "CanvasContent1": "<div>dummy test</div>"
+        }
+    ]}
+    source.sharepoint_client._api_call = Mock(
+        return_value=async_native_coroutine_generator(site_page_response)
+    )
+    response_content = await source.sharepoint_client.get_site_page_for_online(
+        site_url="/site",
+        filename="dummy.txt",
+    )
+    # Assert
+    assert response_content == "<div>dummy test</div>"
+
+
+@pytest.mark.asyncio
+async def test_get_site_pages_content_when_doit_is_none():
+    document = {"title": "Home.aspx", "type": "File", "size": "1000000"}
+    source = create_source(SharepointDataSource)
+    response_content = await source.sharepoint_client.get_site_pages_content(
+        document=document,
+        site_url="/site",
+        list_response={},
+        doit=None,
+    )
+
     assert response_content is None
 
 
