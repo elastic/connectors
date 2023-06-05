@@ -156,7 +156,7 @@ class GraphAPIToken(MicrosoftSecurityToken):
             logger.error(e)
 
             raise Exception(
-                f"Failed to authenticate to tenant {self._tenant_id}. Make sure that provided Tenant Id and Tenant Name are correct."
+                f"Failed to authenticate to tenant {self._tenant_id}. Ensure that the provided Tenant Id and Tenant Name are correct."
             )
 
 
@@ -565,7 +565,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             "site_collections": {
                 "display": "textarea",
                 "label": "Comma-separated list of SharePoint site collections to index",
-                "tooltip": "Site names are expected in this field. Providing \"*\" will make the connector fetch all sites on the tenant.",
+                "tooltip": "This input field is required. Looking to index all available sites? Use the value \"*\" to index all by default.",
                 "order": 5,
                 "type": "list",
                 "value": "",
@@ -598,7 +598,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         truncated_available_sites = remote_sites[:10]
 
         if missing:
-            raise Exception(f"Unable to find sites: [{', '.join(missing)}]. Some available sites are: [{', '.join(truncated_available_sites)}]")
+            raise Exception(f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Review your configuration settings of Microsoft SharePoint access with your SharePoint administrator.")
 
 
     async def get_docs(self, filtering=None):
