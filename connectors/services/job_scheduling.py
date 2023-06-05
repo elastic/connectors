@@ -28,8 +28,6 @@ from connectors.protocol import (
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass
 
-SUPPORTED_JOB_TYPES = [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
-
 
 class JobSchedulingService(BaseService):
     name = "schedule"
@@ -100,7 +98,11 @@ class JobSchedulingService(BaseService):
             )
 
         await self._on_demand_sync(connector)
-        await self._scheduled_sync(connector)
+
+        if connector.features.document_level_security_enabled():
+            await self._scheduled_sync(connector, JobType.ACCESS_CONTROL)
+
+        await self._scheduled_sync(connector, JobType.FULL)
 
     async def _run(self):
         """Main event loop."""
@@ -171,22 +173,13 @@ class JobSchedulingService(BaseService):
                 job_type=JobType.FULL,
             )
 
-    async def _scheduled_sync(self, connector):
+    async def _scheduled_sync(self, connector, job_type=None):
         @with_concurrency_control()
         async def _should_schedule_scheduled_sync(job_type):
             try:
                 await connector.reload()
             except DocumentNotFoundError:
                 logger.error(f"Couldn't reload connector {connector.id}")
-                return False
-
-            if (
-                job_type == JobType.ACCESS_CONTROL
-                and not connector.features.document_level_security_enabled()
-            ):
-                logger.debug(
-                    f"Document level security is not enabled for connector {connector.id}, skipping access control sync scheduling..."
-                )
                 return False
 
             job_type_value = job_type.value
@@ -227,13 +220,12 @@ class JobSchedulingService(BaseService):
 
             return True
 
-        for job_type in SUPPORTED_JOB_TYPES:
-            if await _should_schedule_scheduled_sync(job_type):
-                logger.info(
-                    f"Creating a scheduled '{job_type.value}' sync for connector {connector.id}..."
-                )
-                await self.sync_job_index.create(
-                    connector=connector,
-                    trigger_method=JobTriggerMethod.SCHEDULED,
-                    job_type=job_type,
-                )
+        if await _should_schedule_scheduled_sync(job_type):
+            logger.info(
+                f"Creating a scheduled '{job_type.value}' sync for connector {connector.id}..."
+            )
+            await self.sync_job_index.create(
+                connector=connector,
+                trigger_method=JobTriggerMethod.SCHEDULED,
+                job_type=job_type,
+            )
