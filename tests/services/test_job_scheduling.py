@@ -99,7 +99,8 @@ def mock_connector(
     next_sync=default_next_sync,
     sync_now=False,
     prepare_exception=None,
-    last_sync_scheduled_at_by_job_type=None
+    last_sync_scheduled_at_by_job_type=None,
+    document_level_security_enabled=True
 ):
     connector = Mock()
     connector.native = True
@@ -110,6 +111,7 @@ def mock_connector(
     connector.last_sync_scheduled_at_by_job_type.return_value = last_sync_scheduled_at_by_job_type
 
     connector.features.sync_rules_enabled = Mock(return_value=True)
+    connector.features.document_level_security_enabled = Mock(return_value=document_level_security_enabled)
     connector.validate_filtering = AsyncMock()
     connector.next_sync = Mock(return_value=next_sync)
 
@@ -274,6 +276,23 @@ async def test_connector_both_on_demand_and_scheduled(
 
     # one call for on-demand syncs and one call per job type
     assert sync_job_index_mock.create.await_count == 1 + len(SUPPORTED_JOB_TYPES)
+
+
+@patch("connectors.services.job_scheduling.SUPPORTED_JOB_TYPES", [JobType.ACCESS_CONTROL])
+@pytest.mark.asyncio
+async def test_connector_scheduled_access_control_sync_with_dls_feature_disabled(
+    connector_index_mock,
+    sync_job_index_mock,
+    set_env,
+):
+    connector = mock_connector(next_sync=datetime.utcnow(), document_level_security_enabled=False)
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    await create_and_run_service()
+
+    connector.prepare.assert_awaited()
+    connector.heartbeat.assert_awaited()
+    connector.update_last_sync_scheduled_at_by_job_type.assert_not_awaited()
+    sync_job_index_mock.create.assert_not_awaited()
 
 
 @pytest.mark.asyncio

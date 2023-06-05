@@ -1459,26 +1459,6 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
                 Features.ADVANCED_RULES_OLD: False,
                 Features.DOCUMENT_LEVEL_SECURITY: False
             },
-        ),
-        (
-            {
-                "document_level_security": {
-                    "enabled": True
-                }
-            },
-            {
-                Features.DOCUMENT_LEVEL_SECURITY: True
-            }
-        ),
-        (
-            {
-                "document_level_security": {
-                    "enabled": False
-                }
-            },
-            {
-                Features.DOCUMENT_LEVEL_SECURITY: False
-            }
         )
     ],
 )
@@ -1596,6 +1576,42 @@ def test_incremental_sync_enabled(features_json, incremental_sync_enabled):
     features = Features(features_json)
 
     assert features.incremental_sync_enabled() == incremental_sync_enabled
+
+
+@pytest.mark.parametrize(
+    "features_json, document_level_security_enabled",
+    [
+        (
+            {
+                "document_level_security": {
+                    "enabled": True,
+                },
+            },
+            True,
+        ),
+        (
+            {
+                "document_level_security": {
+                    "enabled": False,
+                },
+            },
+            False,
+        ),
+        (
+            {
+                "document_level_security": {}
+            },
+            False,
+        ),
+        ({"other_feature": True}, False),
+        (None, False),
+        ({}, False),
+    ],
+)
+def test_incremental_sync_enabled(features_json, document_level_security_enabled):
+    features = Features(features_json)
+
+    assert features.document_level_security_enabled() == document_level_security_enabled
 
 
 @pytest.mark.parametrize(

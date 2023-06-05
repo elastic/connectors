@@ -432,6 +432,11 @@ class Features:
             ["incremental_sync", "enabled"], default=False
         )
 
+    def document_level_security_enabled(self):
+        return self._nested_feature_enabled(
+            ["document_level_security", "enabled"], default=False
+        )
+
     def sync_rules_enabled(self):
         return any(
             [
@@ -456,10 +461,6 @@ class Features:
                 return self.features.get("filtering_rules", False)
             case Features.ADVANCED_RULES_OLD:
                 return self.features.get("filtering_advanced_config", False)
-            case Features.DOCUMENT_LEVEL_SECURITY:
-                return self._nested_feature_enabled(
-                    ["document_level_security", "enabled"], default=False
-                )
             case _:
                 return False
 

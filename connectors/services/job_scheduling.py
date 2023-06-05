@@ -180,6 +180,15 @@ class JobSchedulingService(BaseService):
                 logger.error(f"Couldn't reload connector {connector.id}")
                 return False
 
+            if (
+                job_type == JobType.ACCESS_CONTROL
+                and not connector.features.document_level_security_enabled()
+            ):
+                logger.debug(
+                    f"Document level security is not enabled for connector {connector.id}, skipping access control sync scheduling..."
+                )
+                return False
+
             job_type_value = job_type.value
             now = datetime.utcnow()
             last_sync_scheduled_at = connector.last_sync_scheduled_at_by_job_type(
