@@ -46,6 +46,7 @@ DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
 DEFAULT_FILE_SIZE_LIMIT = 10485760
 STORAGE_EMULATOR_HOST = os.environ.get("STORAGE_EMULATOR_HOST")
+TOKEN_URI = os.environ.get("TOKEN_URI", "http://localhost:443/token")
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
@@ -182,7 +183,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             "client_email": "123-abc@developer.gserviceaccount.com",
             "client_id": "123-abc.apps.googleusercontent.com",
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "http://localhost:8443/token",
+            "token_uri": TOKEN_URI,
         }
         return {
             "service_account_credentials": {

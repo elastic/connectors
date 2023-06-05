@@ -120,6 +120,10 @@ def generate_large_files(start_number_of_large_files, end_number_of_large_files)
 
 
 def load():
+    print("****** DEBUG")
+    os.system("docker ps -a")
+    os.system("curl -vvv http://localhost:8443")
+
     create_connection()
     create_buckets()
     if NUMBER_OF_LARGE_FILES:
