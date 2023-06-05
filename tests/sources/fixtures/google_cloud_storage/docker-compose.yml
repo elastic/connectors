@@ -26,6 +26,7 @@ services:
 
   mockserver:
     image: mockserver/mockserver:5.15.0
+    container_name: mockserver
     user: root
     command: -serverPort 8443
     ports:
