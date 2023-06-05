@@ -638,13 +638,24 @@ class Connector(ESDocument):
             case _:
                 raise ValueError(f"Unknown job type: {job_type}")
 
-    async def sync_starts(self):
+    async def sync_starts(self, job_type=JobType.FULL):
+        last_sync_information = (
+            {
+                "last_access_control_sync_status": JobStatus.IN_PROGRESS.value,
+                "last_access_control_sync_error": None,
+            }
+            if job_type == JobType.ACCESS_CONTROL
+            else {
+                "last_sync_status": JobStatus.IN_PROGRESS.value,
+                "last_sync_error": None,
+            }
+        )
+
         doc = {
-            "last_sync_status": JobStatus.IN_PROGRESS.value,
-            "last_sync_error": None,
             "status": Status.CONNECTED.value,
             "error": None,
-        }
+        } | last_sync_information
+
         await self.index.update(
             doc_id=self.id,
             doc=doc,
@@ -659,7 +670,7 @@ class Connector(ESDocument):
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
-    async def sync_done(self, job, cursor=None):
+    async def sync_done(self, job, job_type=None, cursor=None):
         job_status = JobStatus.ERROR if job is None else job.status
         job_error = JOB_NOT_FOUND_ERROR if job is None else job.error
         if job_error is None and job_status == JobStatus.ERROR:
@@ -668,16 +679,30 @@ class Connector(ESDocument):
             Status.ERROR if job_status == JobStatus.ERROR else Status.CONNECTED
         )
 
+        last_sync_information = (
+            {
+                "last_access_control_sync_status": job_status.value,
+                "last_access_control_sync_error": job_error,
+            }
+            if job_type == JobType.ACCESS_CONTROL
+            else {
+                "last_sync_status": job_status.value,
+                "last_sync_error": job_error,
+            }
+        )
+
         doc = {
-            "last_sync_status": job_status.value,
             "last_synced": iso_utc(),
-            "last_sync_error": job_error,
             "status": connector_status.value,
             "error": job_error,
-        }
+        } | last_sync_information
 
         # only update sync cursor after a successful sync job
-        if job_status == JobStatus.COMPLETED:
+        if (
+            job_type is not None
+            and job_type is not JobType.ACCESS_CONTROL
+            and job_status == JobStatus.COMPLETED
+        ):
             doc["sync_cursor"] = cursor
 
         if job is not None and job.terminated:

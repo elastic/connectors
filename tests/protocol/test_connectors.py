@@ -410,23 +410,40 @@ async def test_heartbeat(interval, last_seen, should_send_heartbeat):
         index.heartbeat.assert_not_awaited()
 
 
+@pytest.mark.parametrize(
+    "job_type, expected_doc_source_update",
+    [
+        (JobType.FULL, {
+            "last_sync_status": JobStatus.IN_PROGRESS.value,
+            "last_sync_error": None,
+            "status": Status.CONNECTED.value,
+            "error": None,
+        }),
+        (JobType.INCREMENTAL, {
+            "last_sync_status": JobStatus.IN_PROGRESS.value,
+            "last_sync_error": None,
+            "status": Status.CONNECTED.value,
+            "error": None,
+        }),
+        (JobType.ACCESS_CONTROL, {
+            "last_access_control_sync_status": JobStatus.IN_PROGRESS.value,
+            "last_access_control_sync_error": None,
+            "status": Status.CONNECTED.value,
+            "error": None,
+        })
+    ]
+)
 @pytest.mark.asyncio
-async def test_sync_starts():
+async def test_sync_starts(job_type, expected_doc_source_update):
     doc_id = "1"
     seq_no = 1
     primary_term = 2
     connector_doc = {"_id": doc_id, "_seq_no": seq_no, "_primary_term": primary_term}
     index = Mock()
     index.update = AsyncMock()
-    expected_doc_source_update = {
-        "last_sync_status": JobStatus.IN_PROGRESS.value,
-        "last_sync_error": None,
-        "status": Status.CONNECTED.value,
-        "error": None,
-    }
 
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.sync_starts()
+    await connector.sync_starts(job_type=job_type)
     index.update.assert_called_with(
         doc_id=connector.id,
         doc=expected_doc_source_update,
@@ -467,10 +484,11 @@ def mock_job(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "job, expected_doc_source_update",
+    "job, job_type, expected_doc_source_update",
     [
         (
             None,
+            JobType.FULL,
             {
                 "last_sync_status": JobStatus.ERROR.value,
                 "last_synced": ANY,
@@ -481,6 +499,7 @@ def mock_job(
         ),
         (
             mock_job(status=JobStatus.ERROR, error="something wrong"),
+            JobType.FULL,
             {
                 "last_sync_status": JobStatus.ERROR.value,
                 "last_synced": ANY,
@@ -493,6 +512,7 @@ def mock_job(
         ),
         (
             mock_job(status=JobStatus.CANCELED),
+            JobType.FULL,
             {
                 "last_sync_status": JobStatus.CANCELED.value,
                 "last_synced": ANY,
@@ -505,6 +525,7 @@ def mock_job(
         ),
         (
             mock_job(status=JobStatus.SUSPENDED, terminated=False),
+            JobType.FULL,
             {
                 "last_sync_status": JobStatus.SUSPENDED.value,
                 "last_synced": ANY,
@@ -515,6 +536,7 @@ def mock_job(
         ),
         (
             mock_job(),
+            JobType.FULL,
             {
                 "last_sync_status": JobStatus.COMPLETED.value,
                 "last_synced": ANY,
@@ -526,15 +548,79 @@ def mock_job(
                 "last_deleted_document_count": 0,
             },
         ),
+        (
+            mock_job(),
+            JobType.FULL,
+            {
+                "last_sync_status": JobStatus.COMPLETED.value,
+                "last_synced": ANY,
+                "last_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+                "sync_cursor": SYNC_CURSOR,
+                "last_indexed_document_count": 0,
+                "last_deleted_document_count": 0,
+            },
+        ),
+        (
+            mock_job(),
+            JobType.ACCESS_CONTROL,
+            {
+                "last_access_control_sync_status": JobStatus.COMPLETED.value,
+                "last_synced": ANY,
+                "last_access_control_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+                "last_indexed_document_count": 0,
+                "last_deleted_document_count": 0,
+            },
+        ),
+        (
+            mock_job(status=JobStatus.ERROR, error="something wrong"),
+            JobType.ACCESS_CONTROL,
+            {
+                "last_access_control_sync_status": JobStatus.ERROR.value,
+                "last_synced": ANY,
+                "last_access_control_sync_error": "something wrong",
+                "status": Status.ERROR.value,
+                "error": "something wrong",
+                "last_indexed_document_count": 0,
+                "last_deleted_document_count": 0,
+            },
+        ),
+        (
+            mock_job(status=JobStatus.SUSPENDED, terminated=False),
+            JobType.ACCESS_CONTROL,
+            {
+                "last_access_control_sync_status": JobStatus.SUSPENDED.value,
+                "last_synced": ANY,
+                "last_access_control_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+            },
+        ),
+        (
+            mock_job(status=JobStatus.CANCELED),
+            JobType.ACCESS_CONTROL,
+            {
+                "last_access_control_sync_status": JobStatus.CANCELED.value,
+                "last_synced": ANY,
+                "last_access_control_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+                "last_indexed_document_count": 0,
+                "last_deleted_document_count": 0,
+            },
+        ),
     ],
 )
-async def test_sync_done(job, expected_doc_source_update):
+async def test_sync_done(job, job_type, expected_doc_source_update):
     connector_doc = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
 
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.sync_done(job=job, cursor=SYNC_CURSOR)
+    await connector.sync_done(job=job, job_type=job_type, cursor=SYNC_CURSOR)
     index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
 
 
