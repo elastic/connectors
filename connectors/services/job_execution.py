@@ -53,7 +53,7 @@ class JobExecutionService(BaseService):
         ):
             if connector.last_sync_status == JobStatus.IN_PROGRESS:
                 logger.debug(
-                    f"Connector {connector.id} is still syncing, skip the job {sync_job.id}..."
+                    f"Connector {connector.id} is still syncing content, skip the job {sync_job.id}..."
                 )
                 return
 
@@ -62,7 +62,7 @@ class JobExecutionService(BaseService):
             and connector.last_access_control_sync_status == JobStatus.IN_PROGRESS
         ):
             logger.debug(
-                f"Connector {connector.id} is still syncing ('{sync_job.job_type.value}'), skip the job {sync_job.id}..."
+                f"Connector {connector.id} is still syncing access control, skip the job {sync_job.id}..."
             )
             return
 
