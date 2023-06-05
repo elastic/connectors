@@ -106,19 +106,22 @@ def sync_job_runner_mock():
         yield sync_job_runner_mock
 
 
-def mock_connector(last_sync_status=JobStatus.COMPLETED):
+def mock_connector(job_type=JobType.FULL, last_sync_status=JobStatus.COMPLETED, last_access_control_sync_status=JobStatus.COMPLETED):
     connector = Mock()
     connector.id = "1"
+    connector.job_type=job_type
+
     connector.last_sync_status = last_sync_status
+    connector.last_access_control_sync_status = last_access_control_sync_status
 
     return connector
 
 
-def mock_sync_job(service_type="fake"):
+def mock_sync_job(service_type="fake", job_type=JobType.FULL):
     sync_job = Mock()
     sync_job.service_type = service_type
     sync_job.connector_id = "1"
-    sync_job.job_type = JobType.FULL
+    sync_job.job_type = job_type
 
     return sync_job
 
@@ -210,6 +213,24 @@ async def test_job_execution_with_connector_still_syncing(
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
     sync_job = mock_sync_job()
+    sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
+    await create_and_run_service()
+
+    concurrent_tasks_mock.put.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_access_control_job_execution_with_connector_still_syncing(
+    connector_index_mock,
+    sync_job_index_mock,
+    concurrent_tasks_mock,
+    sync_job_runner_mock,
+    set_env,
+):
+    connector = mock_connector(job_type=JobType.ACCESS_CONTROL, last_access_control_sync_status=JobStatus.IN_PROGRESS)
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
+    sync_job = mock_sync_job(job_type=JobType.ACCESS_CONTROL)
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service()
 
