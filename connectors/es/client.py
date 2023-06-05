@@ -84,6 +84,8 @@ class ESClient:
         self._sleeps.cancel()
 
     async def has_license_enabled(self, license_):
+        """This method checks, whether a certain license or a more powerful license is enabled."""
+
         license_info = await self.client.license.get()
         license_type = license_info.get("license", {}).get("type").lower()
 
