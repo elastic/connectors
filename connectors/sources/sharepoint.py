@@ -192,20 +192,19 @@ class SharepointClient:
         is_list_item_has_attachment=False,
     ):
         if is_list_item_has_attachment:
-            return "".join(
-                (  # pyright: ignore
-                    self.host_url,
-                    quote(relative_url),
-                    "/DispForm.aspx?ID=",
-                    list_item_id,
-                    "&Source=",
-                    f"{self.host_url}{quote(relative_url)}",
-                    "/AllItems.aspx&ContentTypeId=",
-                    content_type_id,
-                )
+            return (
+                self.host_url
+                + quote(relative_url)
+                + "/DispForm.aspx?ID="
+                + list_item_id
+                + "&Source="
+                + self.host_url
+                + quote(relative_url)
+                + "/AllItems.aspx&ContentTypeId="
+                + content_type_id
             )
         else:
-            return "".join((self.host_url, quote(relative_url)))
+            return self.host_url + quote(relative_url)
 
     async def close_session(self):
         """Closes unclosed client session"""
