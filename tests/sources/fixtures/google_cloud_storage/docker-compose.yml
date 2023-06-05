@@ -25,7 +25,7 @@ services:
       - esnet
 
   mockserver:
-    image: mockserver/mockserver:5.13.2
+    image: mockserver/mockserver:5.15.0
     user: root
     command: -serverPort 443
     ports:
