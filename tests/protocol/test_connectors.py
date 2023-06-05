@@ -363,8 +363,8 @@ async def test_connector_properties():
     assert connector.language == "en"
     assert connector.last_sync_status == JobStatus.COMPLETED
     assert connector.last_access_control_sync_status == JobStatus.PENDING
-    assert connector.access_control_scheduling["enabled"]
-    assert connector.access_control_scheduling["interval"] == "* * * * *"
+    assert connector.access_control_sync_scheduling["enabled"]
+    assert connector.access_control_sync_scheduling["interval"] == "* * * * *"
     assert connector.full_sync_scheduling["enabled"]
     assert connector.full_sync_scheduling["interval"] == "* * * * *"
     assert connector.incremental_sync_scheduling["enabled"]
@@ -543,24 +543,42 @@ mock_next_run = iso_utc()
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "scheduling_enabled, expected_next_sync",
+    "scheduling_enabled, expected_next_sync, job_type",
     [
-        (False, None),
-        (True, mock_next_run),
+        (False, None, JobType.ACCESS_CONTROL),
+        (True, mock_next_run, JobType.ACCESS_CONTROL),
+        (False, None, JobType.FULL),
+        (True, mock_next_run, JobType.FULL),
+        (False, None, JobType.INCREMENTAL),
+        (True, mock_next_run, JobType.INCREMENTAL)
     ],
 )
 @patch("connectors.protocol.connectors.next_run")
-async def test_connector_next_sync(next_run, scheduling_enabled, expected_next_sync):
+async def test_connector_next_sync(next_run, scheduling_enabled, expected_next_sync, job_type):
     connector_doc = {
         "_id": "1",
         "_source": {
-            "scheduling": {"full": {"enabled": scheduling_enabled, "interval": "1 * * * * *"}},
+            "scheduling": {
+                "access_control": {
+                    "enabled": scheduling_enabled,
+                    "interval": "1 * * * * *",
+                },
+                "full": {
+                    "enabled": scheduling_enabled,
+                    "interval": "1 * * * * *",
+                },
+                "incremental": {
+                    "enabled": scheduling_enabled,
+                    "interval": "1 * * * * *"
+                }
+            },
         },
     }
     index = Mock()
     next_run.return_value = mock_next_run
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    assert connector.next_sync() == expected_next_sync
+
+    assert connector.next_sync(job_type) == expected_next_sync
 
 
 @pytest.mark.asyncio
@@ -1092,58 +1110,16 @@ async def test_connector_reset_sync_now_flag():
     )
 
 
+@pytest.mark.parametrize(
+    "job_type, date_field_to_update",
+    [
+        (JobType.FULL, "last_sync_scheduled_at"),
+        (JobType.INCREMENTAL, "last_incremental_sync_scheduled_at"),
+        (JobType.ACCESS_CONTROL, "last_access_control_sync_scheduled_at"),
+    ]
+)
 @pytest.mark.asyncio
-async def test_connector_update_last_sync_scheduled_at():
-    doc_id = "1"
-    seq_no = 1
-    primary_term = 2
-    new_ts = datetime.utcnow() + timedelta(seconds=20)
-    connector_doc = {
-        "_id": doc_id,
-        "_seq_no": seq_no,
-        "_primary_term": primary_term,
-        "_source": {},
-    }
-    index = Mock()
-    index.update = AsyncMock()
-    connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.update_last_sync_scheduled_at(new_ts)
-
-    index.update.assert_awaited_once_with(
-        doc_id=doc_id,
-        doc={"last_sync_scheduled_at": new_ts.isoformat()},
-        if_seq_no=seq_no,
-        if_primary_term=primary_term,
-    )
-
-
-@pytest.mark.asyncio
-async def test_connector_update_last_incremental_sync_scheduled_at():
-    doc_id = "1"
-    seq_no = 1
-    primary_term = 2
-    new_ts = datetime.utcnow() + timedelta(seconds=20)
-    connector_doc = {
-        "_id": doc_id,
-        "_seq_no": seq_no,
-        "_primary_term": primary_term,
-        "_source": {},
-    }
-    index = Mock()
-    index.update = AsyncMock()
-    connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.update_last_incremental_sync_scheduled_at(new_ts)
-
-    index.update.assert_awaited_once_with(
-        doc_id=doc_id,
-        doc={"last_incremental_sync_scheduled_at": new_ts.isoformat()},
-        if_seq_no=seq_no,
-        if_primary_term=primary_term,
-    )
-
-
-@pytest.mark.asyncio
-async def test_connector_update_last_access_control_sync_scheduled_at():
+async def test_connector_update_last_sync_scheduled_at_by_job_type(job_type, date_field_to_update):
     doc_id = "2"
     seq_no = 2
     primary_term = 1
@@ -1157,11 +1133,11 @@ async def test_connector_update_last_access_control_sync_scheduled_at():
     index = Mock()
     index.update = AsyncMock()
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.update_last_access_control_sync_scheduled_at(new_ts)
+    await connector.update_last_sync_scheduled_at_by_job_type(job_type, new_ts)
 
     index.update.assert_awaited_once_with(
         doc_id=doc_id,
-        doc={"last_access_control_sync_scheduled_at": new_ts.isoformat()},
+        doc={date_field_to_update: new_ts.isoformat()},
         if_seq_no=seq_no,
         if_primary_term=primary_term,
     )
@@ -1483,26 +1459,6 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
                 Features.ADVANCED_RULES_OLD: False,
                 Features.DOCUMENT_LEVEL_SECURITY: False
             },
-        ),
-        (
-            {
-                "document_level_security": {
-                    "enabled": True
-                }
-            },
-            {
-                Features.DOCUMENT_LEVEL_SECURITY: True
-            }
-        ),
-        (
-            {
-                "document_level_security": {
-                    "enabled": False
-                }
-            },
-            {
-                Features.DOCUMENT_LEVEL_SECURITY: False
-            }
         )
     ],
 )
@@ -1620,6 +1576,42 @@ def test_incremental_sync_enabled(features_json, incremental_sync_enabled):
     features = Features(features_json)
 
     assert features.incremental_sync_enabled() == incremental_sync_enabled
+
+
+@pytest.mark.parametrize(
+    "features_json, document_level_security_enabled",
+    [
+        (
+            {
+                "document_level_security": {
+                    "enabled": True,
+                },
+            },
+            True,
+        ),
+        (
+            {
+                "document_level_security": {
+                    "enabled": False,
+                },
+            },
+            False,
+        ),
+        (
+            {
+                "document_level_security": {}
+            },
+            False,
+        ),
+        ({"other_feature": True}, False),
+        (None, False),
+        ({}, False),
+    ],
+)
+def test_incremental_sync_enabled(features_json, document_level_security_enabled):
+    features = Features(features_json)
+
+    assert features.document_level_security_enabled() == document_level_security_enabled
 
 
 @pytest.mark.parametrize(
