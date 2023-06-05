@@ -102,6 +102,12 @@ class JobSchedulingService(BaseService):
         if connector.features.document_level_security_enabled():
             await self._scheduled_sync(connector, JobType.ACCESS_CONTROL)
 
+        if (
+            connector.features.incremental_sync_enabled()
+            and source_klass.support_incremental_sync
+        ):
+            await self._scheduled_sync(connector, JobType.INCREMENTAL)
+
         await self._scheduled_sync(connector, JobType.FULL)
 
     async def _run(self):

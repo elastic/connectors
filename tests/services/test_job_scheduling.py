@@ -67,7 +67,7 @@ async def create_and_run_service(config_file=CONFIG_FILE, stop_after=0):
 @pytest.fixture(autouse=True)
 def connector_index_mock():
     with patch(
-        "connectors.services.job_scheduling.ConnectorIndex"
+            "connectors.services.job_scheduling.ConnectorIndex"
     ) as connector_index_klass_mock:
         connector_index_mock = Mock()
         connector_index_mock.stop_waiting = Mock()
@@ -80,7 +80,7 @@ def connector_index_mock():
 @pytest.fixture(autouse=True)
 def sync_job_index_mock():
     with patch(
-        "connectors.services.job_scheduling.SyncJobIndex"
+            "connectors.services.job_scheduling.SyncJobIndex"
     ) as sync_job_index_klass_mock:
         sync_job_index_mock = Mock()
         sync_job_index_mock.create = AsyncMock(return_value="1")
@@ -95,13 +95,14 @@ default_next_sync = datetime.utcnow() + timedelta(hours=1)
 
 
 def mock_connector(
-    status=Status.CONNECTED,
-    service_type="fake",
-    next_sync=default_next_sync,
-    sync_now=False,
-    prepare_exception=None,
-    last_sync_scheduled_at_by_job_type=None,
-    document_level_security_enabled=True
+        status=Status.CONNECTED,
+        service_type="fake",
+        next_sync=default_next_sync,
+        sync_now=False,
+        prepare_exception=None,
+        last_sync_scheduled_at_by_job_type=None,
+        document_level_security_enabled=True,
+        incremental_sync_enabled=False,
 ):
     connector = Mock()
     connector.native = True
@@ -113,6 +114,7 @@ def mock_connector(
 
     connector.features.sync_rules_enabled = Mock(return_value=True)
     connector.features.document_level_security_enabled = Mock(return_value=document_level_security_enabled)
+    connector.features.incremental_sync_enabled = Mock(return_value=incremental_sync_enabled)
     connector.validate_filtering = AsyncMock()
     connector.next_sync = Mock(return_value=next_sync)
 
@@ -136,9 +138,9 @@ async def test_no_connector(connector_index_mock, sync_job_index_mock, set_env):
 
 @pytest.mark.asyncio
 async def test_connector_sync_now(
-    connector_index_mock,
-    sync_job_index_mock,
-    set_env,
+        connector_index_mock,
+        sync_job_index_mock,
+        set_env,
 ):
     connector = mock_connector(sync_now=True)
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
@@ -155,9 +157,9 @@ async def test_connector_sync_now(
 
 @pytest.mark.asyncio
 async def test_connector_sync_now_with_race_condition(
-    connector_index_mock,
-    sync_job_index_mock,
-    set_env,
+        connector_index_mock,
+        sync_job_index_mock,
+        set_env,
 ):
     connector = mock_connector(sync_now=True)
 
@@ -184,9 +186,9 @@ async def test_connector_sync_now_with_race_condition(
 
 @pytest.mark.asyncio
 async def test_connector_ready_to_sync(
-    connector_index_mock,
-    sync_job_index_mock,
-    set_env,
+        connector_index_mock,
+        sync_job_index_mock,
+        set_env,
 ):
     connector = mock_connector(next_sync=datetime.utcnow())
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
@@ -207,9 +209,9 @@ async def test_connector_ready_to_sync(
 
 @pytest.mark.asyncio
 async def test_connector_ready_to_sync_with_race_condition(
-    connector_index_mock,
-    sync_job_index_mock,
-    set_env,
+        connector_index_mock,
+        sync_job_index_mock,
+        set_env,
 ):
     connector = mock_connector(next_sync=datetime.utcnow())
 
@@ -236,7 +238,7 @@ async def test_connector_ready_to_sync_with_race_condition(
 
 @pytest.mark.asyncio
 async def test_connector_sync_disabled(
-    connector_index_mock, sync_job_index_mock, set_env
+        connector_index_mock, sync_job_index_mock, set_env
 ):
     connector = mock_connector(next_sync=None)
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
@@ -251,9 +253,9 @@ async def test_connector_sync_disabled(
 
 @pytest.mark.asyncio
 async def test_connector_both_on_demand_and_scheduled(
-    connector_index_mock,
-    sync_job_index_mock,
-    set_env,
+        connector_index_mock,
+        sync_job_index_mock,
+        set_env,
 ):
     connector = mock_connector(sync_now=True, next_sync=datetime.utcnow())
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
@@ -280,9 +282,9 @@ async def test_connector_both_on_demand_and_scheduled(
 
 @pytest.mark.asyncio
 async def test_connector_scheduled_access_control_sync_with_dls_feature_disabled(
-    connector_index_mock,
-    sync_job_index_mock,
-    set_env,
+        connector_index_mock,
+        sync_job_index_mock,
+        set_env,
 ):
     connector = mock_connector(next_sync=datetime.utcnow(), document_level_security_enabled=False)
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
@@ -301,14 +303,56 @@ async def test_connector_scheduled_access_control_sync_with_dls_feature_disabled
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    "incremental_sync_enabled, service_type, schedule_incremental_sync",
+    [
+        (False, "fake", False),
+        (False, "fake_with_incremental", False),
+        (True, "fake", False),
+        (True, "fake_with_incremental", True),
+    ],
+)
+async def test_connector_scheduled_incremental_sync(
+        incremental_sync_enabled,
+        service_type,
+        schedule_incremental_sync,
+        connector_index_mock,
+        sync_job_index_mock,
+        set_env,
+):
+    connector = mock_connector(
+        service_type=service_type,
+        next_sync=datetime.utcnow(),
+        incremental_sync_enabled=incremental_sync_enabled,
+        document_level_security_enabled=False,
+    )
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    await create_and_run_service()
+
+    connector.prepare.assert_awaited()
+    connector.heartbeat.assert_awaited()
+
+    sync_job_index_mock.create.assert_any_await(
+        connector=connector, trigger_method=JobTriggerMethod.SCHEDULED, job_type=JobType.FULL
+    )
+    if schedule_incremental_sync:
+        sync_job_index_mock.create.assert_any_await(
+            connector=connector, trigger_method=JobTriggerMethod.SCHEDULED, job_type=JobType.INCREMENTAL
+        )
+        assert sync_job_index_mock.create.await_count == 2
+    else:
+        assert sync_job_index_mock.create.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     "connector_status",
     [Status.CREATED, Status.NEEDS_CONFIGURATION],
 )
 async def test_connector_not_configured(
-    connector_status,
-    connector_index_mock,
-    sync_job_index_mock,
-    set_env,
+        connector_status,
+        connector_index_mock,
+        sync_job_index_mock,
+        set_env,
 ):
     connector = mock_connector(status=connector_status)
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
@@ -332,10 +376,10 @@ async def test_connector_not_configured(
     ],
 )
 async def test_connector_prepare_failed(
-    prepare_exception,
-    connector_index_mock,
-    sync_job_index_mock,
-    set_env,
+        prepare_exception,
+        connector_index_mock,
+        sync_job_index_mock,
+        set_env,
 ):
     connector = mock_connector(prepare_exception=prepare_exception())
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
@@ -350,7 +394,7 @@ async def test_connector_prepare_failed(
 
 @pytest.mark.asyncio
 async def test_run_when_sync_fails_then_continues_service_execution(
-    connector_index_mock, set_env
+        connector_index_mock, set_env
 ):
     connector = mock_connector(sync_now=True)
     another_connector = mock_connector(sync_now=True)
