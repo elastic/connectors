@@ -46,6 +46,7 @@ __all__ = [
     "DataSourceError",
     "JobStatus",
     "Pipeline",
+    "JobType",
     "JobTriggerMethod",
     "ServiceTypeNotConfiguredError",
     "ServiceTypeNotSupportedError",
@@ -431,6 +432,11 @@ class Features:
             ["incremental_sync", "enabled"], default=False
         )
 
+    def document_level_security_enabled(self):
+        return self._nested_feature_enabled(
+            ["document_level_security", "enabled"], default=False
+        )
+
     def sync_rules_enabled(self):
         return any(
             [
@@ -455,10 +461,6 @@ class Features:
                 return self.features.get("filtering_rules", False)
             case Features.ADVANCED_RULES_OLD:
                 return self.features.get("filtering_advanced_config", False)
-            case Features.DOCUMENT_LEVEL_SECURITY:
-                return self._nested_feature_enabled(
-                    ["document_level_security", "enabled"], default=False
-                )
             case _:
                 return False
 
@@ -511,7 +513,7 @@ class Connector(ESDocument):
         return self.get("scheduling", "incremental", default={})
 
     @property
-    def access_control_scheduling(self):
+    def access_control_sync_scheduling(self):
         return self.get("scheduling", "access_control", default={})
 
     @property
@@ -564,6 +566,17 @@ class Connector(ESDocument):
     def last_access_control_sync_scheduled_at(self):
         return self._property_as_datetime("last_access_control_sync_scheduled_at")
 
+    def last_sync_scheduled_at_by_job_type(self, job_type):
+        match job_type:
+            case JobType.ACCESS_CONTROL:
+                return self.last_access_control_sync_scheduled_at
+            case JobType.INCREMENTAL:
+                return self.last_incremental_sync_scheduled_at
+            case JobType.FULL:
+                return self.last_sync_scheduled_at
+            case _:
+                raise ValueError(f"Unknown job type: {job_type}")
+
     @property
     def sync_cursor(self):
         return self.get("sync_cursor")
@@ -576,12 +589,23 @@ class Connector(ESDocument):
             logger.debug(f"Sending heartbeat for connector {self.id}")
             await self.index.heartbeat(doc_id=self.id)
 
-    def next_sync(self):
-        """Returns the datetime when the next sync will run, return None if it's disabled."""
-        if not self.full_sync_scheduling.get("enabled", False):
-            logger.debug("scheduler is disabled")
+    def next_sync(self, job_type):
+        """Returns the datetime when the next sync for a given job type will run, return None if it's disabled."""
+
+        match job_type:
+            case JobType.ACCESS_CONTROL:
+                scheduling_property = self.access_control_sync_scheduling
+            case JobType.INCREMENTAL:
+                scheduling_property = self.incremental_sync_scheduling
+            case JobType.FULL:
+                scheduling_property = self.full_sync_scheduling
+            case _:
+                raise ValueError(f"Unknown job type: {job_type}")
+
+        if not scheduling_property.get("enabled", False):
+            logger.debug(f"'{job_type.value}' sync scheduling is disabled")
             return None
-        return next_run(self.full_sync_scheduling.get("interval"))
+        return next_run(scheduling_property.get("interval"))
 
     async def reset_sync_now_flag(self):
         await self.index.update(
@@ -599,17 +623,20 @@ class Connector(ESDocument):
             if_primary_term=self._primary_term,
         )
 
-    async def update_last_sync_scheduled_at(self, new_ts):
-        await self._update_datetime("last_sync_scheduled_at", new_ts)
-
-    async def update_last_incremental_sync_scheduled_at(self, new_ts):
-        await self._update_datetime("last_incremental_sync_scheduled_at", new_ts)
-
-    async def update_last_permissions_sync_scheduled_at(self, new_ts):
-        await self._update_datetime("last_permissions_sync_scheduled_at", new_ts)
-
-    async def update_last_access_control_sync_scheduled_at(self, new_ts):
-        await self._update_datetime("last_access_control_sync_scheduled_at", new_ts)
+    async def update_last_sync_scheduled_at_by_job_type(self, job_type, new_ts):
+        match job_type:
+            case JobType.ACCESS_CONTROL:
+                await self._update_datetime(
+                    "last_access_control_sync_scheduled_at", new_ts
+                )
+            case JobType.INCREMENTAL:
+                await self._update_datetime(
+                    "last_incremental_sync_scheduled_at", new_ts
+                )
+            case JobType.FULL:
+                await self._update_datetime("last_sync_scheduled_at", new_ts)
+            case _:
+                raise ValueError(f"Unknown job type: {job_type}")
 
     async def sync_starts(self):
         doc = {
