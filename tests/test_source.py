@@ -765,6 +765,8 @@ async def test_base_class():
     }
     assert ds.get_simple_configuration() == expected
 
+    assert not DataSource.support_incremental_sync
+
     with pytest.raises(NotImplementedError):
         await ds.ping()
 
@@ -772,6 +774,9 @@ async def test_base_class():
 
     with pytest.raises(NotImplementedError):
         await ds.get_docs()
+
+    with pytest.raises(NotImplementedError):
+        await ds.get_docs_incrementally({})
 
     with pytest.raises(NotImplementedError):
         await ds.get_permissions()
