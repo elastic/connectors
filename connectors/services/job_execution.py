@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.protocol import ConnectorIndex, DataSourceError, JobStatus, SyncJobIndex
@@ -57,14 +58,23 @@ class JobExecutionService(BaseService):
                 )
                 return
 
-        if (
-            sync_job.job_type == JobType.ACCESS_CONTROL
-            and connector.last_access_control_sync_status == JobStatus.IN_PROGRESS
-        ):
-            logger.debug(
-                f"Connector {connector.id} is still syncing access control, skip the job {sync_job.id}..."
-            )
-            return
+        if sync_job.job_type == JobType.ACCESS_CONTROL:
+            (
+                is_platinum_license_enabled,
+                license_enabled,
+            ) = await self.connector_index.has_license_enabled(License.PLATINUM)
+
+            if not is_platinum_license_enabled:
+                logger.error(
+                    f"Elasticsearch doesn't use the license 'platinum', instead it uses '{license_enabled}'. Skipping access control sync execution..."
+                )
+                return
+
+            if connector.last_access_control_sync_status == JobStatus.IN_PROGRESS:
+                logger.debug(
+                    f"Connector {connector.id} is still syncing access control, skip the job {sync_job.id}..."
+                )
+                return
 
         sync_job_runner = SyncJobRunner(
             source_klass=source_klass,

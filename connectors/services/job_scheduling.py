@@ -12,7 +12,7 @@ Event loop
 """
 from datetime import datetime
 
-from connectors.es.client import with_concurrency_control
+from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.protocol import (
@@ -100,7 +100,17 @@ class JobSchedulingService(BaseService):
         await self._on_demand_sync(connector)
 
         if connector.features.document_level_security_enabled():
-            await self._scheduled_sync(connector, JobType.ACCESS_CONTROL)
+            (
+                is_platinum_license_enabled,
+                license_enabled,
+            ) = await self.connector_index.has_license_enabled(License.PLATINUM)
+
+            if is_platinum_license_enabled:
+                await self._scheduled_sync(connector, JobType.ACCESS_CONTROL)
+            else:
+                logger.error(
+                    f"Elasticsearch doesn't use the license 'platinum', instead it uses '{license_enabled}'. Skipping access control sync scheduling..."
+                )
 
         await self._scheduled_sync(connector, JobType.FULL)
 

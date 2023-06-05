@@ -6,6 +6,7 @@
 import functools
 import logging
 import time
+from enum import Enum
 
 from elastic_transport.client_utils import url_to_node_config
 from elasticsearch import ApiError, AsyncElasticsearch, ConflictError
@@ -19,6 +20,14 @@ from connectors.utils import CancellableSleeps
 
 class PreflightCheckError(Exception):
     pass
+
+
+class License(Enum):
+    ENTERPRISE = "enterprise"
+    PLATINUM = "platinum"
+    BASIC = "basic"
+    TRIAL = "trial"
+    UNSET = None
 
 
 class ESClient:
@@ -73,6 +82,22 @@ class ESClient:
     def stop_waiting(self):
         self._keep_waiting = False
         self._sleeps.cancel()
+
+    async def has_license_enabled(self, license_):
+        license_info = await self.client.license.get()
+        license_enabled = license_info.get("license", {}).get("type").lower()
+
+        match license_:
+            case License.ENTERPRISE:
+                return license_enabled == "enterprise", license_enabled
+            case License.PLATINUM:
+                return license_enabled == "platinum", license_enabled
+            case License.BASIC:
+                return license_enabled == "basic", license_enabled
+            case License.TRIAL:
+                return license_enabled == "trial", license_enabled
+            case _:
+                raise ValueError(f"Unknown license: {license_}")
 
     async def close(self):
         await self.client.close()

@@ -10,14 +10,18 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from elasticsearch import ConflictError, ConnectionError
 
-from connectors.es.client import ESClient, with_concurrency_control
+from connectors.es.client import ESClient, License, with_concurrency_control
 
+BASIC_CONFIG = {
+    "username": "elastic",
+    "password": "changeme"
+}
 
 def test_esclient():
     # creating a client with a minimal config should create one with sane
     # defaults
-    config = {"username": "elastic", "password": "changeme"}
-    es_client = ESClient(config)
+
+    es_client = ESClient(BASIC_CONFIG)
     assert es_client.host.host == "localhost"
     assert es_client.host.port == 9200
     assert es_client.host.scheme == "http"
@@ -150,3 +154,31 @@ async def test_with_concurrency_control():
     await does_not_raise()
 
     assert mock_func.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "enabled_license",
+    [
+        License.TRIAL,
+        License.BASIC,
+        License.PLATINUM,
+        License.ENTERPRISE
+    ]
+)
+@pytest.mark.asyncio
+async def test_has_license_enabled(enabled_license):
+    all_licenses = [v for _, v in License.__members__.items() if v.value is not None]
+
+    es_client = ESClient(BASIC_CONFIG)
+    es_client.client = AsyncMock()
+    es_client.client.license.get = AsyncMock(return_value={"license": {"type": enabled_license.value}})
+
+    for license_ in all_licenses:
+        is_enabled, _ = await es_client.has_license_enabled(license_)
+
+        if license_ == enabled_license:
+            assert is_enabled
+        else:
+            assert not is_enabled
+
+

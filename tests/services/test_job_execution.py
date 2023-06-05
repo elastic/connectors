@@ -62,6 +62,7 @@ def connector_index_mock():
         connector_index_mock = Mock()
         connector_index_mock.stop_waiting = Mock()
         connector_index_mock.close = AsyncMock()
+        connector_index_mock.has_license_enabled = AsyncMock(return_value=(True, None))
         connector_index_klass_mock.return_value = connector_index_mock
 
         yield connector_index_mock
@@ -230,6 +231,26 @@ async def test_access_control_job_execution_with_connector_still_syncing(
     connector = mock_connector(job_type=JobType.ACCESS_CONTROL, last_access_control_sync_status=JobStatus.IN_PROGRESS)
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
+    sync_job = mock_sync_job(job_type=JobType.ACCESS_CONTROL)
+    sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
+    await create_and_run_service()
+
+    concurrent_tasks_mock.put.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_access_control_job_execution_without_platinum_license_disabled(
+    connector_index_mock,
+    sync_job_index_mock,
+    concurrent_tasks_mock,
+    sync_job_runner_mock,
+    set_env,
+):
+    connector = mock_connector(job_type=JobType.ACCESS_CONTROL, last_access_control_sync_status=JobStatus.COMPLETED)
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
+    connector_index_mock.has_license_enabled = AsyncMock(return_value=(False, "wrong license"))
+
     sync_job = mock_sync_job(job_type=JobType.ACCESS_CONTROL)
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service()
