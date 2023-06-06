@@ -11,7 +11,7 @@ import random
 import string
 
 from flask import Flask, request
-from flask_limiter import Limiter
+from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
@@ -29,6 +29,11 @@ if THROTTLING:
         ],  # Sharepoint 50k+ licences limits
         retry_after="delta_seconds",
         headers_enabled=True,
+        header_name_mapping={
+            HEADERS.LIMIT: "RateLimit-Limit",
+            HEADERS.RESET: "RateLimit-Reset",
+            HEADERS.REMAINING: "RateLimit-Remaining",
+        },
     )
 
 # Number of Sharepoint subsites
