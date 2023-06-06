@@ -66,7 +66,7 @@ class JobExecutionService(BaseService):
 
             if not is_platinum_license_enabled:
                 logger.error(
-                    f"Elasticsearch doesn't use the license 'platinum', instead it uses '{license_enabled}'. Skipping access control sync execution..."
+                    f"Required Elasticsearch license: 'platinum'. Actual license: '{license_enabled}'.  Skipping access control sync execution..."
                 )
                 return
 

@@ -159,20 +159,20 @@ async def test_with_concurrency_control():
 @pytest.mark.parametrize(
     "enabled_license, licenses_enabled",
     [
-        (License.TRIAL, [License.TRIAL]),
-        (License.BASIC, [License.TRIAL, License.BASIC]),
-        (License.PLATINUM, [License.TRIAL, License.BASIC, License.PLATINUM]),
-        (License.ENTERPRISE, [License.TRIAL, License.BASIC, License.PLATINUM, License.ENTERPRISE])
+        (License.BASIC, [License.BASIC]),
+        (License.PLATINUM, [License.BASIC, License.PLATINUM]),
+        (License.ENTERPRISE, [License.BASIC, License.PLATINUM, License.ENTERPRISE]),
+        (License.TRIAL, [License.BASIC, License.PLATINUM, License.ENTERPRISE, License.TRIAL])
     ]
 )
 @pytest.mark.asyncio
 async def test_has_license_enabled(enabled_license, licenses_enabled):
-    all_licenses = [v for _, v in License.__members__.items() if v.value is not None]
+    all_licenses = [license_ for _, license_ in License.__members__.items() if license_.value is not None and license_ != License.EXPIRED]
     licenses_disabled = list(set(all_licenses) - set(licenses_enabled))
 
     es_client = ESClient(BASIC_CONFIG)
     es_client.client = AsyncMock()
-    es_client.client.license.get = AsyncMock(return_value={"license": {"type": enabled_license.value}})
+    es_client.client.license.get = AsyncMock(return_value={"type": enabled_license.value})
 
     for license_ in licenses_enabled:
         is_enabled, _ = await es_client.has_license_enabled(license_)
@@ -182,4 +182,15 @@ async def test_has_license_enabled(enabled_license, licenses_enabled):
         is_enabled, _ = await es_client.has_license_enabled(license_)
         assert not is_enabled
 
+
+@pytest.mark.asyncio
+async def test_has_license_disabled_with_expired_license():
+    es_client = ESClient(BASIC_CONFIG)
+    es_client.client = AsyncMock()
+    es_client.client.license.get = AsyncMock(return_value={"type": License.PLATINUM, "status": "expired"})
+
+    is_enabled, license_ = await es_client.has_license_enabled(License.PLATINUM)
+
+    assert not is_enabled
+    assert license_ == License.EXPIRED
 

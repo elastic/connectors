@@ -27,6 +27,7 @@ class License(Enum):
     PLATINUM = "platinum"
     BASIC = "basic"
     TRIAL = "trial"
+    EXPIRED = "expired"
     UNSET = None
 
 
@@ -86,38 +87,24 @@ class ESClient:
     async def has_license_enabled(self, license_):
         """This method checks, whether a certain license or a more powerful license is enabled."""
 
-        license_info = await self.client.license.get()
-        license_type = license_info.get("license", {}).get("type").lower()
+        license_info = await self.client.license.get("license", {})
+        is_expired = license_info.get("status", "").lower() == "expired"
+
+        if is_expired:
+            return False, License.EXPIRED
+
+        actual_license = license_info.get("type").lower()
 
         license_order = [
-            License.TRIAL.value,
             License.BASIC.value,
             License.PLATINUM.value,
             License.ENTERPRISE.value,
+            License.TRIAL.value,
         ]
 
-        license_index = license_order.index(license_type)
+        license_index = license_order.index(actual_license)
 
-        match license_:
-            case License.ENTERPRISE:
-                return license_type == License.ENTERPRISE.value, license_type
-            case License.PLATINUM:
-                return (
-                    license_order.index(License.PLATINUM.value) <= license_index,
-                    license_type,
-                )
-            case License.BASIC:
-                return (
-                    license_order.index(License.BASIC.value) <= license_index,
-                    license_type,
-                )
-            case License.TRIAL:
-                return (
-                    license_order.index(License.TRIAL.value) <= license_index,
-                    license_type,
-                )
-            case _:
-                raise ValueError(f"Unknown license: {license_}")
+        return license_order.index(license_.value) <= license_index, actual_license
 
     async def close(self):
         await self.client.close()
