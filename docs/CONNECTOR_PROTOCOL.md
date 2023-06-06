@@ -114,7 +114,7 @@ This is our main communication index, used to communicate the connector's config
   index_name: string;   -> The name of the content index where data will be written to
   is_native: boolean;   -> Whether this is a native connector
   language: string;     -> the language used for the analyzer
-  last_access_control_sync_error: keyword;   -> Optional last access control sync job error message
+  last_access_control_sync_error: string;   -> Optional last access control sync job error message
   last_access_control_sync_scheduled_at: date;    -> Date/time when the last access control sync job is scheduled (UTC)
   last_access_control_sync_status: string:  -> Status of the last access control sync job, or null if no job has been executed
   last_deleted_document_count: number;    -> How many documents were deleted in the last job
