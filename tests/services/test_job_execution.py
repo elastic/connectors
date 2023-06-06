@@ -106,13 +106,16 @@ def sync_job_runner_mock():
         yield sync_job_runner_mock
 
 
-def mock_connector(job_type=JobType.FULL, last_sync_status=JobStatus.COMPLETED, last_access_control_sync_status=JobStatus.COMPLETED):
+def mock_connector(job_type=JobType.FULL, last_sync_status=JobStatus.COMPLETED, last_access_control_sync_status=JobStatus.COMPLETED, document_level_security_enabled=True):
     connector = Mock()
     connector.id = "1"
-    connector.job_type=job_type
+    connector.job_type = job_type
 
     connector.last_sync_status = last_sync_status
     connector.last_access_control_sync_status = last_access_control_sync_status
+
+    connector.features = Mock()
+    connector.features.document_level_security_enabled = Mock(return_value=document_level_security_enabled)
 
     return connector
 
@@ -235,3 +238,24 @@ async def test_access_control_job_execution_with_connector_still_syncing(
     await create_and_run_service()
 
     concurrent_tasks_mock.put.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_access_control_job_execution_with_dls_feature_flag_disabled(
+    connector_index_mock,
+    sync_job_index_mock,
+    concurrent_tasks_mock,
+    sync_job_runner_mock,
+    set_env,
+):
+    connector = mock_connector(job_type=JobType.ACCESS_CONTROL, last_access_control_sync_status=JobStatus.IN_PROGRESS, document_level_security_enabled=False)
+
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
+
+    sync_job = mock_sync_job(job_type=JobType.ACCESS_CONTROL)
+    sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
+
+    await create_and_run_service()
+
+    concurrent_tasks_mock.put.assert_awaited()
