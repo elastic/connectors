@@ -85,7 +85,11 @@ class ESClient:
         self._sleeps.cancel()
 
     async def has_active_license_enabled(self, license_):
-        """This method checks, whether an active license or a more powerful active license is enabled."""
+        """This method checks, whether an active license or a more powerful active license is enabled.
+
+        Returns:
+            Tuple: (boolean if `license_` is enabled and not expired, actual license Elasticsearch is using)
+        """
 
         license_response = await self.client.license.get()
         license_info = license_response.get("license", {})
