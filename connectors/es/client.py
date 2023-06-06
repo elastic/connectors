@@ -25,6 +25,7 @@ class PreflightCheckError(Exception):
 class License(Enum):
     ENTERPRISE = "enterprise"
     PLATINUM = "platinum"
+    GOLD = "gold"
     BASIC = "basic"
     TRIAL = "trial"
     EXPIRED = "expired"
@@ -102,6 +103,7 @@ class ESClient:
 
         license_order = [
             License.BASIC.value,
+            License.GOLD.value,
             License.PLATINUM.value,
             License.ENTERPRISE.value,
             License.TRIAL.value,

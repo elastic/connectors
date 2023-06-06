@@ -160,9 +160,10 @@ async def test_with_concurrency_control():
     "enabled_license, licenses_enabled",
     [
         (License.BASIC, [License.BASIC]),
-        (License.PLATINUM, [License.BASIC, License.PLATINUM]),
-        (License.ENTERPRISE, [License.BASIC, License.PLATINUM, License.ENTERPRISE]),
-        (License.TRIAL, [License.BASIC, License.PLATINUM, License.ENTERPRISE, License.TRIAL])
+        (License.GOLD, [License.BASIC, License.GOLD]),
+        (License.PLATINUM, [License.BASIC, License.GOLD, License.PLATINUM]),
+        (License.ENTERPRISE, [License.BASIC, License.GOLD, License.PLATINUM, License.ENTERPRISE]),
+        (License.TRIAL, [License.BASIC, License.GOLD, License.PLATINUM, License.ENTERPRISE, License.TRIAL])
     ]
 )
 @pytest.mark.asyncio
