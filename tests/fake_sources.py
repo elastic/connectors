@@ -20,6 +20,7 @@ class FakeSource:
 
     name = "Fakey"
     service_type = "fake"
+    support_incremental_sync = False
 
     def __init__(self, configuration):
         self.configuration = configuration
@@ -64,6 +65,10 @@ class FakeSource:
 
     def tweak_bulk_options(self, options):
         pass
+
+
+class FakeSourceWithIncrementalSync(FakeSource):
+    support_incremental_sync = True
 
 
 class FakeSourceFilteringValid(FakeSource):

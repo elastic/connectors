@@ -21,6 +21,7 @@ connector_id: '1'
 
 sources:
   fake: fake_sources:FakeSource
+  fake_with_incremental: fake_sources:FakeSourceWithIncrementalSync
   large_fake: fake_sources:LargeFakeSource
   fail_once: fake_sources:FailsThenWork
   fake_ts: fake_sources:FakeSourceTS

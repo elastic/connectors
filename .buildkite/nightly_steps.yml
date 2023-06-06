@@ -1,7 +1,4 @@
 steps:
-  - label: "🏗️ Docker images"
-    command:
-      - ".buildkite/publish_docker.sh"
   - label: "🔨 MySQL"
     command:
       - ".buildkite/run_nigthly.sh mysql"
