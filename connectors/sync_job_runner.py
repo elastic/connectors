@@ -11,7 +11,7 @@ import elasticsearch
 from connectors.es import Mappings
 from connectors.es.client import with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
-from connectors.es.sink import SyncOrchestrator, UnsupportedJobType
+from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
 from connectors.logger import logger
 from connectors.protocol import JobStatus
 from connectors.protocol.connectors import JobType
@@ -240,20 +240,23 @@ class SyncJobRunner:
     async def prepare_docs(self):
         logger.debug(f"Using pipeline {self.sync_job.pipeline}")
 
-        if self.sync_job.job_type == JobType.FULL:
-            generator = self.data_provider.get_docs(filtering=self.sync_job.filtering)
-        elif self.sync_job.job_type == JobType.INCREMENTAL:
-            generator = self.data_provider.get_docs_incrementally(
-                sync_cursor=self.connector.sync_cursor,
-                filtering=self.sync_job.filtering,
-            )
-        else:
-            raise UnsupportedJobType
+        match self.sync_job.job_type:
+            case JobType.FULL:
+                generator = self.data_provider.get_docs(
+                    filtering=self.sync_job.filtering
+                )
+            case JobType.INCREMENTAL:
+                generator = self.data_provider.get_docs_incrementally(
+                    sync_cursor=self.connector.sync_cursor,
+                    filtering=self.sync_job.filtering,
+                )
+            case _:
+                raise UnsupportedJobType
 
         async for doc, lazy_download, *operation in generator:
             doc_id = str(doc.get("_id", ""))
             doc_id_size = len(doc_id.encode(UTF_8))
-            operation = operation[0] if operation else "index"
+            operation = operation[0] if operation else OP_INDEX
 
             if doc_id_size > ES_ID_SIZE_LIMIT:
                 logger.debug(

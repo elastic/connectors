@@ -333,12 +333,13 @@ class Extractor:
 
     async def run(self, generator, job_type):
         try:
-            if job_type == JobType.FULL:
-                await self.get_docs(generator)
-            elif job_type == JobType.INCREMENTAL:
-                await self.get_docs_incrementally(generator)
-            else:
-                raise UnsupportedJobType
+            match job_type:
+                case JobType.FULL:
+                    await self.get_docs(generator)
+                case JobType.INCREMENTAL:
+                    await self.get_docs_incrementally(generator)
+                case _:
+                    raise UnsupportedJobType
         except asyncio.CancelledError:
             logger.info("Task is canceled, stop Extractor...")
             raise
