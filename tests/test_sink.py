@@ -252,7 +252,7 @@ async def test_async_bulk(mock_responses):
         yield {"_id": "1", "_timestamp": datetime.datetime.now().isoformat()}, _dl, "index"
         yield {"_id": "3"}, _dl_none, "index"
 
-    await es.async_bulk("search-some-index", get_docs(), pipeline)
+    await es.async_bulk("search-some-index", get_docs(), pipeline, JobType.FULL)
     while not es.done():
         await asyncio.sleep(0.1)
 
@@ -272,7 +272,7 @@ async def test_async_bulk(mock_responses):
     # 2nd sync
     set_responses(mock_responses)
     with pytest.raises(AsyncBulkRunningError):
-        await es.async_bulk("search-some-index", get_docs(), pipeline)
+        await es.async_bulk("search-some-index", get_docs(), pipeline, JobType.FULL)
 
     await es.close()
 

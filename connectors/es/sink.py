@@ -650,11 +650,11 @@ class SyncOrchestrator(ESClient):
         index,
         generator,
         pipeline,
+        job_type,
         filter_=None,
         sync_rules_enabled=False,
         content_extraction_enabled=True,
         options=None,
-        job_type=JobType.FULL,
     ):
         """Performs a batch of `_bulk` calls, given a generator of documents
 
@@ -662,11 +662,11 @@ class SyncOrchestrator(ESClient):
         - index: target index
         - generator: documents generator
         - pipeline: ingest pipeline settings to pass to the bulk API
+        - job_type: the job type of the sync job
         - filter_: an instance of `Filter` to apply on the fetched document  -- default: `None`
         - sync_rules_enabled: if enabled, applies rules -- default: `False`
         - content_extraction_enabled: if enabled, will download content -- default: `True`
         - options: dict of options (from `elasticsearch.bulk` in the config file)
-        - job_type: the job type of the sync job
         """
         if self._extractor_task is not None or self._sink_task is not None:
             raise AsyncBulkRunningError("Async bulk task has already started.")

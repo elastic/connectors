@@ -138,13 +138,13 @@ class SyncJobRunner:
                 self.sync_job.index_name,
                 self.prepare_docs(),
                 self.sync_job.pipeline,
+                self.sync_job.job_type,
                 filter_=self.sync_job.filtering,
                 sync_rules_enabled=sync_rules_enabled,
                 content_extraction_enabled=self.sync_job.pipeline[
                     "extract_binary_content"
                 ],
                 options=bulk_options,
-                job_type=self.sync_job.job_type,
             )
 
             self.job_reporting_task = asyncio.create_task(
