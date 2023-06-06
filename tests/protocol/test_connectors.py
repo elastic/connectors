@@ -491,9 +491,11 @@ def mock_job(
         (
             None,
             {
+                "last_access_control_sync_error": JOB_NOT_FOUND_ERROR,
+                "last_access_control_sync_status": JobStatus.ERROR.value,
+                "last_sync_error": JOB_NOT_FOUND_ERROR,
                 "last_sync_status": JobStatus.ERROR.value,
                 "last_synced": ANY,
-                "last_sync_error": JOB_NOT_FOUND_ERROR,
                 "status": Status.ERROR.value,
                 "error": JOB_NOT_FOUND_ERROR,
             },

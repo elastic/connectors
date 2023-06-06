@@ -639,17 +639,18 @@ class Connector(ESDocument):
                 raise ValueError(f"Unknown job type: {job_type}")
 
     async def sync_starts(self, job_type=JobType.FULL):
-        last_sync_information = (
-            {
+        if job_type == JobType.ACCESS_CONTROL:
+            last_sync_information = {
                 "last_access_control_sync_status": JobStatus.IN_PROGRESS.value,
                 "last_access_control_sync_error": None,
             }
-            if job_type == JobType.ACCESS_CONTROL
-            else {
+        elif job_type in [JobType.INCREMENTAL, JobType.FULL]:
+            last_sync_information = {
                 "last_sync_status": JobStatus.IN_PROGRESS.value,
                 "last_sync_error": None,
             }
-        )
+        else:
+            raise ValueError(f"Unknown job type: {job_type}")
 
         doc = {
             "status": Status.CONNECTED.value,
@@ -681,17 +682,28 @@ class Connector(ESDocument):
             Status.ERROR if job_status == JobStatus.ERROR else Status.CONNECTED
         )
 
-        last_sync_information = (
-            {
+        if job_type == JobType.ACCESS_CONTROL:
+            last_sync_information = {
                 "last_access_control_sync_status": job_status.value,
                 "last_access_control_sync_error": job_error,
             }
-            if job_type == JobType.ACCESS_CONTROL
-            else {
+        elif job_type in [JobType.INCREMENTAL, JobType.FULL]:
+            last_sync_information = {
                 "last_sync_status": job_status.value,
                 "last_sync_error": job_error,
             }
-        )
+        elif job_type is None:
+            # If we don't know the job type we'll reset all sync jobs,
+            # so we don't run into the risk of staying "in progress" forever
+
+            last_sync_information = {
+                "last_access_control_sync_status": job_status.value,
+                "last_access_control_sync_error": job_error,
+                "last_sync_status": job_status.value,
+                "last_sync_error": job_error,
+            }
+        else:
+            raise ValueError(f"Unknown job type: {job_type}")
 
         doc = {
             "last_synced": iso_utc(),
@@ -699,11 +711,8 @@ class Connector(ESDocument):
             "error": job_error,
         } | last_sync_information
 
-        # only update sync cursor after a successful sync job
-        if (
-            job_type != JobType.ACCESS_CONTROL
-            and job_status == JobStatus.COMPLETED
-        ):
+        # only update sync cursor after a successful content sync job
+        if job_type != JobType.ACCESS_CONTROL and job_status == JobStatus.COMPLETED:
             doc["sync_cursor"] = cursor
 
         if job is not None and job.terminated:
