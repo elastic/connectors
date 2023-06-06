@@ -30,9 +30,10 @@ if THROTTLING:
         retry_after="delta_seconds",
         headers_enabled=True,
         header_name_mapping={
-                 HEADERS.LIMIT : "RateLimit-Limit",
-                 HEADERS.RESET : "RateLimit-Reset",
-                 HEADERS.REMAINING: "RateLimit-Remaining"},
+            HEADERS.LIMIT: "RateLimit-Limit",
+            HEADERS.RESET: "RateLimit-Reset",
+            HEADERS.REMAINING: "RateLimit-Remaining",
+        },
     )
 
 # Number of Sharepoint subsites
