@@ -8,6 +8,7 @@
         "api_key_id": null,
         "status": "configured",
         "language": "en",
+        "last_access_control_sync_error": null,
         "last_access_control_sync_status": null,
         "last_sync_status": "canceled",
         "last_sync_error": null,
