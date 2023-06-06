@@ -84,6 +84,7 @@ SCHEMA = {
     },
     LIST_ITEM: {
         "title": "Title",
+        "author_id": "EditorId",
         "creation_time": "Created",
         "_timestamp": "Modified",
     },
@@ -881,7 +882,7 @@ class SharepointDataSource(BaseDataSource):
         Returns:
             dictionary: Modified document with the help of adapter schema.
         """
-        document = {"type": LIST_ITEM, "author_id": str(item["EditorId"])}
+        document = {"type": LIST_ITEM}
 
         document.update(
             {

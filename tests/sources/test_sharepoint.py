@@ -180,7 +180,7 @@ def test_prepare_list_items_doc():
     source = create_source(SharepointDataSource)
     list_items = {
         "Title": "dummy",
-        "EditorId": "123",
+        "EditorId": 123,
         "Created": "2023-01-30T12:48:31Z",
         "Modified": "2023-01-30T12:48:31Z",
         "GUID": 1,
@@ -195,7 +195,7 @@ def test_prepare_list_items_doc():
         "file_name": "filename",
         "size": "0",
         "title": "dummy",
-        "author_id": "123",
+        "author_id": 123,
         "creation_time": "2023-01-30T12:48:31Z",
         "_timestamp": "2023-01-30T12:48:31Z",
         "url": f"{HOST_URL}/site",
