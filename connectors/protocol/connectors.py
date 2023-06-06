@@ -701,8 +701,7 @@ class Connector(ESDocument):
 
         # only update sync cursor after a successful sync job
         if (
-            job_type is not None
-            and job_type is not JobType.ACCESS_CONTROL
+            job_type != JobType.ACCESS_CONTROL
             and job_status == JobStatus.COMPLETED
         ):
             doc["sync_cursor"] = cursor
