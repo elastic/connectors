@@ -509,7 +509,6 @@ class Extractor:
                         "_op_type": operation,
                         "_index": self.index,
                         "_id": doc_id,
-                        "doc": doc,
                     }
                     if operation == OP_INDEX or operation == OP_UPSERT:
                         item["doc"] = doc
@@ -524,7 +523,8 @@ class Extractor:
         finally:
             # wait for all downloads to be finished
             await lazy_downloads.join()
-            await self.queue.put("END_DOCS")
+
+        await self.queue.put("END_DOCS")
 
 
 class IndexMissing(Exception):

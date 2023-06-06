@@ -285,6 +285,14 @@ def index_operation(doc):
     return {"_op_type": "index", "_index": INDEX, "_id": doc_id, "doc": doc_copy}
 
 
+def update_operation(doc):
+    # deepcopy as get_docs mutates docs
+    doc_copy = deepcopy(doc)
+    doc_id = doc_copy["id"] = doc_copy.pop("_id")
+
+    return {"_op_type": "update", "_index": INDEX, "_id": doc_id, "doc": doc_copy}
+
+
 def delete_operation(doc):
     return {"_op_type": "delete", "_index": INDEX, "_id": doc["_id"]}
 
@@ -639,6 +647,183 @@ async def test_get_docs(
         )
 
         await extractor.run(doc_generator, JobType.FULL)
+
+        assert extractor.total_docs_updated == expected_total_docs_updated
+        assert extractor.total_docs_created == expected_total_docs_created
+        assert extractor.total_docs_deleted == expected_total_docs_deleted
+        assert extractor.total_downloads == expected_total_downloads
+
+        assert queue_called_with_operations(queue, expected_queue_operations)
+
+
+@pytest.mark.parametrize(
+    "docs_from_source, doc_should_ingest, sync_rules_enabled, content_extraction_enabled, expected_queue_operations, "
+    "expected_total_docs_updated, expected_total_docs_created, expected_total_docs_deleted, expected_total_downloads",
+    [
+        (
+            [],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [end_docs_operation()],
+            updated(0),
+            created(0),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "index")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "update")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [update_operation(DOC_ONE), end_docs_operation()],
+            updated(1),
+            created(0),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "delete")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [delete_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(0),
+            deleted(1),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "index"), (DOC_TWO, None, "delete")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [index_operation(DOC_ONE), delete_operation(DOC_TWO), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(1),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "index")],
+            # filter out doc 1
+            (False,),
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [
+                # should not ingest doc 1
+                end_docs_operation()
+            ],
+            updated(0),
+            created(0),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "index")],
+            # filtering throws exception
+            [Exception()],
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            ["FETCH_ERROR"],
+            updated(0),
+            created(0),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            # no doc present, lazy download for doc 1 specified -> index and increment the downloads counter
+            [(DOC_ONE, lazy_download_fake(DOC_ONE), "index")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(1),
+        ),
+        (
+            [(DOC_ONE, None, "index")],
+            # filter out doc 1
+            (False,),
+            SYNC_RULES_DISABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [
+                # should ingest doc 1 as sync rules are disabled
+                index_operation(DOC_ONE),
+                end_docs_operation(),
+            ],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "index")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_DISABLED,
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, lazy_download_fake(DOC_ONE), "index")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_DISABLED,
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(0),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_incrementally(
+    docs_from_source,
+    doc_should_ingest,
+    sync_rules_enabled,
+    content_extraction_enabled,
+    expected_queue_operations,
+    expected_total_docs_updated,
+    expected_total_docs_created,
+    expected_total_docs_deleted,
+    expected_total_downloads,
+):
+    lazy_downloads = await lazy_downloads_mock()
+
+    with mock.patch("connectors.utils.ConcurrentTasks", return_value=lazy_downloads):
+        queue = await queue_mock()
+        basic_rule_engine = await basic_rule_engine_mock(doc_should_ingest)
+
+        # deep copying docs is needed as get_docs mutates the document ids which has side effects on other test
+        # instances
+        doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
+
+        extractor = await setup_extractor(
+            basic_rule_engine,
+            queue,
+            sync_rules_enabled,
+            content_extraction_enabled,
+        )
+
+        await extractor.run(doc_generator, JobType.INCREMENTAL)
 
         assert extractor.total_docs_updated == expected_total_docs_updated
         assert extractor.total_docs_created == expected_total_docs_created
