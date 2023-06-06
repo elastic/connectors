@@ -11,7 +11,7 @@ import random
 import string
 
 from flask import Flask, request
-from flask_limiter import Limiter, HEADERS
+from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
