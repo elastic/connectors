@@ -308,7 +308,7 @@ async def test_connector_scheduled_access_control_sync_with_wrong_license(
 ):
     connector = mock_connector(next_sync=datetime.utcnow())
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
-    connector_index_mock.has_license_enabled = AsyncMock(return_value=(False, "wrong license"))
+    connector_index_mock.has_active_license_enabled = AsyncMock(return_value=(False, "wrong license"))
 
     await create_and_run_service()
 

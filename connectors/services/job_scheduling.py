@@ -103,7 +103,7 @@ class JobSchedulingService(BaseService):
             (
                 is_platinum_license_enabled,
                 license_enabled,
-            ) = await self.connector_index.has_license_enabled(
+            ) = await self.connector_index.has_active_license_enabled(
                 License.PLATINUM
             )  # pyright: ignore
 
