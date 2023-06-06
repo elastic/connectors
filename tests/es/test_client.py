@@ -172,7 +172,7 @@ async def test_has_license_enabled(enabled_license, licenses_enabled):
 
     es_client = ESClient(BASIC_CONFIG)
     es_client.client = AsyncMock()
-    es_client.client.license.get = AsyncMock(return_value={"type": enabled_license.value})
+    es_client.client.license.get = AsyncMock(return_value={"license": { "type": enabled_license.value}})
 
     for license_ in licenses_enabled:
         is_enabled, _ = await es_client.has_active_license_enabled(license_)
@@ -187,7 +187,7 @@ async def test_has_license_enabled(enabled_license, licenses_enabled):
 async def test_has_license_disabled_with_expired_license():
     es_client = ESClient(BASIC_CONFIG)
     es_client.client = AsyncMock()
-    es_client.client.license.get = AsyncMock(return_value={"type": License.PLATINUM, "status": "expired"})
+    es_client.client.license.get = AsyncMock(return_value={"license": {"type": License.PLATINUM, "status": "expired"}})
 
     is_enabled, license_ = await es_client.has_active_license_enabled(License.PLATINUM)
 

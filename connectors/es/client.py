@@ -87,7 +87,8 @@ class ESClient:
     async def has_active_license_enabled(self, license_):
         """This method checks, whether a certain license or a more powerful license is enabled."""
 
-        license_info = await self.client.license.get("license", {})
+        license_response = await self.client.license.get()
+        license_info = license_response.get("license", {})
         is_expired = license_info.get("status", "").lower() == "expired"
 
         if is_expired:
