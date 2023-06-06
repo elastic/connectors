@@ -58,7 +58,10 @@ class JobExecutionService(BaseService):
                 )
                 return
 
-        if sync_job.job_type == JobType.ACCESS_CONTROL:
+        if (
+            sync_job.job_type == JobType.ACCESS_CONTROL
+            and connector.features.document_level_security_enabled()
+        ):
             (
                 is_platinum_license_enabled,
                 license_enabled,
