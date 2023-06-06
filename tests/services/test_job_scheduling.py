@@ -72,7 +72,7 @@ def connector_index_mock():
         connector_index_mock = Mock()
         connector_index_mock.stop_waiting = Mock()
         connector_index_mock.close = AsyncMock()
-        connector_index_mock.has_license_enabled = AsyncMock(return_value=(True, None))
+        connector_index_mock.has_active_license_enabled = AsyncMock(return_value=(True, None))
         connector_index_klass_mock.return_value = connector_index_mock
 
         yield connector_index_mock
