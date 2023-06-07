@@ -157,7 +157,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
     name = "Google Cloud Storage"
     service_type = "google_cloud_storage"
 
-    def __init__(self, configuration, extraction_config):
+    def __init__(self, configuration, extraction_config=None):
         """Set up the connection to the Google Cloud Storage Client.
 
         Args:

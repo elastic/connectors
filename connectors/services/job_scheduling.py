@@ -95,7 +95,8 @@ class JobSchedulingService(BaseService):
         if connector.features.sync_rules_enabled():
             await connector.validate_filtering(
                 validator=source_klass(
-                    connector.configuration, self.config["extraction_service"]
+                    connector.configuration,
+                    extraction_config=self.config["extraction_service"],
                 )
             )
 

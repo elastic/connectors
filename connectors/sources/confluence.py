@@ -189,7 +189,7 @@ class ConfluenceDataSource(BaseDataSource):
     name = "Confluence"
     service_type = "confluence"
 
-    def __init__(self, configuration, extraction_config):
+    def __init__(self, configuration, extraction_config=None):
         """Setup the connection to Confluence
 
         Args:

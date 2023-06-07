@@ -56,7 +56,7 @@ class MSSQLDataSource(GenericBaseDataSource):
     name = "Microsoft SQL Server"
     service_type = "mssql"
 
-    def __init__(self, configuration, extraction_config):
+    def __init__(self, configuration, extraction_config=None):
         """Setup connection to the Microsoft SQL database-server configured by user
 
         Args:

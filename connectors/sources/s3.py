@@ -228,7 +228,7 @@ class S3DataSource(BaseDataSource):
     name = "Amazon S3"
     service_type = "s3"
 
-    def __init__(self, configuration, extraction_config):
+    def __init__(self, configuration, extraction_config=None):
         """Set up the connection to the Amazon S3.
 
         Args:

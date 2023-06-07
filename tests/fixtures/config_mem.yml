@@ -16,6 +16,12 @@ service:
   max_errors_span: 600
   trace_mem: true
 
+extraction_service:
+  host: http://localhost:8090
+  text_extraction:
+    use_file_pointers: false
+    method: 'tika'
+
 connector_id: '1'
 
 sources:

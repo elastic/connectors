@@ -53,7 +53,7 @@ class OracleDataSource(GenericBaseDataSource):
     name = "Oracle Database"
     service_type = "oracle"
 
-    def __init__(self, configuration, extraction_config):
+    def __init__(self, configuration, extraction_config=None):
         """Setup connection to the Oracle database-server configured by user
 
         Args:

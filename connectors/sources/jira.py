@@ -197,7 +197,7 @@ class JiraDataSource(BaseDataSource):
     name = "Jira"
     service_type = "jira"
 
-    def __init__(self, configuration, extraction_config):
+    def __init__(self, configuration, extraction_config=None):
         """Setup the connection to the Jira
 
         Args:

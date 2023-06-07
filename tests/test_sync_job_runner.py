@@ -74,13 +74,16 @@ def create_runner(
 
     sync_job = mock_sync_job()
     connector = mock_connector()
-    es_config = {}
+    config = {
+        "elasticsearch": {},
+        "extraction_service": {},
+    }
 
     return SyncJobRunner(
         source_klass=source_klass,
         sync_job=sync_job,
         connector=connector,
-        es_config=es_config,
+        config=config,
     )
 
 

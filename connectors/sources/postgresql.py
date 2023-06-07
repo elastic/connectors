@@ -55,7 +55,7 @@ class PostgreSQLDataSource(GenericBaseDataSource):
     name = "PostgreSQL"
     service_type = "postgresql"
 
-    def __init__(self, configuration, extraction_config):
+    def __init__(self, configuration, extraction_config=None):
         """Setup connection to the PostgreSQL database-server configured by user
 
         Args:

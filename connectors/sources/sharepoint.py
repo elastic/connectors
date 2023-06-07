@@ -681,7 +681,7 @@ class SharepointDataSource(BaseDataSource):
     name = "SharePoint"
     service_type = "sharepoint"
 
-    def __init__(self, configuration, extraction_config):
+    def __init__(self, configuration, extraction_config=None):
         """Setup the connection to the SharePoint
 
         Args:

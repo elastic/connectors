@@ -93,7 +93,7 @@ class Queries(ABC):
 class GenericBaseDataSource(BaseDataSource):
     """Class contains common functionalities for Generic Database connector"""
 
-    def __init__(self, configuration, extraction_config):
+    def __init__(self, configuration, extraction_config=None):
         """Setup connection to the database-server configured by user
 
         Args:

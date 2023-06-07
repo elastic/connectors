@@ -27,7 +27,7 @@ class NASDataSource(BaseDataSource):
     name = "Network Drive"
     service_type = "network_drive"
 
-    def __init__(self, configuration, extraction_config):
+    def __init__(self, configuration, extraction_config=None):
         """Set up the connection to the Network Drive
 
         Args:

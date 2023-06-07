@@ -22,7 +22,7 @@ class FakeSource:
     service_type = "fake"
     support_incremental_sync = False
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, extraction_config=None):
         self.configuration = configuration
         if configuration.has_field("raise"):
             raise Exception("I break on init")

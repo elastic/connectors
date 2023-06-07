@@ -99,7 +99,7 @@ class SyncJobRunner:
 
         try:
             self.data_provider = self.source_klass(
-                self.sync_job.configuration, self.extraction_config
+                self.sync_job.configuration, extraction_config=self.extraction_config
             )
             if not await self.data_provider.changed():
                 logger.debug(

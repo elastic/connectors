@@ -17,6 +17,12 @@ service:
   max_concurrent_syncs: 10
   log_level: INFO
 
+extraction_service:
+  host: http://localhost:8090
+  text_extraction:
+    use_file_pointers: false
+    method: 'tika'
+
 connector_id: '1'
 
 sources:

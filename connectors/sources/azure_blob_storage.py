@@ -36,7 +36,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
     name = "Azure Blob Storage"
     service_type = "azure_blob_storage"
 
-    def __init__(self, configuration, extraction_config):
+    def __init__(self, configuration, extraction_config=None):
         """Set up the connection to the azure base client
 
         Args:

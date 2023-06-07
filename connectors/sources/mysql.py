@@ -337,7 +337,7 @@ class MySqlDataSource(BaseDataSource):
     name = "MySQL"
     service_type = "mysql"
 
-    def __init__(self, configuration, extraction_config):
+    def __init__(self, configuration, extraction_config=None):
         super().__init__(
             configuration=configuration, extraction_config=extraction_config
         )
