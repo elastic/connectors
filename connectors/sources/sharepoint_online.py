@@ -96,7 +96,23 @@ class MicrosoftSecurityToken:
         now = (
             datetime.now()
         )  # We measure now before request to be on a pessimistic side
-        access_token, expires_in = await self._fetch_token()
+        try:
+            access_token, expires_in = await self._fetch_token()
+        except ClientResponseError as e:
+            match e.status:
+                case 400:
+                    raise Exception(
+                        "Failed to authorize to Sharepoint REST API. Please verify, that provided Tenant Id, Tenant Name and Client ID are valid."
+                    ) from e
+                case 401:
+                    raise Exception(
+                        "Failed to authorize to Sharepoint REST API. Please verify, that provided Secret Value is valid."
+                    ) from e
+                case _:
+                    raise Exception(
+                        f"Failed to authorize to Sharepoint REST API. Response Status: {e.status}, Message: {e.message}"
+                    ) from e
+
         self._token_cache.set(access_token, now + timedelta(expires_in))
 
         return access_token
@@ -140,26 +156,11 @@ class GraphAPIToken(MicrosoftSecurityToken):
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         data = f"client_id={self._client_id}&scope=https://graph.microsoft.com/.default&client_secret={self._client_secret}&grant_type=client_credentials"
 
-        try:
-            async with self._http_session.post(url, headers=headers, data=data) as resp:
-                json_response = await resp.json()
-                access_token = json_response["access_token"]
-                expires_in = int(json_response["expires_in"])
-                return access_token, expires_in
-        except Exception as e:
-            # TODO: fix
-            print(e)
-            match result["error"]:
-                case "invalid_client":
-                    raise Exception(
-                        f'Invalid Secret Value provided for application with client_id="{self._client_id}". Ensure the Secret Value setting is the client secret value, not the client secret ID.'
-                    )
-                case "unauthorized_client":
-                    raise Exception(
-                        f'Application with client_id="{self._client_id}" was not found for tenant with id="{self._tenant_id}".'
-                    )
-                case _:
-                    raise Exception(result.get("error_description"))
+        async with self._http_session.post(url, headers=headers, data=data) as resp:
+            json_response = await resp.json()
+            access_token = json_response["access_token"]
+            expires_in = int(json_response["expires_in"])
+            return access_token, expires_in
 
 
 class SharepointRestAPIToken(MicrosoftSecurityToken):
@@ -198,28 +199,12 @@ class SharepointRestAPIToken(MicrosoftSecurityToken):
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-        try:
-            async with self._http_session.post(url, headers=headers, data=data) as resp:
-                json_response = await resp.json()
-                access_token = json_response["access_token"]
-                expires_in = int(json_response["expires_in"])
+        async with self._http_session.post(url, headers=headers, data=data) as resp:
+            json_response = await resp.json()
+            access_token = json_response["access_token"]
+            expires_in = int(json_response["expires_in"])
 
-                return access_token, expires_in
-        except ClientResponseError as e:
-            # Sharepont REST API is not very talkative about reasons
-            match e.status:
-                case 400:
-                    raise Exception(
-                        "Failed to authorize to Sharepoint REST API. Please verify, that provided Tenant Id, Tenant Name and Client ID are valid."
-                    ) from e
-                case 401:
-                    raise Exception(
-                        "Failed to authorize to Sharepoint REST API. Please verify, that provided Secret Value is valid."
-                    ) from e
-                case _:
-                    raise Exception(
-                        f"Failed to authorize to Shareoint REST API. Response Status: {e.status}, Message: {e.message}"
-                    ) from e
+            return access_token, expires_in
 
 
 class PermissionsMissing(Exception):
