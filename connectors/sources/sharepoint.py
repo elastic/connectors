@@ -885,7 +885,7 @@ class SharepointDataSource(BaseDataSource):
         document.update(
             {
                 "_id": item["GUID"],
-                "size": item.get("File", {}).get("Length", 0),
+                "size": int(item.get("File", {}).get("Length", 0)),
                 "url": self.sharepoint_client.format_url(
                     relative_url=item[item_type]["ServerRelativeUrl"]
                 ),
@@ -917,7 +917,7 @@ class SharepointDataSource(BaseDataSource):
             {
                 "_id": item["_id"] if "_id" in item.keys() else item["GUID"],
                 "file_name": item.get("file_name", ""),
-                "size": item.get("Length", "0"),
+                "size": int(item.get("Length", "0")),
                 "url": item["url"],
             }
         )
