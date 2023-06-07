@@ -269,6 +269,7 @@ class JiraDataSource(BaseDataSource):
             "projects": {
                 "display": "textarea",
                 "label": "Jira project keys",
+                "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
                 "value": "*",
             },
