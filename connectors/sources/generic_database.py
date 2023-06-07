@@ -98,6 +98,7 @@ class GenericBaseDataSource(BaseDataSource):
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
+            extraction_config (dict): Configuration settings for `extraction_service` in config.yaml.
         """
         super().__init__(
             configuration=configuration, extraction_config=extraction_config

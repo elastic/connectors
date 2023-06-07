@@ -58,6 +58,7 @@ class OracleDataSource(GenericBaseDataSource):
 
         Args:
             configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
+            extraction_config (dict): Configuration settings for `extraction_service` in config.yaml.
         """
         super().__init__(
             configuration=configuration, extraction_config=extraction_config
