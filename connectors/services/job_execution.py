@@ -52,7 +52,17 @@ class JobExecutionService(BaseService):
         except DocumentNotFoundError:
             logger.error(f"Couldn't find connector by id {sync_job.connector_id}")
             return
+        if self.requires_platinum_license(sync_job, connector, source_klass):
+            (
+                is_platinum_license_enabled,
+                license_enabled,
+            ) = await self.connector_index.has_active_license_enabled(License.PLATINUM)
 
+            if not is_platinum_license_enabled:
+                logger.error(
+                    f"Minimum required Elasticsearch license: '{License.PLATINUM.value}'. Actual license: '{license_enabled.value}'."
+                )
+                return
         if (
             sync_job.job_type == JobType.FULL
             or sync_job.job_type == JobType.INCREMENTAL
@@ -67,17 +77,6 @@ class JobExecutionService(BaseService):
             sync_job.job_type == JobType.ACCESS_CONTROL
             and connector.features.document_level_security_enabled()
         ):
-            (
-                is_platinum_license_enabled,
-                license_enabled,
-            ) = await self.connector_index.has_active_license_enabled(License.PLATINUM)
-
-            if not is_platinum_license_enabled:
-                logger.error(
-                    f"Minimum required Elasticsearch license: '{License.PLATINUM.value}'. Actual license: '{license_enabled.value}'.  Skipping access control sync execution..."
-                )
-                return
-
             if connector.last_access_control_sync_status == JobStatus.IN_PROGRESS:
                 logger.debug(
                     f"Connector {connector.id} is still syncing access control, skip the job {sync_job.id}..."
@@ -91,6 +90,14 @@ class JobExecutionService(BaseService):
             es_config=self.es_config,
         )
         await self.syncs.put(sync_job_runner.execute)
+
+    @staticmethod
+    def requires_platinum_license(sync_job, connector, source_klass):
+        """Returns whether this scenario requires a Platinum license"""
+        return (
+            sync_job.job_type == JobType.ACCESS_CONTROL
+            and connector.features.document_level_security_enabled()
+        ) or source_klass.is_premium()
 
     async def _run(self):
         self.connector_index = ConnectorIndex(self.es_config)
