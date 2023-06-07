@@ -111,7 +111,7 @@ class JobSchedulingService(BaseService):
                 await self._scheduled_sync(connector, JobType.ACCESS_CONTROL)
             else:
                 logger.error(
-                    f"Minimum required Elasticsearch license: 'platinum'. Actual license: '{license_enabled.value}'. Skipping access control sync scheduling..."
+                    f"Minimum required Elasticsearch license: '{License.PLATINUM.value}'. Actual license: '{license_enabled.value}'. Skipping access control sync scheduling..."
                 )
 
         if (

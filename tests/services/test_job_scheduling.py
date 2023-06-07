@@ -12,6 +12,7 @@ import pytest
 from elasticsearch import ConflictError
 
 from connectors.config import load_config
+from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.protocol import (
     DataSourceError,

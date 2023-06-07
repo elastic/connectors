@@ -111,7 +111,10 @@ class ESClient:
 
         license_index = license_order.index(actual_license)
 
-        return license_order.index(license_.value) <= license_index, actual_license
+        return (
+            license_order.index(license_.value) <= license_index,
+            License[actual_license.upper()],
+        )
 
     async def close(self):
         await self.client.close()

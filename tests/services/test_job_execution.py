@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from connectors.config import load_config
+from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.protocol import JobStatus
 from connectors.protocol.connectors import JobType
