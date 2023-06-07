@@ -537,11 +537,14 @@ class SharepointOnlineDataSource(BaseDataSource):
         # Check that we can log in into Sharepoint REST API
         await self.client.rest_api_token.get()
 
+
+        # TODO: check that tenant_name is valid
+
+        # Check that we at least have permissions to fetch sites and actual site names are correct
         configured_root_sites = self.configuration["site_collections"]
 
         remote_sites = []
 
-        # Check that we at least have permissions to fetch sites
         async for site_collection in self.client.site_collections():
             async for site in self.client.sites(
                 site_collection["siteCollection"]["hostname"], [WILDCARD]
