@@ -30,6 +30,7 @@ from connectors.protocol import (
     Filtering,
     JobStatus,
     JobTriggerMethod,
+    JobType,
     Pipeline,
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
@@ -38,7 +39,6 @@ from connectors.protocol import (
     SyncJob,
     SyncJobIndex,
 )
-from connectors.protocol.connectors import JobType
 from connectors.source import BaseDataSource
 from connectors.utils import iso_utc
 from tests.commons import AsyncIterator
