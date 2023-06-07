@@ -20,8 +20,7 @@ from connectors.es.sink import (
     Sink,
     SyncOrchestrator,
 )
-from connectors.protocol import Pipeline
-from connectors.protocol.connectors import JobType
+from connectors.protocol import JobType, Pipeline
 from tests.commons import AsyncIterator
 
 INDEX = "some-index"

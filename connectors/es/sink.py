@@ -30,8 +30,7 @@ from elasticsearch.helpers import async_scan
 from connectors.es import ESClient
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
-from connectors.protocol import Filter
-from connectors.protocol.connectors import JobType
+from connectors.protocol import Filter, JobType
 from connectors.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
