@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta
@@ -20,14 +21,31 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import CacheWithTimeout, convert_to_b64, html_to_text, url_encode
 
-GRAPH_API_URL = "https://graph.microsoft.com/v1.0"
+if "OVERRIDE_URL" in os.environ:
+    logger.warning("x" * 50)
+    logger.warning(
+        f"SHAREPOINT ONLINE CONNECTOR CALLS ARE REDIRECTED TO {os.environ['OVERRIDE_URL']}"
+    )
+    logger.warning("IT'S SUPPOSED TO BE USED ONLY FOR TESTING")
+    logger.warning("x" * 50)
+    override_url = os.environ["OVERRIDE_URL"]
+    GRAPH_API_URL = override_url
+    GRAPH_API_AUTH_URL = override_url
+    REST_API_AUTH_URL = override_url
+else:
+    GRAPH_API_URL = "https://graph.microsoft.com/v1.0"
+    GRAPH_API_AUTH_URL = "https://login.microsoftonline.com"
+    REST_API_AUTH_URL = "https://accounts.accesscontrol.windows.net"
+
 DEFAULT_RETRY_SECONDS = 30
 FILE_WRITE_CHUNK_SIZE = 1024
 MAX_DOCUMENT_SIZE = 10485760
 WILDCARD = "*"
 
+
 class NotFound(Exception):
     pass
+
 
 class MicrosoftSecurityToken:
     """Abstract token for connecting to one of Microsoft Azure services.
@@ -107,8 +125,9 @@ class GraphAPIToken(MicrosoftSecurityToken):
         client_secret (str): Azure App Client Secret Value
     """
 
-    def __init__(self, tenant_id, tenant_name, client_id, client_secret):
+    def __init__(self, http_session, tenant_id, tenant_name, client_id, client_secret):
         super().__init__(tenant_id, tenant_name, client_id, client_secret)
+        self._http_session = http_session
 
     """Fetch API token for usage with Graph API
 
@@ -117,14 +136,19 @@ class GraphAPIToken(MicrosoftSecurityToken):
     """
 
     async def _fetch_token(self):
-        result = self._call_msal()
+        url = f"{GRAPH_API_AUTH_URL}/{self._tenant_id}/oauth2/v2.0/token"
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        data = f"client_id={self._client_id}&scope=https://graph.microsoft.com/.default&client_secret={self._client_secret}&grant_type=client_credentials"
 
-        if "access_token" in result:
-            access_token = result["access_token"]
-            expires_in = int(result["expires_in"])
-
-            return access_token, expires_in
-        else:
+        try:
+            async with self._http_session.post(url, headers=headers, data=data) as resp:
+                json_response = await resp.json()
+                access_token = json_response["access_token"]
+                expires_in = int(json_response["expires_in"])
+                return access_token, expires_in
+        except Exception as e:
+            # TODO: fix
+            print(e)
             match result["error"]:
                 case "invalid_client":
                     raise Exception(
@@ -136,28 +160,6 @@ class GraphAPIToken(MicrosoftSecurityToken):
                     )
                 case _:
                     raise Exception(result.get("error_description"))
-
-    def _call_msal(self):
-        # MSAL is not async, sigh. Anyway, better call MSAL!
-        authority = f"https://login.microsoftonline.com/{self._tenant_id}"
-        scope = "https://graph.microsoft.com/.default"
-
-        try:
-            app = msal.ConfidentialClientApplication(
-                client_id=self._client_id,
-                client_credential=self._client_secret,
-                authority=authority,
-            )
-
-            return app.acquire_token_for_client(scopes=[scope])
-        except ValueError as e:
-            # Weirdly enough, Value Error most likely is not a VALUE error, but configuration error.
-
-            logger.error(e)
-
-            raise Exception(
-                f"Failed to authenticate to tenant {self._tenant_id}. Ensure that the provided Tenant Id and Tenant Name are correct."
-            )
 
 
 class SharepointRestAPIToken(MicrosoftSecurityToken):
@@ -186,7 +188,7 @@ class SharepointRestAPIToken(MicrosoftSecurityToken):
     """
 
     async def _fetch_token(self):
-        url = f"https://accounts.accesscontrol.windows.net/{self._tenant_id}/tokens/OAuth/2"
+        url = f"{REST_API_AUTH_URL}/{self._tenant_id}/tokens/OAuth/2"
         # GUID in resource is always a constant used to create access token
         data = {
             "grant_type": "client_credentials",
@@ -228,7 +230,9 @@ class MicrosoftAPISession:
     def __init__(self, http_session, api_token, scroll_field):
         self._http_session = http_session
         self._api_token = api_token
-        self._semaphore = asyncio.Semaphore(10)  # TODO: make configurable, that's a scary property
+        self._semaphore = asyncio.Semaphore(
+            10
+        )  # TODO: make configurable, that's a scary property
 
         # Graph API and Sharepoint API scroll over slightly different fields:
         # - odata.nextPage for Sharepoint REST API uses
@@ -237,7 +241,7 @@ class MicrosoftAPISession:
         # but this abstraction can be better.
         self._scroll_field = scroll_field
 
-    async def fetch(self, url):
+    async def fetch(self, url, debug=False):
         return await self._get_json(url)
 
     async def pipe(self, url, stream):
@@ -297,7 +301,7 @@ class MicrosoftAPISession:
                         f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
                     )
 
-                    await asyncio.sleep(retry_seconds)
+                    await asyncio.sleep(retry_seconds)  # TODO: use CancellableSleeps
                 elif (
                     e.status == 403 or e.status == 401
                 ):  # Might work weird, but Graph returns 403 and REST returns 401
@@ -330,7 +334,7 @@ class SharepointOnlineClient:
         )  # Used later for url validation
 
         self.graph_api_token = GraphAPIToken(
-            tenant_id, tenant_name, client_id, client_secret
+            self._http_session, tenant_id, tenant_name, client_id, client_secret
         )
         self.rest_api_token = SharepointRestAPIToken(
             self._http_session, tenant_id, tenant_name, client_id, client_secret
@@ -353,29 +357,20 @@ class SharepointOnlineClient:
             for site_collection in page:
                 yield site_collection
 
-    async def discover_sites(self, site_collection, allowed_root_sites):
-        async for site in self.sites(site_collection):
-            # If WILDCARD, then fetch all, otherwise only the ones in the list
-            if WILDCARD not in allowed_root_sites and site["name"] not in allowed_root_sites:
-                continue
-
-            logger.info(f"Processing site: {site['name']}")
-
-            yield site
-
-            async for subsite in self.sites(site["id"]):
-                if subsite["id"] == site["id"]:
-                    continue  # API returns self too
-
-                yield subsite
-
-    async def sites(self, parent_site_id):
+    async def sites(self, parent_site_id, allowed_root_sites):
         select = ""
 
         async for page in self._graph_api_client.scroll(
             f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?search=*&$select={select}"
         ):
             for site in page:
+                # Filter out site collections that are not needed
+                if (
+                    WILDCARD not in allowed_root_sites
+                    and site["name"] not in allowed_root_sites
+                ):
+                    continue
+
                 yield site
 
     async def site_drives(self, site_id):
@@ -437,10 +432,10 @@ class SharepointOnlineClient:
     async def site_list_item_attachments(self, site_web_url, list_title, list_item_id):
         self._validate_sharepoint_rest_url(site_web_url)
 
-        url = f"{site_web_url}/_api/lists/getByTitle('{list_title}')/items({list_item_id})?$expand=AttachmentFiles"
+        url = f"{site_web_url}/_api/lists/GetByTitle('{list_title}')/items({list_item_id})?$expand=AttachmentFiles"
 
         try:
-            list_item = await self._rest_api_client.fetch(url)
+            list_item = await self._rest_api_client.fetch(url, debug=True)
 
             for attachment in list_item["AttachmentFiles"]:
                 yield attachment
@@ -460,13 +455,16 @@ class SharepointOnlineClient:
         self._validate_sharepoint_rest_url(site_web_url)
 
         select = ""
-        url = f"{site_web_url}/_api/web/lists/getbytitle('Site%20Pages')/items?$select={select}"
+        url = f"{site_web_url}/_api/web/lists/GetByTitle('Site%20Pages')/items?$select={select}"
 
         async for page in self._rest_api_client.scroll(url):
             for site_page in page:
                 yield site_page
 
     def _validate_sharepoint_rest_url(self, url):
+        if "OVERRIDE_URL" in os.environ:  # TODO: make it in a call instead of this
+            return
+
         # I haven't found a better way to validate tenant name for now.
         actual_tenant_name = self._tenant_name_pattern.findall(url)[0]
 
@@ -564,8 +562,8 @@ class SharepointOnlineDataSource(BaseDataSource):
             },
             "site_collections": {
                 "display": "textarea",
-                "label": "Comma-separated list of SharePoint site collections to index",
-                "tooltip": "This input field is required. Looking to index all available sites? Use the value \"*\" to index all by default.",
+                "label": "Comma-separated list of sites",
+                "tooltip": "A comma-separated list of sites to ingest data from. Use * to include all available sites.",
                 "order": 5,
                 "type": "list",
                 "value": "",
@@ -585,21 +583,26 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         # Check that we at least have permissions to fetch sites
         async for site_collection in self.client.site_collections():
-            async for site in self.client.sites(site_collection["siteCollection"]["hostname"]):
+            async for site in self.client.sites(
+                site_collection["siteCollection"]["hostname"], [WILDCARD]
+            ):
                 remote_sites.append(site["name"])
 
         if WILDCARD in configured_root_sites:
             return
 
-        intersection = [value for value in remote_sites if value in configured_root_sites]
+        intersection = [
+            value for value in remote_sites if value in configured_root_sites
+        ]
 
         missing = [x for x in configured_root_sites if x not in remote_sites]
 
         truncated_available_sites = remote_sites[:10]
 
         if missing:
-            raise Exception(f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Review your configuration settings of Microsoft SharePoint access with your SharePoint administrator.")
-
+            raise Exception(
+                f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Review your configuration settings of Microsoft SharePoint access with your SharePoint administrator."
+            )
 
     async def get_docs(self, filtering=None):
         max_data_age = None
@@ -613,7 +616,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             site_collection["object_type"] = "site_collection"
             yield site_collection, None
 
-            async for site in self.client.discover_sites(
+            async for site in self.client.sites(
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
             ):  # TODO: simplify and eliminate root call
