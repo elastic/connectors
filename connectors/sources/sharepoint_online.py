@@ -60,16 +60,19 @@ class MicrosoftSecurityToken:
 
     To read more about tenants and authentication, see:
         - https://learn.microsoft.com/en-us/azure/active-directory/develop/quickstart-create-new-tenant
-        - https://learn.microsoft.com/en-us/azure/active-directory/develop/quickstart-register-app
+        - https://learn.microsoft.com/en-us/azure/active-directory/develop/quickstart-register-app"""
 
-    Args:
-        tenant_id (str): Azure AD Tenant Id
-        tenant_name (str): Azure AD Tenant Name
-        client_id (str): Azure App Client Id
-        client_secret (str): Azure App Client Secret Value
-    """
+    def __init__(self, http_session, tenant_id, tenant_name, client_id, client_secret):
+        """Initializer.
 
-    def __init__(self, tenant_id, tenant_name, client_id, client_secret):
+        Args:
+            http_session (aiohttp.ClientSession): HTTP Client Session
+            tenant_id (str): Azure AD Tenant Id
+            tenant_name (str): Azure AD Tenant Name
+            client_id (str): Azure App Client Id
+            client_secret (str): Azure App Client Secret Value"""
+
+        self._http_session = http_session
         self._tenant_id = tenant_id
         self._tenant_name = tenant_name
         self._client_id = client_id
@@ -77,17 +80,16 @@ class MicrosoftSecurityToken:
 
         self._token_cache = CacheWithTimeout()
 
-    """Get bearer token for provided credentials.
-
-    If token has been retrieved, it'll be taken from the cache.
-    Otherwise, call to `_fetch_token` is made to fetch the token
-    from 3rd-party service.
-
-    Returns:
-        str: bearer token for one of Microsoft services
-    """
-
     async def get(self):
+        """Get bearer token for provided credentials.
+
+        If token has been retrieved, it'll be taken from the cache.
+        Otherwise, call to `_fetch_token` is made to fetch the token
+        from 3rd-party service.
+
+        Returns:
+            str: bearer token for one of Microsoft services"""
+
         cached_value = self._token_cache.get()
 
         if cached_value:
@@ -99,6 +101,8 @@ class MicrosoftSecurityToken:
         try:
             access_token, expires_in = await self._fetch_token()
         except ClientResponseError as e:
+            # Both Graph API and REST API return error codes that indicate different problems happening when authenticating.
+            # Error Code serves as a good starting point classifying these errors, see the messages below:
             match e.status:
                 case 400:
                     raise Exception(
@@ -117,41 +121,26 @@ class MicrosoftSecurityToken:
 
         return access_token
 
-    """Fetch token from Microsoft service.
-
-    This method needs to be implemented in the class that inherits MicrosoftSecurityToken.
-
-    Returns:
-        (str, int) - a tuple containing access token as a string and number of seconds it will be valid for as an integer
-    """
-
     async def _fetch_token(self):
+        """Fetch token from Microsoft service.
+
+        This method needs to be implemented in the class that inherits MicrosoftSecurityToken.
+
+        Returns:
+            (str, int) - a tuple containing access token as a string and number of seconds it will be valid for as an integer"""
+
         raise NotImplementedError
 
 
 class GraphAPIToken(MicrosoftSecurityToken):
-    """Bearer token to connect to Graph API
-
-    We use Graph API to retrieve as much as possible due to higher rate limiting thresholds.
-
-    Args:
-        tenant_id (str): Azure AD Tenant Id
-        tenant_name (str): Azure AD Tenant Name
-        client_id (str): Azure App Client Id
-        client_secret (str): Azure App Client Secret Value
-    """
-
-    def __init__(self, http_session, tenant_id, tenant_name, client_id, client_secret):
-        super().__init__(tenant_id, tenant_name, client_id, client_secret)
-        self._http_session = http_session
-
-    """Fetch API token for usage with Graph API
-
-    Returns:
-        (str, int) - a tuple containing access token as a string and number of seconds it will be valid for as an integer
-    """
+    """Token to connect to Microsoft Graph API endpoints."""
 
     async def _fetch_token(self):
+        """Fetch API token for usage with Graph API
+
+        Returns:
+            (str, int) - a tuple containing access token as a string and number of seconds it will be valid for as an integer"""
+
         url = f"{GRAPH_API_AUTH_URL}/{self._tenant_id}/oauth2/v2.0/token"
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         data = f"client_id={self._client_id}&scope=https://graph.microsoft.com/.default&client_secret={self._client_secret}&grant_type=client_credentials"
@@ -164,31 +153,14 @@ class GraphAPIToken(MicrosoftSecurityToken):
 
 
 class SharepointRestAPIToken(MicrosoftSecurityToken):
-    """Bearer token to connect to Sharepoint REST API
-
-    We use REST API to retrieve information that is not available in Graph API yet.
-
-    When Graph API will have all features we'll stop using this API.
-
-    Args:
-        http_session (aiohttp.ClientSession): HTTP Client Session
-        tenant_id (str): Azure AD Tenant Id
-        tenant_name (str): Azure AD Tenant Name
-        client_id (str): Azure App Client Id
-        client_secret (str): Azure App Client Secret Value
-    """
-
-    def __init__(self, http_session, tenant_id, tenant_name, client_id, client_secret):
-        super().__init__(tenant_id, tenant_name, client_id, client_secret)
-        self._http_session = http_session
-
-    """Fetch API token for usage with Sharepoint REST API
-
-    Returns:
-        (str, int) - a tuple containing access token as a string and number of seconds it will be valid for as an integer
-    """
+    """Token to connect to Sharepoint REST API endpoints."""
 
     async def _fetch_token(self):
+        """Fetch API token for usage with Sharepoint REST API
+
+        Returns:
+            (str, int) - a tuple containing access token as a string and number of seconds it will be valid for as an integer"""
+
         url = f"{REST_API_AUTH_URL}/{self._tenant_id}/tokens/OAuth/2"
         # GUID in resource is always a constant used to create access token
         data = {
@@ -208,6 +180,9 @@ class SharepointRestAPIToken(MicrosoftSecurityToken):
 
 
 class PermissionsMissing(Exception):
+    """Exception class to notify that specific Application Permission is missing for the credentials used.
+    See: https://learn.microsoft.com/en-us/graph/permissions-reference
+    """
     pass
 
 
