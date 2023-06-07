@@ -1,6 +1,14 @@
 #!/bin/bash
 set -exuo pipefail
 
+MACHINE_TYPE=`uname -m`
+
+if [ "$MACHINE_TYPE" != "x86_64" ] || [ "$SKIP_AARCH64" == "true" ]; then
+  echo "Running on aarch64 and skipping"
+  exit
+fi
+
+
 BASEDIR=$(realpath $(dirname $0))
 ROOT=$(realpath $BASEDIR/../)
 
