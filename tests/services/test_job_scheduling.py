@@ -308,8 +308,6 @@ async def test_connector_scheduled_access_control_sync_with_insufficient_license
     sync_job_index_mock,
     set_env,
 ):
-    wrong_license = Mock()
-    wrong_license.value = Mock(return_value="wrong license")
 
     connector = mock_connector(next_sync=datetime.utcnow())
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
