@@ -160,7 +160,7 @@ def test_prepare_drive_items_doc():
     expected_response = {
         "_id": 1,
         "type": "File",
-        "size": "12",
+        "size": 12,
         "title": "dummy",
         "creation_time": "2023-01-30T12:48:31Z",
         "_timestamp": "2023-01-30T12:48:31Z",
@@ -180,7 +180,7 @@ def test_prepare_list_items_doc():
     source = create_source(SharepointDataSource)
     list_items = {
         "Title": "dummy",
-        "EditorId": "123",
+        "EditorId": 123,
         "Created": "2023-01-30T12:48:31Z",
         "Modified": "2023-01-30T12:48:31Z",
         "GUID": 1,
@@ -195,7 +195,7 @@ def test_prepare_list_items_doc():
         "file_name": "filename",
         "size": 0,
         "title": "dummy",
-        "author_id": "123",
+        "author_id": 123,
         "creation_time": "2023-01-30T12:48:31Z",
         "_timestamp": "2023-01-30T12:48:31Z",
         "url": "http://127.0.0.1:8491/site%5E",
@@ -609,7 +609,7 @@ async def test_get_content():
         "id": 1,
         "server_relative_url": "/url",
         "_timestamp": "2022-06-20T10:37:44Z",
-        "size": "11",
+        "size": 11,
         "type": "sites",
         "file_name": "dummy.pdf",
     }
@@ -642,7 +642,7 @@ async def test_get_content_when_size_is_bigger():
     document = {
         "id": 1,
         "_timestamp": "2022-06-20T10:37:44Z",
-        "size": "1048576011",
+        "size": 1048576011,
         "title": "dummy",
         "type": "sites",
         "server_relative_url": "/sites",
@@ -665,7 +665,7 @@ async def test_get_content_when_doit_is_none():
     document = {
         "id": 1,
         "_timestamp": "2022-06-20T10:37:44Z",
-        "size": "11",
+        "size": 11,
         "type": "sites",
         "file_name": "dummy.pdf",
     }
@@ -1045,7 +1045,7 @@ async def test_get_site_pages_content():
         "id": 1,
         "server_relative_url": "/url",
         "_timestamp": "2022-06-20T10:37:44Z",
-        "size": "11",
+        "size": 11,
         "type": "sites",
         "file_name": "dummy.pdf",
     }
@@ -1083,7 +1083,7 @@ async def test_get_site_pages_content_when_canvascontent_is_not_none():
         "id": 1,
         "server_relative_url": "/url",
         "_timestamp": "2022-06-20T10:37:44Z",
-        "size": "11",
+        "size": 11,
         "type": "sites",
         "file_name": "dummy.pdf",
     }
@@ -1109,7 +1109,7 @@ async def test_get_site_pages_content_when_canvascontent_is_none():
     EXPECTED_ATTACHMENT = {
         "title": "Home.aspx",
         "type": "File",
-        "size": "10000000",
+        "size": 10000000,
     }
     source.sharepoint_client.get_site_page_for_online = Mock(
         return_value=coroutine_generator(None)
@@ -1146,7 +1146,7 @@ async def test_get_site_page_for_online():
 
 @pytest.mark.asyncio
 async def test_get_site_pages_content_when_doit_is_none():
-    document = {"title": "Home.aspx", "type": "File", "size": "1000000"}
+    document = {"title": "Home.aspx", "type": "File", "size": 1000000}
     source = create_source(SharepointDataSource)
     response_content = await source.sharepoint_client.get_site_pages_content(
         document=document,
@@ -1168,7 +1168,7 @@ async def test_get_site_pages_content_for_is_cloud_when_size_big():
     EXPECTED_ATTACHMENT = {
         "title": "Home.aspx",
         "type": "File",
-        "size": "1000000000",
+        "size": 1000000000,
     }
     source.sharepoint_client._api_call = Mock(return_value=AsyncIter(async_response))
     # Execute
@@ -1186,7 +1186,7 @@ async def test_get_site_pages_content_for_is_cloud_when_size_big():
 async def test_get_site_pages_content_for_wikifiled_none():
     # Setup
     source = create_source(SharepointDataSource)
-    EXPECTED_ATTACHMENT = {"title": "Home.aspx", "type": "File", "size": "1000000"}
+    EXPECTED_ATTACHMENT = {"title": "Home.aspx", "type": "File", "size": 1000000}
     # Execute
     response_content = await source.sharepoint_client.get_site_pages_content(
         document=EXPECTED_ATTACHMENT,
