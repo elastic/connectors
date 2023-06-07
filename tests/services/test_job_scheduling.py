@@ -303,7 +303,7 @@ async def test_connector_scheduled_access_control_sync_with_dls_feature_disabled
 
 
 @pytest.mark.asyncio
-async def test_connector_scheduled_access_control_sync_with_wrong_license(
+async def test_connector_scheduled_access_control_sync_with_insufficient_license(
     connector_index_mock,
     sync_job_index_mock,
     set_env,
