@@ -242,7 +242,7 @@ async def test_access_control_job_execution_with_connector_still_syncing(
 
 
 @pytest.mark.asyncio
-async def test_access_control_job_execution_without_platinum_license_disabled(
+async def test_access_control_job_execution_with_insufficient_license(
     connector_index_mock,
     sync_job_index_mock,
     concurrent_tasks_mock,
