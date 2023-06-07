@@ -252,7 +252,7 @@ async def test_access_control_job_execution_without_platinum_license_disabled(
     connector = mock_connector(job_type=JobType.ACCESS_CONTROL, last_access_control_sync_status=JobStatus.COMPLETED)
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
-    connector_index_mock.has_active_license_enabled = AsyncMock(return_value=(False, "wrong license"))
+    connector_index_mock.has_active_license_enabled = AsyncMock(return_value=(False, License.BASIC))
 
     sync_job = mock_sync_job(job_type=JobType.ACCESS_CONTROL)
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
