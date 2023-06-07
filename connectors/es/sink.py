@@ -510,7 +510,7 @@ class Extractor:
                         "_index": self.index,
                         "_id": doc_id,
                     }
-                    if operation == OP_INDEX or operation == OP_UPSERT:
+                    if operation in (OP_INDEX, OP_UPSERT):
                         item["doc"] = doc
                     await self.queue.put(item)
 
