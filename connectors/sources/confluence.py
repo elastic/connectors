@@ -262,8 +262,8 @@ class ConfluenceDataSource(BaseDataSource):
             "spaces": {
                 "display": "textarea",
                 "label": "Confluence space keys",
-                "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "order": 7,
+                "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
                 "value": WILDCARD,
             },
