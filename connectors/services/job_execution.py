@@ -5,8 +5,13 @@
 #
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
-from connectors.protocol import ConnectorIndex, DataSourceError, JobStatus, SyncJobIndex
-from connectors.protocol.connectors import JobType
+from connectors.protocol import (
+    ConnectorIndex,
+    DataSourceError,
+    JobStatus,
+    JobType,
+    SyncJobIndex,
+)
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass
 from connectors.sync_job_runner import SyncJobRunner
@@ -57,14 +62,15 @@ class JobExecutionService(BaseService):
                 )
                 return
 
-        if (
-            sync_job.job_type == JobType.ACCESS_CONTROL
-            and connector.last_access_control_sync_status == JobStatus.IN_PROGRESS
-        ):
-            logger.debug(
-                f"Connector {connector.id} is still syncing access control, skip the job {sync_job.id}..."
-            )
-            return
+        if connector.features.document_level_security_enabled():
+            if (
+                sync_job.job_type == JobType.ACCESS_CONTROL
+                and connector.last_access_control_sync_status == JobStatus.IN_PROGRESS
+            ):
+                logger.debug(
+                    f"Connector {connector.id} is still syncing access control, skip the job {sync_job.id}..."
+                )
+                return
 
         sync_job_runner = SyncJobRunner(
             source_klass=source_klass,
