@@ -11,9 +11,10 @@ import elasticsearch
 from connectors.es import Mappings
 from connectors.es.client import with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
-from connectors.es.sink import SyncOrchestrator
+from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
 from connectors.logger import logger
 from connectors.protocol import JobStatus
+from connectors.protocol.connectors import JobType
 from connectors.utils import truncate_id
 
 UTF_8 = "utf-8"
@@ -137,6 +138,7 @@ class SyncJobRunner:
                 self.sync_job.index_name,
                 self.prepare_docs(),
                 self.sync_job.pipeline,
+                self.sync_job.job_type,
                 filter_=self.sync_job.filtering,
                 sync_rules_enabled=sync_rules_enabled,
                 content_extraction_enabled=self.sync_job.pipeline[
@@ -238,9 +240,7 @@ class SyncJobRunner:
     async def prepare_docs(self):
         logger.debug(f"Using pipeline {self.sync_job.pipeline}")
 
-        async for doc, lazy_download in self.data_provider.get_docs(
-            filtering=self.sync_job.filtering
-        ):
+        async for doc, lazy_download, operation in self.generator():
             doc_id = str(doc.get("_id", ""))
             doc_id_size = len(doc_id.encode(UTF_8))
 
@@ -267,7 +267,23 @@ class SyncJobRunner:
             ]
             doc["_reduce_whitespace"] = self.sync_job.pipeline["reduce_whitespace"]
             doc["_run_ml_inference"] = self.sync_job.pipeline["run_ml_inference"]
-            yield doc, lazy_download
+            yield doc, lazy_download, operation
+
+    async def generator(self):
+        match self.sync_job.job_type:
+            case JobType.FULL:
+                async for doc, lazy_download in self.data_provider.get_docs(
+                    filtering=self.sync_job.filtering
+                ):
+                    yield doc, lazy_download, OP_INDEX
+            case JobType.INCREMENTAL:
+                async for doc, lazy_download, operation in self.data_provider.get_docs_incrementally(
+                    sync_cursor=self.connector.sync_cursor,
+                    filtering=self.sync_job.filtering,
+                ):
+                    yield doc, lazy_download, operation
+            case _:
+                raise UnsupportedJobType
 
     async def update_ingestion_stats(self, interval):
         while True:
