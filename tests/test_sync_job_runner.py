@@ -11,8 +11,7 @@ from elasticsearch import ConflictError
 
 from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import InvalidFilteringError
-from connectors.protocol import Filter, JobStatus, Pipeline
-from connectors.protocol.connectors import JobType
+from connectors.protocol import Filter, JobStatus, JobType, Pipeline
 from connectors.sync_job_runner import SyncJobRunner, SyncJobStartError
 from tests.commons import AsyncIterator
 

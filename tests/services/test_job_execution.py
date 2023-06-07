@@ -11,8 +11,7 @@ import pytest
 
 from connectors.config import load_config
 from connectors.es.index import DocumentNotFoundError
-from connectors.protocol import JobStatus
-from connectors.protocol.connectors import JobType
+from connectors.protocol import JobStatus, JobType
 from connectors.services.job_execution import JobExecutionService
 from tests.commons import AsyncIterator
 
