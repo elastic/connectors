@@ -99,21 +99,21 @@ class ESClient:
         if is_expired:
             return False, License.EXPIRED
 
-        actual_license = license_info.get("type").lower()
+        actual_license = License(license_info.get("type").lower())
 
         license_order = [
-            License.BASIC.value,
-            License.GOLD.value,
-            License.PLATINUM.value,
-            License.ENTERPRISE.value,
-            License.TRIAL.value,
+            License.BASIC,
+            License.GOLD,
+            License.PLATINUM,
+            License.ENTERPRISE,
+            License.TRIAL,
         ]
 
         license_index = license_order.index(actual_license)
 
         return (
-            license_order.index(license_.value) <= license_index,
-            License[actual_license.upper()],
+            license_order.index(license_) <= license_index,
+            actual_license,
         )
 
     async def close(self):
