@@ -189,13 +189,15 @@ class ConfluenceDataSource(BaseDataSource):
     name = "Confluence"
     service_type = "confluence"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, extraction_config):
         """Setup the connection to Confluence
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
-        super().__init__(configuration=configuration)
+        super().__init__(
+            configuration=configuration, extraction_config=extraction_config
+        )
         self.spaces = self.configuration["spaces"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
         self.confluence_client = ConfluenceClient(configuration)

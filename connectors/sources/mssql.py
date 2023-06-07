@@ -56,13 +56,15 @@ class MSSQLDataSource(GenericBaseDataSource):
     name = "Microsoft SQL Server"
     service_type = "mssql"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, extraction_config):
         """Setup connection to the Microsoft SQL database-server configured by user
 
         Args:
             configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
         """
-        super().__init__(configuration=configuration)
+        super().__init__(
+            configuration=configuration, extraction_config=extraction_config
+        )
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.ssl_ca = self.configuration["ssl_ca"]
         self.validate_host = self.configuration["validate_host"]

@@ -72,13 +72,14 @@ class SyncJobRunner:
         source_klass,
         sync_job,
         connector,
-        es_config,
+        config,
     ):
         self.source_klass = source_klass
         self.data_provider = None
         self.sync_job = sync_job
         self.connector = connector
-        self.es_config = es_config
+        self.es_config = config["elasticsearch"]
+        self.extraction_config = config["extraction_service"]
         self.elastic_server = None
         self.job_reporting_task = None
         self.bulk_options = self.es_config.get("bulk", {})
@@ -97,7 +98,9 @@ class SyncJobRunner:
         self._start_time = time.time()
 
         try:
-            self.data_provider = self.source_klass(self.sync_job.configuration)
+            self.data_provider = self.source_klass(
+                self.sync_job.configuration, self.extraction_config
+            )
             if not await self.data_provider.changed():
                 logger.debug(
                     f"No change in {self.sync_job.service_type} data provider, skipping..."

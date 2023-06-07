@@ -197,13 +197,15 @@ class JiraDataSource(BaseDataSource):
     name = "Jira"
     service_type = "jira"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, extraction_config):
         """Setup the connection to the Jira
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
-        super().__init__(configuration=configuration)
+        super().__init__(
+            configuration=configuration, extraction_config=extraction_config
+        )
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
         self.jira_client = JiraClient(configuration=configuration)
 

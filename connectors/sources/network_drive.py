@@ -27,13 +27,15 @@ class NASDataSource(BaseDataSource):
     name = "Network Drive"
     service_type = "network_drive"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, extraction_config):
         """Set up the connection to the Network Drive
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
-        super().__init__(configuration=configuration)
+        super().__init__(
+            configuration=configuration, extraction_config=extraction_config
+        )
         self.username = self.configuration["username"]
         self.password = self.configuration["password"]
         self.server_ip = self.configuration["server_ip"]

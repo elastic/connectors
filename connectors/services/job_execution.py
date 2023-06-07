@@ -71,7 +71,7 @@ class JobExecutionService(BaseService):
             source_klass=source_klass,
             sync_job=sync_job,
             connector=connector,
-            es_config=self.es_config,
+            config=self.config,
         )
         await self.syncs.put(sync_job_runner.execute)
 

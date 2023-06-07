@@ -337,8 +337,10 @@ class MySqlDataSource(BaseDataSource):
     name = "MySQL"
     service_type = "mysql"
 
-    def __init__(self, configuration):
-        super().__init__(configuration=configuration)
+    def __init__(self, configuration, extraction_config):
+        super().__init__(
+            configuration=configuration, extraction_config=extraction_config
+        )
         self._sleeps = CancellableSleeps()
         self.retry_count = self.configuration["retry_count"]
         self.ssl_enabled = self.configuration["ssl_enabled"]

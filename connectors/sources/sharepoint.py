@@ -681,13 +681,15 @@ class SharepointDataSource(BaseDataSource):
     name = "SharePoint"
     service_type = "sharepoint"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, extraction_config):
         """Setup the connection to the SharePoint
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
-        super().__init__(configuration=configuration)
+        super().__init__(
+            configuration=configuration, extraction_config=extraction_config
+        )
         self.sharepoint_client = SharepointClient(configuration=configuration)
 
     @classmethod

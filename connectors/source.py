@@ -341,7 +341,7 @@ class BaseDataSource:
     service_type = None
     support_incremental_sync = False
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, extraction_config):
         if not isinstance(configuration, DataSourceConfiguration):
             raise TypeError(
                 f"Configuration expected type is {DataSourceConfiguration.__name__}, actual: {type(configuration).__name__}."
@@ -349,6 +349,7 @@ class BaseDataSource:
 
         self.configuration = configuration
         self.configuration.set_defaults(self.get_default_configuration())
+        self.extraction_config = extraction_config
         # A dictionary, the structure of which is connector dependent, to indicate a point where the sync is at
         self._sync_cursor = None
 
@@ -504,34 +505,6 @@ class BaseDataSource:
         """
         raise NotImplementedError
 
-    async def get_docs_incrementally(self, sync_cursor, filtering=None):
-        """Returns an iterator on all documents changed since the sync_cursor
-
-        Each document is a tuple with:
-        - a mapping with the data to index
-        - a coroutine to download extra data (attachments)
-        - an operation, can be one of index, update or delete
-
-        The mapping should have least an `id` field
-        and optionally a `timestamp` field in ISO 8601 UTC
-
-        The coroutine is called if the document needs to be synced
-        and has attachments. It needs to return a mapping to index.
-
-        It has two arguments: doit and timestamp
-        If doit is False, it should return None immediately.
-        If timestamp is provided, it should be used in the mapping.
-
-        Example:
-
-           async def get_file(doit=True, timestamp=None):
-               if not doit:
-                   return
-               return {'TEXT': 'DATA', 'timestamp': timestamp,
-                       'id': 'doc-id'}
-        """
-        raise NotImplementedError
-
     def tweak_bulk_options(self, options):
         """Receives the bulk options every time a sync happens, so they can be
         tweaked if needed.
@@ -579,10 +552,6 @@ class BaseDataSource:
             doc[key] = _serialize(value)
 
         return doc
-
-    def sync_cursor(self):
-        """Returns the sync cursor of the current sync"""
-        return self._sync_cursor
 
 
 @cache

@@ -90,8 +90,10 @@ class MongoDataSource(BaseDataSource):
     name = "MongoDB"
     service_type = "mongodb"
 
-    def __init__(self, configuration):
-        super().__init__(configuration=configuration)
+    def __init__(self, configuration, extraction_config):
+        super().__init__(
+            configuration=configuration, extraction_config=extraction_config
+        )
 
         client_params = {}
 

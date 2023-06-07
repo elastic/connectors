@@ -228,13 +228,15 @@ class S3DataSource(BaseDataSource):
     name = "Amazon S3"
     service_type = "s3"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, extraction_config):
         """Set up the connection to the Amazon S3.
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
-        super().__init__(configuration=configuration)
+        super().__init__(
+            configuration=configuration, extraction_config=extraction_config
+        )
         self.s3_client = S3Client(configuration=configuration)
 
     async def ping(self):
