@@ -73,7 +73,7 @@ $PYTHON fixture.py --name $NAME --action monitor --pid $PID
 $PYTHON fixture.py --name $NAME --action remove
 $PYTHON fixture.py --name $NAME --action sync
 
-$ELASTIC_INGEST --debug & PID_2=$!
+$ELASTIC_INGEST  --config-file $NAME/config.yml  --debug & PID_2=$!
 
 $PYTHON fixture.py --name $NAME --action monitor --pid $PID_2
 
