@@ -1,5 +1,7 @@
 #!/bin/bash
-set -exuo pipefail
+
+# !!! WARNING DO NOT add -x to avoid leaking vault passwords
+set -euo pipefail
 
 sudo apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get install ca-certificates curl gnupg lsb-release -y
@@ -24,7 +26,8 @@ cd $ROOT
 echo "Building the image"
 make docker-build
 
-printenv
+
+# !!! WARNING be cautious about the following lines, to avoid leaking the secrets in the CI logs
 
 VAULT_ADDR=${VAULT_ADDR:-https://vault-ci-prod.elastic.dev}
 VAULT_USER="docker-swiftypeadmin"
