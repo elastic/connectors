@@ -492,6 +492,31 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return self._client
 
+    def _get_local_extraction_session(self):
+        """Generate and return base client session using extraction_service config
+
+        Returns:
+            aiohttp.ClientSession: An instance of Client Session
+        """
+        if self.local_extraction_session:
+            return self.local_extraction_session
+
+        headers = {"Accept": "application/json"}
+        timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
+
+        self.local_extraction_session = aiohttp.ClientSession(
+            self.extraction_config["host"],
+            headers=headers,
+            timeout=timeout,
+        )
+        return self.local_extraction_session
+
+    def _close_local_extraction_session(self):
+        if not self.local_extraction_session:
+            return
+
+        self.local_extraction_session.close()
+
     @classmethod
     def get_default_configuration(cls):
         return {
@@ -527,6 +552,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "order": 5,
                 "type": "list",
                 "value": "",
+            },
+            "use_text_extraction": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 12,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Overrides pipeline settings for text extraction.",
+                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": False,
             },
         }
 
@@ -687,13 +721,19 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             source_file_name = async_buffer.name
 
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
-        )
-        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            content = (await target_file.read()).strip()
-            result["_attachment"] = content
+        if self.use_text_extraction:
+            if self.extraction_config["text_extraction"]["use_file_pointers"]:
+                result["body"] = await self.extract_with_file_pointer(source_file_name)
+            else:
+                result["body"] = await self.extract_with_file_send(source_file_name)
+        else:
+            await asyncio.to_thread(
+                convert_to_b64,
+                source=source_file_name,
+            )
+            async with aiofiles.open(file=source_file_name, mode="r") as target_file:
+                content = (await target_file.read()).strip()
+                result["_attachment"] = content
 
         return result
 
@@ -719,16 +759,56 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             source_file_name = async_buffer.name
 
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
-        )
-        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            content = (await target_file.read()).strip()
-            result["_attachment"] = content
+        if self.use_text_extraction:
+            if self.extraction_config["text_extraction"]["use_file_pointers"]:
+                result["body"] = await self.extract_with_file_pointer(source_file_name)
+            else:
+                result["body"] = await self.extract_with_file_send(source_file_name)
+        else:
+            await asyncio.to_thread(
+                convert_to_b64,
+                source=source_file_name,
+            )
+            async with aiofiles.open(file=source_file_name, mode="r") as target_file:
+                # base64 on macOS will add a EOL, so we strip() here
+                content = (await target_file.read()).strip()
+                result["_attachment"] = content
 
         return result
+
+    async def extract_with_file_pointer(self, filename):
+        params = {"local_file_path": filename}
+
+        async with self._get_local_extraction_session().put(
+            "/extract_local_file_text/", params=params
+        ) as response:
+            return await self.parse_extraction_resp(filename, response)
+
+    async def extract_with_file_send(self, filename):
+        async with aiofiles.open(file=filename, mode="r") as target_file:
+            data = {"file": target_file}
+
+            async with self._get_local_extraction_session().put(
+                "/extract_text/", data=data
+            ) as response:
+                return await self.parse_extraction_resp(filename, response)
+
+    async def parse_extraction_resp(self, filename, response):
+        content = await response.text()
+        logger.info(response.status)
+        logger.info(content)
+
+        if response.status != 200:
+            logger.warn(
+                f"Extraction service could not parse `{os.path.basename(filename)}'. Status: [{response.status}]."
+            )
+        if len(content) > 20971520:
+            logger.info(
+                f"Extraction service returned more than 20MiB for {os.path.basename(filename)}. Keeping only 20MiB."
+            )
+            content = content[:20971520]
+
+        return content["extracted_text"]
 
     async def ping(self):
         pass
