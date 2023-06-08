@@ -1754,7 +1754,7 @@ async def test_create_job(index_method, trigger_method, set_env):
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
     await sync_job_index.create(connector=connector, trigger_method=trigger_method, job_type=JobType.INCREMENTAL)
 
-    index_method.assert_called_with(expected_index_doc)
+    index_method.assert_called_with(expected_index_doc, doc_id=ANY)
 
 
 @pytest.mark.asyncio

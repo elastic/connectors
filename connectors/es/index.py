@@ -49,8 +49,6 @@ class ESIndex(ESClient):
         return self._create_object(resp_body)
 
     async def fetch_response_by_id(self, doc_id):
-        await self.client.indices.refresh(index=self.index_name)
-
         try:
             resp = await self.client.get(index=self.index_name, id=doc_id)
         except ApiError as e:
@@ -64,8 +62,8 @@ class ESIndex(ESClient):
 
         return resp.body
 
-    async def index(self, doc):
-        return await self.client.index(index=self.index_name, document=doc)
+    async def index(self, doc, doc_id=None):
+        return await self.client.index(index=self.index_name, id=doc_id, document=doc)
 
     async def update(self, doc_id, doc, if_seq_no=None, if_primary_term=None):
         return await self.client.update(
@@ -94,8 +92,6 @@ class ESIndex(ESClient):
         Returns:
             Iterator
         """
-        await self.client.indices.refresh(index=self.index_name)
-
         if query is None:
             query = {"match_all": {}}
 
