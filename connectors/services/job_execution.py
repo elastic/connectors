@@ -5,8 +5,13 @@
 #
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
-from connectors.protocol import ConnectorIndex, DataSourceError, JobStatus, SyncJobIndex
-from connectors.protocol.connectors import JobType
+from connectors.protocol import (
+    ConnectorIndex,
+    DataSourceError,
+    JobStatus,
+    JobType,
+    SyncJobIndex,
+)
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass
 from connectors.sync_job_runner import SyncJobRunner
