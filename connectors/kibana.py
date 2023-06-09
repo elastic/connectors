@@ -359,7 +359,7 @@ async def upsert_index(
             await es.client.index(index=index, id=doc_id, document=doc)
             doc_id += 1
     else:
-        for doc, doc_id in zip(docs, doc_ids):
+        for doc, doc_id in zip(docs, doc_ids, strict=True):
             await es.client.index(index=index, id=doc_id, document=doc)
 
 
