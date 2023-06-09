@@ -291,7 +291,7 @@ async def test_content_job_execution_with_connector_still_syncing(
     sync_job_runner_mock,
     set_env,
 ):
-    content_syncs_tasks_mock, _ = concurrent_tasks_mocks
+    content_syncs_tasks_mock, access_control_syncs_tasks_mock = concurrent_tasks_mocks
 
     connector = mock_connector(last_sync_status=JobStatus.IN_PROGRESS)
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
@@ -301,6 +301,7 @@ async def test_content_job_execution_with_connector_still_syncing(
     await create_and_run_service()
 
     content_syncs_tasks_mock.put.assert_not_awaited()
+    access_control_syncs_tasks_mock.put.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -311,7 +312,7 @@ async def test_access_control_job_execution_with_connector_still_syncing(
     sync_job_runner_mock,
     set_env,
 ):
-    _, access_control_syncs_tasks_mock = concurrent_tasks_mocks
+    content_syncs_tasks_mock, access_control_syncs_tasks_mock = concurrent_tasks_mocks
 
     connector = mock_connector(job_type=JobType.ACCESS_CONTROL, last_access_control_sync_status=JobStatus.IN_PROGRESS)
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
@@ -320,6 +321,7 @@ async def test_access_control_job_execution_with_connector_still_syncing(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service()
 
+    content_syncs_tasks_mock.put.assert_not_awaited()
     access_control_syncs_tasks_mock.put.assert_not_awaited()
 
 
@@ -331,7 +333,7 @@ async def test_access_control_job_execution_with_insufficient_license(
     sync_job_runner_mock,
     set_env,
 ):
-    _, access_control_syncs_tasks_mock = concurrent_tasks_mocks
+    content_syncs_tasks_mock, access_control_syncs_tasks_mock = concurrent_tasks_mocks
 
     connector = mock_connector(job_type=JobType.ACCESS_CONTROL, last_access_control_sync_status=JobStatus.COMPLETED)
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
@@ -342,6 +344,7 @@ async def test_access_control_job_execution_with_insufficient_license(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service()
 
+    content_syncs_tasks_mock.put.assert_not_awaited()
     access_control_syncs_tasks_mock.put.assert_not_awaited()
 
 
@@ -353,7 +356,7 @@ async def test_access_control_job_execution_with_dls_feature_flag_disabled(
     sync_job_runner_mock,
     set_env,
 ):
-    _, access_control_syncs_tasks_mock = concurrent_tasks_mocks
+    content_syncs_tasks_mock, access_control_syncs_tasks_mock = concurrent_tasks_mocks
 
     connector = mock_connector(job_type=JobType.ACCESS_CONTROL, last_access_control_sync_status=JobStatus.IN_PROGRESS, document_level_security_enabled=False)
 
@@ -365,6 +368,7 @@ async def test_access_control_job_execution_with_dls_feature_flag_disabled(
 
     await create_and_run_service()
 
+    content_syncs_tasks_mock.put.assert_not_awaited()
     access_control_syncs_tasks_mock.put.assert_not_awaited()
 
 
