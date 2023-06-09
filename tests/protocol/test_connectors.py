@@ -1209,7 +1209,7 @@ async def test_connector_update_last_sync_scheduled_at_by_job_type(
     doc_id = "2"
     seq_no = 2
     primary_term = 1
-    new_ts = datetime.utcnow() + timedelta(seconds=30)
+    new_ts = datetime.now(timezone.utc) + timedelta(seconds=30)
     connector_doc = {
         "_id": doc_id,
         "_seq_no": seq_no,

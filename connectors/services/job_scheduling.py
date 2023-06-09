@@ -200,6 +200,9 @@ class JobSchedulingService(BaseService):
                 )
                 return False
 
+            print("NEXT is {next_sync}")
+            print("NOW is {now}")
+
             next_sync_due = (next_sync - now).total_seconds()
             if next_sync_due - self.idling > 0:
                 logger.debug(

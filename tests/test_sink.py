@@ -4,8 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-import datetime
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 from unittest.mock import ANY, Mock, call
 
@@ -24,7 +24,7 @@ from connectors.protocol import JobType, Pipeline
 from tests.commons import AsyncIterator
 
 INDEX = "some-index"
-TIMESTAMP = datetime.datetime(year=2023, month=1, day=1)
+TIMESTAMP = datetime(year=2023, month=1, day=1)
 NO_FILTERING = ()
 DOC_ONE_ID = 1
 
@@ -32,7 +32,7 @@ DOC_ONE = {"_id": DOC_ONE_ID, "_timestamp": TIMESTAMP}
 
 DOC_ONE_DIFFERENT_TIMESTAMP = {
     "_id": DOC_ONE_ID,
-    "_timestamp": TIMESTAMP + datetime.timedelta(days=1),
+    "_timestamp": TIMESTAMP + timedelta(days=1),
 }
 
 DOC_TWO = {"_id": 2, "_timestamp": TIMESTAMP}
@@ -138,7 +138,7 @@ async def test_prepare_content_index(mock_responses):
 
 def set_responses(mock_responses, ts=None):
     if ts is None:
-        ts = datetime.datetime.now().isoformat()
+        ts = datetime.now(timezone.utc).isoformat()
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.get(
         "http://nowhere.com:9200/search-some-index",
@@ -251,7 +251,7 @@ async def test_async_bulk(mock_responses):
 
         yield {
             "_id": "1",
-            "_timestamp": datetime.datetime.now().isoformat(),
+            "_timestamp": datetime.now(timezone.utc).isoformat(),
         }, _dl, "index"
         yield {"_id": "3"}, _dl_none, "index"
 

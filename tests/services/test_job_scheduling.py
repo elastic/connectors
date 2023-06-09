@@ -95,7 +95,7 @@ def sync_job_index_mock():
         yield sync_job_index_mock
 
 
-default_next_sync = datetime.utcnow() + timedelta(hours=1)
+default_next_sync = datetime.now(timezone.utc) + timedelta(hours=1)
 
 
 def mock_connector(
@@ -149,7 +149,7 @@ async def test_connector_ready_to_sync(
     sync_job_index_mock,
     set_env,
 ):
-    connector = mock_connector(next_sync=datetime.utcnow())
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     await create_and_run_service()
 
@@ -173,13 +173,13 @@ async def test_connector_ready_to_sync_with_race_condition(
     sync_job_index_mock,
     set_env,
 ):
-    connector = mock_connector(next_sync=datetime.utcnow())
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
 
     # Do nothing in the first call(in _should_schedule_on_demand_sync) and second call(in _should_schedule_scheduled_sync), and the last_sync_scheduled_at is updated by another instance in the subsequent calls
     def _reset_last_sync_scheduled_at_by_job_type():
         if connector.reload.await_count > 2:
             connector.last_sync_scheduled_at_by_job_type = Mock(
-                return_value=datetime.utcnow() + timedelta(seconds=20)
+                return_value=datetime.now(timezone.utc) + timedelta(seconds=20)
             )
 
     connector.reload.side_effect = _reset_last_sync_scheduled_at_by_job_type
@@ -212,13 +212,46 @@ async def test_connector_sync_disabled(
 
 
 @pytest.mark.asyncio
+async def test_connector_both_on_demand_and_scheduled(
+    connector_index_mock,
+    sync_job_index_mock,
+    set_env,
+):
+    connector = mock_connector(sync_now=True, next_sync=datetime.now(timezone.utc))
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    await create_and_run_service()
+
+    connector.prepare.assert_awaited()
+    connector.heartbeat.assert_awaited()
+    connector.reset_sync_now_flag.assert_awaited()
+
+    connector.update_last_sync_scheduled_at_by_job_type.assert_awaited()
+
+    sync_job_index_mock.create.assert_any_await(
+        connector=connector,
+        trigger_method=JobTriggerMethod.ON_DEMAND,
+        job_type=JobType.FULL,
+    )
+
+    for job_type in JOB_TYPES:
+        sync_job_index_mock.create.assert_any_await(
+            connector=connector,
+            trigger_method=JobTriggerMethod.SCHEDULED,
+            job_type=job_type,
+        )
+
+    # one call for on-demand syncs and one call per job type
+    assert sync_job_index_mock.create.await_count == 1 + len(JOB_TYPES)
+
+
+@pytest.mark.asyncio
 async def test_connector_scheduled_access_control_sync_with_dls_feature_disabled(
     connector_index_mock,
     sync_job_index_mock,
     set_env,
 ):
     connector = mock_connector(
-        next_sync=datetime.utcnow(), document_level_security_enabled=False
+        next_sync=datetime.now(timezone.utc), document_level_security_enabled=False
     )
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     await create_and_run_service()
@@ -242,7 +275,7 @@ async def test_connector_scheduled_access_control_sync_with_insufficient_license
     sync_job_index_mock,
     set_env,
 ):
-    connector = mock_connector(next_sync=datetime.utcnow())
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     connector_index_mock.has_active_license_enabled = AsyncMock(
         return_value=(False, License.BASIC)

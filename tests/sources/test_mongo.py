@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest import mock
 from unittest.mock import Mock
 
@@ -124,7 +124,7 @@ async def test_advanced_rules_validator(advanced_rules, is_valid):
 
 
 def build_resp():
-    doc1 = {"id": "one", "tuple": (1, 2, 3), "date": datetime.now()}
+    doc1 = {"id": "one", "tuple": (1, 2, 3), "date": datetime.now(timezone.utc)}
     doc2 = {"id": "two", "dict": {"a": "b"}, "decimal": Decimal128("0.0005")}
 
     class Docs(dict):

@@ -928,7 +928,7 @@ async def test_set_access_token_when_token_expires_at_is_str():
     """This method tests set access token  api call when token_expires_at type is str"""
     # Setup
     source = create_source(SharepointDataSource)
-    source.sharepoint_client.token_expires_at = "2023-02-10T09:02:23.629821"
+    source.sharepoint_client.token_expires_at = "2023-02-10T09:02:23.629821+00:00"
     mock_token = {"access_token": "test2344", "expires_in": "1234555"}
     async_response_token = MockResponse(mock_token, 200)
 
