@@ -809,3 +809,10 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     def advanced_rules_validators(self):
         return [SharepointOnlineAdvancedRulesValidator()]
+
+    @staticmethod
+    def is_premium():
+        """This DataSource is a Premium (paid license gated) connector.
+        NOTE modifying license key logic violates the Elastic License 2.0 that this code is licensed under
+        """
+        return True
