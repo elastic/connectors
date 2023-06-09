@@ -7,7 +7,7 @@ import asyncio
 import os
 import re
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import partial
 
 import aiofiles
@@ -117,7 +117,7 @@ class MicrosoftSecurityToken:
             return cached_value
 
         now = (
-            datetime.utcnow()
+            datetime.now(timezone.utc)
         )  # We measure now before request to be on a pessimistic side
         try:
             access_token, expires_in = await self._fetch_token()
@@ -661,7 +661,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             if (
                                 max_data_age
                                 and modified_date
-                                < datetime.utcnow() - timedelta(seconds=max_data_age)
+                                < datetime.now(timezone.utc) - timedelta(seconds=max_data_age)
                             ):
                                 logger.warning(
                                     f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
@@ -734,7 +734,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return {
             "_id": attachment["odata.id"],
-            "_timestamp": datetime.utcnow(),  # attachments cannot be modified in-place, so we can consider that object ids are permanent
+            "_timestamp": datetime.now(timezone.utc),  # TODO: attachments cannot be modified in-place, so we can consider that object ids are permanent
             "_attachment": await self._download_content(
                 partial(
                     self.client.download_attachment,
