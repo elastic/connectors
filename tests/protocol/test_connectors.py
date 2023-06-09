@@ -195,7 +195,7 @@ ACCESS_CONTROL_INDEX_PREFIX = "search-acl-filter-"
 
 def test_utc():
     # All dates are in ISO 8601 UTC so we can serialize them
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     then = json.loads(json.dumps({"date": iso_utc(when=now)}))["date"]
     assert now.isoformat() == then
 

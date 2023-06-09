@@ -5,7 +5,7 @@
 #
 import asyncio
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -283,7 +283,7 @@ async def test_connector_scheduled_incremental_sync(
 ):
     connector = mock_connector(
         service_type=service_type,
-        next_sync=datetime.utcnow(),
+        next_sync=datetime.now(timezone.utc),
         incremental_sync_enabled=incremental_sync_enabled,
         document_level_security_enabled=False,
     )

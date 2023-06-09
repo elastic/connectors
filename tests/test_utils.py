@@ -15,7 +15,7 @@ import string
 import tempfile
 import time
 import timeit
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import Mock, mock_open, patch
 
 import pytest
@@ -51,11 +51,11 @@ from connectors.utils import (
 )
 
 
-@freeze_time("2023-01-18 17:18:56.814003", tick=True)
+@freeze_time("2023-01-18 17:18:56.814003+00:00", tick=True)
 def test_next_run():
     # can run within two minutes
-    assert next_run("1 * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:19:01"
-    assert next_run("* * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:18:57"
+    assert next_run("1 * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:19:01+00:00"
+    assert next_run("* * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:18:57+00:00"
 
     # this should get parsed
     next_run("0/5 14,18,52 * ? JAN,MAR,SEP MON-FRI 2010-2030")
@@ -448,7 +448,7 @@ def test_url_encode():
 def test_is_expired():
     """This method checks whether token expires or not"""
     # Execute
-    expires_at = datetime.fromisoformat("2023-02-10T09:02:23.629821")
+    expires_at = datetime.fromisoformat("2023-02-10T09:02:23.629821+00:00")
     actual_response = is_expired(expires_at=expires_at)
     # Assert
     assert actual_response is True
@@ -461,7 +461,7 @@ def test_evaluate_timedelta():
     expected_response = evaluate_timedelta(seconds=86399, time_skew=20)
 
     # Assert
-    assert expected_response == "2023-02-19T14:25:05.158843"
+    assert expected_response == "2023-02-19T10:25:05.158843+00:00" # -4 hours because of tz_offset
 
 
 def test_get_pem_format():
