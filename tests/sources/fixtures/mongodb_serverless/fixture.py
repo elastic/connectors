@@ -15,10 +15,13 @@ OB_STORE = "/tmp/objectstore"
 
 
 def setup():
+    print(f"preparing {OB_STORE}")
+    # creating the file storage for es
     if os.path.exists(OB_STORE):
         shutil.rmtree(OB_STORE)
     os.makedirs(OB_STORE, exist_ok=True)
-    os.chmod(OB_STORE, 664)
+    os.chmod(OB_STORE, 777)
+    print(f"{OB_STORE} ready")
 
 
 def load():
