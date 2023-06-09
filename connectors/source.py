@@ -584,6 +584,15 @@ class BaseDataSource:
         """Returns the sync cursor of the current sync"""
         return self._sync_cursor
 
+    @staticmethod
+    def is_premium():
+        """Returns True if this DataSource is a Premium (paid license gated) connector.
+        Otherwise, returns False.
+
+        NOTE modifying license key logic violates the Elastic License 2.0 that this code is licensed under
+        """
+        return False
+
 
 @cache
 def get_source_klass(fqn):
