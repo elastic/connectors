@@ -76,12 +76,16 @@ def _monitor_service(pid):
             response = es_client.search(index=CONNECTORS_INDEX, size=1)
 
             if len(response["hits"]["hits"]) == 0:
+                if time.time() - start > 30:
+                    raise Exception(f"{CONNECTORS_INDEX} not present after 30s")
+
                 print(f"{CONNECTORS_INDEX} not present, waiting...")
                 time.sleep(1)
             else:
                 print(f"{CONNECTORS_INDEX} detected")
                 break
 
+        start = time.time()
         connector = response["hits"]["hits"][0]
         connector_id = connector["_id"]
         last_synced = connector["_source"]["last_synced"]
