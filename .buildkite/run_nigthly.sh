@@ -37,6 +37,9 @@ if [ -v BUILDKITE ]; then
   DOCKER_USER=$(vault read -address "${VAULT_ADDR}" -field user_20230609 secret/ci/elastic-connectors-python/${VAULT_USER})
   DOCKER_PASSWORD=$(vault read -address "${VAULT_ADDR}" -field secret_20230609 secret/ci/elastic-connectors-python/${VAULT_USER})
   echo "Done!"
+
+  # required by serverless
+  sudo sysctl -w vm.max_map_count=262144
 fi
 
 PERF8=yes NAME=$1 DATA_SIZE=$DATA_SIZE make ftest
