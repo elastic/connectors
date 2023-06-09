@@ -51,6 +51,22 @@ class NotFound(Exception):
     pass
 
 
+class InvalidSharepointTenant(Exception):
+    pass
+
+
+class TokenFetchFailed(Exception):
+    pass
+
+
+class PermissionsMissing(Exception):
+    """Exception class to notify that specific Application Permission is missing for the credentials used.
+    See: https://learn.microsoft.com/en-us/graph/permissions-reference
+    """
+
+    pass
+
+
 class MicrosoftSecurityToken:
     """Abstract token for connecting to one of Microsoft Azure services.
 
@@ -110,15 +126,15 @@ class MicrosoftSecurityToken:
             # Error Code serves as a good starting point classifying these errors, see the messages below:
             match e.status:
                 case 400:
-                    raise Exception(
+                    raise TokenFetchFailed(
                         "Failed to authorize to Sharepoint REST API. Please verify, that provided Tenant Id, Tenant Name and Client ID are valid."
                     ) from e
                 case 401:
-                    raise Exception(
+                    raise TokenFetchFailed(
                         "Failed to authorize to Sharepoint REST API. Please verify, that provided Secret Value is valid."
                     ) from e
                 case _:
-                    raise Exception(
+                    raise TokenFetchFailed(
                         f"Failed to authorize to Sharepoint REST API. Response Status: {e.status}, Message: {e.message}"
                     ) from e
 
@@ -156,6 +172,7 @@ class GraphAPIToken(MicrosoftSecurityToken):
             json_response = await resp.json()
             access_token = json_response["access_token"]
             expires_in = int(json_response["expires_in"])
+
             return access_token, expires_in
 
 
@@ -187,14 +204,6 @@ class SharepointRestAPIToken(MicrosoftSecurityToken):
             return access_token, expires_in
 
 
-class PermissionsMissing(Exception):
-    """Exception class to notify that specific Application Permission is missing for the credentials used.
-    See: https://learn.microsoft.com/en-us/graph/permissions-reference
-    """
-
-    pass
-
-
 class MicrosoftAPISession:
     def __init__(self, http_session, api_token, scroll_field):
         self._http_session = http_session
@@ -210,7 +219,7 @@ class MicrosoftAPISession:
         # but this abstraction can be better.
         self._scroll_field = scroll_field
 
-    async def fetch(self, url, debug=False):
+    async def fetch(self, url):
         return await self._get_json(url)
 
     async def pipe(self, url, stream):
@@ -451,9 +460,14 @@ class SharepointOnlineClient:
         select = ""
         url = f"{site_web_url}/_api/web/lists/GetByTitle('Site%20Pages')/items?$select={select}"
 
-        async for page in self._rest_api_client.scroll(url):
-            for site_page in page:
-                yield site_page
+        try:
+            async for page in self._rest_api_client.scroll(url):
+                for site_page in page:
+                    yield site_page
+        except NotFound:
+            # I'm not sure if site can have no pages, but given how weird API is I put this here
+            # Just to be on a safe side
+            return
 
     async def get_tenant_details(self):
         url = f"{GRAPH_API_AUTH_URL}/common/userrealm/?user=cj@{self._tenant_name}.onmicrosoft.com&api-version=2.1&checkForMicrosoftAccount=false"
@@ -461,14 +475,11 @@ class SharepointOnlineClient:
         return await self._rest_api_client.fetch(url)
 
     def _validate_sharepoint_rest_url(self, url):
-        if "OVERRIDE_URL" in os.environ:  # TODO: make it in a call instead of this
-            return
-
         # I haven't found a better way to validate tenant name for now.
         actual_tenant_name = self._tenant_name_pattern.findall(url)[0]
 
         if self._tenant_name != actual_tenant_name:
-            raise Exception(
+            raise InvalidSharepointTenant(
                 f"Unable to call Sharepoint REST API - tenant name is invalid. Authenticated for tenant name: {self._tenant_name}, actual tenant name for the service: {actual_tenant_name}."
             )
 
@@ -719,26 +730,19 @@ class SharepointOnlineDataSource(BaseDataSource):
         if not doit:
             return
 
-        result = {
+        # We don't know attachment sizes unfortunately, so cannot properly ignore them
+
+        return {
             "_id": attachment["odata.id"],
             "_timestamp": datetime.utcnow(),  # attachments cannot be modified in-place, so we can consider that object ids are permanent
+            "_attachment": await self._download_content(
+                partial(
+                    self.client.download_attachment,
+                    attachment["odata.id"],
+                    async_buffer,
+                )
+            ),
         }
-
-        source_file_name = ""
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            await self.client.download_attachment(attachment["odata.id"], async_buffer)
-
-            source_file_name = async_buffer.name
-
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
-        )
-        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            content = (await target_file.read()).strip()
-            result["_attachment"] = content
-
-        return result
 
     async def get_content(self, drive_item, timestamp=None, doit=False):
         document_size = int(drive_item["size"])
@@ -749,16 +753,23 @@ class SharepointOnlineDataSource(BaseDataSource):
         if document_size > MAX_DOCUMENT_SIZE:
             return
 
-        result = {
+        return {
             "_id": drive_item["id"],
             "_timestamp": drive_item["lastModifiedDateTime"],
+            "_attachment": await self._download_content(
+                partial(
+                    self.client.download_drive_item,
+                    drive_item["parentReference"]["driveId"],
+                    drive_item["id"],
+                    async_buffer,
+                )
+            ),
         }
 
+    async def _download_content(self, dowload_func):
         source_file_name = ""
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            await self.client.download_drive_item(
-                drive_item["parentReference"]["driveId"], drive_item["id"], async_buffer
-            )
+            await download_func()
 
             source_file_name = async_buffer.name
 
@@ -766,12 +777,11 @@ class SharepointOnlineDataSource(BaseDataSource):
             convert_to_b64,
             source=source_file_name,
         )
+
         async with aiofiles.open(file=source_file_name, mode="r") as target_file:
             # base64 on macOS will add a EOL, so we strip() here
             content = (await target_file.read()).strip()
-            result["_attachment"] = content
-
-        return result
+            return content
 
     async def ping(self):
         pass
