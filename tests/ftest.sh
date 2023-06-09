@@ -5,6 +5,10 @@ set -o pipefail
 NAME=$1
 PERF8=$2
 
+# add a flag for serverless
+if [[ "$NAME" == *"serverless"* ]]; then
+  export SERVERLESS="yup"
+fi
 
 SERVICE_TYPE=${NAME%"_serverless"}
 INDEX_NAME=search-${NAME%"_serverless"}

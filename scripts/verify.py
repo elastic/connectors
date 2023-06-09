@@ -11,6 +11,7 @@ import yaml
 from elasticsearch import AsyncElasticsearch
 
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
+SERVERLESS = "SERVERLESS" in os.environ
 
 
 async def verify(service_type, index_name, size, config):
@@ -18,6 +19,9 @@ async def verify(service_type, index_name, size, config):
     host = config["host"]
     auth = config["username"], config["password"]
     client = AsyncElasticsearch(hosts=[host], basic_auth=auth, request_timeout=120)
+
+    if not SERVERLESS:
+        await client.indices.refresh(index=index_name)
 
     try:
         print(f"Verifying {index_name}...")
