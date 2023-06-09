@@ -34,6 +34,7 @@ LIMIT = 300  # Limit for fetching shared files per call
 PAPER = "paper"
 FILE = "File"
 FOLDER = "Folder"
+DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 
 class DropboxClient:
@@ -177,13 +178,12 @@ class DropboxDataSource(BaseDataSource):
             "retry_count": {
                 "default_value": RETRY_COUNT,
                 "display": "numeric",
-                "label": "Maximum retries for failed requests",
+                "label": "Retries per request",
                 "order": 5,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
                 "value": RETRY_COUNT,
-                "validations": [{"type": "less_than", "constraint": 10}],
             },
             "concurrent_downloads": {
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
@@ -253,6 +253,53 @@ class DropboxDataSource(BaseDataSource):
         except Exception:
             raise
 
+    async def _get_b64_content(self, attachment_name, temp_filename, document):
+        logger.debug(f"Calling convert_to_b64 for file : {attachment_name}")
+        await asyncio.to_thread(convert_to_b64, source=temp_filename)
+        async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
+            # base64 on macOS will add a EOL, so we strip() here
+            content = (await async_buffer.read()).strip()
+        try:
+            await remove(temp_filename)
+        except Exception as exception:
+            logger.warning(
+                f"Could not remove file from: {temp_filename}. Error: {exception}"
+            )
+        return content
+
+    async def _get_document_with_content(
+        self, attachment, attachment_name, document, shared_file_response
+    ):
+        temp_filename = ""
+        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+            if isinstance(attachment, FileLinkMetadata):
+                await async_buffer.write(shared_file_response.content)
+            elif attachment.is_downloadable:
+                _, data = self.dropbox_client.download_files(  # pyright: ignore
+                    path=attachment.path_display
+                )
+                await async_buffer.write(data.content)
+            elif attachment_name.split(".")[-1] == PAPER:
+                _, data = self.dropbox_client.download_paper_files(  # pyright: ignore
+                    path=attachment.path_display
+                )
+                await async_buffer.write(data.content)
+            else:
+                logger.warning(
+                    f"Skipping the file: {attachment_name} since it is not in the downloadable format."
+                )
+                return
+
+            temp_filename = str(async_buffer.name)
+
+        document["_attachment"] = await self._get_b64_content(
+            attachment_name=attachment_name,
+            temp_filename=temp_filename,
+            document=document,
+        )
+
+        return document
+
     async def get_content(self, attachment, response=None, timestamp=None, doit=False):
         """Extracts the content for allowed file types.
 
@@ -296,48 +343,15 @@ class DropboxDataSource(BaseDataSource):
             "_id": attachment.id,
             "_timestamp": attachment.server_modified,
         }
-        temp_filename = ""
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            if isinstance(attachment, FileLinkMetadata):
-                await async_buffer.write(response.content)
-            elif attachment.is_downloadable:
-                _, data = self.dropbox_client.download_files(  # pyright: ignore
-                    path=attachment.path_display
-                )
-                await async_buffer.write(data.content)
-            elif attachment.name.split(".")[-1] == PAPER:
-                _, data = self.dropbox_client.download_paper_files(  # pyright: ignore
-                    path=attachment.path_display
-                )
-                await async_buffer.write(data.content)
-            else:
-                logger.info(f"Skipping the download of a file: {attachment_name}")
 
-            temp_filename = str(async_buffer.name)
-
-        logger.debug(f"Calling convert_to_b64 for file : {attachment_name}")
-        await asyncio.to_thread(convert_to_b64, source=temp_filename)
-        async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
-            # base64 on macOS will add a EOL, so we strip() here
-            document["_attachment"] = (await async_buffer.read()).strip()
-        try:
-            await remove(temp_filename)
-        except Exception as exception:
-            logger.warning(
-                f"Could not remove file from: {temp_filename}. Error: {exception}"
-            )
-        return document
-
-    def _format_datetime(self, datetime):
-        return datetime.strftime("%Y-%m-%dT%H:%M:%S")
+        return await self._get_document_with_content(
+            attachment=attachment,
+            attachment_name=attachment_name,
+            document=document,
+            shared_file_response=response,
+        )
 
     def _prepare_doc(self, response, shared_metadata=None):
-        is_file = isinstance(response, FileMetadata)
-        timestamp = (
-            self._format_datetime(datetime=response.server_modified)
-            if is_file
-            else iso_utc()
-        )
         if isinstance(response, SharedFileMetadata):
             return {
                 "_id": response.id,
@@ -346,8 +360,13 @@ class DropboxDataSource(BaseDataSource):
                 "file path": response.path_display,
                 "url": response.preview_url,
                 "size": shared_metadata.size,
-                "_timestamp": self._format_datetime(datetime=response.time_invited),
+                "_timestamp": response.time_invited.strftime(DATETIME_FORMAT),
             }
+
+        is_file = isinstance(response, FileMetadata)
+        timestamp = (
+            response.server_modified.strftime(DATETIME_FORMAT) if is_file else iso_utc()
+        )
         return {
             "_id": response.id,
             "type": FILE if is_file else FOLDER,
