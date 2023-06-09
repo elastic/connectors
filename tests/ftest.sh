@@ -52,6 +52,8 @@ $PYTHON fixture.py --name $NAME --action start_stack
 
 if [[ "$NAME" == *"serverless"* ]]; then
   sleep 30
+  docker ps -a
+  docker logs es01
   curl -vvv -u elastic:changeme http://localhost:9200
 fi
 
