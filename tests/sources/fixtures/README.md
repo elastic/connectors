@@ -26,7 +26,7 @@ This file may contain four functions (all optional):
 - load -- loads data in the backend
 - remove -- removes random data in the backend
 - setup -- called before the docker is started
-- teardown -- called after the docker has been teared down
+- teardown -- called after the docker has been torn down
 
 requirements.txt
 ================
