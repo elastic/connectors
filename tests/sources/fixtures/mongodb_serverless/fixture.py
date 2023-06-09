@@ -1,4 +1,5 @@
 import os
+import shutil
 
 import bson
 from faker import Faker
@@ -10,10 +11,14 @@ NUMBER_OF_RECORDS_TO_DELETE = 50
 
 fake = Faker()
 client = MongoClient("mongodb://admin:justtesting@127.0.0.1:27021")
+OB_STORE = "/tmp/objectstore"
 
 
 def setup():
-    pass
+    if os.path.exists(OB_STORE):
+        shutil.rmtree(OB_STORE)
+    os.makedirs(OB_STORE, exist_ok=True)
+    os.chmod(OB_STORE, 664)
 
 
 def load():
