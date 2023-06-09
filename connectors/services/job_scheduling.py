@@ -10,7 +10,7 @@ Event loop
 - instantiates connector plugins
 - mirrors an Elasticsearch index with a collection of documents
 """
-from datetime import datetime
+from datetime import datetime, timezone
 
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
@@ -176,7 +176,7 @@ class JobSchedulingService(BaseService):
                 return False
 
             job_type_value = job_type.value
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             last_sync_scheduled_at = connector.last_sync_scheduled_at_by_job_type(
                 job_type
             )

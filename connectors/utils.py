@@ -73,7 +73,7 @@ def iso_utc(when=None):
 
 def next_run(quartz_definition):
     """Returns the datetime of the next run."""
-    cron_obj = QuartzCron(quartz_definition, datetime.utcnow())
+    cron_obj = QuartzCron(quartz_definition, datetime.now(timezone.utc))
     return cron_obj.next_trigger()
 
 
@@ -492,7 +492,7 @@ def evaluate_timedelta(seconds, time_skew=0):
         seconds (int): Number of seconds to add in current time
         time_skew (int): Time of clock skew. Defaults to 0
     """
-    modified_time = datetime.utcnow() + timedelta(seconds=seconds)
+    modified_time = datetime.now(timezone.utc) + timedelta(seconds=seconds)
     # account for clock skew
     modified_time -= timedelta(seconds=time_skew)
     return iso_utc(when=modified_time)
@@ -507,7 +507,7 @@ def is_expired(expires_at):
     # Recreate in case there's no expires_at present
     if expires_at is None:
         return True
-    return datetime.utcnow() >= expires_at
+    return datetime.now(timezone.utc) >= expires_at
 
 
 def get_pem_format(key, max_split=-1):

@@ -10,7 +10,7 @@ import contextlib
 import inspect
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import wraps
 from typing import AsyncGenerator
 
@@ -36,7 +36,7 @@ class ExtraLogger(logging.Logger):
             {
                 "service.type": "connectors-python",
                 "service.version": __version__,
-                "labels.index_date": datetime.now().strftime("%Y.%m.%d"),
+                "labels.index_date": datetime.now(timezone.utc).strftime("%Y.%m.%d"),
             }
         )
         super(ExtraLogger, self)._log(level, msg, args, exc_info, extra)
