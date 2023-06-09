@@ -297,7 +297,9 @@ async def prepare(service_type, index_name, config, connector_definition=None):
         }
 
         logger.info(f"Prepare {CONNECTORS_INDEX}")
-        await upsert_index(es, CONNECTORS_INDEX, docs=[doc], doc_ids=[config["connector_id"]])
+        await upsert_index(
+            es, CONNECTORS_INDEX, docs=[doc], doc_ids=[config["connector_id"]]
+        )
 
         logger.info(f"Prepare {JOBS_INDEX}")
         await upsert_index(es, JOBS_INDEX, docs=[], mappings=JOB_INDEX_MAPPINGS)
@@ -315,7 +317,9 @@ async def prepare(service_type, index_name, config, connector_definition=None):
         await es.close()
 
 
-async def upsert_index(es, index, docs=None, doc_ids=None, mappings=None, settings=None):
+async def upsert_index(
+    es, index, docs=None, doc_ids=None, mappings=None, settings=None
+):
     """Override the index with new mappings and settings.
 
     If the index with such name exists, it's deleted and then created again
