@@ -12,7 +12,7 @@ Event loop
 """
 from datetime import datetime
 
-from connectors.es.client import with_concurrency_control
+from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.protocol import (
@@ -100,7 +100,19 @@ class JobSchedulingService(BaseService):
         await self._on_demand_sync(connector)
 
         if connector.features.document_level_security_enabled():
-            await self._scheduled_sync(connector, JobType.ACCESS_CONTROL)
+            (
+                is_platinum_license_enabled,
+                license_enabled,
+            ) = await self.connector_index.has_active_license_enabled(
+                License.PLATINUM
+            )  # pyright: ignore
+
+            if is_platinum_license_enabled:
+                await self._scheduled_sync(connector, JobType.ACCESS_CONTROL)
+            else:
+                logger.error(
+                    f"Minimum required Elasticsearch license: '{License.PLATINUM.value}'. Actual license: '{license_enabled.value}'. Skipping access control sync scheduling..."
+                )
 
         if (
             connector.features.incremental_sync_enabled()
