@@ -293,7 +293,7 @@ async def prepare(service_type, index_name, config, connector_definition=None):
             },
             "sync_cursor": None,
             "sync_now": False,
-            "is_native": True,
+            "is_native": False,
         }
 
         logger.info(f"Prepare {CONNECTORS_INDEX}")
