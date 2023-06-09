@@ -65,8 +65,8 @@ class ESIndex(ESClient):
 
         return resp.body
 
-    async def index(self, doc, doc_id=None):
-        return await self.client.index(index=self.index_name, id=doc_id, document=doc)
+    async def index(self, doc):
+        return await self.client.index(index=self.index_name, document=doc)
 
     async def update(self, doc_id, doc, if_seq_no=None, if_primary_term=None):
         return await self.client.update(

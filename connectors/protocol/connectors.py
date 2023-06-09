@@ -17,7 +17,6 @@ from collections import UserDict
 from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
-from uuid import uuid4
 
 from connectors.es import ESDocument, ESIndex
 from connectors.es.client import with_concurrency_control
@@ -832,6 +831,10 @@ class Connector(ESDocument):
         await self.reload()
 
     async def document_count(self):
+        if not self.index.client.serverless:
+            await self.index.client.indices.refresh(
+                index=self.index_name, ignore_unavailable=True
+            )
         result = await self.index.client.count(
             index=self.index_name, ignore_unavailable=True
         )
@@ -950,7 +953,7 @@ class SyncJobIndex(ESIndex):
             "created_at": iso_utc(),
             "last_seen": iso_utc(),
         }
-        await self.index(job_def, doc_id=str(uuid4()))
+        await self.index(job_def)
 
     async def pending_jobs(self, connector_ids):
         query = {
@@ -968,7 +971,6 @@ class SyncJobIndex(ESIndex):
                 ]
             }
         }
-
         sort = [{"created_at": Sort.ASC.value}]
         async for job in self.get_all_docs(query=query, sort=sort):
             yield job
