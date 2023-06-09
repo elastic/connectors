@@ -84,7 +84,8 @@ SCHEMA = {
     },
     LIST_ITEM: {
         "title": "Title",
-        "author_id": "EditorId",
+        "author_id": "AuthorId",
+        "editor_id": "EditorId",
         "creation_time": "Created",
         "_timestamp": "Modified",
     },

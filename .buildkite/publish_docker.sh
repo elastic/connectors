@@ -32,8 +32,8 @@ make docker-build
 VAULT_ADDR=${VAULT_ADDR:-https://vault-ci-prod.elastic.dev}
 VAULT_USER="docker-swiftypeadmin"
 echo "Fetching Docker credentials for '$VAULT_USER' from Vault..."
-DOCKER_USER=$(vault read -address "${VAULT_ADDR}" -field login secret/ci/elastic-connectors-python/${VAULT_USER})
-DOCKER_PASSWORD=$(vault read -address "${VAULT_ADDR}" -field password secret/ci/elastic-connectors-python/${VAULT_USER})
+DOCKER_USER=$(vault read -address "${VAULT_ADDR}" -field user_20230609 secret/ci/elastic-connectors-python/${VAULT_USER})
+DOCKER_PASSWORD=$(vault read -address "${VAULT_ADDR}" -field secret_20230609 secret/ci/elastic-connectors-python/${VAULT_USER})
 echo "Done!"
 echo
 
