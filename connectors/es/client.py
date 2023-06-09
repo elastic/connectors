@@ -6,6 +6,7 @@
 import functools
 import logging
 import time
+from enum import Enum
 
 from elastic_transport.client_utils import url_to_node_config
 from elasticsearch import ApiError, AsyncElasticsearch, ConflictError
@@ -19,6 +20,16 @@ from connectors.utils import CancellableSleeps
 
 class PreflightCheckError(Exception):
     pass
+
+
+class License(Enum):
+    ENTERPRISE = "enterprise"
+    PLATINUM = "platinum"
+    GOLD = "gold"
+    BASIC = "basic"
+    TRIAL = "trial"
+    EXPIRED = "expired"
+    UNSET = None
 
 
 class ESClient:
@@ -73,6 +84,37 @@ class ESClient:
     def stop_waiting(self):
         self._keep_waiting = False
         self._sleeps.cancel()
+
+    async def has_active_license_enabled(self, license_):
+        """This method checks, whether an active license or a more powerful active license is enabled.
+
+        Returns:
+            Tuple: (boolean if `license_` is enabled and not expired, actual license Elasticsearch is using)
+        """
+
+        license_response = await self.client.license.get()
+        license_info = license_response.get("license", {})
+        is_expired = license_info.get("status", "").lower() == "expired"
+
+        if is_expired:
+            return False, License.EXPIRED
+
+        actual_license = License(license_info.get("type").lower())
+
+        license_order = [
+            License.BASIC,
+            License.GOLD,
+            License.PLATINUM,
+            License.ENTERPRISE,
+            License.TRIAL,
+        ]
+
+        license_index = license_order.index(actual_license)
+
+        return (
+            license_order.index(license_) <= license_index,
+            actual_license,
+        )
 
     async def close(self):
         await self.client.close()
