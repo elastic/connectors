@@ -20,7 +20,9 @@ def setup():
     if os.path.exists(OB_STORE):
         shutil.rmtree(OB_STORE)
     os.makedirs(OB_STORE, exist_ok=True)
-    os.chmod(OB_STORE, 777)
+    for r, d, f in os.walk(OB_STORE):
+        os.chmod(r, 0o777)
+    os.chmod(OB_STORE, 0o777)
     print(f"{OB_STORE} ready")
 
 
