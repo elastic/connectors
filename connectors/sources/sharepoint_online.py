@@ -673,7 +673,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                             modified_date = datetime.strptime(
                                 drive_item["lastModifiedDateTime"], "%Y-%m-%dT%H:%M:%SZ"
                             )
-                            if max_data_age and modified_date < datetime.utcnow() - timedelta(seconds=max_data_age):
+                            if (
+                                max_data_age
+                                and modified_date
+                                < datetime.utcnow() - timedelta(seconds=max_data_age)
+                            ):
                                 logger.warning(
                                     f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
                                 )
@@ -747,11 +751,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             "_id": attachment["odata.id"],
             "_timestamp": datetime.utcnow(),  # TODO: attachments cannot be modified in-place, so we can consider that object ids are permanent
             "_attachment": await self._download_content(
-                partial(
-                    self.client.download_attachment,
-                    attachment["odata.id"],
-                    async_buffer,
-                )
+                partial(self.client.download_attachment, attachment["odata.id"])
             ),
         }
 
@@ -772,15 +772,18 @@ class SharepointOnlineDataSource(BaseDataSource):
                     self.client.download_drive_item,
                     drive_item["parentReference"]["driveId"],
                     drive_item["id"],
-                    async_buffer,
                 )
             ),
         }
 
-    async def _download_content(self, dowload_func):
+    async def _download_content(self, download_func):
         source_file_name = ""
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            await download_func()
+            # download_func should always be a partial with async_buffer as last argument that is not filled by the caller!
+            # E.g. if download_func is download_drive_item(drive_id, item_id, async_buffer) then it
+            # should be passed as partial(download_drive_item, drive_id, item_id)
+            # This way async_buffer will be passed from here!!!
+            await download_func(async_buffer)
 
             source_file_name = async_buffer.name
 

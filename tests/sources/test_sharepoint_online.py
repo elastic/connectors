@@ -4,8 +4,9 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-import re
+import base64
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from unittest import mock
@@ -709,7 +710,6 @@ class TestSharepointOnlineDataSource:
 
             yield client
 
-
     @pytest.mark.asyncio
     async def test_get_docs(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
@@ -775,3 +775,29 @@ class TestSharepointOnlineDataSource:
         # Says which site does not exist
         assert e.match(non_existing_site)
         assert e.match(another_non_existing_site)
+
+    @pytest.mark.asyncio
+    async def test_get_attachment(self, patch_sharepoint_client):
+        attachment = { "odata.id": "1" }
+        message = b"This is content of attachment"
+        async def download_func(attachment_id, async_buffer):
+            await async_buffer.write(message)
+        patch_sharepoint_client.download_attachment = download_func
+        source = create_source(SharepointOnlineDataSource)
+
+        download_result = await source.get_attachment(attachment, doit=True)
+
+        assert download_result["_attachment"] == base64.b64encode(message).decode()
+
+    @pytest.mark.asyncio
+    async def test_get_content(self, patch_sharepoint_client):
+        drive_item = { "id": "1", "size": 15, "lastModifiedDateTime": datetime.now(timezone.utc), "parentReference": { "driveId": "drive-1" } }
+        message = b"This is content of drive item"
+        async def download_func(drive_id, drive_item_id, async_buffer):
+            await async_buffer.write(message)
+        patch_sharepoint_client.download_drive_item = download_func
+        source = create_source(SharepointOnlineDataSource)
+
+        download_result = await source.get_content(drive_item, doit=True)
+
+        assert download_result["_attachment"] == base64.b64encode(message).decode()

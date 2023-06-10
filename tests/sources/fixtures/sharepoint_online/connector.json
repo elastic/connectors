@@ -161,8 +161,10 @@
       "run_ml_inference": true
     },
     "scheduling": {
-      "enabled": false,
-      "interval": "0 0 0 * * ?"
+      "full": {
+        "enabled": true,
+        "interval": "0 0 0 * * ?"
+      }
     },
     "service_type": "sharepoint_online",
     "status": "error",
