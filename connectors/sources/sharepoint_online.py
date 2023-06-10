@@ -48,14 +48,30 @@ WILDCARD = "*"
 
 
 class NotFound(Exception):
+    """Internal exception class to handle 404s from the API that has a meaning, that collection
+    for specific object is empty.
+
+    For example List Items API from Sharepoint REST API returns 404 if list has no items.
+
+    It's not an exception for us, we just want to return [], and this exception class facilitates it.
+    """
+
     pass
 
 
 class InvalidSharepointTenant(Exception):
+    """Exception class to notify that tenant name is invalid or does not match tenant id provided"""
+
     pass
 
 
 class TokenFetchFailed(Exception):
+    """Exception class to notify that connector was unable to fetch authentication token from either
+    Sharepoint REST API or Graph API.
+
+    Error message will indicate human-readable reason.
+    """
+
     pass
 
 
@@ -116,9 +132,8 @@ class MicrosoftSecurityToken:
         if cached_value:
             return cached_value
 
-        now = (
-            datetime.now(timezone.utc)
-        )  # We measure now before request to be on a pessimistic side
+        # We measure now before request to be on a pessimistic side
+        now = datetime.utcnow()
         try:
             access_token, expires_in = await self._fetch_token()
         except ClientResponseError as e:
@@ -469,7 +484,7 @@ class SharepointOnlineClient:
             # Just to be on a safe side
             return
 
-    async def get_tenant_details(self):
+    async def tenant_details(self):
         url = f"{GRAPH_API_AUTH_URL}/common/userrealm/?user=cj@{self._tenant_name}.onmicrosoft.com&api-version=2.1&checkForMicrosoftAccount=false"
 
         return await self._rest_api_client.fetch(url)
@@ -593,7 +608,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         # Seems like there's an API that allows this, but it's only in beta:
         # https://learn.microsoft.com/en-us/graph/api/managedtenants-tenant-get?view=graph-rest-beta&tabs=http
         # It also might not work cause permissions there are only delegated
-        tenant_details = await self.client.get_tenant_details()
+        tenant_details = await self.client.tenant_details()
 
         if tenant_details is None or tenant_details["NameSpaceType"] == "Unknown":
             raise Exception(
@@ -658,11 +673,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             modified_date = datetime.strptime(
                                 drive_item["lastModifiedDateTime"], "%Y-%m-%dT%H:%M:%SZ"
                             )
-                            if (
-                                max_data_age
-                                and modified_date
-                                < datetime.now(timezone.utc) - timedelta(seconds=max_data_age)
-                            ):
+                            if max_data_age and modified_date < datetime.utcnow() - timedelta(seconds=max_data_age):
                                 logger.warning(
                                     f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
                                 )
@@ -734,7 +745,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return {
             "_id": attachment["odata.id"],
-            "_timestamp": datetime.now(timezone.utc),  # TODO: attachments cannot be modified in-place, so we can consider that object ids are permanent
+            "_timestamp": datetime.utcnow(),  # TODO: attachments cannot be modified in-place, so we can consider that object ids are permanent
             "_attachment": await self._download_content(
                 partial(
                     self.client.download_attachment,
