@@ -490,6 +490,10 @@ class SharepointOnlineClient:
         return await self._rest_api_client.fetch(url)
 
     def _validate_sharepoint_rest_url(self, url):
+        # TODO: make it better suitable for ftest
+        if "OVERRIDE_URL" in os.environ:
+            return
+
         # I haven't found a better way to validate tenant name for now.
         actual_tenant_name = self._tenant_name_pattern.findall(url)[0]
 

@@ -29,6 +29,11 @@ def get_rest_token(tenant_id):
         "expires_in": 3699
     }
 
+@app.route("/common/userrealm/", methods=["GET"])
+def get_tenant():
+    return {"NameSpaceType":"Managed","Login":"cj@something.onmicrosoft.com","DomainName":"something.onmicrosoft.com","FederationBrandName":"Elastic","TenantBrandingInfo":None,"cloud_instance_name":"microsoftonline.com"}
+
+
 @app.route("/sites/", methods=["GET"])
 def get_site_collections():
     return {
@@ -332,11 +337,7 @@ def get_list_item_pages(site_name):
 
 @app.route("/sites/<string:site_name>/_api/Web/Lists(guid'<string:list_id>')/Items(<string:list_item_id>)/AttachmentFiles('<string:file_name>')/$value", methods=["GET"])
 def get_list_item_attachment(site_name, list_id, list_item_id, file_name):
-    text = "lalalalalal"
-    return send_file(
-        io.StringIO(text),
-        mimetype='text/plain',
-        download_name=f"{file_name}.jpg")
+    return b"lalala lalala this is some content"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10337)
