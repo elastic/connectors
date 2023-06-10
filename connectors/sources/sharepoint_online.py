@@ -7,7 +7,7 @@ import asyncio
 import os
 import re
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from functools import partial
 
 import aiofiles
@@ -453,7 +453,7 @@ class SharepointOnlineClient:
         url = f"{site_web_url}/_api/lists/GetByTitle('{list_title}')/items({list_item_id})?$expand=AttachmentFiles"
 
         try:
-            list_item = await self._rest_api_client.fetch(url, debug=True)
+            list_item = await self._rest_api_client.fetch(url)
 
             for attachment in list_item["AttachmentFiles"]:
                 yield attachment
