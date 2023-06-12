@@ -565,7 +565,8 @@ class Extractor:
                 if doc_exists:
                     last_update_timestamp = existing_ids.pop(doc_id)
                     doc_not_updated = (
-                        TIMESTAMP_FIELD in doc and last_update_timestamp == doc[TIMESTAMP_FIELD]
+                        TIMESTAMP_FIELD in doc
+                        and last_update_timestamp == doc[TIMESTAMP_FIELD]
                     )
 
                     if doc_not_updated:

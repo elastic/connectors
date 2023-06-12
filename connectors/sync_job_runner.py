@@ -30,7 +30,9 @@ class SyncJobRunningError(Exception):
 
 class InsufficientESLicenseError(Exception):
     def __init__(self, required_license, actual_license):
-        super().__init__(f"Minimum required Elasticsearch license: '{required_license.value}'. Actual license: '{actual_license.value}'.")
+        super().__init__(
+            f"Minimum required Elasticsearch license: '{required_license.value}'. Actual license: '{actual_license.value}'."
+        )
 
 
 class SyncJobStartError(Exception):
@@ -171,8 +173,7 @@ class SyncJobRunner:
 
             if not is_platinum_license_enabled:
                 raise InsufficientESLicenseError(
-                    required_license=License.PLATINUM,
-                    actual_license=license_enabled
+                    required_license=License.PLATINUM, actual_license=license_enabled
                 )
 
         await self.elastic_server.async_bulk(
@@ -180,7 +181,7 @@ class SyncJobRunner:
             self.generator(),
             self.sync_job.pipeline,
             job_type,
-            options=bulk_options
+            options=bulk_options,
         )
 
     async def _execute_content_sync_job(self, job_type, bulk_options):
