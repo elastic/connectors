@@ -832,6 +832,82 @@ async def test_get_docs_incrementally(
         assert queue_called_with_operations(queue, expected_queue_operations)
 
 
+@pytest.mark.parametrize(
+    "docs_from_source, expected_queue_operations, "
+    "expected_total_docs_updated, expected_total_docs_created, expected_total_docs_deleted, expected_total_downloads",
+    [
+        (
+            [],
+            [end_docs_operation()],
+            updated(0),
+            created(0),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "index")],
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "update")],
+            [update_operation(DOC_ONE), end_docs_operation()],
+            updated(1),
+            created(0),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "delete")],
+            [delete_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(0),
+            deleted(1),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "index"), (DOC_TWO, None, "delete")],
+            [index_operation(DOC_ONE), delete_operation(DOC_TWO), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(1),
+            total_downloads(0),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_access_control(
+    docs_from_source,
+    expected_queue_operations,
+    expected_total_docs_updated,
+    expected_total_docs_created,
+    expected_total_docs_deleted,
+    expected_total_downloads,
+):
+    lazy_downloads = await lazy_downloads_mock()
+
+    with mock.patch("connectors.utils.ConcurrentTasks", return_value=lazy_downloads):
+        queue = await queue_mock()
+        # deep copying docs is needed as get_docs mutates the document ids which has side effects on other test
+        # instances
+        doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
+
+        extractor = await setup_extractor(
+            queue=queue,
+        )
+
+        await extractor.run(doc_generator, JobType.ACCESS_CONTROL)
+
+        assert extractor.total_docs_updated == expected_total_docs_updated
+        assert extractor.total_docs_created == expected_total_docs_created
+        assert extractor.total_docs_deleted == expected_total_docs_deleted
+        assert extractor.total_downloads == expected_total_downloads
+
+        assert queue_called_with_operations(queue, expected_queue_operations)
+
 STATS = {
     "index": {"1": 1},
     "update": {"2": 1},

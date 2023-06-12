@@ -337,6 +337,8 @@ class Extractor:
                     await self.get_docs(generator)
                 case JobType.INCREMENTAL:
                     await self.get_docs_incrementally(generator)
+                case JobType.ACCESS_CONTROL:
+                    await self.get_access_control(generator)
                 case _:
                     raise UnsupportedJobType
         except asyncio.CancelledError:
