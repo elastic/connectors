@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 from base64io import Base64IO
+from bs4 import BeautifulSoup
 from cstriggers.core.trigger import QuartzCron
 from pympler import asizeof
 
@@ -594,3 +595,52 @@ def deep_merge_dicts(base_dict, new_dict):
             base_dict[key] = new_dict[key]
 
     return base_dict
+
+
+class CacheWithTimeout:
+    """Structure to store an value that needs to expire. Some sort of L1 cache.
+
+    Example of usage:
+
+    cache = CacheWithTimeout()
+    cache.set(50, datetime.datetime.now() + datetime.timedelta(5)
+    value = cache.get() # 50
+    sleep(5)
+    value = cache.get() # None
+    """
+
+    def __init__(self):
+        self._value = None
+        self._expiration_date = None
+
+    def get(self):
+        """Get the value that's stored inside if it hasn't expired.
+
+        If the expiration_date is past due, None is returned instead.
+        """
+        if self._value:
+            if not is_expired(self._expiration_date):
+                return self._value
+
+        self._value = None
+
+        return None
+
+    def set(self, value, expiration_date):
+        """Set the value in the cache with expiration date.
+
+        Once expiration_date is past due, the value will be lost.
+        """
+        self._value = value
+        self._expiration_date = expiration_date
+
+
+def html_to_text(html):
+    if not html:
+        return html
+    try:
+        return BeautifulSoup(html, "lxml").get_text(separator="\n")
+    except Exception:
+        # TODO: figure out which exceptions can be thrown
+        # we actually don't want to raise, just fall back to bs4
+        return BeautifulSoup(html, features="html.parser").get_text(separator="\n")
