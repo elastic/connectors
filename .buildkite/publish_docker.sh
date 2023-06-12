@@ -29,6 +29,7 @@ make docker-build
 
 # !!! WARNING be cautious about the following lines, to avoid leaking the secrets in the CI logs
 
+set +x   # Do not remove so we don't leak passwords
 VAULT_ADDR=${VAULT_ADDR:-https://vault-ci-prod.elastic.dev}
 VAULT_USER="docker-swiftypeadmin"
 echo "Fetching Docker credentials for '$VAULT_USER' from Vault..."
