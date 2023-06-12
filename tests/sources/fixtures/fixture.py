@@ -73,6 +73,7 @@ def _es_client():
     }
     return Elasticsearch(**options)
 
+
 def _monitor_service(pid):
     es_client = _es_client()
     timeout = 20 * 60  # 20 minutes timeout
