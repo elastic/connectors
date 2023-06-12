@@ -333,7 +333,7 @@ class SyncJobRunner:
                 ):
                     yield doc, lazy_download, operation
             case JobType.ACCESS_CONTROL:
-                async for doc in self.data_provider.get_access_control_docs():
+                async for doc in self.data_provider.get_access_control():
                     yield doc, None, None
             case _:
                 raise UnsupportedJobType
