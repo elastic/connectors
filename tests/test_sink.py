@@ -24,7 +24,7 @@ from connectors.protocol import JobType, Pipeline
 from tests.commons import AsyncIterator
 
 INDEX = "some-index"
-TIMESTAMP = datetime(year=2023, month=1, day=1)
+TIMESTAMP = datetime(year=2023, month=1, day=1, tzinfo=timezone.utc)
 NO_FILTERING = ()
 DOC_ONE_ID = 1
 

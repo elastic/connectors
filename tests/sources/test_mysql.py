@@ -5,6 +5,7 @@
 #
 import asyncio
 import datetime
+from datetime import timezone
 from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import aiomysql
@@ -73,7 +74,7 @@ ALICE = {"id": 1, "name": "Alice", "age": 30}
 BOB = {"id": 2, "name": "Bob", "age": 30}
 TIME = "2023-01-18T17:18:56.814003+00:00"
 TIMESTAMP = datetime.datetime(
-    year=2023, month=1, day=2, hour=5, second=10, microsecond=3
+    year=2023, month=1, day=2, hour=5, second=10, microsecond=3, tzinfo=timezone.utc
 )
 
 

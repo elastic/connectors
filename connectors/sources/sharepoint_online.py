@@ -7,7 +7,7 @@ import asyncio
 import os
 import re
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import partial
 
 import aiofiles
@@ -139,7 +139,7 @@ class MicrosoftSecurityToken:
             return cached_value
 
         # We measure now before request to be on a pessimistic side
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         try:
             access_token, expires_in = await self._fetch_token()
         except ClientResponseError as e:
@@ -694,15 +694,12 @@ class SharepointOnlineDataSource(BaseDataSource):
                         download_func = None
 
                         if "@microsoft.graph.downloadUrl" in drive_item:
-                            modified_date = datetime.strptime(
-                                drive_item["lastModifiedDateTime"],
-                                "%Y-%m-%dT%H:%M:%SZ",
+                            modified_date = datetime.fromisoformat(
+                                drive_item["lastModifiedDateTime"]
                             )
-                            if (
-                                max_data_age
-                                and modified_date
-                                < datetime.utcnow() - timedelta(seconds=max_data_age)
-                            ):
+                            if max_data_age and modified_date < datetime.now(
+                                timezone.utc
+                            ) - timedelta(seconds=max_data_age):
                                 logger.warning(
                                     f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
                                 )
@@ -792,7 +789,9 @@ class SharepointOnlineDataSource(BaseDataSource):
         # same everything. But it will already be an absolutely new document.
         # Therefore every time we try to download the attachment we say that
         # it was just recently created so that framework would always re-download it.
-        new_timestamp = datetime.utcnow()
+        new_timestamp = datetime.now(
+                timezone.utc
+            )
 
         doc = {
             "_id": attachment["odata.id"],

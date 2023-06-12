@@ -6,7 +6,7 @@
 """Tests the Azure Blob Storage source class methods"""
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 import pytest
@@ -83,8 +83,8 @@ def test_prepare_blob_doc():
         "container": "container1",
         "name": "blob1",
         "content_settings": {"content_type": "plain/text"},
-        "last_modified": datetime(2022, 4, 21, 12, 12, 30),
-        "creation_time": datetime(2022, 4, 21, 12, 12, 30),
+        "last_modified": datetime(2022, 4, 21, 12, 12, 30, tzinfo=timezone.utc),
+        "creation_time": datetime(2022, 4, 21, 12, 12, 30, tzinfo=timezone.utc),
         "metadata": "{'key1': 'value1', 'key2': 'value2'}",
         "lease": {"status": "Locked", "state": "Leased", "duration": "Infinite"},
         "blob_tier": "private",
@@ -124,7 +124,7 @@ async def test_get_container():
         [
             {
                 "name": "container1",
-                "last_modified": datetime(2022, 4, 21, 12, 12, 30),
+                "last_modified": datetime(2022, 4, 21, 12, 12, 30, tzinfo=timezone.utc),
                 "metadata": {"key1": "value1"},
                 "lease": {
                     "status": "Locked",
@@ -157,8 +157,8 @@ async def test_get_blob():
                 "container": "container1",
                 "name": "blob1",
                 "content_settings": {"content_type": "plain/text"},
-                "last_modified": datetime(2022, 4, 21, 12, 12, 30),
-                "creation_time": datetime(2022, 4, 21, 12, 12, 30),
+                "last_modified": datetime(2022, 4, 21, 12, 12, 30, tzinfo=timezone.utc),
+                "creation_time": datetime(2022, 4, 21, 12, 12, 30, tzinfo=timezone.utc),
                 "metadata": "{'key1': 'value1', 'key2': 'value2'}",
                 "lease": {
                     "status": "Locked",

@@ -7,6 +7,7 @@
 """
 import asyncio
 import datetime
+from datetime import timezone
 from io import BytesIO
 from unittest import mock
 
@@ -38,11 +39,11 @@ def mock_file(name):
     mock_stats["allocation_size"].get_value.return_value = "30"
     mock_stats["creation_time"] = mock.Mock()
     mock_stats["creation_time"].get_value.return_value = datetime.datetime(
-        2022, 1, 11, 12, 12, 30
+        2022, 1, 11, 12, 12, 30, tzinfo=timezone.utc
     )
     mock_stats["change_time"] = mock.Mock()
     mock_stats["change_time"].get_value.return_value = datetime.datetime(
-        2022, 4, 21, 12, 12, 30
+        2022, 4, 21, 12, 12, 30, tzinfo=timezone.utc
     )
 
     mock_response._dir_info.fields = mock_stats
@@ -68,11 +69,11 @@ def mock_folder(name):
     mock_stats["allocation_size"].get_value.return_value = "200"
     mock_stats["creation_time"] = mock.Mock()
     mock_stats["creation_time"].get_value.return_value = datetime.datetime(
-        2022, 2, 11, 12, 12, 30
+        2022, 2, 11, 12, 12, 30, tzinfo=timezone.utc
     )
     mock_stats["change_time"] = mock.Mock()
     mock_stats["change_time"].get_value.return_value = datetime.datetime(
-        2022, 5, 21, 12, 12, 30
+        2022, 5, 21, 12, 12, 30, tzinfo=timezone.utc
     )
     mock_response._dir_info.fields = mock_stats
     return mock_response

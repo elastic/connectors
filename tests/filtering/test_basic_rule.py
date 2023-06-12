@@ -5,6 +5,7 @@
 #
 
 import datetime
+from datetime import timezone
 
 import pytest
 
@@ -92,10 +93,12 @@ AMOUNT_INT_VALUE = 100
 
 CREATED_AT_DATE_KEY = "created_at_date"
 # we expect that the data sources parse their dates to datetime
-CREATED_AT_DATE_VALUE = datetime.datetime(year=2022, month=1, day=1, hour=0, minute=0)
+CREATED_AT_DATE_VALUE = datetime.datetime(
+    year=2022, month=1, day=1, hour=0, minute=0, tzinfo=timezone.utc
+)
 CREATED_AT_DATETIME_KEY = "created_at_datetime"
 CREATED_AT_DATETIME_VALUE = datetime.datetime(
-    year=2022, month=1, day=1, hour=5, minute=10, microsecond=5
+    year=2022, month=1, day=1, hour=5, minute=10, microsecond=5, tzinfo=timezone.utc
 )
 
 DOCUMENT_ONE = {
@@ -1266,15 +1269,17 @@ def test_coerce_rule_value_to_datetime_date_if_it_is_datetime():
         policy=Policy.INCLUDE,
         field=DESCRIPTION_KEY,
         rule=Rule.LESS_THAN,
-        value=str(datetime.datetime(year=2022, month=1, day=1)),
+        value=str(datetime.datetime(year=2022, month=1, day=1, tzinfo=timezone.utc)),
     )
 
     coerced_rule_value = basic_rule.coerce_rule_value_based_on_document_value(
-        datetime.datetime(year=2023, month=2, day=2)
+        datetime.datetime(year=2023, month=2, day=2, tzinfo=timezone.utc)
     )
 
     assert isinstance(coerced_rule_value, datetime.datetime)
-    assert coerced_rule_value == datetime.datetime(year=2022, month=1, day=1)
+    assert coerced_rule_value == datetime.datetime(
+        year=2022, month=1, day=1, tzinfo=timezone.utc
+    )
 
 
 def test_coerce_rule_value_to_datetime_date_if_it_is_date():
@@ -1284,15 +1289,17 @@ def test_coerce_rule_value_to_datetime_date_if_it_is_date():
         policy=Policy.INCLUDE,
         field=DESCRIPTION_KEY,
         rule=Rule.LESS_THAN,
-        value=str(datetime.date(year=2022, month=1, day=1)),
+        value=str(datetime.date(year=2022, month=1, day=1, tzinfo=timezone.utc)),
     )
 
     coerced_rule_value = basic_rule.coerce_rule_value_based_on_document_value(
-        datetime.date(year=2023, month=2, day=2)
+        datetime.date(year=2023, month=2, day=2, tzinfo=timezone.utc)
     )
 
     assert isinstance(coerced_rule_value, datetime.date)
-    assert coerced_rule_value == datetime.datetime(year=2022, month=1, day=1)
+    assert coerced_rule_value == datetime.datetime(
+        year=2022, month=1, day=1, tzinfo=timezone.utc
+    )
 
 
 def test_coerce_rule_to_default_if_type_is_not_registered():
