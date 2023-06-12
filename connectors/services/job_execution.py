@@ -92,17 +92,6 @@ class JobExecutionService(BaseService):
         await self.content_syncs.put(sync_job_runner.execute)
 
     async def _access_control_sync(self, sync_job, connector, source_klass):
-        (
-            is_platinum_license_enabled,
-            license_enabled,
-        ) = await self.connector_index.has_active_license_enabled(License.PLATINUM)
-
-        if not is_platinum_license_enabled:
-            logger.error(
-                f"Minimum required Elasticsearch license: '{License.PLATINUM.value}'. Actual license: '{license_enabled.value}'.  Skipping access control sync execution..."
-            )
-            return
-
         if connector.last_access_control_sync_status == JobStatus.IN_PROGRESS:
             logger.debug(
                 f"Connector {connector.id} is still syncing access control, skip the job {sync_job.id}..."
