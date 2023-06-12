@@ -287,36 +287,49 @@ async def test_job_execution_with_connector_not_found(
 async def test_job_execution_with_premium_connector(
         connector_index_mock,
         sync_job_index_mock,
-        concurrent_tasks_mock,
+        concurrent_tasks_mocks,
         sync_job_runner_mock,
         set_env,
 ):
+    content_syncs_tasks_mock, access_control_syncs_tasks_mock = concurrent_tasks_mocks
+
     connector = mock_connector()
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
-    sync_job = mock_sync_job(service_type="premium_fake")
+    sync_job = mock_sync_job(job_type=JobType.ACCESS_CONTROL)
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service()
 
-    concurrent_tasks_mock.put.assert_not_awaited()
+    content_syncs_tasks_mock.put.assert_not_awaited()
+    access_control_syncs_tasks_mock.put.assert_awaited_once_with(sync_job_runner_mock.execute)
+
 
 @pytest.mark.asyncio
 async def test_job_execution_with_premium_connector_with_insufficient_license(
         connector_index_mock,
         sync_job_index_mock,
-        concurrent_tasks_mock,
+        concurrent_tasks_mocks,
         sync_job_runner_mock,
         set_env,
 ):
+    content_syncs_tasks_mock, access_control_syncs_tasks_mock = concurrent_tasks_mocks
+
     connector = mock_connector()
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
     connector_index_mock.has_active_license_enabled = AsyncMock(return_value=(False, License.BASIC))
-    sync_job = mock_sync_job(service_type="premium_fake")
-    sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
+
+    access_control_sync_job = mock_sync_job(job_type=JobType.ACCESS_CONTROL)
+    content_sync_job = mock_sync_job()
+
+    sync_job_index_mock.pending_jobs.return_value = AsyncIterator([content_sync_job, access_control_sync_job])
     await create_and_run_service()
 
-    concurrent_tasks_mock.put.assert_not_awaited()
+    # Access control sync job should not be executed (license insufficient)
+    access_control_syncs_tasks_mock.put.assert_not_awaited()
+
+    # We still want to execute full content sync jobs
+    content_syncs_tasks_mock.put.assert_awaited_once_with(sync_job_runner_mock.execute)
 
 
 @pytest.mark.asyncio
