@@ -313,7 +313,7 @@ async def test_get_docs(mock_aws):
     ):
         num = 0
         # Execute
-        async for (doc, dl) in source.get_docs():
+        async for (doc, _) in source.get_docs():
             # Assert
             assert doc["_id"] in (
                 "d0295955cdb6d488a4a1d3f10dbf141b",

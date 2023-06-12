@@ -1135,11 +1135,7 @@ async def test_get_site_pages_content_when_canvascontent_is_none():
 @pytest.mark.asyncio
 async def test_get_site_page_for_online():
     source = create_source(SharepointDataSource)
-    site_page_response = {"value":[
-        {
-            "CanvasContent1": "<div>dummy test</div>"
-        }
-    ]}
+    site_page_response = {"value": [{"CanvasContent1": "<div>dummy test</div>"}]}
     source.sharepoint_client._api_call = Mock(
         return_value=async_native_coroutine_generator(site_page_response)
     )

@@ -838,7 +838,9 @@ async def test_serialize(raw_doc, expected_doc):
 
         assert serialized_doc.keys() == expected_doc.keys()
 
-        for serialized_doc_key, expected_doc_key in zip(serialized_doc, expected_doc):
+        for serialized_doc_key, expected_doc_key in zip(
+            serialized_doc, expected_doc, strict=True
+        ):
             assert serialized_doc[serialized_doc_key] == expected_doc[expected_doc_key]
 
 

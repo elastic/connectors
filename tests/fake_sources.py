@@ -157,8 +157,10 @@ class LargeFakeSource(FakeSource):
             doc_id = str(i + 1)
             yield {"_id": doc_id, "data": "big" * 4 * 1024}, partial(self._dl, doc_id)
 
+
 class PremiumFake(FakeSource):
     service_type = "premium_fake"
+
     @classmethod
     def is_premium():
-        True
+        return True

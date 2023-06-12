@@ -12,10 +12,8 @@ from elasticsearch import ConflictError, ConnectionError
 
 from connectors.es.client import ESClient, License, with_concurrency_control
 
-BASIC_CONFIG = {
-    "username": "elastic",
-    "password": "changeme"
-}
+BASIC_CONFIG = {"username": "elastic", "password": "changeme"}
+
 
 def test_esclient():
     # creating a client with a minimal config should create one with sane
@@ -162,15 +160,29 @@ async def test_with_concurrency_control():
         (License.BASIC, [License.BASIC]),
         (License.GOLD, [License.BASIC, License.GOLD]),
         (License.PLATINUM, [License.BASIC, License.GOLD, License.PLATINUM]),
-        (License.ENTERPRISE, [License.BASIC, License.GOLD, License.PLATINUM, License.ENTERPRISE]),
-        (License.TRIAL, [License.BASIC, License.GOLD, License.PLATINUM, License.ENTERPRISE, License.TRIAL])
-    ]
+        (
+            License.ENTERPRISE,
+            [License.BASIC, License.GOLD, License.PLATINUM, License.ENTERPRISE],
+        ),
+        (
+            License.TRIAL,
+            [
+                License.BASIC,
+                License.GOLD,
+                License.PLATINUM,
+                License.ENTERPRISE,
+                License.TRIAL,
+            ],
+        ),
+    ],
 )
 @pytest.mark.asyncio
 async def test_has_license_enabled(enabled_license, licenses_enabled):
     es_client = ESClient(BASIC_CONFIG)
     es_client.client = AsyncMock()
-    es_client.client.license.get = AsyncMock(return_value={"license": { "type": enabled_license.value}})
+    es_client.client.license.get = AsyncMock(
+        return_value={"license": {"type": enabled_license.value}}
+    )
 
     for license_ in licenses_enabled:
         is_enabled, _ = await es_client.has_active_license_enabled(license_)
@@ -180,18 +192,23 @@ async def test_has_license_enabled(enabled_license, licenses_enabled):
 @pytest.mark.parametrize(
     "enabled_license, licenses_disabled",
     [
-        (License.BASIC, [License.GOLD, License.PLATINUM, License.ENTERPRISE, License.TRIAL]),
+        (
+            License.BASIC,
+            [License.GOLD, License.PLATINUM, License.ENTERPRISE, License.TRIAL],
+        ),
         (License.GOLD, [License.PLATINUM, License.ENTERPRISE, License.TRIAL]),
         (License.PLATINUM, [License.ENTERPRISE, License.TRIAL]),
         (License.ENTERPRISE, [License.TRIAL]),
-        (License.TRIAL, [])
-    ]
+        (License.TRIAL, []),
+    ],
 )
 @pytest.mark.asyncio
 async def test_has_licenses_disabled(enabled_license, licenses_disabled):
     es_client = ESClient(BASIC_CONFIG)
     es_client.client = AsyncMock()
-    es_client.client.license.get = AsyncMock(return_value={"license": {"type": enabled_license.value}})
+    es_client.client.license.get = AsyncMock(
+        return_value={"license": {"type": enabled_license.value}}
+    )
 
     for license_ in licenses_disabled:
         is_enabled, _ = await es_client.has_active_license_enabled(license_)
@@ -202,10 +219,11 @@ async def test_has_licenses_disabled(enabled_license, licenses_disabled):
 async def test_has_license_disabled_with_expired_license():
     es_client = ESClient(BASIC_CONFIG)
     es_client.client = AsyncMock()
-    es_client.client.license.get = AsyncMock(return_value={"license": {"type": License.PLATINUM, "status": "expired"}})
+    es_client.client.license.get = AsyncMock(
+        return_value={"license": {"type": License.PLATINUM, "status": "expired"}}
+    )
 
     is_enabled, license_ = await es_client.has_active_license_enabled(License.PLATINUM)
 
     assert not is_enabled
     assert license_ == License.EXPIRED
-
