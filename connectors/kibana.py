@@ -92,150 +92,72 @@ DEFAULT_PIPELINE = {
 # This should be updated when ftest starts to hate on it for any reason
 # Later we won't need it at all
 JOB_INDEX_MAPPINGS = {
-  "dynamic": "false",
-  "_meta": {
-    "version": 1
-  },
-  "properties": {
-    "cancelation_requested_at": {
-      "type": "date"
-    },
-    "canceled_at": {
-      "type": "date"
-    },
-    "completed_at": {
-      "type": "date"
-    },
-    "connector": {
-      "properties": {
-        "configuration": {
-          "type": "object"
-        },
-        "filtering": {
-          "properties": {
-            "advanced_snippet": {
-              "properties": {
-                "created_at": {
-                  "type": "date"
+    "dynamic": "false",
+    "_meta": {"version": 1},
+    "properties": {
+        "cancelation_requested_at": {"type": "date"},
+        "canceled_at": {"type": "date"},
+        "completed_at": {"type": "date"},
+        "connector": {
+            "properties": {
+                "configuration": {"type": "object"},
+                "filtering": {
+                    "properties": {
+                        "advanced_snippet": {
+                            "properties": {
+                                "created_at": {"type": "date"},
+                                "updated_at": {"type": "date"},
+                                "value": {"type": "object"},
+                            }
+                        },
+                        "domain": {"type": "keyword"},
+                        "rules": {
+                            "properties": {
+                                "created_at": {"type": "date"},
+                                "field": {"type": "keyword"},
+                                "id": {"type": "keyword"},
+                                "order": {"type": "short"},
+                                "policy": {"type": "keyword"},
+                                "rule": {"type": "keyword"},
+                                "updated_at": {"type": "date"},
+                                "value": {"type": "keyword"},
+                            }
+                        },
+                        "warnings": {
+                            "properties": {
+                                "ids": {"type": "keyword"},
+                                "messages": {"type": "text"},
+                            }
+                        },
+                    }
                 },
-                "updated_at": {
-                  "type": "date"
+                "id": {"type": "keyword"},
+                "index_name": {"type": "keyword"},
+                "language": {"type": "keyword"},
+                "pipeline": {
+                    "properties": {
+                        "extract_binary_content": {"type": "boolean"},
+                        "name": {"type": "keyword"},
+                        "reduce_whitespace": {"type": "boolean"},
+                        "run_ml_inference": {"type": "boolean"},
+                    }
                 },
-                "value": {
-                  "type": "object"
-                }
-              }
-            },
-            "domain": {
-              "type": "keyword"
-            },
-            "rules": {
-              "properties": {
-                "created_at": {
-                  "type": "date"
-                },
-                "field": {
-                  "type": "keyword"
-                },
-                "id": {
-                  "type": "keyword"
-                },
-                "order": {
-                  "type": "short"
-                },
-                "policy": {
-                  "type": "keyword"
-                },
-                "rule": {
-                  "type": "keyword"
-                },
-                "updated_at": {
-                  "type": "date"
-                },
-                "value": {
-                  "type": "keyword"
-                }
-              }
-            },
-            "warnings": {
-              "properties": {
-                "ids": {
-                  "type": "keyword"
-                },
-                "messages": {
-                  "type": "text"
-                }
-              }
+                "service_type": {"type": "keyword"},
             }
-          }
         },
-        "id": {
-          "type": "keyword"
-        },
-        "index_name": {
-          "type": "keyword"
-        },
-        "language": {
-          "type": "keyword"
-        },
-        "pipeline": {
-          "properties": {
-            "extract_binary_content": {
-              "type": "boolean"
-            },
-            "name": {
-              "type": "keyword"
-            },
-            "reduce_whitespace": {
-              "type": "boolean"
-            },
-            "run_ml_inference": {
-              "type": "boolean"
-            }
-          }
-        },
-        "service_type": {
-          "type": "keyword"
-        }
-      }
+        "created_at": {"type": "date"},
+        "deleted_document_count": {"type": "integer"},
+        "error": {"type": "keyword"},
+        "indexed_document_count": {"type": "integer"},
+        "indexed_document_volume": {"type": "integer"},
+        "last_seen": {"type": "date"},
+        "metadata": {"type": "object"},
+        "started_at": {"type": "date"},
+        "status": {"type": "keyword"},
+        "total_document_count": {"type": "integer"},
+        "trigger_method": {"type": "keyword"},
+        "worker_hostname": {"type": "keyword"},
     },
-    "created_at": {
-      "type": "date"
-    },
-    "deleted_document_count": {
-      "type": "integer"
-    },
-    "error": {
-      "type": "keyword"
-    },
-    "indexed_document_count": {
-      "type": "integer"
-    },
-    "indexed_document_volume": {
-      "type": "integer"
-    },
-    "last_seen": {
-      "type": "date"
-    },
-    "metadata": {
-      "type": "object"
-    },
-    "started_at": {
-      "type": "date"
-    },
-    "status": {
-      "type": "keyword"
-    },
-    "total_document_count": {
-      "type": "integer"
-    },
-    "trigger_method": {
-      "type": "keyword"
-    },
-    "worker_hostname": {
-      "type": "keyword"
-    }
-  }
 }
 
 
@@ -373,8 +295,6 @@ async def prepare(service_type, index_name, config, connector_definition=None):
             "sync_now": False,
             "is_native": True,
         }
-
-
 
         logger.info(f"Prepare {CONNECTORS_INDEX}")
         await upsert_index(es, CONNECTORS_INDEX, docs=[doc])
