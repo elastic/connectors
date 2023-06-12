@@ -18,7 +18,6 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
-import aiofiles
 import aiohttp
 import yaml
 from base64io import Base64IO
