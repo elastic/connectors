@@ -212,6 +212,12 @@ class TestMicrosoftAPISession:
             return "something"
 
     @pytest_asyncio.fixture
+    async def patch_sleep(self):
+        with patch("asyncio.sleep", return_value=AsyncMock) as patch_sleep:
+            # To avoid actually sleeping
+            yield patch_sleep
+
+    @pytest_asyncio.fixture
     async def microsoft_api_session(self):
         session = aiohttp.ClientSession()
         yield MicrosoftAPISession(
@@ -230,6 +236,25 @@ class TestMicrosoftAPISession:
         url = "http://localhost:1234/url"
         payload = {"test": "hello world"}
 
+        mock_responses.get(url, payload=payload)
+
+        response = await microsoft_api_session.fetch(url)
+
+        assert response == payload
+
+    @pytest.mark.asyncio
+    async def test_fetch_with_retry(
+        self, microsoft_api_session, mock_responses, patch_sleep
+    ):
+        url = "http://localhost:1234/url"
+        payload = {"test": "hello world"}
+
+        first_request_error = ClientResponseError(None, None)
+        first_request_error.status = 500
+        first_request_error.message = "Something went wrong"
+
+        # First error out, then on request to same resource return good payload
+        mock_responses.get(url, exception=first_request_error)
         mock_responses.get(url, payload=payload)
 
         response = await microsoft_api_session.fetch(url)
@@ -277,12 +302,24 @@ class TestSharepointOnlineClient:
         return "csecret"
 
     @pytest_asyncio.fixture
-    async def client(self):
+    async def client(self, patch_close):
+        # Patch close is passed here to also not do actual closing logic but instead
+        # Do nothing when MicrosoftAPISession.close is called
         client = SharepointOnlineClient(
             self.tenant_id, self.tenant_name, self.client_id, self.client_secret
         )
+
         yield client
         await client.close()
+
+    @pytest_asyncio.fixture
+    def patch_close(self):
+        with patch.object(
+            MicrosoftAPISession, "close", return_value=AsyncMock()
+        ) as close:
+            close.return_value = asyncio.Future()
+            close.return_value.set_result(None)
+            yield close
 
     @pytest_asyncio.fixture
     def patch_fetch(self):
