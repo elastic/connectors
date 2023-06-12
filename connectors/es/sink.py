@@ -41,6 +41,7 @@ from connectors.utils import (
     DEFAULT_QUEUE_SIZE,
     ConcurrentTasks,
     MemQueue,
+    aenumerate,
     get_size,
     iso_utc,
 )
@@ -369,12 +370,10 @@ class Extractor:
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"Size of ids in memory is {get_mb_size(existing_ids)}MiB")
 
-        count = 0
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
         try:
-            async for doc in generator:
+            async for count, doc in aenumerate(generator):
                 doc, lazy_download, operation = doc
-                count += 1
                 if count % self.display_every == 0:
                     logger.info(str(self))
 
@@ -466,12 +465,10 @@ class Extractor:
 
         self.sync_runs = True
 
-        count = 0
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
         try:
-            async for doc in generator:
+            async for count, doc in aenumerate(generator):
                 doc, lazy_download, operation = doc
-                count += 1
                 if count % self.display_every == 0:
                     logger.info(str(self))
 
