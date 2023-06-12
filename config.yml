@@ -22,7 +22,8 @@ service:
   heartbeat: 300
   max_errors: 20
   max_errors_span: 600
-  max_concurrent_syncs: 1
+  max_concurrent_content_syncs: 1
+  max_concurrent_access_control_syncs: 1
   job_cleanup_interval: 300
   log_level: INFO
 
