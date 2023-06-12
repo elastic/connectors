@@ -5,21 +5,17 @@
 #
 import asyncio
 import base64
-import json
 import re
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from unittest import mock
-from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
 import pytest_asyncio
-from aiohttp import StreamReader
 from aiohttp.client_exceptions import ClientResponseError
 from aioresponses import aioresponses
 
-from connectors.source import DataSourceConfiguration
 from connectors.sources.sharepoint_online import (
     WILDCARD,
     GraphAPIToken,
@@ -30,7 +26,6 @@ from connectors.sources.sharepoint_online import (
     SharepointOnlineAdvancedRulesValidator,
     SharepointOnlineClient,
     SharepointOnlineDataSource,
-    SharepointRestAPIToken,
     TokenFetchFailed,
 )
 from tests.commons import AsyncIterator
@@ -511,7 +506,7 @@ class TestSharepointOnlineClient:
         list_item_id = "1"
 
         with pytest.raises(InvalidSharepointTenant) as e:
-            async for attachment in client.site_list_item_attachments(
+            async for _ in client.site_list_item_attachments(
                 site_web_url, list_title, list_item_id
             ):
                 pass
@@ -574,7 +569,7 @@ class TestSharepointOnlineClient:
         page_url_path = f"https://{invalid_tenant_name}.sharepoint.com/random/totally/made/up/page.aspx"
 
         with pytest.raises(InvalidSharepointTenant) as e:
-            async for attachment in client.site_pages(page_url_path):
+            async for _ in client.site_pages(page_url_path):
                 pass
 
         # Assert error message contains both invalid and valid tenant name

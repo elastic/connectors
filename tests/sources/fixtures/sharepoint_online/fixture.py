@@ -5,13 +5,7 @@
 #
 """Module to handle api calls received from connector."""
 
-import io
-import os
-import random
-import string
-
-from flask import Flask, escape, request, send_file
-from flask_limiter.util import get_remote_address
+from flask import Flask, escape, request
 
 app = Flask(__name__)
 
