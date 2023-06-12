@@ -597,6 +597,14 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "list",
                 "value": "",
             },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 6,
+                "type": "bool",
+                "value": False,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+            },
         }
 
     async def validate_config(self):
@@ -670,6 +678,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                         drive_item["_id"] = drive_item["id"]
                         drive_item["object_type"] = "drive_item"
                         drive_item["_timestamp"] = drive_item["lastModifiedDateTime"]
+                        drive_item["_tempfile_suffix"] = os.path.splitext(
+                            drive_item.get("name", "")
+                        )[-1]
 
                         download_func = None
 
@@ -707,6 +718,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                     ):
                         list_item["_id"] = list_item["id"]
                         list_item["object_type"] = "list_item"
+                        list_item["_tempfile_suffix"] = os.path.splitext(
+                            list_item.get("FileName", "")
+                        )[-1]
+
                         content_type = list_item["contentType"]["name"]
 
                         if content_type in [
@@ -765,13 +780,22 @@ class SharepointOnlineDataSource(BaseDataSource):
         # it was just recently created so that framework would always re-download it.
         new_timestamp = datetime.utcnow()
 
-        return {
+        doc = {
             "_id": attachment["odata.id"],
             "_timestamp": new_timestamp,
-            "_attachment": await self._download_content(
-                partial(self.client.download_attachment, attachment["odata.id"])
-            ),
         }
+
+        attachment, body = await self._download_content(
+            partial(self.client.download_attachment, attachment["odata.id"]),
+            attachment["_tempfile_suffix"],
+        )
+
+        if attachment:
+            doc["_attachment"] = attachment
+        if body:
+            doc["body"] = body
+
+        return doc
 
     async def get_drive_item_content(self, drive_item, timestamp=None, doit=False):
         document_size = int(drive_item["size"])
@@ -782,21 +806,35 @@ class SharepointOnlineDataSource(BaseDataSource):
         if document_size > MAX_DOCUMENT_SIZE:
             return
 
-        return {
+        doc = {
             "_id": drive_item["id"],
             "_timestamp": drive_item["lastModifiedDateTime"],
-            "_attachment": await self._download_content(
-                partial(
-                    self.client.download_drive_item,
-                    drive_item["parentReference"]["driveId"],
-                    drive_item["id"],
-                )
-            ),
         }
 
-    async def _download_content(self, download_func):
+        attachment, body = await self._download_content(
+            partial(
+                self.client.download_drive_item,
+                drive_item["parentReference"]["driveId"],
+                drive_item["id"],
+            ),
+            drive_item["_tempfile_suffix"],
+        )
+
+        if attachment:
+            doc["_attachment"] = attachment
+        if body:
+            doc["body"] = body
+
+        return doc
+
+    async def _download_content(self, download_func, tempfile_suffix):
+        attachment = None
+        body = None
         source_file_name = ""
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+
+        async with NamedTemporaryFile(
+            mode="wb", delete=False, suffix=tempfile_suffix
+        ) as async_buffer:
             # download_func should always be a partial with async_buffer as last argument that is not filled by the caller!
             # E.g. if download_func is download_drive_item(drive_id, item_id, async_buffer) then it
             # should be passed as partial(download_drive_item, drive_id, item_id)
@@ -805,15 +843,17 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             source_file_name = async_buffer.name
 
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
-        )
+        if self.configuration["use_text_extraction_service"]:
+            body = await self.extraction_service.extract_text(source_file_name)
+        else:
+            await asyncio.to_thread(
+                convert_to_b64,
+                source=source_file_name,
+            )
+            async with aiofiles.open(file=source_file_name, mode="r") as target_file:
+                attachment = (await target_file.read()).strip()
 
-        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            content = (await target_file.read()).strip()
-            return content
+        return attachment, body
 
     async def ping(self):
         pass

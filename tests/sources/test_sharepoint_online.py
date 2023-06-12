@@ -821,7 +821,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_get_attachment_content(self, patch_sharepoint_client):
-        attachment = {"odata.id": "1"}
+        attachment = { "odata.id": "1", "_tempfile_suffix": ".ppt" }
         message = b"This is content of attachment"
 
         async def download_func(attachment_id, async_buffer):
@@ -841,6 +841,7 @@ class TestSharepointOnlineDataSource:
             "size": 15,
             "lastModifiedDateTime": datetime.now(timezone.utc),
             "parentReference": {"driveId": "drive-1"},
+            "_tempfile_suffix": ".txt",
         }
         message = b"This is content of drive item"
 
