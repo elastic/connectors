@@ -3,7 +3,6 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import asyncio
 import json
 import logging
 import time
@@ -61,7 +60,7 @@ def test_tracer():
 
         @tracer.start_as_current_span("trace me")
         def traceable():
-            time.sleep(.1)
+            time.sleep(0.1)
 
         traceable()
         ecs_log = logs[0]
@@ -69,15 +68,11 @@ def test_tracer():
         # make sure it's JSON and we have service.type
         data = json.loads(ecs_log)
 
-        assert data['message'].startswith(
-            '[trace me] traceable took 0.1'
-        )
-
+        assert data["message"].startswith("[trace me] traceable took 0.1")
 
 
 @pytest.mark.asyncio
 async def test_async_tracer():
-
     with unset_logger():
         logger = set_logger(logging.DEBUG, filebeat=True)
         logs = []
@@ -89,21 +84,18 @@ async def test_async_tracer():
 
         @tracer.start_as_current_span("trace me", "special")
         async def traceable():
-            time.sleep(.1)
+            time.sleep(0.1)
 
         await traceable()
         ecs_log = logs[0]
 
         # make sure it's JSON and we have service.type
         data = json.loads(ecs_log)
-        assert data['message'].startswith(
-            '[trace me] special took 0.1'
-        )
+        assert data["message"].startswith("[trace me] special took 0.1")
 
 
 @pytest.mark.asyncio
 async def test_async_tracer_slow():
-
     with unset_logger():
         logger = set_logger(logging.DEBUG, filebeat=True)
         logs = []
@@ -115,17 +107,17 @@ async def test_async_tracer_slow():
 
         @tracer.start_as_current_span("trace me", "special", slow_log=10)
         async def traceable():
-            time.sleep(.1)
+            time.sleep(0.1)
 
         await traceable()
-        assert(len(logs)) == 0
+        assert (len(logs)) == 0
 
         @tracer.start_as_current_span("trace me", "special", slow_log=0.01)
         async def traceable_slow():
-            time.sleep(.1)
+            time.sleep(0.1)
 
         await traceable_slow()
-        assert(len(logs)) == 1
+        assert (len(logs)) == 1
 
 
 @pytest.mark.asyncio
@@ -141,17 +133,15 @@ async def test_trace_async_gen():
 
         @tracer.start_as_current_span("trace me", "special")
         async def gen():
-            yield '1'
-            yield '2'
-            yield '3'
+            yield "1"
+            yield "2"
+            yield "3"
 
-        async for i in gen():
+        async for _ in gen():
             pass
 
         assert len(logs) == 4
 
         for i, log in enumerate(logs):
             data = json.loads(log)
-            assert data['message'].startswith(
-                f'[trace me] {i}-special took'
-            )
+            assert data["message"].startswith(f"[trace me] {i}-special took")
