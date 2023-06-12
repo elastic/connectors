@@ -5,6 +5,14 @@ set -o pipefail
 NAME=$1
 PERF8=$2
 
+# add a flag for serverless
+if [[ "$NAME" == *"serverless"* ]]; then
+  export SERVERLESS="yup"
+fi
+
+SERVICE_TYPE=${NAME%"_serverless"}
+INDEX_NAME=search-${NAME%"_serverless"}
+
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR="$SCRIPT_DIR/.."
 PLATFORM='unknown'
@@ -41,7 +49,7 @@ $PYTHON -m pip install -r $NAME/requirements.txt
 fi
 $PYTHON fixture.py --name $NAME --action setup
 $PYTHON fixture.py --name $NAME --action start_stack
-$ROOT_DIR/bin/fake-kibana --index-name search-$NAME --service-type $NAME --connector-definition $NAME/connector.json --debug
+$ROOT_DIR/bin/fake-kibana --index-name $INDEX_NAME --service-type $SERVICE_TYPE --connector-definition $NAME/connector.json --debug
 $PYTHON fixture.py --name $NAME --action load
 $PYTHON fixture.py --name $NAME --action sync
 
@@ -70,7 +78,7 @@ $PYTHON fixture.py --name $NAME --action monitor --pid $PID_2
 
 
 NUM_DOCS=`$PYTHON fixture.py --name $NAME --action get_num_docs`
-$PYTHON $ROOT_DIR/scripts/verify.py --index-name search-$NAME --service-type $NAME --size $NUM_DOCS
+$PYTHON $ROOT_DIR/scripts/verify.py --index-name $INDEX_NAME --service-type $NAME --size $NUM_DOCS
 $PYTHON fixture.py --name $NAME --action stop_stack
 $PYTHON fixture.py --name $NAME --action teardown
 
