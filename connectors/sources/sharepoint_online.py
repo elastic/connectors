@@ -185,6 +185,7 @@ class MicrosoftSecurityToken:
 class GraphAPIToken(MicrosoftSecurityToken):
     """Token to connect to Microsoft Graph API endpoints."""
 
+    @retryable(retries=3)
     async def _fetch_token(self):
         """Fetch API token for usage with Graph API
 
@@ -207,6 +208,7 @@ class GraphAPIToken(MicrosoftSecurityToken):
 class SharepointRestAPIToken(MicrosoftSecurityToken):
     """Token to connect to Sharepoint REST API endpoints."""
 
+    @retryable(retries=3)
     async def _fetch_token(self):
         """Fetch API token for usage with Sharepoint REST API
 
@@ -519,8 +521,8 @@ class SharepointOnlineClient:
 
     async def close(self):
         await self._http_session.close()
-        await self._graph_api_client.close()
-        await self._rest_api_client.close()
+        self._graph_api_client.close()
+        self._rest_api_client.close()
 
 
 class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):

@@ -14,7 +14,6 @@ import aiohttp
 import pytest
 import pytest_asyncio
 from aiohttp.client_exceptions import ClientResponseError
-from aioresponses import aioresponses
 
 from connectors.sources.sharepoint_online import (
     WILDCARD,
@@ -160,15 +159,31 @@ class TestGraphAPIToken:
 
         await session.close()
 
-    @pytest_asyncio.fixture
-    async def mock_responses(self):
-        with aioresponses() as m:
-            yield m
-
     @pytest.mark.asyncio
     async def test_fetch_token(self, token, mock_responses):
         bearer = "hello"
         expires_in = 15
+
+        mock_responses.post(
+            re.compile(".*"),
+            payload={"access_token": bearer, "expires_in": str(expires_in)},
+        )
+
+        actual_token, actual_expires_in = await token._fetch_token()
+
+        assert actual_token == bearer
+        assert actual_expires_in == expires_in
+
+    @pytest.mark.asyncio
+    async def test_fetch_token_retries(self, token, mock_responses, patch_sleep):
+        bearer = "hello"
+        expires_in = 15
+
+        first_request_error = ClientResponseError(None, None)
+        first_request_error.status = 500
+        first_request_error.message = "Something went wrong"
+
+        mock_responses.post(re.compile(".*"), exception=first_request_error)
 
         mock_responses.post(
             re.compile(".*"),
@@ -205,17 +220,35 @@ class TestSharepointRestAPIToken:
         assert actual_token == bearer
         assert actual_expires_in == expires_in
 
+    # This test is a duplicate of test for TestGraphAPIToken.
+    # When we introduce reusable retryable function instead of a wrapper
+    # Then this test can be removed
+    @pytest.mark.asyncio
+    async def test_fetch_token_retries(self, token, mock_responses, patch_sleep):
+        bearer = "hello"
+        expires_in = 15
+
+        first_request_error = ClientResponseError(None, None)
+        first_request_error.status = 500
+        first_request_error.message = "Something went wrong"
+
+        mock_responses.post(re.compile(".*"), exception=first_request_error)
+
+        mock_responses.post(
+            re.compile(".*"),
+            payload={"access_token": bearer, "expires_in": str(expires_in)},
+        )
+
+        actual_token, actual_expires_in = await token._fetch_token()
+
+        assert actual_token == bearer
+        assert actual_expires_in == expires_in
+
 
 class TestMicrosoftAPISession:
     class StubAPIToken:
         async def get(self):
             return "something"
-
-    @pytest_asyncio.fixture
-    async def patch_sleep(self):
-        with patch("asyncio.sleep", return_value=AsyncMock) as patch_sleep:
-            # To avoid actually sleeping
-            yield patch_sleep
 
     @pytest_asyncio.fixture
     async def microsoft_api_session(self):
@@ -302,7 +335,7 @@ class TestSharepointOnlineClient:
         return "csecret"
 
     @pytest_asyncio.fixture
-    async def client(self, patch_close):
+    async def client(self):
         # Patch close is passed here to also not do actual closing logic but instead
         # Do nothing when MicrosoftAPISession.close is called
         client = SharepointOnlineClient(
@@ -311,15 +344,6 @@ class TestSharepointOnlineClient:
 
         yield client
         await client.close()
-
-    @pytest_asyncio.fixture
-    def patch_close(self):
-        with patch.object(
-            MicrosoftAPISession, "close", return_value=AsyncMock()
-        ) as close:
-            close.return_value = asyncio.Future()
-            close.return_value.set_result(None)
-            yield close
 
     @pytest_asyncio.fixture
     def patch_fetch(self):
