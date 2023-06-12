@@ -14,7 +14,8 @@ service:
   heartbeat: 300
   max_errors: 20
   max_errors_span: 600
-  max_concurrent_syncs: 10
+  max_concurrent_content_syncs: 10
+  max_concurrent_access_control_syncs: 10
   log_level: INFO
 
 connector_id: '1'

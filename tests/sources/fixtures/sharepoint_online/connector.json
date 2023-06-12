@@ -1,0 +1,175 @@
+{
+    "api_key_id": "clvIfIgBFjJwEZQV7bda",
+    "configuration": {
+      "tenant_id": {
+        "depends_on": [],
+        "display": "text",
+        "tooltip": null,
+        "default_value": null,
+        "label": "Tenant Id",
+        "sensitive": false,
+        "type": "str",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": "00000000-0000-0000-0000-000000000000",
+        "order": 1,
+        "ui_restrictions": []
+      },
+      "tenant_name": {
+        "depends_on": [],
+        "display": "text",
+        "tooltip": null,
+        "default_value": null,
+        "label": "Tenant Name",
+        "sensitive": false,
+        "type": "str",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": "sharepoint-online-ftest",
+        "order": 2,
+        "ui_restrictions": []
+      },
+      "secret_value": {
+        "depends_on": [],
+        "display": "text",
+        "tooltip": null,
+        "default_value": null,
+        "label": "Secret Value",
+        "sensitive": true,
+        "type": "str",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ",
+        "order": 4,
+        "ui_restrictions": []
+      },
+      "client_id": {
+        "depends_on": [],
+        "display": "text",
+        "tooltip": null,
+        "default_value": null,
+        "label": "Client Id",
+        "sensitive": true,
+        "type": "str",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": "00000000-0000-0000-0000-000000000000",
+        "order": 3,
+        "ui_restrictions": []
+      },
+      "site_collections": {
+        "depends_on": [],
+        "display": "textarea",
+        "tooltip": "Site names are expected in this field. Providing \"*\" will make the connector fetch all sites on the tenant.",
+        "default_value": null,
+        "label": "Comma-separated list of SharePoint site collections to index",
+        "sensitive": false,
+        "type": "list",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": "*",
+        "order": 5,
+        "ui_restrictions": []
+      }
+    },
+    "custom_scheduling": {},
+    "description": null,
+    "error": "Cannot connect to host enterprisesearchasd.sharepoint.com:443 ssl:default [nodename nor servname provided, or not known]",
+    "features": {
+      "filtering_advanced_config": true,
+      "filtering_rules": true,
+      "sync_rules": {
+        "advanced": {
+          "enabled": true
+        },
+        "basic": {
+          "enabled": true
+        }
+      }
+    },
+    "filtering": [
+      {
+        "domain": "DEFAULT",
+        "draft": {
+          "advanced_snippet": {
+            "updated_at": "2023-06-02T15:50:23.157Z",
+            "created_at": "2023-06-02T15:50:23.157Z",
+            "value": {}
+          },
+          "rules": [
+            {
+              "field": "_",
+              "updated_at": "2023-06-02T15:50:23.157Z",
+              "created_at": "2023-06-02T15:44:59.416Z",
+              "rule": "regex",
+              "id": "DEFAULT",
+              "value": ".*",
+              "order": 0,
+              "policy": "include"
+            }
+          ],
+          "validation": {
+            "state": "valid",
+            "errors": []
+          }
+        },
+        "active": {
+          "advanced_snippet": {
+            "updated_at": "2023-06-02T15:50:23.157Z",
+            "created_at": "2023-06-02T15:50:23.157Z",
+            "value": {
+              "maxDataAge": 15
+            }
+          },
+          "rules": [
+            {
+              "field": "_",
+              "updated_at": "2023-06-02T15:50:23.157Z",
+              "created_at": "2023-06-02T15:44:59.416Z",
+              "rule": "regex",
+              "id": "DEFAULT",
+              "value": ".*",
+              "order": 0,
+              "policy": "include"
+            }
+          ],
+          "validation": {
+            "state": "valid",
+            "errors": []
+          }
+        }
+      }
+    ],
+    "index_name": "search-sharepoint_online",
+    "is_native": true,
+    "language": null,
+    "last_seen": "2023-06-02T16:05:43.247794+00:00",
+    "last_sync_error": "Cannot connect to host enterprisesearchasd.sharepoint.com:443 ssl:default [nodename nor servname provided, or not known]",
+    "last_sync_scheduled_at": null,
+    "last_sync_status": "error",
+    "last_synced": "2023-06-02T16:08:30.745527+00:00",
+    "name": "sharepoint-online-adv",
+    "pipeline": {
+      "extract_binary_content": true,
+      "name": "ent-search-generic-ingestion",
+      "reduce_whitespace": true,
+      "run_ml_inference": true
+    },
+    "scheduling": {
+      "full": {
+        "enabled": true,
+        "interval": "0 0 0 * * ?"
+      }
+    },
+    "service_type": "sharepoint_online",
+    "status": "error",
+    "sync_now": false,
+    "id": "cVvIfIgBFjJwEZQVkrcy",
+    "last_indexed_document_count": 0,
+    "last_deleted_document_count": 0
+  }
