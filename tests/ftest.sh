@@ -49,14 +49,6 @@ $PYTHON -m pip install -r $NAME/requirements.txt
 fi
 $PYTHON fixture.py --name $NAME --action setup
 $PYTHON fixture.py --name $NAME --action start_stack
-
-if [[ "$NAME" == *"serverless"* ]]; then
-  sleep 30
-  docker ps -a
-  docker logs es01
-  curl -vvv -u elastic:changeme http://localhost:9200
-fi
-
 $ROOT_DIR/bin/fake-kibana --index-name $INDEX_NAME --service-type $SERVICE_TYPE --connector-definition $NAME/connector.json --debug
 $PYTHON fixture.py --name $NAME --action load
 $PYTHON fixture.py --name $NAME --action sync
