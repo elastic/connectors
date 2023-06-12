@@ -281,7 +281,7 @@ async def prepare(service_type, index_name, config, connector_definition=None):
             # Scheduling intervals
             "scheduling": {
                 "full": {
-                    "enabled": False,
+                    "enabled": True,
                     "interval": "1 * * * * *",
                 },
             },  # quartz syntax
