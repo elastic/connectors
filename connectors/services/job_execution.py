@@ -5,6 +5,7 @@
 #
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
+from connectors.es.license import requires_platinum_license
 from connectors.logger import logger
 from connectors.protocol import (
     ConnectorIndex,
@@ -61,14 +62,6 @@ class JobExecutionService(BaseService):
         self.content_syncs = None
         self.access_control_syncs = None
 
-    @staticmethod
-    def requires_platinum_license(sync_job, connector, source_klass):
-        """Returns whether this scenario requires a Platinum license"""
-        return (
-            sync_job.job_type == JobType.ACCESS_CONTROL
-            and connector.features.document_level_security_enabled()
-        ) or source_klass.is_premium()
-
     def stop(self):
         super().stop()
         if self.content_syncs is not None:
@@ -120,7 +113,7 @@ class JobExecutionService(BaseService):
             logger.error(f"Couldn't find connector by id {connector_id}")
             return
 
-        if self.requires_platinum_license(sync_job, connector, source_klass):
+        if requires_platinum_license(sync_job, connector, source_klass):
             (
                 is_platinum_license_enabled,
                 license_enabled,
