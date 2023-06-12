@@ -37,6 +37,7 @@ from connectors.utils import (
     get_size,
     has_duplicates,
     hash_id,
+    html_to_text,
     is_expired,
     next_run,
     retryable,
@@ -564,3 +565,21 @@ def test_filter_nested_dict_by_keys(key_list, source_dict, expected_dict):
 )
 def test_deep_merge_dicts(base_dict, new_dict, expected_dict):
     assert deep_merge_dicts(base_dict, new_dict) == expected_dict
+
+
+def test_html_to_text_with_html_with_unclosed_tag():
+    invalid_html = "<div>Hello, world!</div><div>Next Line"
+
+    assert html_to_text(invalid_html) == "Hello, world!\nNext Line"
+
+
+def test_html_to_text_without_html():
+    invalid_html = "just text"
+
+    assert html_to_text(invalid_html) == "just text"
+
+
+def test_html_to_text_with_weird_html():
+    invalid_html = "<div/>just</div> text"
+
+    assert html_to_text(invalid_html) == "just\n text"

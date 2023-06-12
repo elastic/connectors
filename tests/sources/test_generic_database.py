@@ -138,8 +138,8 @@ async def test_validate_config_valid_fields():
     # Execute
     try:
         await source.validate_config()
-    except ConfigurableFieldValueError:
-        raise AssertionError("Method raised an exception")
+    except ConfigurableFieldValueError as e:
+        raise AssertionError("Method raised an exception") from e
 
 
 @pytest.mark.parametrize(
