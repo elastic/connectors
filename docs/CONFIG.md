@@ -33,7 +33,7 @@ Configuration lives in [config.yml](../config.yml).
   - `preflight_idle`: The number of seconds to wait between each pre-flight check. Defaults to 30.
   - `max_errors`: The maximum number of errors allowed in one event loop.
   - `max_errors_span`: The number of seconds to reset `max_errors` count.
-  - `max_concurrent_syncs`: The maximum number of concurrent content syncs. Defaults to 1. (deprecated)
+  - `max_concurrent_syncs`: (Deprecated. Use `max_concurrent_content_syncs`) The maximum number of concurrent content syncs. Defaults to 1. 
   - `max_concurrent_content_syncs`: The maximum number of concurrent content syncs. Defaults to 1.
   - `max_concurrent_access_control_syncs`: The maximum number of concurrent access control syncs. Defaults to 1.
   - `job_cleanup_interval`: The interval (in seconds) to run job cleanup task.
