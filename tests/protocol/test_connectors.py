@@ -326,18 +326,9 @@ async def test_connector_properties():
             "configuration": {},
             "language": "en",
             "scheduling": {
-                "access_control": {
-                    "enabled": True,
-                    "interval": "* * * * *"
-                },
-                "full": {
-                    "enabled": True,
-                    "interval": "* * * * *"
-                },
-                "incremental": {
-                    "enabled": True,
-                    "interval": "* * * * *"
-                }
+                "access_control": {"enabled": True, "interval": "* * * * *"},
+                "full": {"enabled": True, "interval": "* * * * *"},
+                "incremental": {"enabled": True, "interval": "* * * * *"},
             },
             "status": "created",
             "last_seen": iso_utc(),
@@ -413,25 +404,34 @@ async def test_heartbeat(interval, last_seen, should_send_heartbeat):
 @pytest.mark.parametrize(
     "job_type, expected_doc_source_update",
     [
-        (JobType.FULL, {
-            "last_sync_status": JobStatus.IN_PROGRESS.value,
-            "last_sync_error": None,
-            "status": Status.CONNECTED.value,
-            "error": None,
-        }),
-        (JobType.INCREMENTAL, {
-            "last_sync_status": JobStatus.IN_PROGRESS.value,
-            "last_sync_error": None,
-            "status": Status.CONNECTED.value,
-            "error": None,
-        }),
-        (JobType.ACCESS_CONTROL, {
-            "last_access_control_sync_status": JobStatus.IN_PROGRESS.value,
-            "last_access_control_sync_error": None,
-            "status": Status.CONNECTED.value,
-            "error": None,
-        })
-    ]
+        (
+            JobType.FULL,
+            {
+                "last_sync_status": JobStatus.IN_PROGRESS.value,
+                "last_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+            },
+        ),
+        (
+            JobType.INCREMENTAL,
+            {
+                "last_sync_status": JobStatus.IN_PROGRESS.value,
+                "last_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+            },
+        ),
+        (
+            JobType.ACCESS_CONTROL,
+            {
+                "last_access_control_sync_status": JobStatus.IN_PROGRESS.value,
+                "last_access_control_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+            },
+        ),
+    ],
 )
 @pytest.mark.asyncio
 async def test_sync_starts(job_type, expected_doc_source_update):
@@ -501,7 +501,9 @@ def mock_job(
             },
         ),
         (
-            mock_job(status=JobStatus.ERROR, job_type=JobType.FULL, error="something wrong"),
+            mock_job(
+                status=JobStatus.ERROR, job_type=JobType.FULL, error="something wrong"
+            ),
             {
                 "last_sync_status": JobStatus.ERROR.value,
                 "last_synced": ANY,
@@ -525,7 +527,9 @@ def mock_job(
             },
         ),
         (
-            mock_job(status=JobStatus.SUSPENDED, job_type=JobType.FULL, terminated=False),
+            mock_job(
+                status=JobStatus.SUSPENDED, job_type=JobType.FULL, terminated=False
+            ),
             {
                 "last_sync_status": JobStatus.SUSPENDED.value,
                 "last_synced": ANY,
@@ -573,7 +577,11 @@ def mock_job(
             },
         ),
         (
-            mock_job(status=JobStatus.ERROR, job_type=JobType.ACCESS_CONTROL, error="something wrong"),
+            mock_job(
+                status=JobStatus.ERROR,
+                job_type=JobType.ACCESS_CONTROL,
+                error="something wrong",
+            ),
             {
                 "last_access_control_sync_status": JobStatus.ERROR.value,
                 "last_synced": ANY,
@@ -585,7 +593,11 @@ def mock_job(
             },
         ),
         (
-            mock_job(status=JobStatus.SUSPENDED, job_type=JobType.ACCESS_CONTROL, terminated=False),
+            mock_job(
+                status=JobStatus.SUSPENDED,
+                job_type=JobType.ACCESS_CONTROL,
+                terminated=False,
+            ),
             {
                 "last_access_control_sync_status": JobStatus.SUSPENDED.value,
                 "last_synced": ANY,
@@ -630,11 +642,13 @@ mock_next_run = iso_utc()
         (False, None, JobType.FULL),
         (True, mock_next_run, JobType.FULL),
         (False, None, JobType.INCREMENTAL),
-        (True, mock_next_run, JobType.INCREMENTAL)
+        (True, mock_next_run, JobType.INCREMENTAL),
     ],
 )
 @patch("connectors.protocol.connectors.next_run")
-async def test_connector_next_sync(next_run, scheduling_enabled, expected_next_sync, job_type):
+async def test_connector_next_sync(
+    next_run, scheduling_enabled, expected_next_sync, job_type
+):
     connector_doc = {
         "_id": "1",
         "_source": {
@@ -649,8 +663,8 @@ async def test_connector_next_sync(next_run, scheduling_enabled, expected_next_s
                 },
                 "incremental": {
                     "enabled": scheduling_enabled,
-                    "interval": "1 * * * * *"
-                }
+                    "interval": "1 * * * * *",
+                },
             },
         },
     }
@@ -1196,10 +1210,12 @@ async def test_connector_reset_sync_now_flag():
         (JobType.FULL, "last_sync_scheduled_at"),
         (JobType.INCREMENTAL, "last_incremental_sync_scheduled_at"),
         (JobType.ACCESS_CONTROL, "last_access_control_sync_scheduled_at"),
-    ]
+    ],
 )
 @pytest.mark.asyncio
-async def test_connector_update_last_sync_scheduled_at_by_job_type(job_type, date_field_to_update):
+async def test_connector_update_last_sync_scheduled_at_by_job_type(
+    job_type, date_field_to_update
+):
     doc_id = "2"
     seq_no = 2
     primary_term = 1
@@ -1527,7 +1543,7 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
                 Features.ADVANCED_RULES_NEW: False,
                 Features.BASIC_RULES_OLD: False,
                 Features.ADVANCED_RULES_OLD: False,
-                Features.DOCUMENT_LEVEL_SECURITY: False
+                Features.DOCUMENT_LEVEL_SECURITY: False,
             },
         ),
         (
@@ -1537,9 +1553,9 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
                 Features.ADVANCED_RULES_NEW: False,
                 Features.BASIC_RULES_OLD: False,
                 Features.ADVANCED_RULES_OLD: False,
-                Features.DOCUMENT_LEVEL_SECURITY: False
+                Features.DOCUMENT_LEVEL_SECURITY: False,
             },
-        )
+        ),
     ],
 )
 def test_feature_enabled(features_json, feature_enabled):
@@ -1642,9 +1658,7 @@ def test_sync_rules_enabled(features_json, sync_rules_enabled):
             False,
         ),
         (
-            {
-                "incremental_sync": {}
-            },
+            {"incremental_sync": {}},
             False,
         ),
         ({"other_feature": True}, False),
@@ -1656,42 +1670,6 @@ def test_incremental_sync_enabled(features_json, incremental_sync_enabled):
     features = Features(features_json)
 
     assert features.incremental_sync_enabled() == incremental_sync_enabled
-
-
-@pytest.mark.parametrize(
-    "features_json, document_level_security_enabled",
-    [
-        (
-            {
-                "document_level_security": {
-                    "enabled": True,
-                },
-            },
-            True,
-        ),
-        (
-            {
-                "document_level_security": {
-                    "enabled": False,
-                },
-            },
-            False,
-        ),
-        (
-            {
-                "document_level_security": {}
-            },
-            False,
-        ),
-        ({"other_feature": True}, False),
-        (None, False),
-        ({}, False),
-    ],
-)
-def test_incremental_sync_enabled(features_json, document_level_security_enabled):
-    features = Features(features_json)
-
-    assert features.document_level_security_enabled() == document_level_security_enabled
 
 
 @pytest.mark.parametrize(
@@ -1752,7 +1730,9 @@ async def test_create_job(index_method, trigger_method, set_env):
     }
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    await sync_job_index.create(connector=connector, trigger_method=trigger_method, job_type=JobType.INCREMENTAL)
+    await sync_job_index.create(
+        connector=connector, trigger_method=trigger_method, job_type=JobType.INCREMENTAL
+    )
 
     index_method.assert_called_with(expected_index_doc)
 

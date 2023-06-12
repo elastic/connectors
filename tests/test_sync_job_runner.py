@@ -85,7 +85,9 @@ def create_runner(
 
 @pytest.fixture(autouse=True)
 def elastic_server_mock():
-    with patch("connectors.sync_job_runner.SyncOrchestrator") as elastic_server_klass_mock:
+    with patch(
+        "connectors.sync_job_runner.SyncOrchestrator"
+    ) as elastic_server_klass_mock:
         elastic_server_mock = Mock()
         elastic_server_mock.prepare_content_index = AsyncMock()
         elastic_server_mock.async_bulk = AsyncMock()
@@ -179,7 +181,7 @@ async def test_source_invalid_config():
     assert sync_job_runner.elastic_server is None
     sync_job_runner.connector.sync_starts.assert_awaited()
     sync_job_runner.sync_job.claim.assert_awaited()
-    sync_job_runner.sync_job.done.assert_not_awaited
+    sync_job_runner.sync_job.done.assert_not_awaited()
     sync_job_runner.sync_job.fail.assert_awaited_with(
         ANY, ingestion_stats=ingestion_stats
     )
@@ -203,7 +205,7 @@ async def test_source_not_available():
     assert sync_job_runner.elastic_server is None
     sync_job_runner.connector.sync_starts.assert_awaited()
     sync_job_runner.sync_job.claim.assert_awaited()
-    sync_job_runner.sync_job.done.assert_not_awaited
+    sync_job_runner.sync_job.done.assert_not_awaited()
     sync_job_runner.sync_job.fail.assert_awaited_with(
         ANY, ingestion_stats=ingestion_stats
     )
@@ -228,7 +230,7 @@ async def test_invalid_filtering():
     assert sync_job_runner.elastic_server is None
     sync_job_runner.connector.sync_starts.assert_awaited()
     sync_job_runner.sync_job.claim.assert_awaited()
-    sync_job_runner.sync_job.done.assert_not_awaited
+    sync_job_runner.sync_job.done.assert_not_awaited()
     sync_job_runner.sync_job.fail.assert_awaited_with(
         ANY, ingestion_stats=ingestion_stats
     )
@@ -255,7 +257,7 @@ async def test_async_bulk_error(elastic_server_mock):
     sync_job_runner.connector.sync_starts.assert_awaited()
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
-    sync_job_runner.sync_job.done.assert_not_awaited
+    sync_job_runner.sync_job.done.assert_not_awaited()
     sync_job_runner.sync_job.fail.assert_awaited_with(
         error, ingestion_stats=ingestion_stats
     )
@@ -281,7 +283,7 @@ async def test_sync_job_runner(elastic_server_mock):
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_awaited_with(ingestion_stats=ingestion_stats)
-    sync_job_runner.sync_job.fail.assert_not_awaited
+    sync_job_runner.sync_job.fail.assert_not_awaited()
     sync_job_runner.sync_job.cancel.assert_not_awaited()
     sync_job_runner.sync_job.suspend.assert_not_awaited()
     sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
@@ -446,7 +448,7 @@ async def test_sync_job_runner_sync_job_not_found(elastic_server_mock):
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
-    sync_job_runner.sync_job.fail.assert_not_awaited
+    sync_job_runner.sync_job.fail.assert_not_awaited()
     sync_job_runner.sync_job.cancel.assert_not_awaited()
     sync_job_runner.sync_job.suspend.assert_not_awaited()
     sync_job_runner.connector.sync_done.assert_awaited_with(None)
@@ -475,7 +477,7 @@ async def test_sync_job_runner_canceled(elastic_server_mock):
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
-    sync_job_runner.sync_job.fail.assert_not_awaited
+    sync_job_runner.sync_job.fail.assert_not_awaited()
     sync_job_runner.sync_job.cancel.assert_awaited_with(
         ingestion_stats=ingestion_stats | {"total_document_count": total_document_count}
     )
