@@ -23,7 +23,13 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import CacheWithTimeout, convert_to_b64, html_to_text, url_encode
+from connectors.utils import (
+    CacheWithTimeout,
+    ExtractionService,
+    convert_to_b64,
+    html_to_text,
+    url_encode,
+)
 
 if "OVERRIDE_URL" in os.environ:
     logger.warning("x" * 50)
@@ -546,6 +552,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
 
         self._client = None
+        self.extraction_service = ExtractionService()
 
     @property
     def client(self):
