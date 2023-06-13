@@ -644,3 +644,12 @@ def html_to_text(html):
         # TODO: figure out which exceptions can be thrown
         # we actually don't want to raise, just fall back to bs4
         return BeautifulSoup(html, features="html.parser").get_text(separator="\n")
+
+
+async def aenumerate(asequence, start=0):
+    i = start
+    async for elem in asequence:
+        try:
+            yield i, elem
+        finally:
+            i += 1
