@@ -112,8 +112,9 @@ async def test_native_config_is_warned(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
-    config["native_service_types"] = ["foo", "bar"]
-    preflight = PreflightCheck(config)
+    local_config = config.copy()
+    local_config["native_service_types"] = ["foo", "bar"]
+    preflight = PreflightCheck(local_config)
     result = await preflight.run()
     assert result is True
     patched_logger.warning.assert_any_call(
@@ -133,9 +134,10 @@ async def test_native_config_is_forced(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
-    config["native_service_types"] = ["foo", "bar"]
-    config["_force_allow_native"] = True
-    preflight = PreflightCheck(config)
+    local_config = config.copy()
+    local_config["native_service_types"] = ["foo", "bar"]
+    local_config["_force_allow_native"] = True
+    preflight = PreflightCheck(local_config)
     result = await preflight.run()
     assert result is True
     patched_logger.warning.assert_not_called()
@@ -147,9 +149,10 @@ async def test_client_config(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
-    config["connector_id"] = "foo"
-    config["service_type"] = "bar"
-    preflight = PreflightCheck(config)
+    local_config = config.copy()
+    local_config["connector_id"] = "foo"
+    local_config["service_type"] = "bar"
+    preflight = PreflightCheck(local_config)
     result = await preflight.run()
     assert result is True
     patched_logger.warning.assert_not_called()
