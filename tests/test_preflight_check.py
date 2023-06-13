@@ -4,9 +4,10 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+from unittest.mock import patch
+
 import pytest
-import connectors
-from unittest.mock import MagicMock, Mock, patch
+
 from connectors.preflight_check import PreflightCheck
 from connectors.protocol import CONNECTORS_INDEX, JOBS_INDEX
 
@@ -104,6 +105,7 @@ async def test_index_exist_transient_error(mock_responses):
     result = await preflight.run()
     assert result is True
 
+
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
 async def test_native_config_is_warned(patched_logger, mock_responses):
@@ -114,9 +116,16 @@ async def test_native_config_is_warned(patched_logger, mock_responses):
     preflight = PreflightCheck(config)
     result = await preflight.run()
     assert result is True
-    patched_logger.warning.assert_any_call("The configuration 'native_service_types' has been deprecated. Please remove this configuration.")
-    patched_logger.warning.assert_any_call("Native Connectors are only supported internal to Elastic Cloud deployments, which this process is not.")
-    patched_logger.warning.assert_any_call("Please update your config.yml to explicitly configure a 'connector_id' and a 'service_type'")
+    patched_logger.warning.assert_any_call(
+        "The configuration 'native_service_types' has been deprecated. Please remove this configuration."
+    )
+    patched_logger.warning.assert_any_call(
+        "Native Connectors are only supported internal to Elastic Cloud deployments, which this process is not."
+    )
+    patched_logger.warning.assert_any_call(
+        "Please update your config.yml to explicitly configure a 'connector_id' and a 'service_type'"
+    )
+
 
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
@@ -130,6 +139,7 @@ async def test_native_config_is_forced(patched_logger, mock_responses):
     result = await preflight.run()
     assert result is True
     patched_logger.warning.assert_not_called()
+
 
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")

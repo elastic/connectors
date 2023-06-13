@@ -77,11 +77,20 @@ class PreflightCheck:
         configured_native_types = "native_service_types" in self.config
         force_allowed_native = self.config.get("_force_allow_native", False)
         if configured_native_types and not force_allowed_native:
-            logger.warning("The configuration 'native_service_types' has been deprecated. Please remove this configuration.")
-            logger.warning("Native Connectors are only supported internal to Elastic Cloud deployments, which this process is not.")
+            logger.warning(
+                "The configuration 'native_service_types' has been deprecated. Please remove this configuration."
+            )
+            logger.warning(
+                "Native Connectors are only supported internal to Elastic Cloud deployments, which this process is not."
+            )
 
         # Connector client mode
         configured_connector_id = self.config.get("connector_id", None)
         configred_service_type = self.config.get("service_type", None)
-        if not (configured_connector_id and configred_service_type) and not force_allowed_native:
-            logger.warning("Please update your config.yml to explicitly configure a 'connector_id' and a 'service_type'")
+        if (
+            not (configured_connector_id and configred_service_type)
+            and not force_allowed_native
+        ):
+            logger.warning(
+                "Please update your config.yml to explicitly configure a 'connector_id' and a 'service_type'"
+            )
