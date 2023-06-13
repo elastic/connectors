@@ -712,7 +712,9 @@ class ExtractionService:
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                f"{self.host}/extract_local_file_text", headers=self.headers, json=params
+                f"{self.host}/extract_local_file_text",
+                headers=self.headers,
+                json=params,
             ) as response:
                 return await self.parse_extraction_resp(filename, response)
 

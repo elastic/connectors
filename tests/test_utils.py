@@ -18,7 +18,6 @@ import timeit
 from datetime import datetime
 from unittest.mock import Mock, mock_open, patch
 
-import aiohttp
 import pytest
 import pytest_asyncio
 from aioresponses import aioresponses
@@ -641,4 +640,3 @@ class TestExtractionService:
                 response = await extraction_service.extract_text(filename)
 
                 assert response == "I've been extracted!"
-

@@ -8,7 +8,6 @@ import base64
 import re
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from unittest import mock
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import aiohttp
