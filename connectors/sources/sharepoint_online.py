@@ -565,25 +565,25 @@ class SharepointOnlineDataSource(BaseDataSource):
     def get_default_configuration(cls):
         return {
             "tenant_id": {
-                "label": "Tenant Id",
+                "label": "Tenant ID",
                 "order": 1,
                 "type": "str",
                 "value": "",
             },
             "tenant_name": {  # TODO: when Tenant API is going out of Beta, we can remove this field
-                "label": "Tenant Name",
+                "label": "Tenant name",
                 "order": 2,
                 "type": "str",
                 "value": "",
             },
             "client_id": {
-                "label": "Client Id",
+                "label": "Client ID",
                 "order": 3,
                 "type": "str",
                 "value": "",
             },
             "secret_value": {
-                "label": "Secret Value",
+                "label": "Secret value",
                 "order": 4,
                 "sensitive": True,
                 "type": "str",
