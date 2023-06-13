@@ -338,6 +338,8 @@ class Extractor:
                     await self.get_docs(generator)
                 case JobType.INCREMENTAL:
                     await self.get_docs_incrementally(generator)
+                case JobType.ACCESS_CONTROL:
+                    await self.get_access_control_docs(generator)
                 case _:
                     raise UnsupportedJobType
         except asyncio.CancelledError:
@@ -345,7 +347,7 @@ class Extractor:
             raise
 
     @tracer.start_as_current_span("get_doc call", slow_log=1.0)
-    async def _wrap_generator(self, generator):
+    async def _decorate_with_metrics_span(self, generator):
         """Wrapper for metrics"""
         async for doc in generator:
             yield doc
@@ -357,7 +359,7 @@ class Extractor:
         Extraction happens in a separate task, when a document contains files.
         """
         logger.info("Starting doc lookups")
-        generator = self._wrap_generator(generator)
+        generator = self._decorate_with_metrics_span(generator)
 
         self.sync_runs = True
 
@@ -461,7 +463,7 @@ class Extractor:
         Extraction happens in a separate task, when a document contains files.
         """
         logger.info("Starting doc lookups")
-        generator = self._wrap_generator(generator)
+        generator = self._decorate_with_metrics_span(generator)
 
         self.sync_runs = True
 
@@ -521,6 +523,89 @@ class Extractor:
             await lazy_downloads.join()
 
         await self.queue.put("END_DOCS")
+
+    async def get_access_control_docs(self, generator):
+        """Iterate on a generator of access control documents to fill a queue with bulk operations for the `Sink` to consume.
+
+        A document might be discarded if its timestamp has not changed.
+        """
+        logger.info("Starting access control doc lookups")
+        generator = self._decorate_with_metrics_span(generator)
+
+        self.sync_runs = True
+
+        existing_ids = {
+            doc_id: last_update_timestamp
+            async for (doc_id, last_update_timestamp) in self._get_existing_ids()
+        }
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                f"Size of {len(existing_ids)} access control document ids  in memory is {get_mb_size(existing_ids)}MiB"
+            )
+
+        count = 0
+        try:
+            async for doc in generator:
+                doc, _, _ = doc
+                count += 1
+                if count % self.display_every == 0:
+                    logger.info(str(self))
+
+                doc_id = doc["id"] = doc.pop("_id")
+                doc_exists = doc_id in existing_ids
+
+                if doc_exists:
+                    last_update_timestamp = existing_ids.pop(doc_id)
+                    doc_not_updated = (
+                        TIMESTAMP_FIELD in doc
+                        and last_update_timestamp == doc[TIMESTAMP_FIELD]
+                    )
+
+                    if doc_not_updated:
+                        continue
+
+                    self.total_docs_updated += 1
+
+                    operation = OP_UPSERT
+                else:
+                    self.total_docs_created += 1
+
+                    if TIMESTAMP_FIELD not in doc:
+                        doc[TIMESTAMP_FIELD] = iso_utc()
+
+                    operation = OP_INDEX
+
+                await self.queue.put(
+                    {
+                        "_op_type": operation,
+                        "_index": self.index,
+                        "_id": doc_id,
+                        "doc": doc,
+                    }
+                )
+
+                await asyncio.sleep(0)
+        except Exception as e:
+            logger.critical("The document fetcher failed", exc_info=True)
+            await self.queue.put("FETCH_ERROR")
+            self.fetch_error = e
+            return
+
+        await self.enqueue_docs_to_delete(existing_ids)
+        await self.queue.put("END_DOCS")
+
+    async def enqueue_docs_to_delete(self, existing_ids):
+        logger.debug(f"Delete {len(existing_ids)} docs from index '{self.index}'")
+        for doc_id in existing_ids.keys():
+            await self.queue.put(
+                {
+                    "_op_type": OP_DELETE,
+                    "_index": self.index,
+                    "_id": doc_id,
+                }
+            )
+            self.total_docs_deleted += 1
 
 
 class IndexMissing(Exception):

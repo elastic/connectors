@@ -779,7 +779,7 @@ async def test_base_class():
         await ds.get_docs_incrementally({})
 
     with pytest.raises(NotImplementedError):
-        await ds.get_permissions()
+        await ds.get_access_control()
 
     # default rule validators for every data source (order matters)
     assert BaseDataSource.basic_rules_validators() == [
