@@ -113,6 +113,7 @@ def main(args=None):
     if args.action in ("start_stack", "stop_stack"):
         os.chdir(os.path.join(os.path.dirname(__file__), args.name))
         if args.action == "start_stack":
+            os.system("docker compose pull")
             os.system("docker compose up -d")
             # TODO: do better
             time.sleep(30)
