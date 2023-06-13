@@ -49,6 +49,7 @@ $PYTHON -m pip install -r $NAME/requirements.txt
 fi
 $PYTHON fixture.py --name $NAME --action setup
 $PYTHON fixture.py --name $NAME --action start_stack
+$PYTHON fixture.py --name $NAME --action check_stack
 $ROOT_DIR/bin/fake-kibana --index-name $INDEX_NAME --service-type $SERVICE_TYPE --connector-definition $NAME/connector.json --debug
 $PYTHON fixture.py --name $NAME --action load
 $PYTHON fixture.py --name $NAME --action sync
@@ -79,7 +80,6 @@ $PYTHON fixture.py --name $NAME --action monitor --pid $PID_2
 
 NUM_DOCS=`$PYTHON fixture.py --name $NAME --action get_num_docs`
 $PYTHON $ROOT_DIR/scripts/verify.py --index-name $INDEX_NAME --service-type $NAME --size $NUM_DOCS
-$PYTHON fixture.py --name $NAME --action stop_stack
 $PYTHON fixture.py --name $NAME --action teardown
 
 # Wait for PERF8 to compile the report
@@ -101,4 +101,5 @@ if [[ $PERF8 == "yes" ]]; then
     exit $STATUS
 fi
 
-
+# stopping the stack as a final step once everything else is done.
+$PYTHON fixture.py --name $NAME --action stop_stack
