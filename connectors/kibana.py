@@ -354,7 +354,7 @@ async def upsert_index(
     # TODO: bulk
 
     if doc_ids is None:
-        for doc_id, doc in enumerate(docs):
+        for doc_id, doc in enumerate(docs, start=1):
             await es.client.index(index=index, id=doc_id, document=doc)
     else:
         for doc, doc_id in zip(docs, doc_ids, strict=True):
