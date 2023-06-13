@@ -5,6 +5,7 @@
 #
 
 import datetime
+from datetime import timezone
 import re
 from enum import Enum
 
@@ -58,13 +59,13 @@ def to_float(value):
 def to_datetime(value):
     try:
         date_parser = parser()
-        parsed_date_or_datetime = date_parser.parse(timestr=value)
+        parsed_date_or_datetime = date_parser.parse(timestr=value).astimezone(timezone.utc)
 
         if isinstance(parsed_date_or_datetime, datetime.datetime):
             return parsed_date_or_datetime
         elif isinstance(parsed_date_or_datetime, datetime.date):
             # adds 00:00 to the date and returns datetime
-            return datetime.datetime.combine(parsed_date_or_datetime, datetime.time.min)
+            return datetime.datetime.combine(parsed_date_or_datetime, datetime.time.min).replace(tzinfo=timezone.utc)
 
         return value
 

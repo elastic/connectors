@@ -1289,11 +1289,11 @@ def test_coerce_rule_value_to_datetime_date_if_it_is_date():
         policy=Policy.INCLUDE,
         field=DESCRIPTION_KEY,
         rule=Rule.LESS_THAN,
-        value=str(datetime.date(year=2022, month=1, day=1, tzinfo=timezone.utc)),
+        value=str(datetime.date(year=2022, month=1, day=1)),
     )
 
     coerced_rule_value = basic_rule.coerce_rule_value_based_on_document_value(
-        datetime.date(year=2023, month=2, day=2, tzinfo=timezone.utc)
+        datetime.date(year=2023, month=2, day=2)
     )
 
     assert isinstance(coerced_rule_value, datetime.date)
