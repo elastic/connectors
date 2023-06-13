@@ -658,8 +658,12 @@ async def aenumerate(asequence, start=0):
 
 
 class ExtractionService:
-    """
-    TODO docstring
+    """Data extraction service manager
+
+    Calling `extract_text` with a filename will begin text extraction
+    using an instance of the data extraction service.
+    Requires the data extraction service to be running and
+    extraction_service settings in config.yml to be configured correctly.
     """
 
     def __init__(self):
@@ -671,6 +675,7 @@ class ExtractionService:
             config = yaml.safe_load(file)
 
         self.host = config["extraction_service"]["host"]
+        # TODO header accept-encoding should be removed by server, not here
         self.headers = {"Accept": "application/json", "Accept-Encoding": ""}
         self.use_file_pointers = config["extraction_service"]["text_extraction"][
             "use_file_pointers"
@@ -686,15 +691,13 @@ class ExtractionService:
 
         content = ""
 
-        logger.info(filename)
-
-        # try:
-        if self.use_file_pointers:
-            content = await self.extract_with_file_pointer(filename)
-        else:
-            content = await self.extract_with_file_send(filename)
-        # except Exception as e:
-        #     logger.warn(f"Text extraction unexpectedly failed: {e}")
+        try:
+            if self.use_file_pointers:
+                content = await self.extract_with_file_pointer(filename)
+            else:
+                content = await self.extract_with_file_send(filename)
+        except Exception as e:
+            logger.warn(f"Text extraction unexpectedly failed: {e}")
 
         return content
 
@@ -707,11 +710,11 @@ class ExtractionService:
 
         params = {"local_file_path": filename}
 
-        async with aiohttp.ClientSession(
-            self.host,
-            headers=self.headers,
-        ).put("/extract_local_file_text/", params=params) as response:
-            return await self.parse_extraction_resp(filename, response)
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.host}/extract_local_file_text", headers=self.headers, json=params
+            ) as response:
+                return await self.parse_extraction_resp(filename, response)
 
     async def extract_with_file_send(self, filename):
         """Sends a request to tika-server to extract text from a file.
@@ -720,16 +723,13 @@ class ExtractionService:
         Returns a parsed response
         """
 
-        async with aiohttp.ClientSession(
-            self.host,
-            headers=self.headers,
-        ) as session:
-            # with aiohttp.MultipartWriter('form-data') as writer:
-            # async with aiofiles.open(filename, 'r') as f:
+        async with aiohttp.ClientSession() as session:
             file_data = aiohttp.FormData()
             file_data.add_field("file", open(filename, "rb"))
 
-            async with session.post("/extract_text/", data=file_data) as response:
+            async with session.post(
+                f"{self.host}/extract_text", headers=self.headers, data=file_data
+            ) as response:
                 return await self.parse_extraction_resp(filename, response)
 
     async def parse_extraction_resp(self, filename, response):
@@ -739,7 +739,7 @@ class ExtractionService:
         """
         content = await response.json()
 
-        # TODO better error handling
+        # TODO expand error handling
         if response.status != 200:
             logger.warn(
                 f"Extraction service could not parse `{os.path.basename(filename)}'. Status: [{response.status}]."
