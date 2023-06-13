@@ -470,7 +470,7 @@ class BaseDataSource:
         """
         pass
 
-    async def get_permissions(self):
+    async def get_access_control(self):
         """Returns an asynchronous iterator on the permission documents present in the backend.
 
         Each document is a dictionary containing permission data indexed into a corresponding permissions index.
