@@ -92,8 +92,8 @@ def test_prepare_blob_doc():
     }
     expected_output = {
         "_id": "container1/blob1",
-        "_timestamp": "2022-04-21T12:12:30",
-        "created at": "2022-04-21T12:12:30",
+        "_timestamp": "2022-04-21T12:12:30+00:00",
+        "created at": "2022-04-21T12:12:30+00:00",
         "content type": "plain/text",
         "container metadata": "{'key1': 'value1', 'key2': 'value2'}",
         "metadata": "{'key1': 'value1', 'key2': 'value2'}",
@@ -173,8 +173,8 @@ async def test_get_blob():
     with patch.object(ContainerClient, "list_blobs", return_value=mock_response):
         expected_output = {
             "_id": "container1/blob1",
-            "_timestamp": "2022-04-21T12:12:30",
-            "created at": "2022-04-21T12:12:30",
+            "_timestamp": "2022-04-21T12:12:30+00:00",
+            "created at": "2022-04-21T12:12:30+00:00",
             "content type": "plain/text",
             "container metadata": "{'key1': 'value1'}",
             "metadata": "{'key1': 'value1', 'key2': 'value2'}",

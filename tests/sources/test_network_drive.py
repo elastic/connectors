@@ -186,19 +186,19 @@ async def test_get_files(dir_mock):
     expected_output = [
         {
             "_id": "1",
-            "_timestamp": "2022-04-21T12:12:30",
+            "_timestamp": "2022-04-21T12:12:30+00:00",
             "path": "\\1.2.3.4/dummy_path/a1.md",
             "title": "a1.md",
-            "created_at": "2022-01-11T12:12:30",
+            "created_at": "2022-01-11T12:12:30+00:00",
             "size": "30",
             "type": "file",
         },
         {
             "_id": "122",
-            "_timestamp": "2022-05-21T12:12:30",
+            "_timestamp": "2022-05-21T12:12:30+00:00",
             "path": "\\1.2.3.4/dummy_path/A",
             "title": "A",
-            "created_at": "2022-02-11T12:12:30",
+            "created_at": "2022-02-11T12:12:30+00:00",
             "size": "200",
             "type": "folder",
         },
