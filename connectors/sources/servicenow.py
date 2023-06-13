@@ -5,17 +5,19 @@
 #
 """ServiceNow source module responsible to fetch documents from ServiceNow."""
 import asyncio
+import base64
 import json
 import os
+import uuid
 from enum import Enum
 from functools import cached_property, partial
+from urllib.parse import urlencode
 
 import aiofiles
 import aiohttp
 import dateutil.parser as parser
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
-from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
@@ -24,16 +26,22 @@ from connectors.utils import (
     CancellableSleeps,
     ConcurrentTasks,
     MemQueue,
+    RetryStrategy,
     convert_to_b64,
     iso_utc,
+    retryable,
 )
 
 RETRIES = 3
 RETRY_INTERVAL = 2
+CHUNK_SIZE = 1024
 QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
 FILE_SIZE_LIMIT = 10485760  # Size in Bytes
-FETCH_SIZE = 1000
-MAX_CONCURRENCY_SUPPORT = 10
+CONCURRENT_TASK = 1000  # 200 * x times, where x = no. of services configured
+MAX_CONCURRENT_CLIENT_SUPPORT = 10
+TABLE_FETCH_SIZE = 50
+TABLE_BATCH_SIZE = 5
+ATTACHMENT_BATCH_SIZE = 10
 
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
@@ -44,6 +52,7 @@ ENDPOINTS = {
     "TABLE": "/api/now/table/{table}",
     "ATTACHMENT": "/api/now/attachment",
     "DOWNLOAD": "/api/now/attachment/{sys_id}/file",
+    "BATCH": "/api/now/v1/batch",
 }
 DEFAULT_SERVICE_NAMES = (
     "sys_user",
@@ -57,6 +66,7 @@ DEFAULT_SERVICE_NAMES = (
 class EndSignal(Enum):
     SERVICE = "SERVICE_TASK_FINISHED"
     RECORD = "RECORD_TASK_FINISHED"
+    ATTACHMENT = "ATTACHMENT_TASK_FINISHED"
 
 
 class InvalidResponse(Exception):
@@ -87,7 +97,7 @@ class ServiceNowClient:
         """
 
         logger.debug("Generating aiohttp client session")
-        connector = aiohttp.TCPConnector(limit=MAX_CONCURRENCY_SUPPORT)
+        connector = aiohttp.TCPConnector(limit=MAX_CONCURRENT_CLIENT_SUPPORT)
         basic_auth = aiohttp.BasicAuth(
             login=self.configuration["username"],
             password=self.configuration["password"],
@@ -107,88 +117,134 @@ class ServiceNowClient:
             raise_for_status=True,
         )
 
-    async def _api_call(self, url, params, is_attachment=False):
-        """Handle every api call to ServiceNow instance with retries.
+    async def _api_call(self, url, params, actions, method):
+        return await getattr(self._get_session, method)(
+            url=url, params=params, json=actions
+        )
 
-        Args:
-            url (str): ServiceNow url to be executed.
-            params (dict): Params to format the query.
-            is_attachment (bool, False): Flag for handle attachment api call. Defaults to False.
+    async def _read_response(self, response):
+        fetched_response = await response.read()
+        if fetched_response == b"":
+            raise InvalidResponse(
+                "Request to ServiceNow server returned an empty response."
+            )
+        elif not response.headers["Content-Type"].startswith("application/json"):
+            if response.headers.get("Connection") == "close":
+                raise Exception("Couldn't connect to ServiceNow instance")
+            raise InvalidResponse(
+                f"Cannot proceed due to unexpected response type '{response.headers['Content-Type']}'; response type must begin with 'application/json'."
+            )
+        return fetched_response
 
-        Raises:
-            InvalidResponse: An instance of InvalidResponse class.
-            Exception: An instance of an exception class.
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_table_length(self, table_name):
+        try:
+            url = ENDPOINTS["TABLE"].format(table=table_name)
+            params = {"sysparm_limit": 1}
+            response = await self._api_call(
+                url=url, params=params, actions={}, method="get"
+            )
+            await self._read_response(response=response)
+            return int(response.headers.get("x-total-count", 0))
+        except Exception as exception:
+            logger.warning(
+                f"Error while fetching {table_name} length. Exception: {exception}."
+            )
+            raise
 
-        Yields:
-            list: Table & Attachment metadata.
-            str: Attachment content.
-        """
-        retry = 1
-        offset = 0
-
-        if not is_attachment:
+    def _prepare_url(self, url, params, offset):
+        if not url.endswith("/file"):
             query = ORDER_BY_CREATION_DATE_QUERY
             if "sysparm_query" in params.keys():
                 query += params["sysparm_query"]
-            params.update({"sysparm_query": query, "sysparm_limit": FETCH_SIZE})
+            params.update(
+                {
+                    "sysparm_query": query,
+                    "sysparm_limit": TABLE_FETCH_SIZE,
+                    "sysparm_offset": offset,
+                }
+            )
+        full_url = url
+        if params:
+            params_string = urlencode(params)
+            full_url = f"{url}?{params_string}"
+        return full_url
 
-        while True:
-            if not is_attachment:
-                params["sysparm_offset"] = offset
+    def get_record_apis(self, url, params, total_count):
+        headers = [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "Accept", "value": "application/json"},
+        ]
+        apis = []
+        for page in range(int(total_count / TABLE_FETCH_SIZE) + 1):
+            apis.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "headers": headers,
+                    "method": "GET",
+                    "url": self._prepare_url(
+                        url=url,
+                        params=params.copy(),
+                        offset=page * TABLE_FETCH_SIZE,
+                    ),
+                }
+            )
+        return apis
 
-            try:
-                async with self._get_session.get(  # pyright: ignore
-                    url=url, params=params
-                ) as response:
-                    if (
-                        not RUNNING_FTEST
-                        and response.headers.get("Connection") == "close"
-                    ):
-                        raise Exception("Couldn't connect to ServiceNow instance")
+    def get_attachment_apis(self, url, ids):
+        headers = [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "Accept", "value": "application/json"},
+        ]
+        apis = []
+        for id in ids:
+            params = {"table_sys_id": id}
+            apis.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "headers": headers,
+                    "method": "GET",
+                    "url": self._prepare_url(url=url, params=params.copy(), offset=0),
+                }
+            )
+        return apis
 
-                    if is_attachment:
-                        yield response
-                        break
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def _batch_api_call(self, batch_data):
+        response = await self._api_call(
+            url=ENDPOINTS["BATCH"], params={}, actions=batch_data, method="post"
+        )
+        json_response = json.loads(await self._read_response(response=response))
 
-                    fetched_response = await response.read()
-                    if fetched_response == b"":
-                        raise InvalidResponse(
-                            "Request to ServiceNow server returned an empty response."
-                        )
-                    elif not response.headers["Content-Type"].startswith(
-                        "application/json"
-                    ):
-                        raise InvalidResponse(
-                            f"Cannot proceed due to unexpected response type '{response.headers['Content-Type']}'; response type must begin with 'application/json'."
-                        )
-
-                    json_response = json.loads(fetched_response)
-                    result = json_response["result"]
-
-                    response_length = len(result)
-                    if response_length == 0:
-                        break
-
-                    offset += response_length
-                    retry = 1
-                    yield result
-
-            except Exception as exception:
-                if isinstance(
-                    exception,
-                    ServerDisconnectedError,
-                ):
-                    await self._get_session.close()
-                    del self._get_session
-
-                logger.warning(
-                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}."
+        for response in json_response["serviced_requests"]:
+            if response["status_code"] != 200:
+                error_message = json.loads(base64.b64decode(response["body"]))["error"]
+                raise InvalidResponse(
+                    f"Cannot proceed due to invalid status code {response['status_code']}; Message {error_message}."
                 )
-                await self._sleeps.sleep(RETRY_INTERVAL**retry)
+            yield json.loads(base64.b64decode(response["body"]))["result"]
 
-                if retry == self.retry_count:
-                    raise exception
-                retry += 1
+    def _prepare_batch(self, requests):
+        return {"batch_request_id": str(uuid.uuid4()), "rest_requests": requests}
+
+    async def get_data(self, batched_apis):
+        try:
+            batch_data = self._prepare_batch(requests=batched_apis)
+            async for response in self._batch_api_call(batch_data=batch_data):
+                yield response
+        except Exception as exception:
+            logger.debug(
+                f"Error while fetching batch: {batched_apis} data. Exception: {exception}."
+            )
+            raise
 
     async def filter_services(self):
         """Filter services based on service mappings.
@@ -202,41 +258,28 @@ class ServiceNowClient:
             service_names, invalid_services = [], self.services.copy()
 
             payload = {"sysparm_fields": "label, name"}
-            async for response in self._api_call(
-                url=ENDPOINTS["TABLE"].format(table="sys_db_object"), params=payload
-            ):
-                for mapping in response:  # pyright: ignore
-                    if mapping["label"] in invalid_services:
-                        service_names.append(mapping["name"])
-                        invalid_services.remove(mapping["label"])
+            table_length = await self.get_table_length(table_name="sys_db_object")
+            record_apis = self.get_record_apis(
+                url=ENDPOINTS["TABLE"].format(table="sys_db_object"),
+                params=payload,
+                total_count=table_length,
+            )
+
+            for batched_apis_index in range(0, len(record_apis), TABLE_BATCH_SIZE):
+                batched_apis = record_apis[
+                    batched_apis_index : (batched_apis_index + TABLE_BATCH_SIZE)  # noqa
+                ]
+                async for table_data in self.get_data(batched_apis=batched_apis):
+                    for mapping in table_data:  # pyright: ignore
+                        if mapping["label"] in invalid_services:
+                            service_names.append(mapping["name"])
+                            invalid_services.remove(mapping["label"])
 
             return service_names, invalid_services
 
         except Exception as exception:
             logger.exception(f"Error while filtering services. Exception: {exception}.")
             raise
-
-    async def _fetch_data(self, url, params):
-        """Hit API call and iterate over the fetched response.
-
-        Args:
-            url (str): ServiceNow query to be executed.
-            params (dict): Params to format the query.
-
-        Yields:
-            dict: Formatted document.
-        """
-        async for response in self._api_call(url=url, params=params):
-            for record in response:  # pyright: ignore
-                yield record
-
-    async def get_table_data(self, url):
-        async for table_data in self._fetch_data(url=url, params={}):
-            yield table_data
-
-    async def get_attachment_data(self, url, params):
-        async for attachment_data in self._fetch_data(url=url, params=params):
-            yield attachment_data
 
     async def fetch_attachment_content(self, metadata, timestamp=None, doit=False):
         """Fetch attachment content via metadata.
@@ -280,13 +323,14 @@ class ServiceNowClient:
             temp_filename = str(async_buffer.name)
 
             try:
-                async for response in self._api_call(
+                response = await self._api_call(
                     url=ENDPOINTS["DOWNLOAD"].format(sys_id=metadata["id"]),
                     params={},
-                    is_attachment=True,
-                ):
-                    async for data, _ in response.content.iter_chunks():
-                        await async_buffer.write(data)
+                    actions={},
+                    method="get",
+                )
+                async for data in response.content.iter_chunked(CHUNK_SIZE):
+                    await async_buffer.write(data)
 
             except Exception as exception:
                 logger.warning(
@@ -310,15 +354,7 @@ class ServiceNowClient:
         return document
 
     async def ping(self):
-        payload = {
-            "sysparm_query": "label=Incident",
-            "sysparm_fields": "label, name",
-        }
-        await anext(
-            self._api_call(
-                url=ENDPOINTS["TABLE"].format(table="sys_db_object"), params=payload
-            )
-        )
+        await self.get_table_length(table_name="sys_db_object")
 
     async def close_session(self):
         """Closes unclosed client session"""
@@ -349,7 +385,7 @@ class ServiceNowDataSource(BaseDataSource):
 
         self.task_count = 0
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
-        self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY_SUPPORT)
+        self.fetchers = ConcurrentTasks(max_concurrency=CONCURRENT_TASK)
 
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by ServiceNow
@@ -377,8 +413,8 @@ class ServiceNowDataSource(BaseDataSource):
             },
             "password": {
                 "label": "Password",
-                "sensitive": True,
                 "order": 3,
+                "sensitive": True,
                 "type": "str",
                 "value": "changeme",
             },
@@ -400,14 +436,14 @@ class ServiceNowDataSource(BaseDataSource):
                 "value": RETRIES,
             },
             "concurrent_downloads": {
-                "default_value": MAX_CONCURRENCY_SUPPORT,
+                "default_value": 10,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
                 "order": 6,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": MAX_CONCURRENCY_SUPPORT,
+                "value": 10,
             },
         }
 
@@ -466,63 +502,97 @@ class ServiceNowDataSource(BaseDataSource):
                 "_timestamp": iso_utc(parser.parse(data["sys_updated_on"])),
             }
         )
-        return self.serialize(doc=data)
+        return data
 
-    async def _attachment_fetcher(self, table_sys_id):
-        """Method to add attachment metadata to queue
-
-        Args:
-            table_sys_id (str): Table Id for fetching attachment metadata.
-        """
+    async def _fetch_attachment_metadata(self, batched_apis):
         try:
-            async for attachment_metadata in self.servicenow_client.get_attachment_data(
-                url=ENDPOINTS["ATTACHMENT"], params={"table_sys_id": table_sys_id}
+            async for attachments_metadata in self.servicenow_client.get_data(
+                batched_apis=batched_apis
             ):
-                formatted_attachment_metadata = self._format_doc(
-                    data=attachment_metadata
-                )
-                serialized_attachment_metadata = self.serialize(
-                    doc=formatted_attachment_metadata
-                )
-                await self.queue.put(
-                    (  # pyright: ignore
-                        serialized_attachment_metadata,
-                        partial(
-                            self.servicenow_client.fetch_attachment_content,
-                            serialized_attachment_metadata,
-                        ),
+                for record in attachments_metadata:
+                    formatted_attachment_metadata = self._format_doc(data=record)
+                    serialized_attachment_metadata = self.serialize(
+                        doc=formatted_attachment_metadata
                     )
-                )
+                    await self.queue.put(
+                        (  # pyright: ignore
+                            serialized_attachment_metadata,
+                            partial(
+                                self.servicenow_client.fetch_attachment_content,
+                                serialized_attachment_metadata,
+                            ),
+                        )
+                    )
         except Exception as exception:
             logger.warning(
-                f"Skipping attachment data for {table_sys_id}. Exception: {exception}."
+                f"Skipping batch data for {batched_apis}. Exception: {exception}."
+            )
+
+        await self.queue.put(EndSignal.ATTACHMENT)  # pyright: ignore
+
+    async def _attachment_metadata_producer(self, record_ids):
+        attachment_apis = self.servicenow_client.get_attachment_apis(
+            url=ENDPOINTS["ATTACHMENT"], ids=record_ids
+        )
+
+        for batched_apis_index in range(0, len(attachment_apis), ATTACHMENT_BATCH_SIZE):
+            batched_apis = attachment_apis[
+                batched_apis_index : (  # noqa
+                    batched_apis_index + ATTACHMENT_BATCH_SIZE
+                )
+            ]
+            await self.fetchers.put(
+                partial(self._fetch_attachment_metadata, batched_apis)
+            )
+            self.task_count += 1
+
+        await self.queue.put(EndSignal.RECORD)  # pyright: ignore
+
+    async def _fetch_table_data(self, batched_apis):
+        try:
+            async for table_data in self.servicenow_client.get_data(
+                batched_apis=batched_apis
+            ):
+                record_ids = []
+                for record in table_data:
+                    formatted_table_data = self._format_doc(data=record)
+                    serialized_table_data = self.serialize(doc=formatted_table_data)
+                    record_ids.append(serialized_table_data["_id"])
+                    await self.queue.put(
+                        (serialized_table_data, None)  # pyright: ignore
+                    )
+                await self.fetchers.put(
+                    partial(
+                        self._attachment_metadata_producer,
+                        record_ids,
+                    )
+                )
+                self.task_count += 1
+        except Exception as exception:
+            logger.warning(
+                f"Skipping batch data for {batched_apis}. Exception: {exception}."
             )
 
         await self.queue.put(EndSignal.RECORD)  # pyright: ignore
 
-    async def _producer(self, service_name):
-        """Fetch data for configured service name.
-
-        Args:
-            service_name (str): Service Name for preparing URL.
-        """
-
+    async def _table_data_producer(self, service_name):
         logger.debug(f"Fetching {service_name} data")
         try:
-            async for table_data in self.servicenow_client.get_table_data(
-                url=ENDPOINTS["TABLE"].format(table=service_name)
-            ):
-                formatted_table_data = self._format_doc(data=table_data)
-                serialized_table_data = self.serialize(doc=formatted_table_data)
-                await self.fetchers.put(
-                    partial(
-                        self._attachment_fetcher,
-                        serialized_table_data["_id"],
-                    )
-                )
-                self.task_count += 1
+            table_length = await self.servicenow_client.get_table_length(
+                table_name=service_name
+            )
+            record_apis = self.servicenow_client.get_record_apis(
+                url=ENDPOINTS["TABLE"].format(table=service_name),
+                params={},
+                total_count=table_length,
+            )
 
-                await self.queue.put((serialized_table_data, None))  # pyright: ignore
+            for batched_apis_index in range(0, len(record_apis), TABLE_BATCH_SIZE):
+                batched_apis = record_apis[
+                    batched_apis_index : (batched_apis_index + TABLE_BATCH_SIZE)  # noqa
+                ]
+                await self.fetchers.put(partial(self._fetch_table_data, batched_apis))
+                self.task_count += 1
         except Exception as exception:
             logger.warning(
                 f"Skipping table data for {service_name}. Exception: {exception}."
@@ -562,7 +632,7 @@ class ServiceNowDataSource(BaseDataSource):
                 self.invalid_services,
             ) = await self.servicenow_client.filter_services()
         for service_name in self.valid_services or DEFAULT_SERVICE_NAMES:
-            await self.fetchers.put(partial(self._producer, service_name))
+            await self.fetchers.put(partial(self._table_data_producer, service_name))
             self.task_count += 1
 
         async for item in self._consumer():
