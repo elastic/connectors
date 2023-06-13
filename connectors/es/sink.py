@@ -537,18 +537,14 @@ class Extractor:
 
         self.sync_runs = True
 
-        start = time.time()
         existing_ids = {
             doc_id: last_update_timestamp
             async for (doc_id, last_update_timestamp) in self._get_existing_ids()
         }
-        logger.debug(
-            f"Found {len(existing_ids)} docs in {self.index} (duration "
-            f"{int(time.time() - start)} seconds) "
-        )
+
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
-                f"Size of access control document ids in memory is {get_mb_size(existing_ids)}MiB"
+                f"Size of {len(existing_ids)} access control document ids  in memory is {get_mb_size(existing_ids)}MiB"
             )
 
         count = 0
