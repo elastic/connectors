@@ -17,7 +17,6 @@ from elasticsearch import Elasticsearch
 from requests.adapters import HTTPAdapter, Retry
 from requests.auth import HTTPBasicAuth
 from retry import retry
-from urllib3.exceptions import ProtocolError
 
 CONNECTORS_INDEX = ".elastic-connectors"
 
