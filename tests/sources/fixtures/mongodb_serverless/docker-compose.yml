@@ -1,0 +1,153 @@
+version: '3.9'
+
+services:
+  es01:
+    image: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
+    container_name: es01
+    environment:
+      - node.name=es01
+      - cluster.initial_master_nodes=es01,es02,es03
+      - discovery.seed_hosts=es02,es03
+      - node.roles=[master,remote_cluster_client,ingest,index]
+      - xpack.security.enabled=false
+      - cluster.name=stateless
+      - stateless.enabled=true
+      - xpack.searchable.snapshot.shared_cache.size=1gb
+      - stateless.object_store.type=fs
+      - stateless.object_store.bucket=stateless
+      - path.repo=/objectstore
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g -Des.serverless=true
+      - ELASTIC_PASSWORD=changeme
+      - bootstrap.memory_lock=true
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - /tmp/objectstore:/objectstore
+    ports:
+      - 9200:9200
+      - 9300:9300
+    networks:
+      - esnet
+  es02:
+    image: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
+    container_name: es02
+    environment:
+      - node.name=es02
+      - cluster.initial_master_nodes=es01,es02,es03
+      - discovery.seed_hosts=es01,es03
+      - node.roles=["master","search"]
+      - xpack.security.enabled=false
+      - cluster.name=stateless
+      - stateless.enabled=true
+      - xpack.searchable.snapshot.shared_cache.size=1gb
+      - stateless.object_store.type=fs
+      - stateless.object_store.bucket=stateless
+      - path.repo=/objectstore
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g -Des.serverless=true
+      - ELASTIC_PASSWORD=changeme
+      - bootstrap.memory_lock=true
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - /tmp/objectstore:/objectstore
+    ports:
+      - 9202:9202
+      - 9302:9302
+    networks:
+      - esnet
+
+  es03:
+    image: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
+    container_name: es03
+    environment:
+      - node.name=es03
+      - cluster.initial_master_nodes=es01,es02,es03
+      - discovery.seed_hosts=es01,es02
+      - node.roles=["master"]
+      - xpack.security.enabled=false
+      - cluster.name=stateless
+      - stateless.enabled=true
+      - stateless.object_store.type=fs
+      - stateless.object_store.bucket=stateless
+      - path.repo=/objectstore
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g -Des.serverless=true
+      - ELASTIC_PASSWORD=changeme
+      - bootstrap.memory_lock=true
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - /tmp/objectstore:/objectstore
+    ports:
+      - 9203:9203
+      - 9303:9303
+    networks:
+      - esnet
+
+  mongo:
+    container_name: mongo
+    image: mongo:latest
+    volumes:
+      - mongo:/data/db
+    networks:
+      - mongo-network
+    ports:
+      - 27021:27017
+    restart: always
+    environment:
+      # provide your credentials here
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=justtesting
+
+  enterprise_search:
+    image: docker.elastic.co/enterprise-search/enterprise-search:${VERSION}
+    profiles:
+      - "enterprise-search"
+    depends_on:
+      - "es01"
+    environment:
+      - ENT_SEARCH_DEFAULT_PASSWORD=changeme
+      - elasticsearch.username=elastic
+      - elasticsearch.password=changeme
+      - elasticsearch.host=http://host.docker.internal:9200
+      - allow_es_settings_modification=true
+      - kibana.host=http://host.docker.internal:5601
+      - kibana.external_url=http://localhost:5601
+      - secret_management.encryption_keys=["4a2cd3f81d39bf28738c10db0ca782095ffac07279561809eecc722e0c20eb09"]
+      - JAVA_OPTS=-Xms2g -Xmx2g
+      - email.account.enabled=true
+      - email.account.smtp.auth=plain
+      - email.account.smtp.starttls.enable=false
+      - email.account.smtp.host=host.docker.internal
+      - email.account.smtp.port=1025
+      - email.account.email_defaults.from=local@example.com
+      - DEBUG=true
+    ports:
+      - 3002:3002
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - esnet
+
+networks:
+  mongo-network:
+    driver: bridge
+  esnet:
+
+volumes:
+  mongo:
+    driver: local

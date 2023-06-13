@@ -5,6 +5,7 @@
 #
 import functools
 import logging
+import os
 import time
 from enum import Enum
 
@@ -34,6 +35,9 @@ class License(Enum):
 
 class ESClient:
     def __init__(self, config):
+        # We don't have a way to ask the server, but it's planned
+        # for now we just use an env flag
+        self.serverless = "SERVERLESS" in os.environ
         self.config = config
         self.host = url_to_node_config(
             config.get("host", "http://localhost:9200"),

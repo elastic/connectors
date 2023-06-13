@@ -831,9 +831,10 @@ class Connector(ESDocument):
         await self.reload()
 
     async def document_count(self):
-        await self.index.client.indices.refresh(
-            index=self.index_name, ignore_unavailable=True
-        )
+        if not self.index.serverless:
+            await self.index.client.indices.refresh(
+                index=self.index_name, ignore_unavailable=True
+            )
         result = await self.index.client.count(
             index=self.index_name, ignore_unavailable=True
         )
