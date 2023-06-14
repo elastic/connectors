@@ -9,8 +9,9 @@ import time
 import elasticsearch
 
 from connectors.es import Mappings
-from connectors.es.client import with_concurrency_control
+from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
+from connectors.es.license import requires_platinum_license
 from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
 from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
@@ -25,6 +26,13 @@ ES_ID_SIZE_LIMIT = 512
 
 class SyncJobRunningError(Exception):
     pass
+
+
+class InsufficientESLicenseError(Exception):
+    def __init__(self, required_license, actual_license):
+        super().__init__(
+            f"Minimum required Elasticsearch license: '{required_license.value}'. Actual license: '{actual_license.value}'."
+        )
 
 
 class SyncJobStartError(Exception):
@@ -89,6 +97,7 @@ class SyncJobRunner:
             raise SyncJobRunningError(
                 f"Sync job {self.sync_job.id} is already running."
             )
+
         self.running = True
 
         await self.sync_starts()
@@ -114,41 +123,25 @@ class SyncJobRunner:
             logger.debug(f"Pinging the {self.source_klass} backend")
             await self.data_provider.ping()
 
-            sync_rules_enabled = self.connector.features.sync_rules_enabled()
-            if sync_rules_enabled:
-                await self.sync_job.validate_filtering(validator=self.data_provider)
-
-            mappings = Mappings.default_text_fields_mappings(
-                is_connectors_index=True,
-            )
-
-            self.elastic_server = SyncOrchestrator(self.es_config)
-
-            logger.debug("Preparing the content index")
-            await self.elastic_server.prepare_content_index(
-                self.sync_job.index_name, mappings=mappings
-            )
+            job_type = self.sync_job.job_type
 
             # allows the data provider to change the bulk options
             bulk_options = self.bulk_options.copy()
             self.data_provider.tweak_bulk_options(bulk_options)
 
-            await self.elastic_server.async_bulk(
-                self.sync_job.index_name,
-                self.prepare_docs(),
-                self.sync_job.pipeline,
-                self.sync_job.job_type,
-                filter_=self.sync_job.filtering,
-                sync_rules_enabled=sync_rules_enabled,
-                content_extraction_enabled=self.sync_job.pipeline[
-                    "extract_binary_content"
-                ],
-                options=bulk_options,
-            )
+            self.elastic_server = SyncOrchestrator(self.es_config)
+
+            if job_type in [JobType.INCREMENTAL, JobType.FULL]:
+                await self._execute_content_sync_job(job_type, bulk_options)
+            elif job_type == JobType.ACCESS_CONTROL:
+                await self._execute_access_control_sync_job(job_type, bulk_options)
+            else:
+                raise UnsupportedJobType
 
             self.job_reporting_task = asyncio.create_task(
                 self.update_ingestion_stats(JOB_REPORTING_INTERVAL)
             )
+
             while not self.elastic_server.done():
                 await self.check_job()
                 await asyncio.sleep(JOB_CHECK_INTERVAL)
@@ -170,6 +163,49 @@ class SyncJobRunner:
                 await self.elastic_server.close()
             if self.data_provider is not None:
                 await self.data_provider.close()
+
+    async def _execute_access_control_sync_job(self, job_type, bulk_options):
+        if requires_platinum_license(self.sync_job, self.connector, self.source_klass):
+            (
+                is_platinum_license_enabled,
+                license_enabled,
+            ) = await self.elastic_server.has_active_license_enabled(License.PLATINUM)
+
+            if not is_platinum_license_enabled:
+                raise InsufficientESLicenseError(
+                    required_license=License.PLATINUM, actual_license=license_enabled
+                )
+
+        await self.elastic_server.async_bulk(
+            self.sync_job.index_name,
+            self.generator(),
+            self.sync_job.pipeline,
+            job_type,
+            options=bulk_options,
+        )
+
+    async def _execute_content_sync_job(self, job_type, bulk_options):
+        sync_rules_enabled = self.connector.features.sync_rules_enabled()
+        if sync_rules_enabled:
+            await self.sync_job.validate_filtering(validator=self.data_provider)
+        mappings = Mappings.default_text_fields_mappings(
+            is_connectors_index=True,
+        )
+        logger.debug("Preparing the content index")
+        await self.elastic_server.prepare_content_index(
+            self.sync_job.index_name, mappings=mappings
+        )
+
+        await self.elastic_server.async_bulk(
+            self.sync_job.index_name,
+            self.prepare_docs(),
+            self.sync_job.pipeline,
+            job_type,
+            filter_=self.sync_job.filtering,
+            sync_rules_enabled=sync_rules_enabled,
+            content_extraction_enabled=self.sync_job.pipeline["extract_binary_content"],
+            options=bulk_options,
+        )
 
     async def _sync_done(self, sync_status, sync_error=None):
         if self.elastic_server is not None and not self.elastic_server.done():
@@ -221,12 +257,28 @@ class SyncJobRunner:
         if not await self.reload_connector():
             raise SyncJobStartError(f"Couldn't reload connector {self.connector.id}")
 
-        if self.connector.last_sync_status == JobStatus.IN_PROGRESS:
-            logger.debug(
-                f"A sync job is started for connector {self.connector.id} by another connector instance, skipping..."
-            )
+        job_type = self.sync_job.job_type
+
+        if job_type in [JobType.FULL, JobType.INCREMENTAL]:
+            if self.connector.last_sync_status == JobStatus.IN_PROGRESS:
+                logger.debug(
+                    f"A content sync job is started for connector {self.connector.id} by another connector instance, skipping..."
+                )
+                raise SyncJobStartError(
+                    f"A content sync job is started for connector {self.connector.id} by another connector instance"
+                )
+        elif job_type == JobType.ACCESS_CONTROL:
+            if self.connector.last_access_control_sync_status == JobStatus.IN_PROGRESS:
+                logger.debug(
+                    f"An access control sync job is started for connector {self.connector.id} by another connector instance, skipping..."
+                )
+                raise SyncJobStartError(
+                    f"An access control sync job is started for connector {self.connector.id} by another connector instance"
+                )
+        else:
+            logger.error(f"Unknown job type: '{job_type}'. Skipping running sync job")
             raise SyncJobStartError(
-                f"A sync job is started for connector {self.connector.id} by another connector instance"
+                f"Unknown job type: '{job_type}'. Skipping running sync job"
             )
 
         try:
@@ -281,6 +333,9 @@ class SyncJobRunner:
                     filtering=self.sync_job.filtering,
                 ):
                     yield doc, lazy_download, operation
+            case JobType.ACCESS_CONTROL:
+                async for doc in self.data_provider.get_access_control():
+                    yield doc, None, None
             case _:
                 raise UnsupportedJobType
 

@@ -6,14 +6,36 @@
 import importlib
 import importlib.util
 import os
+import pprint
 import signal
 import sys
 import time
 from argparse import ArgumentParser
 
+import requests
 from elasticsearch import Elasticsearch
+from requests.adapters import HTTPAdapter, Retry
+from requests.auth import HTTPBasicAuth
+from retry import retry
 
 CONNECTORS_INDEX = ".elastic-connectors"
+
+
+@retry(tries=3, delay=1.0)
+def wait_for_es(url="http://localhost:9200", user="elastic", password="changeme"):
+    print("Waiting for Elasticsearch to be up and running")
+    basic = HTTPBasicAuth(user, password)
+    s = requests.Session()
+    retries = Retry(total=5, backoff_factor=1.0, status_forcelist=[500, 502, 503, 504])
+    s.mount("http://", HTTPAdapter(max_retries=retries))
+    try:
+        return s.get(url, auth=basic).json()
+    except Exception as e:
+        # we're going to display some docker info here
+        print(f"Failed to reach out Elasticsearch {repr(e)}")
+        os.system("docker ps -a")
+        os.system("docker logs es01")
+        raise
 
 
 def _parser():
@@ -27,6 +49,7 @@ def _parser():
             "load",
             "remove",
             "start_stack",
+            "check_stack",
             "stop_stack",
             "setup",
             "teardown",
@@ -113,9 +136,8 @@ def main(args=None):
     if args.action in ("start_stack", "stop_stack"):
         os.chdir(os.path.join(os.path.dirname(__file__), args.name))
         if args.action == "start_stack":
+            os.system("docker compose pull")
             os.system("docker compose up -d")
-            # TODO: do better
-            time.sleep(30)
         else:
             os.system("docker compose down --volumes")
         return
@@ -154,6 +176,9 @@ def main(args=None):
             print(
                 f'Running an e2e test for {args.name} with a {os.environ.get("DATA_SIZE", "medium")} corpus.'
             )
+        elif args.action == "check_stack":
+            # default behavior: we wait until elasticsearch is responding
+            pprint.pprint(wait_for_es())
         else:
             print(
                 f"Fixture {args.name} does not have an {args.action} action, skipping"

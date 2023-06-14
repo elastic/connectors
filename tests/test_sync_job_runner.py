@@ -9,13 +9,16 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 import pytest
 from elasticsearch import ConflictError
 
+from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import InvalidFilteringError
 from connectors.protocol import Filter, JobStatus, JobType, Pipeline
 from connectors.sync_job_runner import SyncJobRunner, SyncJobStartError
 from tests.commons import AsyncIterator
 
-total_document_count = 100
+SEARCH_INDEX_NAME = "search-mysql"
+ACCESS_CONTROL_INDEX_NAME = "search-acl-filter-mysql"
+TOTAL_DOCUMENT_COUNT = 100
 
 
 def mock_connector():
@@ -24,7 +27,7 @@ def mock_connector():
     connector.last_sync_status = JobStatus.COMPLETED
     connector.features.sync_rules_enabled.return_value = True
     connector.sync_cursor = None
-    connector.document_count = AsyncMock(return_value=total_document_count)
+    connector.document_count = AsyncMock(return_value=TOTAL_DOCUMENT_COUNT)
     connector.sync_starts = AsyncMock(return_value=True)
     connector.sync_done = AsyncMock()
     connector.reload = AsyncMock()
@@ -32,14 +35,14 @@ def mock_connector():
     return connector
 
 
-def mock_sync_job():
+def mock_sync_job(job_type, index_name):
     sync_job = Mock()
     sync_job.id = "1"
     sync_job.configuration = {}
     sync_job.service_type = "mysql"
-    sync_job.index_name = "search-mysql"
+    sync_job.index_name = index_name
     sync_job.status = JobStatus.IN_PROGRESS
-    sync_job.job_type = JobType.FULL
+    sync_job.job_type = job_type
     sync_job.pipeline = Pipeline({})
     sync_job.filtering = Filter()
     sync_job.claim = AsyncMock()
@@ -58,6 +61,8 @@ def create_runner(
     source_changed=True,
     source_available=True,
     validate_config_exception=None,
+    job_type=JobType.FULL,
+    index_name=SEARCH_INDEX_NAME,
 ):
     source_klass = Mock()
     data_provider = Mock()
@@ -71,7 +76,7 @@ def create_runner(
     data_provider.close = AsyncMock()
     source_klass.return_value = data_provider
 
-    sync_job = mock_sync_job()
+    sync_job = mock_sync_job(job_type=job_type, index_name=index_name)
     connector = mock_connector()
     es_config = {}
 
@@ -96,6 +101,9 @@ def elastic_server_mock():
         elastic_server_mock.cancel = AsyncMock()
         elastic_server_mock.ingestion_stats = Mock()
         elastic_server_mock.close = AsyncMock()
+        elastic_server_mock.has_active_license_enabled = AsyncMock(
+            return_value=(True, License.PLATINUM)
+        )
         elastic_server_klass_mock.return_value = elastic_server_mock
 
         yield elastic_server_mock
@@ -116,7 +124,7 @@ def create_runner_yielding_docs(docs=None):
 
 
 @pytest.mark.asyncio
-async def test_connector_sync_starts_fail():
+async def test_connector_content_sync_starts_fail():
     sync_job_runner = create_runner()
 
     # Do nothing in the first call, and the last_sync_status is set to `in_progress` by another instance in the subsequent calls
@@ -145,15 +153,49 @@ async def test_connector_sync_starts_fail():
 
 
 @pytest.mark.asyncio
-async def test_source_not_changed():
-    sync_job_runner = create_runner(source_changed=False)
+async def test_connector_access_control_sync_starts_fail():
+    sync_job_runner = create_runner(job_type=JobType.ACCESS_CONTROL)
+
+    # Do nothing in the first call, and the last_access_control_sync_status is set to `in_progress` by another instance in the subsequent calls
+    def _reset_last_sync_status():
+        if sync_job_runner.connector.reload.await_count > 1:
+            sync_job_runner.connector.last_access_control_sync_status = (
+                JobStatus.IN_PROGRESS
+            )
+
+    sync_job_runner.connector.reload.side_effect = _reset_last_sync_status
+    sync_job_runner.connector.sync_starts.side_effect = ConflictError(
+        message="This is an error message from test_connector_sync_starts_fail",
+        meta=None,
+        body={},
+    )
+
+    with pytest.raises(SyncJobStartError):
+        await sync_job_runner.execute()
+
+    assert sync_job_runner.elastic_server is None
+    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_not_awaited()
+    sync_job_runner.sync_job.done.assert_not_awaited()
+    sync_job_runner.sync_job.fail.assert_not_awaited()
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_not_awaited()
+    sync_job_runner.connector.sync_done.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "job_type", [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
+)
+@pytest.mark.asyncio
+async def test_source_not_changed(job_type):
+    sync_job_runner = create_runner(job_type=job_type, source_changed=False)
     await sync_job_runner.execute()
 
     ingestion_stats = {
         "indexed_document_count": 0,
         "indexed_document_volume": 0,
         "deleted_document_count": 0,
-        "total_document_count": total_document_count,
+        "total_document_count": TOTAL_DOCUMENT_COUNT,
     }
 
     assert sync_job_runner.elastic_server is None
@@ -166,16 +208,21 @@ async def test_source_not_changed():
     sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
 
 
+@pytest.mark.parametrize(
+    "job_type", [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
+)
 @pytest.mark.asyncio
-async def test_source_invalid_config():
-    sync_job_runner = create_runner(validate_config_exception=Exception())
+async def test_source_invalid_config(job_type):
+    sync_job_runner = create_runner(
+        job_type=job_type, validate_config_exception=Exception()
+    )
     await sync_job_runner.execute()
 
     ingestion_stats = {
         "indexed_document_count": 0,
         "indexed_document_volume": 0,
         "deleted_document_count": 0,
-        "total_document_count": total_document_count,
+        "total_document_count": TOTAL_DOCUMENT_COUNT,
     }
 
     assert sync_job_runner.elastic_server is None
@@ -190,16 +237,19 @@ async def test_source_invalid_config():
     sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
 
 
+@pytest.mark.parametrize(
+    "job_type", [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
+)
 @pytest.mark.asyncio
-async def test_source_not_available():
-    sync_job_runner = create_runner(source_available=False)
+async def test_source_not_available(job_type):
+    sync_job_runner = create_runner(job_type=job_type, source_available=False)
     await sync_job_runner.execute()
 
     ingestion_stats = {
         "indexed_document_count": 0,
         "indexed_document_volume": 0,
         "deleted_document_count": 0,
-        "total_document_count": total_document_count,
+        "total_document_count": TOTAL_DOCUMENT_COUNT,
     }
 
     assert sync_job_runner.elastic_server is None
@@ -214,20 +264,21 @@ async def test_source_not_available():
     sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
 
 
+@pytest.mark.parametrize("job_type", [JobType.FULL, JobType.INCREMENTAL])
 @pytest.mark.asyncio
-async def test_invalid_filtering():
-    sync_job_runner = create_runner()
+async def test_invalid_filtering(job_type, elastic_server_mock):
+    ingestion_stats = {
+        "indexed_document_count": 0,
+        "indexed_document_volume": 0,
+        "deleted_document_count": 0,
+        "total_document_count": TOTAL_DOCUMENT_COUNT,
+    }
+    elastic_server_mock.ingestion_stats.return_value = ingestion_stats
+
+    sync_job_runner = create_runner(job_type=job_type)
     sync_job_runner.sync_job.validate_filtering.side_effect = InvalidFilteringError()
     await sync_job_runner.execute()
 
-    ingestion_stats = {
-        "indexed_document_count": 0,
-        "indexed_document_volume": 0,
-        "deleted_document_count": 0,
-        "total_document_count": total_document_count,
-    }
-
-    assert sync_job_runner.elastic_server is None
     sync_job_runner.connector.sync_starts.assert_awaited()
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
@@ -240,7 +291,36 @@ async def test_invalid_filtering():
 
 
 @pytest.mark.asyncio
-async def test_async_bulk_error(elastic_server_mock):
+async def test_invalid_filtering_access_control_sync_still_executed(
+    elastic_server_mock,
+):
+    ingestion_stats = {
+        "indexed_document_count": 0,
+        "indexed_document_volume": 0,
+        "deleted_document_count": 0,
+        "total_document_count": TOTAL_DOCUMENT_COUNT,
+    }
+    elastic_server_mock.ingestion_stats.return_value = ingestion_stats
+
+    sync_job_runner = create_runner(job_type=JobType.ACCESS_CONTROL)
+    sync_job_runner.sync_job.validate_filtering.side_effect = InvalidFilteringError()
+
+    await sync_job_runner.execute()
+
+    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
+    sync_job_runner.sync_job.done.assert_awaited()
+    sync_job_runner.sync_job.fail.assert_not_awaited()
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_not_awaited()
+    sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
+
+
+@pytest.mark.parametrize(
+    "job_type", [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
+)
+@pytest.mark.asyncio
+async def test_async_bulk_error(job_type, elastic_server_mock):
     error = "something wrong"
     ingestion_stats = {
         "indexed_document_count": 0,
@@ -249,10 +329,10 @@ async def test_async_bulk_error(elastic_server_mock):
     }
     elastic_server_mock.fetch_error.return_value = error
     elastic_server_mock.ingestion_stats.return_value = ingestion_stats
-    sync_job_runner = create_runner()
+    sync_job_runner = create_runner(job_type=job_type)
     await sync_job_runner.execute()
 
-    ingestion_stats["total_document_count"] = total_document_count
+    ingestion_stats["total_document_count"] = TOTAL_DOCUMENT_COUNT
 
     sync_job_runner.connector.sync_starts.assert_awaited()
     sync_job_runner.sync_job.claim.assert_awaited()
@@ -267,17 +347,47 @@ async def test_async_bulk_error(elastic_server_mock):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_runner(elastic_server_mock):
+async def test_access_control_sync_fails_with_insufficient_license(elastic_server_mock):
+    ingestion_stats = {
+        "indexed_document_count": 0,
+        "indexed_document_volume": 0,
+        "deleted_document_count": 0,
+        "total_document_count": TOTAL_DOCUMENT_COUNT,
+    }
+
+    elastic_server_mock.ingestion_stats.return_value = ingestion_stats
+    elastic_server_mock.has_active_license_enabled.return_value = (False, License.BASIC)
+
+    sync_job_runner = create_runner(job_type=JobType.ACCESS_CONTROL)
+    await sync_job_runner.execute()
+
+    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
+    sync_job_runner.elastic_server.async_bulk.assert_not_awaited()
+    sync_job_runner.sync_job.done.assert_not_awaited()
+    sync_job_runner.sync_job.fail.assert_awaited_with(
+        ANY, ingestion_stats=ingestion_stats
+    )
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_not_awaited()
+    sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
+
+
+@pytest.mark.parametrize(
+    "job_type", [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
+)
+@pytest.mark.asyncio
+async def test_sync_job_runner(job_type, elastic_server_mock):
     ingestion_stats = {
         "indexed_document_count": 25,
         "indexed_document_volume": 30,
         "deleted_document_count": 20,
     }
     elastic_server_mock.ingestion_stats.return_value = ingestion_stats
-    sync_job_runner = create_runner()
+    sync_job_runner = create_runner(job_type=job_type)
     await sync_job_runner.execute()
 
-    ingestion_stats["total_document_count"] = total_document_count
+    ingestion_stats["total_document_count"] = TOTAL_DOCUMENT_COUNT
 
     sync_job_runner.connector.sync_starts.assert_awaited()
     sync_job_runner.sync_job.claim.assert_awaited()
@@ -289,8 +399,11 @@ async def test_sync_job_runner(elastic_server_mock):
     sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
 
 
+@pytest.mark.parametrize(
+    "job_type", [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
+)
 @pytest.mark.asyncio
-async def test_sync_job_runner_suspend(elastic_server_mock):
+async def test_sync_job_runner_suspend(job_type, elastic_server_mock):
     ingestion_stats = {
         "indexed_document_count": 25,
         "indexed_document_volume": 30,
@@ -298,12 +411,12 @@ async def test_sync_job_runner_suspend(elastic_server_mock):
     }
     elastic_server_mock.done.return_value = False
     elastic_server_mock.ingestion_stats.return_value = ingestion_stats
-    sync_job_runner = create_runner()
+    sync_job_runner = create_runner(job_type=job_type)
     task = asyncio.create_task(sync_job_runner.execute())
     asyncio.get_event_loop().call_later(0.1, task.cancel)
     await task
 
-    ingestion_stats["total_document_count"] = total_document_count
+    ingestion_stats["total_document_count"] = TOTAL_DOCUMENT_COUNT
 
     sync_job_runner.connector.sync_starts.assert_awaited()
     sync_job_runner.sync_job.claim.assert_awaited()
@@ -365,10 +478,13 @@ async def test_prepare_docs_when_original_id_above_limit_and_hashed_id_below_lim
     assert docs[0]["_id"] == hashed_id
 
 
+@pytest.mark.parametrize(
+    "job_type", [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
+)
 @pytest.mark.asyncio
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
-async def test_sync_job_runner_reporting_metadata(elastic_server_mock):
+async def test_sync_job_runner_reporting_metadata(job_type, elastic_server_mock):
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,
@@ -376,7 +492,7 @@ async def test_sync_job_runner_reporting_metadata(elastic_server_mock):
     }
     elastic_server_mock.ingestion_stats.return_value = ingestion_stats
     elastic_server_mock.done.return_value = False
-    sync_job_runner = create_runner()
+    sync_job_runner = create_runner(job_type=job_type)
     task = asyncio.create_task(sync_job_runner.execute())
     asyncio.get_event_loop().call_later(0.1, task.cancel)
     await task
@@ -391,15 +507,18 @@ async def test_sync_job_runner_reporting_metadata(elastic_server_mock):
     sync_job_runner.sync_job.fail.assert_not_awaited()
     sync_job_runner.sync_job.cancel.assert_not_awaited()
     sync_job_runner.sync_job.suspend.assert_awaited_with(
-        ingestion_stats=ingestion_stats | {"total_document_count": total_document_count}
+        ingestion_stats=ingestion_stats | {"total_document_count": TOTAL_DOCUMENT_COUNT}
     )
     sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
 
 
+@pytest.mark.parametrize(
+    "job_type", [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
+)
 @pytest.mark.asyncio
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
-async def test_sync_job_runner_connector_not_found(elastic_server_mock):
+async def test_sync_job_runner_connector_not_found(job_type, elastic_server_mock):
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,
@@ -407,7 +526,7 @@ async def test_sync_job_runner_connector_not_found(elastic_server_mock):
     }
     elastic_server_mock.ingestion_stats.return_value = ingestion_stats
     elastic_server_mock.done.return_value = False
-    sync_job_runner = create_runner()
+    sync_job_runner = create_runner(job_type=job_type)
 
     # Do nothing in the first call(in sync_starts), then raise DocumentNotFoundError,
     def _raise_document_not_found_error():
@@ -429,10 +548,13 @@ async def test_sync_job_runner_connector_not_found(elastic_server_mock):
     sync_job_runner.connector.sync_done.assert_not_awaited()
 
 
+@pytest.mark.parametrize(
+    "job_type", [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
+)
 @pytest.mark.asyncio
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
-async def test_sync_job_runner_sync_job_not_found(elastic_server_mock):
+async def test_sync_job_runner_sync_job_not_found(job_type, elastic_server_mock):
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,
@@ -440,7 +562,7 @@ async def test_sync_job_runner_sync_job_not_found(elastic_server_mock):
     }
     elastic_server_mock.ingestion_stats.return_value = ingestion_stats
     elastic_server_mock.done.return_value = False
-    sync_job_runner = create_runner()
+    sync_job_runner = create_runner(job_type=job_type)
     sync_job_runner.sync_job.reload.side_effect = DocumentNotFoundError()
     await sync_job_runner.execute()
 
@@ -454,10 +576,13 @@ async def test_sync_job_runner_sync_job_not_found(elastic_server_mock):
     sync_job_runner.connector.sync_done.assert_awaited_with(None)
 
 
+@pytest.mark.parametrize(
+    "job_type", [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
+)
 @pytest.mark.asyncio
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
-async def test_sync_job_runner_canceled(elastic_server_mock):
+async def test_sync_job_runner_canceled(job_type, elastic_server_mock):
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,
@@ -465,7 +590,7 @@ async def test_sync_job_runner_canceled(elastic_server_mock):
     }
     elastic_server_mock.ingestion_stats.return_value = ingestion_stats
     elastic_server_mock.done.return_value = False
-    sync_job_runner = create_runner()
+    sync_job_runner = create_runner(job_type=job_type)
 
     def _update_job_status():
         sync_job_runner.sync_job.status = JobStatus.CANCELING
@@ -479,16 +604,19 @@ async def test_sync_job_runner_canceled(elastic_server_mock):
     sync_job_runner.sync_job.done.assert_not_awaited()
     sync_job_runner.sync_job.fail.assert_not_awaited()
     sync_job_runner.sync_job.cancel.assert_awaited_with(
-        ingestion_stats=ingestion_stats | {"total_document_count": total_document_count}
+        ingestion_stats=ingestion_stats | {"total_document_count": TOTAL_DOCUMENT_COUNT}
     )
     sync_job_runner.sync_job.suspend.assert_not_awaited()
     sync_job_runner.connector.sync_done.assert_awaited_with(sync_job_runner.sync_job)
 
 
+@pytest.mark.parametrize(
+    "job_type", [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
+)
 @pytest.mark.asyncio
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
-async def test_sync_job_runner_not_running(elastic_server_mock):
+async def test_sync_job_runner_not_running(job_type, elastic_server_mock):
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,
@@ -496,7 +624,7 @@ async def test_sync_job_runner_not_running(elastic_server_mock):
     }
     elastic_server_mock.ingestion_stats.return_value = ingestion_stats
     elastic_server_mock.done.return_value = False
-    sync_job_runner = create_runner()
+    sync_job_runner = create_runner(job_type=job_type)
 
     def _update_job_status():
         sync_job_runner.sync_job.status = JobStatus.COMPLETED
@@ -511,7 +639,7 @@ async def test_sync_job_runner_not_running(elastic_server_mock):
     sync_job_runner.sync_job.fail.assert_awaited_with(
         ANY,
         ingestion_stats=ingestion_stats
-        | {"total_document_count": total_document_count},
+        | {"total_document_count": TOTAL_DOCUMENT_COUNT},
     )
     sync_job_runner.sync_job.cancel.assert_not_awaited()
     sync_job_runner.sync_job.suspend.assert_not_awaited()
