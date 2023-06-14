@@ -247,9 +247,14 @@ class SyncJobRunner:
                 await self.sync_job.done(ingestion_stats=ingestion_stats)
 
         if await self.reload_connector():
+            sync_cursor = (
+                self.data_provider.sync_cursor()
+                if self.sync_job.is_content_sync()
+                else None
+            )
             await self.connector.sync_done(
                 self.sync_job if await self.reload_sync_job() else None,
-                cursor=self.data_provider.sync_cursor(),
+                cursor=sync_cursor,
             )
 
         logger.info(
