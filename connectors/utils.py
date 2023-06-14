@@ -17,6 +17,7 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from io import BytesIO
 
 import aiohttp
 import yaml
@@ -675,11 +676,23 @@ class ExtractionService:
             config = yaml.safe_load(file)
 
         self.host = config["extraction_service"]["host"]
-        # TODO header accept-encoding should be removed by server, not here
-        self.headers = {"Accept": "application/json", "Accept-Encoding": ""}
         self.use_file_pointers = config["extraction_service"]["text_extraction"][
             "use_file_pointers"
         ]
+        self.session = None
+
+    def _begin_session(self):
+        if self.session:
+            return self.session
+
+        timeout = aiohttp.ClientTimeout(total=5)
+        self.session = aiohttp.ClientSession(timeout=timeout)
+
+    def _end_session(self):
+        if not self.session:
+            return
+
+        self.session.close()
 
     async def extract_text(self, filename):
         """Sends a text extraction request to tika-server using the supplied filename.
@@ -701,36 +714,36 @@ class ExtractionService:
 
         return content
 
-    async def extract_with_file_pointer(self, filename):
+    async def extract_with_file_pointer(self, filepath):
         """Sends a request to tika-server to extract text from a file.
         Sends the filename as a request parameter, which tika will pick up and extract.
 
         Returns a parsed response
         """
 
-        params = {"local_file_path": filename}
+        filename = os.path.basename(filepath)
+        params = {"local_file_path": filepath}
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{self.host}/extract_local_file_text",
-                headers=self.headers,
-                json=params,
-            ) as response:
-                return await self.parse_extraction_resp(filename, response)
+        async with self.session.post(
+            f"{self.host}/extract_local_file_text",
+            json=params,
+        ) as response:
+            return await self.parse_extraction_resp(filename, response)
 
-    async def extract_with_file_send(self, filename):
+    async def extract_with_file_send(self, filepath):
         """Sends a request to tika-server to extract text from a file.
         Sends the file as body data in the request.
 
         Returns a parsed response
         """
+        filename = os.path.basename(filepath)
 
-        async with aiohttp.ClientSession() as session:
+        with open(filepath, "rb") as file:
             file_data = aiohttp.FormData()
-            file_data.add_field("file", open(filename, "rb"))
+            file_data.add_field("file", BytesIO(file.read()), filename=filename)
 
-            async with session.post(
-                f"{self.host}/extract_text", headers=self.headers, data=file_data
+            async with self.session.post(
+                f"{self.host}/extract_text/", data=file_data
             ) as response:
                 return await self.parse_extraction_resp(filename, response)
 
@@ -741,15 +754,18 @@ class ExtractionService:
         """
         content = await response.json()
 
-        # TODO expand error handling
         if response.status != 200:
             logger.warn(
-                f"Extraction service could not parse `{os.path.basename(filename)}'. Status: [{response.status}]."
+                f"Extraction service could not parse `{filename}'. Status: [{response.status}]."
             )
         if len(content) > 20971520:
             logger.info(
-                f"Extraction service returned more than 20MiB for {os.path.basename(filename)}. Keeping only 20MiB."
+                f"Extraction service returned more than 20MiB for {filename}. Keeping only 20MiB."
             )
             content = content[:20971520]
+        if content.get("error"):
+            logger.warn(
+                f"Extraction service could not parse `{filename}'; {content.get('error')}: {content.get('message')}"
+            )
 
-        return content["extracted_text"]
+        return content.get("extracted_text", "")
