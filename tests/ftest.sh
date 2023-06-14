@@ -82,6 +82,9 @@ NUM_DOCS=`$PYTHON fixture.py --name $NAME --action get_num_docs`
 $PYTHON $ROOT_DIR/scripts/verify.py --index-name $INDEX_NAME --service-type $NAME --size $NUM_DOCS
 $PYTHON fixture.py --name $NAME --action teardown
 
+# stopping the stack as a final step once everything else is done.
+$PYTHON fixture.py --name $NAME --action stop_stack
+
 # Wait for PERF8 to compile the report
 # Actual report compilation starts right when the first sync finishes, but happens in the background
 # So we wait in the end of the script to not block second sync from happening while we also compile the report
@@ -101,5 +104,19 @@ if [[ $PERF8 == "yes" ]]; then
     exit $STATUS
 fi
 
-# stopping the stack as a final step once everything else is done.
-$PYTHON fixture.py --name $NAME --action stop_stack
+# make sure the ingest processes are terminated
+if ps -p $PID > /dev/null
+then
+  echo 'Killing the ingest process'
+  kill -TERM $PID
+  sleep 5
+  kill -KILL $PID
+fi
+
+if ps -p $PID_2 > /dev/null
+then
+  echo 'Killing the ingest process'
+  kill -TERM $PID_2
+  sleep 5
+  kill -KILL $PID_2
+fi
