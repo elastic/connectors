@@ -41,7 +41,7 @@ class PreflightCheck:
                 logger.critical(f"{self.elastic_config['host']} seem down. Bye!")
                 return False
 
-            self._check_configuration_validity()
+            self._validate_configuration()
             return await self._check_system_indices_with_retries()
         finally:
             self.stop()
@@ -72,7 +72,7 @@ class PreflightCheck:
                     await self._sleeps.sleep(self.preflight_idle)
         return False
 
-    def _check_configuration_validity(self):
+    def _validate_configuration(self):
         # "Native" mode
         configured_native_types = "native_service_types" in self.config
         force_allowed_native = self.config.get("_force_allow_native", False)
