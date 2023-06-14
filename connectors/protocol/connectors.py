@@ -613,7 +613,6 @@ class Connector(ESDocument):
                 raise ValueError(f"Unknown job type: {job_type}")
 
         if not scheduling_property.get("enabled", False):
-            self.log_debug(f"'{job_type.value}' sync scheduling is disabled")
             return None
         return next_run(scheduling_property.get("interval"))
 
