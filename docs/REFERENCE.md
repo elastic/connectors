@@ -15,4 +15,4 @@ All other connector client references can be found [here](./reference).
 
 - [Confluence](./reference/confluence.md)
 - [Jira](./reference/jira.md)
-- [Sharepoint](./reference/sharepoint.md)
+- [Sharepoint Server](./reference/sharepoint_server.md)
