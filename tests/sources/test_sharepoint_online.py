@@ -820,7 +820,7 @@ class TestSharepointOnlineDataSource:
         assert e.match(another_non_existing_site)
 
     @pytest.mark.asyncio
-    async def test_get_attachment(self, patch_sharepoint_client):
+    async def test_get_attachment_content(self, patch_sharepoint_client):
         attachment = {"odata.id": "1"}
         message = b"This is content of attachment"
 
@@ -830,12 +830,12 @@ class TestSharepointOnlineDataSource:
         patch_sharepoint_client.download_attachment = download_func
         source = create_source(SharepointOnlineDataSource)
 
-        download_result = await source.get_attachment(attachment, doit=True)
+        download_result = await source.get_attachment_content(attachment, doit=True)
 
         assert download_result["_attachment"] == base64.b64encode(message).decode()
 
     @pytest.mark.asyncio
-    async def test_get_content(self, patch_sharepoint_client):
+    async def test_get_drive_item_content(self, patch_sharepoint_client):
         drive_item = {
             "id": "1",
             "size": 15,
@@ -850,6 +850,6 @@ class TestSharepointOnlineDataSource:
         patch_sharepoint_client.download_drive_item = download_func
         source = create_source(SharepointOnlineDataSource)
 
-        download_result = await source.get_content(drive_item, doit=True)
+        download_result = await source.get_drive_item_content(drive_item, doit=True)
 
         assert download_result["_attachment"] == base64.b64encode(message).decode()

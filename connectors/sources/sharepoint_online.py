@@ -690,7 +690,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                                     f"Not downloading file {drive_item['name']} of size {drive_item['size']}"
                                 )
                             else:
-                                download_func = partial(self.get_content, drive_item)
+                                download_func = partial(
+                                    self.get_drive_item_content, drive_item
+                                )
 
                         yield drive_item, download_func
 
@@ -727,7 +729,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                                     "lastModifiedDateTime"
                                 ]
                                 attachment_download_func = partial(
-                                    self.get_attachment, list_item_attachment
+                                    self.get_attachment_content, list_item_attachment
                                 )
                                 yield list_item_attachment, attachment_download_func
 
@@ -745,21 +747,33 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                     yield site_page, None
 
-    async def get_attachment(self, attachment, timestamp=None, doit=False):
+    async def get_attachment_content(self, attachment, timestamp=None, doit=False):
         if not doit:
             return
 
         # We don't know attachment sizes unfortunately, so cannot properly ignore them
 
+        # Okay this gets weird.
+        # There's no way to learn whether List Item Attachment changed or not
+        # Response does not contain metadata on LastUpdated or any dates,
+        # but along with that IDs for attachments are actually these attachments'
+        # file names. So if someone creates a file text.txt with content "hello",
+        # runs a sync, then deletes this file and creates again with different content,
+        # the model returned from API will not change at all. It will have same ID,
+        # same everything. But it will already be an absolutely new document.
+        # Therefore every time we try to download the attachment we say that
+        # it was just recently created so that framework would always re-download it.
+        new_timestamp = datetime.utcnow()
+
         return {
             "_id": attachment["odata.id"],
-            "_timestamp": datetime.utcnow(),  # TODO: attachments cannot be modified in-place, so we can consider that object ids are permanent
+            "_timestamp": new_timestamp,
             "_attachment": await self._download_content(
                 partial(self.client.download_attachment, attachment["odata.id"])
             ),
         }
 
-    async def get_content(self, drive_item, timestamp=None, doit=False):
+    async def get_drive_item_content(self, drive_item, timestamp=None, doit=False):
         document_size = int(drive_item["size"])
 
         if not (doit and document_size):
