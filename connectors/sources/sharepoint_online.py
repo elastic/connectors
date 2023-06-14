@@ -23,7 +23,13 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import CacheWithTimeout, convert_to_b64, html_to_text, url_encode
+from connectors.utils import (
+    CacheWithTimeout,
+    ExtractionService,
+    convert_to_b64,
+    html_to_text,
+    url_encode,
+)
 
 if "OVERRIDE_URL" in os.environ:
     logger.warning("x" * 50)
@@ -547,6 +553,11 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         self._client = None
 
+        if self.configuration["use_text_extraction_service"]:
+            self.extraction_service = ExtractionService()
+        else:
+            self.extraction_service = None
+
     @property
     def client(self):
         if not self._client:
@@ -596,6 +607,14 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "order": 5,
                 "type": "list",
                 "value": "",
+            },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 6,
+                "type": "bool",
+                "value": False,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
             },
         }
 
@@ -647,105 +666,128 @@ class SharepointOnlineDataSource(BaseDataSource):
             advanced_rules = filtering.get_advanced_rules()
             max_data_age = advanced_rules["maxDataAge"]
 
-        async for site_collection in self.client.site_collections():
-            site_collection["_id"] = site_collection["webUrl"]
-            site_collection["object_type"] = "site_collection"
-            yield site_collection, None
+        try:
+            if self.extraction_service:
+                self.extraction_service._begin_session()
 
-            async for site in self.client.sites(
-                site_collection["siteCollection"]["hostname"],
-                self.configuration["site_collections"],
-            ):  # TODO: simplify and eliminate root call
-                site["_id"] = site["id"]
-                site["object_type"] = "site"
+            async for site_collection in self.client.site_collections():
+                site_collection["_id"] = site_collection["webUrl"]
+                site_collection["object_type"] = "site_collection"
+                yield site_collection, None
 
-                yield site, None
+                async for site in self.client.sites(
+                    site_collection["siteCollection"]["hostname"],
+                    self.configuration["site_collections"],
+                ):  # TODO: simplify and eliminate root call
+                    site["_id"] = site["id"]
+                    site["object_type"] = "site"
 
-                async for site_drive in self.client.site_drives(site["id"]):
-                    site_drive["_id"] = site_drive["id"]
-                    site_drive["object_type"] = "site_drive"
-                    yield site_drive, None
+                    yield site, None
 
-                    async for drive_item in self.client.drive_items(site_drive["id"]):
-                        drive_item["_id"] = drive_item["id"]
-                        drive_item["object_type"] = "drive_item"
-                        drive_item["_timestamp"] = drive_item["lastModifiedDateTime"]
+                    async for site_drive in self.client.site_drives(site["id"]):
+                        site_drive["_id"] = site_drive["id"]
+                        site_drive["object_type"] = "site_drive"
+                        yield site_drive, None
 
-                        download_func = None
+                        async for drive_item in self.client.drive_items(
+                            site_drive["id"]
+                        ):
+                            drive_item["_id"] = drive_item["id"]
+                            drive_item["object_type"] = "drive_item"
+                            drive_item["_timestamp"] = drive_item[
+                                "lastModifiedDateTime"
+                            ]
 
-                        if "@microsoft.graph.downloadUrl" in drive_item:
-                            modified_date = datetime.strptime(
-                                drive_item["lastModifiedDateTime"], "%Y-%m-%dT%H:%M:%SZ"
-                            )
-                            if (
-                                max_data_age
-                                and modified_date
-                                < datetime.utcnow() - timedelta(seconds=max_data_age)
-                            ):
-                                logger.warning(
-                                    f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
+                            download_func = None
+
+                            if "@microsoft.graph.downloadUrl" in drive_item:
+                                modified_date = datetime.strptime(
+                                    drive_item["lastModifiedDateTime"],
+                                    "%Y-%m-%dT%H:%M:%SZ",
                                 )
-                            elif drive_item["size"] > MAX_DOCUMENT_SIZE:
-                                logger.warning(
-                                    f"Not downloading file {drive_item['name']} of size {drive_item['size']}"
+                                if (
+                                    max_data_age
+                                    and modified_date
+                                    < datetime.utcnow()
+                                    - timedelta(seconds=max_data_age)
+                                ):
+                                    logger.warning(
+                                        f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
+                                    )
+                                elif drive_item["size"] > MAX_DOCUMENT_SIZE:
+                                    logger.warning(
+                                        f"Not downloading file {drive_item['name']} of size {drive_item['size']}"
+                                    )
+                                else:
+                                    drive_item["_tempfile_suffix"] = os.path.splitext(
+                                        drive_item.get("name", "")
+                                    )[-1]
+                                    download_func = partial(
+                                        self.get_drive_item_content, drive_item
+                                    )
+
+                            yield drive_item, download_func
+
+                    async for site_list in self.client.site_lists(site["id"]):
+                        site_list["_id"] = site_list["id"]
+                        site_list["object_type"] = "site_list"
+
+                        yield site_list, None
+
+                        async for list_item in self.client.site_list_items(
+                            site["id"], site_list["id"]
+                        ):
+                            list_item["_id"] = list_item["id"]
+                            list_item["object_type"] = "list_item"
+                            list_item["_tempfile_suffix"] = os.path.splitext(
+                                list_item.get("FileName", "")
+                            )[-1]
+
+                            content_type = list_item["contentType"]["name"]
+
+                            if content_type in [
+                                "Web Template Extensions",
+                                "Client Side Component Manifests",
+                            ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
+                                continue
+
+                            if "Attachments" in list_item["fields"]:
+                                async for list_item_attachment in self.client.site_list_item_attachments(
+                                    site["webUrl"], site_list["name"], list_item["id"]
+                                ):
+                                    list_item_attachment["_id"] = list_item_attachment[
+                                        "odata.id"
+                                    ]
+                                    list_item_attachment[
+                                        "object_type"
+                                    ] = "list_item_attachment"
+                                    list_item_attachment["_timestamp"] = list_item[
+                                        "lastModifiedDateTime"
+                                    ]
+                                    attachment_download_func = partial(
+                                        self.get_attachment_content,
+                                        list_item_attachment,
+                                    )
+                                    yield list_item_attachment, attachment_download_func
+
+                            download_func = None
+
+                            yield list_item, download_func
+
+                    async for site_page in self.client.site_pages(site["webUrl"]):
+                        site_page["_id"] = site_page["GUID"]
+                        site_page["object_type"] = "site_page"
+
+                        for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:
+                            if html_field in site_page:
+                                site_page[html_field] = html_to_text(
+                                    site_page[html_field]
                                 )
-                            else:
-                                download_func = partial(
-                                    self.get_drive_item_content, drive_item
-                                )
 
-                        yield drive_item, download_func
-
-                async for site_list in self.client.site_lists(site["id"]):
-                    site_list["_id"] = site_list["id"]
-                    site_list["object_type"] = "site_list"
-
-                    yield site_list, None
-
-                    async for list_item in self.client.site_list_items(
-                        site["id"], site_list["id"]
-                    ):
-                        list_item["_id"] = list_item["id"]
-                        list_item["object_type"] = "list_item"
-                        content_type = list_item["contentType"]["name"]
-
-                        if content_type in [
-                            "Web Template Extensions",
-                            "Client Side Component Manifests",
-                        ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
-                            continue
-
-                        if "Attachments" in list_item["fields"]:
-                            async for list_item_attachment in self.client.site_list_item_attachments(
-                                site["webUrl"], site_list["name"], list_item["id"]
-                            ):
-                                list_item_attachment["_id"] = list_item_attachment[
-                                    "odata.id"
-                                ]
-                                list_item_attachment[
-                                    "object_type"
-                                ] = "list_item_attachment"
-                                list_item_attachment["_timestamp"] = list_item[
-                                    "lastModifiedDateTime"
-                                ]
-                                attachment_download_func = partial(
-                                    self.get_attachment_content, list_item_attachment
-                                )
-                                yield list_item_attachment, attachment_download_func
-
-                        download_func = None
-
-                        yield list_item, download_func
-
-                async for site_page in self.client.site_pages(site["webUrl"]):
-                    site_page["_id"] = site_page["GUID"]
-                    site_page["object_type"] = "site_page"
-
-                    for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:
-                        if html_field in site_page:
-                            site_page[html_field] = html_to_text(site_page[html_field])
-
-                    yield site_page, None
+                        yield site_page, None
+        finally:
+            if self.extraction_service:
+                await self.extraction_service._end_session()
 
     async def get_attachment_content(self, attachment, timestamp=None, doit=False):
         if not doit:
@@ -765,13 +807,22 @@ class SharepointOnlineDataSource(BaseDataSource):
         # it was just recently created so that framework would always re-download it.
         new_timestamp = datetime.utcnow()
 
-        return {
+        doc = {
             "_id": attachment["odata.id"],
             "_timestamp": new_timestamp,
-            "_attachment": await self._download_content(
-                partial(self.client.download_attachment, attachment["odata.id"])
-            ),
         }
+
+        attachment, body = await self._download_content(
+            partial(self.client.download_attachment, attachment["odata.id"]),
+            attachment["_tempfile_suffix"],
+        )
+
+        if attachment:
+            doc["_attachment"] = attachment
+        if body:
+            doc["body"] = body
+
+        return doc
 
     async def get_drive_item_content(self, drive_item, timestamp=None, doit=False):
         document_size = int(drive_item["size"])
@@ -782,21 +833,35 @@ class SharepointOnlineDataSource(BaseDataSource):
         if document_size > MAX_DOCUMENT_SIZE:
             return
 
-        return {
+        doc = {
             "_id": drive_item["id"],
             "_timestamp": drive_item["lastModifiedDateTime"],
-            "_attachment": await self._download_content(
-                partial(
-                    self.client.download_drive_item,
-                    drive_item["parentReference"]["driveId"],
-                    drive_item["id"],
-                )
-            ),
         }
 
-    async def _download_content(self, download_func):
+        attachment, body = await self._download_content(
+            partial(
+                self.client.download_drive_item,
+                drive_item["parentReference"]["driveId"],
+                drive_item["id"],
+            ),
+            drive_item["_tempfile_suffix"],
+        )
+
+        if attachment:
+            doc["_attachment"] = attachment
+        if body:
+            doc["body"] = body
+
+        return doc
+
+    async def _download_content(self, download_func, tempfile_suffix):
+        attachment = None
+        body = None
         source_file_name = ""
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+
+        async with NamedTemporaryFile(
+            mode="wb", delete=False, suffix=tempfile_suffix
+        ) as async_buffer:
             # download_func should always be a partial with async_buffer as last argument that is not filled by the caller!
             # E.g. if download_func is download_drive_item(drive_id, item_id, async_buffer) then it
             # should be passed as partial(download_drive_item, drive_id, item_id)
@@ -805,15 +870,17 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             source_file_name = async_buffer.name
 
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
-        )
+        if self.configuration["use_text_extraction_service"]:
+            body = await self.extraction_service.extract_text(source_file_name)
+        else:
+            await asyncio.to_thread(
+                convert_to_b64,
+                source=source_file_name,
+            )
+            async with aiofiles.open(file=source_file_name, mode="r") as target_file:
+                attachment = (await target_file.read()).strip()
 
-        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            content = (await target_file.read()).strip()
-            return content
+        return attachment, body
 
     async def ping(self):
         pass

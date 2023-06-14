@@ -16,15 +16,18 @@ import tempfile
 import time
 import timeit
 from datetime import datetime
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, mock_open, patch
 
 import pytest
+import pytest_asyncio
+from aioresponses import aioresponses
 from freezegun import freeze_time
 from pympler import asizeof
 
 from connectors import utils
 from connectors.utils import (
     ConcurrentTasks,
+    ExtractionService,
     InvalidIndexNameError,
     MemQueue,
     RetryStrategy,
@@ -583,3 +586,127 @@ def test_html_to_text_with_weird_html():
     invalid_html = "<div/>just</div> text"
 
     assert html_to_text(invalid_html) == "just\n text"
+
+
+class TestExtractionService:
+    @pytest_asyncio.fixture
+    async def mock_responses(self):
+        with aioresponses() as m:
+            yield m
+
+    @pytest.mark.asyncio
+    async def test_extract_text_without_file_pointer(self, mock_responses):
+        mock_config = {
+            "extraction_service": {
+                "host": "http://localhost:8090",
+                "text_extraction": {"use_file_pointers": False},
+            }
+        }
+
+        filepath = "tmp/notreal.txt"
+        url = "http://localhost:8090/extract_text/"
+        payload = {"extracted_text": "I've been extracted!"}
+
+        with patch("yaml.safe_load") as mock_safe_load:
+            mock_safe_load.return_value = mock_config
+
+            with patch("builtins.open", mock_open(read_data=b"data")):
+                mock_responses.post(url, status=200, payload=payload)
+
+                extraction_service = ExtractionService()
+                extraction_service._begin_session()
+
+                response = await extraction_service.extract_text(filepath)
+                extraction_service._end_session()
+
+                assert response == "I've been extracted!"
+
+    @pytest.mark.asyncio
+    async def test_extract_text_with_file_pointer(self, mock_responses):
+        mock_config = {
+            "extraction_service": {
+                "host": "http://localhost:8090",
+                "text_extraction": {"use_file_pointers": True},
+            }
+        }
+        filepath = "tmp/notreal.txt"
+        url = "http://localhost:8090/extract_local_file_text/"
+        payload = {"extracted_text": "I've been extracted!"}
+
+        with patch("yaml.safe_load") as mock_safe_load:
+            mock_safe_load.return_value = mock_config
+
+            with patch("builtins.open", mock_open(read_data="data")):
+                mock_responses.post(url, status=200, payload=payload)
+
+                extraction_service = ExtractionService()
+                extraction_service._begin_session()
+
+                response = await extraction_service.extract_text(filepath)
+                await extraction_service._end_session()
+
+                assert response == "I've been extracted!"
+
+    @pytest.mark.asyncio
+    async def test_extract_text_when_response_isnt_200_logs_warning(
+        self, mock_responses, patch_logger
+    ):
+        mock_config = {
+            "extraction_service": {
+                "host": "http://localhost:8090",
+                "text_extraction": {"use_file_pointers": True},
+            }
+        }
+        filepath = "tmp/notreal.txt"
+        url = "http://localhost:8090/extract_local_file_text/"
+
+        with patch("yaml.safe_load") as mock_safe_load:
+            mock_safe_load.return_value = mock_config
+
+            with patch("builtins.open", mock_open(read_data="data")):
+                mock_responses.post(url, status=400, payload={})
+
+                extraction_service = ExtractionService()
+                extraction_service._begin_session()
+
+                response = await extraction_service.extract_text(filepath)
+                await extraction_service._end_session()
+                assert response == ""
+
+                patch_logger.assert_present(
+                    "Extraction service could not parse `notreal.txt'. Status: [400]."
+                )
+
+    @pytest.mark.asyncio
+    async def test_extract_text_when_response_is_200_with_error_logs_warning(
+        self, mock_responses, patch_logger
+    ):
+        mock_config = {
+            "extraction_service": {
+                "host": "http://localhost:8090",
+                "text_extraction": {"use_file_pointers": True},
+            }
+        }
+        filepath = "tmp/notreal.txt"
+        url = "http://localhost:8090/extract_local_file_text/"
+
+        with patch("yaml.safe_load") as mock_safe_load:
+            mock_safe_load.return_value = mock_config
+
+            with patch("builtins.open", mock_open(read_data="data")):
+                mock_responses.post(
+                    url,
+                    status=200,
+                    payload={"error": "oh no!", "message": "I'm all messed up..."},
+                )
+
+                extraction_service = ExtractionService()
+                extraction_service._begin_session()
+
+                response = await extraction_service.extract_text(filepath)
+                await extraction_service._end_session()
+                assert response == ""
+
+                patch_logger.assert_present(
+                    "Extraction service could not parse `notreal.txt'; oh no!: I'm all messed up..."
+                )
