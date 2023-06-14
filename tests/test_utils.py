@@ -16,8 +16,7 @@ import tempfile
 import time
 import timeit
 from datetime import datetime
-from io import StringIO
-from unittest.mock import MagicMock, Mock, mock_open, patch
+from unittest.mock import Mock, mock_open, patch
 
 import pytest
 import pytest_asyncio
@@ -25,7 +24,7 @@ from aioresponses import aioresponses
 from freezegun import freeze_time
 from pympler import asizeof
 
-from connectors import logger, utils
+from connectors import utils
 from connectors.utils import (
     ConcurrentTasks,
     ExtractionService,
@@ -709,5 +708,5 @@ class TestExtractionService:
                 assert response == ""
 
                 patch_logger.assert_present(
-                    f"Extraction service could not parse `notreal.txt'; oh no!: I'm all messed up..."
+                    "Extraction service could not parse `notreal.txt'; oh no!: I'm all messed up..."
                 )
