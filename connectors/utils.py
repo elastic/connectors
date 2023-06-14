@@ -729,7 +729,7 @@ class ExtractionService:
         params = {"local_file_path": filepath}
 
         async with self._begin_session().post(
-            f"{self.host}/extract_local_file_text",
+            f"{self.host}/extract_local_file_text/",
             json=params,
         ) as response:
             return await self.parse_extraction_resp(filename, response)

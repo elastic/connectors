@@ -603,18 +603,21 @@ class TestExtractionService:
             }
         }
 
-        filename = "tmp/notreal.txt"
-        url = "http://localhost:8090/extract_text"
+        filepath = "tmp/notreal.txt"
+        url = "http://localhost:8090/extract_text/"
         payload = {"extracted_text": "I've been extracted!"}
 
         with patch("yaml.safe_load") as mock_safe_load:
             mock_safe_load.return_value = mock_config
 
-            with patch("builtins.open", mock_open(read_data="data")):
+            with patch("builtins.open", mock_open(read_data=b"data")):
                 mock_responses.post(url, status=200, payload=payload)
 
                 extraction_service = ExtractionService()
-                response = await extraction_service.extract_text(filename)
+                extraction_service._begin_session()
+
+                response = await extraction_service.extract_text(filepath)
+                extraction_service._end_session()
 
                 assert response == "I've been extracted!"
 
@@ -626,8 +629,8 @@ class TestExtractionService:
                 "text_extraction": {"use_file_pointers": True},
             }
         }
-        filename = "tmp/notreal.txt"
-        url = "http://localhost:8090/extract_local_file_text"
+        filepath = "tmp/notreal.txt"
+        url = "http://localhost:8090/extract_local_file_text/"
         payload = {"extracted_text": "I've been extracted!"}
 
         with patch("yaml.safe_load") as mock_safe_load:
@@ -637,6 +640,9 @@ class TestExtractionService:
                 mock_responses.post(url, status=200, payload=payload)
 
                 extraction_service = ExtractionService()
-                response = await extraction_service.extract_text(filename)
+                extraction_service._begin_session()
+
+                response = await extraction_service.extract_text(filepath)
+                extraction_service._end_session()
 
                 assert response == "I've been extracted!"

@@ -723,7 +723,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                                         drive_item.get("name", "")
                                     )[-1]
                                     download_func = partial(
-                                        self.get_content, drive_item
+                                        self.get_drive_item_content, drive_item
                                     )
 
                             yield drive_item, download_func
@@ -765,7 +765,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                                         "lastModifiedDateTime"
                                     ]
                                     attachment_download_func = partial(
-                                        self.get_attachment, list_item_attachment
+                                        self.get_attachment_content, list_item_attachment
                                     )
                                     yield list_item_attachment, attachment_download_func
 
