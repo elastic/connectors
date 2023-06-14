@@ -21,6 +21,7 @@ from io import BytesIO
 
 import aiohttp
 import yaml
+from aiohttp.client_exceptions import ServerTimeoutError
 from base64io import Base64IO
 from bs4 import BeautifulSoup
 from cstriggers.core.trigger import QuartzCron
@@ -688,13 +689,13 @@ class ExtractionService:
         timeout = aiohttp.ClientTimeout(total=5)
         self.session = aiohttp.ClientSession(timeout=timeout)
 
-    def _end_session(self):
+    async def _end_session(self):
         if not self.session:
             return
 
-        self.session.close()
+        await self.session.close()
 
-    async def extract_text(self, filename):
+    async def extract_text(self, filepath):
         """Sends a text extraction request to tika-server using the supplied filename.
         Args:
             filename: full filepath for file to be used for text extraction
@@ -703,25 +704,28 @@ class ExtractionService:
         """
 
         content = ""
+        filename = os.path.basename(filepath)
 
         try:
             if self.use_file_pointers:
-                content = await self.extract_with_file_pointer(filename)
+                content = await self.extract_with_file_pointer(filepath, filename)
             else:
-                content = await self.extract_with_file_send(filename)
+                content = await self.extract_with_file_send(filepath, filename)
+        except ServerTimeoutError as e:
+            logger.error(
+                f"Server timed out while extracting data from {filename}. Error: {e}"
+            )
         except Exception as e:
-            logger.warn(f"Text extraction unexpectedly failed: {e}")
+            logger.error(f"Text extraction unexpectedly failed. Error: {e}")
 
         return content
 
-    async def extract_with_file_pointer(self, filepath):
+    async def extract_with_file_pointer(self, filepath, filename):
         """Sends a request to tika-server to extract text from a file.
         Sends the filename as a request parameter, which tika will pick up and extract.
 
         Returns a parsed response
         """
-
-        filename = os.path.basename(filepath)
         params = {"local_file_path": filepath}
 
         async with self._begin_session().post(
@@ -730,14 +734,12 @@ class ExtractionService:
         ) as response:
             return await self.parse_extraction_resp(filename, response)
 
-    async def extract_with_file_send(self, filepath):
+    async def extract_with_file_send(self, filepath, filename):
         """Sends a request to tika-server to extract text from a file.
         Sends the file as body data in the request.
 
         Returns a parsed response
         """
-        filename = os.path.basename(filepath)
-
         with open(filepath, "rb") as file:
             file_data = aiohttp.FormData()
             file_data.add_field("file", BytesIO(file.read()), filename=filename)

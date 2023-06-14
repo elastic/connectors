@@ -786,7 +786,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         yield site_page, None
         finally:
             if self.extraction_service:
-                self.extraction_service._end_session()
+                await self.extraction_service._end_session()
 
     async def get_attachment_content(self, attachment, timestamp=None, doit=False):
         if not doit:
