@@ -117,11 +117,6 @@ class ServiceNowClient:
             raise_for_status=True,
         )
 
-    async def _api_call(self, url, params, actions, method):
-        return await getattr(self._get_session, method)(
-            url=url, params=params, json=actions
-        )
-
     async def _read_response(self, response):
         fetched_response = await response.read()
         if fetched_response == b"":
@@ -213,6 +208,20 @@ class ServiceNowClient:
             )
         return apis
 
+    async def get_data(self, batched_apis):
+        try:
+            batch_data = self._prepare_batch(requests=batched_apis)
+            async for response in self._batch_api_call(batch_data=batch_data):
+                yield response
+        except Exception as exception:
+            logger.debug(
+                f"Error while fetching batch: {batched_apis} data. Exception: {exception}."
+            )
+            raise
+
+    def _prepare_batch(self, requests):
+        return {"batch_request_id": str(uuid.uuid4()), "rest_requests": requests}
+
     @retryable(
         retries=RETRIES,
         interval=RETRY_INTERVAL,
@@ -232,19 +241,10 @@ class ServiceNowClient:
                 )
             yield json.loads(base64.b64decode(response["body"]))["result"]
 
-    def _prepare_batch(self, requests):
-        return {"batch_request_id": str(uuid.uuid4()), "rest_requests": requests}
-
-    async def get_data(self, batched_apis):
-        try:
-            batch_data = self._prepare_batch(requests=batched_apis)
-            async for response in self._batch_api_call(batch_data=batch_data):
-                yield response
-        except Exception as exception:
-            logger.debug(
-                f"Error while fetching batch: {batched_apis} data. Exception: {exception}."
-            )
-            raise
+    async def _api_call(self, url, params, actions, method):
+        return await getattr(self._get_session, method)(
+            url=url, params=params, json=actions
+        )
 
     async def filter_services(self):
         """Filter services based on service mappings.
@@ -436,14 +436,14 @@ class ServiceNowDataSource(BaseDataSource):
                 "value": RETRIES,
             },
             "concurrent_downloads": {
-                "default_value": 10,
+                "default_value": MAX_CONCURRENT_CLIENT_SUPPORT,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
                 "order": 6,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": 10,
+                "value": MAX_CONCURRENT_CLIENT_SUPPORT,
             },
         }
 

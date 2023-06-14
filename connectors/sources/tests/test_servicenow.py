@@ -146,7 +146,6 @@ def test_tweak_bulk_options():
 @pytest.mark.asyncio
 async def test_get_data():
     source = create_source(ServiceNowDataSource)
-    # session = source.servicenow_client._get_session
 
     source.servicenow_client._api_call = mock.AsyncMock(
         return_value=MockResponse(
