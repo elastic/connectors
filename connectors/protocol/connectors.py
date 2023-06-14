@@ -257,6 +257,9 @@ class SyncJob(ESDocument):
     def job_type(self):
         return JobType(self.get("job_type"))
 
+    def is_content_sync(self):
+        return self.job_type in (JobType.FULL, JobType.INCREMENTAL)
+
     async def validate_filtering(self, validator):
         validation_result = await validator.validate_filtering(self.filtering)
 

@@ -101,7 +101,12 @@ class SyncJobRunner:
         self.running = True
 
         await self.sync_starts()
-        await self.sync_job.claim()
+        sync_cursor = (
+            self.connector.sync_cursor
+            if self.sync_job.job_type == JobType.INCREMENTAL
+            else None
+        )
+        await self.sync_job.claim(sync_cursor=sync_cursor)
         self._start_time = time.time()
 
         try:
@@ -242,8 +247,14 @@ class SyncJobRunner:
                 await self.sync_job.done(ingestion_stats=ingestion_stats)
 
         if await self.reload_connector():
+            sync_cursor = (
+                self.data_provider.sync_cursor()
+                if self.sync_job.is_content_sync()
+                else None
+            )
             await self.connector.sync_done(
-                self.sync_job if await self.reload_sync_job() else None
+                self.sync_job if await self.reload_sync_job() else None,
+                cursor=sync_cursor,
             )
 
         logger.info(

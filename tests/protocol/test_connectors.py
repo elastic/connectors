@@ -724,6 +724,20 @@ async def test_sync_job_properties():
     assert isinstance(sync_job.job_type, JobType)
 
 
+@pytest.mark.parametrize(
+    "job_type, is_content_sync",
+    [
+        (JobType.FULL, True),
+        (JobType.INCREMENTAL, True),
+        (JobType.ACCESS_CONTROL, False),
+    ],
+)
+def test_is_content_sync(job_type, is_content_sync):
+    source = {"_id": "1", "_source": {"job_type": job_type.value}}
+    sync_job = SyncJob(elastic_index=None, doc_source=source)
+    assert sync_job.is_content_sync() == is_content_sync
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "validation_result_state, validation_result_errors, should_raise_exception",

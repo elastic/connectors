@@ -30,6 +30,12 @@ service:
 connector_id: 'changeme'
 service_type: 'changeme'
 
+extraction_service:
+  host: http://localhost:8090
+  text_extraction:
+    use_file_pointers: false
+    method: 'tika'
+
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
   s3: connectors.sources.s3:S3DataSource
