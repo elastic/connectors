@@ -690,7 +690,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                                     f"Not downloading file {drive_item['name']} of size {drive_item['size']}"
                                 )
                             else:
-                                download_func = partial(self.get_drive_item_content, drive_item)
+                                download_func = partial(
+                                    self.get_drive_item_content, drive_item
+                                )
 
                         yield drive_item, download_func
 
@@ -752,7 +754,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         # We don't know attachment sizes unfortunately, so cannot properly ignore them
 
         # Okay this gets weird.
-        # There's no way to learn whether List Item Attachment changed or not 
+        # There's no way to learn whether List Item Attachment changed or not
         # Response does not contain metadata on LastUpdated or any dates,
         # but along with that IDs for attachments are actually these attachments'
         # file names. So if someone creates a file text.txt with content "hello",
