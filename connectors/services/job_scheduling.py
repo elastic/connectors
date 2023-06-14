@@ -61,7 +61,7 @@ class JobSchedulingService(BaseService):
             return
         except DataSourceError as e:
             await connector.error(e)
-            logger.critical(e, exc_info=True)
+            connector.log_critical(e, exc_info=True)
             raise
 
         # the heartbeat is always triggered
@@ -104,7 +104,7 @@ class JobSchedulingService(BaseService):
             if is_platinum_license_enabled:
                 await self._scheduled_sync(connector, JobType.ACCESS_CONTROL)
             else:
-                logger.error(
+                connector.log_error(
                     f"Minimum required Elasticsearch license: '{License.PLATINUM.value}'. Actual license: '{license_enabled.value}'. Skipping access control sync scheduling..."
                 )
 
@@ -193,15 +193,13 @@ class JobSchedulingService(BaseService):
                 return False
 
             if next_sync is None:
-                connector.log_debug(
-                    f"'{job_type_value}' sync scheduling is disabled for connector {connector.id}"
-                )
+                connector.log_debug(f"'{job_type_value}' sync scheduling is disabled")
                 return False
 
             next_sync_due = (next_sync - now).total_seconds()
             if next_sync_due - self.idling > 0:
                 connector.log_debug(
-                    f"Next '{job_type_value}' sync for connector {connector.id} due in {int(next_sync_due)} seconds"
+                    f"Next '{job_type_value}' sync due in {int(next_sync_due)} seconds"
                 )
                 return False
 
@@ -212,9 +210,7 @@ class JobSchedulingService(BaseService):
             return True
 
         if await _should_schedule_scheduled_sync(job_type):
-            connector.log_info(
-                f"Creating a scheduled '{job_type.value}' sync..."
-            )
+            connector.log_info(f"Creating a scheduled '{job_type.value}' sync...")
             await self.sync_job_index.create(
                 connector=connector,
                 trigger_method=JobTriggerMethod.SCHEDULED,

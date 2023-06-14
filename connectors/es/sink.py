@@ -458,7 +458,7 @@ class Extractor:
         A document might be discarded if its timestamp has not changed.
         Extraction happens in a separate task, when a document contains files.
         """
-        logger.info("Starting doc lookups")
+        self._logger.info("Starting doc lookups incrementally")
         generator = self._decorate_with_metrics_span(generator)
 
         self.sync_runs = True
@@ -468,7 +468,7 @@ class Extractor:
             async for count, doc in aenumerate(generator):
                 doc, lazy_download, operation = doc
                 if count % self.display_every == 0:
-                    logger.info(str(self))
+                    self._logger.info(str(self))
 
                 doc_id = doc["id"] = doc.pop("_id")
 
@@ -484,7 +484,9 @@ class Extractor:
                 elif operation == OP_DELETE:
                     self.total_docs_deleted += 1
                 else:
-                    logger.error(f"unsupported operation {operation} for doc {doc_id}")
+                    self._logger.error(
+                        f"unsupported operation {operation} for doc {doc_id}"
+                    )
 
                 if TIMESTAMP_FIELD not in doc:
                     doc[TIMESTAMP_FIELD] = iso_utc()
@@ -510,7 +512,7 @@ class Extractor:
 
                 await asyncio.sleep(0)
         except Exception as e:
-            logger.critical("The document fetcher failed", exc_info=True)
+            self._logger.critical("The document fetcher failed", exc_info=True)
             await self.queue.put("FETCH_ERROR")
             self.fetch_error = e
             return
@@ -525,7 +527,7 @@ class Extractor:
 
         A document might be discarded if its timestamp has not changed.
         """
-        logger.info("Starting access control doc lookups")
+        self._logger.info("Starting access control doc lookups")
         generator = self._decorate_with_metrics_span(generator)
 
         self.sync_runs = True
@@ -535,8 +537,8 @@ class Extractor:
             async for (doc_id, last_update_timestamp) in self._get_existing_ids()
         }
 
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
+        if self._logger.isEnabledFor(logging.DEBUG):
+            self._logger.debug(
                 f"Size of {len(existing_ids)} access control document ids  in memory is {get_mb_size(existing_ids)}MiB"
             )
 
@@ -546,7 +548,7 @@ class Extractor:
                 doc, _, _ = doc
                 count += 1
                 if count % self.display_every == 0:
-                    logger.info(str(self))
+                    self._logger.info(str(self))
 
                 doc_id = doc["id"] = doc.pop("_id")
                 doc_exists = doc_id in existing_ids
@@ -583,7 +585,7 @@ class Extractor:
 
                 await asyncio.sleep(0)
         except Exception as e:
-            logger.critical("The document fetcher failed", exc_info=True)
+            self._logger.critical("The document fetcher failed", exc_info=True)
             await self.queue.put("FETCH_ERROR")
             self.fetch_error = e
             return
@@ -592,7 +594,7 @@ class Extractor:
         await self.queue.put("END_DOCS")
 
     async def enqueue_docs_to_delete(self, existing_ids):
-        logger.debug(f"Delete {len(existing_ids)} docs from index '{self.index}'")
+        self._logger.debug(f"Delete {len(existing_ids)} docs from index '{self.index}'")
         for doc_id in existing_ids.keys():
             await self.queue.put(
                 {
