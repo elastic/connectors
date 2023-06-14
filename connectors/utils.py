@@ -724,7 +724,7 @@ class ExtractionService:
         filename = os.path.basename(filepath)
         params = {"local_file_path": filepath}
 
-        async with self.session.post(
+        async with self._begin_session().post(
             f"{self.host}/extract_local_file_text",
             json=params,
         ) as response:
@@ -742,7 +742,7 @@ class ExtractionService:
             file_data = aiohttp.FormData()
             file_data.add_field("file", BytesIO(file.read()), filename=filename)
 
-            async with self.session.post(
+            async with self._begin_session().post(
                 f"{self.host}/extract_text/", data=file_data
             ) as response:
                 return await self.parse_extraction_resp(filename, response)
