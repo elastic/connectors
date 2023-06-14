@@ -765,7 +765,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                                         "lastModifiedDateTime"
                                     ]
                                     attachment_download_func = partial(
-                                        self.get_attachment_content, list_item_attachment
+                                        self.get_attachment_content,
+                                        list_item_attachment,
                                     )
                                     yield list_item_attachment, attachment_download_func
 
