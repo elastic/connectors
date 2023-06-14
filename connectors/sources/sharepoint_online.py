@@ -552,7 +552,11 @@ class SharepointOnlineDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
 
         self._client = None
-        self.extraction_service = ExtractionService()
+
+        if self.configuration["use_text_extraction_service"]:
+            self.extraction_service = ExtractionService()
+        else:
+            self.extraction_service = None
 
     @property
     def client(self):
@@ -663,7 +667,8 @@ class SharepointOnlineDataSource(BaseDataSource):
             max_data_age = advanced_rules["maxDataAge"]
 
         try:
-            self.extraction_service._begin_session()
+            if self.extraction_service:
+                self.extraction_service._begin_session()
 
             async for site_collection in self.client.site_collections():
                 site_collection["_id"] = site_collection["webUrl"]
@@ -780,7 +785,8 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                         yield site_page, None
         finally:
-            self.extraction_service._end_session()
+            if self.extraction_service:
+                self.extraction_service._end_session()
 
     async def get_attachment_content(self, attachment, timestamp=None, doit=False):
         if not doit:
