@@ -12,7 +12,6 @@ from urllib.parse import quote
 
 import aiofiles
 import aiohttp
-import requests
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ServerDisconnectedError
@@ -125,7 +124,6 @@ class SharepointServerClient:
         }
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
 
-        
         self.session = aiohttp.ClientSession(
             auth=aiohttp.BasicAuth(
                 login=self.configuration["username"],
