@@ -760,14 +760,9 @@ class ExtractionService:
             logger.warn(
                 f"Extraction service could not parse `{filename}'. Status: [{response.status}]."
             )
-        if len(content) > 20971520:
-            logger.info(
-                f"Extraction service returned more than 20MiB for {filename}. Keeping only 20MiB."
-            )
-            content = content[:20971520]
         if content.get("error"):
             logger.warn(
-                f"Extraction service could not parse `{filename}'; {content.get('error')}: {content.get('message')}"
+                f"Extraction service could not parse `{filename}'; {content.get('error', 'unexpected error')}: {content.get('message', 'unknown cause')}"
             )
 
         return content.get("extracted_text", "")
