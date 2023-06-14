@@ -27,32 +27,14 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
+connector_id: 'changeme'
+service_type: 'changeme'
+
 extraction_service:
   host: http://localhost:8090
   text_extraction:
     use_file_pointers: false
     method: 'tika'
-
-native_service_types:
-  - mongodb
-  - mysql
-  - network_drive
-  - s3
-  - google_cloud_storage
-  - azure_blob_storage
-  - postgresql
-  - oracle
-  - confluence
-  - dir
-  - sharepoint
-  - mssql
-  - jira
-  - sharepoint_online
-
-
-# Connector client settings
-#connector_id: 'changeme'
-#service_type: 'changeme'
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource

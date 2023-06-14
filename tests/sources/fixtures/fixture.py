@@ -53,7 +53,6 @@ def _parser():
             "stop_stack",
             "setup",
             "teardown",
-            "sync",
             "monitor",
             "get_num_docs",
             "description",
@@ -73,19 +72,6 @@ def _es_client():
         "basic_auth": ("elastic", "changeme"),
     }
     return Elasticsearch(**options)
-
-
-def _set_sync_now_flag():
-    es_client = _es_client()
-    try:
-        response = es_client.search(index=CONNECTORS_INDEX, size=1)
-        connector_id = response["hits"]["hits"][0]["_id"]
-        doc = {"sync_now": True}
-        es_client.update(index=CONNECTORS_INDEX, id=connector_id, doc=doc)
-    except Exception as e:
-        print(f"Failed to set sync_now flag. Something bad happened: {e}")
-    finally:
-        es_client.close()
 
 
 def _monitor_service(pid):
@@ -140,10 +126,6 @@ def main(args=None):
             os.system("docker compose up -d")
         else:
             os.system("docker compose down --volumes")
-        return
-
-    if args.action == "sync":
-        _set_sync_now_flag()
         return
 
     if args.action == "monitor":
