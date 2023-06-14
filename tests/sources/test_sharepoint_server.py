@@ -998,7 +998,7 @@ async def test_api_call_when_token_is_expired(patch_default_wait_multiplier):
             await source.close()
 
 
-class ClientErrorException():
+class ClientErrorException:
     real_url = ""
 
 
@@ -1013,7 +1013,9 @@ async def test_api_call_when_status_429_exception(patch_default_wait_multiplier)
     with patch.object(
         aiohttp.ClientSession,
         "get",
-        side_effect=aiohttp.ClientResponseError(history="history", request_info=ClientErrorException),
+        side_effect=aiohttp.ClientResponseError(
+            history="history", request_info=ClientErrorException
+        ),
     ):
         with patch("aiohttp.request", return_value=async_response):
             source.sharepoint_client._get_session()
