@@ -177,3 +177,19 @@ async def test_unmodified_default_config(patched_logger, mock_responses):
     patched_logger.errorassert_any_call(
         "In your configuration, you must change 'connector_id' and 'service_type' to not be 'changeme'"
     )
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_missing_mode_config(patched_logger, mock_responses):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    del local_config["connector_id"]
+    del local_config["service_type"]
+    preflight = PreflightCheck(local_config)
+    result = await preflight.run()
+    assert result is False
+    patched_logger.errorassert_any_call(
+        "You must configure a 'connector_id' and a 'service_type'"
+    )
