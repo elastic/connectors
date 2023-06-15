@@ -25,16 +25,11 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import (
     CacheWithTimeout,
-<<<<<<< HEAD
+    CancellableSleeps,
     ExtractionService,
     convert_to_b64,
     html_to_text,
-=======
-    CancellableSleeps,
-    convert_to_b64,
-    html_to_text,
     retryable,
->>>>>>> 8a34d60 (Add retryable to requests done by MicrosoftAPISession class)
     url_encode,
 )
 
