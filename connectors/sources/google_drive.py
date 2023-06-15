@@ -27,22 +27,6 @@ GOOGLE_DRIVE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 API_NAME = "drive"
 API_VERSION = "v3"
 
-GOOGLE_DRIVE_EMULATOR_HOST = os.environ.get("GOOGLE_DRIVE_EMULATOR_HOST")
-RUNNING_FTEST = (
-    "RUNNING_FTEST" in os.environ
-)  # Flag to check if a connector is run for ftest or not.
-DEFAULT_PEM_FILE = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "..",
-    "tests",
-    "sources",
-    "fixtures",
-    "google_drive",
-    "service_account_dummy_cert.pem",
-)
-
-
 DOMAIN_CORPORA = 'domain'
 USER_CORPORA = 'user'
 
@@ -66,6 +50,21 @@ GOOGLE_MIME_TYPES_MAPPING = {
     'application/vnd.google-apps.presentation': 'text/plain',
     'application/vnd.google-apps.spreadsheet': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 }
+
+GOOGLE_DRIVE_EMULATOR_HOST = os.environ.get("GOOGLE_DRIVE_EMULATOR_HOST")
+RUNNING_FTEST = (
+    "RUNNING_FTEST" in os.environ
+)  # Flag to check if a connector is run for ftest or not.
+DEFAULT_PEM_FILE = os.path.join(
+    os.path.dirname(__file__),
+    "..",
+    "..",
+    "tests",
+    "sources",
+    "fixtures",
+    "google_drive",
+    "service_account_dummy_cert.pem",
+)
 
 class GoogleDriveClient:
     """A google client to handle api calls made to Google Drive."""
