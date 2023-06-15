@@ -29,6 +29,7 @@ from pympler import asizeof
 
 from connectors.logger import logger
 
+ACCESS_CONTROL_INDEX_PREFIX = "search-acl-filter-"
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_QUEUE_SIZE = 1024
 DEFAULT_DISPLAY_EVERY = 100
@@ -757,11 +758,11 @@ class ExtractionService:
         content = await response.json()
 
         if response.status != 200:
-            logger.warn(
+            logger.warning(
                 f"Extraction service could not parse `{filename}'. Status: [{response.status}]."
             )
         if content.get("error"):
-            logger.warn(
+            logger.warning(
                 f"Extraction service could not parse `{filename}'; {content.get('error', 'unexpected error')}: {content.get('message', 'unknown cause')}"
             )
 

@@ -59,6 +59,16 @@ DEFAULT_PEM_FILE = os.path.join(
     "google_cloud_storage",
     "service_account_dummy_cert.pem",
 )
+REQUIRED_CREDENTIAL_KEYS = [
+    "type",
+    "project_id",
+    "private_key_id",
+    "private_key",
+    "client_email",
+    "client_id",
+    "auth_uri",
+    "token_uri",
+]
 
 
 class GoogleCloudStorageClient:
@@ -237,8 +247,14 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 max_split=2,
             )
 
+        required_credentials = {
+            key: value
+            for key, value in json_credentials.items()
+            if key in REQUIRED_CREDENTIAL_KEYS
+        }
+
         return GoogleCloudStorageClient(
-            json_credentials=json_credentials,
+            json_credentials=required_credentials,
             retry_count=self.configuration["retry_count"],
         )
 
