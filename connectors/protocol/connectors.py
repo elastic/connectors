@@ -920,6 +920,8 @@ class SyncJobIndex(ESIndex):
         elastic_config (dict): Elasticsearch configuration and credentials
     """
 
+    ACCESS_CONTROL_INDEX_PREFIX = "search-acl-filter-"
+
     def __init__(self, elastic_config):
         super().__init__(index_name=JOBS_INDEX, elastic_config=elastic_config)
 
@@ -937,11 +939,16 @@ class SyncJobIndex(ESIndex):
 
     async def create(self, connector, trigger_method, job_type):
         filtering = connector.filtering.get_active_filter().transform_filtering()
+        index_name = connector.index_name
+
+        if job_type == JobType.ACCESS_CONTROL:
+            index_name = f"{SyncJobIndex.ACCESS_CONTROL_INDEX_PREFIX}{index_name}"
+
         job_def = {
             "connector": {
                 "id": connector.id,
                 "filtering": filtering,
-                "index_name": connector.index_name,
+                "index_name": index_name,
                 "language": connector.language,
                 "pipeline": connector.pipeline.data,
                 "service_type": connector.service_type,
