@@ -505,10 +505,6 @@ class Connector(ESDocument):
         return self.get("is_native", default=False)
 
     @property
-    def sync_now(self):
-        return self.get("sync_now", default=False)
-
-    @property
     def full_sync_scheduling(self):
         return self.get("scheduling", "full", default={})
 
@@ -610,14 +606,6 @@ class Connector(ESDocument):
             logger.debug(f"'{job_type.value}' sync scheduling is disabled")
             return None
         return next_run(scheduling_property.get("interval"))
-
-    async def reset_sync_now_flag(self):
-        await self.index.update(
-            doc_id=self.id,
-            doc={"sync_now": False},
-            if_seq_no=self._seq_no,
-            if_primary_term=self._primary_term,
-        )
 
     async def _update_datetime(self, field, new_ts):
         await self.index.update(
