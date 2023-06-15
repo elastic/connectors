@@ -873,7 +873,8 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     async def close(self):
         await self.client.close()
-        await self.extraction_service._end_session()
+        if self.extraction_service is not None:
+            await self.extraction_service._end_session()
 
     def advanced_rules_validators(self):
         return [SharepointOnlineAdvancedRulesValidator()]
