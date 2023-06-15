@@ -22,30 +22,19 @@ service:
   heartbeat: 300
   max_errors: 20
   max_errors_span: 600
-  max_concurrent_syncs: 1
+  max_concurrent_content_syncs: 1
+  max_concurrent_access_control_syncs: 1
   job_cleanup_interval: 300
   log_level: INFO
 
-native_service_types:
-  - mongodb
-  - mysql
-  - network_drive
-  - s3
-  - google_cloud_storage
-  - azure_blob_storage
-  - postgresql
-  - oracle
-  - confluence
-  - dir
-  - sharepoint
-  - mssql
-  - jira
-  - servicenow
+connector_id: 'changeme'
+service_type: 'changeme'
 
-
-# Connector client settings
-#connector_id: 'changeme'
-#service_type: 'changeme'
+extraction_service:
+  host: http://localhost:8090
+  text_extraction:
+    use_file_pointers: false
+    method: 'tika'
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
@@ -62,3 +51,4 @@ sources:
   jira: connectors.sources.jira:JiraDataSource
   confluence: connectors.sources.confluence:ConfluenceDataSource
   servicenow: connectors.sources.servicenow:ServiceNowDataSource
+  sharepoint_online: connectors.sources.sharepoint_online:SharepointOnlineDataSource

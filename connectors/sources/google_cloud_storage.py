@@ -51,11 +51,24 @@ RUNNING_FTEST = (
 )  # Flag to check if a connector is run for ftest or not.
 DEFAULT_PEM_FILE = os.path.join(
     os.path.dirname(__file__),
+    "..",
+    "..",
     "tests",
+    "sources",
     "fixtures",
     "google_cloud_storage",
     "service_account_dummy_cert.pem",
 )
+REQUIRED_CREDENTIAL_KEYS = [
+    "type",
+    "project_id",
+    "private_key_id",
+    "private_key",
+    "client_email",
+    "client_id",
+    "auth_uri",
+    "token_uri",
+]
 
 
 class GoogleCloudStorageClient:
@@ -173,7 +186,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             "type": "service_account",
             "project_id": "dummy_project_id",
             "private_key_id": "abc",
-            "private_key": open(DEFAULT_PEM_FILE).read(),
+            "private_key": open(
+                os.path.abspath(DEFAULT_PEM_FILE)
+            ).read(),  # TODO: change this and provide meaningful defaults
             "client_email": "123-abc@developer.gserviceaccount.com",
             "client_id": "123-abc.apps.googleusercontent.com",
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
@@ -209,10 +224,10 @@ class GoogleCloudStorageDataSource(BaseDataSource):
 
         try:
             json.loads(self.configuration["service_account_credentials"])
-        except ValueError:
+        except ValueError as e:
             raise ConfigurableFieldValueError(
                 "Google Cloud service account is not a valid JSON."
-            )
+            ) from e
 
     @cached_property
     def _google_storage_client(self):
@@ -232,8 +247,14 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 max_split=2,
             )
 
+        required_credentials = {
+            key: value
+            for key, value in json_credentials.items()
+            if key in REQUIRED_CREDENTIAL_KEYS
+        }
+
         return GoogleCloudStorageClient(
-            json_credentials=json_credentials,
+            json_credentials=required_credentials,
             retry_count=self.configuration["retry_count"],
         )
 

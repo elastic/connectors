@@ -5,7 +5,9 @@
 #
 import functools
 import logging
+import os
 import time
+from enum import Enum
 
 from elastic_transport.client_utils import url_to_node_config
 from elasticsearch import ApiError, AsyncElasticsearch, ConflictError
@@ -21,8 +23,21 @@ class PreflightCheckError(Exception):
     pass
 
 
+class License(Enum):
+    ENTERPRISE = "enterprise"
+    PLATINUM = "platinum"
+    GOLD = "gold"
+    BASIC = "basic"
+    TRIAL = "trial"
+    EXPIRED = "expired"
+    UNSET = None
+
+
 class ESClient:
     def __init__(self, config):
+        # We don't have a way to ask the server, but it's planned
+        # for now we just use an env flag
+        self.serverless = "SERVERLESS" in os.environ
         self.config = config
         self.host = url_to_node_config(
             config.get("host", "http://localhost:9200"),
@@ -73,6 +88,37 @@ class ESClient:
     def stop_waiting(self):
         self._keep_waiting = False
         self._sleeps.cancel()
+
+    async def has_active_license_enabled(self, license_):
+        """This method checks, whether an active license or a more powerful active license is enabled.
+
+        Returns:
+            Tuple: (boolean if `license_` is enabled and not expired, actual license Elasticsearch is using)
+        """
+
+        license_response = await self.client.license.get()
+        license_info = license_response.get("license", {})
+        is_expired = license_info.get("status", "").lower() == "expired"
+
+        if is_expired:
+            return False, License.EXPIRED
+
+        actual_license = License(license_info.get("type").lower())
+
+        license_order = [
+            License.BASIC,
+            License.GOLD,
+            License.PLATINUM,
+            License.ENTERPRISE,
+            License.TRIAL,
+        ]
+
+        license_index = license_order.index(actual_license)
+
+        return (
+            license_order.index(license_) <= license_index,
+            actual_license,
+        )
 
     async def close(self):
         await self.client.close()
@@ -127,8 +173,8 @@ class ESClient:
             logger.debug(f"Checking for pipeline {pipeline} presence")
             try:
                 await self.client.ingest.get_pipeline(id=pipeline)
-            except NotFoundError:
-                raise PreflightCheckError(f"Could not find pipeline {pipeline}")
+            except NotFoundError as e:
+                raise PreflightCheckError(f"Could not find pipeline {pipeline}") from e
 
     async def delete_indices(self, indices):
         await self.client.indices.delete(index=indices, ignore_unavailable=True)

@@ -21,6 +21,7 @@ from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
+from connectors.sources.atlassian import AtlassianAdvancedRulesValidator
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -268,20 +269,22 @@ class JiraDataSource(BaseDataSource):
             "projects": {
                 "display": "textarea",
                 "label": "Jira project keys",
+                "order": 7,
+                "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
                 "value": "*",
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 7,
+                "order": 8,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 8,
+                "order": 9,
                 "type": "str",
                 "value": "",
             },
@@ -289,7 +292,7 @@ class JiraDataSource(BaseDataSource):
                 "default_value": 3,
                 "display": "numeric",
                 "label": "Retries for failed requests",
-                "order": 9,
+                "order": 10,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -299,7 +302,7 @@ class JiraDataSource(BaseDataSource):
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
-                "order": 10,
+                "order": 11,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -309,6 +312,9 @@ class JiraDataSource(BaseDataSource):
                 "value": MAX_CONCURRENT_DOWNLOADS,
             },
         }
+
+    def advanced_rules_validators(self):
+        return [AtlassianAdvancedRulesValidator(self)]
 
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by jira
@@ -413,7 +419,7 @@ class JiraDataSource(BaseDataSource):
         except Exception as exception:
             raise Exception(
                 f"Unable to verify projects: {self.jira_client.projects}. Error: {exception}"
-            )
+            ) from exception
 
     async def _get_timezone(self):
         """Returns the timezone of the Jira deployment"""
@@ -492,15 +498,20 @@ class JiraDataSource(BaseDataSource):
         except Exception as exception:
             logger.warning(f"Skipping data for type: {ISSUE_DATA}. Error: {exception}")
 
-    async def _get_issues(self):
+    async def _get_issues(self, custom_query=""):
         """Get issues with the help of REST APIs
 
         Yields:
             Dictionary: Jira issue to get indexed
             issue (dict): Issue response to fetch the attachments
         """
-        query = f"project in ({','.join(self.jira_client.projects)})"
-        jql = "" if self.jira_client.projects == ["*"] else query
+        wildcard_query = ""
+        projects_query = f"project in ({','.join(self.jira_client.projects)})"
+
+        jql = custom_query or (
+            wildcard_query if self.jira_client.projects == ["*"] else projects_query
+        )
+
         async for response in self.jira_client.paginated_api_call(
             url_name=ISSUES, jql=jql
         ):
@@ -558,11 +569,21 @@ class JiraDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the files.
         """
-        await self._verify_projects()
+        if filtering and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
 
-        await self.fetchers.put(self._get_projects)
-        await self.fetchers.put(self._get_issues)
-        self.tasks += 2
+            for rule in advanced_rules:
+                await self.fetchers.put(
+                    partial(self._get_issues, rule.get("query", ""))
+                )
+                self.tasks += 1
+
+        else:
+            await self._verify_projects()
+
+            await self.fetchers.put(self._get_projects)
+            await self.fetchers.put(self._get_issues)
+            self.tasks += 2
 
         async for item in self._consumer():
             yield item

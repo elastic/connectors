@@ -9,7 +9,7 @@ import asyncio
 import os
 from datetime import datetime
 from functools import partial
-from urllib.parse import urljoin
+from urllib.parse import quote
 
 import aiofiles
 import aiohttp
@@ -84,7 +84,8 @@ SCHEMA = {
     },
     LIST_ITEM: {
         "title": "Title",
-        "author_id": "EditorId",
+        "author_id": "AuthorId",
+        "editor_id": "EditorId",
         "creation_time": "Created",
         "_timestamp": "Modified",
     },
@@ -183,6 +184,28 @@ class SharepointClient:
             raise_for_status=True,
         )
         return self.session
+
+    def format_url(
+        self,
+        relative_url,
+        list_item_id=None,
+        content_type_id=None,
+        is_list_item_has_attachment=False,
+    ):
+        if is_list_item_has_attachment:
+            return (
+                self.host_url
+                + quote(relative_url)
+                + "/DispForm.aspx?ID="
+                + list_item_id
+                + "&Source="
+                + self.host_url
+                + quote(relative_url)
+                + "/AllItems.aspx&ContentTypeId="
+                + content_type_id
+            )
+        else:
+            return self.host_url + quote(relative_url)
 
     async def close_session(self):
         """Closes unclosed client session"""
@@ -322,8 +345,12 @@ class SharepointClient:
             return
 
         source_file_name = ""
+
         if self.is_cloud:
-            response_data = await self.get_site_page_for_online(site_url, filename)
+            format_filename = filename.replace("'", "''")
+            response_data = await self.get_site_page_for_online(
+                site_url, quote(format_filename)
+            )
         else:
             response_data = list_response["WikiField"]
 
@@ -570,7 +597,12 @@ class SharepointClient:
         ):
             for result in list_items_data:
                 if not result.get("Attachments"):
-                    url = f"{self.host_url}{server_relative_url}/DispForm.aspx?ID={result['Id']}&Source={self.host_url}{server_relative_url}/AllItems.aspx&ContentTypeId={result['ContentTypeId']}"
+                    url = self.format_url(
+                        relative_url=server_relative_url,
+                        list_item_id=str(result["Id"]),
+                        content_type_id=result["ContentTypeId"],
+                        is_list_item_has_attachment=True,
+                    )
                     result["url"] = url
                     yield result, file_relative_url
                     continue
@@ -585,11 +617,11 @@ class SharepointClient:
                     )
                     result["Length"] = attachment_data.get("Length")  # pyright: ignore
                     result["_id"] = attachment_data["UniqueId"]  # pyright: ignore
-                    result["url"] = urljoin(
-                        self.host_url,
-                        attachment_file.get("ServerRelativeUrl"),
+                    result["url"] = self.format_url(
+                        relative_url=attachment_file.get("ServerRelativeUrl")
                     )
                     result["file_name"] = attachment_file.get("FileName")
+                    result["server_relative_url"] = attachment_file["ServerRelativeUrl"]
 
                     if (
                         os.path.splitext(attachment_file["FileName"])[-1]
@@ -812,9 +844,10 @@ class SharepointDataSource(BaseDataSource):
         """
         document = {"type": document_type}
 
-        document["url"] = urljoin(
-            self.sharepoint_client.host_url, item["RootFolder"]["ServerRelativeUrl"]
+        document["url"] = self.sharepoint_client.format_url(
+            relative_url=item["RootFolder"]["ServerRelativeUrl"]
         )
+        document["server_relative_url"] = item["RootFolder"]["ServerRelativeUrl"]
 
         self.map_document_with_schema(
             document=document, item=item, document_type=document_type
@@ -851,13 +884,13 @@ class SharepointDataSource(BaseDataSource):
         item_type = item["item_type"]
 
         document.update(
-            {
+            {  # pyright: ignore
                 "_id": item["GUID"],
-                "size": item.get("File", {}).get("Length", 0),
-                "url": urljoin(
-                    self.sharepoint_client.host_url,
-                    item[item_type]["ServerRelativeUrl"],
+                "size": int(item.get("File", {}).get("Length", 0)),
+                "url": self.sharepoint_client.format_url(
+                    relative_url=item[item_type]["ServerRelativeUrl"]
                 ),
+                "server_relative_url": item[item_type]["ServerRelativeUrl"],
                 "type": item_type,
             }
         )
@@ -882,13 +915,16 @@ class SharepointDataSource(BaseDataSource):
         document = {"type": LIST_ITEM}
 
         document.update(
-            {
+            {  # pyright: ignore
                 "_id": item["_id"] if "_id" in item.keys() else item["GUID"],
-                "file_name": item.get("file_name"),
-                "size": item.get("Length", 0),
+                "file_name": item.get("file_name", ""),
+                "size": int(item.get("Length", "0")),
                 "url": item["url"],
             }
         )
+        server_url = item.get("server_relative_url")
+        if server_url:
+            document["server_relative_url"] = server_url
 
         self.map_document_with_schema(
             document=document, item=item, document_type=LIST_ITEM

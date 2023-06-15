@@ -49,7 +49,8 @@ class ESIndex(ESClient):
         return self._create_object(resp_body)
 
     async def fetch_response_by_id(self, doc_id):
-        await self.client.indices.refresh(index=self.index_name)
+        if not self.serverless:
+            await self.client.indices.refresh(index=self.index_name)
 
         try:
             resp = await self.client.get(index=self.index_name, id=doc_id)
@@ -59,7 +60,7 @@ class ESIndex(ESClient):
             if e.status_code == 404:
                 raise DocumentNotFoundError(
                     f"Couldn't find document in {self.index_name} by id {doc_id}"
-                )
+                ) from e
             raise
 
         return resp.body
@@ -94,7 +95,8 @@ class ESIndex(ESClient):
         Returns:
             Iterator
         """
-        await self.client.indices.refresh(index=self.index_name)
+        if not self.serverless:
+            await self.client.indices.refresh(index=self.index_name)
 
         if query is None:
             query = {"match_all": {}}

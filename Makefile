@@ -35,27 +35,31 @@ clean:
 lint: bin/python bin/black bin/elastic-ingest
 	bin/isort --check . --sp .isort.cfg
 	bin/black --check connectors
+	bin/black --check tests
 	bin/black --check setup.py
-	bin/flake8 connectors
-	bin/flake8 setup.py
 	bin/black --check scripts
-	bin/flake8 scripts
+	bin/ruff connectors
+	bin/ruff tests
+	bin/ruff setup.py
+	bin/ruff scripts
 	bin/pyright connectors
+	bin/pyright tests
 
 autoformat: bin/python bin/black bin/elastic-ingest
 	bin/isort . --sp .isort.cfg
 	bin/black connectors
+	bin/black tests
 	bin/black setup.py
 	bin/black scripts
 
 test:	bin/pytest bin/elastic-ingest
-	bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv connectors/tests connectors/sources/tests
+	bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
 release: install
 	bin/python setup.py sdist
 
 ftest: bin/pytest bin/elastic-ingest
-	connectors/tests/ftest.sh $(NAME) $(PERF8)
+	tests/ftest.sh $(NAME) $(PERF8)
 
 run: install
 	bin/elastic-ingest
