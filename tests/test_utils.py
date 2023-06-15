@@ -617,7 +617,7 @@ class TestExtractionService:
                 extraction_service._begin_session()
 
                 response = await extraction_service.extract_text(filepath)
-                extraction_service._end_session()
+                await extraction_service._end_session()
 
                 assert response == "I've been extracted!"
 
