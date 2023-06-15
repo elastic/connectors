@@ -320,6 +320,7 @@ class Extractor:
             self.total_downloads += 1
             data.pop("_id", None)
             data.pop(TIMESTAMP_FIELD, None)
+            data.pop("_tempfile_suffix", None)
             doc.update(data)
 
         await self.queue.put(

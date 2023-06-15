@@ -57,7 +57,7 @@ def load():
         """N tables of 10001 rows each. each row is ~ 1024*20 bytes"""
         connect = await asyncpg.connect(CONNECTION_STRING)
         for table in range(NUM_TABLES):
-            print(f"Adding data in {table}...")
+            print(f"Adding data from table #{table}...")
             sql_query = f"CREATE TABLE IF NOT EXISTS customers_{table} (name VARCHAR(255), age int, description TEXT, PRIMARY KEY (name))"
             await connect.execute(sql_query)
             for i in range(10):

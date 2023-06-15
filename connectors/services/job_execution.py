@@ -182,7 +182,7 @@ class JobExecutionService(BaseService):
 
                     if len(supported_connector_ids) == 0:
                         logger.info(
-                            f"There's no supported connectors found with native service types [{', '.join(native_service_types)}] and connector ids [{', '.join(connector_ids)}]"
+                            f"There's no supported connectors found with native service types [{', '.join(native_service_types)}] or connector ids [{', '.join(connector_ids)}]"
                         )
                     else:
                         async for sync_job in self.sync_job_index.pending_jobs(

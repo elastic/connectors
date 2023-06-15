@@ -134,14 +134,6 @@ spec:
         trigger_mode: "none"
       repository: "elastic/connectors-python"
       schedules:
-        Daily 8_7:
-          branch: '8.7'
-          cronline: '@daily'
-          message: "Runs daily `8.7` e2e aarch64 test"
-        Daily 8_8:
-          branch: '8.8'
-          cronline: '@daily'
-          message: "Runs daily `8.8` e2e aarch64 test"
         Daily main:
           branch: main
           cronline: '@daily'
@@ -180,6 +172,14 @@ spec:
         trigger_mode: "none"
       repository: "elastic/connectors-python"
       schedules:
+        Daily 8_7:
+          branch: '8.7'
+          cronline: '@daily'
+          message: "Runs daily `8.7` e2e aarch64 test"
+        Daily 8_8:
+          branch: '8.8'
+          cronline: '@daily'
+          message: "Runs daily `8.8` e2e aarch64 test"
         Daily main:
           branch: main
           cronline: '@daily'

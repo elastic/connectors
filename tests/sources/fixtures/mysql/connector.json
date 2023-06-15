@@ -4,7 +4,7 @@
         "service_type": "mysql",
         "sync_cursor": null,
         "sync_now": true,
-        "is_native": true,
+        "is_native": false,
         "api_key_id": null,
         "status": "configured",
         "language": "en",

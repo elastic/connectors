@@ -281,7 +281,7 @@ async def prepare(service_type, index_name, config, connector_definition=None):
             # Scheduling intervals
             "scheduling": {
                 "full": {
-                    "enabled": False,
+                    "enabled": True,
                     "interval": "1 * * * * *",
                 },
             },  # quartz syntax
@@ -293,11 +293,13 @@ async def prepare(service_type, index_name, config, connector_definition=None):
             },
             "sync_cursor": None,
             "sync_now": False,
-            "is_native": True,
+            "is_native": False,
         }
 
         logger.info(f"Prepare {CONNECTORS_INDEX}")
-        await upsert_index(es, CONNECTORS_INDEX, docs=[doc])
+        await upsert_index(
+            es, CONNECTORS_INDEX, docs=[doc], doc_ids=[config["connector_id"]]
+        )
 
         logger.info(f"Prepare {JOBS_INDEX}")
         await upsert_index(es, JOBS_INDEX, docs=[], mappings=JOB_INDEX_MAPPINGS)
@@ -315,7 +317,9 @@ async def prepare(service_type, index_name, config, connector_definition=None):
         await es.close()
 
 
-async def upsert_index(es, index, docs=None, mappings=None, settings=None):
+async def upsert_index(
+    es, index, docs=None, doc_ids=None, mappings=None, settings=None
+):
     """Override the index with new mappings and settings.
 
     If the index with such name exists, it's deleted and then created again
@@ -348,10 +352,13 @@ async def upsert_index(es, index, docs=None, mappings=None, settings=None):
     if docs is None:
         return
     # TODO: bulk
-    doc_id = 1
-    for doc in docs:
-        await es.client.index(index=index, id=doc_id, document=doc)
-        doc_id += 1
+
+    if doc_ids is None:
+        for doc_id, doc in enumerate(docs, start=1):
+            await es.client.index(index=index, id=doc_id, document=doc)
+    else:
+        for doc, doc_id in zip(docs, doc_ids, strict=True):
+            await es.client.index(index=index, id=doc_id, document=doc)
 
 
 def _parser():
