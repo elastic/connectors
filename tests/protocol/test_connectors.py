@@ -190,6 +190,9 @@ ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
 
 SYNC_CURSOR = {"foo": "bar"}
 
+INDEX_NAME = "index_name"
+ACCESS_CONTROL_INDEX_PREFIX = "search-acl-filter-"
+
 
 def test_utc():
     # All dates are in ISO 8601 UTC so we can serialize them
@@ -1746,6 +1749,57 @@ async def test_create_job(index_method, trigger_method, set_env):
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
     await sync_job_index.create(
         connector=connector, trigger_method=trigger_method, job_type=JobType.INCREMENTAL
+    )
+
+    index_method.assert_called_with(expected_index_doc)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "job_type, target_index_name",
+    [
+        (JobType.FULL, INDEX_NAME),
+        (JobType.INCREMENTAL, INDEX_NAME),
+        (JobType.ACCESS_CONTROL, f"{ACCESS_CONTROL_INDEX_PREFIX}{INDEX_NAME}"),
+    ],
+)
+@patch("connectors.protocol.SyncJobIndex.index")
+@patch(
+    "connectors.utils.ACCESS_CONTROL_INDEX_PREFIX",
+    ACCESS_CONTROL_INDEX_PREFIX,
+)
+async def test_create_jobs_with_correct_target_index(
+    index_method, job_type, target_index_name, set_env
+):
+    connector = Mock()
+    connector.index_name = INDEX_NAME
+    config = load_config(CONFIG)
+
+    expected_index_doc = {
+        "connector": {
+            "id": ANY,
+            "filtering": ANY,
+            "index_name": target_index_name,
+            "language": ANY,
+            "pipeline": ANY,
+            "service_type": ANY,
+            "configuration": ANY,
+        },
+        "trigger_method": JobTriggerMethod.SCHEDULED.value,
+        "job_type": job_type.value,
+        "status": JobStatus.PENDING.value,
+        "indexed_document_count": 0,
+        "indexed_document_volume": 0,
+        "deleted_document_count": 0,
+        "created_at": ANY,
+        "last_seen": ANY,
+    }
+
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    await sync_job_index.create(
+        connector=connector,
+        trigger_method=JobTriggerMethod.SCHEDULED,
+        job_type=job_type,
     )
 
     index_method.assert_called_with(expected_index_doc)
