@@ -217,7 +217,7 @@ async def test_connector_both_on_demand_and_scheduled(
     sync_job_index_mock,
     set_env,
 ):
-    connector = mock_connector(sync_now=True, next_sync=datetime.now(timezone.utc))
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     await create_and_run_service()
 
@@ -393,8 +393,8 @@ async def test_connector_prepare_failed(
 async def test_run_when_sync_fails_then_continues_service_execution(
     connector_index_mock, set_env
 ):
-    connector = mock_connector(next_sync=datetime.utcnow())
-    another_connector = mock_connector(next_sync=datetime.utcnow())
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
+    another_connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator(
         [connector, another_connector]
     )

@@ -15,7 +15,7 @@ import string
 import tempfile
 import time
 import timeit
-from datetime import datetime, timezone
+from datetime import datetime
 from unittest.mock import Mock, mock_open, patch
 
 import pytest

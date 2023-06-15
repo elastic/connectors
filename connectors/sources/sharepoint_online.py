@@ -789,9 +789,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         # same everything. But it will already be an absolutely new document.
         # Therefore every time we try to download the attachment we say that
         # it was just recently created so that framework would always re-download it.
-        new_timestamp = datetime.now(
-                timezone.utc
-            )
+        new_timestamp = datetime.now(timezone.utc)
 
         doc = {
             "_id": attachment["odata.id"],
