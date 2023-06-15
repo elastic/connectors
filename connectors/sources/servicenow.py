@@ -37,7 +37,7 @@ RETRY_INTERVAL = 2
 CHUNK_SIZE = 1024
 QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
 FILE_SIZE_LIMIT = 10485760  # Size in Bytes
-CONCURRENT_TASK = 1000  # Depends on total number of services and size of each service
+CONCURRENT_TASKS = 1000  # Depends on total number of services and size of each service
 MAX_CONCURRENT_CLIENT_SUPPORT = 10
 TABLE_FETCH_SIZE = 50
 TABLE_BATCH_SIZE = 5
@@ -385,7 +385,7 @@ class ServiceNowDataSource(BaseDataSource):
 
         self.task_count = 0
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
-        self.fetchers = ConcurrentTasks(max_concurrency=CONCURRENT_TASK)
+        self.fetchers = ConcurrentTasks(max_concurrency=CONCURRENT_TASKS)
 
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by ServiceNow
