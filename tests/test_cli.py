@@ -70,13 +70,14 @@ def test_config_action(mock_responses, set_env):
     args.log_level = "DEBUG"
     args.config_file = CONFIG
     args.action = ["config"]
-    args.service_type = 'fake'
+    args.service_type = "fake"
     with patch("sys.stdout", new=StringIO()) as patched_stdout:
         result = run(args)
         output = patched_stdout.getvalue().strip()
         assert result == 0
         assert "Could not find a connector for service type" not in output
         assert "Getting default configuration for service type fake" in output
+
 
 def test_run_snowflake(mock_responses, set_env):
     args = mock.MagicMock()
