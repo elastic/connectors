@@ -685,14 +685,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                     site_drive["object_type"] = "site_drive"
                     yield site_drive, None
 
-                    async for drive_item in self.client.drive_items(
-                        site_drive["id"]
-                    ):
+                    async for drive_item in self.client.drive_items(site_drive["id"]):
                         drive_item["_id"] = drive_item["id"]
                         drive_item["object_type"] = "drive_item"
-                        drive_item["_timestamp"] = drive_item[
-                            "lastModifiedDateTime"
-                        ]
+                        drive_item["_timestamp"] = drive_item["lastModifiedDateTime"]
 
                         download_func = None
 
@@ -704,8 +700,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             if (
                                 max_data_age
                                 and modified_date
-                                < datetime.utcnow()
-                                - timedelta(seconds=max_data_age)
+                                < datetime.utcnow() - timedelta(seconds=max_data_age)
                             ):
                                 logger.warning(
                                     f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
@@ -776,9 +771,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                     for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:
                         if html_field in site_page:
-                            site_page[html_field] = html_to_text(
-                                site_page[html_field]
-                            )
+                            site_page[html_field] = html_to_text(site_page[html_field])
 
                     yield site_page, None
 
