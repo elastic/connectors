@@ -295,7 +295,7 @@ class MicrosoftAPISession:
                         retry_seconds = int(response_headers["Retry-After"])
                     else:
                         logger.warning(
-                            "Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                            f"Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
                         )
                         retry_seconds = DEFAULT_RETRY_SECONDS
                     logger.debug(
