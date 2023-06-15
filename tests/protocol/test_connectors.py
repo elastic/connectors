@@ -1765,7 +1765,7 @@ async def test_create_job(index_method, trigger_method, set_env):
 )
 @patch("connectors.protocol.SyncJobIndex.index")
 @patch(
-    "connectors.protocol.SyncJobIndex.ACCESS_CONTROL_INDEX_PREFIX",
+    "connectors.utils.ACCESS_CONTROL_INDEX_PREFIX",
     ACCESS_CONTROL_INDEX_PREFIX,
 )
 async def test_create_jobs_with_correct_target_index(

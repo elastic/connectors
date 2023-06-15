@@ -31,6 +31,7 @@ from connectors.source import (
     get_source_klass,
 )
 from connectors.utils import (
+    ACCESS_CONTROL_INDEX_PREFIX,
     deep_merge_dicts,
     filter_nested_dict_by_keys,
     iso_utc,
@@ -920,8 +921,6 @@ class SyncJobIndex(ESIndex):
         elastic_config (dict): Elasticsearch configuration and credentials
     """
 
-    ACCESS_CONTROL_INDEX_PREFIX = "search-acl-filter-"
-
     def __init__(self, elastic_config):
         super().__init__(index_name=JOBS_INDEX, elastic_config=elastic_config)
 
@@ -942,7 +941,7 @@ class SyncJobIndex(ESIndex):
         index_name = connector.index_name
 
         if job_type == JobType.ACCESS_CONTROL:
-            index_name = f"{SyncJobIndex.ACCESS_CONTROL_INDEX_PREFIX}{index_name}"
+            index_name = f"{ACCESS_CONTROL_INDEX_PREFIX}{index_name}"
 
         job_def = {
             "connector": {
