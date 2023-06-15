@@ -3,7 +3,6 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-
 import asyncio
 import os
 import json
@@ -27,6 +26,26 @@ DEFAULT_FILE_SIZE_LIMIT = 10485760
 GOOGLE_DRIVE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 API_NAME = "drive"
 API_VERSION = "v3"
+
+GOOGLE_DRIVE_EMULATOR_HOST = os.environ.get("GOOGLE_DRIVE_EMULATOR_HOST")
+RUNNING_FTEST = (
+    "RUNNING_FTEST" in os.environ
+)  # Flag to check if a connector is run for ftest or not.
+DEFAULT_PEM_FILE = os.path.join(
+    os.path.dirname(__file__),
+    "..",
+    "..",
+    "tests",
+    "sources",
+    "fixtures",
+    "google_drive",
+    "service_account_dummy_cert.pem",
+)
+
+
+DOMAIN_CORPORA = 'domain'
+USER_CORPORA = 'user'
+
 BLOB_ADAPTER = {
     "_id": "id",
     "created_at": "createdTime",
@@ -39,30 +58,14 @@ BLOB_ADAPTER = {
     "file_extension": "fileExtension",
     "url": "webViewLink",
 }
-DEFAULT_RETRY_COUNT = 3
-DEFAULT_WAIT_MULTIPLIER = 2
-DEFAULT_FILE_SIZE_LIMIT = 10485760
-STORAGE_EMULATOR_HOST = os.environ.get("STORAGE_EMULATOR_HOST")
-RUNNING_FTEST = (
-    "RUNNING_FTEST" in os.environ
-)  # Flag to check if a connector is run for ftest or not.
-DEFAULT_PEM_FILE = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "..",
-    "tests",
-    "sources",
-    "fixtures",
-    "google_cloud_storage",
-    "service_account_dummy_cert.pem",
-)
 
-
-DOMAIN_CORPORA = 'domain'
-USER_CORPORA = 'user'
-
-
-
+# Export Google Workspace documents to TIKA compatible format, prefer 'text/plain' where possible to be
+# mindful of the content extraction service resources
+GOOGLE_MIME_TYPES_MAPPING = {
+    'application/vnd.google-apps.document': 'text/plain',
+    'application/vnd.google-apps.presentation': 'text/plain',
+    'application/vnd.google-apps.spreadsheet': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+}
 
 class GoogleDriveClient:
     """A google client to handle api calls made to Google Drive."""
@@ -88,7 +91,7 @@ class GoogleDriveClient:
         full_response=False,
         **kwargs,
     ):
-        """Make a GET call for Google Cloud Storage with retry for the failed API calls.
+        """Make a GET call to Google Drive API with retry for the failed calls.
 
         Args:
             resource (aiogoogle.resource.Resource): Resource name for which api call will be made.
@@ -108,18 +111,18 @@ class GoogleDriveClient:
                 async with Aiogoogle(
                     service_account_creds=self.service_account_credentials
                 ) as google_client:
-                    storage_client = await google_client.discover(
+                    drive_client = await google_client.discover(
                         api_name=API_NAME, api_version=API_VERSION
                     )
-                    if RUNNING_FTEST and not sub_method and STORAGE_EMULATOR_HOST:
+                    if RUNNING_FTEST and not sub_method and GOOGLE_DRIVE_EMULATOR_HOST:
                         logger.debug(
-                            f"Using the storage emulator at {STORAGE_EMULATOR_HOST}"
+                            f"Using the google drive emulator at {GOOGLE_DRIVE_EMULATOR_HOST}"
                         )
-                        # Redirecting calls to fake Google Cloud Storage server for e2e test.
-                        storage_client.discovery_document["rootUrl"] = (
-                            STORAGE_EMULATOR_HOST + "/"
+                        # Redirecting calls to fake Google Drive server for e2e test.
+                        drive_client.discovery_document["rootUrl"] = (
+                            GOOGLE_DRIVE_EMULATOR_HOST + "/"
                         )
-                    resource_object = getattr(storage_client, resource)
+                    resource_object = getattr(drive_client, resource)
                     method_object = getattr(resource_object, method)
                     if full_response:
                         first_page_with_next_attached = (
@@ -154,13 +157,13 @@ class GoogleDriveClient:
 
 
 class GoogleDriveDataSource(BaseDataSource):
-    """Google Cloud Storage"""
+    """Google Drive"""
 
-    name = "Google Cloud Storage"
-    service_type = "google_cloud_storage"
+    name = "Google Drive"
+    service_type = "google_drive"
 
     def __init__(self, configuration):
-        """Set up the connection to the Google Cloud Storage Client.
+        """Set up the connection to the Google Drive Client.
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
@@ -170,7 +173,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
     @classmethod
     def get_default_configuration(cls):
-        """Get the default configuration for Google Cloud Storage.
+        """Get the default configuration for Google Drive.
 
         Returns:
             dictionary: Default configuration.
@@ -210,10 +213,10 @@ class GoogleDriveDataSource(BaseDataSource):
 
     @cached_property
     def _google_drive_client(self):
-        """Initialize and return the GoogleCloudStorageClient
+        """Initialize and return the GoogleDriveClient
 
         Returns:
-            GoogleCloudStorageClient: An instance of the GoogleCloudStorageClient.
+            GoogleDriveClient: An instance of the GoogleDriveClient.
         """
         json_credentials = json.loads(self.configuration["service_account_credentials"])
 
@@ -232,7 +235,7 @@ class GoogleDriveDataSource(BaseDataSource):
         )
 
     async def ping(self):
-        """Verify the connection with Google Cloud Storage"""
+        """Verify the connection with Google Drive"""
         if RUNNING_FTEST:
             return
 
@@ -244,9 +247,9 @@ class GoogleDriveDataSource(BaseDataSource):
                     fields="kind"
                 )
             )
-            logger.info("Successfully connected to the Google Cloud Storage.")
+            logger.info("Successfully connected to the Google Drive.")
         except Exception:
-            logger.exception("Error while connecting to the Google Cloud Storage.")
+            logger.exception("Error while connecting to the Google Drive.")
             raise
 
 
@@ -266,23 +269,106 @@ class GoogleDriveDataSource(BaseDataSource):
             ) from e
 
 
-    async def get_content(self, blob, timestamp=None, doit=None):
-        """Extracts the content for allowed file types.
+    async def _download_content(self, blob, download_func):
+        '''Downloads the file from Google Drive and returns the encoded file content.
+
+        Args:
+            blob (dictionary): Formatted blob document.
+            download_func (partial func): Partial function that gets the file content from Google Drive API.
+
+        Returns:
+            attachment, blob_size (tuple): base64 encoded contnet of the file and size in bytes of the attachment
+        '''
+
+        temp_file_name = ""
+        blob_name = blob["name"]
+
+        logger.debug(f"Downloading {blob_name}")
+
+        async with NamedTemporaryFile(
+            mode="wb", delete=False
+        ) as async_buffer:
+            await anext(download_func(pipe_to=async_buffer,))
+            temp_file_name = async_buffer.name
+
+        await asyncio.to_thread(
+            convert_to_b64,
+            source=temp_file_name,
+        )
+
+        blob_size = os.stat(temp_file_name).st_size
+
+        async with aiofiles.open(file=temp_file_name, mode="r") as target_file:
+            attachment = (await target_file.read()).strip()
+
+        logger.debug(f"Downloaded {blob_name} for {blob_size} bytes ")
+
+        await remove(str(temp_file_name))
+
+        return attachment, blob_size
+
+
+    async def get_google_workspace_content(self, blob, timestamp=None):
+        """Exports Google Workspace documents to an allowed file type and extracts its text content.
+
+        Shared Google Workspace documents are different than regular files. When shared from
+        an external account they don't count against the storage quota and therefore have size 0.
+        They need to be exported to a common file type before the content extraction.
 
         Args:
             blob (dictionary): Formatted blob document.
             timestamp (timestamp, optional): Timestamp of blob last modified. Defaults to None.
-            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to None.
+
+        Returns:
+            dictionary: Content document with id, timestamp & text
+        """
+
+        blob_name, blob_id, blob_mime_type = blob["name"], blob["id"], blob['mime_type']
+
+        document = {
+            "_id": blob_id,
+            "_timestamp": blob["_timestamp"],
+        }
+
+        attachment, blob_size = await self._download_content(
+            blob=blob,
+            download_func=partial(
+                self._google_drive_client.api_call,
+                resource="files",
+                method="export",
+                fileId=blob_id,
+                mimeType=GOOGLE_MIME_TYPES_MAPPING[blob_mime_type],
+            )
+        )
+
+        if blob_size > DEFAULT_FILE_SIZE_LIMIT:
+            logger.warning(
+                f"File size {blob_size} of file {blob_name} is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
+            )
+            return
+
+        document["_attachment"] = attachment
+        return document
+
+
+    async def get_generic_file_content(self, blob, timestamp=None):
+        """Extracts the content from allowed file types supported by Apache Tika.
+
+        Args:
+            blob (dictionary): Formatted blob document.
+            timestamp (timestamp, optional): Timestamp of blob last modified. Defaults to None.
 
         Returns:
             dictionary: Content document with id, timestamp & text
         """
 
         blob_size = int(blob["size"])
-        if not (doit and blob_size > 0):
+
+        if blob_size == 0:
             return
 
-        blob_name, blob_id, blob_extension = blob["name"], blob["id"], f".{blob['file_extension']}"
+        blob_name, blob_id, blob_extension = \
+            blob["name"], blob["id"], f".{blob['file_extension']}"
 
         if blob_extension not in TIKA_SUPPORTED_FILETYPES:
             logger.debug(f"{blob_name} can't be extracted")
@@ -293,43 +379,58 @@ class GoogleDriveDataSource(BaseDataSource):
                 f"File size {blob_size} of file {blob_name} is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
             )
             return
-        logger.debug(f"Downloading {blob_name}")
+
         document = {
             "_id": blob_id,
             "_timestamp": blob["_timestamp"],
         }
-        source_file_name = ""
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            await anext(
-                self._google_drive_client.api_call(
-                    resource="files",
-                    method="get",
-                    fileId=blob_id,
-                    alt="media",
-                    pipe_to=async_buffer,
-                )
-            )
-            source_file_name = async_buffer.name
 
-        logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
+        attachment, blob_size = await self._download_content(
+            blob=blob,
+            download_func=partial(
+                self._google_drive_client.api_call,
+                resource="files",
+                method="get",
+                fileId=blob_id,
+                alt="media",
+            )
         )
-        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            document["_attachment"] = (await target_file.read()).strip()
-        await remove(str(source_file_name))
-        logger.debug(f"Downloaded {blob_name} for {blob_size} bytes ")
+
+        document["_attachment"] = attachment
         return document
+
+
+    async def get_content(self, blob, timestamp=None, doit=None):
+        """Extracts the content from a blob file.
+
+        Args:
+            blob (dictionary): Formatted blob document.
+            timestamp (timestamp, optional): Timestamp of blob last modified. Defaults to None.
+            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to None.
+
+        Returns:
+            dictionary: Content document with id, timestamp & text
+        """
+
+        if not doit:
+            return
+
+        blob_mime_type = blob['mime_type']
+
+        if blob_mime_type in GOOGLE_MIME_TYPES_MAPPING:
+            # Get content from native google workspace files (docs, slides, sheets)
+            return await self.get_google_workspace_content(blob, timestamp=timestamp)
+        else:
+            # Get content from all other file types
+            return await self.get_generic_file_content(blob, timestamp=timestamp)
 
 
 
     async def fetch_files(self):
-      """Get files from Google Drive. File can have any type.
+      """Get files from Google Drive. Files can have any type.
 
       Yields:
-          dictionary: Documents from Google Cloud Storage.
+          dictionary: Documents from Google Drive.
       """
       async for file in self._google_drive_client.api_call(
           resource="files",
@@ -349,19 +450,19 @@ class GoogleDriveDataSource(BaseDataSource):
         """Apply key mappings to the blob document.
 
         Args:
-            blob (dictionary): Blob's metadata returned from the Google Cloud Storage.
+            blob (dictionary): Blob's metadata returned from the Drive.
 
         Returns:
             dictionary: Blobs metadata mapped with the keys of `BLOB_ADAPTER`.
         """
 
         blob_document = {}
-        for elasticsearch_field, google_cloud_storage_field in BLOB_ADAPTER.items():
-            blob_document[elasticsearch_field] = blob.get(google_cloud_storage_field)
+        for elasticsearch_field, google_drive_field in BLOB_ADAPTER.items():
+            blob_document[elasticsearch_field] = blob.get(google_drive_field)
 
         # handle folders and shortcuts
         if blob_document['size'] is None:
-          blob_document['size'] = 0
+            blob_document['size'] = 0
 
         return blob_document
 
