@@ -12,6 +12,7 @@ from connectors.utils import CancellableSleeps
 
 class PreflightCheck:
     def __init__(self, config):
+        self.config = config
         self.elastic_config = config["elasticsearch"]
         self.service_config = config["service"]
         self.es_client = ESClient(self.elastic_config)
@@ -40,6 +41,7 @@ class PreflightCheck:
                 logger.critical(f"{self.elastic_config['host']} seem down. Bye!")
                 return False
 
+            self._validate_configuration()
             return await self._check_system_indices_with_retries()
         finally:
             self.stop()
@@ -69,3 +71,26 @@ class PreflightCheck:
                     attempts += 1
                     await self._sleeps.sleep(self.preflight_idle)
         return False
+
+    def _validate_configuration(self):
+        # "Native" mode
+        configured_native_types = "native_service_types" in self.config
+        force_allowed_native = self.config.get("_force_allow_native", False)
+        if configured_native_types and not force_allowed_native:
+            logger.warning(
+                "The configuration 'native_service_types' has been deprecated. Please remove this configuration."
+            )
+            logger.warning(
+                "Native Connectors are only supported internal to Elastic Cloud deployments, which this process is not."
+            )
+
+        # Connector client mode
+        configured_connector_id = self.config.get("connector_id", None)
+        configred_service_type = self.config.get("service_type", None)
+        if (
+            not (configured_connector_id and configred_service_type)
+            and not force_allowed_native
+        ):
+            logger.warning(
+                "Please update your config.yml to explicitly configure a 'connector_id' and a 'service_type'"
+            )

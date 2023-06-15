@@ -36,6 +36,7 @@ DOC_ONE_DIFFERENT_TIMESTAMP = {
 }
 
 DOC_TWO = {"_id": 2, "_timestamp": TIMESTAMP}
+DOC_THREE = {"_id": 3, "_timestamp": TIMESTAMP}
 
 SYNC_RULES_ENABLED = True
 SYNC_RULES_DISABLED = False
@@ -367,10 +368,10 @@ async def lazy_downloads_mock():
 
 
 async def setup_extractor(
-    basic_rule_engine,
     queue,
-    sync_rules_enabled,
-    content_extraction_enabled,
+    basic_rule_engine=None,
+    sync_rules_enabled=False,
+    content_extraction_enabled=False,
 ):
     # filtering content doesn't matter as the BasicRuleEngine behavior is mocked
     filter_mock = Mock()
@@ -642,10 +643,10 @@ async def test_get_docs(
         doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
 
         extractor = await setup_extractor(
-            basic_rule_engine,
             queue,
-            sync_rules_enabled,
-            content_extraction_enabled,
+            basic_rule_engine=basic_rule_engine,
+            sync_rules_enabled=sync_rules_enabled,
+            content_extraction_enabled=content_extraction_enabled,
         )
 
         await extractor.run(doc_generator, JobType.FULL)
@@ -819,10 +820,10 @@ async def test_get_docs_incrementally(
         doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
 
         extractor = await setup_extractor(
-            basic_rule_engine,
             queue,
-            sync_rules_enabled,
-            content_extraction_enabled,
+            basic_rule_engine=basic_rule_engine,
+            sync_rules_enabled=sync_rules_enabled,
+            content_extraction_enabled=content_extraction_enabled,
         )
 
         await extractor.run(doc_generator, JobType.INCREMENTAL)
@@ -833,6 +834,108 @@ async def test_get_docs_incrementally(
         assert extractor.total_downloads == expected_total_downloads
 
         assert queue_called_with_operations(queue, expected_queue_operations)
+
+
+@pytest.mark.parametrize(
+    "existing_docs, docs_from_source, expected_queue_operations, "
+    "expected_total_docs_updated, expected_total_docs_created, expected_total_docs_deleted",
+    [
+        (
+            [],
+            [],
+            [end_docs_operation()],
+            updated(0),
+            created(0),
+            deleted(0),
+        ),
+        (
+            [],
+            [(DOC_ONE, None, None)],
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(0),
+        ),
+        (
+            [DOC_ONE_DIFFERENT_TIMESTAMP],
+            [(DOC_ONE, None, None)],
+            [update_operation(DOC_ONE), end_docs_operation()],
+            updated(1),
+            created(0),
+            deleted(0),
+        ),
+        (
+            [DOC_ONE],
+            [],
+            [delete_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(0),
+            deleted(1),
+        ),
+        (
+            [DOC_TWO],
+            [(DOC_ONE, None, None)],
+            [index_operation(DOC_ONE), delete_operation(DOC_TWO), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(1),
+        ),
+        (
+            [DOC_ONE_DIFFERENT_TIMESTAMP, DOC_TWO],
+            [(DOC_ONE, None, None)],
+            [
+                update_operation(DOC_ONE),
+                delete_operation(DOC_TWO),
+                end_docs_operation(),
+            ],
+            updated(1),
+            created(0),
+            deleted(1),
+        ),
+        (
+            [DOC_ONE_DIFFERENT_TIMESTAMP, DOC_TWO],
+            [(DOC_ONE, None, None), (DOC_THREE, None, None)],
+            [
+                update_operation(DOC_ONE),
+                index_operation(DOC_THREE),
+                delete_operation(DOC_TWO),
+                end_docs_operation(),
+            ],
+            updated(1),
+            created(1),
+            deleted(1),
+        ),
+    ],
+)
+@mock.patch("connectors.es.sink.Extractor._get_existing_ids")
+@pytest.mark.asyncio
+async def test_get_access_control_docs(
+    get_existing_ids,
+    existing_docs,
+    docs_from_source,
+    expected_queue_operations,
+    expected_total_docs_updated,
+    expected_total_docs_created,
+    expected_total_docs_deleted,
+):
+    get_existing_ids.return_value = AsyncIterator(
+        [(doc["_id"], doc["_timestamp"]) for doc in existing_docs]
+    )
+
+    queue = await queue_mock()
+    # deep copying docs is needed as get_access_control_docs mutates the document ids which has side effects on other test
+    # instances
+    doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
+
+    extractor = await setup_extractor(queue=queue)
+
+    await extractor.run(doc_generator, JobType.ACCESS_CONTROL)
+
+    assert extractor.total_docs_updated == expected_total_docs_updated
+    assert extractor.total_docs_created == expected_total_docs_created
+    assert extractor.total_docs_deleted == expected_total_docs_deleted
+
+    assert queue_called_with_operations(queue, expected_queue_operations)
 
 
 STATS = {

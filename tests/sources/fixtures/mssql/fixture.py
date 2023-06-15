@@ -73,7 +73,7 @@ def load():
     database.autocommit = False
 
     for table in range(NUM_TABLES):
-        print(f"Adding data in {table}...")
+        print(f"Adding data from table #{table}...")
         sql_query = f"CREATE TABLE customers_{table} (name VARCHAR(255), age int, description TEXT, PRIMARY KEY (name))"
         cursor.execute(sql_query)
         for i in range(10):
