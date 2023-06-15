@@ -97,8 +97,6 @@ class JobSchedulingService(BaseService):
                 validator=source_klass(connector.configuration)
             )
 
-        await self._on_demand_sync(connector)
-
         if connector.features.document_level_security_enabled():
             (
                 is_platinum_license_enabled,
@@ -167,29 +165,6 @@ class JobSchedulingService(BaseService):
                 self.sync_job_index.stop_waiting()
                 await self.sync_job_index.close()
         return 0
-
-    async def _on_demand_sync(self, connector):
-        @with_concurrency_control()
-        async def _should_schedule_on_demand_sync():
-            try:
-                await connector.reload()
-            except DocumentNotFoundError:
-                logger.error(f"Couldn't reload connector {connector.id}")
-                return False
-
-            if not connector.sync_now:
-                return False
-
-            await connector.reset_sync_now_flag()
-            return True
-
-        if await _should_schedule_on_demand_sync():
-            logger.info(f"Creating an on demand sync for connector {connector.id}...")
-            await self.sync_job_index.create(
-                connector=connector,
-                trigger_method=JobTriggerMethod.ON_DEMAND,
-                job_type=JobType.FULL,
-            )
 
     async def _scheduled_sync(self, connector, job_type):
         @with_concurrency_control()

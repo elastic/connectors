@@ -758,11 +758,11 @@ class ExtractionService:
         content = await response.json()
 
         if response.status != 200:
-            logger.warn(
+            logger.warning(
                 f"Extraction service could not parse `{filename}'. Status: [{response.status}]."
             )
         if content.get("error"):
-            logger.warn(
+            logger.warning(
                 f"Extraction service could not parse `{filename}'; {content.get('error', 'unexpected error')}: {content.get('message', 'unknown cause')}"
             )
 
