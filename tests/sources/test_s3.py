@@ -18,14 +18,6 @@ from connectors.sources.s3 import S3DataSource
 from tests.sources.support import assert_basics, create_source
 
 
-@pytest.fixture(scope="session", autouse=True)
-def execute_before_all_tests():
-    """This method execute at the start, once"""
-    if "AWS_ACCESS_KEY_ID" not in os.environ:
-        os.environ["AWS_ACCESS_KEY_ID"] = "access_key"
-        os.environ["AWS_SECRET_ACCESS_KEY"] = "secret_key"
-
-
 @pytest.mark.asyncio
 async def test_basics():
     """Test get_default_configuration method of S3DataSource"""

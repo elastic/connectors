@@ -42,7 +42,11 @@ class S3Client:
 
     def __init__(self, configuration):
         self.configuration = configuration
-        self.session = aioboto3.Session()
+        self.session = aioboto3.Session(
+            aws_access_key_id=self.configuration["aws_access_key_id"],
+            aws_secret_access_key=self.configuration["aws_secret_access_key"],
+            region_name=self.configuration["region"],
+        )
         set_extra_logger(aws_logger, log_level=logging.DEBUG, prefix="S3")
         set_extra_logger("aioboto3.resources", log_level=logging.INFO, prefix="S3")
         self.config = AioConfig(
@@ -311,11 +315,33 @@ class S3DataSource(BaseDataSource):
                 "type": "list",
                 "value": "ent-search-ingest-dev",
             },
+            "aws_access_key_id": {
+                "display": "textarea",
+                "label": "AWS Access Key Id",
+                "order": 2,
+                "type": "str",
+                "value": "A1B2C3D4",
+            },
+            "aws_secret_access_key": {
+                "display": "textarea",
+                "label": "AWS Secret Key",
+                "order": 3,
+                "type": "str",
+                "value": "A1B2C3D4",
+                "sensitive": True,
+            },
+            "region": {
+                "display": "textarea",
+                "label": "AWS Region name",
+                "order": 4,
+                "type": "str",
+                "value": "us-east-1",
+            },
             "read_timeout": {
                 "default_value": DEFAULT_READ_TIMEOUT,
                 "display": "numeric",
                 "label": "Read timeout",
-                "order": 2,
+                "order": 5,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -325,7 +351,7 @@ class S3DataSource(BaseDataSource):
                 "default_value": DEFAULT_CONNECTION_TIMEOUT,
                 "display": "numeric",
                 "label": "Connection timeout",
-                "order": 3,
+                "order": 6,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -335,7 +361,7 @@ class S3DataSource(BaseDataSource):
                 "default_value": DEFAULT_MAX_RETRY_ATTEMPTS,
                 "display": "numeric",
                 "label": "Maximum retry attempts",
-                "order": 4,
+                "order": 7,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -345,7 +371,7 @@ class S3DataSource(BaseDataSource):
                 "default_value": DEFAULT_PAGE_SIZE,
                 "display": "numeric",
                 "label": "Maximum size of page",
-                "order": 5,
+                "order": 8,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
