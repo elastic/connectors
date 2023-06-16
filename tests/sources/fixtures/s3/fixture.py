@@ -49,7 +49,7 @@ def load():
             endpoint_url=f"{AWS_ENDPOINT_URL}:{AWS_PORT}",
             region_name=REGION_NAME,
             aws_access_key_id=AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=AWS_SECRET_KEY
+            aws_secret_access_key=AWS_SECRET_KEY,
         )
         s3_client.create_bucket(
             Bucket=BUCKET_NAME,
@@ -95,7 +95,7 @@ def remove():
             endpoint_url=f"{AWS_ENDPOINT_URL}:{AWS_PORT}",
             region_name=REGION_NAME,
             aws_access_key_id=AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=AWS_SECRET_KEY
+            aws_secret_access_key=AWS_SECRET_KEY,
         )
         print("Removing data from aws-moto server.")
         for object_id in range(0, OBJECT_COUNT):
