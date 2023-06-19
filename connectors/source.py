@@ -360,6 +360,7 @@ class BaseDataSource:
 
     def set_logger(self, logger_):
         self._logger = logger_
+        self._set_internal_logger()
 
     def _set_internal_logger(self):
         # no op for BaseDataSource
