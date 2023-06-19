@@ -404,7 +404,7 @@ class BaseDataSource:
 
     def set_features(self, features):
         if self._features is not None:
-            logger.warning("'_features' already set")
+            logger.warning(f"'_features' already set in {self.__class__.name}")
         logger.debug(f"Setting '_features' for {self.__class__.name}")
         self._features = features
 
