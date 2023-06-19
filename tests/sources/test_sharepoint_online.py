@@ -975,7 +975,9 @@ class TestSharepointOnlineDataSource:
             assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
-    async def test_get_drive_item_content_file_too_big_doesnt_download(self, patch_sharepoint_client):
+    async def test_get_drive_item_content_file_too_big_doesnt_download(
+        self, patch_sharepoint_client
+    ):
         drive_item = {
             "id": "1",
             "size": 10485761,
@@ -990,7 +992,9 @@ class TestSharepointOnlineDataSource:
         assert download_result is None
 
     @pytest.mark.asyncio
-    async def test_get_drive_item_content_file_size_with_extraction_service(self, patch_sharepoint_client):
+    async def test_get_drive_item_content_file_size_with_extraction_service(
+        self, patch_sharepoint_client
+    ):
         drive_item = {
             "id": "1",
             "size": 10485761,
@@ -1001,8 +1005,9 @@ class TestSharepointOnlineDataSource:
         message = "This is the text content of drive item"
 
         with patch(
-                "connectors.utils.ExtractionService.extract_text", return_value=message
+            "connectors.utils.ExtractionService.extract_text", return_value=message
         ) as extraction_service_mock:
+
             async def download_func(drive_id, drive_item_id, async_buffer):
                 await async_buffer.write(bytes(message, "utf-8"))
 
