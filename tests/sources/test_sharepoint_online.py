@@ -882,7 +882,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_get_attachment_content(self, patch_sharepoint_client):
-        attachment = {"odata.id": "1", "_tempfile_suffix": ".ppt"}
+        attachment = {"odata.id": "1", "_original_filename": "file.ppt"}
         message = b"This is content of attachment"
 
         async def download_func(attachment_id, async_buffer):
@@ -900,7 +900,7 @@ class TestSharepointOnlineDataSource:
     async def test_get_attachment_with_text_extraction_enabled_adds_body(
         self, patch_sharepoint_client
     ):
-        attachment = {"odata.id": "1", "_tempfile_suffix": ".ppt"}
+        attachment = {"odata.id": "1", "_original_filename": "file.ppt"}
         message = "This is the text content of drive item"
 
         with patch(
@@ -928,7 +928,7 @@ class TestSharepointOnlineDataSource:
             "size": 15,
             "lastModifiedDateTime": datetime.now(timezone.utc),
             "parentReference": {"driveId": "drive-1"},
-            "_tempfile_suffix": ".txt",
+            "_original_filename": "file.txt",
         }
         message = b"This is content of drive item"
 
@@ -952,7 +952,7 @@ class TestSharepointOnlineDataSource:
             "size": 15,
             "lastModifiedDateTime": datetime.now(timezone.utc),
             "parentReference": {"driveId": "drive-1"},
-            "_tempfile_suffix": ".txt",
+            "_original_filename": "file.txt",
         }
         message = "This is the text content of drive item"
 
