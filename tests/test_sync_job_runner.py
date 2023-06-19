@@ -68,7 +68,6 @@ def create_runner(
     job_type=JobType.FULL,
     index_name=SEARCH_INDEX_NAME,
     sync_cursor=SYNC_CURSOR,
-    data_provider_features=None,
 ):
     source_klass = Mock()
     data_provider = Mock()
@@ -80,8 +79,6 @@ def create_runner(
     data_provider.ping = AsyncMock()
     if not source_available:
         data_provider.ping.side_effect = Exception()
-    if data_provider_features:
-        data_provider.features = data_provider_features
     data_provider.sync_cursor = Mock(return_value=sync_cursor)
     data_provider.close = AsyncMock()
     source_klass.return_value = data_provider
