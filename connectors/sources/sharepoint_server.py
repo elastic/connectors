@@ -93,10 +93,10 @@ SCHEMA = {
 class SharepointServerClient:
     """SharePoint client to handle API calls made to SharePoint"""
 
-    def __init__(self, configuration, logger_=None):
+    def __init__(self, configuration):
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
-        self._logger = logger_ or logger
+        self._logger = logger
         self.host_url = self.configuration["host_url"]
         self.certificate = self.configuration["ssl_ca"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
@@ -108,6 +108,9 @@ class SharepointServerClient:
             self.ssl_ctx = ssl_context(certificate=self.certificate)
         else:
             self.ssl_ctx = False
+
+    def set_logger(self, logger_):
+        self._logger = logger_
 
     def _get_session(self):
         """Generate base client session using configuration fields
@@ -597,6 +600,9 @@ class SharepointServerDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
         self.sharepoint_client = SharepointServerClient(configuration=configuration)
+
+    def _set_internal_logger(self):
+        self.sharepoint_client.set_logger(self._logger)
 
     @classmethod
     def get_default_configuration(cls):

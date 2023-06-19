@@ -259,7 +259,7 @@ class SharepointRestAPIToken(MicrosoftSecurityToken):
 
 
 class MicrosoftAPISession:
-    def __init__(self, http_session, api_token, scroll_field):
+    def __init__(self, http_session, api_token, scroll_field, logger_):
         self._http_session = http_session
         self._api_token = api_token
         self._semaphore = asyncio.Semaphore(
@@ -273,6 +273,10 @@ class MicrosoftAPISession:
         # but this abstraction can be better.
         self._scroll_field = scroll_field
         self._sleeps = CancellableSleeps()
+        self._logger = logger_
+
+    def set_logger(self, logger_):
+        self._logger = logger_
 
     def close(self):
         self._sleeps.cancel()
@@ -327,7 +331,7 @@ class MicrosoftAPISession:
 
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
-            logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
+            self._logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
 
             async with self._http_session.get(
                 absolute_url,
@@ -343,11 +347,11 @@ class MicrosoftAPISession:
                 if "Retry-After" in response_headers:
                     retry_seconds = int(response_headers["Retry-After"])
                 else:
-                    logger.warning(
+                    self._logger.warning(
                         f"Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
                     )
                     retry_seconds = DEFAULT_RETRY_SECONDS
-                logger.debug(
+                self._logger.debug(
                     f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
                 )
 
@@ -365,7 +369,7 @@ class MicrosoftAPISession:
                 raise InternalServerError from e
             else:
                 raise
-            logger.debug(
+            self._logger.debug(
                 f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
             )
         finally:
@@ -396,12 +400,19 @@ class SharepointOnlineClient:
             self._http_session, tenant_id, tenant_name, client_id, client_secret
         )
 
+        self._logger = logger
+
         self._graph_api_client = MicrosoftAPISession(
-            self._http_session, self.graph_api_token, "@odata.nextLink"
+            self._http_session, self.graph_api_token, "@odata.nextLink", self._logger
         )
         self._rest_api_client = MicrosoftAPISession(
-            self._http_session, self.rest_api_token, "odata.nextLink"
+            self._http_session, self.rest_api_token, "odata.nextLink", self._logger
         )
+
+    def set_logger(self, logger_):
+        self._logger = logger_
+        self._graph_api_client.set_logger(self._logger)
+        self._rest_api_client.set_logger(self._logger)
 
     async def groups(self):
         select = ""
@@ -719,6 +730,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             self.extraction_service = ExtractionService()
         else:
             self.extraction_service = None
+
+    def _set_internal_logger(self):
+        self.client.set_logger(self._logger)
 
     @property
     def client(self):
@@ -1257,7 +1271,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         if max_drive_item_age and modified_date < datetime.utcnow() - timedelta(
             days=max_drive_item_age
         ):
-            logger.warning(
+            self._logger.warning(
                 f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
             )
 
@@ -1266,7 +1280,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             drive_item["size"] > MAX_DOCUMENT_SIZE
             and not self.configuration["use_text_extraction_service"]
         ):
-            logger.warning(
+            self._logger.warning(
                 f"Not downloading file {drive_item['name']} of size {drive_item['size']}"
             )
 

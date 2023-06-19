@@ -53,14 +53,13 @@ class OracleDataSource(GenericBaseDataSource):
     name = "Oracle Database"
     service_type = "oracle"
 
-    def __init__(self, configuration, logger_=None):
+    def __init__(self, configuration):
         """Setup connection to the Oracle database-server configured by user
 
         Args:
             configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
-            logger_ (DocumentLogger): Object of DocumentLogger class.
         """
-        super().__init__(configuration=configuration, logger_=logger_)
+        super().__init__(configuration=configuration)
         self.is_async = False
         self.oracle_home = self.configuration["oracle_home"]
         self.wallet_config = self.configuration["wallet_configuration_path"]

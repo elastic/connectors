@@ -65,10 +65,10 @@ JIRA_SERVER = "jira_server"
 class JiraClient:
     """Jira client to handle API calls made to Jira"""
 
-    def __init__(self, configuration, logger_=None):
+    def __init__(self, configuration):
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
-        self._logger = logger_ or logger
+        self._logger = logger
         self.is_cloud = self.configuration["data_source"] == JIRA_CLOUD
         self.host_url = self.configuration["jira_url"]
         self.projects = self.configuration["projects"]
@@ -81,6 +81,9 @@ class JiraClient:
         else:
             self.ssl_ctx = False
         self.session = None
+
+    def set_logger(self, logger_):
+        self._logger = logger_
 
     def _get_session(self):
         """Generate and return base client session with configuration fields
@@ -198,20 +201,23 @@ class JiraDataSource(BaseDataSource):
     name = "Jira"
     service_type = "jira"
 
-    def __init__(self, configuration, logger_=None):
+    def __init__(self, configuration):
         """Setup the connection to the Jira
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
             logger_ (DocumentLogger): Object of DocumentLogger class.
         """
-        super().__init__(configuration=configuration, logger_=logger_)
+        super().__init__(configuration=configuration)
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
-        self.jira_client = JiraClient(configuration=configuration, logger_=self._logger)
+        self.jira_client = JiraClient(configuration=configuration)
 
         self.tasks = 0
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
+
+    def _set_internal_logger(self):
+        self.jira_client.set_logger(self._logger)
 
     @classmethod
     def get_default_configuration(cls):

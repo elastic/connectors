@@ -36,7 +36,7 @@ def load_max_concurrent_content_syncs(config):
     if max_concurrent_content_syncs is not None:
         return max_concurrent_content_syncs
 
-    logger.warn(
+    logger.warning(
         "'max_concurrent_syncs' is deprecated. Use 'max_concurrent_content_syncs' in 'config.yml'."
     )
 

@@ -65,10 +65,10 @@ WILDCARD = "*"
 class ConfluenceClient:
     """Confluence client to handle API calls made to Confluence"""
 
-    def __init__(self, configuration, logger_=None):
+    def __init__(self, configuration):
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
-        self._logger = logger_ or logger
+        self._logger = logger
         self.is_cloud = self.configuration["data_source"] == CONFLUENCE_CLOUD
         self.host_url = self.configuration["confluence_url"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
@@ -82,6 +82,9 @@ class ConfluenceClient:
         else:
             self.ssl_ctx = False
         self.session = None
+
+    def set_logger(self, logger_):
+        self._logger = logger_
 
     def _get_session(self):
         """Generate and return base client session with configuration fields
@@ -190,23 +193,23 @@ class ConfluenceDataSource(BaseDataSource):
     name = "Confluence"
     service_type = "confluence"
 
-    def __init__(self, configuration, logger_=None):
+    def __init__(self, configuration):
         """Setup the connection to Confluence
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
-            logger_ (DocumentLogger): Object of DocumentLogger class.
         """
-        super().__init__(configuration=configuration, logger_=logger_)
+        super().__init__(configuration=configuration)
         self.spaces = self.configuration["spaces"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
-        self.confluence_client = ConfluenceClient(
-            configuration=configuration, logger_=self._logger
-        )
+        self.confluence_client = ConfluenceClient(configuration=configuration)
 
         self.queue = MemQueue(maxsize=QUEUE_SIZE, maxmemsize=QUEUE_MEM_SIZE)
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
         self.fetcher_count = 0
+
+    def _set_internal_logger(self):
+        self.confluence_client.set_logger(self._logger)
 
     @classmethod
     def get_default_configuration(cls):

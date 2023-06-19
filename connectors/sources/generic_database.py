@@ -92,14 +92,13 @@ class Queries(ABC):
 class GenericBaseDataSource(BaseDataSource):
     """Class contains common functionalities for Generic Database connector"""
 
-    def __init__(self, configuration, logger_=None):
+    def __init__(self, configuration):
         """Setup connection to the database-server configured by user
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
-            logger_ (DocumentLogger): Object of DocumentLogger class.
         """
-        super().__init__(configuration=configuration, logger_=logger_)
+        super().__init__(configuration=configuration)
 
         # Connector configurations
         self.retry_count = self.configuration["retry_count"]

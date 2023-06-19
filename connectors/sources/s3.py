@@ -40,9 +40,9 @@ else:
 class S3Client:
     """Amazon S3 client to handle method calls made to S3"""
 
-    def __init__(self, configuration, logger_=None):
+    def __init__(self, configuration):
         self.configuration = configuration
-        self._logger = logger_ or logger
+        self._logger = logger
         self.session = aioboto3.Session()
         set_extra_logger(aws_logger, log_level=logging.DEBUG, prefix="S3")
         set_extra_logger("aioboto3.resources", log_level=logging.INFO, prefix="S3")
@@ -53,6 +53,9 @@ class S3Client:
         )
         self.clients = {}
         self.client_context = []
+
+    def set_logger(self, logger_):
+        self._logger = logger_
 
     async def client(self, region=None):
         """This method creates context manager and client session object for s3.
@@ -231,15 +234,17 @@ class S3DataSource(BaseDataSource):
     name = "Amazon S3"
     service_type = "s3"
 
-    def __init__(self, configuration, logger_=None):
+    def __init__(self, configuration):
         """Set up the connection to the Amazon S3.
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
-            logger_ (DocumentLogger): Object of DocumentLogger class.
         """
-        super().__init__(configuration=configuration, logger_=logger_)
-        self.s3_client = S3Client(configuration=configuration, logger_=self._logger)
+        super().__init__(configuration=configuration)
+        self.s3_client = S3Client(configuration=configuration)
+
+    def _set_internal_logger(self):
+        self.s3_client.set_logger(self._logger)
 
     async def ping(self):
         """Verify the connection with AWS"""

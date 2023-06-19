@@ -111,8 +111,9 @@ class SyncJobRunner:
 
         try:
             self.data_provider = self.source_klass(
-                configuration=self.sync_job.configuration, logger_=self.sync_job.logger
+                configuration=self.sync_job.configuration
             )
+            self.data_provider.set_logger(self.sync_job.logger)
             if not await self.data_provider.changed():
                 self.sync_job.log_debug("No change in remote source, skipping...")
                 await self._sync_done(sync_status=JobStatus.COMPLETED)

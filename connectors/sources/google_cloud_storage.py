@@ -74,13 +74,12 @@ REQUIRED_CREDENTIAL_KEYS = [
 class GoogleCloudStorageClient:
     """A google client to handle api calls made to Google Cloud Storage."""
 
-    def __init__(self, retry_count, json_credentials, logger_=None):
+    def __init__(self, retry_count, json_credentials):
         """Initialize the ServiceAccountCreds class using which api calls will be made.
 
         Args:
             retry_count (int): Maximum retries for the failed requests.
             json_credentials (dict): Service account credentials json.
-            logger_ (DocumentLogger): Object of DocumentLogger class.
         """
         self.retry_count = retry_count
         self.service_account_credentials = ServiceAccountCreds(
@@ -88,7 +87,10 @@ class GoogleCloudStorageClient:
             **json_credentials,
         )
         self.user_project_id = self.service_account_credentials.project_id
-        self._logger = logger_ or logger
+        self._logger = logger
+
+    def set_logger(self, logger_):
+        self._logger = logger_
 
     async def api_call(
         self,
@@ -169,14 +171,16 @@ class GoogleCloudStorageDataSource(BaseDataSource):
     name = "Google Cloud Storage"
     service_type = "google_cloud_storage"
 
-    def __init__(self, configuration, logger_=None):
+    def __init__(self, configuration):
         """Set up the connection to the Google Cloud Storage Client.
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
-            logger_ (DocumentLogger): Object of DocumentLogger class.
         """
-        super().__init__(configuration=configuration, logger_=logger_)
+        super().__init__(configuration=configuration)
+
+    def _set_internal_logger(self):
+        self._google_storage_client.set_logger(self._logger)
 
     @classmethod
     def get_default_configuration(cls):
@@ -259,7 +263,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         return GoogleCloudStorageClient(
             json_credentials=required_credentials,
             retry_count=self.configuration["retry_count"],
-            logger_=self._logger,
         )
 
     async def ping(self):

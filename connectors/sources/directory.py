@@ -24,8 +24,8 @@ class DirectoryDataSource(BaseDataSource):
     name = "System Directory"
     service_type = "dir"
 
-    def __init__(self, configuration, logger_=None):
-        super().__init__(configuration=configuration, logger_=logger_)
+    def __init__(self, configuration):
+        super().__init__(configuration=configuration)
         self.directory = os.path.abspath(self.configuration["directory"])
         self.pattern = self.configuration["pattern"]
 

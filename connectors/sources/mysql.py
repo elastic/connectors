@@ -14,7 +14,6 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.generic_database import (
     WILDCARD,
@@ -153,10 +152,10 @@ class MySQLClient:
         password,
         ssl_enabled,
         ssl_certificate,
+        logger_,
         database=None,
         max_pool_size=MAX_POOL_SIZE,
         fetch_size=DEFAULT_FETCH_SIZE,
-        logger_=None,
     ):
         self.host = host
         self.port = port
@@ -170,7 +169,7 @@ class MySQLClient:
         self.queries = MySQLQueries(self.database)
         self.connection_pool = None
         self.connection = None
-        self._logger = logger_ or logger
+        self._logger = logger_
 
     async def __aenter__(self):
         connection_string = {
@@ -339,8 +338,8 @@ class MySqlDataSource(BaseDataSource):
     name = "MySQL"
     service_type = "mysql"
 
-    def __init__(self, configuration, logger_=None):
-        super().__init__(configuration=configuration, logger_=logger_)
+    def __init__(self, configuration):
+        super().__init__(configuration=configuration)
         self._sleeps = CancellableSleeps()
         self.retry_count = self.configuration["retry_count"]
         self.ssl_enabled = self.configuration["ssl_enabled"]

@@ -15,6 +15,7 @@ import pytest
 import pytest_asyncio
 from aiohttp.client_exceptions import ClientResponseError
 
+from connectors.logger import logger
 from connectors.protocol import Features
 from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
@@ -280,6 +281,7 @@ class TestMicrosoftAPISession:
             session,
             TestMicrosoftAPISession.StubAPIToken(),
             self.scroll_field,
+            logger,
         )
         await session.close()
 

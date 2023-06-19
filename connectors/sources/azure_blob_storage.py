@@ -35,14 +35,13 @@ class AzureBlobStorageDataSource(BaseDataSource):
     name = "Azure Blob Storage"
     service_type = "azure_blob_storage"
 
-    def __init__(self, configuration, logger_=None):
+    def __init__(self, configuration):
         """Set up the connection to the azure base client
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
-            logger_ (DocumentLogger): Object of DocumentLogger class.
         """
-        super().__init__(configuration=configuration, logger_=logger_)
+        super().__init__(configuration=configuration)
         self.connection_string = None
         self.retry_count = self.configuration["retry_count"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
