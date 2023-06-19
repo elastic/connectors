@@ -29,19 +29,8 @@ API_VERSION = "v3"
 
 DOMAIN_CORPORA = 'domain'
 USER_CORPORA = 'user'
+FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder'
 
-BLOB_ADAPTER = {
-    "_id": "id",
-    "created_at": "createdTime",
-    "created_by": "",
-    "last_updated": "modifiedTime",
-    "name": "name",
-    "size": "size",
-    "_timestamp": "modifiedTime",
-    "mime_type": "mimeType",
-    "file_extension": "fileExtension",
-    "url": "webViewLink",
-}
 
 # Export Google Workspace documents to TIKA compatible format, prefer 'text/plain' where possible to be
 # mindful of the content extraction service resources
@@ -233,6 +222,7 @@ class GoogleDriveDataSource(BaseDataSource):
             retry_count=self.configuration["retry_count"],
         )
 
+
     async def ping(self):
         """Verify the connection with Google Drive"""
         if RUNNING_FTEST:
@@ -311,8 +301,8 @@ class GoogleDriveDataSource(BaseDataSource):
         """Exports Google Workspace documents to an allowed file type and extracts its text content.
 
         Shared Google Workspace documents are different than regular files. When shared from
-        an external account they don't count against the storage quota and therefore have size 0.
-        They need to be exported to a common file type before the content extraction.
+        a different account they don't count against the user storage quota and therefore have size 0.
+        They need to be exported to a supported file type before the content extraction phase.
 
         Args:
             blob (dictionary): Formatted blob document.
@@ -445,6 +435,7 @@ class GoogleDriveDataSource(BaseDataSource):
           yield file
 
 
+
     def prepare_blob_document(self, blob):
         """Apply key mappings to the blob document.
 
@@ -455,9 +446,35 @@ class GoogleDriveDataSource(BaseDataSource):
             dictionary: Blobs metadata mapped with the keys of `BLOB_ADAPTER`.
         """
 
-        blob_document = {}
-        for elasticsearch_field, google_drive_field in BLOB_ADAPTER.items():
-            blob_document[elasticsearch_field] = blob.get(google_drive_field)
+
+        blob_document = {
+            "_id": blob.get("id"),
+            "created_at": blob.get("createdTime"),
+            "last_updated": blob.get("modifiedTime"),
+            "name": blob.get("name"),
+            "size": blob.get("size"),
+            "_timestamp": blob.get("modifiedTime"),
+            "mime_type": blob.get("mimeType"),
+            "file_extension": blob.get("fileExtension"),
+            "url": blob.get("webViewLink"),
+        }
+
+        # record "file" or "folder" type
+        blob_document["type"] = "folder" if blob.get("fileExtension") == FOLDER_MIME_TYPE else "file"
+
+        # populate owner-related fields if owner is present in the response from the Drive API
+        if 'owners' in blob and blob['owners']:
+            owners = blob['owners']
+            first_owner = blob['owners'][0]
+            blob_document['author'] = ','.join([owner['displayName'] for owner in owners])
+            blob_document['created_by'] = first_owner['displayName']
+            blob_document['created_by_email'] = first_owner['emailAddress']
+
+        # handle last modifying user metadata
+        last_modifying_user = blob['lastModifyingUser']
+        blob_document['updated_by'] = last_modifying_user.get('displayName', None)
+        blob_document['updated_by_email'] = last_modifying_user.get('emailAddress', None)
+        blob_document['updated_by_photo_url'] = last_modifying_user.get('photoLink', None)
 
         # handle folders and shortcuts
         if blob_document['size'] is None:
