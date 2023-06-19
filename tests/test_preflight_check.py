@@ -121,6 +121,8 @@ async def test_native_config_is_warned(patched_logger, mock_responses):
     mock_index_exists(mock_responses, JOBS_INDEX)
     local_config = config.copy()
     local_config["native_service_types"] = ["foo", "bar"]
+    del local_config["connector_id"]
+    del local_config["service_type"]
     preflight = PreflightCheck(local_config)
     result = await preflight.run()
     assert result is True
