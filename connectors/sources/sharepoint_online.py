@@ -520,7 +520,7 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
     SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {
-            "maxDataAge": {"type": "integer"},
+            "skipDriveItemsOlderThan": {"type": "integer"}, # in Days
         },
         "additionalProperties": False,
     }
@@ -661,11 +661,11 @@ class SharepointOnlineDataSource(BaseDataSource):
             )
 
     async def get_docs(self, filtering=None):
-        max_data_age = None
+        max_drive_item_age = None
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            max_data_age = advanced_rules["maxDataAge"]
+            max_drive_item_age = advanced_rules["skipDriveItemsOlderThan"]
 
         async for site_collection in self.client.site_collections():
             site_collection["_id"] = site_collection["webUrl"]
@@ -699,9 +699,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 "%Y-%m-%dT%H:%M:%SZ",
                             )
                             if (
-                                max_data_age
+                                max_drive_item_age
                                 and modified_date
-                                < datetime.utcnow() - timedelta(seconds=max_data_age)
+                                < datetime.utcnow() - timedelta(seconds=max_drive_item_age)
                             ):
                                 logger.warning(
                                     f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
