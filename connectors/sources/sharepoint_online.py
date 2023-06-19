@@ -291,7 +291,9 @@ class MicrosoftAPISession:
                 absolute_url,
                 headers=headers,
             ) as resp:
+                print("YIELDING")
                 yield resp
+
                 return
         except ClientResponseError as e:
             if e.status == 429 or e.status == 503:
@@ -308,7 +310,8 @@ class MicrosoftAPISession:
                     f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
                 )
 
-                await asyncio.sleep(retry_seconds)  # TODO: use CancellableSleeps
+                await self._sleeps.sleep(retry_seconds)  # TODO: use CancellableSleeps
+                raise
             elif (
                 e.status == 403 or e.status == 401
             ):  # Might work weird, but Graph returns 403 and REST returns 401
@@ -318,10 +321,7 @@ class MicrosoftAPISession:
             elif e.status == 404:
                 raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
             else:
-                logger.warning(
-                    "Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
-                )
-                retry_seconds = DEFAULT_RETRY_SECONDS
+                raise
             logger.debug(
                 f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
             )
