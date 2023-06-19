@@ -409,7 +409,7 @@ async def test_get_drive_items():
                 "Length": "3356",
                 "item_type": "File",
             },
-            "%2Fsites%2Fenterprise%2Fctest%2FSitePages%2FHome.aspx",
+            "/sites/enterprise/ctest/SitePages/Home.aspx",
         ),
         (
             {
@@ -1123,3 +1123,142 @@ async def test_get_site_pages_content_for_wikifiled_none():
     )
     # Assert
     assert response_content is None
+
+@pytest.mark.asyncio
+async def test_get_list_items_with_no_extension():
+    # Setup
+    source = create_source(SharepointServerDataSource)
+    api_response = [
+        {
+            "AttachmentFiles": [
+                {
+                    "FileName": "s3 queries",
+                    "ServerRelativeUrl": "/sites/collection1/ctest/Lists/ctestlist/Attachments/1/v4",
+                }
+            ],
+            "Title": "HelloWorld",
+            "Id": 1,
+            "FileRef": "/site",
+            "ContentTypeId": "12345",
+            "Modified": "2022-06-20T10:04:03Z",
+            "Created": "2022-06-20T10:04:03Z",
+            "EditorId": 1073741823,
+            "AuthorId": 1073741823,
+            "Attachments": True,
+            "GUID": "111111122222222-adfa-4e4f-93c4-bfedddda8510",
+            "Length": "12",
+        },
+    ]
+    target_response = [
+        {
+            "AttachmentFiles": [
+                {
+                    "FileName": "s3 queries",
+                    "ServerRelativeUrl": "/sites/collection1/ctest/Lists/ctestlist/Attachments/1/v4",
+                }
+            ],
+            "Title": "HelloWorld",
+            "Id": 1,
+            "FileRef": "/site",
+            "ContentTypeId": "12345",
+            "Modified": "2022-06-20T10:04:03Z",
+            "Created": "2022-06-20T10:04:03Z",
+            "EditorId": 1073741823,
+            "AuthorId": 1073741823,
+            "Attachments": True,
+            "GUID": "111111122222222-adfa-4e4f-93c4-bfedddda8510",
+            "Length": None,
+            "_id": "1",
+            "url": "http://127.0.0.1:8491/sites/collection1/ctest/Lists/ctestlist/Attachments/1/v4",
+            "file_name": "s3 queries",
+            "server_relative_url": "/sites/collection1/ctest/Lists/ctestlist/Attachments/1/v4",
+        },
+    ]
+    attachment_response = {"UniqueId": "1"}
+    source.sharepoint_client._fetch_data_with_next_url = Mock(
+        return_value=AsyncIter(api_response)
+    )
+    source.sharepoint_client._api_call = Mock(
+        return_value=async_native_coroutine_generator(attachment_response)
+    )
+    expected_response = []
+    # Execute
+    async for item, _ in source.sharepoint_client.get_list_items(
+        list_id="620070a1-ee50-4585-b6a7-0f6210b1a69d",
+        site_url="/sites/enterprise/ctest",
+        server_relative_url="/sites/enterprise/site1^",
+        selected_field="",
+    ):
+        expected_response.append(item)
+    # Assert
+    assert expected_response == target_response
+
+
+@pytest.mark.asyncio
+async def test_get_list_items_with_extension_only():
+    # Setup
+    source = create_source(SharepointServerDataSource)
+    api_response = [
+        {
+            "AttachmentFiles": [
+                {
+                    "FileName": ".env",
+                    "ServerRelativeUrl": "/sites/collection1/ctest/Lists/ctestlist/Attachments/1/.env",
+                }
+            ],
+            "Title": "HelloWorld",
+            "Id": 1,
+            "FileRef": "/site",
+            "ContentTypeId": "12345",
+            "Modified": "2022-06-20T10:04:03Z",
+            "Created": "2022-06-20T10:04:03Z",
+            "EditorId": 1073741823,
+            "AuthorId": 1073741823,
+            "Attachments": True,
+            "GUID": "111111122222222-adfa-4e4f-93c4-bfedddda8510",
+            "Length": "12",
+        },
+    ]
+    target_response = [
+        {
+            "AttachmentFiles": [
+                {
+                    "FileName": ".env",
+                    "ServerRelativeUrl": "/sites/collection1/ctest/Lists/ctestlist/Attachments/1/.env",
+                }
+            ],
+            "Title": "HelloWorld",
+            "Id": 1,
+            "FileRef": "/site",
+            "ContentTypeId": "12345",
+            "Modified": "2022-06-20T10:04:03Z",
+            "Created": "2022-06-20T10:04:03Z",
+            "EditorId": 1073741823,
+            "AuthorId": 1073741823,
+            "Attachments": True,
+            "GUID": "111111122222222-adfa-4e4f-93c4-bfedddda8510",
+            "Length": None,
+            "_id": "1",
+            "url": "http://127.0.0.1:8491/sites/collection1/ctest/Lists/ctestlist/Attachments/1/.env",
+            "file_name": ".env",
+            "server_relative_url": "/sites/collection1/ctest/Lists/ctestlist/Attachments/1/.env",
+        },
+    ]
+    attachment_response = {"UniqueId": "1"}
+    source.sharepoint_client._fetch_data_with_next_url = Mock(
+        return_value=AsyncIter(api_response)
+    )
+    source.sharepoint_client._api_call = Mock(
+        return_value=async_native_coroutine_generator(attachment_response)
+    )
+    expected_response = []
+    # Execute
+    async for item, _ in source.sharepoint_client.get_list_items(
+        list_id="620070a1-ee50-4585-b6a7-0f6210b1a69d",
+        site_url="/sites/enterprise/ctest",
+        server_relative_url="/sites/enterprise/site1^",
+        selected_field="",
+    ):
+        expected_response.append(item)
+    # Assert
+    assert expected_response == target_response

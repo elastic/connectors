@@ -25,7 +25,6 @@ from connectors.utils import (
     convert_to_b64,
     retryable,
     ssl_context,
-    url_encode,
 )
 
 RETRY_INTERVAL = 2
@@ -165,11 +164,6 @@ class SharepointServerClient:
         await self.session.close()  # pyright: ignore
         self.session = None
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
     async def get_content(
         self, document, file_relative_url, site_url, timestamp=None, doit=False
     ):
@@ -478,6 +472,19 @@ class SharepointServerClient:
             )
         )
 
+    def verify_filename_for_extraction(self, filename, relative_url):
+        attachment_extension = list(os.path.splitext(filename))
+        if "" in attachment_extension:
+            attachment_extension.remove("")
+        if "." not in filename:
+            logger.warning(
+                f"Files without extension are not supported by TIKA, skipping {filename}."
+            )
+            return
+        if attachment_extension[-1].lower() not in TIKA_SUPPORTED_FILETYPES:
+            return
+        return relative_url
+
     async def get_list_items(self, list_id, site_url, server_relative_url, **kwargs):
         """This method fetches items from all the lists in a collection.
 
@@ -505,8 +512,10 @@ class SharepointServerClient:
                     continue
 
                 for attachment_file in result.get("AttachmentFiles"):
-                    file_relative_url = url_encode(
-                        original_string=attachment_file.get("ServerRelativeUrl")
+                    file_relative_url = quote(
+                        attachment_file.get("ServerRelativeUrl").replace(
+                            "%27", "%27%27"
+                        )
                     )
 
                     attachment_data = await self.get_attachment(
@@ -520,11 +529,10 @@ class SharepointServerClient:
                     result["file_name"] = attachment_file.get("FileName")
                     result["server_relative_url"] = attachment_file["ServerRelativeUrl"]
 
-                    if (
-                        os.path.splitext(attachment_file["FileName"])[-1]
-                        not in TIKA_SUPPORTED_FILETYPES
-                    ):
-                        file_relative_url = None
+                    file_relative_url = self.verify_filename_for_extraction(
+                        filename=attachment_file["FileName"],
+                        relative_url=file_relative_url,
+                    )
 
                     yield result, file_relative_url
 
@@ -551,11 +559,12 @@ class SharepointServerClient:
 
                 if result.get("File", {}).get("TimeLastModified"):
                     item_type = "File"
-                    file_relative_url = (
-                        url_encode(original_string=result["File"]["ServerRelativeUrl"])
-                        if os.path.splitext(result["File"]["Name"])[-1]
-                        in TIKA_SUPPORTED_FILETYPES
-                        else None
+                    filename = result["File"]["Name"]
+                    file_relative_url = quote(
+                        result["File"]["ServerRelativeUrl"]
+                    ).replace("%27", "%27%27")
+                    file_relative_url = self.verify_filename_for_extraction(
+                        filename=filename, relative_url=file_relative_url
                     )
                     result["Length"] = result[item_type]["Length"]
                 result["item_type"] = item_type
