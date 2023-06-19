@@ -291,7 +291,6 @@ class MicrosoftAPISession:
                 absolute_url,
                 headers=headers,
             ) as resp:
-                print("YIELDING")
                 yield resp
 
                 return
