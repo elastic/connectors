@@ -276,55 +276,55 @@ class MicrosoftAPISession:
     @asynccontextmanager
     @retryable(retries=3)
     async def _call_api(self, absolute_url):
-          try:
-              # Sharepoint / Graph API has quite strict throttling policies
-              # If connector is overzealous, it can be banned for not respecting throttling policies
-              # However if connector has a low setting for the semaphore, then it'll just be slow.
-              # Change the value at your own risk
-              await self._semaphore.acquire()
+        try:
+            # Sharepoint / Graph API has quite strict throttling policies
+            # If connector is overzealous, it can be banned for not respecting throttling policies
+            # However if connector has a low setting for the semaphore, then it'll just be slow.
+            # Change the value at your own risk
+            await self._semaphore.acquire()
 
-              token = await self._api_token.get()
-              headers = {"authorization": f"Bearer {token}"}
-              logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
+            token = await self._api_token.get()
+            headers = {"authorization": f"Bearer {token}"}
+            logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
 
-              async with self._http_session.get(
-                  absolute_url,
-                  headers=headers,
-              ) as resp:
-                  yield resp
-                  return
-          except ClientResponseError as e:
-              if e.status == 429 or e.status == 503:
-                  response_headers = e.headers or {}
-                  retry_seconds = None
-                  if "Retry-After" in response_headers:
-                      retry_seconds = int(response_headers["Retry-After"])
-                  else:
-                      logger.warning(
-                          f"Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
-                      )
-                      retry_seconds = DEFAULT_RETRY_SECONDS
-                  logger.debug(
-                      f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
-                  )
+            async with self._http_session.get(
+                absolute_url,
+                headers=headers,
+            ) as resp:
+                yield resp
+                return
+        except ClientResponseError as e:
+            if e.status == 429 or e.status == 503:
+                response_headers = e.headers or {}
+                retry_seconds = None
+                if "Retry-After" in response_headers:
+                    retry_seconds = int(response_headers["Retry-After"])
+                else:
+                    logger.warning(
+                        f"Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                    )
+                    retry_seconds = DEFAULT_RETRY_SECONDS
+                logger.debug(
+                    f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
+                )
 
-                  await asyncio.sleep(retry_seconds)  # TODO: use CancellableSleeps
-              elif (
-                  e.status == 403 or e.status == 401
-              ):  # Might work weird, but Graph returns 403 and REST returns 401
-                  raise PermissionsMissing(
-                      f"Received Unauthorized response for {absolute_url}.\nVerify that Graph API [Sites.Read.All, Files.Read All] and Sharepoint [Sites.Read.All] permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
-                  ) from e
-              elif e.status == 404:
-                  raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
-              else:
-                  logger.warning(
-                      "Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
-                  )
-                  retry_seconds = DEFAULT_RETRY_SECONDS
-              logger.debug(
-                  f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
-              )
+                await asyncio.sleep(retry_seconds)  # TODO: use CancellableSleeps
+            elif (
+                e.status == 403 or e.status == 401
+            ):  # Might work weird, but Graph returns 403 and REST returns 401
+                raise PermissionsMissing(
+                    f"Received Unauthorized response for {absolute_url}.\nVerify that Graph API [Sites.Read.All, Files.Read All] and Sharepoint [Sites.Read.All] permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
+                ) from e
+            elif e.status == 404:
+                raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
+            else:
+                logger.warning(
+                    "Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                )
+                retry_seconds = DEFAULT_RETRY_SECONDS
+            logger.debug(
+                f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
+            )
         finally:
             self._semaphore.release()
 
