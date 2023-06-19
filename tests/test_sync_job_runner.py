@@ -68,6 +68,7 @@ def create_runner(
     job_type=JobType.FULL,
     index_name=SEARCH_INDEX_NAME,
     sync_cursor=SYNC_CURSOR,
+    data_provider_features=None,
 ):
     source_klass = Mock()
     data_provider = Mock()
@@ -78,6 +79,7 @@ def create_runner(
     data_provider.ping = AsyncMock()
     if not source_available:
         data_provider.ping.side_effect = Exception()
+    data_provider.features = data_provider_features
     data_provider.sync_cursor = Mock(return_value=sync_cursor)
     data_provider.close = AsyncMock()
     source_klass.return_value = data_provider
@@ -734,3 +736,29 @@ async def test_sync_job_runner_not_running(job_type, sync_cursor, elastic_server
     sync_job_runner.connector.sync_done.assert_awaited_with(
         sync_job_runner.sync_job, cursor=sync_cursor
     )
+
+
+@pytest.mark.asyncio
+async def test_sync_job_runner_set_features_for_data_provider():
+    sync_job_runner = create_runner()
+    sync_job_runner.connector.features.sync_rules_enabled.return_value = False
+
+    await sync_job_runner.execute()
+
+    assert not sync_job_runner.data_provider.features.sync_rules_enabled()
+
+
+@pytest.mark.asyncio
+async def test_sync_job_runner_do_not_set_features_if_present_for_data_provider():
+    data_provider_features = Mock()
+    data_provider_features.sync_rules_enabled.return_value = True
+
+    sync_job_runner = create_runner(data_provider_features=data_provider_features)
+
+    # Connector features value differs from the one existing in the data source
+    sync_job_runner.connector.features.sync_rules_enabled.return_value = False
+
+    await sync_job_runner.execute()
+
+    # Features were not overridden with the connector's value
+    assert sync_job_runner.data_provider.features.sync_rules_enabled()
