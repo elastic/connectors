@@ -41,8 +41,9 @@ class PreflightCheck:
                 logger.critical(f"{self.elastic_config['host']} seem down. Bye!")
                 return False
 
-            self._validate_configuration()
-            return await self._check_system_indices_with_retries()
+            valid_configuration = self._validate_configuration()
+            available_system_indices = await self._check_system_indices_with_retries()
+            return valid_configuration and available_system_indices
         finally:
             self.stop()
             if self.es_client is not None:
@@ -94,3 +95,24 @@ class PreflightCheck:
             logger.warning(
                 "Please update your config.yml to explicitly configure a 'connector_id' and a 'service_type'"
             )
+
+        # Unset configuration
+        if not configured_native_types and not (
+            configured_connector_id and configred_service_type
+        ):
+            logger.error("You must configure a 'connector_id' and a 'service_type'")
+            return False
+
+        # Default configuration
+        if (
+            configured_connector_id == "changeme"
+            or configred_service_type == "changeme"
+        ):
+            logger.error("Unmodified default configuration detected.")
+            logger.error(
+                "In your configuration, you must change 'connector_id' and 'service_type' to not be 'changeme'"
+            )
+            return False
+
+        # if we made it here, we didn't hit any critical issues
+        return True

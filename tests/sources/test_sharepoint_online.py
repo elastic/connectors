@@ -744,7 +744,7 @@ class TestSharepointOnlineDataSource:
 
     @property
     def site_pages(self):
-        return [{"GUID": "thats-not-a-guid"}]
+        return [{"odata.id": "11", "GUID": "thats-not-a-guid"}]
 
     @property
     def graph_api_token(self):

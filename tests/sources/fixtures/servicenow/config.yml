@@ -18,7 +18,7 @@ elasticsearch:
   log_level: info
 
 service:
-  idling: 5
+  idling: 30
   heartbeat: 300
   max_errors: 20
   max_errors_span: 600
@@ -26,8 +26,8 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'postgres'
-service_type: 'postgresql'
+connector_id: 'servicenow'
+service_type: 'servicenow'
 
 sources:
-  postgresql: connectors.sources.postgresql:PostgreSQLDataSource
+  servicenow: connectors.sources.servicenow:ServiceNowDataSource

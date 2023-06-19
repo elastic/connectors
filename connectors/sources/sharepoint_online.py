@@ -276,49 +276,55 @@ class MicrosoftAPISession:
     @asynccontextmanager
     @retryable(retries=3)
     async def _call_api(self, absolute_url):
-        try:
-            # Sharepoint / Graph API has quite strict throttling policies
-            # If connector is overzealous, it can be banned for not respecting throttling policies
-            # However if connector has a low setting for the semaphore, then it'll just be slow.
-            # Change the value at your own risk
-            await self._semaphore.acquire()
+          try:
+              # Sharepoint / Graph API has quite strict throttling policies
+              # If connector is overzealous, it can be banned for not respecting throttling policies
+              # However if connector has a low setting for the semaphore, then it'll just be slow.
+              # Change the value at your own risk
+              await self._semaphore.acquire()
 
-            token = await self._api_token.get()
-            headers = {"authorization": f"Bearer {token}"}
-            logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
+              token = await self._api_token.get()
+              headers = {"authorization": f"Bearer {token}"}
+              logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
 
-            async with self._http_session.get(
-                absolute_url,
-                headers=headers,
-            ) as resp:
-                yield resp
-                return
-        except ClientResponseError as e:
-            if e.status == 429 or e.status == 503:
-                response_headers = e.headers or {}
-                retry_seconds = None
-                if "Retry-After" in response_headers:
-                    retry_seconds = int(response_headers["Retry-After"])
-                else:
-                    logger.warning(
-                        "Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
-                    )
-                    retry_seconds = DEFAULT_RETRY_SECONDS
-                logger.debug(
-                    f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
-                )
+              async with self._http_session.get(
+                  absolute_url,
+                  headers=headers,
+              ) as resp:
+                  yield resp
+                  return
+          except ClientResponseError as e:
+              if e.status == 429 or e.status == 503:
+                  response_headers = e.headers or {}
+                  retry_seconds = None
+                  if "Retry-After" in response_headers:
+                      retry_seconds = int(response_headers["Retry-After"])
+                  else:
+                      logger.warning(
+                          f"Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                      )
+                      retry_seconds = DEFAULT_RETRY_SECONDS
+                  logger.debug(
+                      f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
+                  )
 
-                await self._sleeps.sleep(retry_seconds)
-            elif (
-                e.status == 403 or e.status == 401
-            ):  # Might work weird, but Graph returns 403 and REST returns 401
-                raise PermissionsMissing(
-                    f"Received Unauthorized response for {absolute_url}.\nVerify that Graph API [Sites.Read.All, Files.Read All] and Sharepoint [Sites.Read.All] permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
-                ) from e
-            elif e.status == 404:
-                raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
-            else:
-                raise
+                  await asyncio.sleep(retry_seconds)  # TODO: use CancellableSleeps
+              elif (
+                  e.status == 403 or e.status == 401
+              ):  # Might work weird, but Graph returns 403 and REST returns 401
+                  raise PermissionsMissing(
+                      f"Received Unauthorized response for {absolute_url}.\nVerify that Graph API [Sites.Read.All, Files.Read All] and Sharepoint [Sites.Read.All] permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
+                  ) from e
+              elif e.status == 404:
+                  raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
+              else:
+                  logger.warning(
+                      "Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                  )
+                  retry_seconds = DEFAULT_RETRY_SECONDS
+              logger.debug(
+                  f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
+              )
         finally:
             self._semaphore.release()
 
@@ -737,7 +743,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                     async for list_item in self.client.site_list_items(
                         site["id"], site_list["id"]
                     ):
-                        list_item["_id"] = list_item["id"]
+                        # List Item IDs are unique within list.
+                        # Therefore we mix in site_list id to it to make sure they are
+                        # globally unique.
+                        # Also we need to remember original ID because when a document
+                        # is yielded, its "id" field is overwritten with content of "_id" field
+                        list_item_natural_id = list_item["id"]
+                        list_item["_id"] = f"{site_list['id']}-{list_item['id']}"
                         list_item["object_type"] = "list_item"
                         list_item["_tempfile_suffix"] = os.path.splitext(
                             list_item.get("FileName", "")
@@ -751,9 +763,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
                             continue
 
+                        yield list_item, None
+
                         if "Attachments" in list_item["fields"]:
                             async for list_item_attachment in self.client.site_list_item_attachments(
-                                site["webUrl"], site_list["name"], list_item["id"]
+                                site["webUrl"], site_list["name"], list_item_natural_id
                             ):
                                 list_item_attachment["_id"] = list_item_attachment[
                                     "odata.id"
@@ -770,12 +784,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 )
                                 yield list_item_attachment, attachment_download_func
 
-                        download_func = None
-
-                        yield list_item, download_func
-
                 async for site_page in self.client.site_pages(site["webUrl"]):
-                    site_page["_id"] = site_page["GUID"]
+                    site_page["_id"] = site_page[
+                        "odata.id"
+                    ]  # Apparantly site_page["GUID"] is not globally unique
                     site_page["object_type"] = "site_page"
 
                     for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:

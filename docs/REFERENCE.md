@@ -16,3 +16,4 @@ All other connector client references can be found [here](./reference).
 - [Confluence](./reference/confluence.md)
 - [Jira](./reference/jira.md)
 - [Sharepoint](./reference/sharepoint.md)
+- [ServiceNow](./reference/servicenow.md)
