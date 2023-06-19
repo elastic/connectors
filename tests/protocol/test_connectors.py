@@ -138,7 +138,6 @@ DOC_SOURCE = {
         "service_type": "SERVICE",
         "status": "connected",
         "language": "en",
-        "sync_now": False,
     },
 }
 
@@ -190,6 +189,9 @@ ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
 
 SYNC_CURSOR = {"foo": "bar"}
 
+INDEX_NAME = "index_name"
+ACCESS_CONTROL_INDEX_PREFIX = "search-acl-filter-"
+
 
 def test_utc():
     # All dates are in ISO 8601 UTC so we can serialize them
@@ -219,7 +221,6 @@ mongo = {
     "created_at": "",
     "updated_at": "",
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
-    "sync_now": True,
 }
 
 
@@ -349,7 +350,6 @@ async def test_connector_properties():
     assert connector.service_type == "test"
     assert connector.configuration.is_empty()
     assert connector.native is False
-    assert connector.sync_now is False
     assert connector.index_name == "search-some-index"
     assert connector.language == "en"
     assert connector.last_sync_status == JobStatus.COMPLETED
@@ -722,6 +722,20 @@ async def test_sync_job_properties():
 
     assert sync_job.job_type == JobType.ACCESS_CONTROL
     assert isinstance(sync_job.job_type, JobType)
+
+
+@pytest.mark.parametrize(
+    "job_type, is_content_sync",
+    [
+        (JobType.FULL, True),
+        (JobType.INCREMENTAL, True),
+        (JobType.ACCESS_CONTROL, False),
+    ],
+)
+def test_is_content_sync(job_type, is_content_sync):
+    source = {"_id": "1", "_source": {"job_type": job_type.value}}
+    sync_job = SyncJob(elastic_index=None, doc_source=source)
+    assert sync_job.is_content_sync() == is_content_sync
 
 
 @pytest.mark.asyncio
@@ -1175,30 +1189,6 @@ async def test_connector_prepare_with_race_condition():
             "configuration": Banana.get_simple_configuration(),
             "status": Status.NEEDS_CONFIGURATION.value,
         },
-        if_seq_no=seq_no,
-        if_primary_term=primary_term,
-    )
-
-
-@pytest.mark.asyncio
-async def test_connector_reset_sync_now_flag():
-    doc_id = "1"
-    seq_no = 1
-    primary_term = 2
-    connector_doc = {
-        "_id": doc_id,
-        "_seq_no": seq_no,
-        "_primary_term": primary_term,
-        "_source": {},
-    }
-    index = Mock()
-    index.update = AsyncMock()
-    connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.reset_sync_now_flag()
-
-    index.update.assert_awaited_once_with(
-        doc_id=doc_id,
-        doc={"sync_now": False},
         if_seq_no=seq_no,
         if_primary_term=primary_term,
     )
@@ -1732,6 +1722,57 @@ async def test_create_job(index_method, trigger_method, set_env):
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
     await sync_job_index.create(
         connector=connector, trigger_method=trigger_method, job_type=JobType.INCREMENTAL
+    )
+
+    index_method.assert_called_with(expected_index_doc)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "job_type, target_index_name",
+    [
+        (JobType.FULL, INDEX_NAME),
+        (JobType.INCREMENTAL, INDEX_NAME),
+        (JobType.ACCESS_CONTROL, f"{ACCESS_CONTROL_INDEX_PREFIX}{INDEX_NAME}"),
+    ],
+)
+@patch("connectors.protocol.SyncJobIndex.index")
+@patch(
+    "connectors.utils.ACCESS_CONTROL_INDEX_PREFIX",
+    ACCESS_CONTROL_INDEX_PREFIX,
+)
+async def test_create_jobs_with_correct_target_index(
+    index_method, job_type, target_index_name, set_env
+):
+    connector = Mock()
+    connector.index_name = INDEX_NAME
+    config = load_config(CONFIG)
+
+    expected_index_doc = {
+        "connector": {
+            "id": ANY,
+            "filtering": ANY,
+            "index_name": target_index_name,
+            "language": ANY,
+            "pipeline": ANY,
+            "service_type": ANY,
+            "configuration": ANY,
+        },
+        "trigger_method": JobTriggerMethod.SCHEDULED.value,
+        "job_type": job_type.value,
+        "status": JobStatus.PENDING.value,
+        "indexed_document_count": 0,
+        "indexed_document_volume": 0,
+        "deleted_document_count": 0,
+        "created_at": ANY,
+        "last_seen": ANY,
+    }
+
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    await sync_job_index.create(
+        connector=connector,
+        trigger_method=JobTriggerMethod.SCHEDULED,
+        job_type=job_type,
     )
 
     index_method.assert_called_with(expected_index_doc)

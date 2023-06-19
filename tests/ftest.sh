@@ -49,38 +49,39 @@ $PYTHON -m pip install -r $NAME/requirements.txt
 fi
 $PYTHON fixture.py --name $NAME --action setup
 $PYTHON fixture.py --name $NAME --action start_stack
-$ROOT_DIR/bin/fake-kibana --index-name $INDEX_NAME --service-type $SERVICE_TYPE --connector-definition $NAME/connector.json --debug
+$PYTHON fixture.py --name $NAME --action check_stack
+$ROOT_DIR/bin/fake-kibana --index-name $INDEX_NAME --service-type $SERVICE_TYPE --config-file $NAME/config.yml --connector-definition $NAME/connector.json --debug
 $PYTHON fixture.py --name $NAME --action load
-$PYTHON fixture.py --name $NAME --action sync
 
 if [[ $PERF8 == "yes" ]]
 then
     $PYTHON fixture.py --name $NAME --action description > description.txt
     if [[ $PLATFORM == "darwin" ]]
     then
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS --max-duration $MAX_DURATION --description description.txt -c $ELASTIC_INGEST --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS --max-duration $MAX_DURATION --description description.txt -c $ELASTIC_INGEST --config-file $NAME/config.yml --debug & PID=$!
     else
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS --max-duration $MAX_DURATION --description description.txt -c $ELASTIC_INGEST --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --psutil-max-rss $MAX_RSS --max-duration $MAX_DURATION --description description.txt -c $ELASTIC_INGEST --config-file $NAME/config.yml --debug & PID=$!
     fi
 else
-    $ELASTIC_INGEST --debug & PID=$!
+    $ELASTIC_INGEST --config-file $NAME/config.yml --debug & PID=$!
 fi
 
 
 $PYTHON fixture.py --name $NAME --action monitor --pid $PID
 
 $PYTHON fixture.py --name $NAME --action remove
-$PYTHON fixture.py --name $NAME --action sync
 
-$ELASTIC_INGEST --debug & PID_2=$!
+$ELASTIC_INGEST  --config-file $NAME/config.yml  --debug & PID_2=$!
 
 $PYTHON fixture.py --name $NAME --action monitor --pid $PID_2
 
 
 NUM_DOCS=`$PYTHON fixture.py --name $NAME --action get_num_docs`
 $PYTHON $ROOT_DIR/scripts/verify.py --index-name $INDEX_NAME --service-type $NAME --size $NUM_DOCS
-$PYTHON fixture.py --name $NAME --action stop_stack
 $PYTHON fixture.py --name $NAME --action teardown
+
+# stopping the stack as a final step once everything else is done.
+$PYTHON fixture.py --name $NAME --action stop_stack
 
 # Wait for PERF8 to compile the report
 # Actual report compilation starts right when the first sync finishes, but happens in the background
@@ -101,4 +102,19 @@ if [[ $PERF8 == "yes" ]]; then
     exit $STATUS
 fi
 
+# make sure the ingest processes are terminated
+if ps -p $PID > /dev/null
+then
+  echo 'Killing the ingest process'
+  kill -TERM $PID
+  sleep 5
+  kill -KILL $PID
+fi
 
+if ps -p $PID_2 > /dev/null
+then
+  echo 'Killing the ingest process'
+  kill -TERM $PID_2
+  sleep 5
+  kill -KILL $PID_2
+fi

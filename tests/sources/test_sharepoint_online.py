@@ -683,7 +683,7 @@ class TestSharepointOnlineDataSource:
 
     @property
     def site_pages(self):
-        return [{"GUID": "thats-not-a-guid"}]
+        return [{"odata.id": "11", "GUID": "thats-not-a-guid"}]
 
     @property
     def graph_api_token(self):
@@ -820,8 +820,8 @@ class TestSharepointOnlineDataSource:
         assert e.match(another_non_existing_site)
 
     @pytest.mark.asyncio
-    async def test_get_attachment(self, patch_sharepoint_client):
-        attachment = {"odata.id": "1"}
+    async def test_get_attachment_content(self, patch_sharepoint_client):
+        attachment = {"odata.id": "1", "_tempfile_suffix": ".ppt"}
         message = b"This is content of attachment"
 
         async def download_func(attachment_id, async_buffer):
@@ -830,17 +830,44 @@ class TestSharepointOnlineDataSource:
         patch_sharepoint_client.download_attachment = download_func
         source = create_source(SharepointOnlineDataSource)
 
-        download_result = await source.get_attachment(attachment, doit=True)
+        download_result = await source.get_attachment_content(attachment, doit=True)
 
         assert download_result["_attachment"] == base64.b64encode(message).decode()
+        assert "body" not in download_result
 
     @pytest.mark.asyncio
-    async def test_get_content(self, patch_sharepoint_client):
+    async def test_get_attachment_with_text_extraction_enabled_adds_body(
+        self, patch_sharepoint_client
+    ):
+        attachment = {"odata.id": "1", "_tempfile_suffix": ".ppt"}
+        message = "This is the text content of drive item"
+
+        with patch(
+            "connectors.utils.ExtractionService.extract_text", return_value=message
+        ) as extraction_service_mock:
+
+            async def download_func(attachment_id, async_buffer):
+                await async_buffer.write(bytes(message, "utf-8"))
+
+            patch_sharepoint_client.download_attachment = download_func
+            source = create_source(
+                SharepointOnlineDataSource, use_text_extraction_service=True
+            )
+
+            download_result = await source.get_attachment_content(attachment, doit=True)
+
+            extraction_service_mock.assert_called_once()
+            assert download_result["body"] == message
+            assert "_attachment" not in download_result
+
+    @pytest.mark.asyncio
+    async def test_get_drive_item_content(self, patch_sharepoint_client):
         drive_item = {
             "id": "1",
             "size": 15,
             "lastModifiedDateTime": datetime.now(timezone.utc),
             "parentReference": {"driveId": "drive-1"},
+            "_tempfile_suffix": ".txt",
         }
         message = b"This is content of drive item"
 
@@ -850,6 +877,38 @@ class TestSharepointOnlineDataSource:
         patch_sharepoint_client.download_drive_item = download_func
         source = create_source(SharepointOnlineDataSource)
 
-        download_result = await source.get_content(drive_item, doit=True)
+        download_result = await source.get_drive_item_content(drive_item, doit=True)
 
         assert download_result["_attachment"] == base64.b64encode(message).decode()
+        assert "body" not in download_result
+
+    @pytest.mark.asyncio
+    async def test_get_content_with_text_extraction_enabled_adds_body(
+        self, patch_sharepoint_client
+    ):
+        drive_item = {
+            "id": "1",
+            "size": 15,
+            "lastModifiedDateTime": datetime.now(timezone.utc),
+            "parentReference": {"driveId": "drive-1"},
+            "_tempfile_suffix": ".txt",
+        }
+        message = "This is the text content of drive item"
+
+        with patch(
+            "connectors.utils.ExtractionService.extract_text", return_value=message
+        ) as extraction_service_mock:
+
+            async def download_func(drive_id, drive_item_id, async_buffer):
+                await async_buffer.write(bytes(message, "utf-8"))
+
+            patch_sharepoint_client.download_drive_item = download_func
+            source = create_source(
+                SharepointOnlineDataSource, use_text_extraction_service=True
+            )
+
+            download_result = await source.get_drive_item_content(drive_item, doit=True)
+
+            extraction_service_mock.assert_called_once()
+            assert download_result["body"] == message
+            assert "_attachment" not in download_result

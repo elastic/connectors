@@ -349,6 +349,7 @@ class BaseDataSource:
 
         self.configuration = configuration
         self.configuration.set_defaults(self.get_default_configuration())
+        self._features = None
         # A dictionary, the structure of which is connector dependent, to indicate a point where the sync is at
         self._sync_cursor = None
 
@@ -400,6 +401,12 @@ class BaseDataSource:
         """
 
         return hash_id(_id)
+
+    def set_features(self, features):
+        if self._features is not None:
+            logger.warning(f"'_features' already set in {self.__class__.name}")
+        logger.debug(f"Setting '_features' for {self.__class__.name}")
+        self._features = features
 
     async def validate_filtering(self, filtering):
         """Execute all basic rule and advanced rule validators."""
@@ -470,7 +477,7 @@ class BaseDataSource:
         """
         pass
 
-    async def get_permissions(self):
+    async def get_access_control(self):
         """Returns an asynchronous iterator on the permission documents present in the backend.
 
         Each document is a dictionary containing permission data indexed into a corresponding permissions index.

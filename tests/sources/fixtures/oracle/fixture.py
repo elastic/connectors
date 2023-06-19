@@ -79,7 +79,7 @@ def load():
         )
         cursor = connection.cursor()
         for table in range(NUM_TABLES):
-            print(f"Adding data in {table}...")
+            print(f"Adding data from table #{table}...")
             sql_query = f"CREATE TABLE customers_{table} (id int, name VARCHAR(255), age int, description long, PRIMARY KEY (id))"
             cursor.execute(sql_query)
             for i in range(10):

@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+from unittest.mock import patch
+
 import pytest
 
 from connectors.preflight_check import PreflightCheck
@@ -20,6 +22,8 @@ config = {
         "initial_backoff_duration": 0.1,
     },
     "service": {"preflight_max_attempts": 4, "preflight_idle": 0.1},
+    "connector_id": "connector_1",
+    "service_type": "some_type",
 }
 
 
@@ -102,3 +106,91 @@ async def test_index_exist_transient_error(mock_responses):
     preflight = PreflightCheck(config)
     result = await preflight.run()
     assert result is True
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_native_config_is_warned(patched_logger, mock_responses):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    local_config["native_service_types"] = ["foo", "bar"]
+    del local_config["connector_id"]
+    del local_config["service_type"]
+    preflight = PreflightCheck(local_config)
+    result = await preflight.run()
+    assert result is True
+    patched_logger.warning.assert_any_call(
+        "The configuration 'native_service_types' has been deprecated. Please remove this configuration."
+    )
+    patched_logger.warning.assert_any_call(
+        "Native Connectors are only supported internal to Elastic Cloud deployments, which this process is not."
+    )
+    patched_logger.warning.assert_any_call(
+        "Please update your config.yml to explicitly configure a 'connector_id' and a 'service_type'"
+    )
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_native_config_is_forced(patched_logger, mock_responses):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    local_config["native_service_types"] = ["foo", "bar"]
+    local_config["_force_allow_native"] = True
+    preflight = PreflightCheck(local_config)
+    result = await preflight.run()
+    assert result is True
+    patched_logger.warning.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_client_config(patched_logger, mock_responses):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    local_config["connector_id"] = "foo"
+    local_config["service_type"] = "bar"
+    preflight = PreflightCheck(local_config)
+    result = await preflight.run()
+    assert result is True
+    patched_logger.warning.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_unmodified_default_config(patched_logger, mock_responses):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    local_config["connector_id"] = "changeme"
+    local_config["service_type"] = "changeme"
+    preflight = PreflightCheck(local_config)
+    result = await preflight.run()
+    assert result is False
+    patched_logger.errorassert_any_call(
+        "In your configuration, you must change 'connector_id' and 'service_type' to not be 'changeme'"
+    )
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_missing_mode_config(patched_logger, mock_responses):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    del local_config["connector_id"]
+    del local_config["service_type"]
+    preflight = PreflightCheck(local_config)
+    result = await preflight.run()
+    assert result is False
+    patched_logger.errorassert_any_call(
+        "You must configure a 'connector_id' and a 'service_type'"
+    )

@@ -23,7 +23,13 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import CacheWithTimeout, convert_to_b64, html_to_text, url_encode
+from connectors.utils import (
+    CacheWithTimeout,
+    ExtractionService,
+    convert_to_b64,
+    html_to_text,
+    url_encode,
+)
 
 if "OVERRIDE_URL" in os.environ:
     logger.warning("x" * 50)
@@ -289,7 +295,7 @@ class MicrosoftAPISession:
                         retry_seconds = int(response_headers["Retry-After"])
                     else:
                         logger.warning(
-                            "Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                            f"Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
                         )
                         retry_seconds = DEFAULT_RETRY_SECONDS
                     logger.debug(
@@ -547,6 +553,11 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         self._client = None
 
+        if self.configuration["use_text_extraction_service"]:
+            self.extraction_service = ExtractionService()
+        else:
+            self.extraction_service = None
+
     @property
     def client(self):
         if not self._client:
@@ -565,25 +576,25 @@ class SharepointOnlineDataSource(BaseDataSource):
     def get_default_configuration(cls):
         return {
             "tenant_id": {
-                "label": "Tenant Id",
+                "label": "Tenant ID",
                 "order": 1,
                 "type": "str",
                 "value": "",
             },
             "tenant_name": {  # TODO: when Tenant API is going out of Beta, we can remove this field
-                "label": "Tenant Name",
+                "label": "Tenant name",
                 "order": 2,
                 "type": "str",
                 "value": "",
             },
             "client_id": {
-                "label": "Client Id",
+                "label": "Client ID",
                 "order": 3,
                 "type": "str",
                 "value": "",
             },
             "secret_value": {
-                "label": "Secret Value",
+                "label": "Secret value",
                 "order": 4,
                 "sensitive": True,
                 "type": "str",
@@ -596,6 +607,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "order": 5,
                 "type": "list",
                 "value": "",
+            },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 6,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": False,
             },
         }
 
@@ -675,7 +695,8 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                         if "@microsoft.graph.downloadUrl" in drive_item:
                             modified_date = datetime.strptime(
-                                drive_item["lastModifiedDateTime"], "%Y-%m-%dT%H:%M:%SZ"
+                                drive_item["lastModifiedDateTime"],
+                                "%Y-%m-%dT%H:%M:%SZ",
                             )
                             if (
                                 max_data_age
@@ -690,7 +711,12 @@ class SharepointOnlineDataSource(BaseDataSource):
                                     f"Not downloading file {drive_item['name']} of size {drive_item['size']}"
                                 )
                             else:
-                                download_func = partial(self.get_content, drive_item)
+                                drive_item["_tempfile_suffix"] = os.path.splitext(
+                                    drive_item.get("name", "")
+                                )[-1]
+                                download_func = partial(
+                                    self.get_drive_item_content, drive_item
+                                )
 
                         yield drive_item, download_func
 
@@ -703,8 +729,18 @@ class SharepointOnlineDataSource(BaseDataSource):
                     async for list_item in self.client.site_list_items(
                         site["id"], site_list["id"]
                     ):
-                        list_item["_id"] = list_item["id"]
+                        # List Item IDs are unique within list.
+                        # Therefore we mix in site_list id to it to make sure they are
+                        # globally unique.
+                        # Also we need to remember original ID because when a document
+                        # is yielded, its "id" field is overwritten with content of "_id" field
+                        list_item_natural_id = list_item["id"]
+                        list_item["_id"] = f"{site_list['id']}-{list_item['id']}"
                         list_item["object_type"] = "list_item"
+                        list_item["_tempfile_suffix"] = os.path.splitext(
+                            list_item.get("FileName", "")
+                        )[-1]
+
                         content_type = list_item["contentType"]["name"]
 
                         if content_type in [
@@ -713,9 +749,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
                             continue
 
+                        yield list_item, None
+
                         if "Attachments" in list_item["fields"]:
                             async for list_item_attachment in self.client.site_list_item_attachments(
-                                site["webUrl"], site_list["name"], list_item["id"]
+                                site["webUrl"], site_list["name"], list_item_natural_id
                             ):
                                 list_item_attachment["_id"] = list_item_attachment[
                                     "odata.id"
@@ -727,16 +765,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                                     "lastModifiedDateTime"
                                 ]
                                 attachment_download_func = partial(
-                                    self.get_attachment, list_item_attachment
+                                    self.get_attachment_content,
+                                    list_item_attachment,
                                 )
                                 yield list_item_attachment, attachment_download_func
 
-                        download_func = None
-
-                        yield list_item, download_func
-
                 async for site_page in self.client.site_pages(site["webUrl"]):
-                    site_page["_id"] = site_page["GUID"]
+                    site_page["_id"] = site_page[
+                        "odata.id"
+                    ]  # Apparantly site_page["GUID"] is not globally unique
                     site_page["object_type"] = "site_page"
 
                     for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:
@@ -745,21 +782,42 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                     yield site_page, None
 
-    async def get_attachment(self, attachment, timestamp=None, doit=False):
+    async def get_attachment_content(self, attachment, timestamp=None, doit=False):
         if not doit:
             return
 
         # We don't know attachment sizes unfortunately, so cannot properly ignore them
 
-        return {
+        # Okay this gets weird.
+        # There's no way to learn whether List Item Attachment changed or not
+        # Response does not contain metadata on LastUpdated or any dates,
+        # but along with that IDs for attachments are actually these attachments'
+        # file names. So if someone creates a file text.txt with content "hello",
+        # runs a sync, then deletes this file and creates again with different content,
+        # the model returned from API will not change at all. It will have same ID,
+        # same everything. But it will already be an absolutely new document.
+        # Therefore every time we try to download the attachment we say that
+        # it was just recently created so that framework would always re-download it.
+        new_timestamp = datetime.utcnow()
+
+        doc = {
             "_id": attachment["odata.id"],
-            "_timestamp": datetime.utcnow(),  # TODO: attachments cannot be modified in-place, so we can consider that object ids are permanent
-            "_attachment": await self._download_content(
-                partial(self.client.download_attachment, attachment["odata.id"])
-            ),
+            "_timestamp": new_timestamp,
         }
 
-    async def get_content(self, drive_item, timestamp=None, doit=False):
+        attachment, body = await self._download_content(
+            partial(self.client.download_attachment, attachment["odata.id"]),
+            attachment["_tempfile_suffix"],
+        )
+
+        if attachment:
+            doc["_attachment"] = attachment
+        if body:
+            doc["body"] = body
+
+        return doc
+
+    async def get_drive_item_content(self, drive_item, timestamp=None, doit=False):
         document_size = int(drive_item["size"])
 
         if not (doit and document_size):
@@ -768,21 +826,35 @@ class SharepointOnlineDataSource(BaseDataSource):
         if document_size > MAX_DOCUMENT_SIZE:
             return
 
-        return {
+        doc = {
             "_id": drive_item["id"],
             "_timestamp": drive_item["lastModifiedDateTime"],
-            "_attachment": await self._download_content(
-                partial(
-                    self.client.download_drive_item,
-                    drive_item["parentReference"]["driveId"],
-                    drive_item["id"],
-                )
-            ),
         }
 
-    async def _download_content(self, download_func):
+        attachment, body = await self._download_content(
+            partial(
+                self.client.download_drive_item,
+                drive_item["parentReference"]["driveId"],
+                drive_item["id"],
+            ),
+            drive_item["_tempfile_suffix"],
+        )
+
+        if attachment:
+            doc["_attachment"] = attachment
+        if body:
+            doc["body"] = body
+
+        return doc
+
+    async def _download_content(self, download_func, tempfile_suffix):
+        attachment = None
+        body = None
         source_file_name = ""
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+
+        async with NamedTemporaryFile(
+            mode="wb", delete=False, suffix=tempfile_suffix
+        ) as async_buffer:
             # download_func should always be a partial with async_buffer as last argument that is not filled by the caller!
             # E.g. if download_func is download_drive_item(drive_id, item_id, async_buffer) then it
             # should be passed as partial(download_drive_item, drive_id, item_id)
@@ -791,21 +863,25 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             source_file_name = async_buffer.name
 
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
-        )
+        if self.configuration["use_text_extraction_service"]:
+            body = await self.extraction_service.extract_text(source_file_name)
+        else:
+            await asyncio.to_thread(
+                convert_to_b64,
+                source=source_file_name,
+            )
+            async with aiofiles.open(file=source_file_name, mode="r") as target_file:
+                attachment = (await target_file.read()).strip()
 
-        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            content = (await target_file.read()).strip()
-            return content
+        return attachment, body
 
     async def ping(self):
         pass
 
     async def close(self):
         await self.client.close()
+        if self.extraction_service is not None:
+            await self.extraction_service._end_session()
 
     def advanced_rules_validators(self):
         return [SharepointOnlineAdvancedRulesValidator()]

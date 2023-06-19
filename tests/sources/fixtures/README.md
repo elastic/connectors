@@ -6,10 +6,17 @@ Each fixture needs to implement the following:
 - create a directory here that matches the service type
 - add in it the following files:
 
+  - config.yml
   - fixture.py
   - requirements.txt
   - docker-compose.yml
 
+config.yml
+==========
+
+The config file necessary to run the connector for the ftest.
+Specifically, this must set the `connector_id` and `service_type` for the connector.
+Other configuration changes are optional.
 
 fixture.py
 ==========
@@ -19,7 +26,7 @@ This file may contain four functions (all optional):
 - load -- loads data in the backend
 - remove -- removes random data in the backend
 - setup -- called before the docker is started
-- teardown -- called after the docker has been teared down
+- teardown -- called after the docker has been torn down
 
 requirements.txt
 ================

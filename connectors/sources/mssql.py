@@ -102,6 +102,7 @@ class MSSQLDataSource(GenericBaseDataSource):
                     "value": "",
                 },
                 "validate_host": {
+                    "display": "toggle",
                     "label": "Validate host",
                     "order": 12,
                     "type": "bool",
