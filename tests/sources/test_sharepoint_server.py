@@ -1124,6 +1124,7 @@ async def test_get_site_pages_content_for_wikifiled_none():
     # Assert
     assert response_content is None
 
+
 @pytest.mark.asyncio
 async def test_get_list_items_with_no_extension():
     # Setup
