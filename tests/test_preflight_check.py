@@ -22,6 +22,8 @@ config = {
         "initial_backoff_duration": 0.1,
     },
     "service": {"preflight_max_attempts": 4, "preflight_idle": 0.1},
+    "connector_id": "connector_1",
+    "service_type": "some_type",
 }
 
 
@@ -114,6 +116,8 @@ async def test_native_config_is_warned(patched_logger, mock_responses):
     mock_index_exists(mock_responses, JOBS_INDEX)
     local_config = config.copy()
     local_config["native_service_types"] = ["foo", "bar"]
+    del local_config["connector_id"]
+    del local_config["service_type"]
     preflight = PreflightCheck(local_config)
     result = await preflight.run()
     assert result is True
@@ -156,3 +160,37 @@ async def test_client_config(patched_logger, mock_responses):
     result = await preflight.run()
     assert result is True
     patched_logger.warning.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_unmodified_default_config(patched_logger, mock_responses):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    local_config["connector_id"] = "changeme"
+    local_config["service_type"] = "changeme"
+    preflight = PreflightCheck(local_config)
+    result = await preflight.run()
+    assert result is False
+    patched_logger.errorassert_any_call(
+        "In your configuration, you must change 'connector_id' and 'service_type' to not be 'changeme'"
+    )
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_missing_mode_config(patched_logger, mock_responses):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    del local_config["connector_id"]
+    del local_config["service_type"]
+    preflight = PreflightCheck(local_config)
+    result = await preflight.run()
+    assert result is False
+    patched_logger.errorassert_any_call(
+        "You must configure a 'connector_id' and a 'service_type'"
+    )
