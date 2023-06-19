@@ -63,6 +63,11 @@ steps:
       - ".buildkite/run_nigthly.sh confluence"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 ServiceNow"
+    command:
+      - ".buildkite/run_nigthly.sh servicenow"
+    artifact_paths:
+      - "perf8-report-*/**/*"
   - label: "🔨 MongoDB"
     command:
       - ".buildkite/run_nigthly.sh mongodb"
