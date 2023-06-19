@@ -777,7 +777,10 @@ class SharepointOnlineDataSource(BaseDataSource):
         sharepoint_groups = list(
             filter(
                 lambda group_title: group_title is not None,
-                map(lambda group: group.get("Title"), sharepoint_groups.get("value")),
+                map(
+                    lambda group: group.get("Title"),
+                    sharepoint_groups.get("value"),  # pyright: ignore
+                ),
             )
         )
 
@@ -787,7 +790,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 lambda user_name: user_name is not None,
                 map(
                     lambda user: user.get("UserPrincipalName"),
-                    users_and_ad_groups.get("value"),
+                    users_and_ad_groups.get("value"),  # pyright: ignore
                 ),
             )
         )
