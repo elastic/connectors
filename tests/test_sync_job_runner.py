@@ -79,7 +79,8 @@ def create_runner(
     data_provider.ping = AsyncMock()
     if not source_available:
         data_provider.ping.side_effect = Exception()
-    data_provider.features = data_provider_features
+    if data_provider_features:
+        data_provider.features = data_provider_features
     data_provider.sync_cursor = Mock(return_value=sync_cursor)
     data_provider.close = AsyncMock()
     source_klass.return_value = data_provider
@@ -745,7 +746,7 @@ async def test_sync_job_runner_set_features_for_data_provider():
 
     await sync_job_runner.execute()
 
-    assert not sync_job_runner.data_provider.features.sync_rules_enabled()
+    assert not sync_job_runner.connector.features.sync_rules_enabled()
 
 
 @pytest.mark.asyncio

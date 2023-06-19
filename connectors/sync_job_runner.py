@@ -118,11 +118,11 @@ class SyncJobRunner:
                 await self._sync_done(sync_status=JobStatus.COMPLETED)
                 return
 
-            if self.data_provider.features is None:
+            if hasattr(self.data_provider, "features"):
+                logger.warning(f"{self.data_provider.name} already has 'features' set.")
+            else:
                 logger.debug(f"Setting 'features' for {self.data_provider.name}")
                 self.data_provider.features = self.connector.features
-            else:
-                logger.warning(f"{self.data_provider.name} already has 'features' set.")
 
             logger.debug(f"Validating configuration for {self.data_provider}")
             self.data_provider.validate_config_fields()
