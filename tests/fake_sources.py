@@ -51,7 +51,7 @@ class FakeSource(BaseDataSource):
 
     @classmethod
     def get_default_configuration(cls):
-        return []
+        return {}
 
     @classmethod
     async def validate_filtering(cls, filtering):
