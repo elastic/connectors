@@ -520,7 +520,7 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
     SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {
-            "dontSubextractDriveItemsOlderThan": {"type": "integer"}, # in Days
+            "dontSubextractDriveItemsOlderThan": {"type": "integer"},  # in Days
         },
         "additionalProperties": False,
     }
@@ -701,7 +701,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                             if (
                                 max_drive_item_age
                                 and modified_date
-                                < datetime.utcnow() - timedelta(seconds=max_drive_item_age)
+                                < datetime.utcnow()
+                                - timedelta(seconds=max_drive_item_age)
                             ):
                                 logger.warning(
                                     f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
