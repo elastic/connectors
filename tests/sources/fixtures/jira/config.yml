@@ -18,7 +18,7 @@ elasticsearch:
   log_level: info
 
 service:
-  idling: 30
+  idling: 5
   heartbeat: 300
   max_errors: 20
   max_errors_span: 600

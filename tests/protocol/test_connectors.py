@@ -138,7 +138,6 @@ DOC_SOURCE = {
         "service_type": "SERVICE",
         "status": "connected",
         "language": "en",
-        "sync_now": False,
     },
 }
 
@@ -222,7 +221,6 @@ mongo = {
     "created_at": "",
     "updated_at": "",
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
-    "sync_now": True,
 }
 
 
@@ -352,7 +350,6 @@ async def test_connector_properties():
     assert connector.service_type == "test"
     assert connector.configuration.is_empty()
     assert connector.native is False
-    assert connector.sync_now is False
     assert connector.index_name == "search-some-index"
     assert connector.language == "en"
     assert connector.last_sync_status == JobStatus.COMPLETED
@@ -1192,30 +1189,6 @@ async def test_connector_prepare_with_race_condition():
             "configuration": Banana.get_simple_configuration(),
             "status": Status.NEEDS_CONFIGURATION.value,
         },
-        if_seq_no=seq_no,
-        if_primary_term=primary_term,
-    )
-
-
-@pytest.mark.asyncio
-async def test_connector_reset_sync_now_flag():
-    doc_id = "1"
-    seq_no = 1
-    primary_term = 2
-    connector_doc = {
-        "_id": doc_id,
-        "_seq_no": seq_no,
-        "_primary_term": primary_term,
-        "_source": {},
-    }
-    index = Mock()
-    index.update = AsyncMock()
-    connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.reset_sync_now_flag()
-
-    index.update.assert_awaited_once_with(
-        doc_id=doc_id,
-        doc={"sync_now": False},
         if_seq_no=seq_no,
         if_primary_term=primary_term,
     )
