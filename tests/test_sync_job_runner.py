@@ -738,7 +738,7 @@ async def test_sync_job_runner_not_running(job_type, sync_cursor, elastic_server
 
 
 @pytest.mark.asyncio
-async def test_sync_job_runner_sets_features():
+async def test_sync_job_runner_sets_features_for_data_provider():
     sync_job_runner = create_runner()
 
     await sync_job_runner.execute()
