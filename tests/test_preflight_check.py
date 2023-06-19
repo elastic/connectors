@@ -251,7 +251,7 @@ async def test_extraction_service_enabled_but_missing_logs_warning(
 
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
-async def test_extraction_service_enabled_but_missing_logs_warning(
+async def test_extraction_service_enabled_but_missing_logs_critical(
     patched_logger, mock_responses
 ):
     mock_es_info(mock_responses)
