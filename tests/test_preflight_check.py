@@ -201,7 +201,9 @@ async def test_missing_mode_config(patched_logger, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
-async def test_extraction_service_enabled_and_found_writes_info_log(patched_logger, mock_responses):
+async def test_extraction_service_enabled_and_found_writes_info_log(
+    patched_logger, mock_responses
+):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
@@ -209,7 +211,9 @@ async def test_extraction_service_enabled_and_found_writes_info_log(patched_logg
     local_config["extraction_service"]["enabled"] = True
     preflight = PreflightCheck(local_config)
 
-    mock_responses.get(f"{local_config['extraction_service']['host']}/ping/", status=200)
+    mock_responses.get(
+        f"{local_config['extraction_service']['host']}/ping/", status=200
+    )
 
     result = await preflight.run()
     assert result is True
@@ -218,9 +222,12 @@ async def test_extraction_service_enabled_and_found_writes_info_log(patched_logg
         f"Data extraction service found at {local_config['extraction_service']['host']}."
     )
 
+
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
-async def test_extraction_service_enabled_but_missing_logs_warning(patched_logger, mock_responses):
+async def test_extraction_service_enabled_but_missing_logs_warning(
+    patched_logger, mock_responses
+):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
@@ -228,7 +235,9 @@ async def test_extraction_service_enabled_but_missing_logs_warning(patched_logge
     local_config["extraction_service"]["enabled"] = True
     preflight = PreflightCheck(local_config)
 
-    mock_responses.get(f"{local_config['extraction_service']['host']}/ping/", status=404)
+    mock_responses.get(
+        f"{local_config['extraction_service']['host']}/ping/", status=404
+    )
 
     result = await preflight.run()
     assert result is True
@@ -237,9 +246,12 @@ async def test_extraction_service_enabled_but_missing_logs_warning(patched_logge
         f"Data extraction service was found at {local_config['extraction_service']['host']} but health-check returned `404'."
     )
 
+
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
-async def test_extraction_service_enabled_but_missing_logs_warning(patched_logger, mock_responses):
+async def test_extraction_service_enabled_but_missing_logs_warning(
+    patched_logger, mock_responses
+):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
