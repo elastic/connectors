@@ -729,7 +729,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                     async for list_item in self.client.site_list_items(
                         site["id"], site_list["id"]
                     ):
-                        list_item["_id"] = list_item["id"]
+                        # List Item IDs are unique within list.
+                        # Therefore we mix in site_list id to it to make sure they are
+                        # globally unique.
+                        # Also we need to remember original ID because when a document
+                        # is yielded, its "id" field is overwritten with content of "_id" field
+                        list_item_natural_id = list_item["id"]
+                        list_item["_id"] = f"{site_list['id']}-{list_item['id']}"
                         list_item["object_type"] = "list_item"
                         list_item["_tempfile_suffix"] = os.path.splitext(
                             list_item.get("FileName", "")
@@ -743,9 +749,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
                             continue
 
+                        yield list_item, None
+
                         if "Attachments" in list_item["fields"]:
                             async for list_item_attachment in self.client.site_list_item_attachments(
-                                site["webUrl"], site_list["name"], list_item["id"]
+                                site["webUrl"], site_list["name"], list_item_natural_id
                             ):
                                 list_item_attachment["_id"] = list_item_attachment[
                                     "odata.id"
@@ -762,12 +770,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 )
                                 yield list_item_attachment, attachment_download_func
 
-                        download_func = None
-
-                        yield list_item, download_func
-
                 async for site_page in self.client.site_pages(site["webUrl"]):
-                    site_page["_id"] = site_page["GUID"]
+                    site_page["_id"] = site_page[
+                        "odata.id"
+                    ]  # Apparantly site_page["GUID"] is not globally unique
                     site_page["object_type"] = "site_page"
 
                     for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:
