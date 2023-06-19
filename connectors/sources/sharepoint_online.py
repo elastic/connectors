@@ -25,9 +25,11 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import (
     CacheWithTimeout,
+    CancellableSleeps,
     ExtractionService,
     convert_to_b64,
     html_to_text,
+    retryable,
     url_encode,
 )
 
@@ -188,6 +190,7 @@ class MicrosoftSecurityToken:
 class GraphAPIToken(MicrosoftSecurityToken):
     """Token to connect to Microsoft Graph API endpoints."""
 
+    @retryable(retries=3)
     async def _fetch_token(self):
         """Fetch API token for usage with Graph API
 
@@ -210,6 +213,7 @@ class GraphAPIToken(MicrosoftSecurityToken):
 class SharepointRestAPIToken(MicrosoftSecurityToken):
     """Token to connect to Sharepoint REST API endpoints."""
 
+    @retryable(retries=3)
     async def _fetch_token(self):
         """Fetch API token for usage with Sharepoint REST API
 
@@ -249,6 +253,10 @@ class MicrosoftAPISession:
         # Therefore for flexibility I made it a field passed in the initializer,
         # but this abstraction can be better.
         self._scroll_field = scroll_field
+        self._sleeps = CancellableSleeps()
+
+    def close(self):
+        self._sleeps.cancel()
 
     async def fetch(self, url):
         return await self._get_json(url)
@@ -276,57 +284,60 @@ class MicrosoftAPISession:
             return await resp.json()
 
     @asynccontextmanager
+    @retryable(retries=3)
     async def _call_api(self, absolute_url):
-        while (
-            True
-        ):  # TODO: do 3 retries AND also refresh token if current token expires
-            try:
-                # Sharepoint / Graph API has quite strict throttling policies
-                # If connector is overzealous, it can be banned for not respecting throttling policies
-                # However if connector has a low setting for the semaphore, then it'll just be slow.
-                # Change the value at your own risk
-                await self._semaphore.acquire()
+        try:
+            # Sharepoint / Graph API has quite strict throttling policies
+            # If connector is overzealous, it can be banned for not respecting throttling policies
+            # However if connector has a low setting for the semaphore, then it'll just be slow.
+            # Change the value at your own risk
+            await self._semaphore.acquire()
 
-                token = await self._api_token.get()
-                headers = {"authorization": f"Bearer {token}"}
-                logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
+            token = await self._api_token.get()
+            headers = {"authorization": f"Bearer {token}"}
+            logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
 
-                async with self._http_session.get(
-                    absolute_url,
-                    headers=headers,
-                ) as resp:
-                    yield resp
-                    return
-            except ClientResponseError as e:
-                if e.status == 429 or e.status == 503:
-                    response_headers = e.headers or {}
-                    retry_seconds = None
-                    if "Retry-After" in response_headers:
-                        retry_seconds = int(response_headers["Retry-After"])
-                    else:
-                        logger.warning(
-                            f"Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
-                        )
-                        retry_seconds = DEFAULT_RETRY_SECONDS
-                    logger.debug(
-                        f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
-                    )
+            async with self._http_session.get(
+                absolute_url,
+                headers=headers,
+            ) as resp:
+                yield resp
 
-                    await asyncio.sleep(retry_seconds)  # TODO: use CancellableSleeps
-                elif (
-                    e.status == 403 or e.status == 401
-                ):  # Might work weird, but Graph returns 403 and REST returns 401
-                    raise PermissionsMissing(
-                        f"Received Unauthorized response for {absolute_url}.\nVerify that Graph API [Sites.Read.All, Files.Read All] and Sharepoint [Sites.Read.All] permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
-                    ) from e
-                elif e.status == 404:
-                    raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
-                elif e.status == 500:
-                    raise InternalServerError from e
+                return
+        except ClientResponseError as e:
+            if e.status == 429 or e.status == 503:
+                response_headers = e.headers or {}
+                retry_seconds = None
+                if "Retry-After" in response_headers:
+                    retry_seconds = int(response_headers["Retry-After"])
                 else:
-                    raise
-            finally:
-                self._semaphore.release()
+                    logger.warning(
+                        f"Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                    )
+                    retry_seconds = DEFAULT_RETRY_SECONDS
+                logger.debug(
+                    f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
+                )
+
+                await self._sleeps.sleep(retry_seconds)  # TODO: use CancellableSleeps
+                raise
+            elif (
+                e.status == 403 or e.status == 401
+            ):  # Might work weird, but Graph returns 403 and REST returns 401
+                raise PermissionsMissing(
+                    f"Received Unauthorized response for {absolute_url}.\nVerify that Graph API [Sites.Read.All, Files.Read All] and Sharepoint [Sites.Read.All] permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
+                ) from e
+            elif e.status == 404:
+                raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
+            elif e.status == 500:
+                raise InternalServerError from e
+            else:
+                raise
+            logger.debug(
+                f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
+            )
+        finally:
+            self._semaphore.release()
 
 
 class SharepointOnlineClient:
@@ -599,6 +610,8 @@ class SharepointOnlineClient:
 
     async def close(self):
         await self._http_session.close()
+        self._graph_api_client.close()
+        self._rest_api_client.close()
 
 
 class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
@@ -1102,9 +1115,6 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if attachment:
             doc["_attachment"] = attachment
-
-            if ACCESS_CONTROL in attachment:
-                doc[ACCESS_CONTROL] = attachment[ACCESS_CONTROL]
         if body:
             doc["body"] = body
 
@@ -1137,9 +1147,6 @@ class SharepointOnlineDataSource(BaseDataSource):
             doc["_attachment"] = attachment
         if body:
             doc["body"] = body
-
-        if ACCESS_CONTROL in drive_item:
-            doc[ACCESS_CONTROL] = drive_item[ACCESS_CONTROL]
 
         return doc
 
