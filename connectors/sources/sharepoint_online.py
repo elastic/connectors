@@ -520,7 +520,7 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
     SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {
-            "skipDriveItemsOlderThan": {"type": "integer"}, # in Days
+            "dontSubextractDriveItemsOlderThan": {"type": "integer"}, # in Days
         },
         "additionalProperties": False,
     }
@@ -665,7 +665,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            max_drive_item_age = advanced_rules["skipDriveItemsOlderThan"]
+            max_drive_item_age = advanced_rules["dontSubextractDriveItemsOlderThan"]
 
         async for site_collection in self.client.site_collections():
             site_collection["_id"] = site_collection["webUrl"]
