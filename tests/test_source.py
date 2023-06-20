@@ -15,6 +15,7 @@ from connectors.filtering.validation import (
     BasicRuleNoMatchAllRegexValidator,
     BasicRulesSetSemanticValidator,
 )
+from connectors.protocol import Features
 from connectors.source import (
     BaseDataSource,
     ConfigurableFieldDependencyError,
@@ -790,6 +791,10 @@ async def test_base_class():
 
     # should be empty as advanced rules are specific to a data source
     assert not len(DataSource(configuration=configuration).advanced_rules_validators())
+
+    features = Features()
+    ds.set_features(features)
+    assert ds._features == features
 
 
 @pytest.mark.parametrize(

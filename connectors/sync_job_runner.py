@@ -118,6 +118,8 @@ class SyncJobRunner:
                 await self._sync_done(sync_status=JobStatus.COMPLETED)
                 return
 
+            self.data_provider.set_features(self.connector.features)
+
             logger.debug(f"Validating configuration for {self.data_provider}")
             self.data_provider.validate_config_fields()
             await self.data_provider.validate_config()
@@ -201,6 +203,11 @@ class SyncJobRunner:
             self.sync_job.index_name, mappings=mappings
         )
 
+        content_extraction_enabled = (
+            self.sync_job.configuration.get("use_text_extraction_service")
+            or self.sync_job.pipeline["extract_binary_content"]
+        )
+
         await self.elastic_server.async_bulk(
             self.sync_job.index_name,
             self.prepare_docs(),
@@ -208,7 +215,7 @@ class SyncJobRunner:
             job_type,
             filter_=self.sync_job.filtering,
             sync_rules_enabled=sync_rules_enabled,
-            content_extraction_enabled=self.sync_job.pipeline["extract_binary_content"],
+            content_extraction_enabled=content_extraction_enabled,
             options=bulk_options,
         )
 

@@ -22,6 +22,11 @@ config = {
         "initial_backoff_duration": 0.1,
     },
     "service": {"preflight_max_attempts": 4, "preflight_idle": 0.1},
+    "extraction_service": {
+        "enabled": False,
+        "host": "http://localhost:8090",
+        "text_extraction": {"use_file_pointers": False, "method": "tika"},
+    },
     "connector_id": "connector_1",
     "service_type": "some_type",
 }
@@ -193,4 +198,72 @@ async def test_missing_mode_config(patched_logger, mock_responses):
     assert result is False
     patched_logger.errorassert_any_call(
         "You must configure a 'connector_id' and a 'service_type'"
+    )
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_extraction_service_enabled_and_found_writes_info_log(
+    patched_logger, mock_responses
+):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    local_config["extraction_service"]["enabled"] = True
+    preflight = PreflightCheck(local_config)
+
+    mock_responses.get(
+        f"{local_config['extraction_service']['host']}/ping/", status=200
+    )
+
+    result = await preflight.run()
+    assert result is True
+
+    patched_logger.info.assert_any_call(
+        f"Data extraction service found at {local_config['extraction_service']['host']}."
+    )
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_extraction_service_enabled_but_missing_logs_warning(
+    patched_logger, mock_responses
+):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    local_config["extraction_service"]["enabled"] = True
+    preflight = PreflightCheck(local_config)
+
+    mock_responses.get(
+        f"{local_config['extraction_service']['host']}/ping/", status=404
+    )
+
+    result = await preflight.run()
+    assert result is True
+
+    patched_logger.warning.assert_any_call(
+        f"Data extraction service was found at {local_config['extraction_service']['host']} but health-check returned `404'."
+    )
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_extraction_service_enabled_but_missing_logs_critical(
+    patched_logger, mock_responses
+):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    local_config["extraction_service"]["enabled"] = True
+    preflight = PreflightCheck(local_config)
+
+    result = await preflight.run()
+    assert result is True
+
+    patched_logger.critical.assert_any_call(
+        f"Expected to find a running instance of data extraction service at {local_config['extraction_service']['host']} but failed. Connection refused: GET {local_config['extraction_service']['host']}/ping/."
     )
