@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+import aiohttp
+
 from connectors.es import ESClient
 from connectors.logger import logger
 from connectors.protocol import CONNECTORS_INDEX, JOBS_INDEX
@@ -15,6 +17,7 @@ class PreflightCheck:
         self.config = config
         self.elastic_config = config["elasticsearch"]
         self.service_config = config["service"]
+        self.extraction_config = config["extraction_service"]
         self.es_client = ESClient(self.elastic_config)
         self.preflight_max_attempts = int(
             self.service_config.get("preflight_max_attempts", 10)
@@ -41,12 +44,45 @@ class PreflightCheck:
                 logger.critical(f"{self.elastic_config['host']} seem down. Bye!")
                 return False
 
-            self._validate_configuration()
-            return await self._check_system_indices_with_retries()
+            await self._check_local_extraction_setup()
+
+            valid_configuration = self._validate_configuration()
+            available_system_indices = await self._check_system_indices_with_retries()
+            return valid_configuration and available_system_indices
         finally:
             self.stop()
             if self.es_client is not None:
                 await self.es_client.close()
+
+    async def _check_local_extraction_setup(self):
+        if not self.extraction_config.get("enabled", False):
+            return
+
+        timeout = aiohttp.ClientTimeout(total=5)
+        session = aiohttp.ClientSession(timeout=timeout)
+
+        try:
+            async with session.get(
+                f"{self.extraction_config['host']}/ping/"
+            ) as response:
+                if response.status != 200:
+                    logger.warning(
+                        f"Data extraction service was found at {self.extraction_config['host']} but health-check returned `{response.status}'."
+                    )
+                else:
+                    logger.info(
+                        f"Data extraction service found at {self.extraction_config['host']}."
+                    )
+        except (aiohttp.ClientConnectionError, aiohttp.ServerTimeoutError) as e:
+            logger.critical(
+                f"Expected to find a running instance of data extraction service at {self.extraction_config['host']} but failed. {e}."
+            )
+        except Exception as e:
+            logger.critical(
+                f"Unexpected error occurred while attempting to connect to data extraction service at {self.extraction_config['host']}. {e}."
+            )
+        finally:
+            await session.close()
 
     async def _check_system_indices_with_retries(self):
         attempts = 0
@@ -94,3 +130,24 @@ class PreflightCheck:
             logger.warning(
                 "Please update your config.yml to explicitly configure a 'connector_id' and a 'service_type'"
             )
+
+        # Unset configuration
+        if not configured_native_types and not (
+            configured_connector_id and configred_service_type
+        ):
+            logger.error("You must configure a 'connector_id' and a 'service_type'")
+            return False
+
+        # Default configuration
+        if (
+            configured_connector_id == "changeme"
+            or configred_service_type == "changeme"
+        ):
+            logger.error("Unmodified default configuration detected.")
+            logger.error(
+                "In your configuration, you must change 'connector_id' and 'service_type' to not be 'changeme'"
+            )
+            return False
+
+        # if we made it here, we didn't hit any critical issues
+        return True

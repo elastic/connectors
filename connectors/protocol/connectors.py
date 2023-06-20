@@ -31,6 +31,7 @@ from connectors.source import (
     get_source_klass,
 )
 from connectors.utils import (
+    ACCESS_CONTROL_INDEX_PREFIX,
     deep_merge_dicts,
     filter_nested_dict_by_keys,
     iso_utc,
@@ -504,10 +505,6 @@ class Connector(ESDocument):
         return self.get("is_native", default=False)
 
     @property
-    def sync_now(self):
-        return self.get("sync_now", default=False)
-
-    @property
     def full_sync_scheduling(self):
         return self.get("scheduling", "full", default={})
 
@@ -609,14 +606,6 @@ class Connector(ESDocument):
             logger.debug(f"'{job_type.value}' sync scheduling is disabled")
             return None
         return next_run(scheduling_property.get("interval"))
-
-    async def reset_sync_now_flag(self):
-        await self.index.update(
-            doc_id=self.id,
-            doc={"sync_now": False},
-            if_seq_no=self._seq_no,
-            if_primary_term=self._primary_term,
-        )
 
     async def _update_datetime(self, field, new_ts):
         await self.index.update(
@@ -937,11 +926,16 @@ class SyncJobIndex(ESIndex):
 
     async def create(self, connector, trigger_method, job_type):
         filtering = connector.filtering.get_active_filter().transform_filtering()
+        index_name = connector.index_name
+
+        if job_type == JobType.ACCESS_CONTROL:
+            index_name = f"{ACCESS_CONTROL_INDEX_PREFIX}{index_name}"
+
         job_def = {
             "connector": {
                 "id": connector.id,
                 "filtering": filtering,
-                "index_name": connector.index_name,
+                "index_name": index_name,
                 "language": connector.language,
                 "pipeline": connector.pipeline.data,
                 "service_type": connector.service_type,

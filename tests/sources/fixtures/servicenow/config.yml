@@ -18,7 +18,7 @@ elasticsearch:
   log_level: info
 
 service:
-  idling: 5
+  idling: 30
   heartbeat: 300
   max_errors: 20
   max_errors_span: 600
@@ -33,8 +33,8 @@ extraction_service:
     use_file_pointers: false
     method: 'tika'
 
-connector_id: 'jira'
-service_type: 'jira'
+connector_id: 'servicenow'
+service_type: 'servicenow'
 
 sources:
-  jira: connectors.sources.jira:JiraDataSource
+  servicenow: connectors.sources.servicenow:ServiceNowDataSource

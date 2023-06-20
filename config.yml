@@ -27,14 +27,15 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'changeme'
-service_type: 'changeme'
-
 extraction_service:
+  enabled: false
   host: http://localhost:8090
   text_extraction:
     use_file_pointers: false
     method: 'tika'
+
+connector_id: 'changeme'
+service_type: 'changeme'
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
@@ -50,4 +51,5 @@ sources:
   mssql: connectors.sources.mssql:MSSQLDataSource
   jira: connectors.sources.jira:JiraDataSource
   confluence: connectors.sources.confluence:ConfluenceDataSource
+  servicenow: connectors.sources.servicenow:ServiceNowDataSource
   sharepoint_online: connectors.sources.sharepoint_online:SharepointOnlineDataSource

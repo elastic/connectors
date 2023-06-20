@@ -18,13 +18,20 @@ elasticsearch:
   log_level: info
 
 service:
-  idling: 30
+  idling: 5
   heartbeat: 300
   max_errors: 20
   max_errors_span: 600
   max_concurrent_syncs: 1
   job_cleanup_interval: 300
   log_level: INFO
+
+extraction_service:
+  enabled: false
+  host: http://localhost:8090
+  text_extraction:
+    use_file_pointers: false
+    method: 'tika'
 
 connector_id: 'sharepoint_server'
 service_type: 'sharepoint_server'

@@ -320,8 +320,9 @@ class Extractor:
             self.total_downloads += 1
             data.pop("_id", None)
             data.pop(TIMESTAMP_FIELD, None)
-            data.pop("_tempfile_suffix", None)
             doc.update(data)
+
+        doc.pop("_original_filename", None)
 
         await self.queue.put(
             {
@@ -440,21 +441,7 @@ class Extractor:
             # wait for all downloads to be finished
             await lazy_downloads.join()
 
-        # We delete any document that existed in Elasticsearch that was not
-        # returned by the backend.
-        #
-        # Since we popped out every seen doc, existing_ids has now the ids to delete
-        logger.debug(f"Delete {len(existing_ids)} docs from Elasticsearch")
-        for doc_id in existing_ids.keys():
-            await self.queue.put(
-                {
-                    "_op_type": OP_DELETE,
-                    "_index": self.index,
-                    "_id": doc_id,
-                }
-            )
-            self.total_docs_deleted += 1
-
+        await self.enqueue_docs_to_delete(existing_ids)
         await self.queue.put("END_DOCS")
 
     async def get_docs_incrementally(self, generator):

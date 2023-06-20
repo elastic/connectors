@@ -73,6 +73,7 @@ def create_runner(
     data_provider = Mock()
     data_provider.tweak_bulk_options = Mock()
     data_provider.changed = AsyncMock(return_value=source_changed)
+    data_provider.set_features = Mock()
     data_provider.validate_config_fields = Mock()
     data_provider.validate_config = AsyncMock(side_effect=validate_config_exception)
     data_provider.ping = AsyncMock()
@@ -734,3 +735,12 @@ async def test_sync_job_runner_not_running(job_type, sync_cursor, elastic_server
     sync_job_runner.connector.sync_done.assert_awaited_with(
         sync_job_runner.sync_job, cursor=sync_cursor
     )
+
+
+@pytest.mark.asyncio
+async def test_sync_job_runner_sets_features_for_data_provider():
+    sync_job_runner = create_runner()
+
+    await sync_job_runner.execute()
+
+    assert sync_job_runner.data_provider.set_features.called

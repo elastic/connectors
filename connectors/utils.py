@@ -21,7 +21,7 @@ from io import BytesIO
 
 import aiohttp
 import yaml
-from aiohttp.client_exceptions import ServerTimeoutError
+from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 from base64io import Base64IO
 from bs4 import BeautifulSoup
 from cstriggers.core.trigger import QuartzCron
@@ -29,6 +29,7 @@ from pympler import asizeof
 
 from connectors.logger import logger
 
+ACCESS_CONTROL_INDEX_PREFIX = "search-acl-filter-"
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_QUEUE_SIZE = 1024
 DEFAULT_DISPLAY_EVERY = 100
@@ -683,7 +684,7 @@ class ExtractionService:
         self.session = None
 
     def _begin_session(self):
-        if self.session:
+        if self.session is not None:
             return self.session
 
         timeout = aiohttp.ClientTimeout(total=5)
@@ -695,25 +696,31 @@ class ExtractionService:
 
         await self.session.close()
 
-    async def extract_text(self, filepath):
+    async def extract_text(self, filepath, original_filename):
         """Sends a text extraction request to tika-server using the supplied filename.
         Args:
-            filename: full filepath for file to be used for text extraction
+            filepath: local path to the tempfile for extraction
+            original_filename: original name of file
 
         Returns the extracted text
         """
 
         content = ""
-        filename = os.path.basename(filepath)
+        filename = (
+            original_filename if original_filename else os.path.basename(filepath)
+        )
 
         try:
+            if self.session is None:
+                self._begin_session()
+
             if self.use_file_pointers:
                 content = await self.extract_with_file_pointer(filepath, filename)
             else:
                 content = await self.extract_with_file_send(filepath, filename)
-        except ServerTimeoutError as e:
+        except (ClientConnectionError, ServerTimeoutError) as e:
             logger.error(
-                f"Server timed out while extracting data from {filename}. Error: {e}"
+                f"Connection to {self.host} failed while extracting data from {filename}. Error: {e}"
             )
         except Exception as e:
             logger.error(f"Text extraction unexpectedly failed. Error: {e}")
@@ -757,11 +764,11 @@ class ExtractionService:
         content = await response.json()
 
         if response.status != 200:
-            logger.warn(
+            logger.warning(
                 f"Extraction service could not parse `{filename}'. Status: [{response.status}]."
             )
         if content.get("error"):
-            logger.warn(
+            logger.warning(
                 f"Extraction service could not parse `{filename}'; {content.get('error', 'unexpected error')}: {content.get('message', 'unknown cause')}"
             )
 
