@@ -263,7 +263,7 @@ async def test_extraction_service_enabled_but_missing_logs_critical(
 
     result = await preflight.run()
     assert result is True
-    # Expected to find a running instance of data extraction service at http://localhost:8090 but failed. Connection refused: GET http://localhost:8090/ping/
+
     patched_logger.critical.assert_any_call(
         f"Expected to find a running instance of data extraction service at {local_config['extraction_service']['host']} but failed. Connection refused: GET {local_config['extraction_service']['host']}/ping/."
     )
