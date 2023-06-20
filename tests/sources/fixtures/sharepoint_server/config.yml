@@ -33,9 +33,9 @@ extraction_service:
     use_file_pointers: false
     method: 'tika'
 
-connector_id: 'sharepoint'
-service_type: 'sharepoint'
+connector_id: 'sharepoint_server'
+service_type: 'sharepoint_server'
 
 sources:
-  sharepoint: connectors.sources.sharepoint:SharepointDataSource
+  sharepoint_server: connectors.sources.sharepoint_server:SharepointServerDataSource
 

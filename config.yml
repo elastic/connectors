@@ -47,7 +47,7 @@ sources:
   azure_blob_storage: connectors.sources.azure_blob_storage:AzureBlobStorageDataSource
   postgresql: connectors.sources.postgresql:PostgreSQLDataSource
   oracle: connectors.sources.oracle:OracleDataSource
-  sharepoint: connectors.sources.sharepoint:SharepointDataSource
+  sharepoint_server: connectors.sources.sharepoint_server:SharepointServerDataSource
   mssql: connectors.sources.mssql:MSSQLDataSource
   jira: connectors.sources.jira:JiraDataSource
   confluence: connectors.sources.confluence:ConfluenceDataSource
