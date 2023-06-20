@@ -26,6 +26,13 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
+extraction_service:
+  enabled: false
+  host: http://localhost:8090
+  text_extraction:
+    use_file_pointers: false
+    method: 'tika'
+
 connector_id: 'dir'
 service_type: 'dir'
 
