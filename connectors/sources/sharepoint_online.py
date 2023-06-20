@@ -1229,6 +1229,9 @@ class SharepointOnlineDataSource(BaseDataSource):
         return self._sync_cursor
 
     def update_drive_delta_link(self, drive_id, link):
+        if not link:
+            return
+
         self._sync_cursor[CURSOR_SITE_DRIVE_KEY][drive_id] = link
 
     def get_drive_delta_link(self, drive_id):
