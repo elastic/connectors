@@ -1264,9 +1264,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             return None
         elif (
             drive_item["size"] > MAX_DOCUMENT_SIZE
-            and not self.configuration[
-                "use_text_extraction_service"
-            ]
+            and not self.configuration["use_text_extraction_service"]
         ):
             logger.warning(
                 f"Not downloading file {drive_item['name']} of size {drive_item['size']}"
@@ -1274,9 +1272,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             return None
         else:
-            drive_item["_original_filename"] = drive_item.get(
-                "name", ""
-            )
+            drive_item["_original_filename"] = drive_item.get("name", "")
             return partial(self.get_drive_item_content, drive_item)
 
     async def get_attachment_content(self, attachment, timestamp=None, doit=False):
