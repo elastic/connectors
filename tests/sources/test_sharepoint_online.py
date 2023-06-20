@@ -1217,8 +1217,7 @@ class TestSharepointOnlineDataSource:
         source._dls_enabled = Mock(return_value=True)
 
         results = []
-        downloads = []
-        async for doc, download_func in source.get_docs():
+        async for doc, _download_func in source.get_docs():
             results.append(doc)
 
         site_collections = [i for i in results if i["object_type"] == "site_collection"]
