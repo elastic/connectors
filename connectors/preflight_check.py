@@ -55,12 +55,12 @@ class PreflightCheck:
                 await self.es_client.close()
 
     async def _check_local_extraction_setup(self):
-        if not self.extraction_config["enabled"]:
+        if not self.extraction_config.get("enabled", False):
             return
 
+        timeout = aiohttp.ClientTimeout(total=5)
+        session = aiohttp.ClientSession(timeout=timeout)
         try:
-            timeout = aiohttp.ClientTimeout(total=5)
-            session = aiohttp.ClientSession(timeout=timeout)
             async with session.get(
                 f"{self.extraction_config['host']}/ping/"
             ) as response:
