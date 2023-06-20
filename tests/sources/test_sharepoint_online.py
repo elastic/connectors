@@ -15,6 +15,7 @@ import pytest
 import pytest_asyncio
 from aiohttp.client_exceptions import ClientResponseError
 
+from connectors.protocol import Features
 from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
     DEFAULT_GROUPS,
@@ -29,7 +30,6 @@ from connectors.sources.sharepoint_online import (
     SharepointOnlineClient,
     SharepointOnlineDataSource,
     TokenFetchFailed,
-    _decorate_with_access_control,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -46,6 +46,10 @@ NUMBER_OF_DEFAULT_GROUPS = 3
 
 ALLOW_ACCESS_CONTROL_PATCHED = "access_control"
 DEFAULT_GROUPS_PATCHED = ["some default group"]
+
+
+def set_dls_enabled(source, dls_enabled):
+    source.set_features(Features({"document_level_security": {"enabled": dls_enabled}}))
 
 
 class TestMicrosoftSecurityToken:
@@ -1361,18 +1365,20 @@ class TestSharepointOnlineDataSource:
             assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
-    async def test_site_access_control(self, patch_sharepoint_client):
+    async def test_with_site_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, True)
         patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
 
         site = {"Id": 1, "webUrl": "some url"}
 
-        access_control = await source._site_access_control(site)
+        site_with_access_control = await source._with_site_access_control(site)
+        access_control = site_with_access_control[ACCESS_CONTROL]
 
         two_users = 2
         two_groups = 2
 
-        assert len(access_control) == two_groups + two_users
+        assert len(access_control) == NUMBER_OF_DEFAULT_GROUPS + two_groups + two_users
         assert USER_1 in access_control
         assert USER_2 in access_control
         assert GROUP_1 in access_control
@@ -1381,6 +1387,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     async def test_with_drive_item_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, True)
         site_drive = {"id": 1}
         drive_item = {"id": 2}
 
@@ -1403,6 +1410,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     async def test_with_site_list_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, True)
         patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
 
         site_web_url = "some url"
@@ -1426,6 +1434,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     async def test_with_site_page_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, True)
         patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
 
         site_web_url = "some url"
@@ -1466,54 +1475,80 @@ class TestSharepointOnlineDataSource:
         assert GROUP_1 in access_control
 
     @pytest.mark.asyncio
-    async def test_list_item_access_control(self, patch_sharepoint_client):
+    async def test_with_list_item_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, True)
         patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
 
         site_web_url = "some url"
         site_list_name = "site_list"
         list_item = {"id": 1}
 
-        access_control = await source._list_item_access_control(
+        list_item_with_access_control = await source._with_list_item_access_control(
             site_web_url, site_list_name, list_item
         )
+        access_control = list_item_with_access_control[ACCESS_CONTROL]
 
         one_user = 1
         one_group = 1
 
-        assert len(access_control) == one_user + one_group
+        assert len(access_control) == NUMBER_OF_DEFAULT_GROUPS + one_user + one_group
         assert USER_1 in access_control
         assert GROUP_1 in access_control
 
+    @pytest.mark.parametrize(
+        "dls_enabled, document, access_control, expected_decorated_document",
+        [
+            (
+                False,
+                {},
+                [USER_1],
+                {},
+            ),
+            (
+                True,
+                {},
+                [USER_1],
+                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1, *DEFAULT_GROUPS_PATCHED]},
+            ),
+            (True, {}, [], {ALLOW_ACCESS_CONTROL_PATCHED: DEFAULT_GROUPS_PATCHED}),
+            (
+                True,
+                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1]},
+                [USER_2],
+                {
+                    ALLOW_ACCESS_CONTROL_PATCHED: [
+                        USER_1,
+                        USER_2,
+                        *DEFAULT_GROUPS_PATCHED,
+                    ]
+                },
+            ),
+            (
+                True,
+                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1]},
+                [],
+                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1, *DEFAULT_GROUPS_PATCHED]},
+            ),
+        ],
+    )
+    @patch(
+        "connectors.sources.sharepoint_online.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    @patch(
+        "connectors.sources.sharepoint_online.DEFAULT_GROUPS", DEFAULT_GROUPS_PATCHED
+    )
+    def test_decorate_with_access_control(
+        self, dls_enabled, document, access_control, expected_decorated_document
+    ):
+        source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, dls_enabled)
+        decorated_document = source._decorate_with_access_control(
+            document, access_control
+        )
 
-@pytest.mark.parametrize(
-    "document, access_control, expected_decorated_document",
-    [
-        (
-            {},
-            [USER_1],
-            {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1, *DEFAULT_GROUPS_PATCHED]},
-        ),
-        ({}, [], {ALLOW_ACCESS_CONTROL_PATCHED: DEFAULT_GROUPS_PATCHED}),
-        (
-            {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1]},
-            [USER_2],
-            {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1, USER_2, *DEFAULT_GROUPS_PATCHED]},
-        ),
-        (
-            {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1]},
-            [],
-            {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1, *DEFAULT_GROUPS_PATCHED]},
-        ),
-    ],
-)
-@patch(
-    "connectors.sources.sharepoint_online.ACCESS_CONTROL", ALLOW_ACCESS_CONTROL_PATCHED
-)
-@patch("connectors.sources.sharepoint_online.DEFAULT_GROUPS", DEFAULT_GROUPS_PATCHED)
-def test_decorate_with_access_control(
-    document, access_control, expected_decorated_document
-):
-    decorated_document = _decorate_with_access_control(document, access_control)
-
-    assert decorated_document == expected_decorated_document
+        assert (
+            decorated_document.get(ALLOW_ACCESS_CONTROL_PATCHED, []).sort()
+            == expected_decorated_document.get(ALLOW_ACCESS_CONTROL_PATCHED, []).sort()
+        )

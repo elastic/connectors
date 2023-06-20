@@ -644,14 +644,6 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
             )
 
 
-def _decorate_with_access_control(document, access_control):
-    document[ACCESS_CONTROL] = (
-        document.get(ACCESS_CONTROL, []) + access_control + DEFAULT_GROUPS
-    )
-
-    return document
-
-
 class SharepointOnlineDataSource(BaseDataSource):
     """Sharepoint Online"""
 
@@ -770,7 +762,18 @@ class SharepointOnlineDataSource(BaseDataSource):
                 f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(remote_sites[:5])}]."
             )
 
-    async def _site_access_control(self, site):
+    def _decorate_with_access_control(self, document, access_control):
+        if self._dls_enabled():
+            document[ACCESS_CONTROL] = list(
+                set(document.get(ACCESS_CONTROL, []) + access_control + DEFAULT_GROUPS)
+            )
+
+        return document
+
+    async def _with_site_access_control(self, site):
+        if not self._dls_enabled():
+            return site
+
         site_web_url = site["webUrl"]
 
         sharepoint_groups = await self.client.site_groups(site_web_url)
@@ -795,7 +798,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             )
         )
 
-        return sharepoint_groups + users_and_ad_groups
+        return self._decorate_with_access_control(
+            site, sharepoint_groups + users_and_ad_groups
+        )
 
     async def _with_drive_item_access_control(self, site_drive, drive_item):
         """
@@ -818,6 +823,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         We're extracting "loginName" or "email" for groups or users inside "grantedToV2" or "grantedTo".
         """
+
+        if not self._dls_enabled():
+            return drive_item
 
         permissions = await self.client.drive_item_permissions(
             site_drive.get("id"), drive_item.get("id")
@@ -852,9 +860,12 @@ class SharepointOnlineDataSource(BaseDataSource):
             )
         )
 
-        return _decorate_with_access_control(drive_item, access_control)
+        return self._decorate_with_access_control(drive_item, access_control)
 
     async def _with_site_list_access_control(self, site_web_url, site_list):
+        if not self._dls_enabled():
+            return site_list
+
         role_assignments = await self.client.site_list_role_assignments(
             site_web_url, site_list["name"]
         )
@@ -863,9 +874,12 @@ class SharepointOnlineDataSource(BaseDataSource):
             site_web_url, role_assignments
         )
 
-        return _decorate_with_access_control(site_list, access_control)
+        return self._decorate_with_access_control(site_list, access_control)
 
     async def _with_site_page_access_control(self, site_web_url, site_page):
+        if not self._dls_enabled():
+            return site_page
+
         role_assignments = await self.client.site_page_role_assignments(
             site_web_url, site_page["Id"]
         )
@@ -874,7 +888,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             site_web_url, role_assignments
         )
 
-        return _decorate_with_access_control(site_page, access_control)
+        return self._decorate_with_access_control(site_page, access_control)
 
     async def _access_control_for_role_assignments(
         self, site_web_url, role_assignments
@@ -888,14 +902,21 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return access_control
 
-    async def _list_item_access_control(self, site_web_url, site_list_name, list_item):
+    async def _with_list_item_access_control(
+        self, site_web_url, site_list_name, list_item
+    ):
+        if not self._dls_enabled():
+            return list_item
+
         list_item_role_assignments = await self.client.site_list_item_role_assignments(
             site_web_url, site_list_name, list_item["id"]
         )
 
-        return await self._access_control_for_role_assignments(
+        access_control = await self._access_control_for_role_assignments(
             site_web_url, list_item_role_assignments
         )
+
+        return self._decorate_with_access_control(list_item, access_control)
 
     def _dls_enabled(self):
         if self._features is None:
@@ -913,11 +934,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         async for site_collection in self.client.site_collections():
             site_collection["_id"] = site_collection["webUrl"]
             site_collection["object_type"] = "site_collection"
-            site_collection = (
-                _decorate_with_access_control(site_collection, [])
-                if self._dls_enabled()
-                else site_collection
-            )
+            site_collection = self._decorate_with_access_control(site_collection, [])
             yield site_collection, None
 
             async for site in self.client.sites(
@@ -927,21 +944,14 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site["_id"] = site["id"]
                 site["object_type"] = "site"
                 site_web_url = site["webUrl"]
-                site_access_control = await self._site_access_control(site)
-                site = (
-                    _decorate_with_access_control(site, site_access_control)
-                    if self._dls_enabled()
-                    else site
-                )
+                site = await self._with_site_access_control(site)
                 yield site, None
 
                 async for site_drive in self.client.site_drives(site["id"]):
                     site_drive["_id"] = site_drive["id"]
                     site_drive["object_type"] = "site_drive"
-                    site_drive = (
-                        _decorate_with_access_control(site_drive, site_access_control)
-                        if self._dls_enabled()
-                        else site_drive
+                    site_drive = self._decorate_with_access_control(
+                        site_drive, site.get(ACCESS_CONTROL, [])
                     )
                     yield site_drive, None
 
@@ -949,12 +959,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                         drive_item["_id"] = drive_item["id"]
                         drive_item["object_type"] = "drive_item"
                         drive_item["_timestamp"] = drive_item["lastModifiedDateTime"]
-                        drive_item = (
-                            await self._with_drive_item_access_control(
-                                site_drive, drive_item
-                            )
-                            if self._dls_enabled()
-                            else drive_item
+                        drive_item = await self._with_drive_item_access_control(
+                            site_drive, drive_item
                         )
                         download_func = None
 
@@ -989,12 +995,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                     site_list["_id"] = site_list["id"]
                     site_list["object_type"] = "site_list"
 
-                    site_list = (
-                        await self._with_site_list_access_control(
-                            site_web_url, site_list
-                        )
-                        if self._dls_enabled()
-                        else site_list
+                    site_list = await self._with_site_list_access_control(
+                        site_web_url, site_list
                     )
 
                     yield site_list, None
@@ -1016,28 +1018,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                         )[-1]
 
                         content_type = list_item["contentType"]["name"]
-                        list_item_access_control = (
-                            await self._list_item_access_control(
-                                site_web_url, site_list_name, list_item
-                            )
-                            if self._dls_enabled()
-                            else []
-                        )
-
                         if content_type in [
                             "Web Template Extensions",
                             "Client Side Component Manifests",
                         ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
                             continue
 
-                        list_item = (
-                            _decorate_with_access_control(
-                                list_item, list_item_access_control
-                            )
-                            if self._dls_enabled()
-                            else list_item
+                        list_item = await self._with_list_item_access_control(
+                            site_web_url, site_list_name, list_item
                         )
-
                         yield list_item, None
 
                         if "Attachments" in list_item["fields"]:
@@ -1055,11 +1044,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 ]
 
                                 list_item_attachment = (
-                                    _decorate_with_access_control(
-                                        list_item_attachment, list_item_access_control
+                                    self._decorate_with_access_control(
+                                        list_item_attachment,
+                                        list_item.get(ACCESS_CONTROL, []),
                                     )
-                                    if self._dls_enabled()
-                                    else list_item_attachment
                                 )
 
                                 attachment_download_func = partial(
@@ -1079,12 +1067,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                         if html_field in site_page:
                             site_page[html_field] = html_to_text(site_page[html_field])
 
-                    site_page = (
-                        await self._with_site_page_access_control(
-                            site_web_url, site_page
-                        )
-                        if self._dls_enabled()
-                        else site_page
+                    site_page = await self._with_site_page_access_control(
+                        site_web_url, site_page
                     )
                     yield site_page, None
 
