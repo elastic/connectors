@@ -1250,7 +1250,8 @@ class TestSharepointOnlineDataSource:
             [ALLOW_ACCESS_CONTROL_PATCHED in site_drive for site_drive in site_drives]
         )
 
-        assert len(drive_items) == len(self.drive_items)
+        assert len(drive_items) == sum([len(j) for j in self.drive_items])
+
         assert all(
             [ALLOW_ACCESS_CONTROL_PATCHED in drive_item for drive_item in drive_items]
         )

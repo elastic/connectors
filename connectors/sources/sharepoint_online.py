@@ -1012,6 +1012,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 "lastModifiedDateTime"
                             ]
 
+                            drive_item = await self._with_drive_item_access_control(
+                                site_drive, drive_item
+                            )
+
                             yield drive_item, self.download_function(
                                 drive_item, max_data_age
                             )
@@ -1074,6 +1078,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 drive_item["lastModifiedDateTime"]
                                 if "lastModifiedDateTime" in drive_item
                                 else None
+                            )
+
+                            drive_item = await self._with_drive_item_access_control(
+                                site_drive, drive_item
                             )
 
                             yield drive_item, self.download_function(
@@ -1177,18 +1185,16 @@ class SharepointOnlineDataSource(BaseDataSource):
                         "lastModifiedDateTime"
                     ]
 
-                    list_item_attachment = (
-                        self._decorate_with_access_control(
-                            list_item_attachment,
-                            list_item.get(ACCESS_CONTROL, []),
-                        )
+                    list_item_attachment = self._decorate_with_access_control(
+                        list_item_attachment,
+                        list_item.get(ACCESS_CONTROL, []),
                     )
                     attachment_download_func = partial(
                         self.get_attachment_content, list_item_attachment
                     )
                     yield list_item_attachment, attachment_download_func
 
-            yield list_item
+            yield list_item, None
 
     async def site_lists(self, site):
         async for site_list in self.client.site_lists(site["id"]):
@@ -1208,10 +1214,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             ]  # Apparantly site_page["GUID"] is not globally unique
             site_page["object_type"] = "site_page"
 
-            site_page = await self._with_site_page_access_control(
-                url, site_page
-            )
-
+            site_page = await self._with_site_page_access_control(url, site_page)
 
             for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:
                 if html_field in site_page:
