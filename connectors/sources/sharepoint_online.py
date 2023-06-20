@@ -6,6 +6,7 @@
 import asyncio
 import os
 import re
+from collections.abc import Iterable, Sized
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from functools import partial
@@ -17,6 +18,7 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 from fastjsonschema import JsonSchemaValueException
 
+from connectors.es.sink import OP_DELETE, OP_INDEX
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
@@ -57,6 +59,15 @@ DEFAULT_RETRY_SECONDS = 30
 FILE_WRITE_CHUNK_SIZE = 1024
 MAX_DOCUMENT_SIZE = 10485760
 WILDCARD = "*"
+DRIVE_ITEMS_FIELDS = "id,content.downloadUrl,lastModifiedDateTime,lastModifiedBy,root,deleted,file,folder,package,name,webUrl,createdBy,createdDateTime,size,parentReference"
+
+CURSOR_SITE_DRIVE_KEY = "site_drives"
+
+# Microsoft Graph API Delta constants
+# https://learn.microsoft.com/en-us/graph/delta-query-overview
+
+DELTA_NEXT_LINK_KEY = "@odata.nextLink"
+DELTA_LINK_KEY = "@odata.deltaLink"
 
 
 class NotFound(Exception):
@@ -96,6 +107,14 @@ class TokenFetchFailed(Exception):
 class PermissionsMissing(Exception):
     """Exception class to notify that specific Application Permission is missing for the credentials used.
     See: https://learn.microsoft.com/en-us/graph/permissions-reference
+    """
+
+    pass
+
+
+class SyncCursorEmpty(Exception):
+    """Exception class to notify that incremental sync can't run because sync_cursor is empty.
+    See: https://learn.microsoft.com/en-us/graph/delta-query-overview
     """
 
     pass
@@ -279,6 +298,19 @@ class MicrosoftAPISession:
             else:
                 break
 
+    async def scroll_url(self, url):
+        scroll_url = url
+
+        while True:
+            graph_data = await self._get_json(scroll_url)
+
+            yield graph_data
+
+            if DELTA_NEXT_LINK_KEY in graph_data:
+                scroll_url = graph_data[DELTA_NEXT_LINK_KEY]
+            else:
+                break
+
     async def _get_json(self, absolute_url):
         async with self._call_api(absolute_url) as resp:
             return await resp.json()
@@ -449,28 +481,25 @@ class SharepointOnlineClient:
             for site_drive in page:
                 yield site_drive
 
-    async def drive_items(self, drive_id):
-        select = ""
+    async def drive_items_delta(self, url):
+        async for response in self._graph_api_client.scroll_url(url):
+            delta_link = (
+                response[DELTA_LINK_KEY] if DELTA_LINK_KEY in response else None
+            )
+            if "value" in response and len(response["value"]) > 0:
+                yield DriveItemsPage(response["value"], delta_link)
 
-        directory_stack = []
-
-        root = await self._graph_api_client.fetch(
-            f"{GRAPH_API_URL}/drives/{drive_id}/root?$select={select}"
+    async def drive_items(self, drive_id, url=None):
+        url = (
+            (
+                f"{GRAPH_API_URL}/drives/{drive_id}/root/delta?$select={DRIVE_ITEMS_FIELDS}"
+            )
+            if not url
+            else url
         )
 
-        directory_stack.append(root["id"])
-        yield root
-
-        while len(directory_stack):
-            folder_id = directory_stack.pop()
-
-            async for page in self._graph_api_client.scroll(
-                f"{GRAPH_API_URL}/drives/{drive_id}/items/{folder_id}/children?$select={select}"
-            ):
-                for drive_item in page:
-                    if "folder" in drive_item:
-                        directory_stack.append(drive_item["id"])
-                    yield drive_item
+        async for page in self.drive_items_delta(url):
+            yield page
 
     async def drive_item_permissions(self, drive_id, item_id):
         return await self._graph_api_client.fetch(
@@ -612,6 +641,37 @@ class SharepointOnlineClient:
         await self._http_session.close()
         self._graph_api_client.close()
         self._rest_api_client.close()
+
+
+class DriveItemsPage(Iterable, Sized):
+    """
+    Container for Microsoft Graph API DriveItem response
+
+    Parameters:
+        items (list<dict>):Represents a list of drive items
+        delta_link (str): Microsoft API deltaLink
+    """
+
+    def __init__(self, items, delta_link):
+        if items:
+            self._items = items
+        else:
+            self._items = []
+
+        if delta_link:
+            self._delta_link = delta_link
+        else:
+            self._delta_link = None
+
+    def __len__(self):
+        return len(self._items)
+
+    def __iter__(self):
+        for item in self._items:
+            yield item
+
+    def delta_link(self):
+        return self._delta_link
 
 
 class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
@@ -926,153 +986,294 @@ class SharepointOnlineDataSource(BaseDataSource):
     async def get_docs(self, filtering=None):
         max_data_age = None
 
+        self.init_sync_cursor()
+
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
             max_data_age = advanced_rules["maxDataAge"]
 
+        async for site_collection in self.site_collections():
+            yield site_collection, None
+
+            async for site in self.sites(
+                site_collection["siteCollection"]["hostname"],
+                self.configuration["site_collections"],
+            ):
+                yield site, None
+
+                async for site_drive in self.site_drives(site):
+                    yield site_drive, None
+
+                    async for page in self.client.drive_items(site_drive["id"]):
+                        for drive_item in page:
+                            drive_item["_id"] = drive_item["id"]
+                            drive_item["object_type"] = "drive_item"
+                            drive_item["_timestamp"] = drive_item[
+                                "lastModifiedDateTime"
+                            ]
+
+                            drive_item = await self._with_drive_item_access_control(
+                                site_drive, drive_item
+                            )
+
+                            yield drive_item, self.download_function(
+                                drive_item, max_data_age
+                            )
+
+                        self.update_drive_delta_link(
+                            drive_id=site_drive["id"], link=page.delta_link()
+                        )
+
+                # Sync site list and site list items
+                async for site_list in self.site_lists(site):
+                    yield site_list, None
+
+                    async for list_item, download_func in self.site_list_items(
+                        site_id=site["id"],
+                        site_list_id=site_list["id"],
+                        site_web_url=site["webUrl"],
+                        site_list_name=site_list["name"],
+                    ):
+                        yield list_item, download_func
+
+                # Sync site pages
+                async for site_page in self.site_pages(site["webUrl"]):
+                    yield site_page, None
+
+    async def get_docs_incrementally(self, sync_cursor, filtering=None):
+        self._sync_cursor = sync_cursor
+
+        if not self._sync_cursor:
+            raise SyncCursorEmpty(
+                "Unable to start incremental sync. Please perform a full sync to re-enable incremental syncs."
+            )
+
+        max_data_age = None
+
+        if filtering is not None and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
+            max_data_age = advanced_rules["maxDataAge"]
+
+        async for site_collection in self.site_collections():
+            yield site_collection, None, OP_INDEX
+
+            async for site in self.sites(
+                site_collection["siteCollection"]["hostname"],
+                self.configuration["site_collections"],
+            ):
+                yield site, None, OP_INDEX
+
+                async for site_drive in self.site_drives(site):
+                    yield site_drive, None, OP_INDEX
+
+                    delta_link = self.get_drive_delta_link(site_drive["id"])
+
+                    async for page in self.client.drive_items(
+                        drive_id=site_drive["id"], url=delta_link
+                    ):
+                        for drive_item in page:
+                            drive_item["_id"] = drive_item["id"]
+                            drive_item["object_type"] = "drive_item"
+                            drive_item["_timestamp"] = (
+                                drive_item["lastModifiedDateTime"]
+                                if "lastModifiedDateTime" in drive_item
+                                else None
+                            )
+
+                            drive_item = await self._with_drive_item_access_control(
+                                site_drive, drive_item
+                            )
+
+                            yield drive_item, self.download_function(
+                                drive_item, max_data_age
+                            ), self.drive_item_operation(drive_item)
+
+                        self.update_drive_delta_link(
+                            drive_id=site_drive["id"], link=page.delta_link()
+                        )
+
+                # Sync site list and site list items
+                async for site_list in self.site_lists(site):
+                    yield site_list, None, OP_INDEX
+
+                    async for list_item, download_func in self.site_list_items(
+                        site_id=site["id"],
+                        site_list_id=site_list["id"],
+                        site_web_url=site["webUrl"],
+                        site_list_name=site_list["name"],
+                    ):
+                        yield list_item, download_func, OP_INDEX
+
+                # Sync site pages
+                async for site_page in self.site_pages(site["webUrl"]):
+                    yield site_page, None, OP_INDEX
+
+    async def site_collections(self):
         async for site_collection in self.client.site_collections():
             site_collection["_id"] = site_collection["webUrl"]
             site_collection["object_type"] = "site_collection"
+
             site_collection = self._decorate_with_access_control(site_collection, [])
-            yield site_collection, None
+            yield site_collection
 
-            async for site in self.client.sites(
-                site_collection["siteCollection"]["hostname"],
-                self.configuration["site_collections"],
-            ):  # TODO: simplify and eliminate root call
-                site["_id"] = site["id"]
-                site["object_type"] = "site"
-                site_web_url = site["webUrl"]
-                site = await self._with_site_access_control(site)
-                yield site, None
+    async def sites(self, hostname, collections):
+        async for site in self.client.sites(
+            hostname,
+            collections,
+        ):  # TODO: simplify and eliminate root call
+            site["_id"] = site["id"]
+            site["object_type"] = "site"
 
-                async for site_drive in self.client.site_drives(site["id"]):
-                    site_drive["_id"] = site_drive["id"]
-                    site_drive["object_type"] = "site_drive"
-                    site_drive = self._decorate_with_access_control(
-                        site_drive, site.get(ACCESS_CONTROL, [])
+            site = await self._with_site_access_control(site)
+            yield site
+
+    async def site_drives(self, site):
+        async for site_drive in self.client.site_drives(site["id"]):
+            site_drive["_id"] = site_drive["id"]
+            site_drive["object_type"] = "site_drive"
+
+            site_drive = self._decorate_with_access_control(
+                site_drive, site.get(ACCESS_CONTROL, [])
+            )
+            yield site_drive
+
+    async def drive_items(self, site_drive, max_data_age):
+        async for page in self.client.drive_items(site_drive["id"]):
+            for drive_item in page:
+                drive_item["_id"] = drive_item["id"]
+                drive_item["object_type"] = "drive_item"
+                drive_item["_timestamp"] = drive_item["lastModifiedDateTime"]
+                drive_item = await self._with_drive_item_access_control(
+                    site_drive, drive_item
+                )
+
+                yield drive_item, self.download_function(drive_item, max_data_age)
+
+    async def site_list_items(
+        self, site_id, site_list_id, site_web_url, site_list_name
+    ):
+        async for list_item in self.client.site_list_items(site_id, site_list_id):
+            # List Item IDs are unique within list.
+            # Therefore we mix in site_list id to it to make sure they are
+            # globally unique.
+            # Also we need to remember original ID because when a document
+            # is yielded, its "id" field is overwritten with content of "_id" field
+            list_item_natural_id = list_item["id"]
+            list_item["_id"] = f"{site_list_id}-{list_item['id']}"
+            list_item["object_type"] = "list_item"
+            list_item["_original_filename"] = list_item.get("FileName", "")
+
+            content_type = list_item["contentType"]["name"]
+
+            if content_type in [
+                "Web Template Extensions",
+                "Client Side Component Manifests",
+            ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
+                continue
+
+            list_item = await self._with_list_item_access_control(
+                site_web_url, site_list_name, list_item
+            )
+
+            if "Attachments" in list_item["fields"]:
+                async for list_item_attachment in self.client.site_list_item_attachments(
+                    site_web_url, site_list_name, list_item_natural_id
+                ):
+                    list_item_attachment["_id"] = list_item_attachment["odata.id"]
+                    list_item_attachment["object_type"] = "list_item_attachment"
+                    list_item_attachment["_timestamp"] = list_item[
+                        "lastModifiedDateTime"
+                    ]
+
+                    list_item_attachment = self._decorate_with_access_control(
+                        list_item_attachment,
+                        list_item.get(ACCESS_CONTROL, []),
                     )
-                    yield site_drive, None
-
-                    async for drive_item in self.client.drive_items(site_drive["id"]):
-                        drive_item["_id"] = drive_item["id"]
-                        drive_item["object_type"] = "drive_item"
-                        drive_item["_timestamp"] = drive_item["lastModifiedDateTime"]
-                        drive_item = await self._with_drive_item_access_control(
-                            site_drive, drive_item
-                        )
-                        download_func = None
-
-                        if "@microsoft.graph.downloadUrl" in drive_item:
-                            modified_date = datetime.strptime(
-                                drive_item["lastModifiedDateTime"],
-                                "%Y-%m-%dT%H:%M:%SZ",
-                            )
-                            if (
-                                max_data_age
-                                and modified_date
-                                < datetime.utcnow() - timedelta(seconds=max_data_age)
-                            ):
-                                logger.warning(
-                                    f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
-                                )
-                            elif (
-                                drive_item["size"] > MAX_DOCUMENT_SIZE
-                                and not self.configuration[
-                                    "use_text_extraction_service"
-                                ]
-                            ):
-                                logger.warning(
-                                    f"Not downloading file {drive_item['name']} of size {drive_item['size']}"
-                                )
-                            else:
-                                drive_item["_original_filename"] = drive_item.get(
-                                    "name", ""
-                                )
-                                download_func = partial(
-                                    self.get_drive_item_content, drive_item
-                                )
-
-                        yield drive_item, download_func
-
-                async for site_list in self.client.site_lists(site["id"]):
-                    site_list["_id"] = site_list["id"]
-                    site_list["object_type"] = "site_list"
-
-                    site_list = await self._with_site_list_access_control(
-                        site_web_url, site_list
+                    attachment_download_func = partial(
+                        self.get_attachment_content, list_item_attachment
                     )
+                    yield list_item_attachment, attachment_download_func
 
-                    yield site_list, None
+            yield list_item, None
 
-                    async for list_item in self.client.site_list_items(
-                        site["id"], site_list["id"]
-                    ):
-                        # List Item IDs are unique within list.
-                        # Therefore we mix in site_list id to it to make sure they are
-                        # globally unique.
-                        # Also we need to remember original ID because when a document
-                        # is yielded, its "id" field is overwritten with content of "_id" field
-                        list_item_natural_id = list_item["id"]
-                        site_list_name = site_list["name"]
-                        list_item["_id"] = f"{site_list['id']}-{list_item['id']}"
-                        list_item["object_type"] = "list_item"
-                        list_item["_original_filename"] = list_item.get("FileName", "")
+    async def site_lists(self, site):
+        async for site_list in self.client.site_lists(site["id"]):
+            site_list["_id"] = site_list["id"]
+            site_list["object_type"] = "site_list"
 
-                        content_type = list_item["contentType"]["name"]
-                        if content_type in [
-                            "Web Template Extensions",
-                            "Client Side Component Manifests",
-                        ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
-                            continue
+            site_list = await self._with_site_list_access_control(
+                site["webUrl"], site_list
+            )
 
-                        list_item = await self._with_list_item_access_control(
-                            site_web_url, site_list_name, list_item
-                        )
-                        yield list_item, None
+            yield site_list
 
-                        if "Attachments" in list_item["fields"]:
-                            async for list_item_attachment in self.client.site_list_item_attachments(
-                                site_web_url, site_list_name, list_item_natural_id
-                            ):
-                                list_item_attachment["_id"] = list_item_attachment[
-                                    "odata.id"
-                                ]
-                                list_item_attachment[
-                                    "object_type"
-                                ] = "list_item_attachment"
-                                list_item_attachment["_timestamp"] = list_item[
-                                    "lastModifiedDateTime"
-                                ]
+    async def site_pages(self, url):
+        async for site_page in self.client.site_pages(url):
+            site_page["_id"] = site_page[
+                "odata.id"
+            ]  # Apparantly site_page["GUID"] is not globally unique
+            site_page["object_type"] = "site_page"
 
-                                list_item_attachment = (
-                                    self._decorate_with_access_control(
-                                        list_item_attachment,
-                                        list_item.get(ACCESS_CONTROL, []),
-                                    )
-                                )
+            site_page = await self._with_site_page_access_control(url, site_page)
 
-                                attachment_download_func = partial(
-                                    self.get_attachment_content,
-                                    list_item_attachment,
-                                )
+            for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:
+                if html_field in site_page:
+                    site_page[html_field] = html_to_text(site_page[html_field])
 
-                                yield list_item_attachment, attachment_download_func
+            yield site_page
 
-                async for site_page in self.client.site_pages(site["webUrl"]):
-                    site_page["_id"] = site_page[
-                        "odata.id"
-                    ]  # Apparantly site_page["GUID"] is not globally unique
-                    site_page["object_type"] = "site_page"
+    def init_sync_cursor(self):
+        if not self._sync_cursor:
+            self._sync_cursor = {CURSOR_SITE_DRIVE_KEY: {}}
 
-                    for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:
-                        if html_field in site_page:
-                            site_page[html_field] = html_to_text(site_page[html_field])
+        return self._sync_cursor
 
-                    site_page = await self._with_site_page_access_control(
-                        site_web_url, site_page
-                    )
-                    yield site_page, None
+    def update_drive_delta_link(self, drive_id, link):
+        if not link:
+            return
+
+        self._sync_cursor[CURSOR_SITE_DRIVE_KEY][drive_id] = link
+
+    def get_drive_delta_link(self, drive_id):
+        return self._sync_cursor.get(CURSOR_SITE_DRIVE_KEY, {}).get(drive_id)
+
+    def drive_item_operation(self, item):
+        if "deleted" in item:
+            return OP_DELETE
+        else:
+            return OP_INDEX
+
+    def download_function(self, drive_item, max_data_age):
+        if "@microsoft.graph.downloadUrl" not in drive_item:
+            return None
+
+        if "lastModifiedDateTime" not in drive_item:
+            return None
+
+        modified_date = datetime.strptime(
+            drive_item["lastModifiedDateTime"], "%Y-%m-%dT%H:%M:%SZ"
+        )
+
+        if max_data_age and modified_date < datetime.utcnow() - timedelta(
+            seconds=max_data_age
+        ):
+            logger.warning(
+                f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
+            )
+
+            return None
+        elif (
+            drive_item["size"] > MAX_DOCUMENT_SIZE
+            and not self.configuration["use_text_extraction_service"]
+        ):
+            logger.warning(
+                f"Not downloading file {drive_item['name']} of size {drive_item['size']}"
+            )
+
+            return None
+        else:
+            drive_item["_original_filename"] = drive_item.get("name", "")
+            return partial(self.get_drive_item_content, drive_item)
 
     async def get_attachment_content(self, attachment, timestamp=None, doit=False):
         if not doit:

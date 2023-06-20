@@ -20,6 +20,7 @@ from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
     DEFAULT_GROUPS,
     WILDCARD,
+    DriveItemsPage,
     GraphAPIToken,
     InternalServerError,
     InvalidSharepointTenant,
@@ -29,6 +30,7 @@ from connectors.sources.sharepoint_online import (
     SharepointOnlineAdvancedRulesValidator,
     SharepointOnlineClient,
     SharepointOnlineDataSource,
+    SyncCursorEmpty,
     TokenFetchFailed,
 )
 from tests.commons import AsyncIterator
@@ -336,6 +338,45 @@ class TestMicrosoftAPISession:
 
         assert first_page in pages
         assert second_page in pages
+
+    @pytest.mark.asyncio
+    async def test_scroll_with_data_link(self, microsoft_api_session, mock_responses):
+        drive_item = {
+            "id": "1",
+            "size": 15,
+            "lastModifiedDateTime": str(datetime.now(timezone.utc)),
+            "parentReference": {"driveId": "drive-1"},
+            "_tempfile_suffix": ".txt",
+        }
+
+        responses = {
+            "page1": {
+                "payload": {
+                    "value": [drive_item],
+                    "@odata.nextLink": "http://fakesharepointonline/page2",  # this makes scroll to just to another link
+                },
+                "url": "http://fakesharepointonline/page1",
+            },
+            "page2": {
+                "payload": {
+                    "value": [drive_item],
+                    "@odata.deltaLink": "http://fakesharepointonline/deltaLink",
+                },
+                "url": "http://fakesharepointonline/page2",
+            },
+        }
+
+        for response in responses.values():
+            mock_responses.get(response["url"], payload=response["payload"])
+
+        pages = list()
+
+        async for page in microsoft_api_session.scroll_url(
+            url=responses["page1"]["url"]
+        ):
+            pages.append(page)
+
+        assert len(pages) == len(responses)
 
 
 class TestSharepointOnlineClient:
@@ -935,8 +976,13 @@ class TestSharepointOnlineDataSource:
     @property
     def drive_items(self):
         return [
-            {"id": "3", "lastModifiedDateTime": self.month_ago},
-            {"id": "4", "lastModifiedDateTime": self.day_ago},
+            DriveItemsPage(
+                items=[
+                    {"id": "3", "lastModifiedDateTime": self.month_ago},
+                    {"id": "4", "lastModifiedDateTime": self.day_ago},
+                ],
+                delta_link="deltalinksample",
+            )
         ]
 
     @property
@@ -1054,6 +1100,20 @@ class TestSharepointOnlineDataSource:
     def valid_tenant(self):
         return {"NameSpaceType": "VALID"}
 
+    @property
+    def drive_items_delta(self):
+        return [
+            DriveItemsPage(
+                items=[
+                    {"id": "3", "lastModifiedDateTime": self.month_ago},
+                    {"id": "4", "lastModifiedDateTime": self.day_ago},
+                    {"id": "5", "lastModifiedDateTime": self.day_ago},
+                    {"id": "6", "deleted": {"state": "deleted"}},
+                ],
+                delta_link="deltalinksample",
+            )
+        ]
+
     @pytest_asyncio.fixture
     async def patch_sharepoint_client(self):
         client = AsyncMock()
@@ -1083,7 +1143,7 @@ class TestSharepointOnlineDataSource:
                 return_value=self.users_and_groups_for_role_assignments
             )
             client.site_drives = AsyncIterator(self.site_drives)
-            client.drive_items = AsyncIterator(self.drive_items)
+            client.drive_items = self.drive_items_func
             client.site_lists = AsyncIterator(self.site_lists)
             client.site_list_items = AsyncIterator(self.site_list_items)
             client.site_list_item_attachments = AsyncIterator(
@@ -1097,8 +1157,15 @@ class TestSharepointOnlineDataSource:
             client.rest_api_token.get.return_value = self.rest_api_token
 
             client.tenant_details = AsyncMock(return_value=self.valid_tenant)
+            client.drive_items_delta = AsyncIterator(self.drive_items_delta)
 
             yield client
+
+    def drive_items_func(self, drive_id, url=None):
+        if not url:
+            return AsyncIterator(self.drive_items)
+        else:
+            return AsyncIterator(self.drive_items_delta)
 
     @pytest.mark.asyncio
     async def test_get_docs_without_access_control(self, patch_sharepoint_client):
@@ -1123,8 +1190,8 @@ class TestSharepointOnlineDataSource:
         assert len([i for i in results if i["object_type"] == "site_drive"]) == len(
             self.site_drives
         )
-        assert len([i for i in results if i["object_type"] == "drive_item"]) == len(
-            self.drive_items
+        assert len([i for i in results if i["object_type"] == "drive_item"]) == sum(
+            [len(j) for j in self.drive_items]
         )
         assert len([i for i in results if i["object_type"] == "site_list"]) == len(
             self.site_lists
@@ -1150,12 +1217,8 @@ class TestSharepointOnlineDataSource:
         source._dls_enabled = Mock(return_value=True)
 
         results = []
-        downloads = []
-        async for doc, download_func in source.get_docs():
+        async for doc, _download_func in source.get_docs():
             results.append(doc)
-
-            if download_func:
-                downloads.append(download_func)
 
         site_collections = [i for i in results if i["object_type"] == "site_collection"]
         sites = [i for i in results if i["object_type"] == "site"]
@@ -1186,7 +1249,8 @@ class TestSharepointOnlineDataSource:
             [ALLOW_ACCESS_CONTROL_PATCHED in site_drive for site_drive in site_drives]
         )
 
-        assert len(drive_items) == len(self.drive_items)
+        assert len(drive_items) == sum([len(j) for j in self.drive_items])
+
         assert all(
             [ALLOW_ACCESS_CONTROL_PATCHED in drive_item for drive_item in drive_items]
         )
@@ -1215,6 +1279,60 @@ class TestSharepointOnlineDataSource:
         assert all(
             [ALLOW_ACCESS_CONTROL_PATCHED in site_page for site_page in site_pages]
         )
+
+    @pytest.mark.parametrize("sync_cursor", [None, {}])
+    async def test_get_docs_incrementaly_with_empty_cursor(
+        self, patch_sharepoint_client, sync_cursor
+    ):
+        source = create_source(SharepointOnlineDataSource)
+
+        with pytest.raises(SyncCursorEmpty):
+            async for _doc, _download_func, _operation in source.get_docs_incrementally(
+                sync_cursor=sync_cursor
+            ):
+                pass
+
+    @pytest.mark.asyncio
+    async def test_get_docs_incrementaly(self, patch_sharepoint_client):
+        source = create_source(SharepointOnlineDataSource)
+
+        sync_cursor = {"site_drives": {}}
+        for site_drive in self.site_drives:
+            sync_cursor["site_drives"][
+                site_drive["id"]
+            ] = "http://fakesharepoint.com/deltalink"
+
+        deleted = 0
+        for page in self.drive_items_delta:
+            deleted += len(list(filter(lambda item: "deleted" in item, page)))
+
+        docs = list()
+        downloads = list()
+        operations = {"index": 0, "delete": 0}
+
+        async for doc, download_func, operation in source.get_docs_incrementally(
+            sync_cursor=sync_cursor
+        ):
+            docs.append(doc)
+
+            if download_func:
+                downloads.append(download_func)
+
+            operations[operation] += 1
+
+        assert len(docs) == sum(
+            [
+                len(self.site_collections),
+                sum([len(i) for i in self.drive_items_delta]),
+                len(self.site_drives),
+                len(self.site_pages),
+                len(self.site_lists),
+                len(self.site_list_items),
+                len(self.site_list_item_attachments),
+            ]
+        )
+
+        assert (operations["delete"]) == deleted
 
     def test_get_default_configuration(self):
         config = SharepointOnlineDataSource.get_default_configuration()
