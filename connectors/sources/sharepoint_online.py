@@ -33,6 +33,10 @@ from connectors.utils import (
     url_encode,
 )
 
+ACCESS_CONTROL = "_allow_access_control"
+
+DEFAULT_GROUPS = ["Visitors", "Owners", "Members"]
+
 if "OVERRIDE_URL" in os.environ:
     logger.warning("x" * 50)
     logger.warning(
@@ -63,6 +67,12 @@ class NotFound(Exception):
 
     It's not an exception for us, we just want to return [], and this exception class facilitates it.
     """
+
+    pass
+
+
+class InternalServerError(Exception):
+    """Internal exception class to handle 500s from the API, which could sometimes also mean NotFound."""
 
     pass
 
@@ -319,6 +329,8 @@ class MicrosoftAPISession:
                 ) from e
             elif e.status == 404:
                 raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
+            elif e.status == 500:
+                raise InternalServerError from e
             else:
                 raise
             logger.debug(
@@ -392,6 +404,26 @@ class SharepointOnlineClient:
             for site_collection in page:
                 yield site_collection
 
+    async def site_groups(self, site_web_url):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = f"{site_web_url}/_api/web/sitegroups"
+
+        try:
+            return await self._rest_api_client.fetch(url)
+        except NotFound:
+            return []
+
+    async def site_users(self, site_web_url):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = f"{site_web_url}/_api/web/siteusers"
+
+        try:
+            return await self._rest_api_client.fetch(url)
+        except NotFound:
+            return []
+
     async def sites(self, parent_site_id, allowed_root_sites):
         select = ""
 
@@ -440,6 +472,11 @@ class SharepointOnlineClient:
                         directory_stack.append(drive_item["id"])
                     yield drive_item
 
+    async def drive_item_permissions(self, drive_id, item_id):
+        return await self._graph_api_client.fetch(
+            f"{GRAPH_API_URL}/drives/{drive_id}/items/{item_id}/permissions"
+        )
+
     async def download_drive_item(self, drive_id, item_id, async_buffer):
         await self._graph_api_client.pipe(
             f"{GRAPH_API_URL}/drives/{drive_id}/items/{item_id}/content", async_buffer
@@ -454,6 +491,18 @@ class SharepointOnlineClient:
             for site_list in page:
                 yield site_list
 
+    async def site_list_role_assignments(self, site_web_url, site_list_name):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = (
+            f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/roleassignments"
+        )
+
+        try:
+            return await self._rest_api_client.fetch(url)
+        except NotFound:
+            return {}
+
     async def site_list_items(self, site_id, list_id):
         select = ""
         expand = "fields"
@@ -463,6 +512,18 @@ class SharepointOnlineClient:
         ):
             for site_list in page:
                 yield site_list
+
+    async def site_list_item_role_assignments(
+        self, site_web_url, list_title, list_item_id
+    ):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = f"{site_web_url}/_api/lists/GetByTitle('{list_title}')/items({list_item_id})/roleassignments"
+
+        try:
+            return await self._rest_api_client.fetch(url)
+        except NotFound:
+            return {}
 
     async def site_list_item_attachments(self, site_web_url, list_title, list_item_id):
         self._validate_sharepoint_rest_url(site_web_url)
@@ -500,6 +561,34 @@ class SharepointOnlineClient:
             # I'm not sure if site can have no pages, but given how weird API is I put this here
             # Just to be on a safe side
             return
+
+    async def site_page_role_assignments(self, site_web_url, site_page_id):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = f"{site_web_url}/_api/web/lists/GetByTitle('Site Pages')/items({site_page_id})/RoleAssignments"
+
+        try:
+            return await self._rest_api_client.fetch(url)
+        except NotFound:
+            return {}
+
+    async def users_and_groups_for_role_assignment(self, site_web_url, role_assignment):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        if "PrincipalId" not in role_assignment:
+            return []
+
+        principal_id = role_assignment["PrincipalId"]
+
+        url = f"{site_web_url}/_api/web/GetUserById('{principal_id}')"
+
+        try:
+            return await self._rest_api_client.fetch(url)
+        except NotFound:
+            return []
+        except InternalServerError:
+            # This can also mean "not found" so handling it explicitly
+            return []
 
     async def tenant_details(self):
         url = f"{GRAPH_API_AUTH_URL}/common/userrealm/?user=cj@{self._tenant_name}.onmicrosoft.com&api-version=2.1&checkForMicrosoftAccount=false"
@@ -627,7 +716,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "order": 6,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
-                "ui_restrictions": ["advanced"],
                 "value": False,
             },
         }
@@ -673,6 +761,168 @@ class SharepointOnlineDataSource(BaseDataSource):
                 f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(remote_sites[:5])}]."
             )
 
+    def _decorate_with_access_control(self, document, access_control):
+        if self._dls_enabled():
+            document[ACCESS_CONTROL] = list(
+                set(document.get(ACCESS_CONTROL, []) + access_control + DEFAULT_GROUPS)
+            )
+
+        return document
+
+    async def _with_site_access_control(self, site):
+        if not self._dls_enabled():
+            return site
+
+        site_web_url = site["webUrl"]
+
+        sharepoint_groups = await self.client.site_groups(site_web_url)
+        sharepoint_groups = list(
+            filter(
+                lambda group_title: group_title is not None,
+                map(
+                    lambda group: group.get("Title"),
+                    sharepoint_groups.get("value"),  # pyright: ignore
+                ),
+            )
+        )
+
+        users_and_ad_groups = await self.client.site_users(site_web_url)
+        users_and_ad_groups = list(
+            filter(
+                lambda user_name: user_name is not None,
+                map(
+                    lambda user: user.get("UserPrincipalName"),
+                    users_and_ad_groups.get("value"),  # pyright: ignore
+                ),
+            )
+        )
+
+        return self._decorate_with_access_control(
+            site, sharepoint_groups + users_and_ad_groups
+        )
+
+    async def _with_drive_item_access_control(self, site_drive, drive_item):
+        """
+        Sample document returned:
+        {
+            "grantedToV2": {
+                "siteGroup": {
+                    "loginName": "some_group"
+                    }
+                },
+            "grantedTo": {
+                "siteGroup": {
+                    "loginName": "user"
+                    }
+                },
+                "user": {
+                    "email": USER_2
+                }
+            }
+
+        We're extracting "loginName" or "email" for groups or users inside "grantedToV2" or "grantedTo".
+        """
+
+        if not self._dls_enabled():
+            return drive_item
+
+        permissions = await self.client.drive_item_permissions(
+            site_drive.get("id"), drive_item.get("id")
+        )
+
+        # users and groups
+        access_control = list(
+            set(
+                filter(
+                    lambda identity: identity is not None,
+                    map(
+                        lambda identity: (
+                            identity.get("loginName") or identity.get("email")
+                        )
+                        if identity is not None
+                        else None,
+                        map(
+                            lambda grantee: grantee.get("siteGroup")
+                            or grantee.get("user"),
+                            map(
+                                lambda permission: (
+                                    (permission.get("grantedToV2") or {})
+                                    | (permission.get("grantedTo") or {})
+                                )
+                                if permission is not None
+                                else {},
+                                permissions.get("value"),
+                            ),
+                        ),
+                    ),
+                )
+            )
+        )
+
+        return self._decorate_with_access_control(drive_item, access_control)
+
+    async def _with_site_list_access_control(self, site_web_url, site_list):
+        if not self._dls_enabled():
+            return site_list
+
+        role_assignments = await self.client.site_list_role_assignments(
+            site_web_url, site_list["name"]
+        )
+
+        access_control = await self._access_control_for_role_assignments(
+            site_web_url, role_assignments
+        )
+
+        return self._decorate_with_access_control(site_list, access_control)
+
+    async def _with_site_page_access_control(self, site_web_url, site_page):
+        if not self._dls_enabled():
+            return site_page
+
+        role_assignments = await self.client.site_page_role_assignments(
+            site_web_url, site_page["Id"]
+        )
+
+        access_control = await self._access_control_for_role_assignments(
+            site_web_url, role_assignments
+        )
+
+        return self._decorate_with_access_control(site_page, access_control)
+
+    async def _access_control_for_role_assignments(
+        self, site_web_url, role_assignments
+    ):
+        access_control = []
+
+        for role_assignment in role_assignments.get("value", []):
+            access_control += await self.client.users_and_groups_for_role_assignment(
+                site_web_url, role_assignment
+            )
+
+        return access_control
+
+    async def _with_list_item_access_control(
+        self, site_web_url, site_list_name, list_item
+    ):
+        if not self._dls_enabled():
+            return list_item
+
+        list_item_role_assignments = await self.client.site_list_item_role_assignments(
+            site_web_url, site_list_name, list_item["id"]
+        )
+
+        access_control = await self._access_control_for_role_assignments(
+            site_web_url, list_item_role_assignments
+        )
+
+        return self._decorate_with_access_control(list_item, access_control)
+
+    def _dls_enabled(self):
+        if self._features is None:
+            return False
+
+        return self._features.document_level_security_enabled()
+
     async def get_docs(self, filtering=None):
         max_data_age = None
 
@@ -683,6 +933,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         async for site_collection in self.client.site_collections():
             site_collection["_id"] = site_collection["webUrl"]
             site_collection["object_type"] = "site_collection"
+            site_collection = self._decorate_with_access_control(site_collection, [])
             yield site_collection, None
 
             async for site in self.client.sites(
@@ -691,19 +942,25 @@ class SharepointOnlineDataSource(BaseDataSource):
             ):  # TODO: simplify and eliminate root call
                 site["_id"] = site["id"]
                 site["object_type"] = "site"
-
+                site_web_url = site["webUrl"]
+                site = await self._with_site_access_control(site)
                 yield site, None
 
                 async for site_drive in self.client.site_drives(site["id"]):
                     site_drive["_id"] = site_drive["id"]
                     site_drive["object_type"] = "site_drive"
+                    site_drive = self._decorate_with_access_control(
+                        site_drive, site.get(ACCESS_CONTROL, [])
+                    )
                     yield site_drive, None
 
                     async for drive_item in self.client.drive_items(site_drive["id"]):
                         drive_item["_id"] = drive_item["id"]
                         drive_item["object_type"] = "drive_item"
                         drive_item["_timestamp"] = drive_item["lastModifiedDateTime"]
-
+                        drive_item = await self._with_drive_item_access_control(
+                            site_drive, drive_item
+                        )
                         download_func = None
 
                         if "@microsoft.graph.downloadUrl" in drive_item:
@@ -719,14 +976,19 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 logger.warning(
                                     f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
                                 )
-                            elif drive_item["size"] > MAX_DOCUMENT_SIZE:
+                            elif (
+                                drive_item["size"] > MAX_DOCUMENT_SIZE
+                                and not self.configuration[
+                                    "use_text_extraction_service"
+                                ]
+                            ):
                                 logger.warning(
                                     f"Not downloading file {drive_item['name']} of size {drive_item['size']}"
                                 )
                             else:
-                                drive_item["_tempfile_suffix"] = os.path.splitext(
-                                    drive_item.get("name", "")
-                                )[-1]
+                                drive_item["_original_filename"] = drive_item.get(
+                                    "name", ""
+                                )
                                 download_func = partial(
                                     self.get_drive_item_content, drive_item
                                 )
@@ -736,6 +998,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                 async for site_list in self.client.site_lists(site["id"]):
                     site_list["_id"] = site_list["id"]
                     site_list["object_type"] = "site_list"
+
+                    site_list = await self._with_site_list_access_control(
+                        site_web_url, site_list
+                    )
 
                     yield site_list, None
 
@@ -748,25 +1014,26 @@ class SharepointOnlineDataSource(BaseDataSource):
                         # Also we need to remember original ID because when a document
                         # is yielded, its "id" field is overwritten with content of "_id" field
                         list_item_natural_id = list_item["id"]
+                        site_list_name = site_list["name"]
                         list_item["_id"] = f"{site_list['id']}-{list_item['id']}"
                         list_item["object_type"] = "list_item"
-                        list_item["_tempfile_suffix"] = os.path.splitext(
-                            list_item.get("FileName", "")
-                        )[-1]
+                        list_item["_original_filename"] = list_item.get("FileName", "")
 
                         content_type = list_item["contentType"]["name"]
-
                         if content_type in [
                             "Web Template Extensions",
                             "Client Side Component Manifests",
                         ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
                             continue
 
+                        list_item = await self._with_list_item_access_control(
+                            site_web_url, site_list_name, list_item
+                        )
                         yield list_item, None
 
                         if "Attachments" in list_item["fields"]:
                             async for list_item_attachment in self.client.site_list_item_attachments(
-                                site["webUrl"], site_list["name"], list_item_natural_id
+                                site_web_url, site_list_name, list_item_natural_id
                             ):
                                 list_item_attachment["_id"] = list_item_attachment[
                                     "odata.id"
@@ -777,10 +1044,19 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 list_item_attachment["_timestamp"] = list_item[
                                     "lastModifiedDateTime"
                                 ]
+
+                                list_item_attachment = (
+                                    self._decorate_with_access_control(
+                                        list_item_attachment,
+                                        list_item.get(ACCESS_CONTROL, []),
+                                    )
+                                )
+
                                 attachment_download_func = partial(
                                     self.get_attachment_content,
                                     list_item_attachment,
                                 )
+
                                 yield list_item_attachment, attachment_download_func
 
                 async for site_page in self.client.site_pages(site["webUrl"]):
@@ -793,6 +1069,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                         if html_field in site_page:
                             site_page[html_field] = html_to_text(site_page[html_field])
 
+                    site_page = await self._with_site_page_access_control(
+                        site_web_url, site_page
+                    )
                     yield site_page, None
 
     async def get_attachment_content(self, attachment, timestamp=None, doit=False):
@@ -820,7 +1099,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         attachment, body = await self._download_content(
             partial(self.client.download_attachment, attachment["odata.id"]),
-            attachment["_tempfile_suffix"],
+            attachment["_original_filename"],
         )
 
         if attachment:
@@ -836,7 +1115,10 @@ class SharepointOnlineDataSource(BaseDataSource):
         if not (doit and document_size):
             return
 
-        if document_size > MAX_DOCUMENT_SIZE:
+        if (
+            document_size > MAX_DOCUMENT_SIZE
+            and not self.configuration["use_text_extraction_service"]
+        ):
             return
 
         doc = {
@@ -850,7 +1132,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 drive_item["parentReference"]["driveId"],
                 drive_item["id"],
             ),
-            drive_item["_tempfile_suffix"],
+            drive_item["_original_filename"],
         )
 
         if attachment:
@@ -860,13 +1142,14 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return doc
 
-    async def _download_content(self, download_func, tempfile_suffix):
+    async def _download_content(self, download_func, original_filename):
         attachment = None
         body = None
         source_file_name = ""
+        file_extension = os.path.splitext(original_filename)[-1]
 
         async with NamedTemporaryFile(
-            mode="wb", delete=False, suffix=tempfile_suffix
+            mode="wb", delete=False, suffix=file_extension
         ) as async_buffer:
             # download_func should always be a partial with async_buffer as last argument that is not filled by the caller!
             # E.g. if download_func is download_drive_item(drive_id, item_id, async_buffer) then it
@@ -877,7 +1160,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             source_file_name = async_buffer.name
 
         if self.configuration["use_text_extraction_service"]:
-            body = await self.extraction_service.extract_text(source_file_name)
+            body = await self.extraction_service.extract_text(
+                source_file_name, original_filename
+            )
         else:
             await asyncio.to_thread(
                 convert_to_b64,
