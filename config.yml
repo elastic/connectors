@@ -27,14 +27,15 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'changeme'
-service_type: 'changeme'
-
 extraction_service:
+  enabled: false
   host: http://localhost:8090
   text_extraction:
     use_file_pointers: false
     method: 'tika'
+
+connector_id: 'changeme'
+service_type: 'changeme'
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource

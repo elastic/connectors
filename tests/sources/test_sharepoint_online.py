@@ -1272,7 +1272,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_get_attachment_content(self, patch_sharepoint_client):
-        attachment = {"odata.id": "1", "_tempfile_suffix": ".ppt"}
+        attachment = {"odata.id": "1", "_original_filename": "file.ppt"}
         message = b"This is content of attachment"
 
         async def download_func(attachment_id, async_buffer):
@@ -1290,7 +1290,7 @@ class TestSharepointOnlineDataSource:
     async def test_get_attachment_with_text_extraction_enabled_adds_body(
         self, patch_sharepoint_client
     ):
-        attachment = {"odata.id": "1", "_tempfile_suffix": ".ppt"}
+        attachment = {"odata.id": "1", "_original_filename": "file.ppt"}
         message = "This is the text content of drive item"
 
         with patch(
@@ -1312,13 +1312,18 @@ class TestSharepointOnlineDataSource:
             assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
-    async def test_get_drive_item_content(self, patch_sharepoint_client):
+    @pytest.mark.parametrize(
+        "filesize, expect_download", [(15, True), (10485761, False)]
+    )
+    async def test_get_drive_item_content(
+        self, patch_sharepoint_client, filesize, expect_download
+    ):
         drive_item = {
             "id": "1",
-            "size": 15,
+            "size": filesize,
             "lastModifiedDateTime": datetime.now(timezone.utc),
             "parentReference": {"driveId": "drive-1"},
-            "_tempfile_suffix": ".txt",
+            "_original_filename": "file.txt",
         }
         message = b"This is content of drive item"
 
@@ -1330,19 +1335,23 @@ class TestSharepointOnlineDataSource:
 
         download_result = await source.get_drive_item_content(drive_item, doit=True)
 
-        assert download_result["_attachment"] == base64.b64encode(message).decode()
-        assert "body" not in download_result
+        if expect_download:
+            assert download_result["_attachment"] == base64.b64encode(message).decode()
+            assert "body" not in download_result
+        else:
+            assert download_result is None
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("filesize", [(15), (10485761)])
     async def test_get_content_with_text_extraction_enabled_adds_body(
-        self, patch_sharepoint_client
+        self, patch_sharepoint_client, filesize
     ):
         drive_item = {
             "id": "1",
-            "size": 15,
+            "size": filesize,
             "lastModifiedDateTime": datetime.now(timezone.utc),
             "parentReference": {"driveId": "drive-1"},
-            "_tempfile_suffix": ".txt",
+            "_original_filename": "file.txt",
         }
         message = "This is the text content of drive item"
 

@@ -716,7 +716,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "order": 6,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
-                "ui_restrictions": ["advanced"],
                 "value": False,
             },
         }
@@ -977,14 +976,19 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 logger.warning(
                                     f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"
                                 )
-                            elif drive_item["size"] > MAX_DOCUMENT_SIZE:
+                            elif (
+                                drive_item["size"] > MAX_DOCUMENT_SIZE
+                                and not self.configuration[
+                                    "use_text_extraction_service"
+                                ]
+                            ):
                                 logger.warning(
                                     f"Not downloading file {drive_item['name']} of size {drive_item['size']}"
                                 )
                             else:
-                                drive_item["_tempfile_suffix"] = os.path.splitext(
-                                    drive_item.get("name", "")
-                                )[-1]
+                                drive_item["_original_filename"] = drive_item.get(
+                                    "name", ""
+                                )
                                 download_func = partial(
                                     self.get_drive_item_content, drive_item
                                 )
@@ -1013,9 +1017,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_list_name = site_list["name"]
                         list_item["_id"] = f"{site_list['id']}-{list_item['id']}"
                         list_item["object_type"] = "list_item"
-                        list_item["_tempfile_suffix"] = os.path.splitext(
-                            list_item.get("FileName", "")
-                        )[-1]
+                        list_item["_original_filename"] = list_item.get("FileName", "")
 
                         content_type = list_item["contentType"]["name"]
                         if content_type in [
@@ -1097,7 +1099,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         attachment, body = await self._download_content(
             partial(self.client.download_attachment, attachment["odata.id"]),
-            attachment["_tempfile_suffix"],
+            attachment["_original_filename"],
         )
 
         if attachment:
@@ -1113,7 +1115,10 @@ class SharepointOnlineDataSource(BaseDataSource):
         if not (doit and document_size):
             return
 
-        if document_size > MAX_DOCUMENT_SIZE:
+        if (
+            document_size > MAX_DOCUMENT_SIZE
+            and not self.configuration["use_text_extraction_service"]
+        ):
             return
 
         doc = {
@@ -1127,7 +1132,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 drive_item["parentReference"]["driveId"],
                 drive_item["id"],
             ),
-            drive_item["_tempfile_suffix"],
+            drive_item["_original_filename"],
         )
 
         if attachment:
@@ -1137,13 +1142,14 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return doc
 
-    async def _download_content(self, download_func, tempfile_suffix):
+    async def _download_content(self, download_func, original_filename):
         attachment = None
         body = None
         source_file_name = ""
+        file_extension = os.path.splitext(original_filename)[-1]
 
         async with NamedTemporaryFile(
-            mode="wb", delete=False, suffix=tempfile_suffix
+            mode="wb", delete=False, suffix=file_extension
         ) as async_buffer:
             # download_func should always be a partial with async_buffer as last argument that is not filled by the caller!
             # E.g. if download_func is download_drive_item(drive_id, item_id, async_buffer) then it
@@ -1154,7 +1160,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             source_file_name = async_buffer.name
 
         if self.configuration["use_text_extraction_service"]:
-            body = await self.extraction_service.extract_text(source_file_name)
+            body = await self.extraction_service.extract_text(
+                source_file_name, original_filename
+            )
         else:
             await asyncio.to_thread(
                 convert_to_b64,
