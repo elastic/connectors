@@ -18,6 +18,13 @@ service:
   max_concurrent_access_control_syncs: 10
   log_level: INFO
 
+extraction_service:
+  enabled: false
+  host: http://elsewhere.com:8090
+  text_extraction:
+    use_file_pointers: false
+    method: 'fake'
+
 connector_id: '1'
 
 sources:

@@ -60,6 +60,7 @@ class PreflightCheck:
 
         timeout = aiohttp.ClientTimeout(total=5)
         session = aiohttp.ClientSession(timeout=timeout)
+
         try:
             async with session.get(
                 f"{self.extraction_config['host']}/ping/"
