@@ -211,23 +211,25 @@ class DropboxDataSource(BaseDataSource):
         try:
             if self.dropbox_client.path not in ["", None]:
                 self.dropbox_client.check_path()
-        except BadInputError:
+        except BadInputError as err:
             raise ConfigurableFieldValueError(
                 "Configured App Key or App Secret is invalid"
-            )
-        except AuthError:
-            raise ConfigurableFieldValueError("Configured Refresh Token is invalid")
+            ) from err
+        except AuthError as err:
+            raise ConfigurableFieldValueError(
+                "Configured Refresh Token is invalid"
+            ) from err
         except ApiError as err:
             if err.error.is_path() and err.error.get_path().is_not_found():
                 raise ConfigurableFieldValueError(
                     f"Configured Path: {self.dropbox_client.path} is invalid"
-                )
+                ) from err
             else:
                 raise Exception(
                     f"Error while validating the configured path. Error: {err}"
-                )
+                ) from err
         except Exception as exception:
-            raise Exception(f"Something went wrong. Error: {exception}")
+            raise Exception(f"Something went wrong. Error: {exception}") from exception
 
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by dropbox
@@ -244,12 +246,14 @@ class DropboxDataSource(BaseDataSource):
         try:
             self.dropbox_client.ping()
             logger.debug("Successfully connected to Dropbox")
-        except BadInputError:
+        except BadInputError as err:
             raise ConfigurableFieldValueError(
                 "Configured App Key or App Secret is invalid"
-            )
-        except AuthError:
-            raise ConfigurableFieldValueError("Configured Refresh Token is invalid")
+            ) from err
+        except AuthError as err:
+            raise ConfigurableFieldValueError(
+                "Configured Refresh Token is invalid"
+            ) from err
         except Exception:
             raise
 

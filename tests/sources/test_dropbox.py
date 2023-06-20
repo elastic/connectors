@@ -100,7 +100,7 @@ EXPECTED_SHARED_FILE_1 = {
     "name": "shared_file_1.py",
     "file path": "/shared/shared_file_1.py",
     "url": "https://www.dropbox.com/scl/fi/12345/shared_file_1.py",
-    'size': 200,
+    "size": 200,
     "_timestamp": "2023-01-01T06:06:06",
 }
 
@@ -110,7 +110,7 @@ EXPECTED_SHARED_FILE_2 = {
     "name": "shared_file_2.py",
     "file path": "/shared/shared_file_2.py",
     "url": "https://www.dropbox.com/scl/fi/12345/shared_file_2.py",
-    'size': 200,
+    "size": 200,
     "_timestamp": "2023-01-01T06:06:06",
 }
 
@@ -150,6 +150,7 @@ class MockResponse:
         self.content = b"test content"
         self.size = 200
 
+
 class MockError:
     def is_path(self):
         return True
@@ -157,9 +158,11 @@ class MockError:
     def get_path(self):
         return LookupError()
 
+
 class LookupError:
     def is_not_found(self):
         return True
+
 
 @pytest.mark.asyncio
 async def test_configuration():
@@ -326,7 +329,7 @@ async def test_ping_for_incorrect_refresh_token_then_raise_exception():
 @pytest.mark.asyncio
 async def test_close_with_client_session():
     source = create_source(DropboxDataSource)
-    source.dropbox_client._connection
+    _ = source.dropbox_client._connection
 
     await source.close()
     assert hasattr(source.dropbox_client.__dict__, "_connection") is False
@@ -376,8 +379,8 @@ async def test_fetch_shared_files():
         return_value=MOCK_SHARING_LIST_RECEIVED_FILES
     )
 
-    source.dropbox_client._connection.sharing_list_received_files_continue = (
-        Mock(return_value=MOCK_SHARING_LIST_RECEIVED_FILES_CONTINUE)
+    source.dropbox_client._connection.sharing_list_received_files_continue = Mock(
+        return_value=MOCK_SHARING_LIST_RECEIVED_FILES_CONTINUE
     )
 
     source.dropbox_client._connection.sharing_get_shared_link_file = Mock(
