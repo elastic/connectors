@@ -29,8 +29,8 @@ from elasticsearch.helpers import async_scan
 
 from connectors.es import ESClient
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
-from connectors.logger import logger
-from connectors.protocol import Filter
+from connectors.logger import logger, tracer
+from connectors.protocol import Filter, JobType
 from connectors.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
@@ -41,6 +41,7 @@ from connectors.utils import (
     DEFAULT_QUEUE_SIZE,
     ConcurrentTasks,
     MemQueue,
+    aenumerate,
     get_size,
     iso_utc,
 )
@@ -56,6 +57,10 @@ TIMESTAMP_FIELD = "_timestamp"
 def get_mb_size(ob):
     """Returns the size of ob in MiB"""
     return round(get_size(ob) / (1024 * 1024), 2)
+
+
+class UnsupportedJobType(Exception):
+    pass
 
 
 class Sink:
@@ -113,6 +118,7 @@ class Sink:
 
         raise TypeError(operation)
 
+    @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
         # TODO: treat result to retry errors like in async_streaming_bulk
         task_num = len(self.bulk_tasks)
@@ -316,6 +322,8 @@ class Extractor:
             data.pop(TIMESTAMP_FIELD, None)
             doc.update(data)
 
+        doc.pop("_original_filename", None)
+
         await self.queue.put(
             {
                 "_op_type": operation,
@@ -325,12 +333,26 @@ class Extractor:
             }
         )
 
-    async def run(self, generator):
+    async def run(self, generator, job_type):
         try:
-            await self.get_docs(generator)
+            match job_type:
+                case JobType.FULL:
+                    await self.get_docs(generator)
+                case JobType.INCREMENTAL:
+                    await self.get_docs_incrementally(generator)
+                case JobType.ACCESS_CONTROL:
+                    await self.get_access_control_docs(generator)
+                case _:
+                    raise UnsupportedJobType
         except asyncio.CancelledError:
             logger.info("Task is canceled, stop Extractor...")
             raise
+
+    @tracer.start_as_current_span("get_doc call", slow_log=1.0)
+    async def _decorate_with_metrics_span(self, generator):
+        """Wrapper for metrics"""
+        async for doc in generator:
+            yield doc
 
     async def get_docs(self, generator):
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
@@ -339,6 +361,8 @@ class Extractor:
         Extraction happens in a separate task, when a document contains files.
         """
         logger.info("Starting doc lookups")
+        generator = self._decorate_with_metrics_span(generator)
+
         self.sync_runs = True
 
         start = time.time()
@@ -350,12 +374,10 @@ class Extractor:
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"Size of ids in memory is {get_mb_size(existing_ids)}MiB")
 
-        count = 0
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
         try:
-            async for doc in generator:
-                doc, lazy_download = doc
-                count += 1
+            async for count, doc in aenumerate(generator):
+                doc, lazy_download, operation = doc
                 if count % self.display_every == 0:
                     logger.info(str(self))
 
@@ -384,11 +406,8 @@ class Extractor:
                             await lazy_download(doit=False)
                         continue
 
-                    # the doc exists, but we are still overwriting it with `index`
-                    operation = OP_INDEX
                     self.total_docs_updated += 1
                 else:
-                    operation = OP_INDEX
                     self.total_docs_created += 1
                     if TIMESTAMP_FIELD not in doc:
                         doc[TIMESTAMP_FIELD] = iso_utc()
@@ -422,11 +441,150 @@ class Extractor:
             # wait for all downloads to be finished
             await lazy_downloads.join()
 
-        # We delete any document that existed in Elasticsearch that was not
-        # returned by the backend.
-        #
-        # Since we popped out every seen doc, existing_ids has now the ids to delete
-        logger.debug(f"Delete {len(existing_ids)} docs from Elasticsearch")
+        await self.enqueue_docs_to_delete(existing_ids)
+        await self.queue.put("END_DOCS")
+
+    async def get_docs_incrementally(self, generator):
+        """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
+
+        A document might be discarded if its timestamp has not changed.
+        Extraction happens in a separate task, when a document contains files.
+        """
+        logger.info("Starting doc lookups")
+        generator = self._decorate_with_metrics_span(generator)
+
+        self.sync_runs = True
+
+        lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
+        try:
+            async for count, doc in aenumerate(generator):
+                doc, lazy_download, operation = doc
+                if count % self.display_every == 0:
+                    logger.info(str(self))
+
+                doc_id = doc["id"] = doc.pop("_id")
+
+                if self.basic_rule_engine and not self.basic_rule_engine.should_ingest(
+                    doc
+                ):
+                    continue
+
+                if operation == OP_INDEX:
+                    self.total_docs_created += 1
+                elif operation == OP_UPSERT:
+                    self.total_docs_updated += 1
+                elif operation == OP_DELETE:
+                    self.total_docs_deleted += 1
+                else:
+                    logger.error(f"unsupported operation {operation} for doc {doc_id}")
+
+                if TIMESTAMP_FIELD not in doc:
+                    doc[TIMESTAMP_FIELD] = iso_utc()
+
+                # if we need to call lazy_download we push it in lazy_downloads
+                if self.content_extraction_enabled and lazy_download is not None:
+                    await lazy_downloads.put(
+                        functools.partial(
+                            self._deferred_index, lazy_download, doc_id, doc, operation
+                        )
+                    )
+
+                else:
+                    # we can push into the queue right away
+                    item = {
+                        "_op_type": operation,
+                        "_index": self.index,
+                        "_id": doc_id,
+                    }
+                    if operation in (OP_INDEX, OP_UPSERT):
+                        item["doc"] = doc
+                    await self.queue.put(item)
+
+                await asyncio.sleep(0)
+        except Exception as e:
+            logger.critical("The document fetcher failed", exc_info=True)
+            await self.queue.put("FETCH_ERROR")
+            self.fetch_error = e
+            return
+        finally:
+            # wait for all downloads to be finished
+            await lazy_downloads.join()
+
+        await self.queue.put("END_DOCS")
+
+    async def get_access_control_docs(self, generator):
+        """Iterate on a generator of access control documents to fill a queue with bulk operations for the `Sink` to consume.
+
+        A document might be discarded if its timestamp has not changed.
+        """
+        logger.info("Starting access control doc lookups")
+        generator = self._decorate_with_metrics_span(generator)
+
+        self.sync_runs = True
+
+        existing_ids = {
+            doc_id: last_update_timestamp
+            async for (doc_id, last_update_timestamp) in self._get_existing_ids()
+        }
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                f"Size of {len(existing_ids)} access control document ids  in memory is {get_mb_size(existing_ids)}MiB"
+            )
+
+        count = 0
+        try:
+            async for doc in generator:
+                doc, _, _ = doc
+                count += 1
+                if count % self.display_every == 0:
+                    logger.info(str(self))
+
+                doc_id = doc["id"] = doc.pop("_id")
+                doc_exists = doc_id in existing_ids
+
+                if doc_exists:
+                    last_update_timestamp = existing_ids.pop(doc_id)
+                    doc_not_updated = (
+                        TIMESTAMP_FIELD in doc
+                        and last_update_timestamp == doc[TIMESTAMP_FIELD]
+                    )
+
+                    if doc_not_updated:
+                        continue
+
+                    self.total_docs_updated += 1
+
+                    operation = OP_UPSERT
+                else:
+                    self.total_docs_created += 1
+
+                    if TIMESTAMP_FIELD not in doc:
+                        doc[TIMESTAMP_FIELD] = iso_utc()
+
+                    operation = OP_INDEX
+
+                await self.queue.put(
+                    {
+                        "_op_type": operation,
+                        "_index": self.index,
+                        "_id": doc_id,
+                        "doc": doc,
+                    }
+                )
+
+                await asyncio.sleep(0)
+        except Exception as e:
+            logger.critical("The document fetcher failed", exc_info=True)
+            await self.queue.put("FETCH_ERROR")
+            self.fetch_error = e
+            return
+
+        await self.enqueue_docs_to_delete(existing_ids)
+        await self.queue.put("END_DOCS")
+
+    async def enqueue_docs_to_delete(self, existing_ids):
+        logger.debug(f"Delete {len(existing_ids)} docs from index '{self.index}'")
         for doc_id in existing_ids.keys():
             await self.queue.put(
                 {
@@ -436,8 +594,6 @@ class Extractor:
                 }
             )
             self.total_docs_deleted += 1
-
-        await self.queue.put("END_DOCS")
 
 
 class IndexMissing(Exception):
@@ -563,6 +719,7 @@ class SyncOrchestrator(ESClient):
         index,
         generator,
         pipeline,
+        job_type,
         filter_=None,
         sync_rules_enabled=False,
         content_extraction_enabled=True,
@@ -574,6 +731,7 @@ class SyncOrchestrator(ESClient):
         - index: target index
         - generator: documents generator
         - pipeline: ingest pipeline settings to pass to the bulk API
+        - job_type: the job type of the sync job
         - filter_: an instance of `Filter` to apply on the fetched document  -- default: `None`
         - sync_rules_enabled: if enabled, applies rules -- default: `False`
         - content_extraction_enabled: if enabled, will download content -- default: `True`
@@ -608,7 +766,9 @@ class SyncOrchestrator(ESClient):
             display_every=display_every,
             concurrent_downloads=concurrent_downloads,
         )
-        self._extractor_task = asyncio.create_task(self._extractor.run(generator))
+        self._extractor_task = asyncio.create_task(
+            self._extractor.run(generator, job_type)
+        )
 
         # start the bulker
         self._sink = Sink(

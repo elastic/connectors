@@ -1,13 +1,4 @@
-agents:
-  provider: "gcp"
-  machineType: "n1-standard-8"
-  useVault: true
-  image: family/enterprise-search-ubuntu-2204-connectors-py
-
 steps:
-  - label: "🏗️ Docker images"
-    command:
-      - ".buildkite/publish_docker.sh"
   - label: "🔨 MySQL"
     command:
       - ".buildkite/run_nigthly.sh mysql"
@@ -26,6 +17,8 @@ steps:
   - label: "🔨 Google Cloud Storage"
     command:
       - ".buildkite/run_nigthly.sh google_cloud_storage"
+    env:
+      SKIP_AARCH64: "true"
     artifact_paths:
       - "perf8-report-*/**/*"
   - label: "🔨 Azure Blob Storage"
@@ -46,6 +39,8 @@ steps:
   - label: "🔨 Oracle Database"
     command:
       - ".buildkite/run_nigthly.sh oracle"
+    env:
+      SKIP_AARCH64: "true"
     artifact_paths:
       - "perf8-report-*/**/*"
   - label: "🔨 Sharepoint"
@@ -68,8 +63,18 @@ steps:
       - ".buildkite/run_nigthly.sh confluence"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 ServiceNow"
+    command:
+      - ".buildkite/run_nigthly.sh servicenow"
+    artifact_paths:
+      - "perf8-report-*/**/*"
   - label: "🔨 MongoDB"
     command:
       - ".buildkite/run_nigthly.sh mongodb"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 MongoDB Serverless"
+    command:
+      - ".buildkite/run_nigthly.sh mongodb_serverless"
     artifact_paths:
       - "perf8-report-*/**/*"

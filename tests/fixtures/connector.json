@@ -2,11 +2,13 @@
         "name": "mongodb",
         "service_type": "mongodb",
         "index_name": "search-mongodb",
-        "sync_now": true,
+        "sync_cursor": null,
         "is_native": true,
         "api_key_id": null,
         "status": "configured",
         "language": "en",
+        "last_access_control_sync_error": null,
+        "last_access_control_sync_status": null,
         "last_sync_status": null,
         "last_sync_error": null,
         "last_synced": null,
@@ -98,7 +100,7 @@
                         }
                 }
         ],
-        "scheduling": {"enabled": true, "interval": "1 * * * * *"},
+        "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
         "pipeline": {
                 "extract_binary_content": true,
                 "name": "ent-search-generic-ingestion",

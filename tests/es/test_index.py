@@ -33,7 +33,7 @@ async def test_es_index_create_object_error(mock_responses):
         payload={"hits": {"total": {"value": 1}, "hits": [{"_id": 1}]}},
     )
     with pytest.raises(NotImplementedError) as _:
-        async for doc_ in index.get_all_docs():
+        async for _ in index.get_all_docs():
             pass
 
     await index.close()

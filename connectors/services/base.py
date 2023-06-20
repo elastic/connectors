@@ -65,7 +65,7 @@ class BaseService(metaclass=_Registry):
     A concrete service class needs to implement `_run`.
     """
 
-    name = None  # using None here avoids registring this class
+    name = None  # using None here avoids registering this class
 
     def __init__(self, config):
         self.config = config

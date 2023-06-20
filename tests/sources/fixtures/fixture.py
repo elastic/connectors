@@ -6,14 +6,36 @@
 import importlib
 import importlib.util
 import os
+import pprint
 import signal
 import sys
 import time
 from argparse import ArgumentParser
 
+import requests
 from elasticsearch import Elasticsearch
+from requests.adapters import HTTPAdapter, Retry
+from requests.auth import HTTPBasicAuth
+from retry import retry
 
 CONNECTORS_INDEX = ".elastic-connectors"
+
+
+@retry(tries=3, delay=1.0)
+def wait_for_es(url="http://localhost:9200", user="elastic", password="changeme"):
+    print("Waiting for Elasticsearch to be up and running")
+    basic = HTTPBasicAuth(user, password)
+    s = requests.Session()
+    retries = Retry(total=5, backoff_factor=1.0, status_forcelist=[500, 502, 503, 504])
+    s.mount("http://", HTTPAdapter(max_retries=retries))
+    try:
+        return s.get(url, auth=basic).json()
+    except Exception as e:
+        # we're going to display some docker info here
+        print(f"Failed to reach out Elasticsearch {repr(e)}")
+        os.system("docker ps -a")
+        os.system("docker logs es01")
+        raise
 
 
 def _parser():
@@ -27,10 +49,10 @@ def _parser():
             "load",
             "remove",
             "start_stack",
+            "check_stack",
             "stop_stack",
             "setup",
             "teardown",
-            "sync",
             "monitor",
             "get_num_docs",
             "description",
@@ -52,19 +74,6 @@ def _es_client():
     return Elasticsearch(**options)
 
 
-def _set_sync_now_flag():
-    es_client = _es_client()
-    try:
-        response = es_client.search(index=CONNECTORS_INDEX, size=1)
-        connector_id = response["hits"]["hits"][0]["_id"]
-        doc = {"sync_now": True}
-        es_client.update(index=CONNECTORS_INDEX, id=connector_id, doc=doc)
-    except Exception as e:
-        print(f"Failed to set sync_now flag. Something bad happened: {e}")
-    finally:
-        es_client.close()
-
-
 def _monitor_service(pid):
     es_client = _es_client()
     timeout = 20 * 60  # 20 minutes timeout
@@ -72,7 +81,20 @@ def _monitor_service(pid):
         # we should have something like connectorIndex.search()[0].last_synced
         # once we have ConnectorIndex and Connector class ready
         start = time.time()
-        response = es_client.search(index=CONNECTORS_INDEX, size=1)
+        while True:
+            response = es_client.search(index=CONNECTORS_INDEX, size=1)
+
+            if len(response["hits"]["hits"]) == 0:
+                if time.time() - start > 30:
+                    raise Exception(f"{CONNECTORS_INDEX} not present after 30s")
+
+                print(f"{CONNECTORS_INDEX} not present, waiting...")
+                time.sleep(1)
+            else:
+                print(f"{CONNECTORS_INDEX} detected")
+                break
+
+        start = time.time()
         connector = response["hits"]["hits"][0]
         connector_id = connector["_id"]
         last_synced = connector["_source"]["last_synced"]
@@ -100,15 +122,10 @@ def main(args=None):
     if args.action in ("start_stack", "stop_stack"):
         os.chdir(os.path.join(os.path.dirname(__file__), args.name))
         if args.action == "start_stack":
+            os.system("docker compose pull")
             os.system("docker compose up -d")
-            # TODO: do better
-            time.sleep(30)
         else:
             os.system("docker compose down --volumes")
-        return
-
-    if args.action == "sync":
-        _set_sync_now_flag()
         return
 
     if args.action == "monitor":
@@ -141,6 +158,9 @@ def main(args=None):
             print(
                 f'Running an e2e test for {args.name} with a {os.environ.get("DATA_SIZE", "medium")} corpus.'
             )
+        elif args.action == "check_stack":
+            # default behavior: we wait until elasticsearch is responding
+            pprint.pprint(wait_for_es())
         else:
             print(
                 f"Fixture {args.name} does not have an {args.action} action, skipping"
