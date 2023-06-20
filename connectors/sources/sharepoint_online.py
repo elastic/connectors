@@ -1017,7 +1017,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             )
 
                             yield drive_item, self.download_function(
-                                drive_item, max_data_age
+                                drive_item, max_drive_item_age
                             )
 
                         self.update_drive_delta_link(
