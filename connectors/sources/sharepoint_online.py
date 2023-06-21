@@ -682,7 +682,7 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
     SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {
-            "maxDataAge": {"type": "integer"},
+            "dontSubextractDriveItemsOlderThan": {"type": "integer"},  # in Days
         },
         "additionalProperties": False,
     }
@@ -984,13 +984,13 @@ class SharepointOnlineDataSource(BaseDataSource):
         return self._features.document_level_security_enabled()
 
     async def get_docs(self, filtering=None):
-        max_data_age = None
+        max_drive_item_age = None
 
         self.init_sync_cursor()
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            max_data_age = advanced_rules["maxDataAge"]
+            max_drive_item_age = advanced_rules["dontSubextractDriveItemsOlderThan"]
 
         async for site_collection in self.site_collections():
             yield site_collection, None
@@ -1017,7 +1017,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             )
 
                             yield drive_item, self.download_function(
-                                drive_item, max_data_age
+                                drive_item, max_drive_item_age
                             )
 
                         self.update_drive_delta_link(
@@ -1048,11 +1048,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "Unable to start incremental sync. Please perform a full sync to re-enable incremental syncs."
             )
 
-        max_data_age = None
+        max_drive_item_age = None
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            max_data_age = advanced_rules["maxDataAge"]
+            max_drive_item_age = advanced_rules["dontSubextractDriveItemsOlderThan"]
 
         async for site_collection in self.site_collections():
             yield site_collection, None, OP_INDEX
@@ -1085,7 +1085,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             )
 
                             yield drive_item, self.download_function(
-                                drive_item, max_data_age
+                                drive_item, max_drive_item_age
                             ), self.drive_item_operation(drive_item)
 
                         self.update_drive_delta_link(
@@ -1137,7 +1137,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             )
             yield site_drive
 
-    async def drive_items(self, site_drive, max_data_age):
+    async def drive_items(self, site_drive, max_drive_item_age):
         async for page in self.client.drive_items(site_drive["id"]):
             for drive_item in page:
                 drive_item["_id"] = drive_item["id"]
@@ -1147,7 +1147,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                     site_drive, drive_item
                 )
 
-                yield drive_item, self.download_function(drive_item, max_data_age)
+                yield drive_item, self.download_function(drive_item, max_drive_item_age)
 
     async def site_list_items(
         self, site_id, site_list_id, site_web_url, site_list_name
@@ -1243,7 +1243,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         else:
             return OP_INDEX
 
-    def download_function(self, drive_item, max_data_age):
+    def download_function(self, drive_item, max_drive_item_age):
         if "@microsoft.graph.downloadUrl" not in drive_item:
             return None
 
@@ -1254,8 +1254,8 @@ class SharepointOnlineDataSource(BaseDataSource):
             drive_item["lastModifiedDateTime"], "%Y-%m-%dT%H:%M:%SZ"
         )
 
-        if max_data_age and modified_date < datetime.utcnow() - timedelta(
-            seconds=max_data_age
+        if max_drive_item_age and modified_date < datetime.utcnow() - timedelta(
+            days=max_drive_item_age
         ):
             logger.warning(
                 f"Not downloading file {drive_item['name']}: last modified on {drive_item['lastModifiedDateTime']}"

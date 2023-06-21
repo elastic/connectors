@@ -926,7 +926,7 @@ class TestSharepointOnlineAdvancedRulesValidator:
 
     @pytest.mark.asyncio
     async def test_validate(self, validator):
-        valid_rules = {"maxDataAge": 15}
+        valid_rules = {"dontSubextractDriveItemsOlderThan": 15}
 
         result = await validator.validate(valid_rules)
 
@@ -934,7 +934,7 @@ class TestSharepointOnlineAdvancedRulesValidator:
 
     @pytest.mark.asyncio
     async def test_validate_invalid_rule(self, validator):
-        invalid_rules = {"maxDataAge": "why is this a string"}
+        invalid_rules = {"dontSubextractDriveItemsOlderThan": "why is this a string"}
 
         result = await validator.validate(invalid_rules)
 
@@ -1333,6 +1333,20 @@ class TestSharepointOnlineDataSource:
         )
 
         assert (operations["delete"]) == deleted
+
+    @pytest.mark.asyncio
+    async def test_download_function_with_filtering_rule(self):
+        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
+        max_drive_item_age = 15
+        drive_item = {
+            "lastModifiedDateTime": str(
+                datetime.utcnow() - timedelta(days=max_drive_item_age + 1)
+            )
+        }
+
+        download_result = source.download_function(drive_item, max_drive_item_age)
+
+        assert download_result is None
 
     def test_get_default_configuration(self):
         config = SharepointOnlineDataSource.get_default_configuration()
