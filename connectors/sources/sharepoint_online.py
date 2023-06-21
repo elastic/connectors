@@ -1305,7 +1305,8 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if attachment:
             doc["_attachment"] = attachment
-        if body:
+        if body is not None:
+            # accept empty strings for body
             doc["body"] = body
 
         return doc
@@ -1338,7 +1339,8 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if attachment:
             doc["_attachment"] = attachment
-        if body:
+        if body is not None:
+            # accept empty strings for body
             doc["body"] = body
 
         return doc
@@ -1361,9 +1363,11 @@ class SharepointOnlineDataSource(BaseDataSource):
             source_file_name = async_buffer.name
 
         if self.configuration["use_text_extraction_service"]:
-            body = await self.extraction_service.extract_text(
-                source_file_name, original_filename
-            )
+            body = ""
+            if self.extraction_service._check_configured():
+                body = await self.extraction_service.extract_text(
+                    source_file_name, original_filename
+                )
         else:
             await asyncio.to_thread(
                 convert_to_b64,
