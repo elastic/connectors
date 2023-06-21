@@ -594,12 +594,32 @@ class TestExtractionService:
         with aioresponses() as m:
             yield m
 
+    @pytest.mark.parametrize(
+        "mock_config, expected_result",
+        [
+            (
+                {
+                    "extraction_service": {
+                        "host": "http://localhost:8090",
+                    }
+                },
+                True,
+            ),
+            ({"something_else": "???"}, False),
+            ({"extraction_service": {"not_a_host": "!!!m"}}, False),
+        ],
+    )
+    def test_check_configured(self, mock_config, expected_result):
+        with patch("yaml.safe_load") as mock_safe_load:
+            mock_safe_load.return_value = mock_config
+            extraction_service = ExtractionService()
+            assert extraction_service._check_configured() is expected_result
+
     @pytest.mark.asyncio
-    async def test_extract_text_without_file_pointer(self, mock_responses):
+    async def test_extract_text(self, mock_responses):
         mock_config = {
             "extraction_service": {
                 "host": "http://localhost:8090",
-                "text_extraction": {"use_file_pointers": False},
             }
         }
 
@@ -624,50 +644,18 @@ class TestExtractionService:
                 assert response == "I've been extracted!"
 
     @pytest.mark.asyncio
-    async def test_extract_text_with_file_pointer(self, mock_responses):
-        mock_config = {
-            "extraction_service": {
-                "host": "http://localhost:8090",
-                "text_extraction": {"use_file_pointers": True},
-            }
-        }
-        filepath = "tmp/notreal.txt"
-        url = "http://localhost:8090/extract_local_file_text/"
-        payload = {"extracted_text": "I've been extracted!"}
-
-        with patch("yaml.safe_load") as mock_safe_load:
-            mock_safe_load.return_value = mock_config
-
-            with patch("builtins.open", mock_open(read_data="data")):
-                mock_responses.post(url, status=200, payload=payload)
-
-                extraction_service = ExtractionService()
-                extraction_service._begin_session()
-
-                response = await extraction_service.extract_text(
-                    filepath, "notreal.txt"
-                )
-                await extraction_service._end_session()
-
-                assert response == "I've been extracted!"
-
-    @pytest.mark.asyncio
     async def test_extract_text_when_response_isnt_200_logs_warning(
         self, mock_responses, patch_logger
     ):
-        mock_config = {
-            "extraction_service": {
-                "host": "http://localhost:8090",
-                "text_extraction": {"use_file_pointers": True},
-            }
-        }
+        mock_config = {"extraction_service": {"host": "http://localhost:8090"}}
+
         filepath = "tmp/notreal.txt"
-        url = "http://localhost:8090/extract_local_file_text/"
+        url = "http://localhost:8090/extract_text/"
 
         with patch("yaml.safe_load") as mock_safe_load:
             mock_safe_load.return_value = mock_config
 
-            with patch("builtins.open", mock_open(read_data="data")):
+            with patch("builtins.open", mock_open(read_data=b"data")):
                 mock_responses.post(url, status=400, payload={})
 
                 extraction_service = ExtractionService()
@@ -687,19 +675,14 @@ class TestExtractionService:
     async def test_extract_text_when_response_is_200_with_error_logs_warning(
         self, mock_responses, patch_logger
     ):
-        mock_config = {
-            "extraction_service": {
-                "host": "http://localhost:8090",
-                "text_extraction": {"use_file_pointers": True},
-            }
-        }
+        mock_config = {"extraction_service": {"host": "http://localhost:8090"}}
         filepath = "tmp/notreal.txt"
-        url = "http://localhost:8090/extract_local_file_text/"
+        url = "http://localhost:8090/extract_text/"
 
         with patch("yaml.safe_load") as mock_safe_load:
             mock_safe_load.return_value = mock_config
 
-            with patch("builtins.open", mock_open(read_data="data")):
+            with patch("builtins.open", mock_open(read_data=b"data")):
                 mock_responses.post(
                     url,
                     status=200,
