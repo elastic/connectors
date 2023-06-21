@@ -149,16 +149,19 @@ class FilteringValidator:
     calling their validate methods and aggregating the result in one FilteringValidationResult.
     """
 
-    def __init__(self, basic_rules_validators=None, advanced_rules_validators=None):
+    def __init__(
+        self, basic_rules_validators=None, advanced_rules_validators=None, logger_=None
+    ):
         self.basic_rules_validators = (
             [] if basic_rules_validators is None else basic_rules_validators
         )
         self.advanced_rules_validators = (
             [] if advanced_rules_validators is None else advanced_rules_validators
         )
+        self._logger = logger_ or logger
 
     async def validate(self, filtering):
-        logger.info("Filtering validation started")
+        self._logger.info("Filtering validation started")
         basic_rules = filtering.basic_rules
 
         filtering_validation_result = FilteringValidationResult()
@@ -186,8 +189,10 @@ class FilteringValidator:
             for validator in advanced_rules_validators:
                 filtering_validation_result += await validator.validate(advanced_rules)
 
-        logger.info(f"Filtering validation result: {filtering_validation_result.state}")
-        logger.info(
+        self._logger.info(
+            f"Filtering validation result: {filtering_validation_result.state}"
+        )
+        self._logger.info(
             f"Filtering validation errors: {[str(error) for error in filtering_validation_result.errors] if filtering_validation_result.errors else 'None'}"
         )
 
