@@ -43,9 +43,9 @@ steps:
       SKIP_AARCH64: "true"
     artifact_paths:
       - "perf8-report-*/**/*"
-  - label: "🔨 Sharepoint"
+  - label: "🔨 Sharepoint Server"
     command:
-      - ".buildkite/run_nigthly.sh sharepoint extra_small"
+      - ".buildkite/run_nigthly.sh sharepoint_server extra_small"
     artifact_paths:
       - "perf8-report-*/**/*"
   - label: "🔨 Microsoft SQL"
