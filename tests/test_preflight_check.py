@@ -22,11 +22,6 @@ config = {
         "initial_backoff_duration": 0.1,
     },
     "service": {"preflight_max_attempts": 4, "preflight_idle": 0.1},
-    "extraction_service": {
-        "enabled": False,
-        "host": "http://localhost:8090",
-        "text_extraction": {"use_file_pointers": False, "method": "tika"},
-    },
     "connector_id": "connector_1",
     "service_type": "some_type",
 }
@@ -210,7 +205,7 @@ async def test_extraction_service_enabled_and_found_writes_info_log(
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
     local_config = config.copy()
-    local_config["extraction_service"]["enabled"] = True
+    local_config["extraction_service"] = {"host": "http://localhost:8090"}
     preflight = PreflightCheck(local_config)
 
     mock_responses.get(
@@ -234,7 +229,7 @@ async def test_extraction_service_enabled_but_missing_logs_warning(
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
     local_config = config.copy()
-    local_config["extraction_service"]["enabled"] = True
+    local_config["extraction_service"] = {"host": "http://localhost:8090"}
     preflight = PreflightCheck(local_config)
 
     mock_responses.get(
@@ -258,7 +253,7 @@ async def test_extraction_service_enabled_but_missing_logs_critical(
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
     local_config = config.copy()
-    local_config["extraction_service"]["enabled"] = True
+    local_config["extraction_service"] = {"host": "http://localhost:8090"}
     preflight = PreflightCheck(local_config)
 
     result = await preflight.run()
