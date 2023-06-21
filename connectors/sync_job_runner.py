@@ -134,7 +134,7 @@ class SyncJobRunner:
             bulk_options = self.bulk_options.copy()
             self.data_provider.tweak_bulk_options(bulk_options)
 
-            self.elastic_server = SyncOrchestrator(self.es_config)
+            self.elastic_server = SyncOrchestrator(self.es_config, self.sync_job.logger)
 
             if job_type in [JobType.INCREMENTAL, JobType.FULL]:
                 await self._execute_content_sync_job(job_type, bulk_options)
