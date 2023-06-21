@@ -1334,6 +1334,20 @@ class TestSharepointOnlineDataSource:
 
         assert (operations["delete"]) == deleted
 
+    @pytest.mark.asyncio
+    async def test_download_function_with_filtering_rule(self):
+        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
+        max_drive_item_age = 15
+        drive_item = {
+            "lastModifiedDateTime": str(
+                datetime.utcnow() - timedelta(days=max_drive_item_age + 1)
+            )
+        }
+
+        download_result = source.download_function(drive_item, max_drive_item_age)
+
+        assert download_result is None
+
     def test_get_default_configuration(self):
         config = SharepointOnlineDataSource.get_default_configuration()
 
