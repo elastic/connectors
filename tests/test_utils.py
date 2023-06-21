@@ -616,7 +616,9 @@ class TestExtractionService:
                 extraction_service = ExtractionService()
                 extraction_service._begin_session()
 
-                response = await extraction_service.extract_text(filepath)
+                response = await extraction_service.extract_text(
+                    filepath, "notreal.txt"
+                )
                 await extraction_service._end_session()
 
                 assert response == "I've been extracted!"
@@ -642,7 +644,9 @@ class TestExtractionService:
                 extraction_service = ExtractionService()
                 extraction_service._begin_session()
 
-                response = await extraction_service.extract_text(filepath)
+                response = await extraction_service.extract_text(
+                    filepath, "notreal.txt"
+                )
                 await extraction_service._end_session()
 
                 assert response == "I've been extracted!"
@@ -669,7 +673,9 @@ class TestExtractionService:
                 extraction_service = ExtractionService()
                 extraction_service._begin_session()
 
-                response = await extraction_service.extract_text(filepath)
+                response = await extraction_service.extract_text(
+                    filepath, "notreal.txt"
+                )
                 await extraction_service._end_session()
                 assert response == ""
 
@@ -703,7 +709,9 @@ class TestExtractionService:
                 extraction_service = ExtractionService()
                 extraction_service._begin_session()
 
-                response = await extraction_service.extract_text(filepath)
+                response = await extraction_service.extract_text(
+                    filepath, "notreal.txt"
+                )
                 await extraction_service._end_session()
                 assert response == ""
 

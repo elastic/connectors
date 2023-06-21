@@ -15,10 +15,12 @@ import pytest
 import pytest_asyncio
 from aiohttp.client_exceptions import ClientResponseError
 
+from connectors.protocol import Features
 from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
     DEFAULT_GROUPS,
     WILDCARD,
+    DriveItemsPage,
     GraphAPIToken,
     InternalServerError,
     InvalidSharepointTenant,
@@ -28,8 +30,8 @@ from connectors.sources.sharepoint_online import (
     SharepointOnlineAdvancedRulesValidator,
     SharepointOnlineClient,
     SharepointOnlineDataSource,
+    SyncCursorEmpty,
     TokenFetchFailed,
-    _decorate_with_access_control,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -46,6 +48,10 @@ NUMBER_OF_DEFAULT_GROUPS = 3
 
 ALLOW_ACCESS_CONTROL_PATCHED = "access_control"
 DEFAULT_GROUPS_PATCHED = ["some default group"]
+
+
+def set_dls_enabled(source, dls_enabled):
+    source.set_features(Features({"document_level_security": {"enabled": dls_enabled}}))
 
 
 class TestMicrosoftSecurityToken:
@@ -332,6 +338,45 @@ class TestMicrosoftAPISession:
 
         assert first_page in pages
         assert second_page in pages
+
+    @pytest.mark.asyncio
+    async def test_scroll_with_data_link(self, microsoft_api_session, mock_responses):
+        drive_item = {
+            "id": "1",
+            "size": 15,
+            "lastModifiedDateTime": str(datetime.now(timezone.utc)),
+            "parentReference": {"driveId": "drive-1"},
+            "_tempfile_suffix": ".txt",
+        }
+
+        responses = {
+            "page1": {
+                "payload": {
+                    "value": [drive_item],
+                    "@odata.nextLink": "http://fakesharepointonline/page2",  # this makes scroll to just to another link
+                },
+                "url": "http://fakesharepointonline/page1",
+            },
+            "page2": {
+                "payload": {
+                    "value": [drive_item],
+                    "@odata.deltaLink": "http://fakesharepointonline/deltaLink",
+                },
+                "url": "http://fakesharepointonline/page2",
+            },
+        }
+
+        for response in responses.values():
+            mock_responses.get(response["url"], payload=response["payload"])
+
+        pages = list()
+
+        async for page in microsoft_api_session.scroll_url(
+            url=responses["page1"]["url"]
+        ):
+            pages.append(page)
+
+        assert len(pages) == len(responses)
 
 
 class TestSharepointOnlineClient:
@@ -931,8 +976,13 @@ class TestSharepointOnlineDataSource:
     @property
     def drive_items(self):
         return [
-            {"id": "3", "lastModifiedDateTime": self.month_ago},
-            {"id": "4", "lastModifiedDateTime": self.day_ago},
+            DriveItemsPage(
+                items=[
+                    {"id": "3", "lastModifiedDateTime": self.month_ago},
+                    {"id": "4", "lastModifiedDateTime": self.day_ago},
+                ],
+                delta_link="deltalinksample",
+            )
         ]
 
     @property
@@ -1050,6 +1100,20 @@ class TestSharepointOnlineDataSource:
     def valid_tenant(self):
         return {"NameSpaceType": "VALID"}
 
+    @property
+    def drive_items_delta(self):
+        return [
+            DriveItemsPage(
+                items=[
+                    {"id": "3", "lastModifiedDateTime": self.month_ago},
+                    {"id": "4", "lastModifiedDateTime": self.day_ago},
+                    {"id": "5", "lastModifiedDateTime": self.day_ago},
+                    {"id": "6", "deleted": {"state": "deleted"}},
+                ],
+                delta_link="deltalinksample",
+            )
+        ]
+
     @pytest_asyncio.fixture
     async def patch_sharepoint_client(self):
         client = AsyncMock()
@@ -1079,7 +1143,7 @@ class TestSharepointOnlineDataSource:
                 return_value=self.users_and_groups_for_role_assignments
             )
             client.site_drives = AsyncIterator(self.site_drives)
-            client.drive_items = AsyncIterator(self.drive_items)
+            client.drive_items = self.drive_items_func
             client.site_lists = AsyncIterator(self.site_lists)
             client.site_list_items = AsyncIterator(self.site_list_items)
             client.site_list_item_attachments = AsyncIterator(
@@ -1093,8 +1157,15 @@ class TestSharepointOnlineDataSource:
             client.rest_api_token.get.return_value = self.rest_api_token
 
             client.tenant_details = AsyncMock(return_value=self.valid_tenant)
+            client.drive_items_delta = AsyncIterator(self.drive_items_delta)
 
             yield client
+
+    def drive_items_func(self, drive_id, url=None):
+        if not url:
+            return AsyncIterator(self.drive_items)
+        else:
+            return AsyncIterator(self.drive_items_delta)
 
     @pytest.mark.asyncio
     async def test_get_docs_without_access_control(self, patch_sharepoint_client):
@@ -1119,8 +1190,8 @@ class TestSharepointOnlineDataSource:
         assert len([i for i in results if i["object_type"] == "site_drive"]) == len(
             self.site_drives
         )
-        assert len([i for i in results if i["object_type"] == "drive_item"]) == len(
-            self.drive_items
+        assert len([i for i in results if i["object_type"] == "drive_item"]) == sum(
+            [len(j) for j in self.drive_items]
         )
         assert len([i for i in results if i["object_type"] == "site_list"]) == len(
             self.site_lists
@@ -1146,12 +1217,8 @@ class TestSharepointOnlineDataSource:
         source._dls_enabled = Mock(return_value=True)
 
         results = []
-        downloads = []
-        async for doc, download_func in source.get_docs():
+        async for doc, _download_func in source.get_docs():
             results.append(doc)
-
-            if download_func:
-                downloads.append(download_func)
 
         site_collections = [i for i in results if i["object_type"] == "site_collection"]
         sites = [i for i in results if i["object_type"] == "site"]
@@ -1182,7 +1249,8 @@ class TestSharepointOnlineDataSource:
             [ALLOW_ACCESS_CONTROL_PATCHED in site_drive for site_drive in site_drives]
         )
 
-        assert len(drive_items) == len(self.drive_items)
+        assert len(drive_items) == sum([len(j) for j in self.drive_items])
+
         assert all(
             [ALLOW_ACCESS_CONTROL_PATCHED in drive_item for drive_item in drive_items]
         )
@@ -1211,6 +1279,60 @@ class TestSharepointOnlineDataSource:
         assert all(
             [ALLOW_ACCESS_CONTROL_PATCHED in site_page for site_page in site_pages]
         )
+
+    @pytest.mark.parametrize("sync_cursor", [None, {}])
+    async def test_get_docs_incrementaly_with_empty_cursor(
+        self, patch_sharepoint_client, sync_cursor
+    ):
+        source = create_source(SharepointOnlineDataSource)
+
+        with pytest.raises(SyncCursorEmpty):
+            async for _doc, _download_func, _operation in source.get_docs_incrementally(
+                sync_cursor=sync_cursor
+            ):
+                pass
+
+    @pytest.mark.asyncio
+    async def test_get_docs_incrementaly(self, patch_sharepoint_client):
+        source = create_source(SharepointOnlineDataSource)
+
+        sync_cursor = {"site_drives": {}}
+        for site_drive in self.site_drives:
+            sync_cursor["site_drives"][
+                site_drive["id"]
+            ] = "http://fakesharepoint.com/deltalink"
+
+        deleted = 0
+        for page in self.drive_items_delta:
+            deleted += len(list(filter(lambda item: "deleted" in item, page)))
+
+        docs = list()
+        downloads = list()
+        operations = {"index": 0, "delete": 0}
+
+        async for doc, download_func, operation in source.get_docs_incrementally(
+            sync_cursor=sync_cursor
+        ):
+            docs.append(doc)
+
+            if download_func:
+                downloads.append(download_func)
+
+            operations[operation] += 1
+
+        assert len(docs) == sum(
+            [
+                len(self.site_collections),
+                sum([len(i) for i in self.drive_items_delta]),
+                len(self.site_drives),
+                len(self.site_pages),
+                len(self.site_lists),
+                len(self.site_list_items),
+                len(self.site_list_item_attachments),
+            ]
+        )
+
+        assert (operations["delete"]) == deleted
 
     def test_get_default_configuration(self):
         config = SharepointOnlineDataSource.get_default_configuration()
@@ -1268,7 +1390,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_get_attachment_content(self, patch_sharepoint_client):
-        attachment = {"odata.id": "1", "_tempfile_suffix": ".ppt"}
+        attachment = {"odata.id": "1", "_original_filename": "file.ppt"}
         message = b"This is content of attachment"
 
         async def download_func(attachment_id, async_buffer):
@@ -1286,7 +1408,7 @@ class TestSharepointOnlineDataSource:
     async def test_get_attachment_with_text_extraction_enabled_adds_body(
         self, patch_sharepoint_client
     ):
-        attachment = {"odata.id": "1", "_tempfile_suffix": ".ppt"}
+        attachment = {"odata.id": "1", "_original_filename": "file.ppt"}
         message = "This is the text content of drive item"
 
         with patch(
@@ -1308,13 +1430,18 @@ class TestSharepointOnlineDataSource:
             assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
-    async def test_get_drive_item_content(self, patch_sharepoint_client):
+    @pytest.mark.parametrize(
+        "filesize, expect_download", [(15, True), (10485761, False)]
+    )
+    async def test_get_drive_item_content(
+        self, patch_sharepoint_client, filesize, expect_download
+    ):
         drive_item = {
             "id": "1",
-            "size": 15,
+            "size": filesize,
             "lastModifiedDateTime": datetime.now(timezone.utc),
             "parentReference": {"driveId": "drive-1"},
-            "_tempfile_suffix": ".txt",
+            "_original_filename": "file.txt",
         }
         message = b"This is content of drive item"
 
@@ -1326,19 +1453,23 @@ class TestSharepointOnlineDataSource:
 
         download_result = await source.get_drive_item_content(drive_item, doit=True)
 
-        assert download_result["_attachment"] == base64.b64encode(message).decode()
-        assert "body" not in download_result
+        if expect_download:
+            assert download_result["_attachment"] == base64.b64encode(message).decode()
+            assert "body" not in download_result
+        else:
+            assert download_result is None
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("filesize", [(15), (10485761)])
     async def test_get_content_with_text_extraction_enabled_adds_body(
-        self, patch_sharepoint_client
+        self, patch_sharepoint_client, filesize
     ):
         drive_item = {
             "id": "1",
-            "size": 15,
+            "size": filesize,
             "lastModifiedDateTime": datetime.now(timezone.utc),
             "parentReference": {"driveId": "drive-1"},
-            "_tempfile_suffix": ".txt",
+            "_original_filename": "file.txt",
         }
         message = "This is the text content of drive item"
 
@@ -1361,18 +1492,20 @@ class TestSharepointOnlineDataSource:
             assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
-    async def test_site_access_control(self, patch_sharepoint_client):
+    async def test_with_site_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, True)
         patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
 
         site = {"Id": 1, "webUrl": "some url"}
 
-        access_control = await source._site_access_control(site)
+        site_with_access_control = await source._with_site_access_control(site)
+        access_control = site_with_access_control[ACCESS_CONTROL]
 
         two_users = 2
         two_groups = 2
 
-        assert len(access_control) == two_groups + two_users
+        assert len(access_control) == NUMBER_OF_DEFAULT_GROUPS + two_groups + two_users
         assert USER_1 in access_control
         assert USER_2 in access_control
         assert GROUP_1 in access_control
@@ -1381,6 +1514,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     async def test_with_drive_item_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, True)
         site_drive = {"id": 1}
         drive_item = {"id": 2}
 
@@ -1403,6 +1537,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     async def test_with_site_list_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, True)
         patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
 
         site_web_url = "some url"
@@ -1426,6 +1561,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     async def test_with_site_page_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, True)
         patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
 
         site_web_url = "some url"
@@ -1466,54 +1602,80 @@ class TestSharepointOnlineDataSource:
         assert GROUP_1 in access_control
 
     @pytest.mark.asyncio
-    async def test_list_item_access_control(self, patch_sharepoint_client):
+    async def test_with_list_item_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, True)
         patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
 
         site_web_url = "some url"
         site_list_name = "site_list"
         list_item = {"id": 1}
 
-        access_control = await source._list_item_access_control(
+        list_item_with_access_control = await source._with_list_item_access_control(
             site_web_url, site_list_name, list_item
         )
+        access_control = list_item_with_access_control[ACCESS_CONTROL]
 
         one_user = 1
         one_group = 1
 
-        assert len(access_control) == one_user + one_group
+        assert len(access_control) == NUMBER_OF_DEFAULT_GROUPS + one_user + one_group
         assert USER_1 in access_control
         assert GROUP_1 in access_control
 
+    @pytest.mark.parametrize(
+        "dls_enabled, document, access_control, expected_decorated_document",
+        [
+            (
+                False,
+                {},
+                [USER_1],
+                {},
+            ),
+            (
+                True,
+                {},
+                [USER_1],
+                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1, *DEFAULT_GROUPS_PATCHED]},
+            ),
+            (True, {}, [], {ALLOW_ACCESS_CONTROL_PATCHED: DEFAULT_GROUPS_PATCHED}),
+            (
+                True,
+                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1]},
+                [USER_2],
+                {
+                    ALLOW_ACCESS_CONTROL_PATCHED: [
+                        USER_1,
+                        USER_2,
+                        *DEFAULT_GROUPS_PATCHED,
+                    ]
+                },
+            ),
+            (
+                True,
+                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1]},
+                [],
+                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1, *DEFAULT_GROUPS_PATCHED]},
+            ),
+        ],
+    )
+    @patch(
+        "connectors.sources.sharepoint_online.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    @patch(
+        "connectors.sources.sharepoint_online.DEFAULT_GROUPS", DEFAULT_GROUPS_PATCHED
+    )
+    def test_decorate_with_access_control(
+        self, dls_enabled, document, access_control, expected_decorated_document
+    ):
+        source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, dls_enabled)
+        decorated_document = source._decorate_with_access_control(
+            document, access_control
+        )
 
-@pytest.mark.parametrize(
-    "document, access_control, expected_decorated_document",
-    [
-        (
-            {},
-            [USER_1],
-            {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1, *DEFAULT_GROUPS_PATCHED]},
-        ),
-        ({}, [], {ALLOW_ACCESS_CONTROL_PATCHED: DEFAULT_GROUPS_PATCHED}),
-        (
-            {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1]},
-            [USER_2],
-            {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1, USER_2, *DEFAULT_GROUPS_PATCHED]},
-        ),
-        (
-            {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1]},
-            [],
-            {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1, *DEFAULT_GROUPS_PATCHED]},
-        ),
-    ],
-)
-@patch(
-    "connectors.sources.sharepoint_online.ACCESS_CONTROL", ALLOW_ACCESS_CONTROL_PATCHED
-)
-@patch("connectors.sources.sharepoint_online.DEFAULT_GROUPS", DEFAULT_GROUPS_PATCHED)
-def test_decorate_with_access_control(
-    document, access_control, expected_decorated_document
-):
-    decorated_document = _decorate_with_access_control(document, access_control)
-
-    assert decorated_document == expected_decorated_document
+        assert (
+            decorated_document.get(ALLOW_ACCESS_CONTROL_PATCHED, []).sort()
+            == expected_decorated_document.get(ALLOW_ACCESS_CONTROL_PATCHED, []).sort()
+        )
