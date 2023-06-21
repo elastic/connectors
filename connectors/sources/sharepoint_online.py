@@ -1013,7 +1013,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             "_id": user.get("Id"),
             "identity": {
                 "email": user.get("Email"),
-                "username": user.get("UserPrincipalName"),
+                "username": user.get("LoginName"),
             },
         } | self.access_control_query(access_control)
 

@@ -1715,7 +1715,7 @@ class TestSharepointOnlineDataSource:
         email = "some_email@email.com"
         username = "username"
 
-        user = {"Id": user_id, "Email": email, "UserPrincipalName": username}
+        user = {"Id": user_id, "Email": email, "LoginName": username}
 
         access_control = ["group_1"]
 
