@@ -357,7 +357,7 @@ class MicrosoftAPISession:
                 e.status == 403 or e.status == 401
             ):  # Might work weird, but Graph returns 403 and REST returns 401
                 raise PermissionsMissing(
-                    f"Received Unauthorized response for {absolute_url}.\nVerify that Graph API [Sites.Read.All, Files.Read All] and Sharepoint [Sites.Read.All] permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
+                    f"Received Unauthorized response for {absolute_url}.\nVerify that the correct Graph API and Sharepoint permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
                 ) from e
             elif e.status == 404:
                 raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
@@ -442,9 +442,11 @@ class SharepointOnlineClient:
         url = f"{site_web_url}/_api/web/sitegroups"
 
         try:
-            return await self._rest_api_client.fetch(url)
+            async for page in self._rest_api_client.scroll(url):
+                for group in page:
+                    yield group
         except NotFound:
-            return []
+            return
 
     async def site_users(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)
@@ -452,9 +454,11 @@ class SharepointOnlineClient:
         url = f"{site_web_url}/_api/web/siteusers"
 
         try:
-            return await self._rest_api_client.fetch(url)
+            async for page in self._rest_api_client.scroll(url):
+                for user in page:
+                    yield user
         except NotFound:
-            return []
+            return
 
     async def sites(self, parent_site_id, allowed_root_sites):
         select = ""
@@ -617,6 +621,16 @@ class SharepointOnlineClient:
             return []
         except InternalServerError:
             # This can also mean "not found" so handling it explicitly
+            return []
+
+    async def groups_for_user(self, site_web_url, user_id):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = f"{site_web_url}/_api/web/GetUserById('{user_id}')/groups"
+
+        try:
+            return await self._rest_api_client.fetch(url)
+        except NotFound:
             return []
 
     async def tenant_details(self):
@@ -835,24 +849,32 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         site_web_url = site["webUrl"]
 
-        sharepoint_groups = await self.client.site_groups(site_web_url)
+        sharepoint_groups = []
+
+        async for sharepoint_group in self.client.site_groups(site_web_url):
+            sharepoint_groups.append(sharepoint_group)
+
         sharepoint_groups = list(
             filter(
                 lambda group_title: group_title is not None,
                 map(
                     lambda group: group.get("Title"),
-                    sharepoint_groups.get("value"),  # pyright: ignore
+                    sharepoint_groups,
                 ),
             )
         )
 
-        users_and_ad_groups = await self.client.site_users(site_web_url)
+        users_and_ad_groups = []
+
+        async for user_or_group in self.client.site_users(site_web_url):
+            users_and_ad_groups.append(user_or_group)
+
         users_and_ad_groups = list(
             filter(
                 lambda user_name: user_name is not None,
                 map(
                     lambda user: user.get("UserPrincipalName"),
-                    users_and_ad_groups.get("value"),  # pyright: ignore
+                    users_and_ad_groups,
                 ),
             )
         )
@@ -982,6 +1004,43 @@ class SharepointOnlineDataSource(BaseDataSource):
             return False
 
         return self._features.document_level_security_enabled()
+
+    def access_control_query(self, access_control):
+        return {"query": {"template": {"params": {"access_control": access_control}}}}
+
+    def _user_access_control_doc(self, user, access_control):
+        return {
+            "_id": user.get("Id"),
+            "identity": {
+                "email": user.get("Email"),
+                "username": user.get("UserPrincipalName"),
+            },
+        } | self.access_control_query(access_control)
+
+    async def get_access_control(self):
+        if not self._dls_enabled():
+            return
+
+        async for site_collection in self.client.site_collections():
+            site_web_url = site_collection["webUrl"]
+
+            async for user in self.client.site_users(site_web_url):
+                groups = await self.client.groups_for_user(site_web_url, user.get("Id"))
+                groups = list(
+                    map(lambda group: group.get("LoginName"), groups.get("value", []))
+                )
+
+                username = user.get("LoginName", None)
+                email = user.get("Email", None)
+                additional_fields = [
+                    value
+                    for value in [username, email]
+                    if value is not None and len(value) > 0
+                ]
+
+                access_control = list(set(groups + additional_fields + DEFAULT_GROUPS))
+
+                yield self._user_access_control_doc(user, access_control)
 
     async def get_docs(self, filtering=None):
         max_data_age = None
