@@ -5,10 +5,13 @@
 #
 import json
 import logging
+import time
 from contextlib import contextmanager
 
+import pytest
+
 import connectors.logger
-from connectors.logger import logger, set_logger
+from connectors.logger import logger, set_logger, tracer
 
 
 @contextmanager
@@ -43,3 +46,102 @@ def test_logger_filebeat():
         # make sure it's JSON and we have service.type
         data = json.loads(ecs_log)
         assert data["service"]["type"] == "connectors-python"
+
+
+def test_tracer():
+    with unset_logger():
+        logger = set_logger(logging.DEBUG, filebeat=True)
+        logs = []
+
+        def _w(msg):
+            logs.append(msg)
+
+        logger.handlers[0].stream.write = _w
+
+        @tracer.start_as_current_span("trace me")
+        def traceable():
+            time.sleep(0.1)
+
+        traceable()
+        ecs_log = logs[0]
+
+        # make sure it's JSON and we have service.type
+        data = json.loads(ecs_log)
+
+        assert data["message"].startswith("[trace me] traceable took 0.1")
+
+
+@pytest.mark.asyncio
+async def test_async_tracer():
+    with unset_logger():
+        logger = set_logger(logging.DEBUG, filebeat=True)
+        logs = []
+
+        def _w(msg):
+            logs.append(msg)
+
+        logger.handlers[0].stream.write = _w
+
+        @tracer.start_as_current_span("trace me", "special")
+        async def traceable():
+            time.sleep(0.1)
+
+        await traceable()
+        ecs_log = logs[0]
+
+        # make sure it's JSON and we have service.type
+        data = json.loads(ecs_log)
+        assert data["message"].startswith("[trace me] special took 0.1")
+
+
+@pytest.mark.asyncio
+async def test_async_tracer_slow():
+    with unset_logger():
+        logger = set_logger(logging.DEBUG, filebeat=True)
+        logs = []
+
+        def _w(msg):
+            logs.append(msg)
+
+        logger.handlers[0].stream.write = _w
+
+        @tracer.start_as_current_span("trace me", "special", slow_log=10)
+        async def traceable():
+            time.sleep(0.1)
+
+        await traceable()
+        assert (len(logs)) == 0
+
+        @tracer.start_as_current_span("trace me", "special", slow_log=0.01)
+        async def traceable_slow():
+            time.sleep(0.1)
+
+        await traceable_slow()
+        assert (len(logs)) == 1
+
+
+@pytest.mark.asyncio
+async def test_trace_async_gen():
+    with unset_logger():
+        logger = set_logger(logging.DEBUG, filebeat=True)
+        logs = []
+
+        def _w(msg):
+            logs.append(msg)
+
+        logger.handlers[0].stream.write = _w
+
+        @tracer.start_as_current_span("trace me", "special")
+        async def gen():
+            yield "1"
+            yield "2"
+            yield "3"
+
+        async for _ in gen():
+            pass
+
+        assert len(logs) == 4
+
+        for i, log in enumerate(logs):
+            data = json.loads(log)
+            assert data["message"].startswith(f"[trace me] {i}-special took")

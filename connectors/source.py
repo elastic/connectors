@@ -339,6 +339,7 @@ class BaseDataSource:
 
     name = None
     service_type = None
+    support_incremental_sync = False
 
     def __init__(self, configuration):
         if not isinstance(configuration, DataSourceConfiguration):
@@ -348,6 +349,9 @@ class BaseDataSource:
 
         self.configuration = configuration
         self.configuration.set_defaults(self.get_default_configuration())
+        self._features = None
+        # A dictionary, the structure of which is connector dependent, to indicate a point where the sync is at
+        self._sync_cursor = None
 
     def __str__(self):
         return f"Datasource `{self.__class__.name}`"
@@ -397,6 +401,12 @@ class BaseDataSource:
         """
 
         return hash_id(_id)
+
+    def set_features(self, features):
+        if self._features is not None:
+            logger.warning(f"'_features' already set in {self.__class__.name}")
+        logger.debug(f"Setting '_features' for {self.__class__.name}")
+        self._features = features
 
     async def validate_filtering(self, filtering):
         """Execute all basic rule and advanced rule validators."""
@@ -467,12 +477,47 @@ class BaseDataSource:
         """
         pass
 
+    async def get_access_control(self):
+        """Returns an asynchronous iterator on the permission documents present in the backend.
+
+        Each document is a dictionary containing permission data indexed into a corresponding permissions index.
+        """
+        raise NotImplementedError
+
     async def get_docs(self, filtering=None):
         """Returns an iterator on all documents present in the backend
 
         Each document is a tuple with:
         - a mapping with the data to index
         - a coroutine to download extra data (attachments)
+
+        The mapping should have least an `id` field
+        and optionally a `timestamp` field in ISO 8601 UTC
+
+        The coroutine is called if the document needs to be synced
+        and has attachments. It needs to return a mapping to index.
+
+        It has two arguments: doit and timestamp
+        If doit is False, it should return None immediately.
+        If timestamp is provided, it should be used in the mapping.
+
+        Example:
+
+           async def get_file(doit=True, timestamp=None):
+               if not doit:
+                   return
+               return {'TEXT': 'DATA', 'timestamp': timestamp,
+                       'id': 'doc-id'}
+        """
+        raise NotImplementedError
+
+    async def get_docs_incrementally(self, sync_cursor, filtering=None):
+        """Returns an iterator on all documents changed since the sync_cursor
+
+        Each document is a tuple with:
+        - a mapping with the data to index
+        - a coroutine to download extra data (attachments)
+        - an operation, can be one of index, update or delete
 
         The mapping should have least an `id` field
         and optionally a `timestamp` field in ISO 8601 UTC
@@ -541,6 +586,19 @@ class BaseDataSource:
             doc[key] = _serialize(value)
 
         return doc
+
+    def sync_cursor(self):
+        """Returns the sync cursor of the current sync"""
+        return self._sync_cursor
+
+    @staticmethod
+    def is_premium():
+        """Returns True if this DataSource is a Premium (paid license gated) connector.
+        Otherwise, returns False.
+
+        NOTE modifying license key logic violates the Elastic License 2.0 that this code is licensed under
+        """
+        return False
 
 
 @cache

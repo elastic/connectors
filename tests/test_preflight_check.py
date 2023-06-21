@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+from unittest.mock import patch
+
 import pytest
 
 from connectors.preflight_check import PreflightCheck
@@ -20,6 +22,13 @@ config = {
         "initial_backoff_duration": 0.1,
     },
     "service": {"preflight_max_attempts": 4, "preflight_idle": 0.1},
+    "extraction_service": {
+        "enabled": False,
+        "host": "http://localhost:8090",
+        "text_extraction": {"use_file_pointers": False, "method": "tika"},
+    },
+    "connector_id": "connector_1",
+    "service_type": "some_type",
 }
 
 
@@ -102,3 +111,159 @@ async def test_index_exist_transient_error(mock_responses):
     preflight = PreflightCheck(config)
     result = await preflight.run()
     assert result is True
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_native_config_is_warned(patched_logger, mock_responses):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    local_config["native_service_types"] = ["foo", "bar"]
+    del local_config["connector_id"]
+    del local_config["service_type"]
+    preflight = PreflightCheck(local_config)
+    result = await preflight.run()
+    assert result is True
+    patched_logger.warning.assert_any_call(
+        "The configuration 'native_service_types' has been deprecated. Please remove this configuration."
+    )
+    patched_logger.warning.assert_any_call(
+        "Native Connectors are only supported internal to Elastic Cloud deployments, which this process is not."
+    )
+    patched_logger.warning.assert_any_call(
+        "Please update your config.yml to explicitly configure a 'connector_id' and a 'service_type'"
+    )
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_native_config_is_forced(patched_logger, mock_responses):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    local_config["native_service_types"] = ["foo", "bar"]
+    local_config["_force_allow_native"] = True
+    preflight = PreflightCheck(local_config)
+    result = await preflight.run()
+    assert result is True
+    patched_logger.warning.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_client_config(patched_logger, mock_responses):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    local_config["connector_id"] = "foo"
+    local_config["service_type"] = "bar"
+    preflight = PreflightCheck(local_config)
+    result = await preflight.run()
+    assert result is True
+    patched_logger.warning.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_unmodified_default_config(patched_logger, mock_responses):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    local_config["connector_id"] = "changeme"
+    local_config["service_type"] = "changeme"
+    preflight = PreflightCheck(local_config)
+    result = await preflight.run()
+    assert result is False
+    patched_logger.errorassert_any_call(
+        "In your configuration, you must change 'connector_id' and 'service_type' to not be 'changeme'"
+    )
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_missing_mode_config(patched_logger, mock_responses):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    del local_config["connector_id"]
+    del local_config["service_type"]
+    preflight = PreflightCheck(local_config)
+    result = await preflight.run()
+    assert result is False
+    patched_logger.errorassert_any_call(
+        "You must configure a 'connector_id' and a 'service_type'"
+    )
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_extraction_service_enabled_and_found_writes_info_log(
+    patched_logger, mock_responses
+):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    local_config["extraction_service"]["enabled"] = True
+    preflight = PreflightCheck(local_config)
+
+    mock_responses.get(
+        f"{local_config['extraction_service']['host']}/ping/", status=200
+    )
+
+    result = await preflight.run()
+    assert result is True
+
+    patched_logger.info.assert_any_call(
+        f"Data extraction service found at {local_config['extraction_service']['host']}."
+    )
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_extraction_service_enabled_but_missing_logs_warning(
+    patched_logger, mock_responses
+):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    local_config["extraction_service"]["enabled"] = True
+    preflight = PreflightCheck(local_config)
+
+    mock_responses.get(
+        f"{local_config['extraction_service']['host']}/ping/", status=404
+    )
+
+    result = await preflight.run()
+    assert result is True
+
+    patched_logger.warning.assert_any_call(
+        f"Data extraction service was found at {local_config['extraction_service']['host']} but health-check returned `404'."
+    )
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_extraction_service_enabled_but_missing_logs_critical(
+    patched_logger, mock_responses
+):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, JOBS_INDEX)
+    local_config = config.copy()
+    local_config["extraction_service"]["enabled"] = True
+    preflight = PreflightCheck(local_config)
+
+    result = await preflight.run()
+    assert result is True
+
+    patched_logger.critical.assert_any_call(
+        f"Expected to find a running instance of data extraction service at {local_config['extraction_service']['host']} but failed. Connection refused: GET {local_config['extraction_service']['host']}/ping/."
+    )

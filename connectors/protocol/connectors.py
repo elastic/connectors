@@ -31,6 +31,7 @@ from connectors.source import (
     get_source_klass,
 )
 from connectors.utils import (
+    ACCESS_CONTROL_INDEX_PREFIX,
     deep_merge_dicts,
     filter_nested_dict_by_keys,
     iso_utc,
@@ -46,6 +47,7 @@ __all__ = [
     "DataSourceError",
     "JobStatus",
     "Pipeline",
+    "JobType",
     "JobTriggerMethod",
     "ServiceTypeNotConfiguredError",
     "ServiceTypeNotSupportedError",
@@ -91,6 +93,13 @@ class JobStatus(Enum):
     SUSPENDED = "suspended"
     COMPLETED = "completed"
     ERROR = "error"
+    UNSET = None
+
+
+class JobType(Enum):
+    FULL = "full"
+    INCREMENTAL = "incremental"
+    ACCESS_CONTROL = "access_control"
     UNSET = None
 
 
@@ -222,6 +231,10 @@ class SyncJob(ESDocument):
         return Pipeline(self.get("connector", "pipeline"))
 
     @property
+    def sync_cursor(self):
+        return self.get("connector", "sync_cursor")
+
+    @property
     def terminated(self):
         return self.status in (JobStatus.ERROR, JobStatus.COMPLETED, JobStatus.CANCELED)
 
@@ -241,6 +254,13 @@ class SyncJob(ESDocument):
     def total_document_count(self):
         return self.get("total_document_count", default=0)
 
+    @property
+    def job_type(self):
+        return JobType(self.get("job_type"))
+
+    def is_content_sync(self):
+        return self.job_type in (JobType.FULL, JobType.INCREMENTAL)
+
     async def validate_filtering(self, validator):
         validation_result = await validator.validate_filtering(self.filtering)
 
@@ -249,12 +269,13 @@ class SyncJob(ESDocument):
                 f"Filtering in state {validation_result.state}, errors: {validation_result.errors}."
             )
 
-    async def claim(self):
+    async def claim(self, sync_cursor=None):
         doc = {
             "status": JobStatus.IN_PROGRESS.value,
             "started_at": iso_utc(),
             "last_seen": iso_utc(),
             "worker_hostname": socket.gethostname(),
+            "connector.sync_cursor": sync_cursor,
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
@@ -395,6 +416,8 @@ class Pipeline(UserDict):
 
 
 class Features:
+    DOCUMENT_LEVEL_SECURITY = "document_level_security"
+
     BASIC_RULES_NEW = "basic_rules_new"
     ADVANCED_RULES_NEW = "advanced_rules_new"
 
@@ -407,6 +430,16 @@ class Features:
             features = {}
 
         self.features = features
+
+    def incremental_sync_enabled(self):
+        return self._nested_feature_enabled(
+            ["incremental_sync", "enabled"], default=False
+        )
+
+    def document_level_security_enabled(self):
+        return self._nested_feature_enabled(
+            ["document_level_security", "enabled"], default=False
+        )
 
     def sync_rules_enabled(self):
         return any(
@@ -472,12 +505,16 @@ class Connector(ESDocument):
         return self.get("is_native", default=False)
 
     @property
-    def sync_now(self):
-        return self.get("sync_now", default=False)
+    def full_sync_scheduling(self):
+        return self.get("scheduling", "full", default={})
 
     @property
-    def scheduling(self):
-        return self.get("scheduling", default={})
+    def incremental_sync_scheduling(self):
+        return self.get("scheduling", "incremental", default={})
+
+    @property
+    def access_control_sync_scheduling(self):
+        return self.get("scheduling", "access_control", default={})
 
     @property
     def configuration(self):
@@ -508,13 +545,41 @@ class Connector(ESDocument):
         return JobStatus(self.get("last_sync_status"))
 
     @property
+    def last_access_control_sync_status(self):
+        return JobStatus(self.get("last_access_control_sync_status"))
+
+    def _property_as_datetime(self, key):
+        value = self.get(key)
+        if value is not None:
+            value = datetime.fromisoformat(value)  # pyright: ignore
+        return value
+
+    @property
     def last_sync_scheduled_at(self):
-        last_sync_scheduled_at = self.get("last_sync_scheduled_at")
-        if last_sync_scheduled_at is not None:
-            last_sync_scheduled_at = datetime.fromisoformat(
-                last_sync_scheduled_at  # pyright: ignore
-            )
-        return last_sync_scheduled_at
+        return self._property_as_datetime("last_sync_scheduled_at")
+
+    @property
+    def last_incremental_sync_scheduled_at(self):
+        return self._property_as_datetime("last_incremental_sync_scheduled_at")
+
+    @property
+    def last_access_control_sync_scheduled_at(self):
+        return self._property_as_datetime("last_access_control_sync_scheduled_at")
+
+    def last_sync_scheduled_at_by_job_type(self, job_type):
+        match job_type:
+            case JobType.ACCESS_CONTROL:
+                return self.last_access_control_sync_scheduled_at
+            case JobType.INCREMENTAL:
+                return self.last_incremental_sync_scheduled_at
+            case JobType.FULL:
+                return self.last_sync_scheduled_at
+            case _:
+                raise ValueError(f"Unknown job type: {job_type}")
+
+    @property
+    def sync_cursor(self):
+        return self.get("sync_cursor")
 
     async def heartbeat(self, interval):
         if (
@@ -524,35 +589,66 @@ class Connector(ESDocument):
             logger.debug(f"Sending heartbeat for connector {self.id}")
             await self.index.heartbeat(doc_id=self.id)
 
-    def next_sync(self):
-        """Returns the datetime when the next sync will run, return None if it's disabled."""
-        if not self.scheduling.get("enabled", False):
-            logger.debug("scheduler is disabled")
+    def next_sync(self, job_type):
+        """Returns the datetime when the next sync for a given job type will run, return None if it's disabled."""
+
+        match job_type:
+            case JobType.ACCESS_CONTROL:
+                scheduling_property = self.access_control_sync_scheduling
+            case JobType.INCREMENTAL:
+                scheduling_property = self.incremental_sync_scheduling
+            case JobType.FULL:
+                scheduling_property = self.full_sync_scheduling
+            case _:
+                raise ValueError(f"Unknown job type: {job_type}")
+
+        if not scheduling_property.get("enabled", False):
+            logger.debug(f"'{job_type.value}' sync scheduling is disabled")
             return None
-        return next_run(self.scheduling.get("interval"))
+        return next_run(scheduling_property.get("interval"))
 
-    async def reset_sync_now_flag(self):
+    async def _update_datetime(self, field, new_ts):
         await self.index.update(
             doc_id=self.id,
-            doc={"sync_now": False},
+            doc={field: new_ts.isoformat()},
             if_seq_no=self._seq_no,
             if_primary_term=self._primary_term,
         )
 
-    async def update_last_sync_scheduled_at(self, new_ts):
-        await self.index.update(
-            doc_id=self.id,
-            doc={"last_sync_scheduled_at": new_ts.isoformat()},
-            if_seq_no=self._seq_no,
-            if_primary_term=self._primary_term,
-        )
+    async def update_last_sync_scheduled_at_by_job_type(self, job_type, new_ts):
+        match job_type:
+            case JobType.ACCESS_CONTROL:
+                await self._update_datetime(
+                    "last_access_control_sync_scheduled_at", new_ts
+                )
+            case JobType.INCREMENTAL:
+                await self._update_datetime(
+                    "last_incremental_sync_scheduled_at", new_ts
+                )
+            case JobType.FULL:
+                await self._update_datetime("last_sync_scheduled_at", new_ts)
+            case _:
+                raise ValueError(f"Unknown job type: {job_type}")
 
-    async def sync_starts(self):
+    async def sync_starts(self, job_type=JobType.FULL):
+        if job_type == JobType.ACCESS_CONTROL:
+            last_sync_information = {
+                "last_access_control_sync_status": JobStatus.IN_PROGRESS.value,
+                "last_access_control_sync_error": None,
+            }
+        elif job_type in [JobType.INCREMENTAL, JobType.FULL]:
+            last_sync_information = {
+                "last_sync_status": JobStatus.IN_PROGRESS.value,
+                "last_sync_error": None,
+            }
+        else:
+            raise ValueError(f"Unknown job type: {job_type}")
+
         doc = {
-            "last_sync_status": JobStatus.IN_PROGRESS.value,
-            "last_sync_error": None,
             "status": Status.CONNECTED.value,
-        }
+            "error": None,
+        } | last_sync_information
+
         await self.index.update(
             doc_id=self.id,
             doc=doc,
@@ -567,22 +663,49 @@ class Connector(ESDocument):
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
-    async def sync_done(self, job):
+    async def sync_done(self, job, cursor=None):
         job_status = JobStatus.ERROR if job is None else job.status
         job_error = JOB_NOT_FOUND_ERROR if job is None else job.error
+        job_type = job.job_type if job is not None else None
+
         if job_error is None and job_status == JobStatus.ERROR:
             job_error = UNKNOWN_ERROR
         connector_status = (
             Status.ERROR if job_status == JobStatus.ERROR else Status.CONNECTED
         )
 
+        if job_type == JobType.ACCESS_CONTROL:
+            last_sync_information = {
+                "last_access_control_sync_status": job_status.value,
+                "last_access_control_sync_error": job_error,
+            }
+        elif job_type in [JobType.INCREMENTAL, JobType.FULL]:
+            last_sync_information = {
+                "last_sync_status": job_status.value,
+                "last_sync_error": job_error,
+            }
+        elif job_type is None:
+            # If we don't know the job type we'll reset all sync jobs,
+            # so we don't run into the risk of staying "in progress" forever
+
+            last_sync_information = {
+                "last_access_control_sync_status": job_status.value,
+                "last_access_control_sync_error": job_error,
+                "last_sync_status": job_status.value,
+                "last_sync_error": job_error,
+            }
+        else:
+            raise ValueError(f"Unknown job type: {job_type}")
+
         doc = {
-            "last_sync_status": job_status.value,
             "last_synced": iso_utc(),
-            "last_sync_error": job_error,
             "status": connector_status.value,
             "error": job_error,
-        }
+        } | last_sync_information
+
+        # only update sync cursor after a successful content sync job
+        if job_type != JobType.ACCESS_CONTROL and job_status == JobStatus.COMPLETED:
+            doc["sync_cursor"] = cursor
 
         if job is not None and job.terminated:
             doc["last_indexed_document_count"] = job.indexed_document_count
@@ -654,7 +777,7 @@ class Connector(ESDocument):
                 logger.critical(e, exc_info=True)
                 raise DataSourceError(
                     f"Could not instantiate {fqn} for {configured_service_type}"
-                )
+                ) from e
 
         await self.index.update(
             doc_id=self.id,
@@ -700,9 +823,10 @@ class Connector(ESDocument):
         await self.reload()
 
     async def document_count(self):
-        await self.index.client.indices.refresh(
-            index=self.index_name, ignore_unavailable=True
-        )
+        if not self.index.serverless:
+            await self.index.client.indices.refresh(
+                index=self.index_name, ignore_unavailable=True
+            )
         result = await self.index.client.count(
             index=self.index_name, ignore_unavailable=True
         )
@@ -719,7 +843,9 @@ class Connector(ESDocument):
             source_klass = get_source_klass(fqn)
         except Exception as e:
             logger.critical(e, exc_info=True)
-            raise DataSourceError(f"Could not instantiate {fqn} for {service_type}")
+            raise DataSourceError(
+                f"Could not instantiate {fqn} for {service_type}"
+            ) from e
 
         default_config = source_klass.get_simple_configuration()
         current_config = self.configuration.to_dict()
@@ -798,19 +924,25 @@ class SyncJobIndex(ESIndex):
             doc_source=doc_source,
         )
 
-    async def create(self, connector, trigger_method):
+    async def create(self, connector, trigger_method, job_type):
         filtering = connector.filtering.get_active_filter().transform_filtering()
+        index_name = connector.index_name
+
+        if job_type == JobType.ACCESS_CONTROL:
+            index_name = f"{ACCESS_CONTROL_INDEX_PREFIX}{index_name}"
+
         job_def = {
             "connector": {
                 "id": connector.id,
                 "filtering": filtering,
-                "index_name": connector.index_name,
+                "index_name": index_name,
                 "language": connector.language,
                 "pipeline": connector.pipeline.data,
                 "service_type": connector.service_type,
                 "configuration": connector.configuration.to_dict(),
             },
             "trigger_method": trigger_method.value,
+            "job_type": job_type.value,
             "status": JobStatus.PENDING.value,
             "indexed_document_count": 0,
             "indexed_document_volume": 0,

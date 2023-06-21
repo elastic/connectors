@@ -66,7 +66,7 @@ async def test_close_without_session():
 @pytest.mark.asyncio
 async def test_close_with_session():
     source = create_source(GitHubDataSource)
-    source.github_client._get_client
+    source.github_client._get_client  # noqa
     await source.close()
     assert hasattr(source, "_get_client") is False
 

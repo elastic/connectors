@@ -11,16 +11,16 @@ from unittest.mock import ANY, Mock, call
 
 import pytest
 
-from connectors.byoei import (
-    AsyncBulkRunningError,
-    Bulker,
-    ContentIndexNameInvalid,
-    ElasticServer,
-    Fetcher,
-    IndexMissing,
-)
 from connectors.es.settings import TEXT_FIELD_MAPPING
-from connectors.protocol import Pipeline
+from connectors.es.sink import (
+    AsyncBulkRunningError,
+    ContentIndexNameInvalid,
+    Extractor,
+    IndexMissing,
+    Sink,
+    SyncOrchestrator,
+)
+from connectors.protocol import JobType, Pipeline
 from tests.commons import AsyncIterator
 
 INDEX = "some-index"
@@ -36,6 +36,7 @@ DOC_ONE_DIFFERENT_TIMESTAMP = {
 }
 
 DOC_TWO = {"_id": 2, "_timestamp": TIMESTAMP}
+DOC_THREE = {"_id": 3, "_timestamp": TIMESTAMP}
 
 SYNC_RULES_ENABLED = True
 SYNC_RULES_DISABLED = False
@@ -46,7 +47,7 @@ CONTENT_EXTRACTION_DISABLED = False
 @pytest.mark.asyncio
 async def test_prepare_content_index_raise_error_when_index_name_invalid():
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    es = ElasticServer(config)
+    es = SyncOrchestrator(config)
 
     with pytest.raises(ContentIndexNameInvalid):
         await es.prepare_content_index("lalalalalalalala woohooo")
@@ -72,7 +73,7 @@ async def test_prepare_content_index_raise_error_when_index_does_not_exist(
         headers=headers,
     )
 
-    es = ElasticServer(config)
+    es = SyncOrchestrator(config)
 
     with pytest.raises(IndexMissing):
         await es.prepare_content_index("search-new-index")
@@ -111,7 +112,7 @@ async def test_prepare_content_index(mock_responses):
         payload=mappings,
     )
 
-    es = ElasticServer(config)
+    es = SyncOrchestrator(config)
     put_mappings_result = asyncio.Future()
     put_mappings_result.set_result({"acknowledged": True})
     with mock.patch.object(
@@ -221,10 +222,10 @@ async def test_get_existing_ids(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses)
 
-    es = ElasticServer(config)
-    fetcher = Fetcher(es.client, None, "search-some-index")
+    es = SyncOrchestrator(config)
+    extractor = Extractor(es.client, None, "search-some-index")
     ids = []
-    async for doc_id, ts in fetcher._get_existing_ids():
+    async for doc_id, _ in extractor._get_existing_ids():
         ids.append(doc_id)
 
     assert ids == ["1", "2"]
@@ -236,7 +237,7 @@ async def test_async_bulk(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses)
 
-    es = ElasticServer(config)
+    es = SyncOrchestrator(config)
     pipeline = Pipeline({})
 
     async def get_docs():
@@ -248,10 +249,13 @@ async def test_async_bulk(mock_responses):
                 return
             return {"TEXT": "DATA", "_timestamp": timestamp, "_id": "1"}
 
-        yield {"_id": "1", "_timestamp": datetime.datetime.now().isoformat()}, _dl
-        yield {"_id": "3"}, _dl_none
+        yield {
+            "_id": "1",
+            "_timestamp": datetime.datetime.now().isoformat(),
+        }, _dl, "index"
+        yield {"_id": "3"}, _dl_none, "index"
 
-    await es.async_bulk("search-some-index", get_docs(), pipeline)
+    await es.async_bulk("search-some-index", get_docs(), pipeline, JobType.FULL)
     while not es.done():
         await asyncio.sleep(0.1)
 
@@ -271,7 +275,7 @@ async def test_async_bulk(mock_responses):
     # 2nd sync
     set_responses(mock_responses)
     with pytest.raises(AsyncBulkRunningError):
-        await es.async_bulk("search-some-index", get_docs(), pipeline)
+        await es.async_bulk("search-some-index", get_docs(), pipeline, JobType.FULL)
 
     await es.close()
 
@@ -282,6 +286,14 @@ def index_operation(doc):
     doc_id = doc_copy["id"] = doc_copy.pop("_id")
 
     return {"_op_type": "index", "_index": INDEX, "_id": doc_id, "doc": doc_copy}
+
+
+def update_operation(doc):
+    # deepcopy as get_docs mutates docs
+    doc_copy = deepcopy(doc)
+    doc_id = doc_copy["id"] = doc_copy.pop("_id")
+
+    return {"_op_type": "update", "_index": INDEX, "_id": doc_id, "doc": doc_copy}
 
 
 def delete_operation(doc):
@@ -355,24 +367,24 @@ async def lazy_downloads_mock():
     return lazy_downloads
 
 
-async def setup_fetcher(
-    basic_rule_engine,
+async def setup_extractor(
     queue,
-    sync_rules_enabled,
-    content_extraction_enabled,
+    basic_rule_engine=None,
+    sync_rules_enabled=False,
+    content_extraction_enabled=False,
 ):
     # filtering content doesn't matter as the BasicRuleEngine behavior is mocked
     filter_mock = Mock()
     filter_mock.get_active_filter = Mock(return_value={})
-    fetcher = Fetcher(
+    extractor = Extractor(
         None,
         queue,
         INDEX,
         filter_=filter_mock,
         content_extraction_enabled=content_extraction_enabled,
     )
-    fetcher.basic_rule_engine = basic_rule_engine if sync_rules_enabled else None
-    return fetcher
+    extractor.basic_rule_engine = basic_rule_engine if sync_rules_enabled else None
+    return extractor
 
 
 @pytest.mark.parametrize(
@@ -382,7 +394,7 @@ async def setup_fetcher(
         (
             # no docs exist, data source has doc 1 -> ingest doc 1
             [],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
@@ -408,7 +420,7 @@ async def setup_fetcher(
         (
             # doc 2 is present, data source only returns doc 1 -> delete doc 2 and ingest doc 1
             [DOC_TWO],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
@@ -421,7 +433,7 @@ async def setup_fetcher(
         (
             # doc 1 is present, data source also has doc 1 with the same timestamp -> nothing happens
             [DOC_ONE],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
@@ -434,7 +446,7 @@ async def setup_fetcher(
         (
             # doc 1 is present, data source has doc 1 with different timestamp -> doc is updated
             [DOC_ONE],
-            [(DOC_ONE_DIFFERENT_TIMESTAMP, None)],
+            [(DOC_ONE_DIFFERENT_TIMESTAMP, None, "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
@@ -450,7 +462,7 @@ async def setup_fetcher(
         ),
         (
             [],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             # filter out doc 1
             (False,),
             SYNC_RULES_ENABLED,
@@ -467,7 +479,7 @@ async def setup_fetcher(
         (
             # doc 1 is present, data source has doc 1, doc 1 should be filtered -> delete doc 1
             [DOC_ONE],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             # filter out doc 1
             (False,),
             SYNC_RULES_ENABLED,
@@ -484,7 +496,7 @@ async def setup_fetcher(
         (
             # doc 1 is present, data source has doc 1 (different timestamp), doc 1 should be filtered -> delete doc 1
             [DOC_ONE],
-            [(DOC_ONE_DIFFERENT_TIMESTAMP, None)],
+            [(DOC_ONE_DIFFERENT_TIMESTAMP, None, "index")],
             # still filter out doc 1
             (False,),
             SYNC_RULES_ENABLED,
@@ -497,7 +509,7 @@ async def setup_fetcher(
         ),
         (
             [],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             # filtering throws exception
             [Exception()],
             SYNC_RULES_ENABLED,
@@ -511,7 +523,7 @@ async def setup_fetcher(
         (
             [],
             # no doc present, lazy download for doc 1 specified -> index and increment the downloads counter
-            [(DOC_ONE, lazy_download_fake(DOC_ONE))],
+            [(DOC_ONE, lazy_download_fake(DOC_ONE), "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
@@ -524,7 +536,7 @@ async def setup_fetcher(
         (
             # doc 1 present, data source has doc 1 -> no lazy download if timestamps are the same for the docs
             [DOC_ONE],
-            [(DOC_ONE, lazy_download_fake(DOC_ONE))],
+            [(DOC_ONE, lazy_download_fake(DOC_ONE), "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
@@ -542,6 +554,7 @@ async def setup_fetcher(
                 (
                     DOC_ONE_DIFFERENT_TIMESTAMP,
                     lazy_download_fake(DOC_ONE_DIFFERENT_TIMESTAMP),
+                    "index",
                 )
             ],
             NO_FILTERING,
@@ -555,7 +568,7 @@ async def setup_fetcher(
         ),
         (
             [],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             # filter out doc 1
             (False,),
             SYNC_RULES_DISABLED,
@@ -574,7 +587,7 @@ async def setup_fetcher(
             # content_extraction_enabled is false and no download is provided,
             # indexing should still work, but nothing should be downloaded
             [],
-            [(DOC_ONE, None)],
+            [(DOC_ONE, None, "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_DISABLED,
@@ -588,7 +601,7 @@ async def setup_fetcher(
             # content_extraction_enabled is false but a download is also provided,
             # indexing should still work, but nothing should be downloaded
             [],
-            [(DOC_ONE, lazy_download_fake(DOC_ONE))],
+            [(DOC_ONE, lazy_download_fake(DOC_ONE), "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_DISABLED,
@@ -600,7 +613,7 @@ async def setup_fetcher(
         ),
     ],
 )
-@mock.patch("connectors.byoei.Fetcher._get_existing_ids")
+@mock.patch("connectors.es.sink.Extractor._get_existing_ids")
 @pytest.mark.asyncio
 async def test_get_docs(
     get_existing_ids,
@@ -629,21 +642,300 @@ async def test_get_docs(
         # instances
         doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
 
-        fetcher = await setup_fetcher(
-            basic_rule_engine,
+        extractor = await setup_extractor(
             queue,
-            sync_rules_enabled,
-            content_extraction_enabled,
+            basic_rule_engine=basic_rule_engine,
+            sync_rules_enabled=sync_rules_enabled,
+            content_extraction_enabled=content_extraction_enabled,
         )
 
-        await fetcher.run(doc_generator)
+        await extractor.run(doc_generator, JobType.FULL)
 
-        assert fetcher.total_docs_updated == expected_total_docs_updated
-        assert fetcher.total_docs_created == expected_total_docs_created
-        assert fetcher.total_docs_deleted == expected_total_docs_deleted
-        assert fetcher.total_downloads == expected_total_downloads
+        assert extractor.total_docs_updated == expected_total_docs_updated
+        assert extractor.total_docs_created == expected_total_docs_created
+        assert extractor.total_docs_deleted == expected_total_docs_deleted
+        assert extractor.total_downloads == expected_total_downloads
 
         assert queue_called_with_operations(queue, expected_queue_operations)
+
+
+@pytest.mark.parametrize(
+    "docs_from_source, doc_should_ingest, sync_rules_enabled, content_extraction_enabled, expected_queue_operations, "
+    "expected_total_docs_updated, expected_total_docs_created, expected_total_docs_deleted, expected_total_downloads",
+    [
+        (
+            [],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [end_docs_operation()],
+            updated(0),
+            created(0),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "index")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "update")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [update_operation(DOC_ONE), end_docs_operation()],
+            updated(1),
+            created(0),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "delete")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [delete_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(0),
+            deleted(1),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "index"), (DOC_TWO, None, "delete")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [index_operation(DOC_ONE), delete_operation(DOC_TWO), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(1),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "index")],
+            # filter out doc 1
+            (False,),
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [
+                # should not ingest doc 1
+                end_docs_operation()
+            ],
+            updated(0),
+            created(0),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "index")],
+            # filtering throws exception
+            [Exception()],
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            ["FETCH_ERROR"],
+            updated(0),
+            created(0),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            # no doc present, lazy download for doc 1 specified -> index and increment the downloads counter
+            [(DOC_ONE, lazy_download_fake(DOC_ONE), "index")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(1),
+        ),
+        (
+            [(DOC_ONE, None, "index")],
+            # filter out doc 1
+            (False,),
+            SYNC_RULES_DISABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            [
+                # should ingest doc 1 as sync rules are disabled
+                index_operation(DOC_ONE),
+                end_docs_operation(),
+            ],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, None, "index")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_DISABLED,
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            [(DOC_ONE, lazy_download_fake(DOC_ONE), "index")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_DISABLED,
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(0),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_incrementally(
+    docs_from_source,
+    doc_should_ingest,
+    sync_rules_enabled,
+    content_extraction_enabled,
+    expected_queue_operations,
+    expected_total_docs_updated,
+    expected_total_docs_created,
+    expected_total_docs_deleted,
+    expected_total_downloads,
+):
+    lazy_downloads = await lazy_downloads_mock()
+
+    with mock.patch("connectors.utils.ConcurrentTasks", return_value=lazy_downloads):
+        queue = await queue_mock()
+        basic_rule_engine = await basic_rule_engine_mock(doc_should_ingest)
+
+        # deep copying docs is needed as get_docs mutates the document ids which has side effects on other test
+        # instances
+        doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
+
+        extractor = await setup_extractor(
+            queue,
+            basic_rule_engine=basic_rule_engine,
+            sync_rules_enabled=sync_rules_enabled,
+            content_extraction_enabled=content_extraction_enabled,
+        )
+
+        await extractor.run(doc_generator, JobType.INCREMENTAL)
+
+        assert extractor.total_docs_updated == expected_total_docs_updated
+        assert extractor.total_docs_created == expected_total_docs_created
+        assert extractor.total_docs_deleted == expected_total_docs_deleted
+        assert extractor.total_downloads == expected_total_downloads
+
+        assert queue_called_with_operations(queue, expected_queue_operations)
+
+
+@pytest.mark.parametrize(
+    "existing_docs, docs_from_source, expected_queue_operations, "
+    "expected_total_docs_updated, expected_total_docs_created, expected_total_docs_deleted",
+    [
+        (
+            [],
+            [],
+            [end_docs_operation()],
+            updated(0),
+            created(0),
+            deleted(0),
+        ),
+        (
+            [],
+            [(DOC_ONE, None, None)],
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(0),
+        ),
+        (
+            [DOC_ONE_DIFFERENT_TIMESTAMP],
+            [(DOC_ONE, None, None)],
+            [update_operation(DOC_ONE), end_docs_operation()],
+            updated(1),
+            created(0),
+            deleted(0),
+        ),
+        (
+            [DOC_ONE],
+            [],
+            [delete_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(0),
+            deleted(1),
+        ),
+        (
+            [DOC_TWO],
+            [(DOC_ONE, None, None)],
+            [index_operation(DOC_ONE), delete_operation(DOC_TWO), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(1),
+        ),
+        (
+            [DOC_ONE_DIFFERENT_TIMESTAMP, DOC_TWO],
+            [(DOC_ONE, None, None)],
+            [
+                update_operation(DOC_ONE),
+                delete_operation(DOC_TWO),
+                end_docs_operation(),
+            ],
+            updated(1),
+            created(0),
+            deleted(1),
+        ),
+        (
+            [DOC_ONE_DIFFERENT_TIMESTAMP, DOC_TWO],
+            [(DOC_ONE, None, None), (DOC_THREE, None, None)],
+            [
+                update_operation(DOC_ONE),
+                index_operation(DOC_THREE),
+                delete_operation(DOC_TWO),
+                end_docs_operation(),
+            ],
+            updated(1),
+            created(1),
+            deleted(1),
+        ),
+    ],
+)
+@mock.patch("connectors.es.sink.Extractor._get_existing_ids")
+@pytest.mark.asyncio
+async def test_get_access_control_docs(
+    get_existing_ids,
+    existing_docs,
+    docs_from_source,
+    expected_queue_operations,
+    expected_total_docs_updated,
+    expected_total_docs_created,
+    expected_total_docs_deleted,
+):
+    get_existing_ids.return_value = AsyncIterator(
+        [(doc["_id"], doc["_timestamp"]) for doc in existing_docs]
+    )
+
+    queue = await queue_mock()
+    # deep copying docs is needed as get_access_control_docs mutates the document ids which has side effects on other test
+    # instances
+    doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
+
+    extractor = await setup_extractor(queue=queue)
+
+    await extractor.run(doc_generator, JobType.ACCESS_CONTROL)
+
+    assert extractor.total_docs_updated == expected_total_docs_updated
+    assert extractor.total_docs_created == expected_total_docs_created
+    assert extractor.total_docs_deleted == expected_total_docs_deleted
+
+    assert queue_called_with_operations(queue, expected_queue_operations)
 
 
 STATS = {
@@ -730,7 +1022,7 @@ FAILED_DELETE_ITEM = {"delete": {"_id": "3"}}
     ],
 )
 def test_bulk_populate_stats(res, expected_result):
-    bulker = Bulker(
+    sink = Sink(
         client=None,
         queue=None,
         chunk_size=0,
@@ -738,15 +1030,15 @@ def test_bulk_populate_stats(res, expected_result):
         chunk_mem_size=0,
         max_concurrency=0,
     )
-    bulker._populate_stats(deepcopy(STATS), res)
+    sink._populate_stats(deepcopy(STATS), res)
 
-    assert bulker.indexed_document_count == expected_result["indexed_document_count"]
-    assert bulker.indexed_document_volume == expected_result["indexed_document_volume"]
-    assert bulker.deleted_document_count == expected_result["deleted_document_count"]
+    assert sink.indexed_document_count == expected_result["indexed_document_count"]
+    assert sink.indexed_document_volume == expected_result["indexed_document_volume"]
+    assert sink.deleted_document_count == expected_result["deleted_document_count"]
 
 
 @pytest.mark.parametrize(
-    "fetcher_task, fetcher_task_done, bulker_task, bulker_task_done, expected_result",
+    "extractor_task, extractor_task_done, sink_task, sink_task_done, expected_result",
     [
         (None, False, None, False, True),
         (Mock(), False, None, False, False),
@@ -761,17 +1053,17 @@ def test_bulk_populate_stats(res, expected_result):
 )
 @pytest.mark.asyncio
 async def test_elastic_server_done(
-    fetcher_task, fetcher_task_done, bulker_task, bulker_task_done, expected_result
+    extractor_task, extractor_task_done, sink_task, sink_task_done, expected_result
 ):
-    if fetcher_task is not None:
-        fetcher_task.done.return_value = fetcher_task_done
-    if bulker_task is not None:
-        bulker_task.done.return_value = bulker_task_done
+    if extractor_task is not None:
+        extractor_task.done.return_value = extractor_task_done
+    if sink_task is not None:
+        sink_task.done.return_value = sink_task_done
 
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    es = ElasticServer(config)
-    es._fetcher_task = fetcher_task
-    es._bulker_task = bulker_task
+    es = SyncOrchestrator(config)
+    es._extractor_task = extractor_task
+    es._sink_task = sink_task
 
     assert es.done() == expected_result
 

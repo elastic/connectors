@@ -30,6 +30,7 @@ from connectors.protocol import (
     Filtering,
     JobStatus,
     JobTriggerMethod,
+    JobType,
     Pipeline,
     ServiceTypeNotConfiguredError,
     ServiceTypeNotSupportedError,
@@ -137,7 +138,6 @@ DOC_SOURCE = {
         "service_type": "SERVICE",
         "status": "connected",
         "language": "en",
-        "sync_now": False,
     },
 }
 
@@ -187,6 +187,11 @@ ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
     "rules": RULES,
 }
 
+SYNC_CURSOR = {"foo": "bar"}
+
+INDEX_NAME = "index_name"
+ACCESS_CONTROL_INDEX_PREFIX = "search-acl-filter-"
+
 
 def test_utc():
     # All dates are in ISO 8601 UTC so we can serialize them
@@ -216,7 +221,6 @@ mongo = {
     "created_at": "",
     "updated_at": "",
     "scheduling": {"enabled": True, "interval": "0 * * * *"},
-    "sync_now": True,
 }
 
 
@@ -322,12 +326,19 @@ async def test_connector_properties():
             "index_name": "search-some-index",
             "configuration": {},
             "language": "en",
-            "scheduling": {},
+            "scheduling": {
+                "access_control": {"enabled": True, "interval": "* * * * *"},
+                "full": {"enabled": True, "interval": "* * * * *"},
+                "incremental": {"enabled": True, "interval": "* * * * *"},
+            },
             "status": "created",
             "last_seen": iso_utc(),
             "last_sync_status": "completed",
+            "last_access_control_sync_status": "pending",
             "pipeline": {},
             "last_sync_scheduled_at": iso_utc(),
+            "last_access_control_sync_scheduled_at": iso_utc(),
+            "sync_cursor": SYNC_CURSOR,
         },
     }
 
@@ -339,15 +350,23 @@ async def test_connector_properties():
     assert connector.service_type == "test"
     assert connector.configuration.is_empty()
     assert connector.native is False
-    assert connector.sync_now is False
     assert connector.index_name == "search-some-index"
     assert connector.language == "en"
     assert connector.last_sync_status == JobStatus.COMPLETED
+    assert connector.last_access_control_sync_status == JobStatus.PENDING
+    assert connector.access_control_sync_scheduling["enabled"]
+    assert connector.access_control_sync_scheduling["interval"] == "* * * * *"
+    assert connector.full_sync_scheduling["enabled"]
+    assert connector.full_sync_scheduling["interval"] == "* * * * *"
+    assert connector.incremental_sync_scheduling["enabled"]
+    assert connector.incremental_sync_scheduling["interval"] == "* * * * *"
+    assert connector.sync_cursor == SYNC_CURSOR
     assert isinstance(connector.last_seen, datetime)
     assert isinstance(connector.filtering, Filtering)
     assert isinstance(connector.pipeline, Pipeline)
     assert isinstance(connector.features, Features)
     assert isinstance(connector.last_sync_scheduled_at, datetime)
+    assert isinstance(connector.last_access_control_sync_scheduled_at, datetime)
 
 
 @pytest.mark.asyncio
@@ -382,22 +401,49 @@ async def test_heartbeat(interval, last_seen, should_send_heartbeat):
         index.heartbeat.assert_not_awaited()
 
 
+@pytest.mark.parametrize(
+    "job_type, expected_doc_source_update",
+    [
+        (
+            JobType.FULL,
+            {
+                "last_sync_status": JobStatus.IN_PROGRESS.value,
+                "last_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+            },
+        ),
+        (
+            JobType.INCREMENTAL,
+            {
+                "last_sync_status": JobStatus.IN_PROGRESS.value,
+                "last_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+            },
+        ),
+        (
+            JobType.ACCESS_CONTROL,
+            {
+                "last_access_control_sync_status": JobStatus.IN_PROGRESS.value,
+                "last_access_control_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+            },
+        ),
+    ],
+)
 @pytest.mark.asyncio
-async def test_sync_starts():
+async def test_sync_starts(job_type, expected_doc_source_update):
     doc_id = "1"
     seq_no = 1
     primary_term = 2
     connector_doc = {"_id": doc_id, "_seq_no": seq_no, "_primary_term": primary_term}
     index = Mock()
     index.update = AsyncMock()
-    expected_doc_source_update = {
-        "last_sync_status": JobStatus.IN_PROGRESS.value,
-        "last_sync_error": None,
-        "status": Status.CONNECTED.value,
-    }
 
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.sync_starts()
+    await connector.sync_starts(job_type=job_type)
     index.update.assert_called_with(
         doc_id=connector.id,
         doc=expected_doc_source_update,
@@ -424,12 +470,14 @@ async def test_connector_error():
 
 def mock_job(
     status=JobStatus.COMPLETED,
+    job_type=JobType.FULL,
     error=None,
     terminated=True,
 ):
     job = Mock()
     job.status = status
     job.error = error
+    job.job_type = job_type
     job.terminated = terminated
     job.indexed_document_count = 0
     job.deleted_document_count = 0
@@ -443,15 +491,19 @@ def mock_job(
         (
             None,
             {
+                "last_access_control_sync_error": JOB_NOT_FOUND_ERROR,
+                "last_access_control_sync_status": JobStatus.ERROR.value,
+                "last_sync_error": JOB_NOT_FOUND_ERROR,
                 "last_sync_status": JobStatus.ERROR.value,
                 "last_synced": ANY,
-                "last_sync_error": JOB_NOT_FOUND_ERROR,
                 "status": Status.ERROR.value,
                 "error": JOB_NOT_FOUND_ERROR,
             },
         ),
         (
-            mock_job(status=JobStatus.ERROR, error="something wrong"),
+            mock_job(
+                status=JobStatus.ERROR, job_type=JobType.FULL, error="something wrong"
+            ),
             {
                 "last_sync_status": JobStatus.ERROR.value,
                 "last_synced": ANY,
@@ -463,7 +515,7 @@ def mock_job(
             },
         ),
         (
-            mock_job(status=JobStatus.CANCELED),
+            mock_job(status=JobStatus.CANCELED, job_type=JobType.FULL),
             {
                 "last_sync_status": JobStatus.CANCELED.value,
                 "last_synced": ANY,
@@ -475,7 +527,9 @@ def mock_job(
             },
         ),
         (
-            mock_job(status=JobStatus.SUSPENDED, terminated=False),
+            mock_job(
+                status=JobStatus.SUSPENDED, job_type=JobType.FULL, terminated=False
+            ),
             {
                 "last_sync_status": JobStatus.SUSPENDED.value,
                 "last_synced": ANY,
@@ -485,11 +539,79 @@ def mock_job(
             },
         ),
         (
-            mock_job(),
+            mock_job(job_type=JobType.FULL),
             {
                 "last_sync_status": JobStatus.COMPLETED.value,
                 "last_synced": ANY,
                 "last_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+                "sync_cursor": SYNC_CURSOR,
+                "last_indexed_document_count": 0,
+                "last_deleted_document_count": 0,
+            },
+        ),
+        (
+            mock_job(job_type=JobType.FULL),
+            {
+                "last_sync_status": JobStatus.COMPLETED.value,
+                "last_synced": ANY,
+                "last_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+                "sync_cursor": SYNC_CURSOR,
+                "last_indexed_document_count": 0,
+                "last_deleted_document_count": 0,
+            },
+        ),
+        (
+            mock_job(job_type=JobType.ACCESS_CONTROL),
+            {
+                "last_access_control_sync_status": JobStatus.COMPLETED.value,
+                "last_synced": ANY,
+                "last_access_control_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+                "last_indexed_document_count": 0,
+                "last_deleted_document_count": 0,
+            },
+        ),
+        (
+            mock_job(
+                status=JobStatus.ERROR,
+                job_type=JobType.ACCESS_CONTROL,
+                error="something wrong",
+            ),
+            {
+                "last_access_control_sync_status": JobStatus.ERROR.value,
+                "last_synced": ANY,
+                "last_access_control_sync_error": "something wrong",
+                "status": Status.ERROR.value,
+                "error": "something wrong",
+                "last_indexed_document_count": 0,
+                "last_deleted_document_count": 0,
+            },
+        ),
+        (
+            mock_job(
+                status=JobStatus.SUSPENDED,
+                job_type=JobType.ACCESS_CONTROL,
+                terminated=False,
+            ),
+            {
+                "last_access_control_sync_status": JobStatus.SUSPENDED.value,
+                "last_synced": ANY,
+                "last_access_control_sync_error": None,
+                "status": Status.CONNECTED.value,
+                "error": None,
+            },
+        ),
+        (
+            mock_job(status=JobStatus.CANCELED, job_type=JobType.ACCESS_CONTROL),
+            {
+                "last_access_control_sync_status": JobStatus.CANCELED.value,
+                "last_synced": ANY,
+                "last_access_control_sync_error": None,
                 "status": Status.CONNECTED.value,
                 "error": None,
                 "last_indexed_document_count": 0,
@@ -504,7 +626,7 @@ async def test_sync_done(job, expected_doc_source_update):
     index.update = AsyncMock(return_value=1)
 
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.sync_done(job=job)
+    await connector.sync_done(job=job, cursor=SYNC_CURSOR)
     index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
 
 
@@ -513,24 +635,44 @@ mock_next_run = iso_utc()
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "scheduling_enabled, expected_next_sync",
+    "scheduling_enabled, expected_next_sync, job_type",
     [
-        (False, None),
-        (True, mock_next_run),
+        (False, None, JobType.ACCESS_CONTROL),
+        (True, mock_next_run, JobType.ACCESS_CONTROL),
+        (False, None, JobType.FULL),
+        (True, mock_next_run, JobType.FULL),
+        (False, None, JobType.INCREMENTAL),
+        (True, mock_next_run, JobType.INCREMENTAL),
     ],
 )
 @patch("connectors.protocol.connectors.next_run")
-async def test_connector_next_sync(next_run, scheduling_enabled, expected_next_sync):
+async def test_connector_next_sync(
+    next_run, scheduling_enabled, expected_next_sync, job_type
+):
     connector_doc = {
         "_id": "1",
         "_source": {
-            "scheduling": {"enabled": scheduling_enabled, "interval": "1 * * * * *"},
+            "scheduling": {
+                "access_control": {
+                    "enabled": scheduling_enabled,
+                    "interval": "1 * * * * *",
+                },
+                "full": {
+                    "enabled": scheduling_enabled,
+                    "interval": "1 * * * * *",
+                },
+                "incremental": {
+                    "enabled": scheduling_enabled,
+                    "interval": "1 * * * * *",
+                },
+            },
         },
     }
     index = Mock()
     next_run.return_value = mock_next_run
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    assert connector.next_sync() == expected_next_sync
+
+    assert connector.next_sync(job_type) == expected_next_sync
 
 
 @pytest.mark.asyncio
@@ -539,6 +681,7 @@ async def test_sync_job_properties():
         "_id": "test",
         "_source": {
             "status": "error",
+            "job_type": "access_control",
             "error": "something wrong",
             "indexed_document_count": 10,
             "indexed_document_volume": 20,
@@ -552,6 +695,7 @@ async def test_sync_job_properties():
                 "language": "en",
                 "filtering": {},
                 "pipeline": {},
+                "sync_cursor": SYNC_CURSOR,
             },
         },
     }
@@ -567,12 +711,31 @@ async def test_sync_job_properties():
     assert sync_job.configuration.is_empty()
     assert sync_job.index_name == "search-some-index"
     assert sync_job.language == "en"
+    assert sync_job.sync_cursor == SYNC_CURSOR
     assert sync_job.indexed_document_count == 10
     assert sync_job.indexed_document_volume == 20
     assert sync_job.deleted_document_count == 30
     assert sync_job.total_document_count == 100
+
     assert isinstance(sync_job.filtering, Filter)
     assert isinstance(sync_job.pipeline, Pipeline)
+
+    assert sync_job.job_type == JobType.ACCESS_CONTROL
+    assert isinstance(sync_job.job_type, JobType)
+
+
+@pytest.mark.parametrize(
+    "job_type, is_content_sync",
+    [
+        (JobType.FULL, True),
+        (JobType.INCREMENTAL, True),
+        (JobType.ACCESS_CONTROL, False),
+    ],
+)
+def test_is_content_sync(job_type, is_content_sync):
+    source = {"_id": "1", "_source": {"job_type": job_type.value}}
+    sync_job = SyncJob(elastic_index=None, doc_source=source)
+    assert sync_job.is_content_sync() == is_content_sync
 
 
 @pytest.mark.asyncio
@@ -620,10 +783,11 @@ async def test_sync_job_claim():
         "started_at": ANY,
         "last_seen": ANY,
         "worker_hostname": ANY,
+        "connector.sync_cursor": SYNC_CURSOR,
     }
 
     sync_job = SyncJob(elastic_index=index, doc_source=source)
-    await sync_job.claim()
+    await sync_job.claim(sync_cursor=SYNC_CURSOR)
 
     index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
 
@@ -1030,11 +1194,22 @@ async def test_connector_prepare_with_race_condition():
     )
 
 
+@pytest.mark.parametrize(
+    "job_type, date_field_to_update",
+    [
+        (JobType.FULL, "last_sync_scheduled_at"),
+        (JobType.INCREMENTAL, "last_incremental_sync_scheduled_at"),
+        (JobType.ACCESS_CONTROL, "last_access_control_sync_scheduled_at"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_connector_reset_sync_now_flag():
-    doc_id = "1"
-    seq_no = 1
-    primary_term = 2
+async def test_connector_update_last_sync_scheduled_at_by_job_type(
+    job_type, date_field_to_update
+):
+    doc_id = "2"
+    seq_no = 2
+    primary_term = 1
+    new_ts = datetime.utcnow() + timedelta(seconds=30)
     connector_doc = {
         "_id": doc_id,
         "_seq_no": seq_no,
@@ -1044,36 +1219,11 @@ async def test_connector_reset_sync_now_flag():
     index = Mock()
     index.update = AsyncMock()
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.reset_sync_now_flag()
+    await connector.update_last_sync_scheduled_at_by_job_type(job_type, new_ts)
 
     index.update.assert_awaited_once_with(
         doc_id=doc_id,
-        doc={"sync_now": False},
-        if_seq_no=seq_no,
-        if_primary_term=primary_term,
-    )
-
-
-@pytest.mark.asyncio
-async def test_connector_update_last_sync_scheduled_at():
-    doc_id = "1"
-    seq_no = 1
-    primary_term = 2
-    new_ts = datetime.utcnow() + timedelta(seconds=20)
-    connector_doc = {
-        "_id": doc_id,
-        "_seq_no": seq_no,
-        "_primary_term": primary_term,
-        "_source": {},
-    }
-    index = Mock()
-    index.update = AsyncMock()
-    connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.update_last_sync_scheduled_at(new_ts)
-
-    index.update.assert_awaited_once_with(
-        doc_id=doc_id,
-        doc={"last_sync_scheduled_at": new_ts.isoformat()},
+        doc={date_field_to_update: new_ts.isoformat()},
         if_seq_no=seq_no,
         if_primary_term=primary_term,
     )
@@ -1383,6 +1533,7 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
                 Features.ADVANCED_RULES_NEW: False,
                 Features.BASIC_RULES_OLD: False,
                 Features.ADVANCED_RULES_OLD: False,
+                Features.DOCUMENT_LEVEL_SECURITY: False,
             },
         ),
         (
@@ -1392,6 +1543,7 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
                 Features.ADVANCED_RULES_NEW: False,
                 Features.BASIC_RULES_OLD: False,
                 Features.ADVANCED_RULES_OLD: False,
+                Features.DOCUMENT_LEVEL_SECURITY: False,
             },
         ),
     ],
@@ -1477,6 +1629,40 @@ def test_sync_rules_enabled(features_json, sync_rules_enabled):
 
 
 @pytest.mark.parametrize(
+    "features_json, incremental_sync_enabled",
+    [
+        (
+            {
+                "incremental_sync": {
+                    "enabled": True,
+                },
+            },
+            True,
+        ),
+        (
+            {
+                "incremental_sync": {
+                    "enabled": False,
+                },
+            },
+            False,
+        ),
+        (
+            {"incremental_sync": {}},
+            False,
+        ),
+        ({"other_feature": True}, False),
+        (None, False),
+        ({}, False),
+    ],
+)
+def test_incremental_sync_enabled(features_json, incremental_sync_enabled):
+    features = Features(features_json)
+
+    assert features.incremental_sync_enabled() == incremental_sync_enabled
+
+
+@pytest.mark.parametrize(
     "nested_dict, keys, default, expected",
     [
         # extract True
@@ -1524,6 +1710,7 @@ async def test_create_job(index_method, trigger_method, set_env):
     expected_index_doc = {
         "connector": ANY,
         "trigger_method": trigger_method.value,
+        "job_type": JobType.INCREMENTAL.value,
         "status": JobStatus.PENDING.value,
         "indexed_document_count": 0,
         "indexed_document_volume": 0,
@@ -1533,7 +1720,60 @@ async def test_create_job(index_method, trigger_method, set_env):
     }
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    await sync_job_index.create(connector=connector, trigger_method=trigger_method)
+    await sync_job_index.create(
+        connector=connector, trigger_method=trigger_method, job_type=JobType.INCREMENTAL
+    )
+
+    index_method.assert_called_with(expected_index_doc)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "job_type, target_index_name",
+    [
+        (JobType.FULL, INDEX_NAME),
+        (JobType.INCREMENTAL, INDEX_NAME),
+        (JobType.ACCESS_CONTROL, f"{ACCESS_CONTROL_INDEX_PREFIX}{INDEX_NAME}"),
+    ],
+)
+@patch("connectors.protocol.SyncJobIndex.index")
+@patch(
+    "connectors.utils.ACCESS_CONTROL_INDEX_PREFIX",
+    ACCESS_CONTROL_INDEX_PREFIX,
+)
+async def test_create_jobs_with_correct_target_index(
+    index_method, job_type, target_index_name, set_env
+):
+    connector = Mock()
+    connector.index_name = INDEX_NAME
+    config = load_config(CONFIG)
+
+    expected_index_doc = {
+        "connector": {
+            "id": ANY,
+            "filtering": ANY,
+            "index_name": target_index_name,
+            "language": ANY,
+            "pipeline": ANY,
+            "service_type": ANY,
+            "configuration": ANY,
+        },
+        "trigger_method": JobTriggerMethod.SCHEDULED.value,
+        "job_type": job_type.value,
+        "status": JobStatus.PENDING.value,
+        "indexed_document_count": 0,
+        "indexed_document_volume": 0,
+        "deleted_document_count": 0,
+        "created_at": ANY,
+        "last_seen": ANY,
+    }
+
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    await sync_job_index.create(
+        connector=connector,
+        trigger_method=JobTriggerMethod.SCHEDULED,
+        job_type=job_type,
+    )
 
     index_method.assert_called_with(expected_index_doc)
 

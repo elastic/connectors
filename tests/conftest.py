@@ -9,11 +9,11 @@ import os
 import re
 import sys
 import traceback
+from unittest.mock import AsyncMock, patch
 
 import pytest
+import pytest_asyncio
 from aioresponses import aioresponses
-
-import connectors
 
 
 class Logger:
@@ -114,6 +114,13 @@ def event_loop():
 def mock_responses():
     with aioresponses() as m:
         yield m
+
+
+@pytest_asyncio.fixture
+async def patch_sleep():
+    with patch("asyncio.sleep", return_value=AsyncMock) as patch_sleep:
+        # To avoid actually sleeping
+        yield patch_sleep
 
 
 @pytest.fixture
