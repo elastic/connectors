@@ -1280,8 +1280,9 @@ class TestSharepointOnlineDataSource:
             [ALLOW_ACCESS_CONTROL_PATCHED in site_page for site_page in site_pages]
         )
 
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("sync_cursor", [None, {}])
-    async def test_get_docs_incrementaly_with_empty_cursor(
+    async def test_get_docs_incrementally_with_empty_cursor(
         self, patch_sharepoint_client, sync_cursor
     ):
         source = create_source(SharepointOnlineDataSource)
