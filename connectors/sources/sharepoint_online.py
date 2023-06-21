@@ -631,7 +631,7 @@ class SharepointOnlineClient:
         try:
             return await self._rest_api_client.fetch(url)
         except NotFound:
-            return []
+            return {}
 
     async def tenant_details(self):
         url = f"{GRAPH_API_AUTH_URL}/common/userrealm/?user=cj@{self._tenant_name}.onmicrosoft.com&api-version=2.1&checkForMicrosoftAccount=false"
