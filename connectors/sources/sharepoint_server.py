@@ -481,7 +481,7 @@ class SharepointServerClient:
         if "" in attachment_extension:
             attachment_extension.remove("")
         if "." not in filename:
-            logger.warning(
+            self._logger.warning(
                 f"Files without extension are not supported by TIKA, skipping {filename}."
             )
             return
