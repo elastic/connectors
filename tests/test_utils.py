@@ -594,25 +594,26 @@ class TestExtractionService:
         with aioresponses() as m:
             yield m
 
-    def test_check_configured_when_configuration_ok_returns_true(self):
-        mock_config = {
-            "extraction_service": {
-                "host": "http://localhost:8090",
-            }
-        }
-
+    @pytest.mark.parametrize(
+        "mock_config, expected_result",
+        [
+            (
+                {
+                    "extraction_service": {
+                        "host": "http://localhost:8090",
+                    }
+                },
+                True,
+            ),
+            ({"something_else": "???"}, False),
+            ({"extraction_service": {"not_a_host": "!!!m"}}, False),
+        ],
+    )
+    def test_check_configured(self, mock_config, expected_result):
         with patch("yaml.safe_load") as mock_safe_load:
             mock_safe_load.return_value = mock_config
             extraction_service = ExtractionService()
-            assert extraction_service._check_configured() is True
-
-    def test_check_configured_when_configuration_missing_returns_false(self):
-        mock_config = {"something_else": "???"}
-
-        with patch("yaml.safe_load") as mock_safe_load:
-            mock_safe_load.return_value = mock_config
-            extraction_service = ExtractionService()
-            assert extraction_service._check_configured() is False
+            assert extraction_service._check_configured() is expected_result
 
     @pytest.mark.asyncio
     async def test_extract_text(self, mock_responses):

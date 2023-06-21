@@ -677,16 +677,18 @@ class ExtractionService:
         ) as file:
             config = yaml.safe_load(file)
 
+        self.session = None
+
         self.extraction_config = config.get("extraction_service", None)
         if self.extraction_config is not None:
             self.host = self.extraction_config.get("host", None)
         else:
             self.host = None
-            logger.warning(
-                "Extraction service has been initialised but no extraction service configuration was found."
-            )
 
-        self.session = None
+        if self.host is None:
+            logger.warning(
+                "Extraction service has been initialised but no extraction service configuration was found. No text will be extracted for this sync."
+            )
 
     def _check_configured(self):
         if self.host is not None:
