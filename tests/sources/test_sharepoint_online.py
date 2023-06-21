@@ -32,6 +32,10 @@ from connectors.sources.sharepoint_online import (
     SharepointOnlineDataSource,
     SyncCursorEmpty,
     TokenFetchFailed,
+    _prefix_email,
+    _prefix_group,
+    _prefix_identity,
+    _prefix_user,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -1059,12 +1063,12 @@ class TestSharepointOnlineDataSource:
         return {
             # three valid values: GROUP_1 (1x, will be de-deduplicated), USER_1 and USER_2
             "value": [
-                {"grantedToV2": {"user": {"email": USER_1}}},
+                {"grantedToV2": {"user": {"loginName": USER_1}}},
                 {
                     "grantedToV2": {"siteGroup": {"loginName": GROUP_1}},
                     "grantedTo": {"siteGroup": {"loginName": GROUP_1}},
                 },
-                {"grantedTo": {"user": {"email": USER_2}}},
+                {"grantedTo": {"user": {"loginName": USER_2}}},
                 {
                     "grantedTo": {
                         "user": {"email": None},
@@ -1538,10 +1542,10 @@ class TestSharepointOnlineDataSource:
         two_groups = 2
 
         assert len(access_control) == NUMBER_OF_DEFAULT_GROUPS + two_groups + two_users
-        assert USER_1 in access_control
-        assert USER_2 in access_control
-        assert GROUP_1 in access_control
-        assert GROUP_2 in access_control
+        assert _prefix_user(USER_1) in access_control
+        assert _prefix_user(USER_2) in access_control
+        assert _prefix_group(GROUP_1) in access_control
+        assert _prefix_group(GROUP_2) in access_control
 
     @pytest.mark.asyncio
     async def test_with_drive_item_access_control(self, patch_sharepoint_client):
@@ -1562,9 +1566,9 @@ class TestSharepointOnlineDataSource:
         assert all(
             [default_group in access_control for default_group in DEFAULT_GROUPS]
         )
-        assert USER_1 in access_control
-        assert USER_2 in access_control
-        assert GROUP_1 in access_control
+        assert _prefix_user(USER_1) in access_control
+        assert _prefix_user(USER_2) in access_control
+        assert _prefix_group(GROUP_1) in access_control
 
     @pytest.mark.asyncio
     async def test_with_site_list_access_control(self, patch_sharepoint_client):
@@ -1737,7 +1741,7 @@ class TestSharepointOnlineDataSource:
 
         assert user_doc == {
             "_id": user_id,
-            "identity": {"email": email, "username": username},
+            "identity": {"email": f"email:{email}", "username": f"user:{username}"},
             "query": {"template": {"params": {"access_control": access_control}}},
         }
 
@@ -1798,5 +1802,43 @@ class TestSharepointOnlineDataSource:
 
         assert username in access_control
         assert email in access_control
-        assert all([group.get("LoginName") in access_control for group in groups])
+        assert all(
+            [
+                _prefix_group(group.get("LoginName")) in access_control
+                for group in groups
+            ]
+        )
         assert all([group in access_control for group in DEFAULT_GROUPS_PATCHED])
+
+    def test_prefix_identity(self):
+        prefix = "prefix"
+        identity = "identity"
+
+        assert _prefix_identity(prefix, identity) == f"{prefix}:{identity}"
+
+    def test_prefix_identity_with_prefix_none(self):
+        prefix = None
+        identity = "identity"
+
+        assert _prefix_identity(prefix, identity) is None
+
+    def test_prefix_identity_with_identity_none(self):
+        prefix = "prefix"
+        identity = None
+
+        assert _prefix_identity(prefix, identity) is None
+
+    def test_prefix_group(self):
+        group = "group"
+
+        assert _prefix_group(group) == "group:group"
+
+    def test_prefix_user(self):
+        user = "user"
+
+        assert _prefix_user(user) == "user:user"
+
+    def test_prefix_email(self):
+        email = "email"
+
+        assert _prefix_email(email) == "email:email"

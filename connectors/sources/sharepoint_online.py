@@ -718,6 +718,25 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
             )
 
 
+def _prefix_identity(prefix, identity):
+    if prefix is None or identity is None:
+        return None
+
+    return f"{prefix}:{identity}"
+
+
+def _prefix_group(group):
+    return _prefix_identity("group", group)
+
+
+def _prefix_user(user):
+    return _prefix_identity("user", user)
+
+
+def _prefix_email(email):
+    return _prefix_identity("email", email)
+
+
 class SharepointOnlineDataSource(BaseDataSource):
     """Sharepoint Online"""
 
@@ -855,33 +874,37 @@ class SharepointOnlineDataSource(BaseDataSource):
             sharepoint_groups.append(sharepoint_group)
 
         sharepoint_groups = list(
-            filter(
-                lambda group_title: group_title is not None,
-                map(
-                    lambda group: group.get("Title"),
-                    sharepoint_groups,
+            map(
+                lambda group: _prefix_group(group),
+                filter(
+                    lambda group_title: group_title is not None,
+                    map(
+                        lambda group: group.get("Title"),
+                        sharepoint_groups,
+                    ),
                 ),
             )
         )
 
-        users_and_ad_groups = []
+        site_users = []
 
-        async for user_or_group in self.client.site_users(site_web_url):
-            users_and_ad_groups.append(user_or_group)
+        async for site_user in self.client.site_users(site_web_url):
+            site_users.append(site_user)
 
-        users_and_ad_groups = list(
-            filter(
-                lambda user_name: user_name is not None,
-                map(
-                    lambda user: user.get("UserPrincipalName"),
-                    users_and_ad_groups,
+        site_users = list(
+            map(
+                lambda user: _prefix_user(user),
+                filter(
+                    lambda user_name: user_name is not None,
+                    map(
+                        lambda user: user.get("UserPrincipalName"),
+                        site_users,
+                    ),
                 ),
             )
         )
 
-        return self._decorate_with_access_control(
-            site, sharepoint_groups + users_and_ad_groups
-        )
+        return self._decorate_with_access_control(site, sharepoint_groups + site_users)
 
     async def _with_drive_item_access_control(self, site_drive, drive_item):
         """
@@ -912,20 +935,19 @@ class SharepointOnlineDataSource(BaseDataSource):
             site_drive.get("id"), drive_item.get("id")
         )
 
-        # users and groups
-        access_control = list(
+        users = list(
             set(
                 filter(
                     lambda identity: identity is not None,
                     map(
                         lambda identity: (
-                            identity.get("loginName") or identity.get("email")
+                            _prefix_user(identity.get("loginName"))
+                            or _prefix_email(identity.get("email"))
                         )
                         if identity is not None
                         else None,
                         map(
-                            lambda grantee: grantee.get("siteGroup")
-                            or grantee.get("user"),
+                            lambda grantee: grantee.get("user"),
                             map(
                                 lambda permission: (
                                     (permission.get("grantedToV2") or {})
@@ -940,6 +962,33 @@ class SharepointOnlineDataSource(BaseDataSource):
                 )
             )
         )
+
+        groups = list(
+            set(
+                filter(
+                    lambda identity: identity is not None,
+                    map(
+                        lambda identity: (_prefix_group(identity.get("loginName")))
+                        if identity is not None
+                        else None,
+                        map(
+                            lambda grantee: grantee.get("siteGroup"),
+                            map(
+                                lambda permission: (
+                                    (permission.get("grantedToV2") or {})
+                                    | (permission.get("grantedTo") or {})
+                                )
+                                if permission is not None
+                                else {},
+                                permissions.get("value"),
+                            ),
+                        ),
+                    ),
+                )
+            )
+        )
+
+        access_control = groups + users
 
         return self._decorate_with_access_control(drive_item, access_control)
 
@@ -1012,8 +1061,8 @@ class SharepointOnlineDataSource(BaseDataSource):
         return {
             "_id": user.get("Id"),
             "identity": {
-                "email": user.get("Email"),
-                "username": user.get("LoginName"),
+                "email": _prefix_email(user.get("Email")),
+                "username": _prefix_user(user.get("LoginName")),
             },
         } | self.access_control_query(access_control)
 
@@ -1027,7 +1076,10 @@ class SharepointOnlineDataSource(BaseDataSource):
             async for user in self.client.site_users(site_web_url):
                 groups = await self.client.groups_for_user(site_web_url, user.get("Id"))
                 groups = list(
-                    map(lambda group: group.get("LoginName"), groups.get("value", []))
+                    map(
+                        lambda group: _prefix_group(group.get("LoginName")),
+                        groups.get("value", []),
+                    )
                 )
 
                 username = user.get("LoginName", None)
