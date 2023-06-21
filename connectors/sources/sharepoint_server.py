@@ -3,11 +3,10 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""SharePoint source module responsible to fetch documents from SharePoint Server/Online.
+"""SharePoint source module responsible to fetch documents from SharePoint Server.
 """
 import asyncio
 import os
-from datetime import datetime
 from functools import partial
 from urllib.parse import quote
 
@@ -15,7 +14,7 @@ import aiofiles
 import aiohttp
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
-from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
+from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
@@ -24,11 +23,8 @@ from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     convert_to_b64,
-    evaluate_timedelta,
-    is_expired,
     retryable,
     ssl_context,
-    url_encode,
 )
 
 RETRY_INTERVAL = 2
@@ -45,9 +41,7 @@ DRIVE_ITEM = "drive_item"
 LIST_ITEM = "list_item"
 ATTACHMENT_DATA = "attachment_data"
 DOCUMENT_LIBRARY = "document_library"
-LIST_BY_TITLE = "list_by_title"
-CLOUD_SELECTED_FIELDS = "Modified,Id,GUID,File,Folder"
-SERVER_SELECTED_FIELDS = "WikiField, Modified,Id,GUID,File,Folder"
+SELECTED_FIELDS = "WikiField, Modified,Id,GUID,File,Folder"
 
 URLS = {
     PING: "{host_url}/sites/{site_collections}/_api/web/webs",
@@ -57,7 +51,6 @@ URLS = {
     DRIVE_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$select={selected_field}&$expand=File,Folder&$top={top}",
     LIST_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$expand=AttachmentFiles&$select=*,FileRef",
     ATTACHMENT_DATA: "{host_url}{parent_site_url}/_api/web/getfilebyserverrelativeurl('{file_relative_url}')",
-    LIST_BY_TITLE: "{host_url}{parent_site_url}/_api/web/lists/getbytitle('Site%20Pages')/items?$select=Title,CanvasContent1,FileLeafRef&$filter=FileLeafRef eq '{filename}'",
 }
 SCHEMA = {
     SITES: {
@@ -96,17 +89,13 @@ SCHEMA = {
     },
 }
 
-SHAREPOINT_ONLINE = "sharepoint_online"
-SHAREPOINT_SERVER = "sharepoint_server"
 
-
-class SharepointClient:
+class SharepointServerClient:
     """SharePoint client to handle API calls made to SharePoint"""
 
     def __init__(self, configuration):
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
-        self.is_cloud = self.configuration["data_source"] == SHAREPOINT_ONLINE
         self.host_url = self.configuration["host_url"]
         self.certificate = self.configuration["ssl_ca"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
@@ -114,46 +103,10 @@ class SharepointClient:
         self.site_collections = self.configuration["site_collections"]
 
         self.session = None
-        self.access_token = None
-        self.token_expires_at = None
-
         if self.ssl_enabled and self.certificate:
             self.ssl_ctx = ssl_context(certificate=self.certificate)
         else:
             self.ssl_ctx = False
-
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def _set_access_token(self):
-        """Set access token using configuration fields"""
-        expires_at = self.token_expires_at
-        if self.token_expires_at and (not isinstance(expires_at, datetime)):
-            expires_at = datetime.fromisoformat(expires_at)  # pyright: ignore
-        if not is_expired(expires_at=expires_at):
-            return
-        tenant_id = self.configuration["tenant_id"]
-        logger.debug("Generating access token")
-        url = f"https://accounts.accesscontrol.windows.net/{tenant_id}/tokens/OAuth/2"
-        # GUID in resource is always a constant used to create access token
-        data = {
-            "grant_type": "client_credentials",
-            "resource": f"00000003-0000-0ff1-ce00-000000000000/{self.configuration['tenant']}.sharepoint.com@{tenant_id}",
-            "client_id": f"{self.configuration['client_id']}@{tenant_id}",
-            "client_secret": self.configuration["client_secret"],
-        }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
-        async with aiohttp.request(
-            method="POST", url=url, data=data, headers=headers
-        ) as response:
-            json_data = await response.json()
-            self.access_token = json_data["access_token"]
-            self.token_expires_at = evaluate_timedelta(
-                seconds=int(json_data["expires_in"]), time_skew=20
-            )
 
     def _get_session(self):
         """Generate base client session using configuration fields
@@ -170,15 +123,11 @@ class SharepointClient:
         }
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
 
-        if self.is_cloud:
-            basic_auth = None
-        else:
-            basic_auth = aiohttp.BasicAuth(
+        self.session = aiohttp.ClientSession(
+            auth=aiohttp.BasicAuth(
                 login=self.configuration["username"],
                 password=self.configuration["password"],
-            )
-        self.session = aiohttp.ClientSession(
-            auth=basic_auth,
+            ),  # pyright: ignore
             headers=request_headers,
             timeout=timeout,
             raise_for_status=True,
@@ -212,14 +161,9 @@ class SharepointClient:
         self._sleeps.cancel()
         if self.session is None:
             return
-        await self.session.close()
+        await self.session.close()  # pyright: ignore
         self.session = None
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
     async def get_content(
         self, document, file_relative_url, site_url, timestamp=None, doit=False
     ):
@@ -257,7 +201,9 @@ class SharepointClient:
                 value=site_url,
                 file_relative_url=file_relative_url,
             ):
-                async for data in response.content.iter_chunked(CHUNK_SIZE):
+                async for data in response.content.iter_chunked(  # pyright: ignore
+                    CHUNK_SIZE
+                ):
                     await async_buffer.write(data)
 
             source_file_name = async_buffer.name
@@ -271,26 +217,6 @@ class SharepointClient:
             "_timestamp": document.get("_timestamp"),
             "_attachment": await self.convert_file_to_b64(source_file_name),
         }
-
-    async def get_site_page_for_online(self, site_url, filename):
-        """Get metadata of site pages for SharePoint Online
-
-        Args:
-            site_url (str): Site path of sharepoint
-            filename (str): Name of file
-
-        Returns:
-            data: API response
-        """
-        response = await anext(
-            self._api_call(
-                url_name=LIST_BY_TITLE,
-                host_url=self.host_url,
-                parent_site_url=site_url,
-                filename=filename,
-            )
-        )
-        return response["value"][0].get("CanvasContent1")  # pyright: ignore
 
     async def convert_file_to_b64(self, source_file_name):
         """This method converts the file content into b64
@@ -316,13 +242,12 @@ class SharepointClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def get_site_pages_content(
-        self, document, site_url, list_response, timestamp=None, doit=False
+        self, document, list_response, timestamp=None, doit=False
     ):
         """Get content of site pages for SharePoint
 
         Args:
             document (dictionary): Modified document.
-            site_url (str): Site path of sharepoint
             list_response (dict): Dictionary of list item response
             timestamp (timestamp, optional): Timestamp of item last modified. Defaults to None.
             doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
@@ -346,13 +271,7 @@ class SharepointClient:
 
         source_file_name = ""
 
-        if self.is_cloud:
-            format_filename = filename.replace("'", "''")
-            response_data = await self.get_site_page_for_online(
-                site_url, quote(format_filename)
-            )
-        else:
-            response_data = list_response["WikiField"]
+        response_data = list_response["WikiField"]
 
         if response_data is None:
             return
@@ -373,10 +292,10 @@ class SharepointClient:
         }
 
     def _get_retry_after(self, retry, exception):
-        """verify retry for SharePoint Server/Online
+        """verify retry for SharePoint Server
         Args:
             retry (int): Number of retry count.
-            exception(Exception/ClientResponseError/ServerDisconnectedError): Exception instance
+            exception(Exception/ServerDisconnectedError): Exception instance
         Raises:
             Exception: An instance of an Exception class.
         Returns:
@@ -393,7 +312,7 @@ class SharepointClient:
         return retry, retry_seconds
 
     async def _api_call(self, url_name, url="", **url_kwargs):
-        """Make an API call to the SharePoint Server/Online
+        """Make an API call to the SharePoint Server
 
         Args:
             url_name (str): SharePoint url name to be executed.
@@ -414,12 +333,9 @@ class SharepointClient:
 
         while True:
             try:
-                if self.is_cloud:
-                    await self._set_access_token()
-                    headers = {"Authorization": f"Bearer {self.access_token}"}
                 async with self._get_session().get(  # pyright: ignore
                     url=url,
-                    ssl=self.ssl_ctx,
+                    ssl=self.ssl_ctx,  # pyright: ignore
                     headers=headers,
                 ) as result:
                     if url_name == ATTACHMENT:
@@ -427,38 +343,12 @@ class SharepointClient:
                     else:
                         yield await result.json()
                     break
-            except ClientResponseError as exception:
-                retry, retry_seconds = self._get_retry_after(
-                    retry=retry, exception=exception
-                )
-                response_headers = exception.headers or {}
-                if exception.status == 429:
-                    if "Retry-After" in response_headers:
-                        retry_seconds = int(response_headers["Retry-After"])
-                    else:
-                        logger.warning(
-                            "Response Code from Sharepoint Server is 429 but Retry-After header is not found"
-                        )
-                        retry_seconds = DEFAULT_RETRY_SECONDS
-                    logger.warning(
-                        f"Rate Limited by Sharepoint: have {response_headers['RateLimit-Remaining']} of {response_headers['RateLimit-Limit']} left, opportunity to retry in {retry_seconds} seconds"
-                    )
-                elif "token has expired" in response_headers.get(  # pyright: ignore
-                    "x-ms-diagnostics", ""
-                ):
-                    await self._set_access_token()
-                logger.debug(f"Will retry in {retry_seconds} seconds")
-                await self._sleeps.sleep(retry_seconds)
-
-            except ServerDisconnectedError as exception:
-                retry, retry_seconds = self._get_retry_after(
-                    retry=retry, exception=exception
-                )
-                await self.close_session()
-                logger.debug(f"Will retry in {retry_seconds} seconds")
-                await self._sleeps.sleep(retry_seconds)
-
             except Exception as exception:
+                if isinstance(
+                    exception,
+                    ServerDisconnectedError,
+                ):
+                    await self.close_session()
                 retry, retry_seconds = self._get_retry_after(
                     retry=retry, exception=exception
                 )
@@ -468,7 +358,7 @@ class SharepointClient:
     async def _fetch_data_with_next_url(
         self, site_url, list_id, param_name, selected_field=""
     ):
-        """Invokes a GET call to the SharePoint Server/Online for calling list and drive item API.
+        """Invokes a GET call to the SharePoint Server for calling list and drive item API.
 
         Args:
             site_url(string): site url to the SharePoint farm.
@@ -485,6 +375,7 @@ class SharepointClient:
                     self._api_call(
                         url_name=param_name,
                         url=next_url,
+                        selected_field=selected_field,
                     )
                 )
             else:
@@ -506,7 +397,7 @@ class SharepointClient:
                 break
 
     async def _fetch_data_with_query(self, site_url, param_name):
-        """Invokes a GET call to the SharePoint Server/Online for calling site and list API.
+        """Invokes a GET call to the SharePoint Server for calling site and list API.
 
         Args:
             site_url(string): site url to the SharePoint farm.
@@ -533,7 +424,7 @@ class SharepointClient:
                 break
 
     async def get_sites(self, site_url):
-        """Get sites from SharePoint Server/Online
+        """Get sites from SharePoint Server
 
         Args:
             site_url(string): Parent site relative path.
@@ -551,7 +442,7 @@ class SharepointClient:
                 yield data
 
     async def get_lists(self, site_url):
-        """Get site lists from SharePoint Server/Online
+        """Get site lists from SharePoint Server
 
         Args:
             site_url(string): Parent site relative path.
@@ -581,6 +472,19 @@ class SharepointClient:
             )
         )
 
+    def verify_filename_for_extraction(self, filename, relative_url):
+        attachment_extension = list(os.path.splitext(filename))
+        if "" in attachment_extension:
+            attachment_extension.remove("")
+        if "." not in filename:
+            logger.warning(
+                f"Files without extension are not supported by TIKA, skipping {filename}."
+            )
+            return
+        if attachment_extension[-1].lower() not in TIKA_SUPPORTED_FILETYPES:
+            return
+        return relative_url
+
     async def get_list_items(self, list_id, site_url, server_relative_url, **kwargs):
         """This method fetches items from all the lists in a collection.
 
@@ -608,8 +512,10 @@ class SharepointClient:
                     continue
 
                 for attachment_file in result.get("AttachmentFiles"):
-                    file_relative_url = url_encode(
-                        original_string=attachment_file.get("ServerRelativeUrl")
+                    file_relative_url = quote(
+                        attachment_file.get("ServerRelativeUrl").replace(
+                            "%27", "%27%27"
+                        )
                     )
 
                     attachment_data = await self.get_attachment(
@@ -623,11 +529,10 @@ class SharepointClient:
                     result["file_name"] = attachment_file.get("FileName")
                     result["server_relative_url"] = attachment_file["ServerRelativeUrl"]
 
-                    if (
-                        os.path.splitext(attachment_file["FileName"])[-1]
-                        not in TIKA_SUPPORTED_FILETYPES
-                    ):
-                        file_relative_url = None
+                    file_relative_url = self.verify_filename_for_extraction(
+                        filename=attachment_file["FileName"],
+                        relative_url=file_relative_url,
+                    )
 
                     yield result, file_relative_url
 
@@ -654,11 +559,12 @@ class SharepointClient:
 
                 if result.get("File", {}).get("TimeLastModified"):
                     item_type = "File"
-                    file_relative_url = (
-                        url_encode(original_string=result["File"]["ServerRelativeUrl"])
-                        if os.path.splitext(result["File"]["Name"])[-1]
-                        in TIKA_SUPPORTED_FILETYPES
-                        else None
+                    filename = result["File"]["Name"]
+                    file_relative_url = quote(
+                        result["File"]["ServerRelativeUrl"]
+                    ).replace("%27", "%27%27")
+                    file_relative_url = self.verify_filename_for_extraction(
+                        filename=filename, relative_url=file_relative_url
                     )
                     result["Length"] = result[item_type]["Length"]
                 result["item_type"] = item_type
@@ -676,11 +582,11 @@ class SharepointClient:
         )
 
 
-class SharepointDataSource(BaseDataSource):
-    """SharePoint"""
+class SharepointServerDataSource(BaseDataSource):
+    """SharePoint Server"""
 
-    name = "SharePoint"
-    service_type = "sharepoint"
+    name = "SharePoint Server"
+    service_type = "sharepoint_server"
 
     def __init__(self, configuration):
         """Setup the connection to the SharePoint
@@ -689,7 +595,7 @@ class SharepointDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self.sharepoint_client = SharepointClient(configuration=configuration)
+        self.sharepoint_client = SharepointServerClient(configuration=configuration)
 
     @classmethod
     def get_default_configuration(cls):
@@ -699,84 +605,43 @@ class SharepointDataSource(BaseDataSource):
             dictionary: Default configuration.
         """
         return {
-            "data_source": {
-                "display": "dropdown",
-                "label": "SharePoint data source",
-                "options": [
-                    {"label": "SharePoint Online", "value": SHAREPOINT_ONLINE},
-                    {"label": "SharePoint Server", "value": SHAREPOINT_SERVER},
-                ],
-                "order": 1,
-                "type": "str",
-                "value": SHAREPOINT_SERVER,
-            },
             "username": {
-                "depends_on": [{"field": "data_source", "value": SHAREPOINT_SERVER}],
                 "label": "SharePoint Server username",
-                "order": 2,
+                "order": 1,
                 "type": "str",
                 "value": "demo_user",
             },
             "password": {
-                "depends_on": [{"field": "data_source", "value": SHAREPOINT_SERVER}],
                 "label": "SharePoint Server password",
                 "sensitive": True,
-                "order": 3,
+                "order": 2,
                 "type": "str",
                 "value": "abc@123",
             },
-            "client_id": {
-                "depends_on": [{"field": "data_source", "value": SHAREPOINT_ONLINE}],
-                "label": "SharePoint Online client id",
-                "order": 4,
-                "type": "str",
-                "value": "",
-            },
-            "client_secret": {
-                "depends_on": [{"field": "data_source", "value": SHAREPOINT_ONLINE}],
-                "label": "SharePoint Online secret id",
-                "order": 5,
-                "type": "str",
-                "value": "",
-            },
-            "tenant": {
-                "depends_on": [{"field": "data_source", "value": SHAREPOINT_ONLINE}],
-                "label": "SharePoint Online tenant",
-                "order": 6,
-                "type": "str",
-                "value": "",
-            },
-            "tenant_id": {
-                "depends_on": [{"field": "data_source", "value": SHAREPOINT_ONLINE}],
-                "label": "SharePoint Online tenant id",
-                "order": 7,
-                "type": "str",
-                "value": "",
-            },
             "host_url": {
                 "label": "SharePoint host",
-                "order": 8,
+                "order": 3,
                 "type": "str",
                 "value": "http://127.0.0.1:8491",
             },
             "site_collections": {
                 "display": "textarea",
                 "label": "Comma-separated list of SharePoint site collections to index",
-                "order": 9,
+                "order": 4,
                 "type": "list",
                 "value": "collection1",
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 10,
+                "order": 5,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 11,
+                "order": 6,
                 "type": "str",
                 "value": "",
             },
@@ -784,7 +649,7 @@ class SharepointDataSource(BaseDataSource):
                 "default_value": RETRIES,
                 "display": "numeric",
                 "label": "Retries per request",
-                "order": 12,
+                "order": 7,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -918,7 +783,7 @@ class SharepointDataSource(BaseDataSource):
             {  # pyright: ignore
                 "_id": item["_id"] if "_id" in item.keys() else item["GUID"],
                 "file_name": item.get("file_name", ""),
-                "size": int(item.get("Length", "0")),
+                "size": int(item.get("Length", 0)),
                 "url": item["url"],
             }
         )
@@ -952,13 +817,12 @@ class SharepointDataSource(BaseDataSource):
             async for list_data in self.sharepoint_client.get_lists(site_url=site_url):
                 for result in list_data:
                     is_site_page = False
-                    selected_field = CLOUD_SELECTED_FIELDS
+                    selected_field = ""
                     # if BaseType value is 1 then it's document library else it's a list
                     if result.get("BaseType") == 1:
                         if result.get("Title") == "Site Pages":
                             is_site_page = True
-                            if not self.sharepoint_client.is_cloud:
-                                selected_field = SERVER_SELECTED_FIELDS
+                            selected_field = SELECTED_FIELDS
                         yield self.format_lists(
                             item=result, document_type=DOCUMENT_LIBRARY
                         ), None
@@ -986,7 +850,6 @@ class SharepointDataSource(BaseDataSource):
                                 yield document, partial(
                                     self.sharepoint_client.get_site_pages_content,
                                     document,
-                                    site_url,
                                     item,
                                 )
                             else:
