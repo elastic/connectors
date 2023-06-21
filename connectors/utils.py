@@ -720,7 +720,7 @@ class ExtractionService:
 
         content = ""
 
-        if self._check_configured is False:
+        if self._check_configured() is False:
             # an empty host means configuration was not set correctly
             # a warning is already raised in __init__
             return content
