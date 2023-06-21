@@ -20,15 +20,14 @@ from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64, get_pem_format
 
 DEFAULT_RETRY_COUNT = 3
-DEFAULT_WAIT_MULTIPLIER = 2
+DEFAULT_WAIT_MULTIPLIER = 3
 DEFAULT_FILE_SIZE_LIMIT = 10485760
 
 GOOGLE_DRIVE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 API_NAME = "drive"
 API_VERSION = "v3"
 
-DOMAIN_CORPORA = 'domain'
-USER_CORPORA = 'user'
+CORPORA = 'allDrives'
 FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder'
 
 
@@ -119,6 +118,9 @@ class GoogleDriveClient:
                                 full_res=True,
                             )
                         )
+                        # if first_page_with_next_attached.status_code != 200:
+                        #   print(first_page_with_next_attached.status_code)
+                        #   print(first_page_with_next_attached.json)
                         async for page_items in first_page_with_next_attached:
                             yield page_items
                             retry_counter = 0
@@ -168,7 +170,7 @@ class GoogleDriveDataSource(BaseDataSource):
         """
         default_credentials = {
             "type": "service_account",
-            "project_id": "dummy_project_id",
+            "project_id": "project_id",
             "private_key_id": "abc",
             "private_key": open(
                 os.path.abspath(DEFAULT_PEM_FILE)
@@ -181,7 +183,7 @@ class GoogleDriveDataSource(BaseDataSource):
         return {
             "service_account_credentials": {
                 "display": "textarea",
-                "label": "Google Cloud service account JSON",
+                "label": "Google Drive service account JSON",
                 "order": 1,
                 "type": "str",
                 "value": json.dumps(default_credentials),
@@ -256,6 +258,90 @@ class GoogleDriveDataSource(BaseDataSource):
             raise ConfigurableFieldValueError(
                 "Google Cloud service account is not a valid JSON."
             ) from e
+
+
+    async def get_drives(self):
+        """Fetch all shared drive ids and names from the Googl Drive API.
+
+        Yields:
+            Dictionary: Contains the list of fetched buckets from Google Cloud Storage.
+        """
+
+        async for drive in self._google_drive_client.api_call(
+            resource="drives",
+            method="list",
+            fields="nextPageToken,drives(id,name)",
+            full_response=True,
+            pageSize=100,
+        ):
+            yield drive
+
+
+    async def retrieve_all_drives(self):
+        drives = {}
+        async for chunk in self.get_drives():
+          drives_chunk = chunk.get('drives', [])
+          for drive in drives_chunk:
+              drives[drive['id']] = drive['name']
+
+        return drives
+
+
+    async def get_folders(self):
+        async for folder in self._google_drive_client.api_call(
+            resource="files",
+            method="list",
+            corpora='allDrives',
+            fields="nextPageToken,files(id,name,parents)",
+            q=f"mimeType='{FOLDER_MIME_TYPE}' and trashed=false",
+            full_response=True,
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True,
+            pageSize=1000,
+        ):
+            yield folder
+
+
+    async def retrieve_all_folders(self):
+        folders = {}
+        async for chunk in self.get_folders():
+            folders_chunk = chunk.get('files', [])
+            for folder in folders_chunk:
+              folders[folder['id']] = {
+                  'name': folder['name'],
+                  'parents': folder.get('parents', None)
+              }
+
+        return folders
+
+
+    async def resolve_paths(self):
+        folders = await self.retrieve_all_folders()
+        drives = await self.retrieve_all_drives()
+
+        # for paths let's treat drives as top level folders
+        for id, drive_name in drives.items():
+            folders[id] = {'name': drive_name, 'parents': []}
+
+        logger.info(f"Resolving folder paths for {len(folders)} folders")
+
+        for folder in folders.values():
+            path = [folder['name']]  # Start with the folder name
+
+            parents = folder['parents']
+            parent_id = parents[0] if parents else None
+
+            # Traverse the parents until reaching the root or a missing parent
+            while parent_id and parent_id in folders:
+                parent_folder = folders[parent_id]
+                path.insert(0, parent_folder['name'])  # Insert parent name at the beginning
+                parents = parent_folder['parents']
+                parent_id = parents[0] if parents else None
+
+            folder['path'] = '/'.join(path)  # Join path elements with '/'
+
+
+        return folders
 
 
     async def _download_content(self, blob, download_func):
@@ -425,7 +511,8 @@ class GoogleDriveDataSource(BaseDataSource):
           resource="files",
           method="list",
           full_response=True,
-          corpora=USER_CORPORA,
+          corpora=CORPORA,
+          q="trashed=false",
           orderBy='modifiedTime desc',
           fields='files,nextPageToken',
           includeItemsFromAllDrives=True,
@@ -435,8 +522,7 @@ class GoogleDriveDataSource(BaseDataSource):
           yield file
 
 
-
-    def prepare_blob_document(self, blob):
+    def prepare_blob_document(self, blob, paths):
         """Apply key mappings to the blob document.
 
         Args:
@@ -445,7 +531,6 @@ class GoogleDriveDataSource(BaseDataSource):
         Returns:
             dictionary: Blobs metadata mapped with the keys of `BLOB_ADAPTER`.
         """
-
 
         blob_document = {
             "_id": blob.get("id"),
@@ -460,29 +545,37 @@ class GoogleDriveDataSource(BaseDataSource):
         }
 
         # record "file" or "folder" type
-        blob_document["type"] = "folder" if blob.get("fileExtension") == FOLDER_MIME_TYPE else "file"
+        blob_document["type"] = "folder" if blob.get("mimeType") == FOLDER_MIME_TYPE else "file"
 
         # populate owner-related fields if owner is present in the response from the Drive API
-        if 'owners' in blob and blob['owners']:
-            owners = blob['owners']
-            first_owner = blob['owners'][0]
-            blob_document['author'] = ','.join([owner['displayName'] for owner in owners])
-            blob_document['created_by'] = first_owner['displayName']
-            blob_document['created_by_email'] = first_owner['emailAddress']
+        owners = blob.get('owners', None)
+        if owners:
+                first_owner = blob['owners'][0]
+                blob_document['author'] = ','.join([owner['displayName'] for owner in owners])
+                blob_document['created_by'] = first_owner['displayName']
+                blob_document['created_by_email'] = first_owner['emailAddress']
 
         # handle last modifying user metadata
-        last_modifying_user = blob['lastModifyingUser']
-        blob_document['updated_by'] = last_modifying_user.get('displayName', None)
-        blob_document['updated_by_email'] = last_modifying_user.get('emailAddress', None)
-        blob_document['updated_by_photo_url'] = last_modifying_user.get('photoLink', None)
+        last_modifying_user = blob.get('lastModifyingUser', None)
+        if last_modifying_user:
+            blob_document['updated_by'] = last_modifying_user.get('displayName', None)
+            blob_document['updated_by_email'] = last_modifying_user.get('emailAddress', None)
+            blob_document['updated_by_photo_url'] = last_modifying_user.get('photoLink', None)
 
         # handle folders and shortcuts
         if blob_document['size'] is None:
             blob_document['size'] = 0
 
+        # determine the path on google drive, note that google workspace files won't have a path
+        blob_parents = blob.get('parents', None)
+        if blob_parents and blob_parents[0] in paths:
+            blob_document['path'] = f"{paths[blob_parents[0]]['path']}/{blob['name']}"
+        else:
+            logger.debug(f"Not able to get the path for file {blob['id']} {blob['name']}. File will be indexed without a path")
+
         return blob_document
 
-    def get_blob_document(self, blobs):
+    def get_blob_document(self, blobs, paths):
         """Generate blob document.
 
         Args:
@@ -492,10 +585,14 @@ class GoogleDriveDataSource(BaseDataSource):
             dictionary: Blobs metadata mapped with the keys of `BLOB_ADAPTER`.
         """
         for blob in blobs.get("files", []):
-            yield self.prepare_blob_document(blob=blob)
+            yield self.prepare_blob_document(blob=blob, paths=paths)
 
 
     async def get_docs(self, filtering=None):
+
+      # Build a path lookup, parentId -> parent path
+      resolved_paths = await self.resolve_paths()
+
       async for files in self.fetch_files():
-          for blob_document in self.get_blob_document(blobs=files):
+          for blob_document in self.get_blob_document(blobs=files, paths=resolved_paths):
               yield blob_document, partial(self.get_content, blob_document)
