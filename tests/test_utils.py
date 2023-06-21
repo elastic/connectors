@@ -32,6 +32,7 @@ from connectors.utils import (
     MemQueue,
     RetryStrategy,
     convert_to_b64,
+    decode_base64_value,
     deep_merge_dicts,
     evaluate_timedelta,
     filter_nested_dict_by_keys,
@@ -203,6 +204,12 @@ def test_get_base64_value():
     """This test verify get_base64_value method and convert encoded data into base64"""
     expected_result = get_base64_value("dummy".encode("utf-8"))
     assert expected_result == "ZHVtbXk="
+
+
+def test_decode_base64_value():
+    """This test verify decode_base64_value and decodes base64 encoded data"""
+    expected_result = decode_base64_value("ZHVtbXk=".encode("utf-8"))
+    assert expected_result == b"dummy"
 
 
 @pytest.mark.asyncio
