@@ -677,11 +677,24 @@ class ExtractionService:
         ) as file:
             config = yaml.safe_load(file)
 
-        self.host = config["extraction_service"]["host"]
-        self.use_file_pointers = config["extraction_service"]["text_extraction"][
-            "use_file_pointers"
-        ]
         self.session = None
+
+        self.extraction_config = config.get("extraction_service", None)
+        if self.extraction_config is not None:
+            self.host = self.extraction_config.get("host", None)
+        else:
+            self.host = None
+
+        if self.host is None:
+            logger.warning(
+                "Extraction service has been initialised but no extraction service configuration was found. No text will be extracted for this sync."
+            )
+
+    def _check_configured(self):
+        if self.host is not None:
+            return True
+
+        return False
 
     def _begin_session(self):
         if self.session is not None:
@@ -706,18 +719,21 @@ class ExtractionService:
         """
 
         content = ""
+
+        if self._check_configured() is False:
+            # an empty host means configuration was not set correctly
+            # a warning is already raised in __init__
+            return content
+
+        if self.session is None:
+            self._begin_session()
+
         filename = (
             original_filename if original_filename else os.path.basename(filepath)
         )
 
         try:
-            if self.session is None:
-                self._begin_session()
-
-            if self.use_file_pointers:
-                content = await self.extract_with_file_pointer(filepath, filename)
-            else:
-                content = await self.extract_with_file_send(filepath, filename)
+            content = await self.extract_with_file_send(filepath, filename)
         except (ClientConnectionError, ServerTimeoutError) as e:
             logger.error(
                 f"Connection to {self.host} failed while extracting data from {filename}. Error: {e}"
@@ -726,20 +742,6 @@ class ExtractionService:
             logger.error(f"Text extraction unexpectedly failed. Error: {e}")
 
         return content
-
-    async def extract_with_file_pointer(self, filepath, filename):
-        """Sends a request to tika-server to extract text from a file.
-        Sends the filename as a request parameter, which tika will pick up and extract.
-
-        Returns a parsed response
-        """
-        params = {"local_file_path": filepath}
-
-        async with self._begin_session().post(
-            f"{self.host}/extract_local_file_text/",
-            json=params,
-        ) as response:
-            return await self.parse_extraction_resp(filename, response)
 
     async def extract_with_file_send(self, filepath, filename):
         """Sends a request to tika-server to extract text from a file.
