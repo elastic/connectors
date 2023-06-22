@@ -17,7 +17,7 @@ class PreflightCheck:
         self.config = config
         self.elastic_config = config["elasticsearch"]
         self.service_config = config["service"]
-        self.extraction_config = config["extraction_service"]
+        self.extraction_config = config.get("extraction_service", None)
         self.es_client = ESClient(self.elastic_config)
         self.preflight_max_attempts = int(
             self.service_config.get("preflight_max_attempts", 10)
@@ -55,7 +55,10 @@ class PreflightCheck:
                 await self.es_client.close()
 
     async def _check_local_extraction_setup(self):
-        if not self.extraction_config.get("enabled", False):
+        if self.extraction_config is None:
+            logger.info(
+                "Extraction service is not configured, skipping its preflight check."
+            )
             return
 
         timeout = aiohttp.ClientTimeout(total=5)
