@@ -9,7 +9,7 @@ import re
 from collections.abc import Iterable, Sized
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from functools import partial
+from functools import cached_property, partial
 
 import aiofiles
 import aiohttp
@@ -854,10 +854,18 @@ class SharepointOnlineDataSource(BaseDataSource):
                 f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(remote_sites[:5])}]."
             )
 
+    @cached_property
+    def _default_groups(self):
+        return [_prefix_group(default_group) for default_group in DEFAULT_GROUPS]
+
     def _decorate_with_access_control(self, document, access_control):
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
-                set(document.get(ACCESS_CONTROL, []) + access_control + DEFAULT_GROUPS)
+                set(
+                    document.get(ACCESS_CONTROL, [])
+                    + access_control
+                    + self._default_groups
+                )
             )
 
         return document
@@ -1090,7 +1098,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                     if value is not None and len(value) > 0
                 ]
 
-                access_control = list(set(groups + additional_fields + DEFAULT_GROUPS))
+                access_control = list(
+                    set(groups + additional_fields + self._default_groups)
+                )
 
                 yield self._user_access_control_doc(user, access_control)
 

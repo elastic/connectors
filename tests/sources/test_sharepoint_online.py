@@ -1627,7 +1627,10 @@ class TestSharepointOnlineDataSource:
 
         assert len(access_control) == NUMBER_OF_DEFAULT_GROUPS + two_users + one_group
         assert all(
-            [default_group in access_control for default_group in DEFAULT_GROUPS]
+            [
+                _prefix_group(default_group) in access_control
+                for default_group in DEFAULT_GROUPS
+            ]
         )
         assert _prefix_user(USER_1) in access_control
         assert _prefix_user(USER_2) in access_control
@@ -1652,7 +1655,10 @@ class TestSharepointOnlineDataSource:
 
         assert len(access_control) == NUMBER_OF_DEFAULT_GROUPS + one_user + one_group
         assert all(
-            [default_group in access_control for default_group in DEFAULT_GROUPS]
+            [
+                _prefix_group(default_group) in access_control
+                for default_group in DEFAULT_GROUPS
+            ]
         )
         assert USER_1 in access_control
         assert GROUP_1 in access_control
@@ -1676,7 +1682,10 @@ class TestSharepointOnlineDataSource:
 
         assert len(access_control) == NUMBER_OF_DEFAULT_GROUPS + one_user + one_group
         assert all(
-            [default_group in access_control for default_group in DEFAULT_GROUPS]
+            [
+                _prefix_group(default_group) in access_control
+                for default_group in DEFAULT_GROUPS
+            ]
         )
         assert USER_1 in access_control
         assert GROUP_1 in access_control
@@ -1863,15 +1872,17 @@ class TestSharepointOnlineDataSource:
             "access_control"
         ]
 
-        assert username in access_control
-        assert email in access_control
+        assert _prefix_user(username) in access_control
+        assert _prefix_email(email) in access_control
         assert all(
             [
                 _prefix_group(group.get("LoginName")) in access_control
                 for group in groups
             ]
         )
-        assert all([group in access_control for group in DEFAULT_GROUPS_PATCHED])
+        assert all(
+            [_prefix_group(group) in access_control for group in DEFAULT_GROUPS_PATCHED]
+        )
 
     def test_prefix_identity(self):
         prefix = "prefix"
