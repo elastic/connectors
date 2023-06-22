@@ -508,7 +508,7 @@ async def test_fetch_issues_with_unauthorized_exception():
 
 
 @pytest.mark.asyncio
-async def test_fetch_pulls():
+async def test_fetch_pull_requests():
     source = create_source(GitHubDataSource)
     mock_pull_request = MOCK_RESPONSE_PULL.copy()
     mock_pull_request["id"] = mock_pull_request.pop("_id")
@@ -544,49 +544,58 @@ async def test_fetch_pulls():
             ),
         ],
     ):
-        async for pull in source.fetch_pulls("demo_repo"):
+        async for pull in source.fetch_pull_requests("demo_repo"):
             assert pull == MOCK_RESPONSE_PULL
 
 
 @pytest.mark.asyncio
-async def test_fetch_pulls_with_unauthorized_exception():
+async def test_fetch_pull_requests_with_unauthorized_exception():
     source = create_source(GitHubDataSource)
     source.github_client.get_paginated_response = mock.Mock(
         side_effect=UnauthorizedException()
     )
     with pytest.raises(UnauthorizedException):
-        async for _ in source.fetch_pulls("demo_repo"):
+        async for _ in source.fetch_pull_requests("demo_repo"):
             pass
 
 
 @pytest.mark.asyncio
-async def test_fetch_repos_with_max_retries():
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_fetch_repos_with_max_retries(mock_apply_retry_strategy):
     source = create_source(GitHubDataSource)
-    source.github_client.get_paginated_response = BadRequest(
-        status_code=HTTPStatus.INTERNAL_SERVER_ERROR
+    mock_apply_retry_strategy.return_value = mock.Mock()
+    source.github_client._get_client.getitem = mock.Mock(
+        side_effect=BadRequest(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
     )
     async for _ in source.fetch_repos():
         pass
+    assert mock_apply_retry_strategy.call_count == 2
 
 
 @pytest.mark.asyncio
-async def test_fetch_pulls_with_max_retries():
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_fetch_pull_requests_with_max_retries(mock_apply_retry_strategy):
     source = create_source(GitHubDataSource)
-    source.github_client.get_paginated_response = BadRequest(
-        status_code=HTTPStatus.INTERNAL_SERVER_ERROR
+    mock_apply_retry_strategy.return_value = mock.Mock()
+    source.github_client._get_client.getitem = mock.Mock(
+        side_effect=BadRequest(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
     )
-    async for _ in source.fetch_pulls("demo_repo"):
+    async for _ in source.fetch_pull_requests("demo_repo"):
         pass
+    assert mock_apply_retry_strategy.call_count == 2
 
 
 @pytest.mark.asyncio
-async def test_fetch_issues_with_max_retries():
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_fetch_issues_with_max_retries(mock_apply_retry_strategy):
     source = create_source(GitHubDataSource)
-    source.github_client.get_paginated_response = BadRequest(
-        status_code=HTTPStatus.UNAUTHORIZED
+    mock_apply_retry_strategy.return_value = mock.Mock()
+    source.github_client._get_client.getitem = mock.Mock(
+        side_effect=BadRequest(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
     )
     async for _ in source.fetch_issues("demo_repo"):
         pass
+    assert mock_apply_retry_strategy.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -638,7 +647,9 @@ async def test_get_docs():
     source = create_source(GitHubDataSource)
     source.fetch_repos = mock.Mock(return_value=AsyncIterator([MOCK_RESPONSE_REPO]))
     source.fetch_issues = mock.Mock(return_value=AsyncIterator([MOCK_RESPONSE_ISSUE]))
-    source.fetch_pulls = mock.Mock(return_value=AsyncIterator([MOCK_RESPONSE_PULL]))
+    source.fetch_pull_requests = mock.Mock(
+        return_value=AsyncIterator([MOCK_RESPONSE_PULL])
+    )
     source.fetch_files = mock.Mock(
         return_value=AsyncIterator([MOCK_RESPONSE_ATTACHMENTS])
     )

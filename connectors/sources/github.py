@@ -6,6 +6,7 @@
 """GitHub source module responsible to fetch documents from GitHub Cloud and Server."""
 import asyncio
 import json
+import os
 import time
 from enum import Enum
 from functools import cached_property, partial
@@ -33,8 +34,13 @@ BLOB = "blob"
 
 RETRIES = 3
 RETRY_INTERVAL = 2
-FILE_SIZE_LIMIT = 10485760  # Size in Bytes
+FILE_SIZE_LIMIT = 10485760  # ~ 10 Megabytes
 PAGE_SIZE = 100
+FORBIDDEN = 403
+
+RUNNING_FTEST = (
+    "RUNNING_FTEST" in os.environ
+)  # Flag to check if a connector is run for ftest or not.
 
 
 class ObjectType(Enum):
@@ -43,7 +49,9 @@ class ObjectType(Enum):
     PR = "Pull request"
 
 
-USER_API = "https://api.github.com/user"
+BASE_URL = "http://127.0.0.1:5000" if RUNNING_FTEST else "https://api.github.com"
+USER_API = f"{BASE_URL}/user"
+
 ENDPOINTS = {
     "ALL_REPOS": "/user/repos?type=all&per_page={page_size}",
     "REPO": "repos/{repo_name}",
@@ -118,12 +126,19 @@ class GitHubClient:
         self.session = None
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
+        self._logger = logger
         self.repos = self.configuration["repositories"]
         self.github_token = self.configuration["github_token"]
         self.headers = {
             "Authorization": f"Bearer {self.github_token}",
             "Accept": "application/vnd.github.raw",
         }
+
+    def set_logger(self, logger_):
+        self._logger = logger_
+
+    def get_rate_limit_encountered(self, status_code, message):
+        return status_code == FORBIDDEN and "rate limit" in str(message).lower()
 
     async def _get_retry_after(self):
         response = await self._get_client.getitem("/rate_limit")
@@ -133,7 +148,9 @@ class GitHubClient:
 
     async def _put_to_sleep(self):
         retry_after = await self._get_retry_after()
-        logger.debug(f"Connector will attempt to retry after {retry_after} seconds.")
+        self._logger.debug(
+            f"Connector will attempt to retry after {retry_after} seconds."
+        )
         await self._sleeps.sleep(retry_after)
         raise Exception("Rate limit exceeded.")
 
@@ -154,7 +171,7 @@ class GitHubClient:
         try:
             return await self._get_client.getitem(url=resource)
         except BadRequest as exception:
-            if exception.status_code == 403 and "rate limit" in str(exception).lower():
+            if self.get_rate_limit_encountered(exception.status_code, exception):
                 await self._put_to_sleep()
             elif self.is_unauthorized(exception=exception):
                 raise UnauthorizedException(
@@ -189,11 +206,11 @@ class GitHubClient:
             data = data.decode("utf-8")
             message = json.loads(data)
         except ValueError as exception:
-            logger.exception(
+            self._logger.exception(
                 f"Error while loading the response data. Error: {exception}"
             )
             raise
-        if status_code == 403 and "rate limit" in str(message).lower():
+        if self.get_rate_limit_encountered(status_code, message):
             await self._put_to_sleep()
         else:
             raise Exception(
@@ -237,6 +254,7 @@ class GitHubClient:
             self.session,
             requester="",
             oauth_token=self.github_token,
+            base_url=BASE_URL,
         )
 
     async def ping(self):
@@ -268,6 +286,9 @@ class GitHubDataSource(BaseDataSource):
         self.github_client = GitHubClient(configuration=configuration)
         self.user_repos = {}
         self.foreign_repos = {}
+
+    def _set_internal_logger(self):
+        self.github_client.set_logger(self._logger)
 
     @classmethod
     def get_default_configuration(cls):
@@ -306,7 +327,7 @@ class GitHubDataSource(BaseDataSource):
 
     async def get_invalid_repos(self):
         try:
-            logger.debug(
+            self._logger.debug(
                 "Checking if there are any inaccessible repositories configured"
             )
             foreign_repos, configured_repos = [], []
@@ -334,7 +355,7 @@ class GitHubDataSource(BaseDataSource):
                     invalid_repos.append(repo_name)
             return invalid_repos
         except Exception as exception:
-            logger.exception(
+            self._logger.exception(
                 f"Error while checking for inaccessible repositories. Exception: {exception}."
             )
             raise
@@ -372,16 +393,57 @@ class GitHubDataSource(BaseDataSource):
     async def ping(self):
         try:
             await self.github_client.ping()
-            logger.debug("Successfully connected to GitHub.")
+            self._logger.debug("Successfully connected to GitHub.")
         except Exception:
-            logger.exception("Error while connecting to GitHub.")
+            self._logger.exception("Error while connecting to GitHub.")
             raise
 
-    def prepare_document(self, github_document, schema):
+    def adapt_gh_doc_to_es_doc(self, github_document, schema):
         document = {}
         for es_field, github_field in schema.items():
             document[es_field] = github_document[github_field]
         return document
+
+    def _comment_doc(self, comment):
+        return {
+            "author": comment["user"]["login"],
+            "body": comment["body"],
+        }
+
+    def _review_doc(self, review):
+        return {
+            "author": review["user"]["login"],
+            "body": review["body"],
+            "state": review["state"],
+        }
+
+    def _pull_request_doc(self, pull, repo_name, review_comments, comments, reviews):
+        return {
+            "type": ObjectType.PR.value,
+            "owner": pull["user"]["login"],
+            "repository": repo_name,
+            "head_label": pull["head"]["label"],
+            "base_label": pull["base"]["label"],
+            "assignees": [assignee["login"] for assignee in pull["assignees"]],
+            "requested_reviewers": [
+                reviewer["login"] for reviewer in pull["requested_reviewers"]
+            ],
+            "requested_teams": [team["name"] for team in pull["requested_teams"]],
+            "labels": [label["name"] for label in pull["labels"]],
+            "review_comments": review_comments,
+            "comments": comments,
+            "reviews": reviews,
+        }
+
+    def _issue_doc(self, issue, repo_name, comments):
+        return {
+            "type": ObjectType.ISSUE.value,
+            "owner": issue["user"]["login"],
+            "repository": repo_name,
+            "assignees": [assignee["login"] for assignee in issue["assignees"]],
+            "labels": [label["name"] for label in issue["labels"]],
+            "comments": comments,
+        }
 
     async def fetch_repos(self):
         try:
@@ -390,7 +452,7 @@ class GitHubDataSource(BaseDataSource):
                     async for repo in self.github_client.get_user_repos():
                         self.user_repos[repo["full_name"]] = repo
                 for repo in self.user_repos.values():
-                    document = self.prepare_document(
+                    document = self.adapt_gh_doc_to_es_doc(
                         github_document=repo, schema=REPO_SCHEMA
                     )
                     document["owner"] = repo["owner"]["login"]
@@ -418,7 +480,7 @@ class GitHubDataSource(BaseDataSource):
                             resource=ENDPOINTS["REPO"].format(repo_name=repo_name)
                         )
 
-                    document = self.prepare_document(
+                    document = self.adapt_gh_doc_to_es_doc(
                         github_document=repo_object,
                         schema=REPO_SCHEMA,
                     )
@@ -428,18 +490,18 @@ class GitHubDataSource(BaseDataSource):
         except UnauthorizedException:
             raise
         except Exception as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Something went wrong while fetching the repository. Exception: {exception}"
             )
 
-    async def fetch_pulls(self, repo_name):
+    async def fetch_pull_requests(self, repo_name):
         try:
             async for pull in self.github_client.get_paginated_response(
                 resource=ENDPOINTS["PULLS"].format(
                     repo_name=repo_name, page_size=PAGE_SIZE
                 )
             ):
-                document = self.prepare_document(
+                document = self.adapt_gh_doc_to_es_doc(
                     github_document=pull, schema=PULL_REQUEST_SCHEMA
                 )
                 comments, review_comments, reviews = [], [], []
@@ -448,60 +510,29 @@ class GitHubDataSource(BaseDataSource):
                         repo_name=repo_name, number=pull["number"], page_size=PAGE_SIZE
                     )
                 ):
-                    review_comments.append(
-                        {
-                            "author": review_comment["user"]["login"],
-                            "body": review_comment["body"],
-                        }
-                    )
+                    review_comments.append(self._comment_doc(review_comment))
                 async for comment in self.github_client.get_paginated_response(
                     ENDPOINTS["COMMENTS"].format(
                         repo_name=repo_name, number=pull["number"], page_size=PAGE_SIZE
                     )
                 ):
-                    comments.append(
-                        {"author": comment["user"]["login"], "body": comment["body"]}
-                    )
+                    comments.append(self._comment_doc(comment))
                 async for review in self.github_client.get_paginated_response(
                     ENDPOINTS["REVIEWS"].format(
                         repo_name=repo_name, number=pull["number"], page_size=PAGE_SIZE
                     )
                 ):
-                    reviews.append(
-                        {
-                            "author": review["user"]["login"],
-                            "body": review["body"],
-                            "state": review["state"],
-                        }
-                    )
+                    reviews.append(self._review_doc(review))
                 document.update(
-                    {
-                        "type": ObjectType.PR.value,
-                        "owner": pull["user"]["login"],
-                        "repository": repo_name,
-                        "head_label": pull["head"]["label"],
-                        "base_label": pull["base"]["label"],
-                        "assignees": [
-                            assignee["login"] for assignee in pull["assignees"]
-                        ],
-                        "requested_reviewers": [
-                            reviewer["login"]
-                            for reviewer in pull["requested_reviewers"]
-                        ],
-                        "requested_teams": [
-                            team["name"] for team in pull["requested_teams"]
-                        ],
-                        "labels": [label["name"] for label in pull["labels"]],
-                        "review_comments": review_comments,
-                        "comments": comments,
-                        "reviews": reviews,
-                    }
+                    self._pull_request_doc(
+                        pull, repo_name, review_comments, comments, reviews
+                    )
                 )
                 yield document
         except UnauthorizedException:
             raise
         except Exception as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Something went wrong while fetching the pull requests of {repo_name}. Exception: {exception}"
             )
 
@@ -514,7 +545,7 @@ class GitHubDataSource(BaseDataSource):
             ):
                 if issue.get("pull_request") is not None:
                     continue
-                document = self.prepare_document(
+                document = self.adapt_gh_doc_to_es_doc(
                     github_document=issue, schema=ISSUE_SCHEMA
                 )
                 comments = []
@@ -523,26 +554,13 @@ class GitHubDataSource(BaseDataSource):
                         repo_name=repo_name, number=issue["number"], page_size=PAGE_SIZE
                     )
                 ):
-                    comments.append(
-                        {"author": comment["user"]["login"], "body": comment["body"]}
-                    )
-                document.update(
-                    {
-                        "type": ObjectType.ISSUE.value,
-                        "owner": issue["user"]["login"],
-                        "repository": repo_name,
-                        "assignees": [
-                            assignee["login"] for assignee in issue["assignees"]
-                        ],
-                        "labels": [label["name"] for label in issue["labels"]],
-                        "comments": comments,
-                    }
-                )
+                    comments.append(self._comment_doc(comment))
+                document.update(self._issue_doc(issue, repo_name, comments))
                 yield document
         except UnauthorizedException:
             raise
         except Exception as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Something went wrong while fetching the issues of {repo_name}. Exception: {exception}"
             )
 
@@ -568,18 +586,21 @@ class GitHubDataSource(BaseDataSource):
                 )
                 if repo_object["type"] == BLOB:
                     file_name = repo_object["path"].split("/")[-1]
+                    file_extension = (
+                        file_name[file_name.rfind(".") :]  # noqa
+                        if "." in file_name
+                        else ""
+                    )
                     repo_object.update(
                         {
                             "_timestamp": last_commit_timestamp,
                             "repo_name": repo_name,
                             "name": file_name,
-                            "extension": file_name[file_name.rfind(".") :]  # noqa
-                            if "." in file_name
-                            else "",
+                            "extension": file_extension,
                         }
                     )
 
-                    document = self.prepare_document(
+                    document = self.adapt_gh_doc_to_es_doc(
                         github_document=repo_object, schema=FILE_SCHEMA
                     )
 
@@ -592,7 +613,7 @@ class GitHubDataSource(BaseDataSource):
         except UnauthorizedException:
             raise
         except Exception as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Something went wrong while fetching the files of {repo_name}. Exception: {exception}"
             )
 
@@ -615,24 +636,24 @@ class GitHubDataSource(BaseDataSource):
         attachment_extension = attachment["extension"]
 
         if attachment_extension == "":
-            logger.warning(
+            self._logger.warning(
                 f"Files without extension are not supported by TIKA, skipping {attachment_name}."
             )
             return
 
         if attachment_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
-            logger.warning(
+            self._logger.warning(
                 f"Files with the extension {attachment_extension} are not supported by TIKA, skipping {attachment_name}."
             )
             return
 
         if attachment_size > FILE_SIZE_LIMIT:
-            logger.warning(
+            self._logger.warning(
                 f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
             )
             return
 
-        logger.debug(f"Downloading {attachment_name}")
+        self._logger.debug(f"Downloading {attachment_name}")
 
         document = {
             "_id": f"{attachment['repo_name']}/{attachment['name']}",
@@ -646,7 +667,7 @@ class GitHubDataSource(BaseDataSource):
             )
             temp_filename = str(async_buffer.name)
 
-        logger.debug(f"Calling convert_to_b64 for file : {attachment_name}")
+        self._logger.debug(f"Calling convert_to_b64 for file : {attachment_name}")
 
         await asyncio.to_thread(convert_to_b64, source=temp_filename)
         async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
@@ -655,7 +676,7 @@ class GitHubDataSource(BaseDataSource):
         try:
             await remove(temp_filename)
         except Exception as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Could not remove file from: {temp_filename}. Error: {exception}"
             )
         return document
@@ -673,7 +694,7 @@ class GitHubDataSource(BaseDataSource):
             yield repo, None
             repo_name = repo["full_name"]
 
-            async for pull_request in self.fetch_pulls(repo_name=repo_name):
+            async for pull_request in self.fetch_pull_requests(repo_name=repo_name):
                 yield pull_request, None
 
             async for issue in self.fetch_issues(repo_name=repo_name):
