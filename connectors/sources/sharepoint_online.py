@@ -1082,8 +1082,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                     )
                 )
 
-                username = user.get("LoginName", None)
-                email = user.get("Email", None)
+                username = _prefix_user(user.get("LoginName", None))
+                email = _prefix_email(user.get("Email", None))
                 additional_fields = [
                     value
                     for value in [username, email]
