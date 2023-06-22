@@ -29,7 +29,13 @@ def _formatter(prefix):
 
 
 class ExtraLogger(logging.Logger):
-    def _log(self, level, msg, args, exc_info=None, extra=None):
+    def _log(self, level, msg, args, exc_info=None, prefix=None, extra=None):
+        if (
+            not (hasattr(self, "filebeat") and self.filebeat)  # pyright: ignore
+            and prefix
+        ):
+            msg = f"{prefix} {msg}"
+
         if extra is None:
             extra = {}
         extra.update(

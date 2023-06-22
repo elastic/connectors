@@ -36,7 +36,7 @@ def load_max_concurrent_content_syncs(config):
     if max_concurrent_content_syncs is not None:
         return max_concurrent_content_syncs
 
-    logger.warn(
+    logger.warning(
         "'max_concurrent_syncs' is deprecated. Use 'max_concurrent_content_syncs' in 'config.yml'."
     )
 
@@ -71,9 +71,7 @@ class JobExecutionService(BaseService):
 
     async def _content_sync(self, sync_job, connector, source_klass):
         if connector.last_sync_status == JobStatus.IN_PROGRESS:
-            logger.debug(
-                f"Connector {connector.id} is still syncing content, skip the job {sync_job.id}..."
-            )
+            sync_job.log_debug("Connector is still syncing content, skip the job...")
             return
 
         sync_job_runner = SyncJobRunner(
@@ -86,8 +84,8 @@ class JobExecutionService(BaseService):
 
     async def _access_control_sync(self, sync_job, connector, source_klass):
         if connector.last_access_control_sync_status == JobStatus.IN_PROGRESS:
-            logger.debug(
-                f"Connector {connector.id} is still syncing access control, skip the job {sync_job.id}..."
+            sync_job.log_debug(
+                "Connector is still syncing access control, skip the job..."
             )
             return
 
@@ -110,7 +108,7 @@ class JobExecutionService(BaseService):
         try:
             connector = await self.connector_index.fetch_by_id(connector_id)
         except DocumentNotFoundError:
-            logger.error(f"Couldn't find connector by id {connector_id}")
+            sync_job.log_error("Couldn't find connector")
             return
 
         if requires_platinum_license(sync_job, connector, source_klass):
@@ -120,7 +118,7 @@ class JobExecutionService(BaseService):
             ) = await self.connector_index.has_active_license_enabled(License.PLATINUM)
 
             if not is_platinum_license_enabled:
-                logger.error(
+                sync_job.log_error(
                     f"Minimum required Elasticsearch license: '{License.PLATINUM.value}'. Actual license: '{license_enabled.value}'."
                 )
                 return
@@ -137,8 +135,8 @@ class JobExecutionService(BaseService):
             await self._access_control_sync(sync_job, connector, source_klass)
 
         else:
-            logger.error(
-                f"Unsupported job type '{job_type}' for '{connector_id}'. Skipping sync job execution..."
+            sync_job.log_error(
+                f"Unsupported job type '{job_type}'. Skipping sync job execution..."
             )
 
     async def _run(self):
