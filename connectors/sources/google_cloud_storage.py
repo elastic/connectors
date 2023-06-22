@@ -199,7 +199,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             "client_email": "123-abc@developer.gserviceaccount.com",
             "client_id": "123-abc.apps.googleusercontent.com",
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "http://localhost:443/token",
+            "token_uri": "http://localhost:4444/token",
         }
         return {
             "service_account_credentials": {
