@@ -15,6 +15,7 @@ import pytest
 import pytest_asyncio
 from aiohttp.client_exceptions import ClientResponseError
 
+from connectors.logger import logger
 from connectors.protocol import Features
 from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
@@ -280,6 +281,7 @@ class TestMicrosoftAPISession:
             session,
             TestMicrosoftAPISession.StubAPIToken(),
             self.scroll_field,
+            logger,
         )
         await session.close()
 
@@ -926,7 +928,7 @@ class TestSharepointOnlineAdvancedRulesValidator:
 
     @pytest.mark.asyncio
     async def test_validate(self, validator):
-        valid_rules = {"maxDataAge": 15}
+        valid_rules = {"dontSubextractDriveItemsOlderThan": 15}
 
         result = await validator.validate(valid_rules)
 
@@ -934,7 +936,7 @@ class TestSharepointOnlineAdvancedRulesValidator:
 
     @pytest.mark.asyncio
     async def test_validate_invalid_rule(self, validator):
-        invalid_rules = {"maxDataAge": "why is this a string"}
+        invalid_rules = {"dontSubextractDriveItemsOlderThan": "why is this a string"}
 
         result = await validator.validate(invalid_rules)
 
@@ -1280,8 +1282,9 @@ class TestSharepointOnlineDataSource:
             [ALLOW_ACCESS_CONTROL_PATCHED in site_page for site_page in site_pages]
         )
 
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("sync_cursor", [None, {}])
-    async def test_get_docs_incrementaly_with_empty_cursor(
+    async def test_get_docs_incrementally_with_empty_cursor(
         self, patch_sharepoint_client, sync_cursor
     ):
         source = create_source(SharepointOnlineDataSource)
@@ -1333,6 +1336,20 @@ class TestSharepointOnlineDataSource:
         )
 
         assert (operations["delete"]) == deleted
+
+    @pytest.mark.asyncio
+    async def test_download_function_with_filtering_rule(self):
+        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
+        max_drive_item_age = 15
+        drive_item = {
+            "lastModifiedDateTime": str(
+                datetime.utcnow() - timedelta(days=max_drive_item_age + 1)
+            )
+        }
+
+        download_result = source.download_function(drive_item, max_drive_item_age)
+
+        assert download_result is None
 
     def test_get_default_configuration(self):
         config = SharepointOnlineDataSource.get_default_configuration()
@@ -1405,6 +1422,7 @@ class TestSharepointOnlineDataSource:
         assert "body" not in download_result
 
     @pytest.mark.asyncio
+    @patch("connectors.utils.ExtractionService._check_configured", lambda *_: True)
     async def test_get_attachment_with_text_extraction_enabled_adds_body(
         self, patch_sharepoint_client
     ):
@@ -1430,9 +1448,36 @@ class TestSharepointOnlineDataSource:
             assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
+    @patch("connectors.utils.ExtractionService._check_configured", lambda *_: False)
+    async def test_get_attachment_with_text_extraction_enabled_but_not_configured_adds_empty_string(
+        self, patch_sharepoint_client
+    ):
+        attachment = {"odata.id": "1", "_original_filename": "file.ppt"}
+        message = "This is the text content of drive item"
+
+        with patch(
+            "connectors.utils.ExtractionService.extract_text", return_value=message
+        ) as extraction_service_mock:
+
+            async def download_func(attachment_id, async_buffer):
+                await async_buffer.write(bytes(message, "utf-8"))
+
+            patch_sharepoint_client.download_attachment = download_func
+            source = create_source(
+                SharepointOnlineDataSource, use_text_extraction_service=True
+            )
+
+            download_result = await source.get_attachment_content(attachment, doit=True)
+
+            extraction_service_mock.assert_not_called()
+            assert download_result["body"] == ""
+            assert "_attachment" not in download_result
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "filesize, expect_download", [(15, True), (10485761, False)]
     )
+    @patch("connectors.utils.ExtractionService._check_configured", lambda *_: True)
     async def test_get_drive_item_content(
         self, patch_sharepoint_client, filesize, expect_download
     ):
@@ -1461,6 +1506,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("filesize", [(15), (10485761)])
+    @patch("connectors.utils.ExtractionService._check_configured", lambda *_: True)
     async def test_get_content_with_text_extraction_enabled_adds_body(
         self, patch_sharepoint_client, filesize
     ):
@@ -1489,6 +1535,39 @@ class TestSharepointOnlineDataSource:
 
             extraction_service_mock.assert_called_once()
             assert download_result["body"] == message
+            assert "_attachment" not in download_result
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("filesize", [(15), (10485761)])
+    @patch("connectors.utils.ExtractionService._check_configured", lambda *_: False)
+    async def test_get_content_with_text_extraction_enabled_but_not_configured_adds_empty_string(
+        self, patch_sharepoint_client, filesize
+    ):
+        drive_item = {
+            "id": "1",
+            "size": filesize,
+            "lastModifiedDateTime": datetime.now(timezone.utc),
+            "parentReference": {"driveId": "drive-1"},
+            "_original_filename": "file.txt",
+        }
+        message = "This is the text content of drive item"
+
+        with patch(
+            "connectors.utils.ExtractionService.extract_text", return_value=message
+        ) as extraction_service_mock:
+
+            async def download_func(drive_id, drive_item_id, async_buffer):
+                await async_buffer.write(bytes(message, "utf-8"))
+
+            patch_sharepoint_client.download_drive_item = download_func
+            source = create_source(
+                SharepointOnlineDataSource, use_text_extraction_service=True
+            )
+
+            download_result = await source.get_drive_item_content(drive_item, doit=True)
+
+            extraction_service_mock.assert_not_called()
+            assert download_result["body"] == ""
             assert "_attachment" not in download_result
 
     @pytest.mark.asyncio

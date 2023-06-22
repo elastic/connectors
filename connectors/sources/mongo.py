@@ -15,7 +15,6 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 
 
@@ -211,7 +210,7 @@ class MongoDataSource(BaseDataSource):
 
         existing_database_names = await client.list_database_names()
 
-        logger.debug(f"Existing databases: {existing_database_names}")
+        self._logger.debug(f"Existing databases: {existing_database_names}")
 
         if configured_database_name not in existing_database_names:
             raise ConfigurableFieldValueError(
@@ -221,7 +220,7 @@ class MongoDataSource(BaseDataSource):
         database = client[configured_database_name]
 
         existing_collection_names = await database.list_collection_names()
-        logger.debug(
+        self._logger.debug(
             f"Existing collections in {configured_database_name}: {existing_collection_names}"
         )
 
