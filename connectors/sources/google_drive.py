@@ -115,12 +115,10 @@ class GoogleDriveClient:
                         first_page_with_next_attached = (
                             await google_client.as_service_account(
                                 method_object(**kwargs),
-                                full_res=True,
+                                full_res=True
                             )
                         )
-                        # if first_page_with_next_attached.status_code != 200:
-                        #   print(first_page_with_next_attached.status_code)
-                        #   print(first_page_with_next_attached.json)
+
                         async for page_items in first_page_with_next_attached:
                             yield page_items
                             retry_counter = 0
@@ -128,7 +126,7 @@ class GoogleDriveClient:
                         if sub_method:
                             method_object = getattr(method_object, sub_method)
                         yield await google_client.as_service_account(
-                            method_object(**kwargs)
+                            method_object(**kwargs),
                         )
                     break
             except AttributeError as error:
@@ -141,7 +139,7 @@ class GoogleDriveClient:
                 if retry_counter > self.retry_count:
                     raise exception
                 logger.warning(
-                    f"Retry count: {retry_counter} out of {self.retry_count}. Exception: {exception}"
+                    f"Retry count: {retry_counter} out of {self.retry_count}. Response code: {exception.res.status_code} Exception: {exception}."
                 )
                 await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry_counter)
 
@@ -467,6 +465,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 resource="files",
                 method="get",
                 fileId=blob_id,
+                supportsAllDrives=True,
                 alt="media",
             )
         )
@@ -570,8 +569,6 @@ class GoogleDriveDataSource(BaseDataSource):
         blob_parents = blob.get('parents', None)
         if blob_parents and blob_parents[0] in paths:
             blob_document['path'] = f"{paths[blob_parents[0]]['path']}/{blob['name']}"
-        else:
-            logger.debug(f"Not able to get the path for file {blob['id']} {blob['name']}. File will be indexed without a path")
 
         return blob_document
 
