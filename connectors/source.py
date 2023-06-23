@@ -342,6 +342,8 @@ class BaseDataSource:
     support_incremental_sync = False
 
     def __init__(self, configuration):
+        # Initialize to the global logger
+        self._logger = logger
         if not isinstance(configuration, DataSourceConfiguration):
             raise TypeError(
                 f"Configuration expected type is {DataSourceConfiguration.__name__}, actual: {type(configuration).__name__}."
@@ -349,11 +351,22 @@ class BaseDataSource:
 
         self.configuration = configuration
         self.configuration.set_defaults(self.get_default_configuration())
+        self._features = None
         # A dictionary, the structure of which is connector dependent, to indicate a point where the sync is at
         self._sync_cursor = None
 
     def __str__(self):
         return f"Datasource `{self.__class__.name}`"
+
+    def set_logger(self, logger_):
+        self._logger = logger_
+        self._set_internal_logger()
+
+    def _set_internal_logger(self):
+        # no op for BaseDataSource
+        # if there are internal class (e.g. Client class) to which the logger need to be set,
+        # this method needs to be implemented
+        pass
 
     @classmethod
     def get_simple_configuration(cls):
@@ -401,11 +414,19 @@ class BaseDataSource:
 
         return hash_id(_id)
 
+    def set_features(self, features):
+        if self._features is not None:
+            self._logger.warning(f"'_features' already set in {self.__class__.name}")
+        self._logger.debug(f"Setting '_features' for {self.__class__.name}")
+        self._features = features
+
     async def validate_filtering(self, filtering):
         """Execute all basic rule and advanced rule validators."""
 
         return await FilteringValidator(
-            self.basic_rules_validators(), self.advanced_rules_validators()
+            self.basic_rules_validators(),
+            self.advanced_rules_validators(),
+            self._logger,
         ).validate(filtering)
 
     def advanced_rules_validators(self):

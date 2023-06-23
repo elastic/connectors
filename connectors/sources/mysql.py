@@ -14,7 +14,6 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.generic_database import (
     WILDCARD,
@@ -153,6 +152,7 @@ class MySQLClient:
         password,
         ssl_enabled,
         ssl_certificate,
+        logger_,
         database=None,
         max_pool_size=MAX_POOL_SIZE,
         fetch_size=DEFAULT_FETCH_SIZE,
@@ -169,6 +169,7 @@ class MySQLClient:
         self.queries = MySQLQueries(self.database)
         self.connection_pool = None
         self.connection = None
+        self._logger = logger_
 
     async def __aenter__(self):
         connection_string = {
@@ -209,9 +210,9 @@ class MySQLClient:
     async def ping(self):
         try:
             await self.connection.ping()
-            logger.info("Successfully connected to the MySQL Server.")
+            self._logger.info("Successfully connected to the MySQL Server.")
         except Exception:
-            logger.exception("Error while connecting to the MySQL Server.")
+            self._logger.exception("Error while connecting to the MySQL Server.")
             raise
 
     @retryable(
@@ -295,7 +296,7 @@ class MySQLClient:
 
                     await self._sleeps.sleep(0)
             except IndexError as e:
-                logger.exception(
+                self._logger.exception(
                     f"Fetched {fetched_rows} rows in {successful_batches} batches. Encountered exception {e} in batch {successful_batches + 1}."
                 )
 
@@ -435,6 +436,7 @@ class MySqlDataSource(BaseDataSource):
             fetch_size=self.configuration["fetch_size"],
             ssl_enabled=self.configuration["ssl_enabled"],
             ssl_certificate=self.configuration["ssl_ca"],
+            logger_=self._logger,
         )
 
     def advanced_rules_validators(self):
@@ -505,7 +507,7 @@ class MySqlDataSource(BaseDataSource):
                 tables = query_info.get("tables", [])
                 query = query_info.get("query", "")
 
-                logger.debug(
+                self._logger.debug(
                     f"Fetching rows from table '{format_list(tables)}' in database '{self.database}' with a custom query."
                 )
 
@@ -548,7 +550,7 @@ class MySqlDataSource(BaseDataSource):
             primary_key_columns = await client.get_primary_key_column_names(table)
 
             if not primary_key_columns:
-                logger.warning(
+                self._logger.warning(
                     f"Skipping table {table} from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
                 )
                 continue
@@ -574,13 +576,13 @@ class MySqlDataSource(BaseDataSource):
         )
 
         if not primary_key_columns:
-            logger.warning(
+            self._logger.warning(
                 f"Skipping tables {format_list(tables)} from database {self.database} since no primary key is associated with them. Assign primary key to the tables to index it in the next sync interval."
             )
             return
 
         if has_duplicates(primary_key_columns):
-            logger.warning(
+            self._logger.warning(
                 f"Skipping custom query for tables {format_list(tables)} as there are multiple primary key columns with the same name. Consider using 'AS' to uniquely identify primary key columns from different tables."
             )
             return

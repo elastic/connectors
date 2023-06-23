@@ -21,7 +21,7 @@ from io import BytesIO
 
 import aiohttp
 import yaml
-from aiohttp.client_exceptions import ServerTimeoutError
+from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 from base64io import Base64IO
 from bs4 import BeautifulSoup
 from cstriggers.core.trigger import QuartzCron
@@ -677,14 +677,27 @@ class ExtractionService:
         ) as file:
             config = yaml.safe_load(file)
 
-        self.host = config["extraction_service"]["host"]
-        self.use_file_pointers = config["extraction_service"]["text_extraction"][
-            "use_file_pointers"
-        ]
         self.session = None
 
+        self.extraction_config = config.get("extraction_service", None)
+        if self.extraction_config is not None:
+            self.host = self.extraction_config.get("host", None)
+        else:
+            self.host = None
+
+        if self.host is None:
+            logger.warning(
+                "Extraction service has been initialised but no extraction service configuration was found. No text will be extracted for this sync."
+            )
+
+    def _check_configured(self):
+        if self.host is not None:
+            return True
+
+        return False
+
     def _begin_session(self):
-        if self.session:
+        if self.session is not None:
             return self.session
 
         timeout = aiohttp.ClientTimeout(total=5)
@@ -696,44 +709,39 @@ class ExtractionService:
 
         await self.session.close()
 
-    async def extract_text(self, filepath):
+    async def extract_text(self, filepath, original_filename):
         """Sends a text extraction request to tika-server using the supplied filename.
         Args:
-            filename: full filepath for file to be used for text extraction
+            filepath: local path to the tempfile for extraction
+            original_filename: original name of file
 
         Returns the extracted text
         """
 
         content = ""
-        filename = os.path.basename(filepath)
+
+        if self._check_configured() is False:
+            # an empty host means configuration was not set correctly
+            # a warning is already raised in __init__
+            return content
+
+        if self.session is None:
+            self._begin_session()
+
+        filename = (
+            original_filename if original_filename else os.path.basename(filepath)
+        )
 
         try:
-            if self.use_file_pointers:
-                content = await self.extract_with_file_pointer(filepath, filename)
-            else:
-                content = await self.extract_with_file_send(filepath, filename)
-        except ServerTimeoutError as e:
+            content = await self.extract_with_file_send(filepath, filename)
+        except (ClientConnectionError, ServerTimeoutError) as e:
             logger.error(
-                f"Server timed out while extracting data from {filename}. Error: {e}"
+                f"Connection to {self.host} failed while extracting data from {filename}. Error: {e}"
             )
         except Exception as e:
             logger.error(f"Text extraction unexpectedly failed. Error: {e}")
 
         return content
-
-    async def extract_with_file_pointer(self, filepath, filename):
-        """Sends a request to tika-server to extract text from a file.
-        Sends the filename as a request parameter, which tika will pick up and extract.
-
-        Returns a parsed response
-        """
-        params = {"local_file_path": filepath}
-
-        async with self._begin_session().post(
-            f"{self.host}/extract_local_file_text/",
-            json=params,
-        ) as response:
-            return await self.parse_extraction_resp(filename, response)
 
     async def extract_with_file_send(self, filepath, filename):
         """Sends a request to tika-server to extract text from a file.

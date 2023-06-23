@@ -12,6 +12,7 @@ import pytest
 from freezegun import freeze_time
 
 from connectors.filtering.validation import SyncRuleValidationResult
+from connectors.logger import logger
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.mysql import (
@@ -582,6 +583,7 @@ async def setup_mysql_client():
         password="password",
         ssl_enabled=False,
         ssl_certificate="",
+        logger_=logger,
     )
 
     return client
