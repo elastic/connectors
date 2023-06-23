@@ -54,11 +54,13 @@ If you wish to connect more connector types than are natively available on Elast
 
 ## Run the connector service on-prem
 
-1. Go to Kibana, _Enterprise Search_ > _Create an Elasticsearch index_. Select the type of connector you wish to use.
+Any converted native connector, net-new connector, or customized/modified connector must be run as a connector client, on premises.  
+
+1. Go to Kibana, _Enterprise Search_ > _Create an Elasticsearch index_. Select the service type of connector you wish to use.
 2. Create an API key to work with the connector. It should be done using the `Generate API key` button under `Configuration` tab.
 3. Configure your connector service application. You need to configure the following fields, and leave the rest as default.
    1. `elasticsearch.host`: Configure this to the Elasticsearch endpoint.
-   2. `elasticsearch.api_key`: Configure the API key generated in step 2. Make sure `elasticsearch.username` is not configured.
+   2. `elasticsearch.api_key`: Configure the API key generated in step 2. This is recommended over utilizing `elasticsearch.username/password` so that access can be automatically and narrowly scoped.
    3. `connector_id`: You can find the `connector_id` in step 3 `Deploy a connector` under `Configuration` tab in Kibana.
    4. `service_type`: Configure it to the service type of your new connector.
 4. Run the connector service application with
