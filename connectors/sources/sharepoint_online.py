@@ -720,6 +720,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     name = "Sharepoint Online"
     service_type = "sharepoint_online"
+    support_incremental_sync = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
