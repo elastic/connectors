@@ -164,7 +164,7 @@ class GoogleDriveDataSource(BaseDataSource):
         """Get the default configuration for Google Drive.
 
         Returns:
-            dictionary: Default configuration.
+            dict: Default configuration.
         """
         default_credentials = {
             "type": "service_account",
@@ -224,7 +224,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
 
     async def ping(self):
-        """Verify the connection with Google Drive"""
+        """""Verify the connection with Google Drive"""""
         if RUNNING_FTEST:
             return
 
@@ -258,11 +258,11 @@ class GoogleDriveDataSource(BaseDataSource):
             ) from e
 
 
-    async def get_drives(self):
-        """Fetch all shared drive ids and names from the Googl Drive API.
+    async def _get_drives(self):
+        """Fetch all shared drive (id, name) from Google Drive
 
         Yields:
-            Dictionary: Contains the list of fetched buckets from Google Cloud Storage.
+            dict: Shared drive metadata.
         """
 
         async for drive in self._google_drive_client.api_call(
@@ -276,8 +276,13 @@ class GoogleDriveDataSource(BaseDataSource):
 
 
     async def retrieve_all_drives(self):
+        """Retrieves all shared drives from Google Drive
+
+        Returns:
+            dict: mapping between drive id and its name
+        """
         drives = {}
-        async for chunk in self.get_drives():
+        async for chunk in self._get_drives():
           drives_chunk = chunk.get('drives', [])
           for drive in drives_chunk:
               drives[drive['id']] = drive['name']
@@ -285,7 +290,12 @@ class GoogleDriveDataSource(BaseDataSource):
         return drives
 
 
-    async def get_folders(self):
+    async def _get_folders(self):
+        """Fetch all folders (id, name, parent) from Google Drive
+
+        Yields:
+            dict: Folder metadata.
+        """
         async for folder in self._google_drive_client.api_call(
             resource="files",
             method="list",
@@ -301,8 +311,13 @@ class GoogleDriveDataSource(BaseDataSource):
 
 
     async def retrieve_all_folders(self):
+        """Retrieves all folders from Google Drive
+
+        Returns:
+            dict: mapping between folder id and its (name, parents)
+        """
         folders = {}
-        async for chunk in self.get_folders():
+        async for chunk in self._get_folders():
             folders_chunk = chunk.get('files', [])
             for folder in folders_chunk:
               folders[folder['id']] = {
@@ -314,6 +329,11 @@ class GoogleDriveDataSource(BaseDataSource):
 
 
     async def resolve_paths(self):
+        """Builds a lookup between a folder id and its absolute path in Google Drive structure
+
+        Returns:
+            dict: mapping between folder id and its (name, parents, path)
+        """
         folders = await self.retrieve_all_folders()
         drives = await self.retrieve_all_drives()
 
@@ -338,7 +358,6 @@ class GoogleDriveDataSource(BaseDataSource):
 
             folder['path'] = '/'.join(path)  # Join path elements with '/'
 
-
         return folders
 
 
@@ -346,7 +365,7 @@ class GoogleDriveDataSource(BaseDataSource):
         '''Downloads the file from Google Drive and returns the encoded file content.
 
         Args:
-            blob (dictionary): Formatted blob document.
+            blob (dict): Formatted blob document.
             download_func (partial func): Partial function that gets the file content from Google Drive API.
 
         Returns:
@@ -389,11 +408,11 @@ class GoogleDriveDataSource(BaseDataSource):
         They need to be exported to a supported file type before the content extraction phase.
 
         Args:
-            blob (dictionary): Formatted blob document.
+            blob (dict): Formatted blob document.
             timestamp (timestamp, optional): Timestamp of blob last modified. Defaults to None.
 
         Returns:
-            dictionary: Content document with id, timestamp & text
+            dict: Content document with id, timestamp & text
         """
 
         blob_name, blob_id, blob_mime_type = blob["name"], blob["id"], blob['mime_type']
@@ -428,11 +447,11 @@ class GoogleDriveDataSource(BaseDataSource):
         """Extracts the content from allowed file types supported by Apache Tika.
 
         Args:
-            blob (dictionary): Formatted blob document.
+            blob (dict): Formatted blob document.
             timestamp (timestamp, optional): Timestamp of blob last modified. Defaults to None.
 
         Returns:
-            dictionary: Content document with id, timestamp & text
+            dict: Content document with id, timestamp & text
         """
 
         blob_size = int(blob["size"])
@@ -478,12 +497,12 @@ class GoogleDriveDataSource(BaseDataSource):
         """Extracts the content from a blob file.
 
         Args:
-            blob (dictionary): Formatted blob document.
+            blob (dict): Formatted blob document.
             timestamp (timestamp, optional): Timestamp of blob last modified. Defaults to None.
             doit (boolean, optional): Boolean value for whether to get content or not. Defaults to None.
 
         Returns:
-            dictionary: Content document with id, timestamp & text
+            dict: Content document with id, timestamp & text
         """
 
         if not doit:
@@ -501,34 +520,34 @@ class GoogleDriveDataSource(BaseDataSource):
 
 
     async def fetch_files(self):
-      """Get files from Google Drive. Files can have any type.
+        """Get files from Google Drive. Files can have any type.
 
-      Yields:
-          dictionary: Documents from Google Drive.
-      """
-      async for file in self._google_drive_client.api_call(
-          resource="files",
-          method="list",
-          full_response=True,
-          corpora=CORPORA,
-          q="trashed=false",
-          orderBy='modifiedTime desc',
-          fields='files,nextPageToken',
-          includeItemsFromAllDrives=True,
-          supportsAllDrives=True,
-          pageSize=100
-      ):
-          yield file
+        Yields:
+            dict: Documents from Google Drive.
+        """
+        async for file in self._google_drive_client.api_call(
+            resource="files",
+            method="list",
+            full_response=True,
+            corpora=CORPORA,
+            q="trashed=false",
+            orderBy='modifiedTime desc',
+            fields='files,nextPageToken',
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True,
+            pageSize=100
+        ):
+            yield file
 
 
     def prepare_blob_document(self, blob, paths):
         """Apply key mappings to the blob document.
 
         Args:
-            blob (dictionary): Blob's metadata returned from the Drive.
+            blob (dict): Blob's metadata returned from the Drive.
 
         Returns:
-            dictionary: Blobs metadata mapped with the keys of `BLOB_ADAPTER`.
+            dict: Blobs metadata mapped with the keys of `BLOB_ADAPTER`.
         """
 
         blob_document = {
@@ -576,20 +595,30 @@ class GoogleDriveDataSource(BaseDataSource):
         """Generate blob document.
 
         Args:
-            blobs (dictionary): Dictionary contains blobs list.
+            blobs (dict): Dictionary contains blobs list.
 
         Yields:
-            dictionary: Blobs metadata mapped with the keys of `BLOB_ADAPTER`.
+            dict: Blobs metadata mapped with the keys of `BLOB_ADAPTER`.
         """
         for blob in blobs.get("files", []):
             yield self.prepare_blob_document(blob=blob, paths=paths)
 
 
     async def get_docs(self, filtering=None):
+        """Executes the logic to fetch Google Drive objects in an async manner.
 
-      # Build a path lookup, parentId -> parent path
-      resolved_paths = await self.resolve_paths()
+        Args:
+            filtering (optional): Advenced filtering rules. Defaults to None.
 
-      async for files in self.fetch_files():
-          for blob_document in self.get_blob_document(blobs=files, paths=resolved_paths):
-              yield blob_document, partial(self.get_content, blob_document)
+        Yields:
+            dict, partial: dict containing meta-data of the Google Drive objects,
+                                partial download content function
+        """
+
+
+        # Build a path lookup, parentId -> parent path
+        resolved_paths = await self.resolve_paths()
+
+        async for files in self.fetch_files():
+            for blob_document in self.get_blob_document(blobs=files, paths=resolved_paths):
+                yield blob_document, partial(self.get_content, blob_document)
