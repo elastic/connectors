@@ -114,13 +114,14 @@ This is our main communication index, used to communicate the connector's config
   index_name: string;   -> The name of the content index where data will be written to
   is_native: boolean;   -> Whether this is a native connector
   language: string;     -> the language used for the analyzer
+  last_access_control_sync_error: string;   -> Optional last access control sync job error message
   last_access_control_sync_scheduled_at: date;    -> Date/time when the last access control sync job is scheduled (UTC)
   last_access_control_sync_status: string:  -> Status of the last access control sync job, or null if no job has been executed
   last_deleted_document_count: number;    -> How many documents were deleted in the last job
   last_incremental_sync_scheduled_at: date; -> Date/time when the last incremental sync job is scheduled (UTC)
   last_indexed_document_count: number;    -> How many documents were indexed in the last job  
   last_seen: date;      -> Connector writes check-in date-time regularly (UTC)
-  last_sync_error: string;   -> Optional last job error message
+  last_sync_error: string;   -> Optional last full or incremental sync job error message
   last_sync_status: string;  -> Status of the last content sync job, or null if no job has been executed
   last_permissions_sync_status: string:  -> Status of the last permissions sync job, or null if no job has been executed
   last_synced: date;    -> Date/time of last job (UTC)
@@ -141,7 +142,6 @@ This is our main communication index, used to communicate the connector's config
   service_type: string; -> Service type of the connector
   status: string;       -> Connector status Enum, see below
   sync_cursor: object;  -> Cursor object of the last sync job, used to run incremental sync
-  sync_now: boolean;    -> Flag to signal user wants to initiate a job
 }
 ```
 **Possible values for 'status'**
@@ -271,6 +271,7 @@ This is our main communication index, used to communicate the connector's config
     "index_name" : { "type" : "keyword" },
     "is_native" : { "type" : "boolean" },
     "language" : { "type" : "keyword" },
+    "last_access_control_sync_error": { "type": "keyword" },
     "last_access_control_sync_scheduled_at": { "type": "date" },
     "last_access_control_sync_status" : { "type" : "keyword" },
     "last_deleted_document_count" : { "type" : "long" },
@@ -314,8 +315,7 @@ This is our main communication index, used to communicate the connector's config
     },
     "service_type" : { "type" : "keyword" },
     "status" : { "type" : "keyword" },
-    "sync_cursor" : { "type" : "object" },
-    "sync_now" : { "type" : "boolean" }
+    "sync_cursor" : { "type" : "object" }
   }
 }
 ```
@@ -487,7 +487,7 @@ For every half hour, and every time a job is executed, the connector should upda
 For custom connectors, the connector should also update `configuration` field if its status is `created`.
 
 The connector should also sync data for connectors:
-- Read connector definitions from `.elastic-connectors` regularly, and determine whether to sync data based on `sync_now` flag, as well as `scheduling` and `custom_scheduling` values. 
+- Read connector definitions from `.elastic-connectors` regularly, and determine whether to sync data based on `scheduling` and `custom_scheduling` values. 
 - Set the index mappings of the to-be-written-to index if not already present.
 - Sync with the data source and index resulting documents into the correct index.
 - Log jobs to `.elastic-connectors-sync-jobs`.
@@ -520,9 +520,9 @@ sequenceDiagram
         and Rule Validation
             Connector->>Elasticsearch: Updates validation state of filtering rules
         and Job
-            Connector->>Elasticsearch: Reads sync_now flag and job schedule and filtering rules
-            opt Sync_now is true or sync_schedule requires synchronization
-                Connector->>Elasticsearch: Sets sync_now to false and last_sync_status to in_progress
+            Connector->>Elasticsearch: Reads job schedule and filtering rules
+            opt sync_schedule requires synchronization
+                Connector->>Elasticsearch: Sets last_sync_status to in_progress
                 Connector->>Data source: Queries data
                 Connector->>Elasticsearch: Indexes filtered data
                 alt Job is successfully completed

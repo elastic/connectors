@@ -15,6 +15,7 @@ from connectors.filtering.validation import (
     BasicRuleNoMatchAllRegexValidator,
     BasicRulesSetSemanticValidator,
 )
+from connectors.protocol import Features
 from connectors.source import (
     BaseDataSource,
     ConfigurableFieldDependencyError,
@@ -779,7 +780,7 @@ async def test_base_class():
         await ds.get_docs_incrementally({})
 
     with pytest.raises(NotImplementedError):
-        await ds.get_permissions()
+        await ds.get_access_control()
 
     # default rule validators for every data source (order matters)
     assert BaseDataSource.basic_rules_validators() == [
@@ -790,6 +791,10 @@ async def test_base_class():
 
     # should be empty as advanced rules are specific to a data source
     assert not len(DataSource(configuration=configuration).advanced_rules_validators())
+
+    features = Features()
+    ds.set_features(features)
+    assert ds._features == features
 
 
 @pytest.mark.parametrize(
@@ -838,7 +843,9 @@ async def test_serialize(raw_doc, expected_doc):
 
         assert serialized_doc.keys() == expected_doc.keys()
 
-        for serialized_doc_key, expected_doc_key in zip(serialized_doc, expected_doc):
+        for serialized_doc_key, expected_doc_key in zip(
+            serialized_doc, expected_doc, strict=True
+        ):
             assert serialized_doc[serialized_doc_key] == expected_doc[expected_doc_key]
 
 

@@ -9,11 +9,12 @@ import time
 import elasticsearch
 
 from connectors.es import Mappings
-from connectors.es.client import with_concurrency_control
+from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
-from connectors.es.sink import SyncOrchestrator
+from connectors.es.license import requires_platinum_license
+from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
 from connectors.logger import logger
-from connectors.protocol import JobStatus
+from connectors.protocol import JobStatus, JobType
 from connectors.utils import truncate_id
 
 UTF_8 = "utf-8"
@@ -25,6 +26,13 @@ ES_ID_SIZE_LIMIT = 512
 
 class SyncJobRunningError(Exception):
     pass
+
+
+class InsufficientESLicenseError(Exception):
+    def __init__(self, required_license, actual_license):
+        super().__init__(
+            f"Minimum required Elasticsearch license: '{required_license.value}'. Actual license: '{actual_license.value}'."
+        )
 
 
 class SyncJobStartError(Exception):
@@ -89,65 +97,56 @@ class SyncJobRunner:
             raise SyncJobRunningError(
                 f"Sync job {self.sync_job.id} is already running."
             )
+
         self.running = True
 
         await self.sync_starts()
-        await self.sync_job.claim()
+        sync_cursor = (
+            self.connector.sync_cursor
+            if self.sync_job.job_type == JobType.INCREMENTAL
+            else None
+        )
+        await self.sync_job.claim(sync_cursor=sync_cursor)
         self._start_time = time.time()
 
         try:
-            self.data_provider = self.source_klass(self.sync_job.configuration)
+            self.data_provider = self.source_klass(
+                configuration=self.sync_job.configuration
+            )
+            self.data_provider.set_logger(self.sync_job.logger)
             if not await self.data_provider.changed():
-                logger.debug(
-                    f"No change in {self.sync_job.service_type} data provider, skipping..."
-                )
+                self.sync_job.log_debug("No change in remote source, skipping...")
                 await self._sync_done(sync_status=JobStatus.COMPLETED)
                 return
 
-            logger.debug(f"Validating configuration for {self.data_provider}")
+            self.data_provider.set_features(self.connector.features)
+
+            self.sync_job.log_debug("Validating configuration")
             self.data_provider.validate_config_fields()
             await self.data_provider.validate_config()
 
-            logger.debug(
-                f"Syncing '{self.sync_job.service_type}' for connector '{self.connector.id}'"
-            )
-            logger.debug(f"Pinging the {self.source_klass} backend")
+            self.sync_job.log_debug("Pinging the backend")
             await self.data_provider.ping()
 
-            sync_rules_enabled = self.connector.features.sync_rules_enabled()
-            if sync_rules_enabled:
-                await self.sync_job.validate_filtering(validator=self.data_provider)
-
-            mappings = Mappings.default_text_fields_mappings(
-                is_connectors_index=True,
-            )
-
-            self.elastic_server = SyncOrchestrator(self.es_config)
-
-            logger.debug("Preparing the content index")
-            await self.elastic_server.prepare_content_index(
-                self.sync_job.index_name, mappings=mappings
-            )
+            job_type = self.sync_job.job_type
 
             # allows the data provider to change the bulk options
             bulk_options = self.bulk_options.copy()
             self.data_provider.tweak_bulk_options(bulk_options)
 
-            await self.elastic_server.async_bulk(
-                self.sync_job.index_name,
-                self.prepare_docs(),
-                self.sync_job.pipeline,
-                filter_=self.sync_job.filtering,
-                sync_rules_enabled=sync_rules_enabled,
-                content_extraction_enabled=self.sync_job.pipeline[
-                    "extract_binary_content"
-                ],
-                options=bulk_options,
-            )
+            self.elastic_server = SyncOrchestrator(self.es_config, self.sync_job.logger)
+
+            if job_type in [JobType.INCREMENTAL, JobType.FULL]:
+                await self._execute_content_sync_job(job_type, bulk_options)
+            elif job_type == JobType.ACCESS_CONTROL:
+                await self._execute_access_control_sync_job(job_type, bulk_options)
+            else:
+                raise UnsupportedJobType
 
             self.job_reporting_task = asyncio.create_task(
                 self.update_ingestion_stats(JOB_REPORTING_INTERVAL)
             )
+
             while not self.elastic_server.done():
                 await self.check_job()
                 await asyncio.sleep(JOB_CHECK_INTERVAL)
@@ -161,7 +160,7 @@ class SyncJobRunner:
         except ConnectorJobCanceledError:
             await self._sync_done(sync_status=JobStatus.CANCELED)
         except Exception as e:
-            logger.critical(e, exc_info=True)
+            self.sync_job.log_critical(e, exc_info=True)
             await self._sync_done(sync_status=JobStatus.ERROR, sync_error=e)
         finally:
             self.running = False
@@ -169,6 +168,54 @@ class SyncJobRunner:
                 await self.elastic_server.close()
             if self.data_provider is not None:
                 await self.data_provider.close()
+
+    async def _execute_access_control_sync_job(self, job_type, bulk_options):
+        if requires_platinum_license(self.sync_job, self.connector, self.source_klass):
+            (
+                is_platinum_license_enabled,
+                license_enabled,
+            ) = await self.elastic_server.has_active_license_enabled(License.PLATINUM)
+
+            if not is_platinum_license_enabled:
+                raise InsufficientESLicenseError(
+                    required_license=License.PLATINUM, actual_license=license_enabled
+                )
+
+        await self.elastic_server.async_bulk(
+            self.sync_job.index_name,
+            self.generator(),
+            self.sync_job.pipeline,
+            job_type,
+            options=bulk_options,
+        )
+
+    async def _execute_content_sync_job(self, job_type, bulk_options):
+        sync_rules_enabled = self.connector.features.sync_rules_enabled()
+        if sync_rules_enabled:
+            await self.sync_job.validate_filtering(validator=self.data_provider)
+        mappings = Mappings.default_text_fields_mappings(
+            is_connectors_index=True,
+        )
+        logger.debug("Preparing the content index")
+        await self.elastic_server.prepare_content_index(
+            self.sync_job.index_name, mappings=mappings
+        )
+
+        content_extraction_enabled = (
+            self.sync_job.configuration.get("use_text_extraction_service")
+            or self.sync_job.pipeline["extract_binary_content"]
+        )
+
+        await self.elastic_server.async_bulk(
+            self.sync_job.index_name,
+            self.prepare_docs(),
+            self.sync_job.pipeline,
+            job_type,
+            filter_=self.sync_job.filtering,
+            sync_rules_enabled=sync_rules_enabled,
+            content_extraction_enabled=content_extraction_enabled,
+            options=bulk_options,
+        )
 
     async def _sync_done(self, sync_status, sync_error=None):
         if self.elastic_server is not None and not self.elastic_server.done():
@@ -178,7 +225,7 @@ class SyncJobRunner:
             try:
                 await self.job_reporting_task
             except asyncio.CancelledError:
-                logger.info("Job reporting task is stopped.")
+                self.sync_job.log_info("Job reporting task is stopped.")
 
         result = (
             {} if self.elastic_server is None else self.elastic_server.ingestion_stats()
@@ -205,12 +252,18 @@ class SyncJobRunner:
                 await self.sync_job.done(ingestion_stats=ingestion_stats)
 
         if await self.reload_connector():
+            sync_cursor = (
+                self.data_provider.sync_cursor()
+                if self.sync_job.is_content_sync()
+                else None
+            )
             await self.connector.sync_done(
-                self.sync_job if await self.reload_sync_job() else None
+                self.sync_job if await self.reload_sync_job() else None,
+                cursor=sync_cursor,
             )
 
-        logger.info(
-            f"[{self.sync_job.id}] Sync done: {ingestion_stats.get('indexed_document_count')} indexed, "
+        self.sync_job.log_info(
+            f"Sync done: {ingestion_stats.get('indexed_document_count')} indexed, "
             f"{ingestion_stats.get('deleted_document_count')} deleted. "
             f"({int(time.time() - self._start_time)} seconds)"  # pyright: ignore
         )
@@ -220,12 +273,28 @@ class SyncJobRunner:
         if not await self.reload_connector():
             raise SyncJobStartError(f"Couldn't reload connector {self.connector.id}")
 
-        if self.connector.last_sync_status == JobStatus.IN_PROGRESS:
-            logger.debug(
-                f"A sync job is started for connector {self.connector.id} by another connector instance, skipping..."
-            )
+        job_type = self.sync_job.job_type
+
+        if job_type in [JobType.FULL, JobType.INCREMENTAL]:
+            if self.connector.last_sync_status == JobStatus.IN_PROGRESS:
+                logger.debug(
+                    f"A content sync job is started for connector {self.connector.id} by another connector instance, skipping..."
+                )
+                raise SyncJobStartError(
+                    f"A content sync job is started for connector {self.connector.id} by another connector instance"
+                )
+        elif job_type == JobType.ACCESS_CONTROL:
+            if self.connector.last_access_control_sync_status == JobStatus.IN_PROGRESS:
+                logger.debug(
+                    f"An access control sync job is started for connector {self.connector.id} by another connector instance, skipping..."
+                )
+                raise SyncJobStartError(
+                    f"An access control sync job is started for connector {self.connector.id} by another connector instance"
+                )
+        else:
+            logger.error(f"Unknown job type: '{job_type}'. Skipping running sync job")
             raise SyncJobStartError(
-                f"A sync job is started for connector {self.connector.id} by another connector instance"
+                f"Unknown job type: '{job_type}'. Skipping running sync job"
             )
 
         try:
@@ -236,16 +305,14 @@ class SyncJobRunner:
             raise SyncJobStartError from e
 
     async def prepare_docs(self):
-        logger.debug(f"Using pipeline {self.sync_job.pipeline}")
+        self.sync_job.log_debug(f"Using pipeline {self.sync_job.pipeline}")
 
-        async for doc, lazy_download in self.data_provider.get_docs(
-            filtering=self.sync_job.filtering
-        ):
+        async for doc, lazy_download, operation in self.generator():
             doc_id = str(doc.get("_id", ""))
             doc_id_size = len(doc_id.encode(UTF_8))
 
             if doc_id_size > ES_ID_SIZE_LIMIT:
-                logger.debug(
+                self.sync_job.log_debug(
                     f"Id '{truncate_id(doc_id)}' is too long: {doc_id_size} of maximum {ES_ID_SIZE_LIMIT} bytes, hashing"
                 )
 
@@ -253,7 +320,7 @@ class SyncJobRunner:
                 hashed_id_size = len(hashed_id.encode(UTF_8))
 
                 if hashed_id_size > ES_ID_SIZE_LIMIT:
-                    logger.error(
+                    self.sync_job.log_error(
                         f"Hashed document id '{hashed_id}' with a size of '{hashed_id_size}' bytes is above the size limit of '{ES_ID_SIZE_LIMIT}' bytes."
                         f"Check the `hash_id` implementation of {self.source_klass.name}."
                     )
@@ -267,7 +334,26 @@ class SyncJobRunner:
             ]
             doc["_reduce_whitespace"] = self.sync_job.pipeline["reduce_whitespace"]
             doc["_run_ml_inference"] = self.sync_job.pipeline["run_ml_inference"]
-            yield doc, lazy_download
+            yield doc, lazy_download, operation
+
+    async def generator(self):
+        match self.sync_job.job_type:
+            case JobType.FULL:
+                async for doc, lazy_download in self.data_provider.get_docs(
+                    filtering=self.sync_job.filtering
+                ):
+                    yield doc, lazy_download, OP_INDEX
+            case JobType.INCREMENTAL:
+                async for doc, lazy_download, operation in self.data_provider.get_docs_incrementally(
+                    sync_cursor=self.connector.sync_cursor,
+                    filtering=self.sync_job.filtering,
+                ):
+                    yield doc, lazy_download, operation
+            case JobType.ACCESS_CONTROL:
+                async for doc in self.data_provider.get_access_control():
+                    yield doc, None, None
+            case _:
+                raise UnsupportedJobType
 
     async def update_ingestion_stats(self, interval):
         while True:
@@ -302,7 +388,7 @@ class SyncJobRunner:
             await self.sync_job.reload()
             return True
         except DocumentNotFoundError:
-            logger.error(f"Couldn't find sync job by id {self.sync_job.id}")
+            self.sync_job.log_error("Couldn't reload sync job")
             return False
 
     async def reload_connector(self):
@@ -310,5 +396,5 @@ class SyncJobRunner:
             await self.connector.reload()
             return True
         except DocumentNotFoundError:
-            logger.error(f"Couldn't find connector by id {self.connector.id}")
+            self.connector.log_error("Couldn't reload connector")
             return False

@@ -11,7 +11,7 @@ import random
 import string
 
 from flask import Flask, request
-from flask_limiter import Limiter
+from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
@@ -29,6 +29,11 @@ if THROTTLING:
         ],  # Sharepoint 50k+ licences limits
         retry_after="delta_seconds",
         headers_enabled=True,
+        header_name_mapping={
+            HEADERS.LIMIT: "RateLimit-Limit",
+            HEADERS.RESET: "RateLimit-Reset",
+            HEADERS.REMAINING: "RateLimit-Remaining",
+        },
     )
 
 # Number of Sharepoint subsites
@@ -242,7 +247,8 @@ def get_list_and_items(parent_site_url, list_id):
                     "GUID": f"list-item-att-{parent_site_url}-{list_id}",
                     "FileRef": parent_site_url,
                     "Modified": "2023-01-30T10:02:40Z",
-                    "EditorId": "aabb-112c",
+                    "AuthorId": 12345,
+                    "EditorId": 12345,
                     "Title": f"list-item-{list_id}",
                 }
             ]
@@ -258,7 +264,8 @@ def get_list_and_items(parent_site_url, list_id):
                     ),
                     "FileRef": parent_site_url,
                     "Modified": "2023-01-30T10:02:40Z",
-                    "EditorId": "aabb-112c",
+                    "AuthorId": 12345,
+                    "EditorId": 12345,
                     "Title": f"list-item-{list_id}",
                     "Id": adjust_document_id_size(f"list-id1-{list_id}"),
                     "ContentTypeId": f"123-{list_id}",
@@ -269,7 +276,8 @@ def get_list_and_items(parent_site_url, list_id):
                     "GUID": adjust_document_id_size(f"list-item-{list_id}"),
                     "FileRef": parent_site_url,
                     "Modified": "2023-01-30T10:02:40Z",
-                    "EditorId": "aabb-112c",
+                    "AuthorId": 12345,
+                    "EditorId": 12345,
                     "Title": f"list-item-{list_id}",
                     "Id": adjust_document_id_size(f"list-id2-{list_id}"),
                     "ContentTypeId": f"456-{list_id}",

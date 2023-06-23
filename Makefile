@@ -35,16 +35,20 @@ clean:
 lint: bin/python bin/black bin/elastic-ingest
 	bin/isort --check . --sp .isort.cfg
 	bin/black --check connectors
+	bin/black --check tests
 	bin/black --check setup.py
-	bin/ruff connectors
-	bin/ruff setup.py
 	bin/black --check scripts
+	bin/ruff connectors
+	bin/ruff tests
+	bin/ruff setup.py
 	bin/ruff scripts
 	bin/pyright connectors
+	bin/pyright tests
 
 autoformat: bin/python bin/black bin/elastic-ingest
 	bin/isort . --sp .isort.cfg
 	bin/black connectors
+	bin/black tests
 	bin/black setup.py
 	bin/black scripts
 

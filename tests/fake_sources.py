@@ -13,13 +13,15 @@ from connectors.filtering.validation import (
     FilteringValidationResult,
     FilteringValidationState,
 )
+from connectors.source import BaseDataSource
 
 
-class FakeSource:
+class FakeSource(BaseDataSource):
     """Fakey"""
 
     name = "Fakey"
     service_type = "fake"
+    support_incremental_sync = False
 
     def __init__(self, configuration):
         self.configuration = configuration
@@ -49,7 +51,7 @@ class FakeSource:
 
     @classmethod
     def get_default_configuration(cls):
-        return []
+        return {}
 
     @classmethod
     async def validate_filtering(cls, filtering):
@@ -64,6 +66,10 @@ class FakeSource:
 
     def tweak_bulk_options(self, options):
         pass
+
+
+class FakeSourceWithIncrementalSync(FakeSource):
+    support_incremental_sync = True
 
 
 class FakeSourceFilteringValid(FakeSource):
@@ -150,3 +156,11 @@ class LargeFakeSource(FakeSource):
         for i in range(1001):
             doc_id = str(i + 1)
             yield {"_id": doc_id, "data": "big" * 4 * 1024}, partial(self._dl, doc_id)
+
+
+class PremiumFake(FakeSource):
+    service_type = "premium_fake"
+
+    @classmethod
+    def is_premium():
+        return True

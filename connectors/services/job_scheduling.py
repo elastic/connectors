@@ -12,7 +12,7 @@ Event loop
 """
 from datetime import datetime
 
-from connectors.es.client import with_concurrency_control
+from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
 from connectors.protocol import (
@@ -42,47 +42,43 @@ class JobSchedulingService(BaseService):
 
     async def _schedule(self, connector):
         if self.running is False:
-            logger.debug(
-                f"Skipping run for {connector.id} because service is terminating"
-            )
+            connector.log_debug("Skipping run because service is terminating")
             return
 
         if connector.native:
-            logger.debug(f"Connector {connector.id} natively supported")
+            connector.log_debug("Natively supported")
 
         try:
             await connector.prepare(self.config)
         except DocumentNotFoundError:
-            logger.error(f"Couldn't find connector by id {connector.id}")
+            connector.log_error("Couldn't find connector")
             return
         except ServiceTypeNotConfiguredError:
-            logger.error(
-                f"Service type is not configured for connector {self.config['connector_id']}"
-            )
+            connector.log_error("Service type is not configured")
             return
         except ServiceTypeNotSupportedError:
-            logger.debug(f"Can't handle source of type {connector.service_type}")
+            connector.log_debug(f"Can't handle source of type {connector.service_type}")
             return
         except DataSourceError as e:
             await connector.error(e)
-            logger.critical(e, exc_info=True)
+            connector.log_critical(e, exc_info=True)
             raise
 
         # the heartbeat is always triggered
         await connector.heartbeat(self.heartbeat_interval)
 
-        logger.debug(f"Connector status is {connector.status}")
+        connector.log_debug(f"Status is {connector.status}")
 
         # we trigger a sync
         if connector.status == Status.CREATED:
-            logger.info(
-                f'Connector for {connector.service_type}(id: "{connector.id}") has just been created and cannot sync. Wait for Kibana to initialise connector correctly before proceeding.'
+            connector.log_info(
+                "Connector has just been created and cannot sync. Wait for Kibana to initialise connector correctly before proceeding."
             )
             return
 
         if connector.status == Status.NEEDS_CONFIGURATION:
-            logger.info(
-                f'Connector for {connector.service_type}(id: "{connector.id}") is not configured yet. Finish connector configuration in Kibana to make it possible to run a sync.'
+            connector.log_info(
+                "Connector is not configured yet. Finish connector configuration in Kibana to make it possible to run a sync."
             )
             return
 
@@ -93,14 +89,30 @@ class JobSchedulingService(BaseService):
 
         source_klass = get_source_klass(self.source_list[connector.service_type])
         if connector.features.sync_rules_enabled():
-            await connector.validate_filtering(
-                validator=source_klass(connector.configuration)
-            )
-
-        await self._on_demand_sync(connector)
+            validator = source_klass(connector.configuration)
+            validator.set_logger(connector.logger)
+            await connector.validate_filtering(validator=validator)
 
         if connector.features.document_level_security_enabled():
-            await self._scheduled_sync(connector, JobType.ACCESS_CONTROL)
+            (
+                is_platinum_license_enabled,
+                license_enabled,
+            ) = await self.connector_index.has_active_license_enabled(
+                License.PLATINUM
+            )  # pyright: ignore
+
+            if is_platinum_license_enabled:
+                await self._scheduled_sync(connector, JobType.ACCESS_CONTROL)
+            else:
+                connector.log_error(
+                    f"Minimum required Elasticsearch license: '{License.PLATINUM.value}'. Actual license: '{license_enabled.value}'. Skipping access control sync scheduling..."
+                )
+
+        if (
+            connector.features.incremental_sync_enabled()
+            and source_klass.support_incremental_sync
+        ):
+            await self._scheduled_sync(connector, JobType.INCREMENTAL)
 
         await self._scheduled_sync(connector, JobType.FULL)
 
@@ -109,7 +121,9 @@ class JobSchedulingService(BaseService):
         self.connector_index = ConnectorIndex(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
 
-        native_service_types = self.config.get("native_service_types", [])
+        native_service_types = self.config.get("native_service_types")
+        if native_service_types is None:
+            native_service_types = []
         logger.debug(f"Native support for {', '.join(native_service_types)}")
 
         # TODO: we can support multiple connectors but Ruby can't so let's use a
@@ -150,36 +164,13 @@ class JobSchedulingService(BaseService):
                 await self.sync_job_index.close()
         return 0
 
-    async def _on_demand_sync(self, connector):
-        @with_concurrency_control()
-        async def _should_schedule_on_demand_sync():
-            try:
-                await connector.reload()
-            except DocumentNotFoundError:
-                logger.error(f"Couldn't reload connector {connector.id}")
-                return False
-
-            if not connector.sync_now:
-                return False
-
-            await connector.reset_sync_now_flag()
-            return True
-
-        if await _should_schedule_on_demand_sync():
-            logger.info(f"Creating an on demand sync for connector {connector.id}...")
-            await self.sync_job_index.create(
-                connector=connector,
-                trigger_method=JobTriggerMethod.ON_DEMAND,
-                job_type=JobType.FULL,
-            )
-
     async def _scheduled_sync(self, connector, job_type):
         @with_concurrency_control()
         async def _should_schedule_scheduled_sync(job_type):
             try:
                 await connector.reload()
             except DocumentNotFoundError:
-                logger.error(f"Couldn't reload connector {connector.id}")
+                connector.log_error("Couldn't reload connector")
                 return False
 
             job_type_value = job_type.value
@@ -189,7 +180,7 @@ class JobSchedulingService(BaseService):
             )
 
             if last_sync_scheduled_at is not None and last_sync_scheduled_at > now:
-                logger.debug(
+                connector.log_debug(
                     f"A scheduled '{job_type_value}' sync is created by another connector instance, skipping..."
                 )
                 return False
@@ -197,20 +188,18 @@ class JobSchedulingService(BaseService):
             try:
                 next_sync = connector.next_sync(job_type)
             except Exception as e:
-                logger.critical(e, exc_info=True)
+                connector.log_critical(e, exc_info=True)
                 await connector.error(str(e))
                 return False
 
             if next_sync is None:
-                logger.debug(
-                    f"'{job_type_value}' sync scheduling is disabled for connector {connector.id}"
-                )
+                connector.log_debug(f"'{job_type_value}' sync scheduling is disabled")
                 return False
 
             next_sync_due = (next_sync - now).total_seconds()
             if next_sync_due - self.idling > 0:
-                logger.debug(
-                    f"Next '{job_type_value}' sync for connector {connector.id} due in {int(next_sync_due)} seconds"
+                connector.log_debug(
+                    f"Next '{job_type_value}' sync due in {int(next_sync_due)} seconds"
                 )
                 return False
 
@@ -221,9 +210,7 @@ class JobSchedulingService(BaseService):
             return True
 
         if await _should_schedule_scheduled_sync(job_type):
-            logger.info(
-                f"Creating a scheduled '{job_type.value}' sync for connector {connector.id}..."
-            )
+            connector.log_info(f"Creating a scheduled '{job_type.value}' sync...")
             await self.sync_job_index.create(
                 connector=connector,
                 trigger_method=JobTriggerMethod.SCHEDULED,

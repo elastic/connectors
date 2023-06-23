@@ -31,6 +31,7 @@ from connectors.source import (
     get_source_klass,
 )
 from connectors.utils import (
+    ACCESS_CONTROL_INDEX_PREFIX,
     deep_merge_dicts,
     filter_nested_dict_by_keys,
     iso_utc,
@@ -257,6 +258,9 @@ class SyncJob(ESDocument):
     def job_type(self):
         return JobType(self.get("job_type"))
 
+    def is_content_sync(self):
+        return self.job_type in (JobType.FULL, JobType.INCREMENTAL)
+
     async def validate_filtering(self, validator):
         validation_result = await validator.validate_filtering(self.filtering)
 
@@ -328,6 +332,16 @@ class SyncJob(ESDocument):
         if len(connector_metadata) > 0:
             doc["metadata"] = connector_metadata
         await self.index.update(doc_id=self.id, doc=doc)
+
+    def _prefix(self):
+        return f"[Sync Job id: {self.id}, connector id: {self.connector_id}, index name: {self.index_name}]"
+
+    def _extra(self):
+        return {
+            "labels.sync_job_id": self.id,
+            "labels.connector_id": self.connector_id,
+            "labels.index_name": self.index_name,
+        }
 
 
 class Filtering:
@@ -501,10 +515,6 @@ class Connector(ESDocument):
         return self.get("is_native", default=False)
 
     @property
-    def sync_now(self):
-        return self.get("sync_now", default=False)
-
-    @property
     def full_sync_scheduling(self):
         return self.get("scheduling", "full", default={})
 
@@ -586,7 +596,7 @@ class Connector(ESDocument):
             self.last_seen is None
             or (datetime.now(timezone.utc) - self.last_seen).total_seconds() > interval
         ):
-            logger.debug(f"Sending heartbeat for connector {self.id}")
+            self.log_debug("Sending heartbeat")
             await self.index.heartbeat(doc_id=self.id)
 
     def next_sync(self, job_type):
@@ -603,17 +613,8 @@ class Connector(ESDocument):
                 raise ValueError(f"Unknown job type: {job_type}")
 
         if not scheduling_property.get("enabled", False):
-            logger.debug(f"'{job_type.value}' sync scheduling is disabled")
             return None
         return next_run(scheduling_property.get("interval"))
-
-    async def reset_sync_now_flag(self):
-        await self.index.update(
-            doc_id=self.id,
-            doc={"sync_now": False},
-            if_seq_no=self._seq_no,
-            if_primary_term=self._primary_term,
-        )
 
     async def _update_datetime(self, field, new_ts):
         await self.index.update(
@@ -638,13 +639,25 @@ class Connector(ESDocument):
             case _:
                 raise ValueError(f"Unknown job type: {job_type}")
 
-    async def sync_starts(self):
+    async def sync_starts(self, job_type=JobType.FULL):
+        if job_type == JobType.ACCESS_CONTROL:
+            last_sync_information = {
+                "last_access_control_sync_status": JobStatus.IN_PROGRESS.value,
+                "last_access_control_sync_error": None,
+            }
+        elif job_type in [JobType.INCREMENTAL, JobType.FULL]:
+            last_sync_information = {
+                "last_sync_status": JobStatus.IN_PROGRESS.value,
+                "last_sync_error": None,
+            }
+        else:
+            raise ValueError(f"Unknown job type: {job_type}")
+
         doc = {
-            "last_sync_status": JobStatus.IN_PROGRESS.value,
-            "last_sync_error": None,
             "status": Status.CONNECTED.value,
             "error": None,
-        }
+        } | last_sync_information
+
         await self.index.update(
             doc_id=self.id,
             doc=doc,
@@ -662,22 +675,45 @@ class Connector(ESDocument):
     async def sync_done(self, job, cursor=None):
         job_status = JobStatus.ERROR if job is None else job.status
         job_error = JOB_NOT_FOUND_ERROR if job is None else job.error
+        job_type = job.job_type if job is not None else None
+
         if job_error is None and job_status == JobStatus.ERROR:
             job_error = UNKNOWN_ERROR
         connector_status = (
             Status.ERROR if job_status == JobStatus.ERROR else Status.CONNECTED
         )
 
+        if job_type == JobType.ACCESS_CONTROL:
+            last_sync_information = {
+                "last_access_control_sync_status": job_status.value,
+                "last_access_control_sync_error": job_error,
+            }
+        elif job_type in [JobType.INCREMENTAL, JobType.FULL]:
+            last_sync_information = {
+                "last_sync_status": job_status.value,
+                "last_sync_error": job_error,
+            }
+        elif job_type is None:
+            # If we don't know the job type we'll reset all sync jobs,
+            # so we don't run into the risk of staying "in progress" forever
+
+            last_sync_information = {
+                "last_access_control_sync_status": job_status.value,
+                "last_access_control_sync_error": job_error,
+                "last_sync_status": job_status.value,
+                "last_sync_error": job_error,
+            }
+        else:
+            raise ValueError(f"Unknown job type: {job_type}")
+
         doc = {
-            "last_sync_status": job_status.value,
             "last_synced": iso_utc(),
-            "last_sync_error": job_error,
             "status": connector_status.value,
             "error": job_error,
-        }
+        } | last_sync_information
 
-        # only update sync cursor after a successful sync job
-        if job_status == JobStatus.COMPLETED:
+        # only update sync cursor after a successful content sync job
+        if job_type != JobType.ACCESS_CONTROL and job_status == JobStatus.COMPLETED:
             doc["sync_cursor"] = cursor
 
         if job is not None and job.terminated:
@@ -703,8 +739,8 @@ class Connector(ESDocument):
         if self.id != configured_connector_id:
             # check configuration for native and other peripheral connectors
             if self.service_type not in config["sources"]:
-                logger.debug(
-                    f"Peripheral connector {self.id} has invalid service type {self.service_type}, cannot check configuration formatting."
+                self.log_debug(
+                    f"Peripheral connector has invalid service type {self.service_type}, cannot check configuration formatting."
                 )
                 return
 
@@ -715,9 +751,7 @@ class Connector(ESDocument):
             return
 
         if not configured_service_type:
-            logger.error(
-                f"Service type is not configured for connector {configured_connector_id}"
-            )
+            self.log_error("Service type is not configured")
             raise ServiceTypeNotConfiguredError("Service type is not configured.")
 
         if configured_service_type not in config["sources"]:
@@ -733,9 +767,7 @@ class Connector(ESDocument):
         doc = {}
         if self.service_type is None:
             doc["service_type"] = configured_service_type
-            logger.debug(
-                f"Populated service type {configured_service_type} for connector {self.id}"
-            )
+            self.log_debug(f"Populated service type {configured_service_type}")
 
         if self.configuration.is_empty():
             fqn = config["sources"][configured_service_type]
@@ -745,9 +777,9 @@ class Connector(ESDocument):
                 # sets the defaults and the flag to NEEDS_CONFIGURATION
                 doc["configuration"] = source_klass.get_simple_configuration()
                 doc["status"] = Status.NEEDS_CONFIGURATION.value
-                logger.debug(f"Populated configuration for connector {self.id}")
+                self.log_debug("Populated configuration")
             except Exception as e:
-                logger.critical(e, exc_info=True)
+                self.log_critical(e, exc_info=True)
                 raise DataSourceError(
                     f"Could not instantiate {fqn} for {configured_service_type}"
                 ) from e
@@ -765,18 +797,16 @@ class Connector(ESDocument):
         await self.reload()
         draft_filter = self.filtering.get_draft_filter()
         if not draft_filter.has_validation_state(FilteringValidationState.EDITED):
-            logger.debug(
-                f"Filtering of connector {self.id} is in state {draft_filter.validation['state']}, skipping..."
+            self.log_debug(
+                f"Filtering is in state {draft_filter.validation['state']}, skipping..."
             )
             return
 
-        logger.info(
-            f"Filtering of connector {self.id} is in state {FilteringValidationState.EDITED.value}, validating...)"
+        self.log_info(
+            f"Filtering is in state {FilteringValidationState.EDITED.value}, validating...)"
         )
         validation_result = await validator.validate_filtering(draft_filter)
-        logger.info(
-            f"Filtering validation result for connector {self.id}: {validation_result.state.value}"
-        )
+        self.log_info(f"Filtering validation result: {validation_result.state.value}")
 
         filtering = self.filtering.to_list()
         for filter_ in filtering:
@@ -796,9 +826,10 @@ class Connector(ESDocument):
         await self.reload()
 
     async def document_count(self):
-        await self.index.client.indices.refresh(
-            index=self.index_name, ignore_unavailable=True
-        )
+        if not self.index.serverless:
+            await self.index.client.indices.refresh(
+                index=self.index_name, ignore_unavailable=True
+            )
         result = await self.index.client.count(
             index=self.index_name, ignore_unavailable=True
         )
@@ -814,7 +845,7 @@ class Connector(ESDocument):
         try:
             source_klass = get_source_klass(fqn)
         except Exception as e:
-            logger.critical(e, exc_info=True)
+            self.log_critical(e, exc_info=True)
             raise DataSourceError(
                 f"Could not instantiate {fqn} for {service_type}"
             ) from e
@@ -845,8 +876,8 @@ class Connector(ESDocument):
         if not configs_missing_properties:
             return
 
-        logger.info(
-            f'Connector for {service_type}(id: "{self.id}") is missing configuration field properties. Generating defaults.'
+        self.log_info(
+            f"Connector for {service_type} is missing configuration field properties. Generating defaults."
         )
 
         # filter the default config by what fields we want to update, then merge the actual config into it
@@ -868,6 +899,15 @@ class Connector(ESDocument):
             if_primary_term=self._primary_term,
         )
         await self.reload()
+
+    def _prefix(self):
+        return f"[Connector id: {self.id}, index name: {self.index_name}]"
+
+    def _extra(self):
+        return {
+            "labels.connector_id": self.id,
+            "labels.index_name": self.index_name,
+        }
 
 
 IDLE_JOBS_THRESHOLD = 60  # 60 seconds
@@ -898,11 +938,16 @@ class SyncJobIndex(ESIndex):
 
     async def create(self, connector, trigger_method, job_type):
         filtering = connector.filtering.get_active_filter().transform_filtering()
+        index_name = connector.index_name
+
+        if job_type == JobType.ACCESS_CONTROL:
+            index_name = f"{ACCESS_CONTROL_INDEX_PREFIX}{index_name}"
+
         job_def = {
             "connector": {
                 "id": connector.id,
                 "filtering": filtering,
-                "index_name": connector.index_name,
+                "index_name": index_name,
                 "language": connector.language,
                 "pipeline": connector.pipeline.data,
                 "service_type": connector.service_type,

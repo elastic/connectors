@@ -17,13 +17,19 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from io import BytesIO
 
+import aiohttp
+import yaml
+from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 from base64io import Base64IO
+from bs4 import BeautifulSoup
 from cstriggers.core.trigger import QuartzCron
 from pympler import asizeof
 
 from connectors.logger import logger
 
+ACCESS_CONTROL_INDEX_PREFIX = "search-acl-filter-"
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_QUEUE_SIZE = 1024
 DEFAULT_DISPLAY_EVERY = 100
@@ -594,3 +600,178 @@ def deep_merge_dicts(base_dict, new_dict):
             base_dict[key] = new_dict[key]
 
     return base_dict
+
+
+class CacheWithTimeout:
+    """Structure to store an value that needs to expire. Some sort of L1 cache.
+
+    Example of usage:
+
+    cache = CacheWithTimeout()
+    cache.set(50, datetime.datetime.now() + datetime.timedelta(5)
+    value = cache.get() # 50
+    sleep(5)
+    value = cache.get() # None
+    """
+
+    def __init__(self):
+        self._value = None
+        self._expiration_date = None
+
+    def get(self):
+        """Get the value that's stored inside if it hasn't expired.
+
+        If the expiration_date is past due, None is returned instead.
+        """
+        if self._value:
+            if not is_expired(self._expiration_date):
+                return self._value
+
+        self._value = None
+
+        return None
+
+    def set(self, value, expiration_date):
+        """Set the value in the cache with expiration date.
+
+        Once expiration_date is past due, the value will be lost.
+        """
+        self._value = value
+        self._expiration_date = expiration_date
+
+
+def html_to_text(html):
+    if not html:
+        return html
+    try:
+        return BeautifulSoup(html, "lxml").get_text(separator="\n")
+    except Exception:
+        # TODO: figure out which exceptions can be thrown
+        # we actually don't want to raise, just fall back to bs4
+        return BeautifulSoup(html, features="html.parser").get_text(separator="\n")
+
+
+async def aenumerate(asequence, start=0):
+    i = start
+    async for elem in asequence:
+        try:
+            yield i, elem
+        finally:
+            i += 1
+
+
+class ExtractionService:
+    """Data extraction service manager
+
+    Calling `extract_text` with a filename will begin text extraction
+    using an instance of the data extraction service.
+    Requires the data extraction service to be running and
+    extraction_service settings in config.yml to be configured correctly.
+    """
+
+    def __init__(self):
+        # The config file is being opened here as a temporary measure for 8.9.
+        # This should be removed when the extraction service is expanded.
+        with open(
+            os.path.join(os.path.dirname(__file__), "..", "config.yml"), "r"
+        ) as file:
+            config = yaml.safe_load(file)
+
+        self.session = None
+
+        self.extraction_config = config.get("extraction_service", None)
+        if self.extraction_config is not None:
+            self.host = self.extraction_config.get("host", None)
+        else:
+            self.host = None
+
+        if self.host is None:
+            logger.warning(
+                "Extraction service has been initialised but no extraction service configuration was found. No text will be extracted for this sync."
+            )
+
+    def _check_configured(self):
+        if self.host is not None:
+            return True
+
+        return False
+
+    def _begin_session(self):
+        if self.session is not None:
+            return self.session
+
+        timeout = aiohttp.ClientTimeout(total=5)
+        self.session = aiohttp.ClientSession(timeout=timeout)
+
+    async def _end_session(self):
+        if not self.session:
+            return
+
+        await self.session.close()
+
+    async def extract_text(self, filepath, original_filename):
+        """Sends a text extraction request to tika-server using the supplied filename.
+        Args:
+            filepath: local path to the tempfile for extraction
+            original_filename: original name of file
+
+        Returns the extracted text
+        """
+
+        content = ""
+
+        if self._check_configured() is False:
+            # an empty host means configuration was not set correctly
+            # a warning is already raised in __init__
+            return content
+
+        if self.session is None:
+            self._begin_session()
+
+        filename = (
+            original_filename if original_filename else os.path.basename(filepath)
+        )
+
+        try:
+            content = await self.extract_with_file_send(filepath, filename)
+        except (ClientConnectionError, ServerTimeoutError) as e:
+            logger.error(
+                f"Connection to {self.host} failed while extracting data from {filename}. Error: {e}"
+            )
+        except Exception as e:
+            logger.error(f"Text extraction unexpectedly failed. Error: {e}")
+
+        return content
+
+    async def extract_with_file_send(self, filepath, filename):
+        """Sends a request to tika-server to extract text from a file.
+        Sends the file as body data in the request.
+
+        Returns a parsed response
+        """
+        with open(filepath, "rb") as file:
+            file_data = aiohttp.FormData()
+            file_data.add_field("file", BytesIO(file.read()), filename=filename)
+
+            async with self._begin_session().post(
+                f"{self.host}/extract_text/", data=file_data
+            ) as response:
+                return await self.parse_extraction_resp(filename, response)
+
+    async def parse_extraction_resp(self, filename, response):
+        """Parses the response from the tika-server and logs any extraction failures.
+
+        Returns `extracted_text` from the response.
+        """
+        content = await response.json()
+
+        if response.status != 200:
+            logger.warning(
+                f"Extraction service could not parse `{filename}'. Status: [{response.status}]."
+            )
+        if content.get("error"):
+            logger.warning(
+                f"Extraction service could not parse `{filename}'; {content.get('error', 'unexpected error')}: {content.get('message', 'unknown cause')}"
+            )
+
+        return content.get("extracted_text", "")
