@@ -339,7 +339,6 @@ class BaseDataSource:
 
     name = None
     service_type = None
-    support_incremental_sync = False
 
     def __init__(self, configuration):
         # Initialize to the global logger
@@ -413,6 +412,11 @@ class BaseDataSource:
         """
 
         return hash_id(_id)
+
+    @classmethod
+    def features(cls):
+        """Returns features available for the data source"""
+        raise NotImplementedError
 
     def set_features(self, features):
         if self._features is not None:

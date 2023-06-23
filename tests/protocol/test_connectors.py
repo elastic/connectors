@@ -893,12 +893,28 @@ async def test_sync_job_suspend():
     index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
 
 
+FEATURES = {
+    "sync_rules": {
+        "basic": {
+            "enabled": True,
+        },
+        "advanced": {
+            "enabled": True,
+        },
+    },
+}
+
+
 class Banana(BaseDataSource):
     """Banana"""
 
     @classmethod
     def get_default_configuration(cls):
         return {"one": {"value": None}, "two": {"value": None}}
+
+    @classmethod
+    def features(cls):
+        return Features(FEATURES)
 
 
 @pytest.mark.asyncio
@@ -968,6 +984,7 @@ async def test_connector_prepare_with_prepared_connector():
                     "value": "foobar",
                 },
             },
+            "features": FEATURES,
         },
     }
     config = {
@@ -1012,6 +1029,7 @@ async def test_connector_prepare_with_connector_missing_field_properties_creates
                     "value": "foobar",
                 },
             },
+            "features": FEATURES,
         },
     }
     config = {
@@ -1115,6 +1133,39 @@ async def test_connector_prepare_with_data_source_error():
 
 
 @pytest.mark.asyncio
+async def test_connector_prepare_with_different_features():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {
+            "service_type": "banana",
+            "configuration": Banana.get_simple_configuration(),
+            "features": {"foo": "bar"},
+        },
+    }
+    config = {
+        "connector_id": doc_id,
+        "service_type": "banana",
+        "sources": {"banana": "tests.protocol.test_connectors:Banana"},
+    }
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.prepare(config)
+    index.update.assert_called_once_with(
+        doc_id=doc_id,
+        doc={"features": FEATURES},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.asyncio
 async def test_connector_prepare():
     doc_id = "1"
     seq_no = 1
@@ -1141,6 +1192,7 @@ async def test_connector_prepare():
             "service_type": "banana",
             "configuration": Banana.get_simple_configuration(),
             "status": Status.NEEDS_CONFIGURATION.value,
+            "features": FEATURES,
         },
         if_seq_no=seq_no,
         if_primary_term=primary_term,
@@ -1167,6 +1219,7 @@ async def test_connector_prepare_with_race_condition():
         "_source": {
             "service_type": "banana",
             "configuration": Banana.get_simple_configuration(),
+            "features": FEATURES,
         }
     }
     index = Mock()
@@ -1188,6 +1241,7 @@ async def test_connector_prepare_with_race_condition():
             "service_type": "banana",
             "configuration": Banana.get_simple_configuration(),
             "status": Status.NEEDS_CONFIGURATION.value,
+            "features": FEATURES,
         },
         if_seq_no=seq_no,
         if_primary_term=primary_term,

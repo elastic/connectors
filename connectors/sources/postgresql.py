@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from connectors.protocol import Features
 from connectors.sources.generic_database import GenericBaseDataSource, Queries
 
 # Below schemas are system schemas and the tables of the systems schema's will not get indexed
@@ -96,6 +97,27 @@ class PostgreSQLDataSource(GenericBaseDataSource):
             }
         )
         return postgresql_configuration
+
+    @classmethod
+    def features(cls):
+        return Features(
+            {
+                "sync_rules": {
+                    "basic": {
+                        "enabled": True,
+                    },
+                    "advanced": {
+                        "enabled": False,
+                    },
+                },
+                "document_level_security": {
+                    "enabled": False,
+                },
+                "incremental_sync": {
+                    "enabled": False,
+                },
+            }
+        )
 
     def _create_engine(self):
         """Create async engine for postgresql"""

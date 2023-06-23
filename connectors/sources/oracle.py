@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from sqlalchemy import create_engine
 
+from connectors.protocol import Features
 from connectors.sources.generic_database import GenericBaseDataSource, Queries
 
 DEFAULT_PROTOCOL = "TCP"
@@ -111,6 +112,27 @@ class OracleDataSource(GenericBaseDataSource):
             }
         )
         return oracle_configuration
+
+    @classmethod
+    def features(cls):
+        return Features(
+            {
+                "sync_rules": {
+                    "basic": {
+                        "enabled": True,
+                    },
+                    "advanced": {
+                        "enabled": False,
+                    },
+                },
+                "document_level_security": {
+                    "enabled": False,
+                },
+                "incremental_sync": {
+                    "enabled": False,
+                },
+            }
+        )
 
     def _create_engine(self):
         """Create sync engine for oracle"""

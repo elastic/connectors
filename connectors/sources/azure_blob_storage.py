@@ -13,6 +13,7 @@ from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClient
 
+from connectors.protocol import Features
 from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
 
@@ -107,6 +108,27 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "value": MAX_CONCURRENT_DOWNLOADS,
             },
         }
+
+    @classmethod
+    def features(cls):
+        return Features(
+            {
+                "sync_rules": {
+                    "basic": {
+                        "enabled": True,
+                    },
+                    "advanced": {
+                        "enabled": False,
+                    },
+                },
+                "document_level_security": {
+                    "enabled": False,
+                },
+                "incremental_sync": {
+                    "enabled": False,
+                },
+            }
+        )
 
     def _configure_connection_string(self):
         """Generates connection string for ABS
