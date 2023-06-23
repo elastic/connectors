@@ -4,9 +4,9 @@ Configuration lives in [config.yml](../config.yml).
 
 - `elasticsearch`: Elasticsearch connection configurations.
   - `host`: The host of the Elasticsearch deployment.
-  - `username`: The username for the Elasticsearch connection.
-  - `password`: The password for the Elasticsearch connection.
-  - `api_key`: The API key for Elasticsearch connection. You can't set `api_key` when basic auth is used.
+  - `api_key`: The API key for Elasticsearch connection. Using `api_key` is recommended instead of `username`/`password`.
+  - `username`: The username for the Elasticsearch connection. Using `username` requires `password` to also be configured. However, `api_key` is the recommended configuration choice.
+  - `password`: The password for the Elasticsearch connection. Using `password` requires `username` to also be configured. However, `api_key` is the recommended configuration choice.
   - `ssl`: Whether SSL is used for the Elasticsearch connection.
   - `ca_certs`: Path to a CA bundle.
   - `bulk`: Options for the Bulk API calls behavior - all options can be
