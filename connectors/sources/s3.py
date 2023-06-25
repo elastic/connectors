@@ -42,6 +42,7 @@ class S3Client:
 
     def __init__(self, configuration):
         self.configuration = configuration
+        self._logger = logger
         self.session = aioboto3.Session(
             aws_access_key_id=self.configuration["aws_access_key_id"],
             aws_secret_access_key=self.configuration["aws_secret_access_key"],
