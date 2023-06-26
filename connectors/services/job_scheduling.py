@@ -42,47 +42,43 @@ class JobSchedulingService(BaseService):
 
     async def _schedule(self, connector):
         if self.running is False:
-            logger.debug(
-                f"Skipping run for {connector.id} because service is terminating"
-            )
+            connector.log_debug("Skipping run because service is terminating")
             return
 
         if connector.native:
-            logger.debug(f"Connector {connector.id} natively supported")
+            connector.log_debug("Natively supported")
 
         try:
             await connector.prepare(self.config)
         except DocumentNotFoundError:
-            logger.error(f"Couldn't find connector by id {connector.id}")
+            connector.log_error("Couldn't find connector")
             return
         except ServiceTypeNotConfiguredError:
-            logger.error(
-                f"Service type is not configured for connector {self.config['connector_id']}"
-            )
+            connector.log_error("Service type is not configured")
             return
         except ServiceTypeNotSupportedError:
-            logger.debug(f"Can't handle source of type {connector.service_type}")
+            connector.log_debug(f"Can't handle source of type {connector.service_type}")
             return
         except DataSourceError as e:
             await connector.error(e)
-            logger.critical(e, exc_info=True)
+            connector.log_critical(e, exc_info=True)
             raise
 
         # the heartbeat is always triggered
         await connector.heartbeat(self.heartbeat_interval)
 
-        logger.debug(f"Connector status is {connector.status}")
+        connector.log_debug(f"Status is {connector.status}")
 
         # we trigger a sync
         if connector.status == Status.CREATED:
-            logger.info(
-                f'Connector for {connector.service_type}(id: "{connector.id}") has just been created and cannot sync. Wait for Kibana to initialise connector correctly before proceeding.'
+            connector.log_info(
+                "Connector has just been created and cannot sync. Wait for Kibana to initialise connector correctly before proceeding."
             )
             return
 
         if connector.status == Status.NEEDS_CONFIGURATION:
-            logger.info(
-                f'Connector for {connector.service_type}(id: "{connector.id}") is not configured yet. Finish connector configuration in Kibana to make it possible to run a sync.'
+            connector.log_info(
+                "Connector is not configured yet. Finish connector configuration in Kibana to make it possible to run a sync."
             )
             return
 
@@ -93,9 +89,9 @@ class JobSchedulingService(BaseService):
 
         source_klass = get_source_klass(self.source_list[connector.service_type])
         if connector.features.sync_rules_enabled():
-            await connector.validate_filtering(
-                validator=source_klass(connector.configuration)
-            )
+            validator = source_klass(connector.configuration)
+            validator.set_logger(connector.logger)
+            await connector.validate_filtering(validator=validator)
 
         if connector.features.document_level_security_enabled():
             (
@@ -108,7 +104,7 @@ class JobSchedulingService(BaseService):
             if is_platinum_license_enabled:
                 await self._scheduled_sync(connector, JobType.ACCESS_CONTROL)
             else:
-                logger.error(
+                connector.log_error(
                     f"Minimum required Elasticsearch license: '{License.PLATINUM.value}'. Actual license: '{license_enabled.value}'. Skipping access control sync scheduling..."
                 )
 
@@ -174,7 +170,7 @@ class JobSchedulingService(BaseService):
             try:
                 await connector.reload()
             except DocumentNotFoundError:
-                logger.error(f"Couldn't reload connector {connector.id}")
+                connector.log_error("Couldn't reload connector")
                 return False
 
             job_type_value = job_type.value
@@ -184,7 +180,7 @@ class JobSchedulingService(BaseService):
             )
 
             if last_sync_scheduled_at is not None and last_sync_scheduled_at > now:
-                logger.debug(
+                connector.log_debug(
                     f"A scheduled '{job_type_value}' sync is created by another connector instance, skipping..."
                 )
                 return False
@@ -192,20 +188,18 @@ class JobSchedulingService(BaseService):
             try:
                 next_sync = connector.next_sync(job_type)
             except Exception as e:
-                logger.critical(e, exc_info=True)
+                connector.log_critical(e, exc_info=True)
                 await connector.error(str(e))
                 return False
 
             if next_sync is None:
-                logger.debug(
-                    f"'{job_type_value}' sync scheduling is disabled for connector {connector.id}"
-                )
+                connector.log_debug(f"'{job_type_value}' sync scheduling is disabled")
                 return False
 
             next_sync_due = (next_sync - now).total_seconds()
             if next_sync_due - self.idling > 0:
-                logger.debug(
-                    f"Next '{job_type_value}' sync for connector {connector.id} due in {int(next_sync_due)} seconds"
+                connector.log_debug(
+                    f"Next '{job_type_value}' sync due in {int(next_sync_due)} seconds"
                 )
                 return False
 
@@ -216,9 +210,7 @@ class JobSchedulingService(BaseService):
             return True
 
         if await _should_schedule_scheduled_sync(job_type):
-            logger.info(
-                f"Creating a scheduled '{job_type.value}' sync for connector {connector.id}..."
-            )
+            connector.log_info(f"Creating a scheduled '{job_type.value}' sync...")
             await self.sync_job_index.create(
                 connector=connector,
                 trigger_method=JobTriggerMethod.SCHEDULED,
