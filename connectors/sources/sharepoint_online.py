@@ -793,6 +793,14 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "bool",
                 "value": False,
             },
+            "use_document_level_security": {
+                "display": "toggle",
+                "label": "Use document level security",
+                "order": 7,
+                "tooltip": "This will add access control data to content documents and will also sync identities with their corresponding access control to a separate index .search-acl-filter-index-name",
+                "type": "bool",
+                "value": False,
+            },
         }
 
     async def validate_config(self):
@@ -996,7 +1004,10 @@ class SharepointOnlineDataSource(BaseDataSource):
         if self._features is None:
             return False
 
-        return self._features.document_level_security_enabled()
+        if not self._features.document_level_security_enabled():
+            return False
+
+        return self.configuration["use_document_level_security"]
 
     async def get_docs(self, filtering=None):
         max_drive_item_age = None
