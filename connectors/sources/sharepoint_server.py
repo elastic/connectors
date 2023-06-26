@@ -96,6 +96,7 @@ class SharepointServerClient:
     def __init__(self, configuration):
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
+        self._logger = logger
         self.host_url = self.configuration["host_url"]
         self.certificate = self.configuration["ssl_ca"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
@@ -108,6 +109,9 @@ class SharepointServerClient:
         else:
             self.ssl_ctx = False
 
+    def set_logger(self, logger_):
+        self._logger = logger_
+
     def _get_session(self):
         """Generate base client session using configuration fields
 
@@ -116,7 +120,7 @@ class SharepointServerClient:
         """
         if self.session:
             return self.session
-        logger.info("Generating aiohttp Client Session...")
+        self._logger.info("Generating aiohttp Client Session...")
         request_headers = {
             "accept": "application/json",
             "content-type": "application/json",
@@ -187,7 +191,7 @@ class SharepointServerClient:
             return
 
         if document_size > FILE_SIZE_LIMIT:
-            logger.warning(
+            self._logger.warning(
                 f"File size {document_size} of file {filename} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
             )
             return
@@ -231,7 +235,7 @@ class SharepointServerClient:
         try:
             await remove(source_file_name)  # pyright: ignore
         except Exception as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Could not remove file: {source_file_name}. Error: {exception}"
             )
         return attachment_content
@@ -264,7 +268,7 @@ class SharepointServerClient:
         )
 
         if document_size > FILE_SIZE_LIMIT:
-            logger.warning(
+            self._logger.warning(
                 f"File size {document_size} of file {filename} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
             )
             return
@@ -304,7 +308,7 @@ class SharepointServerClient:
         """
         if retry > self.retry_count:
             raise exception
-        logger.warning(
+        self._logger.warning(
             f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
         )
         retry += 1
@@ -352,7 +356,7 @@ class SharepointServerClient:
                 retry, retry_seconds = self._get_retry_after(
                     retry=retry, exception=exception
                 )
-                logger.debug(f"Will retry in {retry_seconds} seconds")
+                self._logger.debug(f"Will retry in {retry_seconds} seconds")
                 await self._sleeps.sleep(retry_seconds)
 
     async def _fetch_data_with_next_url(
@@ -477,7 +481,7 @@ class SharepointServerClient:
         if "" in attachment_extension:
             attachment_extension.remove("")
         if "." not in filename:
-            logger.warning(
+            self._logger.warning(
                 f"Files without extension are not supported by TIKA, skipping {filename}."
             )
             return
@@ -597,6 +601,9 @@ class SharepointServerDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.sharepoint_client = SharepointServerClient(configuration=configuration)
 
+    def _set_internal_logger(self):
+        self.sharepoint_client.set_logger(self._logger)
+
     @classmethod
     def get_default_configuration(cls):
         """Get the default configuration for SharePoint
@@ -665,11 +672,11 @@ class SharepointServerDataSource(BaseDataSource):
         """Verify the connection with SharePoint"""
         try:
             await self.sharepoint_client.ping()
-            logger.debug(
+            self._logger.debug(
                 f"Successfully connected to the SharePoint via {self.sharepoint_client.host_url}"
             )
         except Exception:
-            logger.exception(
+            self._logger.exception(
                 f"Error while connecting to the SharePoint via {self.sharepoint_client.host_url}"
             )
             raise

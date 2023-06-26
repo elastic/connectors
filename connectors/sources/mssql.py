@@ -10,7 +10,6 @@ from tempfile import NamedTemporaryFile
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 
-from connectors.logger import logger
 from connectors.sources.generic_database import GenericBaseDataSource, Queries
 from connectors.utils import get_pem_format
 
@@ -137,7 +136,7 @@ class MSSQLDataSource(GenericBaseDataSource):
             try:
                 os.remove(self.certfile)
             except Exception as exception:
-                logger.warning(
+                self._logger.warning(
                     f"Something went wrong while removing temporary certificate file. Exception: {exception}"
                 )
         if self.connection is None:
