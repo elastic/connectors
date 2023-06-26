@@ -10,7 +10,6 @@ from tempfile import NamedTemporaryFile
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 
-from connectors.protocol import Features
 from connectors.sources.generic_database import GenericBaseDataSource, Queries
 from connectors.utils import get_pem_format
 
@@ -111,27 +110,6 @@ class MSSQLDataSource(GenericBaseDataSource):
             }
         )
         return mssql_configuration
-
-    @classmethod
-    def features(cls):
-        return Features(
-            {
-                "sync_rules": {
-                    "basic": {
-                        "enabled": True,
-                    },
-                    "advanced": {
-                        "enabled": False,
-                    },
-                },
-                "document_level_security": {
-                    "enabled": False,
-                },
-                "incremental_sync": {
-                    "enabled": False,
-                },
-            }
-        )
 
     def _create_engine(self):
         """Create sync engine for mssql"""

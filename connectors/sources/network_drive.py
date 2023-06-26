@@ -13,7 +13,6 @@ from io import BytesIO
 import smbclient
 from smbprotocol.exceptions import SMBException, SMBOSError
 
-from connectors.protocol import Features
 from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value, iso_utc
 
@@ -81,27 +80,6 @@ class NASDataSource(BaseDataSource):
                 "value": "Folder1",
             },
         }
-
-    @classmethod
-    def features(cls):
-        return Features(
-            {
-                "sync_rules": {
-                    "basic": {
-                        "enabled": True,
-                    },
-                    "advanced": {
-                        "enabled": False,
-                    },
-                },
-                "document_level_security": {
-                    "enabled": False,
-                },
-                "incremental_sync": {
-                    "enabled": False,
-                },
-            }
-        )
 
     def create_connection(self):
         """Creates an SMB session to the shared drive."""

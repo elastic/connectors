@@ -15,7 +15,6 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.protocol import Features
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 
 
@@ -89,6 +88,7 @@ class MongoDataSource(BaseDataSource):
 
     name = "MongoDB"
     service_type = "mongodb"
+    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
@@ -150,27 +150,6 @@ class MongoDataSource(BaseDataSource):
                 "value": False,
             },
         }
-
-    @classmethod
-    def features(cls):
-        return Features(
-            {
-                "sync_rules": {
-                    "basic": {
-                        "enabled": True,
-                    },
-                    "advanced": {
-                        "enabled": True,
-                    },
-                },
-                "document_level_security": {
-                    "enabled": False,
-                },
-                "incremental_sync": {
-                    "enabled": False,
-                },
-            }
-        )
 
     def advanced_rules_validators(self):
         return [MongoAdvancedRulesValidator()]

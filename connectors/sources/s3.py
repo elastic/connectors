@@ -21,7 +21,6 @@ from aiohttp.client_exceptions import ServerTimeoutError
 from botocore.exceptions import ClientError
 
 from connectors.logger import logger, set_extra_logger
-from connectors.protocol import Features
 from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
 
@@ -362,24 +361,3 @@ class S3DataSource(BaseDataSource):
                 "value": DEFAULT_PAGE_SIZE,
             },
         }
-
-    @classmethod
-    def features(cls):
-        return Features(
-            {
-                "sync_rules": {
-                    "basic": {
-                        "enabled": True,
-                    },
-                    "advanced": {
-                        "enabled": False,
-                    },
-                },
-                "document_level_security": {
-                    "enabled": False,
-                },
-                "incremental_sync": {
-                    "enabled": False,
-                },
-            }
-        )

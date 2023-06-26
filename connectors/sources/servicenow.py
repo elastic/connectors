@@ -20,7 +20,6 @@ from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 
 from connectors.logger import logger
-from connectors.protocol import Features
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
@@ -453,27 +452,6 @@ class ServiceNowDataSource(BaseDataSource):
                 "value": MAX_CONCURRENT_CLIENT_SUPPORT,
             },
         }
-
-    @classmethod
-    def features(cls):
-        return Features(
-            {
-                "sync_rules": {
-                    "basic": {
-                        "enabled": True,
-                    },
-                    "advanced": {
-                        "enabled": False,
-                    },
-                },
-                "document_level_security": {
-                    "enabled": False,
-                },
-                "incremental_sync": {
-                    "enabled": False,
-                },
-            }
-        )
 
     async def _remote_validation(self):
         """Validate configured services

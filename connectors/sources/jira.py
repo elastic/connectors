@@ -20,7 +20,6 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
-from connectors.protocol import Features
 from connectors.source import BaseDataSource
 from connectors.sources.atlassian import AtlassianAdvancedRulesValidator
 from connectors.utils import (
@@ -201,6 +200,7 @@ class JiraDataSource(BaseDataSource):
 
     name = "Jira"
     service_type = "jira"
+    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the Jira
@@ -321,27 +321,6 @@ class JiraDataSource(BaseDataSource):
                 "value": MAX_CONCURRENT_DOWNLOADS,
             },
         }
-
-    @classmethod
-    def features(cls):
-        return Features(
-            {
-                "sync_rules": {
-                    "basic": {
-                        "enabled": True,
-                    },
-                    "advanced": {
-                        "enabled": True,
-                    },
-                },
-                "document_level_security": {
-                    "enabled": False,
-                },
-                "incremental_sync": {
-                    "enabled": False,
-                },
-            }
-        )
 
     def advanced_rules_validators(self):
         return [AtlassianAdvancedRulesValidator(self)]

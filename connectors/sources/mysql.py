@@ -14,7 +14,6 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.protocol import Features
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.generic_database import (
     WILDCARD,
@@ -338,6 +337,7 @@ class MySqlDataSource(BaseDataSource):
 
     name = "MySQL"
     service_type = "mysql"
+    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
@@ -426,27 +426,6 @@ class MySqlDataSource(BaseDataSource):
                 "value": RETRIES,
             },
         }
-
-    @classmethod
-    def features(cls):
-        return Features(
-            {
-                "sync_rules": {
-                    "basic": {
-                        "enabled": True,
-                    },
-                    "advanced": {
-                        "enabled": True,
-                    },
-                },
-                "document_level_security": {
-                    "enabled": False,
-                },
-                "incremental_sync": {
-                    "enabled": False,
-                },
-            }
-        )
 
     def mysql_client(self):
         return MySQLClient(

@@ -19,7 +19,6 @@ from dropbox.files import FileMetadata
 from dropbox.sharing import FileLinkMetadata, SharedFileMetadata
 
 from connectors.logger import logger
-from connectors.protocol import Features
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
@@ -200,27 +199,6 @@ class DropboxDataSource(BaseDataSource):
                 "value": MAX_CONCURRENT_DOWNLOADS,
             },
         }
-
-    @classmethod
-    def features(cls):
-        return Features(
-            {
-                "sync_rules": {
-                    "basic": {
-                        "enabled": True,
-                    },
-                    "advanced": {
-                        "enabled": False,
-                    },
-                },
-                "document_level_security": {
-                    "enabled": False,
-                },
-                "incremental_sync": {
-                    "enabled": False,
-                },
-            }
-        )
 
     async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields

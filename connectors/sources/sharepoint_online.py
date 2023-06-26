@@ -24,7 +24,6 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.protocol import Features
 from connectors.source import BaseDataSource
 from connectors.utils import (
     CacheWithTimeout,
@@ -754,6 +753,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     name = "Sharepoint Online"
     service_type = "sharepoint_online"
+    advanced_rules_enabled = True
+    dls_enabled = True
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
@@ -827,27 +829,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "value": False,
             },
         }
-
-    @classmethod
-    def features(cls):
-        return Features(
-            {
-                "sync_rules": {
-                    "basic": {
-                        "enabled": True,
-                    },
-                    "advanced": {
-                        "enabled": True,
-                    },
-                },
-                "document_level_security": {
-                    "enabled": True,
-                },
-                "incremental_sync": {
-                    "enabled": True,
-                },
-            }
-        )
 
     async def validate_config(self):
         # Check that we can log in into Graph API

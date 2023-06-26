@@ -17,7 +17,6 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
-from connectors.protocol import Features
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.atlassian import AtlassianAdvancedRulesValidator
 from connectors.utils import (
@@ -193,6 +192,7 @@ class ConfluenceDataSource(BaseDataSource):
 
     name = "Confluence"
     service_type = "confluence"
+    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to Confluence
@@ -313,27 +313,6 @@ class ConfluenceDataSource(BaseDataSource):
                 "value": MAX_CONCURRENT_DOWNLOADS,
             },
         }
-
-    @classmethod
-    def features(cls):
-        return Features(
-            {
-                "sync_rules": {
-                    "basic": {
-                        "enabled": True,
-                    },
-                    "advanced": {
-                        "enabled": True,
-                    },
-                },
-                "document_level_security": {
-                    "enabled": False,
-                },
-                "incremental_sync": {
-                    "enabled": False,
-                },
-            }
-        )
 
     async def close(self):
         """Closes unclosed client session"""

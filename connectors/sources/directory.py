@@ -12,7 +12,6 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from connectors.protocol import Features
 from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
@@ -48,27 +47,6 @@ class DirectoryDataSource(BaseDataSource):
                 "value": "**/*.*",
             },
         }
-
-    @classmethod
-    def features(cls):
-        return Features(
-            {
-                "sync_rules": {
-                    "basic": {
-                        "enabled": True,
-                    },
-                    "advanced": {
-                        "enabled": False,
-                    },
-                },
-                "document_level_security": {
-                    "enabled": False,
-                },
-                "incremental_sync": {
-                    "enabled": False,
-                },
-            }
-        )
 
     async def ping(self):
         return True

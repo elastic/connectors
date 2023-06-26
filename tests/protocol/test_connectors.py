@@ -893,28 +893,12 @@ async def test_sync_job_suspend():
     index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
 
 
-FEATURES = {
-    "sync_rules": {
-        "basic": {
-            "enabled": True,
-        },
-        "advanced": {
-            "enabled": True,
-        },
-    },
-}
-
-
 class Banana(BaseDataSource):
     """Banana"""
 
     @classmethod
     def get_default_configuration(cls):
         return {"one": {"value": None}, "two": {"value": None}}
-
-    @classmethod
-    def features(cls):
-        return Features(FEATURES)
 
 
 @pytest.mark.asyncio
@@ -984,7 +968,7 @@ async def test_connector_prepare_with_prepared_connector():
                     "value": "foobar",
                 },
             },
-            "features": FEATURES,
+            "features": Banana.features(),
         },
     }
     config = {
@@ -1029,7 +1013,7 @@ async def test_connector_prepare_with_connector_missing_field_properties_creates
                     "value": "foobar",
                 },
             },
-            "features": FEATURES,
+            "features": Banana.features(),
         },
     }
     config = {
@@ -1159,7 +1143,7 @@ async def test_connector_prepare_with_different_features():
     await connector.prepare(config)
     index.update.assert_called_once_with(
         doc_id=doc_id,
-        doc={"features": FEATURES},
+        doc={"features": Banana.features()},
         if_seq_no=seq_no,
         if_primary_term=primary_term,
     )
@@ -1192,7 +1176,7 @@ async def test_connector_prepare():
             "service_type": "banana",
             "configuration": Banana.get_simple_configuration(),
             "status": Status.NEEDS_CONFIGURATION.value,
-            "features": FEATURES,
+            "features": Banana.features(),
         },
         if_seq_no=seq_no,
         if_primary_term=primary_term,
@@ -1219,7 +1203,7 @@ async def test_connector_prepare_with_race_condition():
         "_source": {
             "service_type": "banana",
             "configuration": Banana.get_simple_configuration(),
-            "features": FEATURES,
+            "features": Banana.features(),
         }
     }
     index = Mock()
@@ -1241,7 +1225,7 @@ async def test_connector_prepare_with_race_condition():
             "service_type": "banana",
             "configuration": Banana.get_simple_configuration(),
             "status": Status.NEEDS_CONFIGURATION.value,
-            "features": FEATURES,
+            "features": Banana.features(),
         },
         if_seq_no=seq_no,
         if_primary_term=primary_term,

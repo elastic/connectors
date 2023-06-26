@@ -785,8 +785,8 @@ class Connector(ESDocument):
             doc["status"] = Status.NEEDS_CONFIGURATION.value
             self.log_debug("Populated configuration")
 
-        if self.features.features != source_klass.features().features:
-            doc["features"] = source_klass.features().features
+        if self.features.features != source_klass.features():
+            doc["features"] = source_klass.features()
             self.log_debug("Populated features")
 
         if not doc:

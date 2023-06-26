@@ -339,6 +339,10 @@ class BaseDataSource:
 
     name = None
     service_type = None
+    basic_rules_enabled = True
+    advanced_rules_enabled = False
+    dls_enabled = False
+    incremental_sync_enabled = False
 
     def __init__(self, configuration):
         # Initialize to the global logger
@@ -416,7 +420,22 @@ class BaseDataSource:
     @classmethod
     def features(cls):
         """Returns features available for the data source"""
-        raise NotImplementedError
+        return {
+            "sync_rules": {
+                "basic": {
+                    "enabled": cls.basic_rules_enabled,
+                },
+                "advanced": {
+                    "enabled": cls.advanced_rules_enabled,
+                },
+            },
+            "document_level_security": {
+                "enabled": cls.dls_enabled,
+            },
+            "incremental_sync": {
+                "enabled": cls.incremental_sync_enabled,
+            },
+        }
 
     def set_features(self, features):
         if self._features is not None:

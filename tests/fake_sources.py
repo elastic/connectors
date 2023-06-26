@@ -13,7 +13,6 @@ from connectors.filtering.validation import (
     FilteringValidationResult,
     FilteringValidationState,
 )
-from connectors.protocol import Features
 from connectors.source import BaseDataSource
 
 
@@ -60,10 +59,6 @@ class FakeSource(BaseDataSource):
             state=FilteringValidationState.VALID, errors=[]
         )
 
-    @classmethod
-    def features(cls):
-        return Features()
-
     async def validate_config(self):
         if self.configuration_invalid:
             raise ValueError("I fail when validating configuration")
@@ -73,15 +68,7 @@ class FakeSource(BaseDataSource):
 
 
 class FakeSourceWithIncrementalSync(FakeSource):
-    @classmethod
-    def features(cls):
-        return Features(
-            {
-                "incremental_sync": {
-                    "enabled": True,
-                },
-            }
-        )
+    incremental_sync_enabled = True
 
 
 class FakeSourceFilteringValid(FakeSource):
