@@ -491,6 +491,9 @@ class BaseDataSource:
         """
         pass
 
+    def access_control_query(self, access_control):
+        raise NotImplementedError
+
     async def get_access_control(self):
         """Returns an asynchronous iterator on the permission documents present in the backend.
 
