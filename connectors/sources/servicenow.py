@@ -92,6 +92,10 @@ class ServiceNowClient:
         self.configuration = configuration
         self.services = self.configuration["services"]
         self.retry_count = self.configuration["retry_count"]
+        self._logger = logger
+
+    def set_logger(self, logger_):
+        self._logger = logger_
 
     @cached_property
     def _get_session(self):
@@ -101,7 +105,7 @@ class ServiceNowClient:
             aiohttp.ClientSession: An instance of Client Session
         """
 
-        logger.debug("Generating aiohttp client session")
+        self._logger.debug("Generating aiohttp client session")
         connector = aiohttp.TCPConnector(limit=MAX_CONCURRENT_CLIENT_SUPPORT)
         basic_auth = aiohttp.BasicAuth(
             login=self.configuration["username"],
@@ -151,7 +155,7 @@ class ServiceNowClient:
             await self._read_response(response=response)
             return int(response.headers.get("x-total-count", 0))
         except Exception as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Error while fetching {table_name} length. Exception: {exception}."
             )
             raise
@@ -242,7 +246,7 @@ class ServiceNowClient:
             async for response in self._batch_api_call(batch_data=batch_data):
                 yield response
         except Exception as exception:
-            logger.debug(
+            self._logger.debug(
                 f"Error while fetching batch: {batched_apis} data. Exception: {exception}."
             )
             raise
@@ -285,7 +289,7 @@ class ServiceNowClient:
         """
 
         try:
-            logger.debug("Filtering services")
+            self._logger.debug("Filtering services")
             servicenow_mapping, invalid_services = {}, configured_service
 
             payload = {"sysparm_fields": "label, name"}
@@ -309,7 +313,9 @@ class ServiceNowClient:
             return servicenow_mapping, invalid_services
 
         except Exception as exception:
-            logger.exception(f"Error while filtering services. Exception: {exception}.")
+            self._logger.exception(
+                f"Error while filtering services. Exception: {exception}."
+            )
             raise
 
     async def fetch_attachment_content(self, metadata, timestamp=None, doit=False):
@@ -331,18 +337,18 @@ class ServiceNowClient:
         attachment_name = metadata["file_name"]
         attachment_extension = os.path.splitext(attachment_name)[-1]
         if attachment_extension == "":
-            logger.warning(
+            self._logger.warning(
                 f"Files without extension are not supported by TIKA, skipping {attachment_name}."
             )
             return
         elif attachment_extension not in TIKA_SUPPORTED_FILETYPES:
-            logger.warning(
+            self._logger.warning(
                 f"Files with the extension {attachment_extension} are not supported by TIKA, skipping {attachment_name}."
             )
             return
 
         if attachment_size > FILE_SIZE_LIMIT:
-            logger.warning(
+            self._logger.warning(
                 f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content."
             )
             return
@@ -364,12 +370,12 @@ class ServiceNowClient:
                     await async_buffer.write(data)
 
             except Exception as exception:
-                logger.warning(
+                self._logger.warning(
                     f"Skipping content for {attachment_name}. Exception: {exception}."
                 )
                 return
 
-        logger.debug(f"Calling convert_to_b64 for file : {attachment_name}.")
+        self._logger.debug(f"Calling convert_to_b64 for file : {attachment_name}.")
         await asyncio.to_thread(convert_to_b64, source=temp_filename)
 
         async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
@@ -378,7 +384,7 @@ class ServiceNowClient:
         try:
             await remove(temp_filename)
         except Exception as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Error while deleting the file: {temp_filename} from disk. Error: {exception}"
             )
 
@@ -575,10 +581,10 @@ class ServiceNowDataSource(BaseDataSource):
 
         try:
             await self.servicenow_client.ping()
-            logger.debug("Successfully connected to the ServiceNow.")
+            self._logger.debug("Successfully connected to the ServiceNow.")
 
         except Exception:
-            logger.exception("Error while connecting to the ServiceNow.")
+            self._logger.exception("Error while connecting to the ServiceNow.")
             raise
 
     def _format_doc(self, data):
@@ -620,7 +626,7 @@ class ServiceNowDataSource(BaseDataSource):
                         )
                     )
         except Exception as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Skipping batch data for {batched_apis}. Exception: {exception}."
             )
 
@@ -665,14 +671,14 @@ class ServiceNowDataSource(BaseDataSource):
                 )
                 self.task_count += 1
         except Exception as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Skipping batch data for {batched_apis}. Exception: {exception}."
             )
 
         await self.queue.put(EndSignal.RECORD)  # pyright: ignore
 
     async def _table_data_producer(self, service_name):
-        logger.debug(f"Fetching {service_name} data")
+        self._logger.debug(f"Fetching {service_name} data")
         try:
             table_length = await self.servicenow_client.get_table_length(
                 table_name=service_name
@@ -690,7 +696,7 @@ class ServiceNowDataSource(BaseDataSource):
                 await self.fetchers.put(partial(self._fetch_table_data, batched_apis))
                 self.task_count += 1
         except Exception as exception:
-            logger.warning(
+            self._logger.warning(
                 f"Skipping table data for {service_name}. Exception: {exception}."
             )
 
@@ -721,7 +727,7 @@ class ServiceNowDataSource(BaseDataSource):
             dict: Documents from ServiceNow.
         """
 
-        logger.info("Fetching ServiceNow data")
+        self._logger.info("Fetching ServiceNow data")
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
             services = set(rule["service"] for rule in advanced_rules)
