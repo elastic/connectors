@@ -40,7 +40,7 @@ from connectors.protocol import (
     SyncJobIndex,
 )
 from connectors.source import BaseDataSource
-from connectors.utils import iso_utc, ACCESS_CONTROL_INDEX_PREFIX
+from connectors.utils import ACCESS_CONTROL_INDEX_PREFIX, iso_utc
 from tests.commons import AsyncIterator
 
 HERE = os.path.dirname(__file__)
