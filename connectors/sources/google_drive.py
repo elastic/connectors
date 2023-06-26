@@ -11,7 +11,7 @@ from functools import cached_property, partial
 import aiofiles
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
-from aiogoogle import Aiogoogle
+from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 
@@ -129,19 +129,35 @@ class GoogleDriveClient:
                             method_object(**kwargs),
                         )
                     break
-            except AttributeError as error:
+            except AttributeError as exception:
                 logger.error(
-                    f"Error occurred while generating the resource/method object for an API call. Error: {error}"
+                    f"Error occurred while generating the resource/method object for an API call. Error: {exception}"
                 )
-                raise
+                raise exception
+            except HTTPError as exception:
+                log_message = f"Retry count: {retry_counter} out of {self.retry_count}. Response code: {exception.res.status_code} Exception: {exception}."
+                retry_counter = await self._retry(retry_counter, log_message)
             except Exception as exception:
-                retry_counter += 1
-                if retry_counter > self.retry_count:
-                    raise exception
-                logger.warning(
-                    f"Retry count: {retry_counter} out of {self.retry_count}. Response code: {exception.res.status_code} Exception: {exception}."
-                )
-                await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry_counter)
+                log_message = f"Retry count: {retry_counter} out of {self.retry_count}. Exception: {exception}."
+                retry_counter = await self._retry(retry_counter, log_message)
+
+
+    async def _retry(self, retry_counter, log_message):
+        """Retry logic for handling Google API calls
+
+        Args:
+            retry_counter (int): Current number of attempted retries
+            log_message (str): Warning message logged
+
+        Returns:
+            int: increased retry_counter
+        """
+        retry_counter += 1
+        if retry_counter > self.retry_count:
+            raise
+        logger.warning(log_message)
+        await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER ** retry_counter)
+        return retry_counter
 
 
 class GoogleDriveDataSource(BaseDataSource):
@@ -221,7 +237,6 @@ class GoogleDriveDataSource(BaseDataSource):
             json_credentials=json_credentials,
             retry_count=self.configuration["retry_count"],
         )
-
 
     async def ping(self):
         """""Verify the connection with Google Drive"""""
