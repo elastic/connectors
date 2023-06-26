@@ -7,8 +7,6 @@
 """
 import os
 import random
-import shutil
-import ssl
 import string
 
 from google.auth.credentials import AnonymousCredentials
@@ -154,42 +152,5 @@ def remove():
         raise
 
 
-def target_ssl_file():
-    ssl_paths = ssl.get_default_verify_paths()
-    return ssl_paths.cafile is not None and ssl_paths.cafile or ssl_paths.openssl_cafile
-
-
 def setup():
     verify()
-
-    if os.access(HOSTS, os.W_OK):
-        with open(HOSTS) as f:
-            hosts = f.read()
-
-        if "127.0.0.1   storage.googleapis.com" not in hosts:
-            saved_hosts = os.path.join(HERE, "hosts")
-            shutil.copy(HOSTS, saved_hosts)
-
-            with open(HOSTS, "a") as f:
-                f.write("\n127.0.0.1   storage.googleapis.com\n")
-
-    with open(os.path.join(HERE, "gcs_dummy_cert.pem")) as f:
-        dummy_cert = f.read()
-
-    ssl_file = target_ssl_file()
-    if os.path.exists(ssl_file) and os.access(ssl_file, os.W_OK):
-        saved_ssl = os.path.join(HERE, "ssl")
-        shutil.copy(ssl_file, saved_ssl)
-
-        with open(ssl_file, "a+") as f:
-            f.write(f"/n{dummy_cert}/n")
-
-
-def teardown():
-    if os.access(HOSTS, os.W_OK):
-        saved_hosts = os.path.join(HERE, "hosts")
-        if os.path.exists(saved_hosts):
-            shutil.copy(saved_hosts, HOSTS)
-    saved_ssl = os.path.join(HERE, "ssl")
-    if os.path.exists(saved_ssl):
-        shutil.copy(saved_ssl, target_ssl_file())
