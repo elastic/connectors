@@ -12,6 +12,7 @@ Main classes are :
 - SyncJob: represents a document in `.elastic-connectors-sync-jobs`
 
 """
+import re
 import socket
 from collections import UserDict
 from copy import deepcopy
@@ -941,7 +942,11 @@ class SyncJobIndex(ESIndex):
         index_name = connector.index_name
 
         if job_type == JobType.ACCESS_CONTROL:
-            index_name = re.sub(r'^(?:search-)?(.*)$', fr'{ACCESS_CONTROL_INDEX_PREFIX}\g<1>', index_name)
+            index_name = re.sub(
+                r"^(?:search-)?(.*)$",
+                rf"{ACCESS_CONTROL_INDEX_PREFIX}\g<1>",
+                index_name,
+            )
 
         job_def = {
             "connector": {
