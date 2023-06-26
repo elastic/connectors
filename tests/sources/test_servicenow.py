@@ -9,9 +9,12 @@ from unittest import mock
 import pytest
 from aiohttp.client_exceptions import ServerDisconnectedError
 
+from connectors.filtering.validation import SyncRuleValidationResult
+from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.servicenow import (
     InvalidResponse,
+    ServiceNowAdvancedRulesValidator,
     ServiceNowClient,
     ServiceNowDataSource,
 )
@@ -19,6 +22,7 @@ from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
 SAMPLE_RESPONSE = b'{"batch_request_id":"1","serviced_requests":[{"id":"1", "body":"eyJyZXN1bHQiOlt7Im5hbWUiOiJzbl9zbV9qb3VybmFsMDAwMiIsImxhYmVsIjoiU2VjcmV0cyBNYW5hZ2VtZW50IEpvdXJuYWwifV19","status_code":200,"status_text":"OK","execution_time":19}],"unserviced_requests":[]}'
+ADVANCED_SNIPPET = "advanced_snippet"
 
 
 class MockResponse:
@@ -345,7 +349,7 @@ async def test_get_docs_with_configured_services():
 
     response_list = []
     with mock.patch.object(
-        ServiceNowClient, "filter_services", return_value=(["custom"], [])
+        ServiceNowClient, "filter_services", return_value=({"custom": "custom"}, [])
     ):
         with mock.patch.object(
             ServiceNowClient,
@@ -526,3 +530,196 @@ async def test_fetch_attachment_content_with_unsupported_file_size_then_skip():
     )
 
     assert response is None
+
+
+@pytest.mark.parametrize(
+    "advanced_rules, expected_validation_result",
+    [
+        (
+            # valid: empty array should be valid
+            [],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: empty object should also be valid -> default value in Kibana
+            {},
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: one custom query
+            [{"service": "User", "query": "user_nameSTARTSWITHa"}],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: two custom queries
+            [
+                {"service": "User", "query": "user_nameSTARTSWITHa"},
+                {"service": "User", "query": "user_nameSTARTSWITHb"},
+            ],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # invalid: query field missing
+            [
+                {"service": "User", "query": "user_nameSTARTSWITHa"},
+                {"service": "User", "query": ""},
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=mock.ANY,
+            ),
+        ),
+        (
+            # invalid: property field invalid
+            [
+                {"service": "User", "query": "user_nameSTARTSWITHa"},
+                {"services": "User", "query": "user_nameSTARTSWITHa"},
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=mock.ANY,
+            ),
+        ),
+        (
+            # invalid: service as array -> wrong type
+            [{"service": ["User"], "query": "user_nameSTARTSWITHa"}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=mock.ANY,
+            ),
+        ),
+        (
+            # invalid: invalid service name
+            [
+                {"service": "User", "query": ["user_nameSTARTSWITHa"]},
+                {"service": "Knowledge", "query": "user_nameSTARTSWITHa"},
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=mock.ANY,
+            ),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+    source = create_source(ServiceNowDataSource)
+    source.servicenow_client.get_table_length = mock.AsyncMock(return_value=2)
+
+    with mock.patch.object(
+        ServiceNowClient,
+        "get_data",
+        return_value=AsyncIterator(
+            [
+                [
+                    {"name": "user", "label": "User"},
+                    {"name": "incident", "label": "User"},
+                ]
+            ]
+        ),
+    ):
+        validation_result = await ServiceNowAdvancedRulesValidator(source).validate(
+            advanced_rules
+        )
+
+    assert validation_result == expected_validation_result
+
+
+@pytest.mark.parametrize(
+    "filtering",
+    [
+        Filter(
+            {
+                ADVANCED_SNIPPET: {
+                    "value": [
+                        {"service": "Incident", "query": "user_nameSTARTSWITHa"},
+                        {"service": "Incident", "query": "user_nameSTARTSWITHj"},
+                    ]
+                }
+            }
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules(filtering):
+    source = create_source(ServiceNowDataSource)
+    source.servicenow_client.services = ["custom"]
+    source.servicenow_client._api_call = mock.AsyncMock(
+        return_value=MockResponse(
+            res=SAMPLE_RESPONSE,
+            headers={"Content-Type": "application/json", "x-total-count": 2},
+        )
+    )
+
+    response_list = []
+    with mock.patch.object(
+        ServiceNowClient, "filter_services", return_value=({"Incident": "incident"}, [])
+    ):
+        with mock.patch.object(
+            ServiceNowClient,
+            "get_data",
+            side_effect=[
+                AsyncIterator(
+                    [
+                        [
+                            {
+                                "sys_id": "id_1",
+                                "sys_updated_on": "1212-12-12 12:12:12",
+                                "sys_class_name": "incident",
+                                "sys_user": "abc",
+                                "type": "table_record",
+                            },
+                        ]
+                    ]
+                ),
+                AsyncIterator(
+                    [
+                        [
+                            {
+                                "sys_id": "id_2",
+                                "table_sys_id": "id_1",
+                                "sys_updated_on": "1212-12-12 12:12:12",
+                                "sys_class_name": "incident",
+                                "sys_user": "abc",
+                                "type": "attachment_metadata",
+                            },
+                        ]
+                    ]
+                ),
+            ],
+        ):
+            async for response in source.get_docs(filtering):
+                response_list.append(response[0])
+    assert [
+        {
+            "sys_id": "id_1",
+            "sys_updated_on": "1212-12-12 12:12:12",
+            "sys_class_name": "incident",
+            "sys_user": "abc",
+            "type": "table_record",
+            "_id": "id_1",
+            "_timestamp": "1212-12-12T12:12:12",
+        },
+        {
+            "sys_id": "id_2",
+            "table_sys_id": "id_1",
+            "sys_updated_on": "1212-12-12 12:12:12",
+            "sys_class_name": "incident",
+            "sys_user": "abc",
+            "type": "attachment_metadata",
+            "_id": "id_2",
+            "_timestamp": "1212-12-12T12:12:12",
+        },
+    ] == response_list

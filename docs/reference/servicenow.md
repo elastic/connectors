@@ -68,7 +68,16 @@ The connector syncs the following ServiceNow object types:
 
 - Content of files bigger than 10 MB won't be extracted.
 - Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
-- Advanced sync rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
+
+## Advanced Sync Rules
+
+Advanced Sync Rules are now available in elastic 8.10 version.
+
+- Users can add [ServiceNow queries](https://docs.servicenow.com/bundle/tokyo-api-reference/page/integrate/inbound-rest/concept/c_TableAPI.html#title_table-GET:~:text=Default%3A%200-,sysparm_query,Syntax%3A%20sysparm_query%3D%3Ccol_name%3E%3Coperator%3E%3Cvalue%3E,-.) for syncing the source.
+- All the data returned by queries will be indexed.
+- You can refer to [SERVICENOW.md](../connectors/docs/sync-rules/SERVICENOW.md) for the correct format to add sync rules. Any errors encountered, will be presented to the user visually in the sync rules overview.
+
+**Note:** "services" configuration field will be overridden by the advanced rules.
 
 ## Connector Client operations
 

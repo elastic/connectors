@@ -16,9 +16,14 @@ from urllib.parse import urlencode
 import aiofiles
 import aiohttp
 import dateutil.parser as parser
+import fastjsonschema
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 
+from connectors.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
@@ -87,10 +92,6 @@ class ServiceNowClient:
         self.configuration = configuration
         self.services = self.configuration["services"]
         self.retry_count = self.configuration["retry_count"]
-        self._logger = logger
-
-    def set_logger(self, logger_):
-        self._logger = logger_
 
     @cached_property
     def _get_session(self):
@@ -100,7 +101,7 @@ class ServiceNowClient:
             aiohttp.ClientSession: An instance of Client Session
         """
 
-        self._logger.debug("Generating aiohttp client session")
+        logger.debug("Generating aiohttp client session")
         connector = aiohttp.TCPConnector(limit=MAX_CONCURRENT_CLIENT_SUPPORT)
         basic_auth = aiohttp.BasicAuth(
             login=self.configuration["username"],
@@ -150,7 +151,7 @@ class ServiceNowClient:
             await self._read_response(response=response)
             return int(response.headers.get("x-total-count", 0))
         except Exception as exception:
-            self._logger.warning(
+            logger.warning(
                 f"Error while fetching {table_name} length. Exception: {exception}."
             )
             raise
@@ -172,6 +173,29 @@ class ServiceNowClient:
             params_string = urlencode(params)
             full_url = f"{url}?{params_string}"
         return full_url
+
+    def get_filter_apis(self, rules, mapping):
+        headers = [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "Accept", "value": "application/json"},
+        ]
+        apis = []
+        for rule in rules:
+            params = {"sysparm_query": rule["query"]}
+            table_name = mapping[rule["service"]]
+            apis.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "headers": headers,
+                    "method": "GET",
+                    "url": self._prepare_url(
+                        url=ENDPOINTS["TABLE"].format(table=table_name),
+                        params=params.copy(),
+                        offset=0,
+                    ),
+                }
+            )
+        return apis
 
     def get_record_apis(self, url, params, total_count):
         headers = [
@@ -218,7 +242,7 @@ class ServiceNowClient:
             async for response in self._batch_api_call(batch_data=batch_data):
                 yield response
         except Exception as exception:
-            self._logger.debug(
+            logger.debug(
                 f"Error while fetching batch: {batched_apis} data. Exception: {exception}."
             )
             raise
@@ -250,16 +274,19 @@ class ServiceNowClient:
             url=url, params=params, json=actions
         )
 
-    async def filter_services(self):
+    async def filter_services(self, configured_service):
         """Filter services based on service mappings.
 
+        Args:
+            configured_service (list): Services need to validate.
+
         Returns:
-            list, list: Valid service names, Invalid services.
+            dict, list: Servicenow mapping, Invalid services.
         """
 
         try:
-            self._logger.debug("Filtering services")
-            service_names, invalid_services = [], self.services.copy()
+            logger.debug("Filtering services")
+            servicenow_mapping, invalid_services = {}, configured_service
 
             payload = {"sysparm_fields": "label, name"}
             table_length = await self.get_table_length(table_name="sys_db_object")
@@ -276,15 +303,13 @@ class ServiceNowClient:
                 async for table_data in self.get_data(batched_apis=batched_apis):
                     for mapping in table_data:  # pyright: ignore
                         if mapping["label"] in invalid_services:
-                            service_names.append(mapping["name"])
+                            servicenow_mapping[mapping["label"]] = mapping["name"]
                             invalid_services.remove(mapping["label"])
 
-            return service_names, invalid_services
+            return servicenow_mapping, invalid_services
 
         except Exception as exception:
-            self._logger.exception(
-                f"Error while filtering services. Exception: {exception}."
-            )
+            logger.exception(f"Error while filtering services. Exception: {exception}.")
             raise
 
     async def fetch_attachment_content(self, metadata, timestamp=None, doit=False):
@@ -306,18 +331,18 @@ class ServiceNowClient:
         attachment_name = metadata["file_name"]
         attachment_extension = os.path.splitext(attachment_name)[-1]
         if attachment_extension == "":
-            self._logger.warning(
+            logger.warning(
                 f"Files without extension are not supported by TIKA, skipping {attachment_name}."
             )
             return
         elif attachment_extension not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.warning(
+            logger.warning(
                 f"Files with the extension {attachment_extension} are not supported by TIKA, skipping {attachment_name}."
             )
             return
 
         if attachment_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
+            logger.warning(
                 f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content."
             )
             return
@@ -339,12 +364,12 @@ class ServiceNowClient:
                     await async_buffer.write(data)
 
             except Exception as exception:
-                self._logger.warning(
+                logger.warning(
                     f"Skipping content for {attachment_name}. Exception: {exception}."
                 )
                 return
 
-        self._logger.debug(f"Calling convert_to_b64 for file : {attachment_name}.")
+        logger.debug(f"Calling convert_to_b64 for file : {attachment_name}.")
         await asyncio.to_thread(convert_to_b64, source=temp_filename)
 
         async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
@@ -353,7 +378,7 @@ class ServiceNowClient:
         try:
             await remove(temp_filename)
         except Exception as exception:
-            self._logger.warning(
+            logger.warning(
                 f"Error while deleting the file: {temp_filename} from disk. Error: {exception}"
             )
 
@@ -367,6 +392,65 @@ class ServiceNowClient:
         self._sleeps.cancel()
         await self._get_session.close()
         del self._get_session
+
+
+class ServiceNowAdvancedRulesValidator(AdvancedRulesValidator):
+    RULES_OBJECT_SCHEMA_DEFINITION = {
+        "type": "object",
+        "properties": {
+            "service": {"type": "string", "minLength": 1},
+            "query": {"type": "string", "minLength": 1},
+        },
+        "required": ["service", "query"],
+        "additionalProperties": False,
+    }
+
+    SCHEMA_DEFINITION = {"type": "array", "items": RULES_OBJECT_SCHEMA_DEFINITION}
+
+    SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
+
+    def __init__(self, source):
+        self.source = source
+
+    async def validate(self, advanced_rules):
+        if len(advanced_rules) == 0:
+            return SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            )
+
+        return await self._remote_validation(advanced_rules)
+
+    async def _remote_validation(self, advanced_rules):
+        try:
+            ServiceNowAdvancedRulesValidator.SCHEMA(advanced_rules)
+        except fastjsonschema.JsonSchemaValueException as e:
+            return SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=e.message,
+            )
+
+        services_to_filter = set(rule["service"] for rule in advanced_rules)
+
+        (
+            _,
+            invalid_services,
+        ) = await self.source.servicenow_client.filter_services(
+            configured_service=services_to_filter.copy()
+        )
+
+        if len(invalid_services) > 0:
+            return SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=f"Services '{', '.join(invalid_services)}' are not available. Available services are: '{', '.join(set(services_to_filter)-set(invalid_services))}'",
+            )
+
+        await self.source.servicenow_client.close_session()
+
+        return SyncRuleValidationResult.valid_result(
+            SyncRuleValidationResult.ADVANCED_RULES
+        )
 
 
 class ServiceNowDataSource(BaseDataSource):
@@ -386,12 +470,15 @@ class ServiceNowDataSource(BaseDataSource):
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
         self.servicenow_client = ServiceNowClient(configuration=configuration)
 
-        self.valid_services = []
+        self.servicenow_mapping = {}
         self.invalid_services = []
 
         self.task_count = 0
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
         self.fetchers = ConcurrentTasks(max_concurrency=CONCURRENT_TASKS)
+
+    def advanced_rules_validators(self):
+        return [ServiceNowAdvancedRulesValidator(self)]
 
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by ServiceNow
@@ -428,6 +515,7 @@ class ServiceNowDataSource(BaseDataSource):
                 "display": "textarea",
                 "label": "Comma-separated list of services",
                 "order": 4,
+                "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
                 "value": "*",
             },
@@ -462,9 +550,11 @@ class ServiceNowDataSource(BaseDataSource):
 
         if self.servicenow_client.services != ["*"] and self.invalid_services == []:
             (
-                self.valid_services,
+                self.servicenow_mapping,
                 self.invalid_services,
-            ) = await self.servicenow_client.filter_services()
+            ) = await self.servicenow_client.filter_services(
+                configured_service=self.servicenow_client.services.copy()
+            )
         if self.invalid_services:
             raise ConfigurableFieldValueError(
                 f"Services '{', '.join(self.invalid_services)}' are not available. Available services are: '{', '.join(set(self.servicenow_client.services)-set(self.invalid_services))}'"
@@ -485,10 +575,10 @@ class ServiceNowDataSource(BaseDataSource):
 
         try:
             await self.servicenow_client.ping()
-            self._logger.debug("Successfully connected to the ServiceNow.")
+            logger.debug("Successfully connected to the ServiceNow.")
 
         except Exception:
-            self._logger.exception("Error while connecting to the ServiceNow.")
+            logger.exception("Error while connecting to the ServiceNow.")
             raise
 
     def _format_doc(self, data):
@@ -530,7 +620,7 @@ class ServiceNowDataSource(BaseDataSource):
                         )
                     )
         except Exception as exception:
-            self._logger.warning(
+            logger.warning(
                 f"Skipping batch data for {batched_apis}. Exception: {exception}."
             )
 
@@ -575,14 +665,14 @@ class ServiceNowDataSource(BaseDataSource):
                 )
                 self.task_count += 1
         except Exception as exception:
-            self._logger.warning(
+            logger.warning(
                 f"Skipping batch data for {batched_apis}. Exception: {exception}."
             )
 
         await self.queue.put(EndSignal.RECORD)  # pyright: ignore
 
     async def _table_data_producer(self, service_name):
-        self._logger.debug(f"Fetching {service_name} data")
+        logger.debug(f"Fetching {service_name} data")
         try:
             table_length = await self.servicenow_client.get_table_length(
                 table_name=service_name
@@ -600,7 +690,7 @@ class ServiceNowDataSource(BaseDataSource):
                 await self.fetchers.put(partial(self._fetch_table_data, batched_apis))
                 self.task_count += 1
         except Exception as exception:
-            self._logger.warning(
+            logger.warning(
                 f"Skipping table data for {service_name}. Exception: {exception}."
             )
 
@@ -631,15 +721,49 @@ class ServiceNowDataSource(BaseDataSource):
             dict: Documents from ServiceNow.
         """
 
-        self._logger.info("Fetching ServiceNow data")
-        if self.servicenow_client.services != ["*"] and self.valid_services == []:
+        logger.info("Fetching ServiceNow data")
+        if filtering and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
+            services = set(rule["service"] for rule in advanced_rules)
+
             (
-                self.valid_services,
-                self.invalid_services,
-            ) = await self.servicenow_client.filter_services()
-        for service_name in self.valid_services or DEFAULT_SERVICE_NAMES:
-            await self.fetchers.put(partial(self._table_data_producer, service_name))
-            self.task_count += 1
+                servicenow_mapping,
+                _,
+            ) = await self.servicenow_client.filter_services(
+                configured_service=services.copy()
+            )
+
+            for advanced_rules_index in range(0, len(advanced_rules), TABLE_BATCH_SIZE):
+                batched_advanced_rules = advanced_rules[
+                    advanced_rules_index : (
+                        advanced_rules_index + TABLE_BATCH_SIZE
+                    )  # noqa
+                ]
+                filter_apis = self.servicenow_client.get_filter_apis(
+                    rules=batched_advanced_rules, mapping=servicenow_mapping
+                )
+
+                await self.fetchers.put(partial(self._fetch_table_data, filter_apis))
+                self.task_count += 1
+
+        else:
+            if (
+                self.servicenow_client.services != ["*"]
+                and self.servicenow_mapping == {}
+            ):
+                (
+                    self.servicenow_mapping,
+                    self.invalid_services,
+                ) = await self.servicenow_client.filter_services(
+                    configured_service=self.servicenow_client.services.copy()
+                )
+            for service_name in (
+                self.servicenow_mapping.values() or DEFAULT_SERVICE_NAMES
+            ):
+                await self.fetchers.put(
+                    partial(self._table_data_producer, service_name)
+                )
+                self.task_count += 1
 
         async for item in self._consumer():
             yield item
