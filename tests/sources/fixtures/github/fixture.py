@@ -16,12 +16,9 @@ DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
 _SIZES = {"small": 500000, "medium": 1000000, "large": 3000000}
 FILE_SIZE = _SIZES[DATA_SIZE]
 LARGE_DATA = "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
-PULL_REQUEST_PAGES = "15"
-ISSUE_PAGES = "15"
 DELETED_PAGES = "12"
 FIRST_PAGE = "1"
 ALL_TYPE = "all"
-FILE_COUNT = 2500
 
 
 app = Flask(__name__)
@@ -34,10 +31,13 @@ def encode_data(content):
 class GitHubAPI:
     def __init__(self):
         self.app = Flask(__name__)
+        self.pull_request_pages = "15"
+        self.issue_pages = "15"
+        self.file_count = 2500
         self.app.route("/user", methods=["GET"])(self.get_user)
         self.app.route("/user/repos", methods=["GET"])(self.get_repos)
         self.app.route("/repos/demo_user/demo_repo/pulls", methods=["GET"])(
-            self.get_pulls
+            self.get_pull_requests
         )
         self.app.route(
             "/repos/demo_user/demo_repo/issues/<string:id>/comments", methods=["GET"]
@@ -98,8 +98,7 @@ class GitHubAPI:
         if args.get("page") == "2":
             return []
 
-    def get_pulls(self):
-        global PULL_REQUEST_PAGES
+    def get_pull_requests(self):
         args = request.args
         if args.get("state") == ALL_TYPE:
             pulls = [
@@ -125,8 +124,8 @@ class GitHubAPI:
                 }
                 for pull_number in range(100)
             ]
-        if args.get("page") == PULL_REQUEST_PAGES:
-            PULL_REQUEST_PAGES = DELETED_PAGES
+        if args.get("page") == self.pull_request_pages:
+            self.pull_request_pages = DELETED_PAGES
             return []
         return pulls
 
@@ -147,7 +146,6 @@ class GitHubAPI:
         return comments if args.get("page") == FIRST_PAGE else []
 
     def get_issues(self):
-        global ISSUE_PAGES
         args = request.args
         if args.get("state") == ALL_TYPE:
             issues = [
@@ -169,13 +167,12 @@ class GitHubAPI:
                 )
                 for issue_number in range(100)
             ]
-        if args.get("page") == ISSUE_PAGES:
-            ISSUE_PAGES = DELETED_PAGES
+        if args.get("page") == self.issue_pages:
+            self.issue_pages = DELETED_PAGES
             return []
         return issues
 
     def get_tree(self):
-        global FILE_COUNT
         args = request.args
         if args.get("recursive") == FIRST_PAGE:
             tree_list = [
@@ -185,11 +182,11 @@ class GitHubAPI:
                     "type": "blob",
                     "sha": file_number,
                     "size": 30,
-                    "url": f"http://127.0.0.1:5000/repos/demo_user/demo_repo/git/blobs/{file_number}",
+                    "url": f"http://127.0.0.1:9091/repos/demo_user/demo_repo/git/blobs/{file_number}",
                 }
-                for file_number in range(FILE_COUNT)
+                for file_number in range(self.file_count)
             ]
-        FILE_COUNT = 2000
+        self.file_count = 2000
         return {"tree": tree_list}
 
     def get_content(self, commit_id):
@@ -218,4 +215,4 @@ class GitHubAPI:
 
 
 if __name__ == "__main__":
-    GitHubAPI().app.run(host="0.0.0.0", port=5000)
+    GitHubAPI().app.run(host="0.0.0.0", port=9091)
