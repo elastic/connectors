@@ -26,6 +26,7 @@ DEFAULT_FILE_SIZE_LIMIT = 10485760
 GOOGLE_DRIVE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 API_NAME = "drive"
 API_VERSION = "v3"
+DRIVE_API_TIMEOUT = 3 * 60 # 3 min
 
 CORPORA = 'allDrives'
 FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder'
@@ -115,7 +116,8 @@ class GoogleDriveClient:
                         first_page_with_next_attached = (
                             await google_client.as_service_account(
                                 method_object(**kwargs),
-                                full_res=True
+                                full_res=True,
+                                timeout=DRIVE_API_TIMEOUT
                             )
                         )
 
@@ -127,6 +129,7 @@ class GoogleDriveClient:
                             method_object = getattr(method_object, sub_method)
                         yield await google_client.as_service_account(
                             method_object(**kwargs),
+                            timeout=DRIVE_API_TIMEOUT
                         )
                     break
             except AttributeError as exception:
@@ -192,7 +195,7 @@ class GoogleDriveDataSource(BaseDataSource):
             "client_email": "123-abc@developer.gserviceaccount.com",
             "client_id": "123-abc.apps.googleusercontent.com",
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "http://localhost:443/token",
+            "token_uri": "http://localhost:10339/token",
         }
         return {
             "service_account_credentials": {
