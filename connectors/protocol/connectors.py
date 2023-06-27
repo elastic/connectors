@@ -730,6 +730,9 @@ class Connector(ESDocument):
 
         Also checks that the configuration structure is correct.
         If a field is missing, raises an error. If a property is missing, add it.
+
+        This method will also populate the features available for the data source
+        if it's different from the features in the connector document
         """
         await self.reload()
 
@@ -762,27 +765,32 @@ class Connector(ESDocument):
                 config["sources"][configured_service_type], configured_service_type
             )
 
-            return
-
         doc = {}
+        fqn = config["sources"][configured_service_type]
+        try:
+            source_klass = get_source_klass(fqn)
+        except Exception as e:
+            self.log_critical(e, exc_info=True)
+            raise DataSourceError(
+                f"Could not instantiate {fqn} for {configured_service_type}"
+            ) from e
+
         if self.service_type is None:
             doc["service_type"] = configured_service_type
             self.log_debug(f"Populated service type {configured_service_type}")
 
         if self.configuration.is_empty():
-            fqn = config["sources"][configured_service_type]
-            try:
-                source_klass = get_source_klass(fqn)
+            # sets the defaults and the flag to NEEDS_CONFIGURATION
+            doc["configuration"] = source_klass.get_simple_configuration()
+            doc["status"] = Status.NEEDS_CONFIGURATION.value
+            self.log_debug("Populated configuration")
 
-                # sets the defaults and the flag to NEEDS_CONFIGURATION
-                doc["configuration"] = source_klass.get_simple_configuration()
-                doc["status"] = Status.NEEDS_CONFIGURATION.value
-                self.log_debug("Populated configuration")
-            except Exception as e:
-                self.log_critical(e, exc_info=True)
-                raise DataSourceError(
-                    f"Could not instantiate {fqn} for {configured_service_type}"
-                ) from e
+        if self.features.features != source_klass.features():
+            doc["features"] = source_klass.features()
+            self.log_debug("Populated features")
+
+        if not doc:
+            return
 
         await self.index.update(
             doc_id=self.id,

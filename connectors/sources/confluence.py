@@ -192,6 +192,7 @@ class ConfluenceDataSource(BaseDataSource):
 
     name = "Confluence"
     service_type = "confluence"
+    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to Confluence
