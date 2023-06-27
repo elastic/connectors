@@ -795,7 +795,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             },
             "use_document_level_security": {
                 "display": "toggle",
-                "label": "Use document level security",
+                "label": "Enable document level security",
                 "order": 7,
                 "tooltip": "This will add access control data to content documents and will also sync identities with their corresponding access control to a separate index .search-acl-filter-index-name",
                 "type": "bool",
