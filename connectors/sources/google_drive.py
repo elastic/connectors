@@ -4,8 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-import os
 import json
+import os
 from functools import cached_property, partial
 
 import aiofiles
@@ -13,7 +13,6 @@ from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
-
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
@@ -26,18 +25,18 @@ DEFAULT_FILE_SIZE_LIMIT = 10485760
 GOOGLE_DRIVE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 API_NAME = "drive"
 API_VERSION = "v3"
-DRIVE_API_TIMEOUT = 3 * 60 # 3 min
+DRIVE_API_TIMEOUT = 3 * 60  # 3 min
 
-CORPORA = 'allDrives'
-FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder'
+CORPORA = "allDrives"
+FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 
 
 # Export Google Workspace documents to TIKA compatible format, prefer 'text/plain' where possible to be
 # mindful of the content extraction service resources
 GOOGLE_MIME_TYPES_MAPPING = {
-    'application/vnd.google-apps.document': 'text/plain',
-    'application/vnd.google-apps.presentation': 'text/plain',
-    'application/vnd.google-apps.spreadsheet': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    "application/vnd.google-apps.document": "text/plain",
+    "application/vnd.google-apps.presentation": "text/plain",
+    "application/vnd.google-apps.spreadsheet": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
 
 GOOGLE_DRIVE_EMULATOR_HOST = os.environ.get("GOOGLE_DRIVE_EMULATOR_HOST")
@@ -54,6 +53,7 @@ DEFAULT_PEM_FILE = os.path.join(
     "google_drive",
     "service_account_dummy_cert.pem",
 )
+
 
 class GoogleDriveClient:
     """A google client to handle api calls made to Google Drive."""
@@ -117,7 +117,7 @@ class GoogleDriveClient:
                             await google_client.as_service_account(
                                 method_object(**kwargs),
                                 full_res=True,
-                                timeout=DRIVE_API_TIMEOUT
+                                timeout=DRIVE_API_TIMEOUT,
                             )
                         )
 
@@ -128,8 +128,7 @@ class GoogleDriveClient:
                         if sub_method:
                             method_object = getattr(method_object, sub_method)
                         yield await google_client.as_service_account(
-                            method_object(**kwargs),
-                            timeout=DRIVE_API_TIMEOUT
+                            method_object(**kwargs), timeout=DRIVE_API_TIMEOUT
                         )
                     break
             except AttributeError as exception:
@@ -143,7 +142,6 @@ class GoogleDriveClient:
             except Exception as exception:
                 log_message = f"Retry count: {retry_counter} out of {self.retry_count}. Exception: {exception}."
                 retry_counter = await self._retry(retry_counter, log_message)
-
 
     async def _retry(self, retry_counter, log_message):
         """Retry logic for handling Google API calls
@@ -159,7 +157,7 @@ class GoogleDriveClient:
         if retry_counter > self.retry_count:
             raise
         logger.warning(log_message)
-        await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER ** retry_counter)
+        await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry_counter)
         return retry_counter
 
 
@@ -176,7 +174,6 @@ class GoogleDriveDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-
 
     @classmethod
     def get_default_configuration(cls):
@@ -217,7 +214,6 @@ class GoogleDriveDataSource(BaseDataSource):
             },
         }
 
-
     @cached_property
     def _google_drive_client(self):
         """Initialize and return the GoogleDriveClient
@@ -242,23 +238,20 @@ class GoogleDriveDataSource(BaseDataSource):
         )
 
     async def ping(self):
-        """""Verify the connection with Google Drive"""""
+        """""Verify the connection with Google Drive""" ""
         if RUNNING_FTEST:
             return
 
         try:
             await anext(
                 self._google_drive_client.api_call(
-                    resource="about",
-                    method="get",
-                    fields="kind"
+                    resource="about", method="get", fields="kind"
                 )
             )
             logger.info("Successfully connected to the Google Drive.")
         except Exception:
             logger.exception("Error while connecting to the Google Drive.")
             raise
-
 
     async def validate_config(self):
         """Validates whether user inputs are valid or not for configuration field.
@@ -274,7 +267,6 @@ class GoogleDriveDataSource(BaseDataSource):
             raise ConfigurableFieldValueError(
                 "Google Cloud service account is not a valid JSON."
             ) from e
-
 
     async def _get_drives(self):
         """Fetch all shared drive (id, name) from Google Drive
@@ -292,7 +284,6 @@ class GoogleDriveDataSource(BaseDataSource):
         ):
             yield drive
 
-
     async def retrieve_all_drives(self):
         """Retrieves all shared drives from Google Drive
 
@@ -301,12 +292,11 @@ class GoogleDriveDataSource(BaseDataSource):
         """
         drives = {}
         async for chunk in self._get_drives():
-          drives_chunk = chunk.get('drives', [])
-          for drive in drives_chunk:
-              drives[drive['id']] = drive['name']
+            drives_chunk = chunk.get("drives", [])
+            for drive in drives_chunk:
+                drives[drive["id"]] = drive["name"]
 
         return drives
-
 
     async def _get_folders(self):
         """Fetch all folders (id, name, parent) from Google Drive
@@ -317,7 +307,7 @@ class GoogleDriveDataSource(BaseDataSource):
         async for folder in self._google_drive_client.api_call(
             resource="files",
             method="list",
-            corpora='allDrives',
+            corpora="allDrives",
             fields="nextPageToken,files(id,name,parents)",
             q=f"mimeType='{FOLDER_MIME_TYPE}' and trashed=false",
             full_response=True,
@@ -327,7 +317,6 @@ class GoogleDriveDataSource(BaseDataSource):
         ):
             yield folder
 
-
     async def retrieve_all_folders(self):
         """Retrieves all folders from Google Drive
 
@@ -336,15 +325,14 @@ class GoogleDriveDataSource(BaseDataSource):
         """
         folders = {}
         async for chunk in self._get_folders():
-            folders_chunk = chunk.get('files', [])
+            folders_chunk = chunk.get("files", [])
             for folder in folders_chunk:
-              folders[folder['id']] = {
-                  'name': folder['name'],
-                  'parents': folder.get('parents', None)
-              }
+                folders[folder["id"]] = {
+                    "name": folder["name"],
+                    "parents": folder.get("parents", None),
+                }
 
         return folders
-
 
     async def resolve_paths(self):
         """Builds a lookup between a folder id and its absolute path in Google Drive structure
@@ -357,30 +345,31 @@ class GoogleDriveDataSource(BaseDataSource):
 
         # for paths let's treat drives as top level folders
         for id, drive_name in drives.items():
-            folders[id] = {'name': drive_name, 'parents': []}
+            folders[id] = {"name": drive_name, "parents": []}
 
         logger.info(f"Resolving folder paths for {len(folders)} folders")
 
         for folder in folders.values():
-            path = [folder['name']]  # Start with the folder name
+            path = [folder["name"]]  # Start with the folder name
 
-            parents = folder['parents']
+            parents = folder["parents"]
             parent_id = parents[0] if parents else None
 
             # Traverse the parents until reaching the root or a missing parent
             while parent_id and parent_id in folders:
                 parent_folder = folders[parent_id]
-                path.insert(0, parent_folder['name'])  # Insert parent name at the beginning
-                parents = parent_folder['parents']
+                path.insert(
+                    0, parent_folder["name"]
+                )  # Insert parent name at the beginning
+                parents = parent_folder["parents"]
                 parent_id = parents[0] if parents else None
 
-            folder['path'] = '/'.join(path)  # Join path elements with '/'
+            folder["path"] = "/".join(path)  # Join path elements with '/'
 
         return folders
 
-
     async def _download_content(self, blob, download_func):
-        '''Downloads the file from Google Drive and returns the encoded file content.
+        """Downloads the file from Google Drive and returns the encoded file content.
 
         Args:
             blob (dict): Formatted blob document.
@@ -388,17 +377,19 @@ class GoogleDriveDataSource(BaseDataSource):
 
         Returns:
             attachment, blob_size (tuple): base64 encoded contnet of the file and size in bytes of the attachment
-        '''
+        """
 
         temp_file_name = ""
         blob_name = blob["name"]
 
         logger.debug(f"Downloading {blob_name}")
 
-        async with NamedTemporaryFile(
-            mode="wb", delete=False
-        ) as async_buffer:
-            await anext(download_func(pipe_to=async_buffer,))
+        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+            await anext(
+                download_func(
+                    pipe_to=async_buffer,
+                )
+            )
             temp_file_name = async_buffer.name
 
         await asyncio.to_thread(
@@ -417,7 +408,6 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return attachment, blob_size
 
-
     async def get_google_workspace_content(self, blob, timestamp=None):
         """Exports Google Workspace documents to an allowed file type and extracts its text content.
 
@@ -433,7 +423,7 @@ class GoogleDriveDataSource(BaseDataSource):
             dict: Content document with id, timestamp & text
         """
 
-        blob_name, blob_id, blob_mime_type = blob["name"], blob["id"], blob['mime_type']
+        blob_name, blob_id, blob_mime_type = blob["name"], blob["id"], blob["mime_type"]
 
         document = {
             "_id": blob_id,
@@ -448,7 +438,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 method="export",
                 fileId=blob_id,
                 mimeType=GOOGLE_MIME_TYPES_MAPPING[blob_mime_type],
-            )
+            ),
         )
 
         if blob_size > DEFAULT_FILE_SIZE_LIMIT:
@@ -459,7 +449,6 @@ class GoogleDriveDataSource(BaseDataSource):
 
         document["_attachment"] = attachment
         return document
-
 
     async def get_generic_file_content(self, blob, timestamp=None):
         """Extracts the content from allowed file types supported by Apache Tika.
@@ -477,8 +466,11 @@ class GoogleDriveDataSource(BaseDataSource):
         if blob_size == 0:
             return
 
-        blob_name, blob_id, blob_extension = \
-            blob["name"], blob["id"], f".{blob['file_extension']}"
+        blob_name, blob_id, blob_extension = (
+            blob["name"],
+            blob["id"],
+            f".{blob['file_extension']}",
+        )
 
         if blob_extension not in TIKA_SUPPORTED_FILETYPES:
             logger.debug(f"{blob_name} can't be extracted")
@@ -504,12 +496,11 @@ class GoogleDriveDataSource(BaseDataSource):
                 fileId=blob_id,
                 supportsAllDrives=True,
                 alt="media",
-            )
+            ),
         )
 
         document["_attachment"] = attachment
         return document
-
 
     async def get_content(self, blob, timestamp=None, doit=None):
         """Extracts the content from a blob file.
@@ -526,7 +517,7 @@ class GoogleDriveDataSource(BaseDataSource):
         if not doit:
             return
 
-        blob_mime_type = blob['mime_type']
+        blob_mime_type = blob["mime_type"]
 
         if blob_mime_type in GOOGLE_MIME_TYPES_MAPPING:
             # Get content from native google workspace files (docs, slides, sheets)
@@ -534,8 +525,6 @@ class GoogleDriveDataSource(BaseDataSource):
         else:
             # Get content from all other file types
             return await self.get_generic_file_content(blob, timestamp=timestamp)
-
-
 
     async def fetch_files(self):
         """Get files from Google Drive. Files can have any type.
@@ -549,14 +538,13 @@ class GoogleDriveDataSource(BaseDataSource):
             full_response=True,
             corpora=CORPORA,
             q="trashed=false",
-            orderBy='modifiedTime desc',
-            fields='files,nextPageToken',
+            orderBy="modifiedTime desc",
+            fields="files,nextPageToken",
             includeItemsFromAllDrives=True,
             supportsAllDrives=True,
-            pageSize=100
+            pageSize=100,
         ):
             yield file
-
 
     def prepare_blob_document(self, blob, paths):
         """Apply key mappings to the blob document.
@@ -581,31 +569,39 @@ class GoogleDriveDataSource(BaseDataSource):
         }
 
         # record "file" or "folder" type
-        blob_document["type"] = "folder" if blob.get("mimeType") == FOLDER_MIME_TYPE else "file"
+        blob_document["type"] = (
+            "folder" if blob.get("mimeType") == FOLDER_MIME_TYPE else "file"
+        )
 
         # populate owner-related fields if owner is present in the response from the Drive API
-        owners = blob.get('owners', None)
+        owners = blob.get("owners", None)
         if owners:
-                first_owner = blob['owners'][0]
-                blob_document['author'] = ','.join([owner['displayName'] for owner in owners])
-                blob_document['created_by'] = first_owner['displayName']
-                blob_document['created_by_email'] = first_owner['emailAddress']
+            first_owner = blob["owners"][0]
+            blob_document["author"] = ",".join(
+                [owner["displayName"] for owner in owners]
+            )
+            blob_document["created_by"] = first_owner["displayName"]
+            blob_document["created_by_email"] = first_owner["emailAddress"]
 
         # handle last modifying user metadata
-        last_modifying_user = blob.get('lastModifyingUser', None)
+        last_modifying_user = blob.get("lastModifyingUser", None)
         if last_modifying_user:
-            blob_document['updated_by'] = last_modifying_user.get('displayName', None)
-            blob_document['updated_by_email'] = last_modifying_user.get('emailAddress', None)
-            blob_document['updated_by_photo_url'] = last_modifying_user.get('photoLink', None)
+            blob_document["updated_by"] = last_modifying_user.get("displayName", None)
+            blob_document["updated_by_email"] = last_modifying_user.get(
+                "emailAddress", None
+            )
+            blob_document["updated_by_photo_url"] = last_modifying_user.get(
+                "photoLink", None
+            )
 
         # handle folders and shortcuts
-        if blob_document['size'] is None:
-            blob_document['size'] = 0
+        if blob_document["size"] is None:
+            blob_document["size"] = 0
 
         # determine the path on google drive, note that google workspace files won't have a path
-        blob_parents = blob.get('parents', None)
+        blob_parents = blob.get("parents", None)
         if blob_parents and blob_parents[0] in paths:
-            blob_document['path'] = f"{paths[blob_parents[0]]['path']}/{blob['name']}"
+            blob_document["path"] = f"{paths[blob_parents[0]]['path']}/{blob['name']}"
 
         return blob_document
 
@@ -621,7 +617,6 @@ class GoogleDriveDataSource(BaseDataSource):
         for blob in blobs.get("files", []):
             yield self.prepare_blob_document(blob=blob, paths=paths)
 
-
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch Google Drive objects in an async manner.
 
@@ -633,10 +628,11 @@ class GoogleDriveDataSource(BaseDataSource):
                                 partial download content function
         """
 
-
         # Build a path lookup, parentId -> parent path
         resolved_paths = await self.resolve_paths()
 
         async for files in self.fetch_files():
-            for blob_document in self.get_blob_document(blobs=files, paths=resolved_paths):
+            for blob_document in self.get_blob_document(
+                blobs=files, paths=resolved_paths
+            ):
                 yield blob_document, partial(self.get_content, blob_document)

@@ -12,10 +12,10 @@ import string
 
 from flask import Flask, request
 
-
 DOCS_COUNT = {"small": 750, "medium": 1500, "large": 3000}
 
 DATA_SIZE = os.environ.get("DATA_SIZE")
+
 
 def generate_random_string(length):
     """Function that generates random string with fixed lenght.
@@ -26,9 +26,8 @@ def generate_random_string(length):
     Returns:
         str: Random string
     """
-    return "".join(
-        [random.choice(string.ascii_letters) for _ in range(length)]
-    )
+    return "".join([random.choice(string.ascii_letters) for _ in range(length)])
+
 
 def generate_document_data():
     """Function to generate random data content.
@@ -55,50 +54,44 @@ def drives_list():
         "nextPageToken": "dummyToken",
         "kind": "drive#driveList",
         "drives": [
-          {
-            "id": "id1",
-            "name": "Drive1 [Internal]",
-            "kind": "drive#drive"
-          },
-          {
-            "id": "id2",
-            "name": "Drive2 [Internal]",
-            "kind": "drive#drive"
-          }
-        ]
-      }
+            {"id": "id1", "name": "Drive1 [Internal]", "kind": "drive#drive"},
+            {"id": "id2", "name": "Drive2 [Internal]", "kind": "drive#drive"},
+        ],
+    }
+
 
 @app.route("/drive/v3/files", methods=["GET"])
 def files_list():
-    files_list = [{
-      "kind": "drive#file",
-      "mimeType": "text/plain",
-      "id": generate_random_string(length=16),
-      "name": f"file_name_{id}",
-      "fileExtension": "txt",
-      "size": 12345,
-      "modifiedTime": 1687860674,
-      "parents": []
-    } for id in range(DOCS_COUNT.get(DATA_SIZE, 'small'))]
-    return {
-        "nextPageToken": "dummyToken",
-        "files": files_list
-      }
+    files_list = [
+        {
+            "kind": "drive#file",
+            "mimeType": "text/plain",
+            "id": generate_random_string(length=16),
+            "name": f"file_name_{id}",
+            "fileExtension": "txt",
+            "size": 12345,
+            "modifiedTime": 1687860674,
+            "parents": [],
+        }
+        for id in range(DOCS_COUNT.get(DATA_SIZE, "small"))
+    ]
+    return {"nextPageToken": "dummyToken", "files": files_list}
+
 
 @app.route("/drive/v3/files/<string:file_id>", methods=["GET"])
 def files_get(file_id):
     req_params = request.args.to_dict()
 
     # response includes the file contents in the response body
-    if req_params.get('alt', None) == 'media':
+    if req_params.get("alt", None) == "media":
         return generate_document_data()
     # response includes file metadata
     else:
         return {
-          "kind": "drive#file",
-          "id": "file_0",
-          "name": "file_name_0",
-          "mimeType": "text/plain",
+            "kind": "drive#file",
+            "id": "file_0",
+            "name": "file_name_0",
+            "mimeType": "text/plain",
         }
 
 
@@ -111,7 +104,6 @@ def post_auth_token():
         "expires_in": 3600,
         "refresh_token": "XXXXXX3SEBX7F2cfrHcqJEa3KoAHYeXES6nmho",
     }
-
 
 
 if __name__ == "__main__":
