@@ -797,7 +797,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Use document level security",
                 "order": 7,
-                "tooltip": "This will add access control data to content documents and will also sync identities with their corresponding access control to a separate index .search-acl-filter-index-name",
+                "tooltip": "Document level security ensures identities and permissions set in Sharepoint Online are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
             },
