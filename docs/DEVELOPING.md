@@ -136,6 +136,17 @@ In most instances, it is helpful to separate concerns inside your connector code
 One class for the business logic of the connector (this class usually extends `BaseDataSource`), and one class (usually called something like `<3rd-party>Client`) for the API interactions with the 3rd-party.
 By keeping a `Client` class separate, it is much easier to read the business logic of your connector, without having to get hung up on extraneous details like  authentication, request headers, error response handling, retries, pagination, etc.
 
+#### Logging
+
+Logging in connector implementation needs to be done via the instance variable `_logger` of `BaseDataSource`, e.g. `self._logger.info(...)`, which will automatically include the context of the sync job, e.g. sync job id, connector id.
+
+If there are other classes, e.g. `<3rd-party>Client`, you need to implement a `_set_internal_logger` method in the source class, to pass the logger to client class. Example of Confluence connector:
+
+```python
+def _set_internal_logger(self):
+    self.confluence_client.set_logger(self._logger)
+```
+
 #### Async
 
 The CLI uses `asyncio` and makes the assumption that all the code that has been called should not block the event loop. This makes syncs extremely fast with no memory overhead. In order to achieve this asynchronicity, source classes should use async libs for their backend.

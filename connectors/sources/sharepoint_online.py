@@ -707,7 +707,7 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
     SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {
-            "dontSubextractDriveItemsOlderThan": {"type": "integer"},  # in Days
+            "dontExtractDriveItemsOlderThan": {"type": "integer"},  # in Days
         },
         "additionalProperties": False,
     }
@@ -753,7 +753,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     name = "Sharepoint Online"
     service_type = "sharepoint_online"
-    support_incremental_sync = True
+    advanced_rules_enabled = True
+    dls_enabled = True
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
@@ -1126,7 +1128,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            max_drive_item_age = advanced_rules["dontSubextractDriveItemsOlderThan"]
+            max_drive_item_age = advanced_rules["dontExtractDriveItemsOlderThan"]
 
         async for site_collection in self.site_collections():
             yield site_collection, None
@@ -1188,7 +1190,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            max_drive_item_age = advanced_rules["dontSubextractDriveItemsOlderThan"]
+            max_drive_item_age = advanced_rules["dontExtractDriveItemsOlderThan"]
 
         async for site_collection in self.site_collections():
             yield site_collection, None, OP_INDEX
