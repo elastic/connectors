@@ -14,36 +14,36 @@ To use this connector as a **connector client**, use the **Customized connector*
 
 For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
 
-## Get a Refresh Token
+Creating a Dropbox application is required to help the Dropbox connector to authenticate.
+
+## Dropbox API Authorization
 
 ### Create Dropbox OAuth App
 
-In order to authenticate via the Dropbox package, the user needs to configure an app key, app secret and refresh token to fetch the data from Dropbox. 
-
-To generate App Key and App Secret, user needs to follow below steps:
+To generate App Key and App Secret, follow the next steps:
 1. Register a new app in the [App Console](https://www.dropbox.com/developers/apps) and select Full Dropbox API app and choose the following required permissions.
     - files.content.read
     - sharing.read
 
-2. Once the app is created, users can have an **app key** and **app secret** on the settings tab.
+2. Once the app is created, please store **app key** and **app secret** for later configuration use.
 
 ### Generate a Refresh Token
 
-To generate refresh token, user needs to follow below steps:
-1. Hit the following URL with the generated APP_KEY on the browser:
+To generate a refresh token, follow the next steps:
+1. Hit the following URL with the generated APP_KEY on your browser:
     ```shell
     https://www.dropbox.com/oauth2/authorize?client_id=<APP_KEY>&response_type=code&token_access_type=offline
     ```
     
-    User will get an **authorization code** by hitting the URL and that will be used to generate a refresh token.
+    In the HTTP response, you will get an **authorization code** that will be used to generate a refresh token.
 
     **Note:** Authorization code can only be used once to create a refresh token.
 
-2. User needs to perform the following POST API call in the terminal:
+2. Perform the following POST API call in the terminal:
     ```shell
     curl -X POST "https://api.dropboxapi.com/oauth2/token?code=<AUTHORIZATION_CODE>&grant_type=authorization_code" -u "<APP_KEY>:<APP_SECRET>"
     ```
-    Users just need to copy a Refresh Token getting from the response and configure it in the connector configuration.
+    Store the refresh token from the response and use it in the connector configuration.
     **Note:** Make sure the response has a similar list of following scopes:
     - account_info.read
     - files.content.read
@@ -58,19 +58,19 @@ The following configuration fields need to be provided for setting up the connec
 
 #### `path`
 
-The folder path to fetch files/folders for Dropbox connector.
+The folder path to fetch files/folders for Dropbox connector. Default value is `/`.
 
 #### `app_key`
 
-The App Key to authenticate the Dropbox instance.
+The App Key to authenticate the Dropbox application.
 
 #### `app_secret`
 
-The App Secret to authenticate the Dropbox instance.
+The App Secret to authenticate the Dropbox application.
 
 #### `refresh_token`
 
-The Refresh Token to authenticate the Dropbox instance.
+The Refresh Token to authenticate the Dropbox application.
 
 #### `retry_count`
 
@@ -78,7 +78,7 @@ The number of retry attempts after failed request to Dropbox. Default value is `
 
 #### `concurrent_downloads`
 
-The number of concurrent downloads for fetching the attachment content. This speeds up the content extraction of attachments. Defaults to `100`.
+The number of concurrent downloads for fetching the attachment content. This might speed up the content extraction of attachments. Defaults to `100`.
 
 ### Content Extraction
 
