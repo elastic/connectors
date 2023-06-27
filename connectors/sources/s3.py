@@ -42,7 +42,11 @@ class S3Client:
 
     def __init__(self, configuration):
         self.configuration = configuration
-        self.session = aioboto3.Session()
+        self._logger = logger
+        self.session = aioboto3.Session(
+            aws_access_key_id=self.configuration["aws_access_key_id"],
+            aws_secret_access_key=self.configuration["aws_secret_access_key"],
+        )
         set_extra_logger(aws_logger, log_level=logging.DEBUG, prefix="S3")
         set_extra_logger("aioboto3.resources", log_level=logging.INFO, prefix="S3")
         self.config = AioConfig(
@@ -52,6 +56,9 @@ class S3Client:
         )
         self.clients = {}
         self.client_context = []
+
+    def set_logger(self, logger_):
+        self._logger = logger_
 
     async def client(self, region=None):
         """This method creates context manager and client session object for s3.
@@ -64,7 +71,7 @@ class S3Client:
             return self.clients[region_name]
 
         if AWS_ENDPOINT is not None:
-            logger.debug(f"Creating a session against {AWS_ENDPOINT}")
+            self._logger.debug(f"Creating a session against {AWS_ENDPOINT}")
 
         # AsyncExitStack, supports asynchronous context managers, used to create client using enter_async_context and
         # these context manager will be stored in client_context list also client will be stored in clients dict with their region
@@ -130,7 +137,7 @@ class S3Client:
                 async for obj_summary in bucket_obj.objects.page_size(page_size):
                     yield obj_summary, s3_client
             except Exception as exception:
-                logger.warning(
+                self._logger.warning(
                     f"Something went wrong while fetching documents from {bucket}. Error: {exception}"
                 )
 
@@ -149,7 +156,7 @@ class S3Client:
             )
             region = response.get("LocationConstraint")
         except ClientError:
-            logger.warning(f"Unable to fetch the region for {bucket_name}")
+            self._logger.warning(f"Unable to fetch the region for {bucket_name}")
 
         return region
 
@@ -170,16 +177,16 @@ class S3Client:
             return
         filename = doc["filename"]
         if os.path.splitext(filename)[-1] not in TIKA_SUPPORTED_FILETYPES:
-            logger.debug(f"{filename} can't be extracted")
+            self._logger.debug(f"{filename} can't be extracted")
             return
         if doc["size_in_bytes"] > DEFAULT_MAX_FILE_SIZE:
-            logger.warning(
+            self._logger.warning(
                 f"File size for {filename} is larger than {DEFAULT_MAX_FILE_SIZE} bytes. Discarding the file content"
             )
             return
 
         bucket = doc["bucket"]
-        logger.debug(f"Downloading {filename}")
+        self._logger.debug(f"Downloading {filename}")
         document = {
             "_id": doc["id"],
             "_timestamp": doc["_timestamp"],
@@ -198,23 +205,25 @@ class S3Client:
             async with aiofiles.open(file=source_file_name, mode="r") as async_buffer:
                 document["_attachment"] = (await async_buffer.read()).strip()
 
-            logger.debug(f"Downloaded {filename} for {doc['size_in_bytes']} bytes ")
+            self._logger.debug(
+                f"Downloaded {filename} for {doc['size_in_bytes']} bytes "
+            )
             return document
         except ClientError as exception:
             if (
                 getattr(exception, "response", {}).get("Error", {}).get("Code")
                 == "InvalidObjectState"
             ):
-                logger.warning(
+                self._logger.warning(
                     f"{filename} of {bucket} is archived and inaccessible until restored. Error: {exception}"
                 )
             else:
-                logger.error(
+                self._logger.error(
                     f"Something went wrong while extracting data from {filename} of {bucket}. Error: {exception}"
                 )
                 raise
         except (ServerTimeoutError, AioReadTimeoutError) as exception:
-            logger.error(
+            self._logger.error(
                 f"Something went wrong while extracting data from {filename} of {bucket}. Error: {exception}"
             )
             raise
@@ -237,13 +246,16 @@ class S3DataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.s3_client = S3Client(configuration=configuration)
 
+    def _set_internal_logger(self):
+        self.s3_client.set_logger(self._logger)
+
     async def ping(self):
         """Verify the connection with AWS"""
         try:
             await self.s3_client.fetch_buckets()
-            logger.info("Successfully connected to AWS.")
+            self._logger.info("Successfully connected to AWS.")
         except Exception:
-            logger.exception("Error while connecting to AWS.")
+            self._logger.exception("Error while connecting to AWS.")
             raise
 
     async def format_document(self, bucket_name, bucket_object):
@@ -311,11 +323,24 @@ class S3DataSource(BaseDataSource):
                 "type": "list",
                 "value": "ent-search-ingest-dev",
             },
+            "aws_access_key_id": {
+                "label": "AWS Access Key Id",
+                "order": 2,
+                "type": "str",
+                "value": "A1B2C3D4",
+            },
+            "aws_secret_access_key": {
+                "label": "AWS Secret Key",
+                "order": 3,
+                "type": "str",
+                "value": "A1B2C3D4",
+                "sensitive": True,
+            },
             "read_timeout": {
                 "default_value": DEFAULT_READ_TIMEOUT,
                 "display": "numeric",
                 "label": "Read timeout",
-                "order": 2,
+                "order": 4,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -325,7 +350,7 @@ class S3DataSource(BaseDataSource):
                 "default_value": DEFAULT_CONNECTION_TIMEOUT,
                 "display": "numeric",
                 "label": "Connection timeout",
-                "order": 3,
+                "order": 5,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -335,7 +360,7 @@ class S3DataSource(BaseDataSource):
                 "default_value": DEFAULT_MAX_RETRY_ATTEMPTS,
                 "display": "numeric",
                 "label": "Maximum retry attempts",
-                "order": 4,
+                "order": 6,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -345,7 +370,7 @@ class S3DataSource(BaseDataSource):
                 "default_value": DEFAULT_PAGE_SIZE,
                 "display": "numeric",
                 "label": "Maximum size of page",
-                "order": 5,
+                "order": 7,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],

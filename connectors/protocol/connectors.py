@@ -333,6 +333,16 @@ class SyncJob(ESDocument):
             doc["metadata"] = connector_metadata
         await self.index.update(doc_id=self.id, doc=doc)
 
+    def _prefix(self):
+        return f"[Sync Job id: {self.id}, connector id: {self.connector_id}, index name: {self.index_name}]"
+
+    def _extra(self):
+        return {
+            "labels.sync_job_id": self.id,
+            "labels.connector_id": self.connector_id,
+            "labels.index_name": self.index_name,
+        }
+
 
 class Filtering:
     DEFAULT_DOMAIN = "DEFAULT"
@@ -586,7 +596,7 @@ class Connector(ESDocument):
             self.last_seen is None
             or (datetime.now(timezone.utc) - self.last_seen).total_seconds() > interval
         ):
-            logger.debug(f"Sending heartbeat for connector {self.id}")
+            self.log_debug("Sending heartbeat")
             await self.index.heartbeat(doc_id=self.id)
 
     def next_sync(self, job_type):
@@ -603,7 +613,6 @@ class Connector(ESDocument):
                 raise ValueError(f"Unknown job type: {job_type}")
 
         if not scheduling_property.get("enabled", False):
-            logger.debug(f"'{job_type.value}' sync scheduling is disabled")
             return None
         return next_run(scheduling_property.get("interval"))
 
@@ -721,6 +730,9 @@ class Connector(ESDocument):
 
         Also checks that the configuration structure is correct.
         If a field is missing, raises an error. If a property is missing, add it.
+
+        This method will also populate the features available for the data source
+        if it's different from the features in the connector document
         """
         await self.reload()
 
@@ -730,8 +742,8 @@ class Connector(ESDocument):
         if self.id != configured_connector_id:
             # check configuration for native and other peripheral connectors
             if self.service_type not in config["sources"]:
-                logger.debug(
-                    f"Peripheral connector {self.id} has invalid service type {self.service_type}, cannot check configuration formatting."
+                self.log_debug(
+                    f"Peripheral connector has invalid service type {self.service_type}, cannot check configuration formatting."
                 )
                 return
 
@@ -742,9 +754,7 @@ class Connector(ESDocument):
             return
 
         if not configured_service_type:
-            logger.error(
-                f"Service type is not configured for connector {configured_connector_id}"
-            )
+            self.log_error("Service type is not configured")
             raise ServiceTypeNotConfiguredError("Service type is not configured.")
 
         if configured_service_type not in config["sources"]:
@@ -755,29 +765,32 @@ class Connector(ESDocument):
                 config["sources"][configured_service_type], configured_service_type
             )
 
-            return
-
         doc = {}
+        fqn = config["sources"][configured_service_type]
+        try:
+            source_klass = get_source_klass(fqn)
+        except Exception as e:
+            self.log_critical(e, exc_info=True)
+            raise DataSourceError(
+                f"Could not instantiate {fqn} for {configured_service_type}"
+            ) from e
+
         if self.service_type is None:
             doc["service_type"] = configured_service_type
-            logger.debug(
-                f"Populated service type {configured_service_type} for connector {self.id}"
-            )
+            self.log_debug(f"Populated service type {configured_service_type}")
 
         if self.configuration.is_empty():
-            fqn = config["sources"][configured_service_type]
-            try:
-                source_klass = get_source_klass(fqn)
+            # sets the defaults and the flag to NEEDS_CONFIGURATION
+            doc["configuration"] = source_klass.get_simple_configuration()
+            doc["status"] = Status.NEEDS_CONFIGURATION.value
+            self.log_debug("Populated configuration")
 
-                # sets the defaults and the flag to NEEDS_CONFIGURATION
-                doc["configuration"] = source_klass.get_simple_configuration()
-                doc["status"] = Status.NEEDS_CONFIGURATION.value
-                logger.debug(f"Populated configuration for connector {self.id}")
-            except Exception as e:
-                logger.critical(e, exc_info=True)
-                raise DataSourceError(
-                    f"Could not instantiate {fqn} for {configured_service_type}"
-                ) from e
+        if self.features.features != source_klass.features():
+            doc["features"] = source_klass.features()
+            self.log_debug("Populated features")
+
+        if not doc:
+            return
 
         await self.index.update(
             doc_id=self.id,
@@ -792,18 +805,16 @@ class Connector(ESDocument):
         await self.reload()
         draft_filter = self.filtering.get_draft_filter()
         if not draft_filter.has_validation_state(FilteringValidationState.EDITED):
-            logger.debug(
-                f"Filtering of connector {self.id} is in state {draft_filter.validation['state']}, skipping..."
+            self.log_debug(
+                f"Filtering is in state {draft_filter.validation['state']}, skipping..."
             )
             return
 
-        logger.info(
-            f"Filtering of connector {self.id} is in state {FilteringValidationState.EDITED.value}, validating...)"
+        self.log_info(
+            f"Filtering is in state {FilteringValidationState.EDITED.value}, validating...)"
         )
         validation_result = await validator.validate_filtering(draft_filter)
-        logger.info(
-            f"Filtering validation result for connector {self.id}: {validation_result.state.value}"
-        )
+        self.log_info(f"Filtering validation result: {validation_result.state.value}")
 
         filtering = self.filtering.to_list()
         for filter_ in filtering:
@@ -842,7 +853,7 @@ class Connector(ESDocument):
         try:
             source_klass = get_source_klass(fqn)
         except Exception as e:
-            logger.critical(e, exc_info=True)
+            self.log_critical(e, exc_info=True)
             raise DataSourceError(
                 f"Could not instantiate {fqn} for {service_type}"
             ) from e
@@ -873,8 +884,8 @@ class Connector(ESDocument):
         if not configs_missing_properties:
             return
 
-        logger.info(
-            f'Connector for {service_type}(id: "{self.id}") is missing configuration field properties. Generating defaults.'
+        self.log_info(
+            f"Connector for {service_type} is missing configuration field properties. Generating defaults."
         )
 
         # filter the default config by what fields we want to update, then merge the actual config into it
@@ -896,6 +907,15 @@ class Connector(ESDocument):
             if_primary_term=self._primary_term,
         )
         await self.reload()
+
+    def _prefix(self):
+        return f"[Connector id: {self.id}, index name: {self.index_name}]"
+
+    def _extra(self):
+        return {
+            "labels.connector_id": self.id,
+            "labels.index_name": self.index_name,
+        }
 
 
 IDLE_JOBS_THRESHOLD = 60  # 60 seconds

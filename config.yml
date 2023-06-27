@@ -27,13 +27,6 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-extraction_service:
-  enabled: false
-  host: http://localhost:8090
-  text_extraction:
-    use_file_pointers: false
-    method: 'tika'
-
 connector_id: 'changeme'
 service_type: 'changeme'
 
@@ -47,9 +40,10 @@ sources:
   azure_blob_storage: connectors.sources.azure_blob_storage:AzureBlobStorageDataSource
   postgresql: connectors.sources.postgresql:PostgreSQLDataSource
   oracle: connectors.sources.oracle:OracleDataSource
-  sharepoint: connectors.sources.sharepoint:SharepointDataSource
+  sharepoint_server: connectors.sources.sharepoint_server:SharepointServerDataSource
   mssql: connectors.sources.mssql:MSSQLDataSource
   jira: connectors.sources.jira:JiraDataSource
   confluence: connectors.sources.confluence:ConfluenceDataSource
+  dropbox: connectors.sources.dropbox:DropboxDataSource
   servicenow: connectors.sources.servicenow:ServiceNowDataSource
   sharepoint_online: connectors.sources.sharepoint_online:SharepointOnlineDataSource
