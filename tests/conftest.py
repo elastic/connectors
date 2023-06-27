@@ -117,6 +117,14 @@ def mock_responses():
 
 
 @pytest_asyncio.fixture
+async def patch_cancellable_sleeps():
+    with patch(
+        "connectors.utils.CancellableSleeps.sleep", return_value=AsyncMock()
+    ) as new_mock:
+        yield new_mock
+
+
+@pytest_asyncio.fixture
 async def patch_sleep():
     with patch("asyncio.sleep", return_value=AsyncMock) as patch_sleep:
         # To avoid actually sleeping
