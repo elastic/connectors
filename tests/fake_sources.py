@@ -21,7 +21,6 @@ class FakeSource(BaseDataSource):
 
     name = "Fakey"
     service_type = "fake"
-    support_incremental_sync = False
 
     def __init__(self, configuration):
         self.configuration = configuration
@@ -69,7 +68,7 @@ class FakeSource(BaseDataSource):
 
 
 class FakeSourceWithIncrementalSync(FakeSource):
-    support_incremental_sync = True
+    incremental_sync_enabled = True
 
 
 class FakeSourceFilteringValid(FakeSource):

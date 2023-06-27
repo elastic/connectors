@@ -200,6 +200,7 @@ class JiraDataSource(BaseDataSource):
 
     name = "Jira"
     service_type = "jira"
+    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the Jira
