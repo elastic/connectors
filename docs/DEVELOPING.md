@@ -3,6 +3,7 @@
 - [General Configuration](#general-configuration)
 - [Installation](#installation)
 - [Architecture](#architecture)
+- [Features](#features)
 - [Syncing](#syncing)
   - [Sync Strategy](#sync-strategy)
   - [How a sync works](#how-a-sync-works)
@@ -88,16 +89,32 @@ sources:
 
 And that source will be available in Kibana.
 
+## Features
+
+Data source features will be populated to connector clients and customized connectors, to tell what features are available for the connector.
+
+The features are defined as class variables of the data source class, and the available features and default values are:
+1. `basic_rules_enabled` (Default: `True`) - whether basic sync rules are enabled
+2. `advanced_rules_enabled` (Default: `False`) - whether advanced rules are enabled
+3. `dls_enabled` (Default: `False`) - whether document-level security is enabled
+4. `incremental_sync_enabled` (Default: `False`) - whether incremental sync is enabled
+
+If you want to enable/disable any feature which is different from the default value, you need to override the class variable in the data source implementation. E.g. to enable incremental sync:
+```python
+class MyDataSource(BaseDataSource):
+    incremental_sync_enabled = True
+```
+
 ## Syncing
 ### Sync strategy
 
-In Elastic `connectors-python` a **Full sync** ensures full data parity (including deletion).
+There are two types of content sync jobs: full sync and incremental sync.
 
-This sync strategy is good enough for some sources like MongoDB where 100,000 documents can be fully synced in less than 30 seconds.
+A **Full sync** ensures full data parity (including deletion), this sync strategy is good enough for some sources like MongoDB where 100,000 documents can be fully synced in less than 30 seconds.
 
-As new sources are added, more sophisticated syncs may be introduced in order to achieve the same level of freshness available in Workplace Search.
+An **Incremental sync** only syncs documents created, updated and deleted since the last successful content sync.
 
-### How a sync works
+### How a full sync works
 
 Syncing a backend consists of reconciliating an Elasticsearch index with an external data source. It's a read-only mirror of the data located in the 3rd party data source.
 
@@ -111,9 +128,38 @@ To sync both sides, the CLI uses these steps:
   - if not, adds it as an `upsert` operation into a `bulk` call to Elasticsearch
 - for each id from Elasticsearch that is not present in the documents sent by the data source class, adds it as a `delete` operation into the `bulk` call
 - `bulk` calls are emitted every 500 operations (this is configurable for slow networks).
+- If incremental sync is available for the connector, `self._sync_cursor` should also be updated in the connector document in the end, so that when an incremental sync starts, it knows where to start from.
 
 To implement a new source, check [CONTRIBUTE.rst](./CONTRIBUTING.md)
 
+### How an incremental sync works
+
+If a connector supports incremental sync, you should firstly enable it. Check [Features](#features).
+
+You have to implement `get_docs_incrementally` method of the data source class, which will take `sync_cursor` as a parameter, and yield `document`, `lazy_download`, `operation`.
+
+```python
+async def get_docs_incrementally(self, sync_cursor, filtering=None):
+    # start syncing from sync_cursor
+    ...
+    
+    # document - a json representation of an item in the remote source
+    # lazy_download - a function to download attachment, if available
+    # operation - operation to be applied to this document, can be one of index, update or delete
+    yield document, lazy_download, operation
+```
+
+`sync_cursor` is a dictionary object to record where the last sync job is left off, so that increment sync will know where to start from. The structure of the `sync_cursor` is connector dependent. E.g. in Sharepoint Online connector, we want to sync site drives incrementally, we could design the sync cursor to be like:
+```json
+{
+  "site_drives": {
+    "{site_drive_id}" : "{delta_link}",
+    ...
+  }
+}
+```
+
+If increment sync is enabled for a connector, you need to make sure `self._sync_cursor` is updated at the end of the full/incremental sync. Take a look at [Sharepoint Online connector](../connectors/sources/sharepoint_online.py) implementation as an example.
 
 ## Implementing a new source
 
@@ -383,7 +429,10 @@ Take a look at the `get_docs` method in the [MySQL connector](../connectors/sour
 #### How to implement advanced rules
 
 When implementing a new connector follow the API of the [BaseDataSource](../connectors/source.py).
-The custom implementation for advanced rules is usually located inside the `get_docs` function:
+
+To implement advanced rules, you should firstly enable it. Check [Features](#features).
+
+The custom implementation for advanced rules is usually located inside the `get_docs` (and `get_docs_incrementally` if incremental sync is enabled) function:
 
 ```python
 async def get_docs(self, filtering=None):
