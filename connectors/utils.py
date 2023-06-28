@@ -141,6 +141,15 @@ def get_base64_value(content):
     return base64.b64encode(content).decode("utf-8")
 
 
+def decode_base64_value(content):
+    """
+    Decodes the base64 encoded content
+    Args:
+           content (string): base64 encoded content
+    """
+    return base64.b64decode(content)
+
+
 _BASE64 = shutil.which("base64")
 
 
