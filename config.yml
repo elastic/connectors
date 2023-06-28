@@ -47,3 +47,4 @@ sources:
   dropbox: connectors.sources.dropbox:DropboxDataSource
   servicenow: connectors.sources.servicenow:ServiceNowDataSource
   sharepoint_online: connectors.sources.sharepoint_online:SharepointOnlineDataSource
+  github: connectors.sources.github:GitHubDataSource
