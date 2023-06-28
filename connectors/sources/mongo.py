@@ -88,6 +88,7 @@ class MongoDataSource(BaseDataSource):
 
     name = "MongoDB"
     service_type = "mongodb"
+    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
