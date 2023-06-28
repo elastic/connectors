@@ -2,7 +2,7 @@
 
 ![logo](logo-enterprise-search.png)
 
-The home of Elastic connector service and native connectors written in Python. This repository contains the framework for customizing Elastic native connectors, or writing your own connectors for advanced use cases.
+The home of Elastic connector service and connectors written in Python. This repository contains the framework for customizing Elastic connectors, or writing your own connectors for advanced use cases.
 
 **The connector will be operated by an administrative user from within Kibana.**
 
@@ -27,4 +27,4 @@ See the [official end-user documentation](https://www.elastic.co/guide/en/enterp
 - [MySQL](docs/sync-rules/MYSQL.md)
 - [JIRA](docs/sync-rules/JIRA.md)
 - [CONFLUENCE](docs/sync-rules/CONFLUENCE.md)
-
+- [SERVICENOW](docs/sync-rules/SERVICENOW.md)
