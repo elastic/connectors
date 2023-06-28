@@ -10,7 +10,7 @@ This connector is in **beta** and is subject to change. The design and code is l
 
 ## Usage
 
-To use this connector as a **connector client**, use the **Customized connector** workflow.
+To use this connector as a **connector client**, use the **Dropbox** tile from the connectors list or **Customized connector** workflow.
 
 For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
 
