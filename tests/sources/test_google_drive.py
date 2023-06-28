@@ -787,7 +787,7 @@ async def test_get_google_workspace_content():
 @pytest.mark.asyncio
 async def test_get_google_workspace_content_size_limit():
     """Test the module responsible for fetching the content of the Google Suite document if its size
-       is above the limit."""
+    is above the limit."""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
