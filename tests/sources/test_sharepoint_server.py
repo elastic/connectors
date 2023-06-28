@@ -14,7 +14,7 @@ from aiohttp import StreamReader
 
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
-from connectors.sources.sharepoint import SharepointServerDataSource
+from connectors.sources.sharepoint_server import SharepointServerDataSource
 from tests.sources.support import create_source
 
 EXCEPTION_MESSAGE = "Something went wrong"
@@ -1003,7 +1003,7 @@ async def test_api_call_successfully():
 
 @pytest.fixture
 def patch_default_wait_multiplier():
-    with mock.patch("connectors.sources.sharepoint.RETRY_INTERVAL", 0):
+    with mock.patch("connectors.sources.sharepoint_server.RETRY_INTERVAL", 0):
         yield
 
 
