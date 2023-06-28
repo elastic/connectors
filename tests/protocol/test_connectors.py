@@ -40,7 +40,7 @@ from connectors.protocol import (
     SyncJobIndex,
 )
 from connectors.source import BaseDataSource
-from connectors.utils import iso_utc
+from connectors.utils import ACCESS_CONTROL_INDEX_PREFIX, iso_utc
 from tests.commons import AsyncIterator
 
 HERE = os.path.dirname(__file__)
@@ -190,7 +190,6 @@ ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
 SYNC_CURSOR = {"foo": "bar"}
 
 INDEX_NAME = "index_name"
-ACCESS_CONTROL_INDEX_PREFIX = "search-acl-filter-"
 
 
 def test_utc():
