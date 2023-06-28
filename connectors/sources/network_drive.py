@@ -13,7 +13,6 @@ from io import BytesIO
 import smbclient
 from smbprotocol.exceptions import SMBException, SMBOSError
 
-from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value, iso_utc
 
@@ -95,7 +94,7 @@ class NASDataSource(BaseDataSource):
         """Verify the connection with Network Drive"""
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(executor=None, func=self.create_connection)
-        logger.info("Successfully connected to the Network Drive")
+        self._logger.info("Successfully connected to the Network Drive")
 
     async def close(self):
         """Close all the open smb sessions"""
@@ -118,7 +117,9 @@ class NASDataSource(BaseDataSource):
         try:
             files = await loop.run_in_executor(None, smbclient.scandir, path)
         except (SMBOSError, SMBException) as exception:
-            logger.exception(f"Error while scanning the path {path}. Error {exception}")
+            self._logger.exception(
+                f"Error while scanning the path {path}. Error {exception}"
+            )
 
         for file in files:
             file_details = file._dir_info.fields
@@ -149,7 +150,7 @@ class NASDataSource(BaseDataSource):
                 file_content.seek(0)
                 return file_content
         except SMBOSError as error:
-            logger.error(
+            self._logger.error(
                 f"Cannot read the contents of file on path:{path}. Error {error}"
             )
 
@@ -172,7 +173,7 @@ class NASDataSource(BaseDataSource):
             return
 
         if int(file["size"]) > DEFAULT_FILE_SIZE_LIMIT:
-            logger.warning(
+            self._logger.warning(
                 f"File size {file['size']} of {file['title']} bytes is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
             )
             return

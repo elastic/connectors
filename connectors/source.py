@@ -339,9 +339,14 @@ class BaseDataSource:
 
     name = None
     service_type = None
-    support_incremental_sync = False
+    basic_rules_enabled = True
+    advanced_rules_enabled = False
+    dls_enabled = False
+    incremental_sync_enabled = False
 
     def __init__(self, configuration):
+        # Initialize to the global logger
+        self._logger = logger
         if not isinstance(configuration, DataSourceConfiguration):
             raise TypeError(
                 f"Configuration expected type is {DataSourceConfiguration.__name__}, actual: {type(configuration).__name__}."
@@ -355,6 +360,16 @@ class BaseDataSource:
 
     def __str__(self):
         return f"Datasource `{self.__class__.name}`"
+
+    def set_logger(self, logger_):
+        self._logger = logger_
+        self._set_internal_logger()
+
+    def _set_internal_logger(self):
+        # no op for BaseDataSource
+        # if there are internal class (e.g. Client class) to which the logger need to be set,
+        # this method needs to be implemented
+        pass
 
     @classmethod
     def get_simple_configuration(cls):
@@ -402,17 +417,39 @@ class BaseDataSource:
 
         return hash_id(_id)
 
+    @classmethod
+    def features(cls):
+        """Returns features available for the data source"""
+        return {
+            "sync_rules": {
+                "basic": {
+                    "enabled": cls.basic_rules_enabled,
+                },
+                "advanced": {
+                    "enabled": cls.advanced_rules_enabled,
+                },
+            },
+            "document_level_security": {
+                "enabled": cls.dls_enabled,
+            },
+            "incremental_sync": {
+                "enabled": cls.incremental_sync_enabled,
+            },
+        }
+
     def set_features(self, features):
         if self._features is not None:
-            logger.warning(f"'_features' already set in {self.__class__.name}")
-        logger.debug(f"Setting '_features' for {self.__class__.name}")
+            self._logger.warning(f"'_features' already set in {self.__class__.name}")
+        self._logger.debug(f"Setting '_features' for {self.__class__.name}")
         self._features = features
 
     async def validate_filtering(self, filtering):
         """Execute all basic rule and advanced rule validators."""
 
         return await FilteringValidator(
-            self.basic_rules_validators(), self.advanced_rules_validators()
+            self.basic_rules_validators(),
+            self.advanced_rules_validators(),
+            self._logger,
         ).validate(filtering)
 
     def advanced_rules_validators(self):
@@ -476,6 +513,9 @@ class BaseDataSource:
         Can be used to close connections
         """
         pass
+
+    def access_control_query(self, access_control):
+        raise NotImplementedError
 
     async def get_access_control(self):
         """Returns an asynchronous iterator on the permission documents present in the backend.
