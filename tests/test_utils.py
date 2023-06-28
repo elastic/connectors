@@ -617,8 +617,8 @@ class TestExtractionService:
         ],
     )
     def test_check_configured(self, mock_config, expected_result):
-        with patch("yaml.safe_load") as mock_safe_load:
-            mock_safe_load.return_value = mock_config
+        with patch("connectors.utils.get_framework_config") as mock_framework_config:
+            mock_framework_config.return_value = mock_config
             extraction_service = ExtractionService()
             assert extraction_service._check_configured() is expected_result
 
@@ -634,8 +634,8 @@ class TestExtractionService:
         url = "http://localhost:8090/extract_text/"
         payload = {"extracted_text": "I've been extracted!"}
 
-        with patch("yaml.safe_load") as mock_safe_load:
-            mock_safe_load.return_value = mock_config
+        with patch("connectors.utils.get_framework_config") as mock_framework_config:
+            mock_framework_config.return_value = mock_config
 
             with patch("builtins.open", mock_open(read_data=b"data")):
                 mock_responses.post(url, status=200, payload=payload)
@@ -659,8 +659,8 @@ class TestExtractionService:
         filepath = "tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/"
 
-        with patch("yaml.safe_load") as mock_safe_load:
-            mock_safe_load.return_value = mock_config
+        with patch("connectors.utils.get_framework_config") as mock_framework_config:
+            mock_framework_config.return_value = mock_config
 
             with patch("builtins.open", mock_open(read_data=b"data")):
                 mock_responses.post(url, status=400, payload={})
@@ -686,8 +686,8 @@ class TestExtractionService:
         filepath = "tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/"
 
-        with patch("yaml.safe_load") as mock_safe_load:
-            mock_safe_load.return_value = mock_config
+        with patch("connectors.utils.get_framework_config") as mock_framework_config:
+            mock_framework_config.return_value = mock_config
 
             with patch("builtins.open", mock_open(read_data=b"data")):
                 mock_responses.post(

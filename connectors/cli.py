@@ -19,7 +19,7 @@ import signal
 from argparse import ArgumentParser
 
 from connectors import __version__
-from connectors.config import load_config
+from connectors.config import load_config, set_framework_config
 from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
 from connectors.services import get_services
@@ -140,6 +140,7 @@ def run(args):
     config = {}
     try:
         config = load_config(args.config_file)
+        set_framework_config(config)
     except Exception as e:
         # If something goes wrong while parsing config file, we still want
         # to set up the logger so that Cloud deployments report errors to

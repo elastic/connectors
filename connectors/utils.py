@@ -20,13 +20,13 @@ from enum import Enum
 from io import BytesIO
 
 import aiohttp
-import yaml
 from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 from base64io import Base64IO
 from bs4 import BeautifulSoup
 from cstriggers.core.trigger import QuartzCron
 from pympler import asizeof
 
+from connectors.config import get_framework_config
 from connectors.logger import logger
 
 ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
@@ -681,10 +681,7 @@ class ExtractionService:
     def __init__(self):
         # The config file is being opened here as a temporary measure for 8.9.
         # This should be removed when the extraction service is expanded.
-        with open(
-            os.path.join(os.path.dirname(__file__), "..", "config.yml"), "r"
-        ) as file:
-            config = yaml.safe_load(file)
+        config = get_framework_config()
 
         self.session = None
 
