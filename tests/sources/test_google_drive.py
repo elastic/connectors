@@ -43,12 +43,12 @@ def test_get_configuration():
 
     # Setup
 
-    google_cloud_storage_object = GoogleDriveDataSource
+    google_drive_object = GoogleDriveDataSource
 
     # Execute
 
     config = DataSourceConfiguration(
-        config=google_cloud_storage_object.get_default_configuration()
+        config=google_drive_object.get_default_configuration()
     )
 
     # Assert
@@ -61,7 +61,7 @@ def test_get_configuration():
 
 @pytest.mark.asyncio
 async def test_empty_configuration():
-    """Tests the validity of the configurations passed to the Google Cloud source class."""
+    """Tests the validity of the configurations passed to the Google Drive source class."""
 
     # Setup
     configuration = DataSourceConfiguration({"service_account_credentials": ""})
@@ -77,6 +77,8 @@ async def test_empty_configuration():
 
 @pytest.mark.asyncio
 async def test_raise_on_invalid_configuration():
+    """Test if invalid configuration raises an expected Exception"""
+
     # Setup
     configuration = DataSourceConfiguration(
         {"service_account_credentials": "{'abc':'bcd','cd'}"}
@@ -167,12 +169,7 @@ async def test_ping_for_failed_connection(catch_stdout):
     ],
 )
 def test_get_blob_document(blob_files, processed_blob_files):
-    """Tests the function which modifies the fetched blobs and maps the values to keys.
-
-    Args:
-        blob_files (list): List of the blob fikes fetched from Google Drive.
-        processed_blob_files (list): List of the documents returned by the method.
-    """
+    """Tests the function which modifies the fetched blobs and maps the values to keys."""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -313,6 +310,7 @@ def test_get_blob_document(blob_files, processed_blob_files):
     ],
 )
 def test_prepare_blob_document(blob, expected_blog):
+    """Test the method that formats the blob metadata from Google Drive API"""
     # Setup
     mocked_gd_object = get_google_drive_source_object()
 
@@ -332,7 +330,7 @@ def test_prepare_blob_document(blob, expected_blog):
 
 @pytest.mark.asyncio
 async def test_get_drives():
-    """Tests the method which lists the storage buckets available in Google Cloud Storage."""
+    """Tests the method which lists the shared drives from Google Drive."""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -378,7 +376,7 @@ async def test_get_drives():
 
 @pytest.mark.asyncio
 async def test_get_folders():
-    """Tests the method which lists the storage buckets available in Google Cloud Storage."""
+    """Tests the method which lists the folders from Google Drive."""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -430,6 +428,7 @@ async def test_get_folders():
 
 @pytest.mark.asyncio
 async def test_resolve_paths():
+    """Test the method that builds a lookup between a folder id and its absolute path in Google Drive structure"""
     drives = {
         "driveId1": "Drive1",
         "driveId2": "Drive2",
@@ -485,7 +484,7 @@ async def test_resolve_paths():
 
 @pytest.mark.asyncio
 async def test_fetch_files():
-    """Tests the method responsible to yield blobs from Google Cloud Storage bucket."""
+    """Tests the method responsible to yield files from Google Drive."""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -537,7 +536,7 @@ async def test_fetch_files():
 
 @pytest.mark.asyncio
 async def test_get_docs():
-    """Tests the module responsible to fetch and yield blobs documents from Google Cloud Storage."""
+    """Tests the module responsible to fetch and yield blobs documents from Google Drive."""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -630,7 +629,7 @@ async def test_get_content():
 
 @pytest.mark.asyncio
 async def test_get_content_doit_false():
-    """Test the module responsible for fetching the content of the file if it is extractable."""
+    """Test the module responsible for fetching the content of the file with `doit` set to False"""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -657,7 +656,7 @@ async def test_get_content_doit_false():
 
 @pytest.mark.asyncio
 async def test_get_content_google_workspace_called():
-    """Test the module responsible for fetching the content of the file if it is extractable."""
+    """Test the method responsible for selecting right extraction method depending on MIME type"""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -703,7 +702,7 @@ async def test_get_content_google_workspace_called():
 
 @pytest.mark.asyncio
 async def test_get_content_generic_files_called():
-    """Test the module responsible for fetching the content of the file if it is extractable."""
+    """Test the method responsible for selecting right extraction method depending on MIME type"""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -749,7 +748,7 @@ async def test_get_content_generic_files_called():
 
 @pytest.mark.asyncio
 async def test_get_google_workspace_content():
-    """Test the module responsible for fetching the content of the file if it is extractable."""
+    """Test the module responsible for fetching the content of the Google Suite document."""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -787,7 +786,8 @@ async def test_get_google_workspace_content():
 
 @pytest.mark.asyncio
 async def test_get_google_workspace_content_size_limit():
-    """Test the module responsible for fetching the content of the file if it is extractable."""
+    """Test the module responsible for fetching the content of the Google Suite document if its size
+       is above the limit."""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -859,7 +859,7 @@ async def test_get_generic_file_content():
 
 @pytest.mark.asyncio
 async def test_get_generic_file_content_size_limit():
-    """Test the module responsible for fetching the content of the file if it is extractable."""
+    """Test the module responsible for fetching the content of the file size is above the limit."""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -887,7 +887,7 @@ async def test_get_generic_file_content_size_limit():
 
 @pytest.mark.asyncio
 async def test_get_generic_file_content_empty_file():
-    """Test the module responsible for fetching the content of the file if it is extractable."""
+    """Test the module responsible for fetching the content of the file if the file size is 0."""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -915,7 +915,7 @@ async def test_get_generic_file_content_empty_file():
 
 @pytest.mark.asyncio
 async def test_get_content_when_type_not_supported():
-    """Test the module responsible for fetching the content of the file if it is not extractable or doit is not true."""
+    """Test the module responsible for fetching the content of the file if it is not extractable."""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -967,6 +967,7 @@ async def test_api_call_for_attribute_error():
 @mock.patch("connectors.sources.google_drive.DEFAULT_WAIT_MULTIPLIER", 0.1)
 @pytest.mark.asyncio
 async def test_api_call_http_error_retry():
+    """Test handling retries for HTTPError exception in api_call() method."""
     # Setup
     configuration = DataSourceConfiguration(
         {"service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS, "retry_count": 1}
@@ -985,6 +986,7 @@ async def test_api_call_http_error_retry():
 @mock.patch("connectors.sources.google_drive.DEFAULT_WAIT_MULTIPLIER", 0.1)
 @pytest.mark.asyncio
 async def test_api_call_other_exception_retry():
+    """Test handling retries for generic Exception in api_call() method."""
     # Setup
     configuration = DataSourceConfiguration(
         {"service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS, "retry_count": 1}
@@ -1001,6 +1003,7 @@ async def test_api_call_other_exception_retry():
 @mock.patch("connectors.sources.google_drive.RUNNING_FTEST", True)
 @pytest.mark.asyncio
 async def test_ping_detects_ftest_mode():
+    """Test if RUNNING_FTEST mode is correctly detected in ping() method."""
     # Setup
     mocked_gd_object = get_google_drive_source_object()
 
