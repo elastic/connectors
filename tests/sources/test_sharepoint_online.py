@@ -709,13 +709,15 @@ class TestSharepointOnlineClient:
     @pytest.mark.asyncio
     async def test_drive_items_delta(self, client, patch_fetch, patch_scroll_delta_url):
         delta_url_input = "https://sharepoint.com/delta-link-lalal"
-        delta_url_next_sync = "https://sharepoint.com/delta-link-lalal/page-2"
+        delta_url_next_page = "https://sharepoint.com/delta-link-lalal/page-2"
+        delta_url_next_sync = "https://sharepoint.com/delta-link-lalal/next-sync"
+
         items_page_1 = ["1", "2"]
         items_page_2 = ["3", "4"]
 
         patch_scroll_delta_url.return_value = AsyncIterator(
             [
-                {"@odata.deltaLink": delta_url_next_sync, "value": items_page_1},
+                {"@odata.nextLink": delta_url_next_page, "value": items_page_1},
                 {"@odata.deltaLink": delta_url_next_sync, "value": items_page_2},
             ]
         )
