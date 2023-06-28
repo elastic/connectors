@@ -19,13 +19,13 @@ from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64, get_pem_format
 
 DEFAULT_RETRY_COUNT = 3
-DEFAULT_WAIT_MULTIPLIER = 3
+DEFAULT_WAIT_MULTIPLIER = 2
 DEFAULT_FILE_SIZE_LIMIT = 10485760
 
 GOOGLE_DRIVE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 API_NAME = "drive"
 API_VERSION = "v3"
-DRIVE_API_TIMEOUT = 3 * 60  # 3 min
+DRIVE_API_TIMEOUT = 1 * 60  # 1 min
 
 CORPORA = "allDrives"
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
@@ -265,10 +265,10 @@ class GoogleDriveDataSource(BaseDataSource):
             json.loads(self.configuration["service_account_credentials"])
         except ValueError as e:
             raise ConfigurableFieldValueError(
-                "Google Cloud service account is not a valid JSON."
+                "Google Drive service account is not a valid JSON."
             ) from e
 
-    async def _get_drives(self):
+    async def get_drives(self):
         """Fetch all shared drive (id, name) from Google Drive
 
         Yields:
@@ -291,14 +291,14 @@ class GoogleDriveDataSource(BaseDataSource):
             dict: mapping between drive id and its name
         """
         drives = {}
-        async for chunk in self._get_drives():
+        async for chunk in self.get_drives():
             drives_chunk = chunk.get("drives", [])
             for drive in drives_chunk:
                 drives[drive["id"]] = drive["name"]
 
         return drives
 
-    async def _get_folders(self):
+    async def get_folders(self):
         """Fetch all folders (id, name, parent) from Google Drive
 
         Yields:
@@ -324,7 +324,7 @@ class GoogleDriveDataSource(BaseDataSource):
             dict: mapping between folder id and its (name, parents)
         """
         folders = {}
-        async for chunk in self._get_folders():
+        async for chunk in self.get_folders():
             folders_chunk = chunk.get("files", [])
             for folder in folders_chunk:
                 folders[folder["id"]] = {
