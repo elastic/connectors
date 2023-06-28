@@ -316,15 +316,13 @@ def test_prepare_blob_document(blob, expected_blog):
     # Setup
     mocked_gd_object = get_google_drive_source_object()
 
-    dummy_paths = (
-        {
-            "folderId4": {
-                "name": "Folder4",
-                "parents": ["driveId3"],
-                "path": "Drive3/Folder4",
-            }
+    dummy_paths = {
+        "folderId4": {
+            "name": "Folder4",
+            "parents": ["driveId3"],
+            "path": "Drive3/Folder4",
         }
-    )
+    }
 
     # Execute and Assert
     assert expected_blog == mocked_gd_object.prepare_blob_document(
@@ -629,6 +627,7 @@ async def test_get_content():
             )
             assert content == expected_blob_document
 
+
 @pytest.mark.asyncio
 async def test_get_content_doit_false():
     """Test the module responsible for fetching the content of the file if it is extractable."""
@@ -653,7 +652,7 @@ async def test_get_content_doit_false():
         blob=blob_document,
         doit=False,
     )
-    assert content == None
+    assert content is None
 
 
 @pytest.mark.asyncio
@@ -817,7 +816,7 @@ async def test_get_google_workspace_content_size_limit():
         blob=blob_document,
         doit=True,
     )
-    assert content == None
+    assert content is None
 
 
 @pytest.mark.asyncio
@@ -883,7 +882,7 @@ async def test_get_generic_file_content_size_limit():
         blob=blob_document,
         doit=True,
     )
-    assert content == None
+    assert content is None
 
 
 @pytest.mark.asyncio
@@ -911,7 +910,7 @@ async def test_get_generic_file_content_empty_file():
         blob=blob_document,
         doit=True,
     )
-    assert content == None
+    assert content is None
 
 
 @pytest.mark.asyncio
@@ -1002,13 +1001,10 @@ async def test_api_call_other_exception_retry():
 @mock.patch("connectors.sources.google_drive.RUNNING_FTEST", True)
 @pytest.mark.asyncio
 async def test_ping_detects_ftest_mode():
-
     # Setup
     mocked_gd_object = get_google_drive_source_object()
 
     # Execute and assert
-    with mock.patch.object(
-        Aiogoogle, "as_service_account"
-    ) as google_client:
+    with mock.patch.object(Aiogoogle, "as_service_account") as google_client:
         await mocked_gd_object.ping()
         google_client.as_service_account.assert_not_called()
