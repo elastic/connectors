@@ -507,3 +507,10 @@ This will configure the connector in Elasticsearch to run a full sync. The scrip
     ```shell
     $ System/Volumes/Data/Applications/Python\ 3.10/Install\ Certificates.command
     ```
+- To fix gssapi error related to requests-kerberos OS dependency, users have to run this to install it successfully:
+    ```
+    $ sudo apt-get update \
+    && apt-get install -y --no-install-recommends \
+    gcc \
+    heimdal-dev \
+    ```

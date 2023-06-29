@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 import aiohttp
 import pytest
 from aiohttp import StreamReader
-
+from connectors.logger import logger
 from connectors.source import DataSourceConfiguration
 from connectors.sources.sharepoint_server import SharepointServerDataSource
 from tests.sources.support import create_source
@@ -101,6 +101,7 @@ async def test_ping_for_successful_connection():
 
     # Setup
     source = create_source(SharepointServerDataSource)
+    source._logger=logger
     source.sharepoint_client._api_call = Mock(
         return_value=async_native_coroutine_generator(200)
     )
@@ -692,6 +693,35 @@ class ContentResponse:
 
 
 @pytest.mark.asyncio
+async def test_get_content_for_kerberos_authentication():
+    source = create_source(SharepointServerDataSource)
+    source.sharepoint_client.authentication_type = "kerberos_authentication"
+
+    EXPECTED_ATTACHMENT = {
+        "id": 1,
+        "server_relative_url": "/url",
+        "_timestamp": "2022-06-20T10:37:44Z",
+        "size": "11",
+        "type": "sites",
+        "file_name": "dummy.pdf",
+    }
+    EXPECTED_CONTENT = {
+        "_id": 1,
+        "_attachment": "VGhpcyBpcyBhIGR1bW15IHNoYXJlcG9pbnQgYm9keSByZXNwb25zZQ==",
+        "_timestamp": "2022-06-20T10:37:44Z",
+    }
+    source.sharepoint_client._api_call = Mock(return_value=AsyncIter(ContentResponse))
+    response_content = await source.sharepoint_client.get_content(
+        document=EXPECTED_ATTACHMENT,
+        file_relative_url="abc.com",
+        site_url="/site",
+        doit=True,
+    )
+
+    assert response_content == EXPECTED_CONTENT
+
+
+@pytest.mark.asyncio
 async def test_get_content_when_size_is_bigger():
     """Test the get content method when document size is greater than the allowed size limit."""
     # Setup
@@ -906,6 +936,14 @@ async def test_close_with_client_session():
 
 
 @pytest.mark.asyncio
+async def test_close_with_client_session_for_kerberos_authentication():
+    source = create_source(SharepointServerDataSource)
+    source.sharepoint_client.authentication_type = "kerberos_authentication"
+    source.sharepoint_client.session = ClientSession()
+    await source.sharepoint_client.close_session()
+
+
+@pytest.mark.asyncio
 async def test_close_without_client_session():
     """Test close method of SharepointServerDataSource without client session"""
 
@@ -1056,6 +1094,14 @@ async def test_api_call_when_server_is_down(patch_default_wait_multiplier):
 def test_get_session():
     """Test that the instance of session returned is always the same for the datasource class."""
     source = create_source(SharepointServerDataSource)
+    first_instance = source.sharepoint_client._get_session()
+    second_instance = source.sharepoint_client._get_session()
+    assert first_instance is second_instance
+
+
+def test_get_session_for_kerberos_authentication():
+    source = create_source(SharepointServerDataSource)
+    source.sharepoint_client.authentication_type = "kerberos_authentication"
     first_instance = source.sharepoint_client._get_session()
     second_instance = source.sharepoint_client._get_session()
     assert first_instance is second_instance
