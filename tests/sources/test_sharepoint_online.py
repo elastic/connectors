@@ -1663,8 +1663,10 @@ class TestSharepointOnlineDataSource:
         with patch(
             "connectors.utils.ExtractionService.extract_text", return_value=message
         ) as extraction_service_mock:
-            with patch("connectors.sources.sharepoint_online.get_framework_config") as framework_config_mock:
-                framework_config_mock = { "extraction_service": { "host": "http://localhost:8090" } }
+            with patch(
+                "connectors.sources.sharepoint_online.get_framework_config",
+                return_value={"extraction_service": {"host": "http://localhost:8090"}},
+            ):
 
                 async def download_func(attachment_id, async_buffer):
                     await async_buffer.write(bytes(message, "utf-8"))
@@ -1674,7 +1676,9 @@ class TestSharepointOnlineDataSource:
                     SharepointOnlineDataSource, use_text_extraction_service=True
                 )
 
-                download_result = await source.get_attachment_content(attachment, doit=True)
+                download_result = await source.get_attachment_content(
+                    attachment, doit=True
+                )
 
                 extraction_service_mock.assert_called_once()
                 assert download_result["body"] == message
@@ -1691,8 +1695,10 @@ class TestSharepointOnlineDataSource:
         with patch(
             "connectors.utils.ExtractionService.extract_text", return_value=message
         ) as extraction_service_mock:
-            with patch("connectors.sources.sharepoint_online.get_framework_config") as framework_config_mock:
-                framework_config_mock = { "extraction_service": { "host": "http://localhost:8090" } }
+            with patch(
+                "connectors.sources.sharepoint_online.get_framework_config",
+                return_value={"extraction_service": {"host": "http://localhost:8090"}},
+            ):
 
                 async def download_func(attachment_id, async_buffer):
                     await async_buffer.write(bytes(message, "utf-8"))
@@ -1702,7 +1708,9 @@ class TestSharepointOnlineDataSource:
                     SharepointOnlineDataSource, use_text_extraction_service=True
                 )
 
-                download_result = await source.get_attachment_content(attachment, doit=True)
+                download_result = await source.get_attachment_content(
+                    attachment, doit=True
+                )
 
                 extraction_service_mock.assert_not_called()
                 assert download_result["body"] == ""
@@ -1757,8 +1765,10 @@ class TestSharepointOnlineDataSource:
         with patch(
             "connectors.utils.ExtractionService.extract_text", return_value=message
         ) as extraction_service_mock:
-            with patch("connectors.sources.sharepoint_online.get_framework_config") as framework_config_mock:
-                framework_config_mock = { "extraction_service": { "host": "http://localhost:8090" } }
+            with patch(
+                "connectors.sources.sharepoint_online.get_framework_config",
+                return_value={"extraction_service": {"host": "http://localhost:8090"}},
+            ):
 
                 async def download_func(drive_id, drive_item_id, async_buffer):
                     await async_buffer.write(bytes(message, "utf-8"))
@@ -1768,7 +1778,9 @@ class TestSharepointOnlineDataSource:
                     SharepointOnlineDataSource, use_text_extraction_service=True
                 )
 
-                download_result = await source.get_drive_item_content(drive_item, doit=True)
+                download_result = await source.get_drive_item_content(
+                    drive_item, doit=True
+                )
 
                 extraction_service_mock.assert_called_once()
                 assert download_result["body"] == message
@@ -1792,8 +1804,11 @@ class TestSharepointOnlineDataSource:
         with patch(
             "connectors.utils.ExtractionService.extract_text", return_value=message
         ) as extraction_service_mock:
-            with patch("connectors.sources.sharepoint_online.get_framework_config") as framework_config_mock:
-                framework_config_mock = { "extraction_service": { "host": "http://localhost:8090" } }
+            with patch(
+                "connectors.sources.sharepoint_online.get_framework_config",
+                return_value={"extraction_service": {"host": "http://localhost:8090"}},
+            ):
+
                 async def download_func(drive_id, drive_item_id, async_buffer):
                     await async_buffer.write(bytes(message, "utf-8"))
 
@@ -1802,7 +1817,9 @@ class TestSharepointOnlineDataSource:
                     SharepointOnlineDataSource, use_text_extraction_service=True
                 )
 
-                download_result = await source.get_drive_item_content(drive_item, doit=True)
+                download_result = await source.get_drive_item_content(
+                    drive_item, doit=True
+                )
 
                 extraction_service_mock.assert_not_called()
                 assert download_result["body"] == ""

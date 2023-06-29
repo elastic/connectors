@@ -26,7 +26,6 @@ from bs4 import BeautifulSoup
 from cstriggers.core.trigger import QuartzCron
 from pympler import asizeof
 
-from connectors.config import get_framework_config
 from connectors.logger import logger
 
 ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"

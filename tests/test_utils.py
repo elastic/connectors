@@ -617,7 +617,9 @@ class TestExtractionService:
         ],
     )
     def test_check_configured(self, mock_config, expected_result):
-        extraction_service = ExtractionService(mock_config.get('extraction_service', None))
+        extraction_service = ExtractionService(
+            mock_config.get("extraction_service", None)
+        )
         assert extraction_service._check_configured() is expected_result
 
     @pytest.mark.asyncio
@@ -635,12 +637,12 @@ class TestExtractionService:
         with patch("builtins.open", mock_open(read_data=b"data")):
             mock_responses.post(url, status=200, payload=payload)
 
-            extraction_service = ExtractionService(mock_config.get('extraction_service', None))
+            extraction_service = ExtractionService(
+                mock_config.get("extraction_service", None)
+            )
             extraction_service._begin_session()
 
-            response = await extraction_service.extract_text(
-                filepath, "notreal.txt"
-            )
+            response = await extraction_service.extract_text(filepath, "notreal.txt")
             await extraction_service._end_session()
 
             assert response == "I've been extracted!"
@@ -657,12 +659,12 @@ class TestExtractionService:
         with patch("builtins.open", mock_open(read_data=b"data")):
             mock_responses.post(url, status=400, payload={})
 
-            extraction_service = ExtractionService(mock_config.get('extraction_service', None))
+            extraction_service = ExtractionService(
+                mock_config.get("extraction_service", None)
+            )
             extraction_service._begin_session()
 
-            response = await extraction_service.extract_text(
-                filepath, "notreal.txt"
-            )
+            response = await extraction_service.extract_text(filepath, "notreal.txt")
             await extraction_service._end_session()
             assert response == ""
 
@@ -685,12 +687,12 @@ class TestExtractionService:
                 payload={"error": "oh no!", "message": "I'm all messed up..."},
             )
 
-            extraction_service = ExtractionService(mock_config.get('extraction_service', None))
+            extraction_service = ExtractionService(
+                mock_config.get("extraction_service", None)
+            )
             extraction_service._begin_session()
 
-            response = await extraction_service.extract_text(
-                filepath, "notreal.txt"
-            )
+            response = await extraction_service.extract_text(filepath, "notreal.txt")
             await extraction_service._end_session()
             assert response == ""
 
