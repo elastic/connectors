@@ -10,7 +10,7 @@ from envyaml import EnvYAML
 
 from connectors.logger import logger
 
-__CONNECTOR_FRAMEWORK_CONFIG = None
+__CONNECTOR_FRAMEWORK_CONFIG = {} # setup by cli.py on startup
 
 
 def get_framework_config():
