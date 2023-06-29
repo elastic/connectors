@@ -19,10 +19,7 @@ def get_framework_config():
 
 def set_framework_config(framework_config):
     global __CONNECTOR_FRAMEWORK_CONFIG
-    if __CONNECTOR_FRAMEWORK_CONFIG is None:
-        __CONNECTOR_FRAMEWORK_CONFIG = framework_config
-    else:
-        raise Exception("Connector framework config was already set!")
+    __CONNECTOR_FRAMEWORK_CONFIG = framework_config
 
 
 def load_config(config_file):
