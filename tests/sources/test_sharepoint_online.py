@@ -1663,20 +1663,22 @@ class TestSharepointOnlineDataSource:
         with patch(
             "connectors.utils.ExtractionService.extract_text", return_value=message
         ) as extraction_service_mock:
+            with patch("connectors.sources.sharepoint_online.get_framework_config") as framework_config_mock:
+                framework_config_mock = { "extraction_service": { "host": "http://localhost:8090" } }
 
-            async def download_func(attachment_id, async_buffer):
-                await async_buffer.write(bytes(message, "utf-8"))
+                async def download_func(attachment_id, async_buffer):
+                    await async_buffer.write(bytes(message, "utf-8"))
 
-            patch_sharepoint_client.download_attachment = download_func
-            source = create_source(
-                SharepointOnlineDataSource, use_text_extraction_service=True
-            )
+                patch_sharepoint_client.download_attachment = download_func
+                source = create_source(
+                    SharepointOnlineDataSource, use_text_extraction_service=True
+                )
 
-            download_result = await source.get_attachment_content(attachment, doit=True)
+                download_result = await source.get_attachment_content(attachment, doit=True)
 
-            extraction_service_mock.assert_called_once()
-            assert download_result["body"] == message
-            assert "_attachment" not in download_result
+                extraction_service_mock.assert_called_once()
+                assert download_result["body"] == message
+                assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
     @patch("connectors.utils.ExtractionService._check_configured", lambda *_: False)
@@ -1689,20 +1691,22 @@ class TestSharepointOnlineDataSource:
         with patch(
             "connectors.utils.ExtractionService.extract_text", return_value=message
         ) as extraction_service_mock:
+            with patch("connectors.sources.sharepoint_online.get_framework_config") as framework_config_mock:
+                framework_config_mock = { "extraction_service": { "host": "http://localhost:8090" } }
 
-            async def download_func(attachment_id, async_buffer):
-                await async_buffer.write(bytes(message, "utf-8"))
+                async def download_func(attachment_id, async_buffer):
+                    await async_buffer.write(bytes(message, "utf-8"))
 
-            patch_sharepoint_client.download_attachment = download_func
-            source = create_source(
-                SharepointOnlineDataSource, use_text_extraction_service=True
-            )
+                patch_sharepoint_client.download_attachment = download_func
+                source = create_source(
+                    SharepointOnlineDataSource, use_text_extraction_service=True
+                )
 
-            download_result = await source.get_attachment_content(attachment, doit=True)
+                download_result = await source.get_attachment_content(attachment, doit=True)
 
-            extraction_service_mock.assert_not_called()
-            assert download_result["body"] == ""
-            assert "_attachment" not in download_result
+                extraction_service_mock.assert_not_called()
+                assert download_result["body"] == ""
+                assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -1753,20 +1757,22 @@ class TestSharepointOnlineDataSource:
         with patch(
             "connectors.utils.ExtractionService.extract_text", return_value=message
         ) as extraction_service_mock:
+            with patch("connectors.sources.sharepoint_online.get_framework_config") as framework_config_mock:
+                framework_config_mock = { "extraction_service": { "host": "http://localhost:8090" } }
 
-            async def download_func(drive_id, drive_item_id, async_buffer):
-                await async_buffer.write(bytes(message, "utf-8"))
+                async def download_func(drive_id, drive_item_id, async_buffer):
+                    await async_buffer.write(bytes(message, "utf-8"))
 
-            patch_sharepoint_client.download_drive_item = download_func
-            source = create_source(
-                SharepointOnlineDataSource, use_text_extraction_service=True
-            )
+                patch_sharepoint_client.download_drive_item = download_func
+                source = create_source(
+                    SharepointOnlineDataSource, use_text_extraction_service=True
+                )
 
-            download_result = await source.get_drive_item_content(drive_item, doit=True)
+                download_result = await source.get_drive_item_content(drive_item, doit=True)
 
-            extraction_service_mock.assert_called_once()
-            assert download_result["body"] == message
-            assert "_attachment" not in download_result
+                extraction_service_mock.assert_called_once()
+                assert download_result["body"] == message
+                assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("filesize", [(15), (10485761)])
@@ -1786,20 +1792,21 @@ class TestSharepointOnlineDataSource:
         with patch(
             "connectors.utils.ExtractionService.extract_text", return_value=message
         ) as extraction_service_mock:
+            with patch("connectors.sources.sharepoint_online.get_framework_config") as framework_config_mock:
+                framework_config_mock = { "extraction_service": { "host": "http://localhost:8090" } }
+                async def download_func(drive_id, drive_item_id, async_buffer):
+                    await async_buffer.write(bytes(message, "utf-8"))
 
-            async def download_func(drive_id, drive_item_id, async_buffer):
-                await async_buffer.write(bytes(message, "utf-8"))
+                patch_sharepoint_client.download_drive_item = download_func
+                source = create_source(
+                    SharepointOnlineDataSource, use_text_extraction_service=True
+                )
 
-            patch_sharepoint_client.download_drive_item = download_func
-            source = create_source(
-                SharepointOnlineDataSource, use_text_extraction_service=True
-            )
+                download_result = await source.get_drive_item_content(drive_item, doit=True)
 
-            download_result = await source.get_drive_item_content(drive_item, doit=True)
-
-            extraction_service_mock.assert_not_called()
-            assert download_result["body"] == ""
-            assert "_attachment" not in download_result
+                extraction_service_mock.assert_not_called()
+                assert download_result["body"] == ""
+                assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
     async def test_with_site_access_control(self, patch_sharepoint_client):
