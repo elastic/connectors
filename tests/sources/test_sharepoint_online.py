@@ -8,6 +8,7 @@ import base64
 import re
 from datetime import datetime, timedelta, timezone
 from functools import partial
+from io import BytesIO
 from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
@@ -20,6 +21,7 @@ from connectors.protocol import Features
 from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
     DEFAULT_GROUPS,
+    DEFAULT_RETRY_SECONDS,
     WILDCARD,
     DriveItemsPage,
     GraphAPIToken,
@@ -28,9 +30,11 @@ from connectors.sources.sharepoint_online import (
     MicrosoftAPISession,
     MicrosoftSecurityToken,
     NotFound,
+    PermissionsMissing,
     SharepointOnlineAdvancedRulesValidator,
     SharepointOnlineClient,
     SharepointOnlineDataSource,
+    SharepointRestAPIToken,
     SyncCursorEmpty,
     TokenFetchFailed,
     _prefix_email,
@@ -53,10 +57,6 @@ NUMBER_OF_DEFAULT_GROUPS = 3
 
 ALLOW_ACCESS_CONTROL_PATCHED = "access_control"
 DEFAULT_GROUPS_PATCHED = ["some default group"]
-
-
-def set_dls_enabled(source, dls_enabled):
-    source.set_features(Features({"document_level_security": {"enabled": dls_enabled}}))
 
 
 class TestMicrosoftSecurityToken:
@@ -229,7 +229,7 @@ class TestSharepointRestAPIToken:
     async def token(self):
         session = aiohttp.ClientSession()
 
-        yield GraphAPIToken(session, None, None, None, None)
+        yield SharepointRestAPIToken(session, None, None, None, None)
 
         await session.close()
 
@@ -346,7 +346,9 @@ class TestMicrosoftAPISession:
         assert second_page in pages
 
     @pytest.mark.asyncio
-    async def test_scroll_with_data_link(self, microsoft_api_session, mock_responses):
+    async def test_scroll_delta_url_with_data_link(
+        self, microsoft_api_session, mock_responses
+    ):
         drive_item = {
             "id": "1",
             "size": 15,
@@ -377,12 +379,162 @@ class TestMicrosoftAPISession:
 
         pages = list()
 
-        async for page in microsoft_api_session.scroll_url(
+        async for page in microsoft_api_session.scroll_delta_url(
             url=responses["page1"]["url"]
         ):
             pages.append(page)
 
         assert len(pages) == len(responses)
+
+    @pytest.mark.asyncio
+    async def test_pipe(self, microsoft_api_session, mock_responses):
+        class AsyncStream:
+            def __init__(self):
+                self.stream = BytesIO()
+
+            async def write(self, data):
+                self.stream.write(data)
+
+            def read(self):
+                return self.stream.getvalue().decode()
+
+        url = "http://localhost:1234/download-some-sample-file"
+        file_content = "hello world, this is content of downloaded file"
+        stream = AsyncStream()
+        mock_responses.get(url, body=file_content)
+
+        await microsoft_api_session.pipe(url, stream)
+
+        assert stream.read() == file_content
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_429(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        payload = {"hello": "world"}
+        retry_after = 25
+
+        # First throttle, then do not throttle
+        first_request_error = ClientResponseError(None, None)
+        first_request_error.status = 429
+        first_request_error.message = "Something went wrong"
+        first_request_error.headers = {"Retry-After": str(retry_after)}
+
+        mock_responses.get(url, exception=first_request_error)
+        mock_responses.get(url, payload=payload)
+
+        async with microsoft_api_session._call_api(url) as response:
+            actual_payload = await response.json()
+            assert actual_payload == payload
+
+        patch_cancellable_sleeps.assert_awaited_with(retry_after)
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_429_without_retry_after(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        payload = {"hello": "world"}
+
+        # First throttle, then do not throttle
+        first_request_error = ClientResponseError(None, None)
+        first_request_error.status = 429
+        first_request_error.message = "Something went wrong"
+
+        mock_responses.get(url, exception=first_request_error)
+        mock_responses.get(url, payload=payload)
+
+        async with microsoft_api_session._call_api(url) as response:
+            actual_payload = await response.json()
+            assert actual_payload == payload
+
+        patch_cancellable_sleeps.assert_awaited_with(DEFAULT_RETRY_SECONDS)
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_403(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+
+        # First throttle, then do not throttle
+        unauthorized_error = ClientResponseError(None, None)
+        unauthorized_error.status = 403
+        unauthorized_error.message = "Something went wrong"
+
+        mock_responses.get(url, exception=unauthorized_error)
+        mock_responses.get(url, exception=unauthorized_error)
+        mock_responses.get(url, exception=unauthorized_error)
+
+        with pytest.raises(PermissionsMissing) as e:
+            async with microsoft_api_session._call_api(url) as _:
+                pass
+
+        assert e is not None
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_404(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+
+        # First throttle, then do not throttle
+        not_found_error = ClientResponseError(None, None)
+        not_found_error.status = 404
+        not_found_error.message = "Something went wrong"
+
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
+
+        with pytest.raises(NotFound) as e:
+            async with microsoft_api_session._call_api(url) as _:
+                pass
+
+        assert e is not None
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_unhandled_status(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+
+        error_message = "Something went wrong"
+
+        # First throttle, then do not throttle
+        not_found_error = ClientResponseError(MagicMock(), MagicMock())
+        not_found_error.status = 420
+        not_found_error.message = error_message
+
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
+
+        with pytest.raises(ClientResponseError) as e:
+            async with microsoft_api_session._call_api(url) as _:
+                pass
+
+        assert e.match(error_message)
 
 
 class TestSharepointOnlineClient:
@@ -424,6 +576,13 @@ class TestSharepointOnlineClient:
     async def patch_scroll(self):
         with patch.object(
             MicrosoftAPISession, "scroll", return_value=AsyncMock()
+        ) as scroll:
+            yield scroll
+
+    @pytest_asyncio.fixture
+    async def patch_scroll_delta_url(self):
+        with patch.object(
+            MicrosoftAPISession, "scroll_delta_url", return_value=AsyncMock()
         ) as scroll:
             yield scroll
 
@@ -548,10 +707,55 @@ class TestSharepointOnlineClient:
         assert returned_items == actual_items
 
     @pytest.mark.asyncio
-    async def test_drive_items_non_recursive(self, client, patch_fetch, patch_scroll):
-        """Basic setup for the test - no recursion through directories"""
-        pass
+    async def test_drive_items_delta(self, client, patch_fetch, patch_scroll_delta_url):
+        delta_url_input = "https://sharepoint.com/delta-link-lalal"
+        delta_url_next_page = "https://sharepoint.com/delta-link-lalal/page-2"
+        delta_url_next_sync = "https://sharepoint.com/delta-link-lalal/next-sync"
 
+        items_page_1 = ["1", "2"]
+        items_page_2 = ["3", "4"]
+
+        patch_scroll_delta_url.return_value = AsyncIterator(
+            [
+                {"@odata.nextLink": delta_url_next_page, "value": items_page_1},
+                {"@odata.deltaLink": delta_url_next_sync, "value": items_page_2},
+            ]
+        )
+
+        returned_items = []
+        async for item in client.drive_items_delta(delta_url_input):
+            returned_items.append(item)
+
+        return returned_items
+
+        assert len(returned_items) == len(items_page_1) + len(items_page_2)
+        assert returned_items == items_page_1 + items_page_2
+
+    @pytest.mark.asyncio
+    async def test_drive_items(self, client, patch_fetch):
+        drive_id = "12345"
+        delta_url_next_sync = "https://sharepoint.com/delta-link-lalal/page-2"
+        items_page_1 = ["1", "2"]
+        items_page_2 = ["3", "4"]
+
+        pages = AsyncIterator(
+            [
+                DriveItemsPage(items_page_1, delta_url_next_sync),
+                DriveItemsPage(items_page_2, delta_url_next_sync),
+            ]
+        )
+        returned_items = []
+
+        with patch.object(client, "drive_items_delta", return_value=pages):
+            async for page in client.drive_items(drive_id):
+                for item in page:
+                    returned_items.append(item)
+                assert page.delta_link() == delta_url_next_sync
+
+        assert len(returned_items) == len(items_page_1) + len(items_page_2)
+        assert returned_items == items_page_1 + items_page_2
+
+    @pytest.mark.asyncio
     @pytest.mark.asyncio
     async def test_download_drive_item(self, client, patch_pipe):
         """Basic setup for the test - no recursion through directories"""
@@ -1191,6 +1395,11 @@ class TestSharepointOnlineDataSource:
         else:
             return AsyncIterator(self.drive_items_delta)
 
+    def set_dls_enabled(self, source, dls_enabled):
+        source.set_features(
+            Features({"document_level_security": {"enabled": dls_enabled}})
+        )
+
     @pytest.mark.asyncio
     async def test_get_docs_without_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
@@ -1595,7 +1804,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     async def test_with_site_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
+        self.set_dls_enabled(source, True)
         patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
 
         site = {"Id": 1, "webUrl": "some url"}
@@ -1615,7 +1824,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     async def test_with_drive_item_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
+        self.set_dls_enabled(source, True)
         site_drive = {"id": 1}
         drive_item = {"id": 2}
 
@@ -1641,7 +1850,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     async def test_with_site_list_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
+        self.set_dls_enabled(source, True)
         patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
 
         site_web_url = "some url"
@@ -1668,7 +1877,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     async def test_with_site_page_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
+        self.set_dls_enabled(source, True)
         patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
 
         site_web_url = "some url"
@@ -1714,7 +1923,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     async def test_with_list_item_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
+        self.set_dls_enabled(source, True)
         patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
 
         site_web_url = "some url"
@@ -1780,7 +1989,7 @@ class TestSharepointOnlineDataSource:
         self, dls_enabled, document, access_control, expected_decorated_document
     ):
         source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, dls_enabled)
+        self.set_dls_enabled(source, dls_enabled)
         decorated_document = source._decorate_with_access_control(
             document, access_control
         )
@@ -1822,7 +2031,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     async def test_get_access_control_with_dls_disabled(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, False)
+        self.set_dls_enabled(source, False)
 
         patch_sharepoint_client.site_collections = AsyncIterator(
             [{"siteCollection": {"hostname": "localhost"}}]
@@ -1846,7 +2055,7 @@ class TestSharepointOnlineDataSource:
     )
     async def test_get_access_control_with_dls_enabled(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
+        self.set_dls_enabled(source, True)
 
         username = "user"
         email = "some_email@email.com"
