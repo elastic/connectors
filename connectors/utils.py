@@ -674,18 +674,13 @@ class ExtractionService:
 
     Calling `extract_text` with a filename will begin text extraction
     using an instance of the data extraction service.
-    Requires the data extraction service to be running and
-    extraction_service settings in config.yml to be configured correctly.
+    Requires the data extraction service to be running
     """
 
-    def __init__(self):
-        # The config file is being opened here as a temporary measure for 8.9.
-        # This should be removed when the extraction service is expanded.
-        config = get_framework_config()
-
+    def __init__(self, extraction_config):
         self.session = None
 
-        self.extraction_config = config.get("extraction_service", None)
+        self.extraction_config = extraction_config
         if self.extraction_config is not None:
             self.host = self.extraction_config.get("host", None)
         else:

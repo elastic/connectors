@@ -617,10 +617,8 @@ class TestExtractionService:
         ],
     )
     def test_check_configured(self, mock_config, expected_result):
-        with patch("connectors.utils.get_framework_config") as mock_framework_config:
-            mock_framework_config.return_value = mock_config
-            extraction_service = ExtractionService()
-            assert extraction_service._check_configured() is expected_result
+        extraction_service = ExtractionService(mock_config.get('extraction_service', None))
+        assert extraction_service._check_configured() is expected_result
 
     @pytest.mark.asyncio
     async def test_extract_text(self, mock_responses):
@@ -634,21 +632,18 @@ class TestExtractionService:
         url = "http://localhost:8090/extract_text/"
         payload = {"extracted_text": "I've been extracted!"}
 
-        with patch("connectors.utils.get_framework_config") as mock_framework_config:
-            mock_framework_config.return_value = mock_config
+        with patch("builtins.open", mock_open(read_data=b"data")):
+            mock_responses.post(url, status=200, payload=payload)
 
-            with patch("builtins.open", mock_open(read_data=b"data")):
-                mock_responses.post(url, status=200, payload=payload)
+            extraction_service = ExtractionService(mock_config.get('extraction_service', None))
+            extraction_service._begin_session()
 
-                extraction_service = ExtractionService()
-                extraction_service._begin_session()
+            response = await extraction_service.extract_text(
+                filepath, "notreal.txt"
+            )
+            await extraction_service._end_session()
 
-                response = await extraction_service.extract_text(
-                    filepath, "notreal.txt"
-                )
-                await extraction_service._end_session()
-
-                assert response == "I've been extracted!"
+            assert response == "I've been extracted!"
 
     @pytest.mark.asyncio
     async def test_extract_text_when_response_isnt_200_logs_warning(
@@ -659,24 +654,21 @@ class TestExtractionService:
         filepath = "tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/"
 
-        with patch("connectors.utils.get_framework_config") as mock_framework_config:
-            mock_framework_config.return_value = mock_config
+        with patch("builtins.open", mock_open(read_data=b"data")):
+            mock_responses.post(url, status=400, payload={})
 
-            with patch("builtins.open", mock_open(read_data=b"data")):
-                mock_responses.post(url, status=400, payload={})
+            extraction_service = ExtractionService(mock_config.get('extraction_service', None))
+            extraction_service._begin_session()
 
-                extraction_service = ExtractionService()
-                extraction_service._begin_session()
+            response = await extraction_service.extract_text(
+                filepath, "notreal.txt"
+            )
+            await extraction_service._end_session()
+            assert response == ""
 
-                response = await extraction_service.extract_text(
-                    filepath, "notreal.txt"
-                )
-                await extraction_service._end_session()
-                assert response == ""
-
-                patch_logger.assert_present(
-                    "Extraction service could not parse `notreal.txt'. Status: [400]."
-                )
+            patch_logger.assert_present(
+                "Extraction service could not parse `notreal.txt'. Status: [400]."
+            )
 
     @pytest.mark.asyncio
     async def test_extract_text_when_response_is_200_with_error_logs_warning(
@@ -686,25 +678,22 @@ class TestExtractionService:
         filepath = "tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/"
 
-        with patch("connectors.utils.get_framework_config") as mock_framework_config:
-            mock_framework_config.return_value = mock_config
+        with patch("builtins.open", mock_open(read_data=b"data")):
+            mock_responses.post(
+                url,
+                status=200,
+                payload={"error": "oh no!", "message": "I'm all messed up..."},
+            )
 
-            with patch("builtins.open", mock_open(read_data=b"data")):
-                mock_responses.post(
-                    url,
-                    status=200,
-                    payload={"error": "oh no!", "message": "I'm all messed up..."},
-                )
+            extraction_service = ExtractionService(mock_config.get('extraction_service', None))
+            extraction_service._begin_session()
 
-                extraction_service = ExtractionService()
-                extraction_service._begin_session()
+            response = await extraction_service.extract_text(
+                filepath, "notreal.txt"
+            )
+            await extraction_service._end_session()
+            assert response == ""
 
-                response = await extraction_service.extract_text(
-                    filepath, "notreal.txt"
-                )
-                await extraction_service._end_session()
-                assert response == ""
-
-                patch_logger.assert_present(
-                    "Extraction service could not parse `notreal.txt'; oh no!: I'm all messed up..."
-                )
+            patch_logger.assert_present(
+                "Extraction service could not parse `notreal.txt'; oh no!: I'm all messed up..."
+            )
