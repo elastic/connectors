@@ -481,14 +481,6 @@ class SharepointOnlineClient:
         except NotFound:
             return {}
 
-    async def group(self, group_id):
-        url = f"{GRAPH_API_URL}/groups/{group_id}"
-
-        try:
-            return await self._graph_api_client.fetch(url)
-        except NotFound:
-            return {}
-
     async def group_members(self, group_id):
         url = f"{GRAPH_API_URL}/groups/{group_id}/members"
 
@@ -1037,10 +1029,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 domain_group_id = _domain_group_id(user["Name"])
 
                 if domain_group_id:
-                    group = await self.client.group(domain_group_id)
-
-                    if len(group) > 0:
-                        access_control.add(_prefix_group(group["id"]))
+                    access_control.add(_prefix_group(domain_group_id))
 
             if is_person(user):
                 name = user.get("Name")

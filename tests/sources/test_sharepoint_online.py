@@ -2038,11 +2038,12 @@ class TestSharepointOnlineDataSource:
         access_control = await source._site_access_control(site)
 
         two_other_users = 2
-        one_group = 1
+        two_groups = 2
 
-        assert len(access_control) == one_group + two_other_users
+        assert len(access_control) == two_groups + two_other_users
 
-        assert _prefix_group(GROUP_ID) in access_control
+        assert _prefix_group(GROUP_1) in access_control
+        assert _prefix_group(GROUP_2) in access_control
 
         assert _prefix_email(USER_ONE_EMAIL) in access_control
         assert _prefix_email(USER_TWO_EMAIL) in access_control
