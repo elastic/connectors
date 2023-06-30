@@ -712,7 +712,13 @@ class ExtractionService:
             return self.session
 
         timeout = aiohttp.ClientTimeout(total=5)
-        self.session = aiohttp.ClientSession(timeout=timeout)
+        self.session = aiohttp.ClientSession(
+            timeout=timeout,
+            headers={
+                "content-type": "application/octet-stream",
+                "accept": "application/json",
+            },
+        )
 
     async def _end_session(self):
         if not self.session:
@@ -750,7 +756,9 @@ class ExtractionService:
                 f"Connection to {self.host} failed while extracting data from {filename}. Error: {e}"
             )
         except Exception as e:
-            logger.error(f"Text extraction unexpectedly failed. Error: {e}")
+            logger.error(
+                f"Text extraction unexpectedly failed for {filename}. Error: {e}"
+            )
 
         return content
 
@@ -761,11 +769,8 @@ class ExtractionService:
         Returns a parsed response
         """
         with open(filepath, "rb") as file:
-            file_data = aiohttp.FormData()
-            file_data.add_field("file", BytesIO(file.read()), filename=filename)
-
-            async with self._begin_session().post(
-                f"{self.host}/extract_text/", data=file_data
+            async with self._begin_session().put(
+                f"{self.host}/extract_text/", data=file
             ) as response:
                 return await self.parse_extraction_resp(filename, response)
 
@@ -774,15 +779,12 @@ class ExtractionService:
 
         Returns `extracted_text` from the response.
         """
-        content = await response.json()
+        content = await response.json(content_type=None)
 
-        if response.status != 200:
+        if response.status != 200 or content.get("error"):
             logger.warning(
-                f"Extraction service could not parse `{filename}'. Status: [{response.status}]."
+                f"Extraction service could not parse `{filename}'. Status: [{response.status}]; {content.get('error', 'unexpected error')}: {content.get('message', 'unknown cause')}"
             )
-        if content.get("error"):
-            logger.warning(
-                f"Extraction service could not parse `{filename}'; {content.get('error', 'unexpected error')}: {content.get('message', 'unknown cause')}"
-            )
+            return ""
 
         return content.get("extracted_text", "")
