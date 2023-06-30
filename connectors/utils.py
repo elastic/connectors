@@ -29,7 +29,7 @@ from pympler import asizeof
 
 from connectors.logger import logger
 
-ACCESS_CONTROL_INDEX_PREFIX = "search-acl-filter-"
+ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_QUEUE_SIZE = 1024
 DEFAULT_DISPLAY_EVERY = 100
@@ -139,6 +139,15 @@ def get_base64_value(content):
            content (byte): Object content in bytes
     """
     return base64.b64encode(content).decode("utf-8")
+
+
+def decode_base64_value(content):
+    """
+    Decodes the base64 encoded content
+    Args:
+           content (string): base64 encoded content
+    """
+    return base64.b64decode(content)
 
 
 _BASE64 = shutil.which("base64")
