@@ -707,7 +707,7 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
     SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {
-            "dontExtractDriveItemsOlderThan": {"type": "integer"},  # in Days
+            "skipExtractingDriveItemsOlderThan": {"type": "integer"},  # in Days
         },
         "additionalProperties": False,
     }
@@ -1128,7 +1128,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            max_drive_item_age = advanced_rules["dontExtractDriveItemsOlderThan"]
+            max_drive_item_age = advanced_rules["skipExtractingDriveItemsOlderThan"]
 
         async for site_collection in self.site_collections():
             yield site_collection, None
@@ -1190,7 +1190,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            max_drive_item_age = advanced_rules["dontExtractDriveItemsOlderThan"]
+            max_drive_item_age = advanced_rules["skipExtractingDriveItemsOlderThan"]
 
         async for site_collection in self.site_collections():
             yield site_collection, None, OP_INDEX
