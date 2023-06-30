@@ -19,7 +19,6 @@ from connectors.logger import logger
 from connectors.protocol import Features
 from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
-    DEFAULT_GROUPS,
     WILDCARD,
     DriveItemsPage,
     GraphAPIToken,
@@ -42,7 +41,6 @@ from connectors.sources.sharepoint_online import (
     is_domain_group,
     is_person,
 )
-from connectors.utils import iso_utc
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
