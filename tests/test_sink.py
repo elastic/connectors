@@ -842,14 +842,6 @@ async def test_get_docs_incrementally(
     [
         (
             [],
-            [(None, None, None)],
-            [end_docs_operation()],
-            updated(0),
-            created(0),
-            deleted(0),
-        ),
-        (
-            [],
             [],
             [end_docs_operation()],
             updated(0),

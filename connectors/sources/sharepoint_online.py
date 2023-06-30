@@ -1247,7 +1247,11 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                                 update_already_seen(member)
 
-                                yield await self._user_access_control_doc(member)
+                                member_access_control_doc = (
+                                    await self._user_access_control_doc(member)
+                                )
+                                if member_access_control_doc:
+                                    yield member_access_control_doc
 
                             async for owner_username in _emails_and_usernames_of_domain_group(
                                 domain_group_id,
@@ -1262,7 +1266,11 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                                 update_already_seen(owner)
 
-                                yield await self._user_access_control_doc(owner)
+                                owner_access_control_doc = (
+                                    await self._user_access_control_doc(owner)
+                                )
+                                if owner_access_control_doc:
+                                    yield owner_access_control_doc
 
                     elif is_person(user):
                         if _already_seen(user):
@@ -1270,7 +1278,11 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                         update_already_seen(user)
 
-                        yield await self._user_access_control_doc(user)
+                        person_access_control_doc = await self._user_access_control_doc(
+                            user
+                        )
+                        if person_access_control_doc:
+                            yield person_access_control_doc
 
     async def get_docs(self, filtering=None):
         max_drive_item_age = None
