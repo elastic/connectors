@@ -339,7 +339,10 @@ class BaseDataSource:
 
     name = None
     service_type = None
-    support_incremental_sync = False
+    basic_rules_enabled = True
+    advanced_rules_enabled = False
+    dls_enabled = False
+    incremental_sync_enabled = False
 
     def __init__(self, configuration):
         # Initialize to the global logger
@@ -413,6 +416,26 @@ class BaseDataSource:
         """
 
         return hash_id(_id)
+
+    @classmethod
+    def features(cls):
+        """Returns features available for the data source"""
+        return {
+            "sync_rules": {
+                "basic": {
+                    "enabled": cls.basic_rules_enabled,
+                },
+                "advanced": {
+                    "enabled": cls.advanced_rules_enabled,
+                },
+            },
+            "document_level_security": {
+                "enabled": cls.dls_enabled,
+            },
+            "incremental_sync": {
+                "enabled": cls.incremental_sync_enabled,
+            },
+        }
 
     def set_features(self, features):
         if self._features is not None:
@@ -490,6 +513,9 @@ class BaseDataSource:
         Can be used to close connections
         """
         pass
+
+    def access_control_query(self, access_control):
+        raise NotImplementedError
 
     async def get_access_control(self):
         """Returns an asynchronous iterator on the permission documents present in the backend.

@@ -9,7 +9,7 @@ import re
 from collections.abc import Iterable, Sized
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from functools import partial
+from functools import cached_property, partial
 
 import aiofiles
 import aiohttp
@@ -302,7 +302,7 @@ class MicrosoftAPISession:
             else:
                 break
 
-    async def scroll_url(self, url):
+    async def scroll_delta_url(self, url):
         scroll_url = url
 
         while True:
@@ -361,7 +361,7 @@ class MicrosoftAPISession:
                 e.status == 403 or e.status == 401
             ):  # Might work weird, but Graph returns 403 and REST returns 401
                 raise PermissionsMissing(
-                    f"Received Unauthorized response for {absolute_url}.\nVerify that Graph API [Sites.Read.All, Files.Read All] and Sharepoint [Sites.Read.All] permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
+                    f"Received Unauthorized response for {absolute_url}.\nVerify that the correct Graph API and Sharepoint permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
                 ) from e
             elif e.status == 404:
                 raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
@@ -453,9 +453,11 @@ class SharepointOnlineClient:
         url = f"{site_web_url}/_api/web/sitegroups"
 
         try:
-            return await self._rest_api_client.fetch(url)
+            async for page in self._rest_api_client.scroll(url):
+                for group in page:
+                    yield group
         except NotFound:
-            return []
+            return
 
     async def site_users(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)
@@ -463,9 +465,11 @@ class SharepointOnlineClient:
         url = f"{site_web_url}/_api/web/siteusers"
 
         try:
-            return await self._rest_api_client.fetch(url)
+            async for page in self._rest_api_client.scroll(url):
+                for user in page:
+                    yield user
         except NotFound:
-            return []
+            return
 
     async def sites(self, parent_site_id, allowed_root_sites):
         select = ""
@@ -493,7 +497,7 @@ class SharepointOnlineClient:
                 yield site_drive
 
     async def drive_items_delta(self, url):
-        async for response in self._graph_api_client.scroll_url(url):
+        async for response in self._graph_api_client.scroll_delta_url(url):
             delta_link = (
                 response[DELTA_LINK_KEY] if DELTA_LINK_KEY in response else None
             )
@@ -630,6 +634,16 @@ class SharepointOnlineClient:
             # This can also mean "not found" so handling it explicitly
             return []
 
+    async def groups_for_user(self, site_web_url, user_id):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = f"{site_web_url}/_api/web/GetUserById('{user_id}')/groups"
+
+        try:
+            return await self._rest_api_client.fetch(url)
+        except NotFound:
+            return {}
+
     async def tenant_details(self):
         url = f"{GRAPH_API_AUTH_URL}/common/userrealm/?user=cj@{self._tenant_name}.onmicrosoft.com&api-version=2.1&checkForMicrosoftAccount=false"
 
@@ -693,7 +707,7 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
     SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {
-            "dontSubextractDriveItemsOlderThan": {"type": "integer"},  # in Days
+            "dontExtractDriveItemsOlderThan": {"type": "integer"},  # in Days
         },
         "additionalProperties": False,
     }
@@ -715,12 +729,33 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
             )
 
 
+def _prefix_identity(prefix, identity):
+    if prefix is None or identity is None:
+        return None
+
+    return f"{prefix}:{identity}"
+
+
+def _prefix_group(group):
+    return _prefix_identity("group", group)
+
+
+def _prefix_user(user):
+    return _prefix_identity("user", user)
+
+
+def _prefix_email(email):
+    return _prefix_identity("email", email)
+
+
 class SharepointOnlineDataSource(BaseDataSource):
     """Sharepoint Online"""
 
     name = "Sharepoint Online"
     service_type = "sharepoint_online"
-    support_incremental_sync = True
+    advanced_rules_enabled = True
+    dls_enabled = True
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
@@ -844,10 +879,18 @@ class SharepointOnlineDataSource(BaseDataSource):
                 f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(remote_sites[:5])}]."
             )
 
+    @cached_property
+    def _default_groups(self):
+        return [_prefix_group(default_group) for default_group in DEFAULT_GROUPS]
+
     def _decorate_with_access_control(self, document, access_control):
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
-                set(document.get(ACCESS_CONTROL, []) + access_control + DEFAULT_GROUPS)
+                set(
+                    document.get(ACCESS_CONTROL, [])
+                    + access_control
+                    + self._default_groups
+                )
             )
 
         return document
@@ -858,31 +901,43 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         site_web_url = site["webUrl"]
 
-        sharepoint_groups = await self.client.site_groups(site_web_url)
+        sharepoint_groups = []
+
+        async for sharepoint_group in self.client.site_groups(site_web_url):
+            sharepoint_groups.append(sharepoint_group)
+
         sharepoint_groups = list(
-            filter(
-                lambda group_title: group_title is not None,
-                map(
-                    lambda group: group.get("Title"),
-                    sharepoint_groups.get("value"),  # pyright: ignore
+            map(
+                lambda group: _prefix_group(group),
+                filter(
+                    lambda group_title: group_title is not None,
+                    map(
+                        lambda group: group.get("Title"),
+                        sharepoint_groups,
+                    ),
                 ),
             )
         )
 
-        users_and_ad_groups = await self.client.site_users(site_web_url)
-        users_and_ad_groups = list(
-            filter(
-                lambda user_name: user_name is not None,
-                map(
-                    lambda user: user.get("UserPrincipalName"),
-                    users_and_ad_groups.get("value"),  # pyright: ignore
+        site_users = []
+
+        async for site_user in self.client.site_users(site_web_url):
+            site_users.append(site_user)
+
+        site_users = list(
+            map(
+                lambda user: _prefix_user(user),
+                filter(
+                    lambda user_name: user_name is not None,
+                    map(
+                        lambda user: user.get("UserPrincipalName"),
+                        site_users,
+                    ),
                 ),
             )
         )
 
-        return self._decorate_with_access_control(
-            site, sharepoint_groups + users_and_ad_groups
-        )
+        return self._decorate_with_access_control(site, sharepoint_groups + site_users)
 
     async def _with_drive_item_access_control(self, site_drive, drive_item):
         """
@@ -913,20 +968,19 @@ class SharepointOnlineDataSource(BaseDataSource):
             site_drive.get("id"), drive_item.get("id")
         )
 
-        # users and groups
-        access_control = list(
+        users = list(
             set(
                 filter(
                     lambda identity: identity is not None,
                     map(
                         lambda identity: (
-                            identity.get("loginName") or identity.get("email")
+                            _prefix_user(identity.get("loginName"))
+                            or _prefix_email(identity.get("email"))
                         )
                         if identity is not None
                         else None,
                         map(
-                            lambda grantee: grantee.get("siteGroup")
-                            or grantee.get("user"),
+                            lambda grantee: grantee.get("user"),
                             map(
                                 lambda permission: (
                                     (permission.get("grantedToV2") or {})
@@ -941,6 +995,33 @@ class SharepointOnlineDataSource(BaseDataSource):
                 )
             )
         )
+
+        groups = list(
+            set(
+                filter(
+                    lambda identity: identity is not None,
+                    map(
+                        lambda identity: (_prefix_group(identity.get("loginName")))
+                        if identity is not None
+                        else None,
+                        map(
+                            lambda grantee: grantee.get("siteGroup"),
+                            map(
+                                lambda permission: (
+                                    (permission.get("grantedToV2") or {})
+                                    | (permission.get("grantedTo") or {})
+                                )
+                                if permission is not None
+                                else {},
+                                permissions.get("value"),
+                            ),
+                        ),
+                    ),
+                )
+            )
+        )
+
+        access_control = groups + users
 
         return self._decorate_with_access_control(drive_item, access_control)
 
@@ -1009,6 +1090,48 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
+    def access_control_query(self, access_control):
+        return {"query": {"template": {"params": {"access_control": access_control}}}}
+
+    def _user_access_control_doc(self, user, access_control):
+        return {
+            "_id": user.get("Id"),
+            "identity": {
+                "email": _prefix_email(user.get("Email")),
+                "username": _prefix_user(user.get("LoginName")),
+            },
+        } | self.access_control_query(access_control)
+
+    async def get_access_control(self):
+        if not self._dls_enabled():
+            return
+
+        async for site_collection in self.client.site_collections():
+            site_web_url = site_collection["webUrl"]
+
+            async for user in self.client.site_users(site_web_url):
+                groups = await self.client.groups_for_user(site_web_url, user.get("Id"))
+                groups = list(
+                    map(
+                        lambda group: _prefix_group(group.get("LoginName")),
+                        groups.get("value", []),
+                    )
+                )
+
+                username = _prefix_user(user.get("LoginName", None))
+                email = _prefix_email(user.get("Email", None))
+                additional_fields = [
+                    value
+                    for value in [username, email]
+                    if value is not None and len(value) > 0
+                ]
+
+                access_control = list(
+                    set(groups + additional_fields + self._default_groups)
+                )
+
+                yield self._user_access_control_doc(user, access_control)
+
     async def get_docs(self, filtering=None):
         max_drive_item_age = None
 
@@ -1016,7 +1139,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            max_drive_item_age = advanced_rules["dontSubextractDriveItemsOlderThan"]
+            max_drive_item_age = advanced_rules["dontExtractDriveItemsOlderThan"]
 
         async for site_collection in self.site_collections():
             yield site_collection, None
@@ -1078,7 +1201,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            max_drive_item_age = advanced_rules["dontSubextractDriveItemsOlderThan"]
+            max_drive_item_age = advanced_rules["dontExtractDriveItemsOlderThan"]
 
         async for site_collection in self.site_collections():
             yield site_collection, None, OP_INDEX
