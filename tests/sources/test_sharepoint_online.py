@@ -1302,7 +1302,7 @@ class TestSharepointOnlineAdvancedRulesValidator:
 
     @pytest.mark.asyncio
     async def test_validate(self, validator):
-        valid_rules = {"dontExtractDriveItemsOlderThan": 15}
+        valid_rules = {"skipExtractingDriveItemsOlderThan": 15}
 
         result = await validator.validate(valid_rules)
 
@@ -1310,7 +1310,7 @@ class TestSharepointOnlineAdvancedRulesValidator:
 
     @pytest.mark.asyncio
     async def test_validate_invalid_rule(self, validator):
-        invalid_rules = {"dontExtractDriveItemsOlderThan": "why is this a string"}
+        invalid_rules = {"skipExtractingDriveItemsOlderThan": "why is this a string"}
 
         result = await validator.validate(invalid_rules)
 
