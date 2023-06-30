@@ -9,7 +9,7 @@ import re
 from collections.abc import Iterable, Sized
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from functools import cached_property, partial
+from functools import partial
 
 import aiofiles
 import aiohttp
