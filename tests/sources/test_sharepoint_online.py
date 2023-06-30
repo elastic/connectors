@@ -57,6 +57,19 @@ DEFAULT_GROUPS_PATCHED = ["some default group"]
 
 def set_dls_enabled(source, dls_enabled):
     source.set_features(Features({"document_level_security": {"enabled": dls_enabled}}))
+    source.configuration.set_field("use_document_level_security", value=dls_enabled)
+
+
+def dls_feature_flag_enabled(value):
+    return value
+
+
+def dls_enabled_config_value(value):
+    return value
+
+
+def dls_enabled(value):
+    return value
 
 
 class TestMicrosoftSecurityToken:
@@ -1733,7 +1746,7 @@ class TestSharepointOnlineDataSource:
         assert GROUP_1 in access_control
 
     @pytest.mark.parametrize(
-        "dls_enabled, document, access_control, expected_decorated_document",
+        "_dls_enabled, document, access_control, expected_decorated_document",
         [
             (
                 False,
@@ -1776,10 +1789,10 @@ class TestSharepointOnlineDataSource:
         "connectors.sources.sharepoint_online.DEFAULT_GROUPS", DEFAULT_GROUPS_PATCHED
     )
     def test_decorate_with_access_control(
-        self, dls_enabled, document, access_control, expected_decorated_document
+        self, _dls_enabled, document, access_control, expected_decorated_document
     ):
         source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, dls_enabled)
+        set_dls_enabled(source, _dls_enabled)
         decorated_document = source._decorate_with_access_control(
             document, access_control
         )
@@ -1788,6 +1801,51 @@ class TestSharepointOnlineDataSource:
             decorated_document.get(ALLOW_ACCESS_CONTROL_PATCHED, []).sort()
             == expected_decorated_document.get(ALLOW_ACCESS_CONTROL_PATCHED, []).sort()
         )
+
+    @pytest.mark.parametrize(
+        "dls_feature_flag, dls_config_value, expected_dls_enabled",
+        [
+            (
+                dls_feature_flag_enabled(False),
+                dls_enabled_config_value(False),
+                dls_enabled(False),
+            ),
+            (
+                dls_feature_flag_enabled(False),
+                dls_enabled_config_value(True),
+                dls_enabled(False),
+            ),
+            (
+                dls_feature_flag_enabled(True),
+                dls_enabled_config_value(False),
+                dls_enabled(False),
+            ),
+            (
+                dls_feature_flag_enabled(True),
+                dls_enabled_config_value(True),
+                dls_enabled(True),
+            ),
+        ],
+    )
+    def test_dls_enabled(
+        self, dls_feature_flag, dls_config_value, expected_dls_enabled
+    ):
+        source = create_source(SharepointOnlineDataSource)
+        source._features = Mock()
+        source._features.document_level_security_enabled = Mock(
+            return_value=dls_feature_flag
+        )
+        source.configuration.set_field(
+            "use_document_level_security", value=dls_config_value
+        )
+
+        assert source._dls_enabled() == expected_dls_enabled
+
+    def test_dls_disabled_with_features_missing(self):
+        source = create_source(SharepointOnlineDataSource)
+        source._features = None
+
+        assert not source._dls_enabled()
 
     def test_access_control_query(self):
         source = create_source(SharepointOnlineDataSource)
