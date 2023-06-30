@@ -6,7 +6,6 @@
 """Tests the Google Drive source class methods.
 """
 import asyncio
-import json
 from unittest import mock
 
 import pytest

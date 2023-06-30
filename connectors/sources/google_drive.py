@@ -20,7 +20,6 @@ from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     RetryStrategy,
     convert_to_b64,
-    get_pem_format,
     retryable,
 )
 
