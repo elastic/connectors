@@ -76,3 +76,8 @@ steps:
       - ".buildkite/run_nigthly.sh mongodb_serverless"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 GitHub"
+    command:
+      - ".buildkite/run_nigthly.sh github"
+    artifact_paths:
+      - "perf8-report-*/**/*"

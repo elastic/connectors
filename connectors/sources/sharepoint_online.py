@@ -305,7 +305,7 @@ class MicrosoftAPISession:
             else:
                 break
 
-    async def scroll_url(self, url):
+    async def scroll_delta_url(self, url):
         scroll_url = url
 
         while True:
@@ -547,7 +547,7 @@ class SharepointOnlineClient:
                 yield site_drive
 
     async def drive_items_delta(self, url):
-        async for response in self._graph_api_client.scroll_url(url):
+        async for response in self._graph_api_client.scroll_delta_url(url):
             delta_link = (
                 response[DELTA_LINK_KEY] if DELTA_LINK_KEY in response else None
             )
@@ -757,7 +757,7 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
     SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {
-            "dontSubextractDriveItemsOlderThan": {"type": "integer"},  # in Days
+            "dontExtractDriveItemsOlderThan": {"type": "integer"},  # in Days
         },
         "additionalProperties": False,
     }
@@ -952,6 +952,14 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "bool",
                 "value": False,
             },
+            "use_document_level_security": {
+                "display": "toggle",
+                "label": "Enable document level security",
+                "order": 7,
+                "tooltip": "Document level security ensures identities and permissions set in Sharepoint Online are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "type": "bool",
+                "value": False,
+            },
         }
 
     async def validate_config(self):
@@ -1071,7 +1079,10 @@ class SharepointOnlineDataSource(BaseDataSource):
         if self._features is None:
             return False
 
-        return self._features.document_level_security_enabled()
+        if not self._features.document_level_security_enabled():
+            return False
+
+        return self.configuration["use_document_level_security"]
 
     def access_control_query(self, access_control):
         # filter out 'None' values
@@ -1234,7 +1245,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            max_drive_item_age = advanced_rules["dontSubextractDriveItemsOlderThan"]
+            max_drive_item_age = advanced_rules["dontExtractDriveItemsOlderThan"]
 
         async for site_collection in self.site_collections():
             yield site_collection, None
@@ -1298,7 +1309,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            max_drive_item_age = advanced_rules["dontSubextractDriveItemsOlderThan"]
+            max_drive_item_age = advanced_rules["dontExtractDriveItemsOlderThan"]
 
         async for site_collection in self.site_collections():
             yield site_collection, None, OP_INDEX
