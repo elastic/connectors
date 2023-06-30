@@ -141,7 +141,9 @@ class JobSchedulingService(BaseService):
         try:
             while self.running:
                 try:
-                    logger.debug(f"Polling every {self.idling} seconds for Job Scheduling Service")
+                    logger.debug(
+                        f"Polling every {self.idling} seconds for Job Scheduling Service"
+                    )
                     async for connector in self.connector_index.supported_connectors(
                         native_service_types=native_service_types,
                         connector_ids=connector_ids,

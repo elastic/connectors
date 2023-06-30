@@ -171,7 +171,9 @@ class JobExecutionService(BaseService):
                 )
 
                 try:
-                    logger.debug(f"Polling every {self.idling} seconds for Job Execution Service")
+                    logger.debug(
+                        f"Polling every {self.idling} seconds for Job Execution Service"
+                    )
                     supported_connector_ids = [
                         connector.id
                         async for connector in self.connector_index.supported_connectors(
