@@ -1026,7 +1026,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         """
 
         if not self._dls_enabled():
-            return site
+            return []
 
         access_control = set()
 
@@ -1041,16 +1041,6 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                     if len(group) > 0:
                         access_control.add(_prefix_group(group["id"]))
-
-                    async for member_email_or_username in _emails_and_usernames_of_domain_group(
-                        domain_group_id, self.client.group_members
-                    ):
-                        access_control.add(member_email_or_username)
-
-                    async for owner_email_or_username in _emails_and_usernames_of_domain_group(
-                        domain_group_id, self.client.group_owners
-                    ):
-                        access_control.add(owner_email_or_username)
 
             if is_person(user):
                 name = user.get("Name")
@@ -1068,7 +1058,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 email = user["EMail"]
 
-                if email in access_control:
+                if _prefix_email(email) in access_control:
                     continue
 
                 access_control.add(_prefix_email(email))
@@ -1110,7 +1100,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                                     },
                                     {
                                         "terms": {
-                                            f"{ACCESS_CONTROL}.keyword": filtered_access_control
+                                            f"{ACCESS_CONTROL}.enum": filtered_access_control
                                         }
                                     },
                                 ]
@@ -1135,7 +1125,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                     "email": "email:some.user@spo.com",
                     "username": "user:some.user"
                 },
-                "_timestamp": "2023-06-30 12:00:00",
+                "created_at": "2023-06-30 12:00:00",
                 "query": {
                     "template": {
                         "params": {
@@ -1175,10 +1165,10 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         access_control = list({prefixed_mail, prefixed_username}.union(prefixed_groups))
 
-        if "Modified" in user:
-            timestamp = datetime.strptime(user["Modified"], TIMESTAMP_FORMAT)
+        if "createdDateTime" in user:
+            created_at = datetime.strptime(user["createdDateTime"], TIMESTAMP_FORMAT)
         else:
-            timestamp = iso_utc()
+            created_at = iso_utc()
 
         return {
             # Here we're intentionally using the email/username without the prefix
@@ -1187,14 +1177,12 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "email": prefixed_mail,
                 "username": prefixed_username,
             },
-            "_timestamp": timestamp,
+            "created_at": created_at,
         } | self.access_control_query(access_control)
 
     async def get_access_control(self):
         """Yields an access control document for every user of a site.
-        Note: this method can sometimes fetch some groups and therefore some users multiple times for different sites.
-        This can lead to a higher "indexed" number than actual documents present in the index (documents with the same id won't be indexed multiple times).
-        This is expected as it would otherwise overload memory keeping a set of all users/groups already seen for big Sharepoint Online instances.
+        Note: this method will cache users and emails it has already and skip the ingestion for those.
 
         Yields:
              dict: dictionary representing a user access control document
@@ -1202,6 +1190,35 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if not self._dls_enabled():
             return
+
+        already_seen_emails = set()
+        already_seen_usernames = set()
+
+        def _identity_mail(identity):
+            return identity.get("EMail", identity.get("mail", None))
+
+        def _identity_username(identity):
+            return identity.get("UserName", identity.get("userPrincipalName", None))
+
+        def _already_seen(identity):
+            if _identity_mail(identity) in already_seen_emails:
+                return True
+
+            if _identity_username(identity) in already_seen_usernames:
+                return True
+
+            return False
+
+        def update_already_seen(identity):
+            mail = _identity_mail(identity)
+            username = _identity_username(identity)
+
+            # We want to make sure to not add 'None' to the already seen sets
+            if mail:
+                already_seen_emails.add(mail)
+
+            if username:
+                already_seen_usernames.add(username)
 
         async for site_collection in self.client.site_collections():
             async for site in self.client.sites(
@@ -1224,6 +1241,12 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 prefix=False,
                             ):
                                 member = await self.client.user(member_username)
+
+                                if _already_seen(member):
+                                    continue
+
+                                update_already_seen(member)
+
                                 yield await self._user_access_control_doc(member)
 
                             async for owner_username in _emails_and_usernames_of_domain_group(
@@ -1233,9 +1256,20 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 prefix=False,
                             ):
                                 owner = await self.client.user(owner_username)
+
+                                if _already_seen(owner):
+                                    continue
+
+                                update_already_seen(owner)
+
                                 yield await self._user_access_control_doc(owner)
 
                     elif is_person(user):
+                        if _already_seen(user):
+                            continue
+
+                        update_already_seen(user)
+
                         yield await self._user_access_control_doc(user)
 
     async def get_docs(self, filtering=None):

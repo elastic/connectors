@@ -2037,23 +2037,12 @@ class TestSharepointOnlineDataSource:
 
         access_control = await source._site_access_control(site)
 
-        two_members = 2
-        two_owners = 2
         two_other_users = 2
         one_group = 1
 
-        assert (
-            len(access_control)
-            == one_group + two_members + two_owners + two_other_users
-        )
+        assert len(access_control) == one_group + two_other_users
 
         assert _prefix_group(GROUP_ID) in access_control
-
-        assert _prefix_email(MEMBER_ONE_EMAIL) in access_control
-        assert _prefix_user(MEMBER_TWO_USER_PRINCIPAL_NAME) in access_control
-
-        assert _prefix_email(OWNER_ONE_EMAIL) in access_control
-        assert _prefix_user(OWNER_TWO_USER_PRINCIPAL_NAME) in access_control
 
         assert _prefix_email(USER_ONE_EMAIL) in access_control
         assert _prefix_email(USER_TWO_EMAIL) in access_control
@@ -2193,7 +2182,7 @@ class TestSharepointOnlineDataSource:
                                     },
                                     {
                                         "terms": {
-                                            f"{ACCESS_CONTROL}.keyword": access_control
+                                            f"{ACCESS_CONTROL}.enum": access_control
                                         }
                                     },
                                 ]
@@ -2211,7 +2200,7 @@ class TestSharepointOnlineDataSource:
     )
     async def test_user_access_control_doc(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
-        last_modified = "2023-05-25T13:30:54Z"
+        created_at = "2023-05-25T13:30:54Z"
         group_one = {"id": "group-one-id"}
         group_two = {"id": "group-two-id"}
         groups = [group_one, group_two]
@@ -2219,7 +2208,7 @@ class TestSharepointOnlineDataSource:
 
         username = "user"
         email = "user@spo.com"
-        user = {"UserName": username, "EMail": email, "Modified": last_modified}
+        user = {"UserName": username, "EMail": email, "createdDateTime": created_at}
 
         expected_email = f"email:{email}"
         expected_user = f"user:{username}"
@@ -2229,8 +2218,8 @@ class TestSharepointOnlineDataSource:
         access_control = user_doc["query"]["template"]["params"]["access_control"]
 
         assert user_doc["_id"] == email
-        assert user_doc["_timestamp"] == datetime.strptime(
-            user["Modified"], TIMESTAMP_FORMAT_PATCHED
+        assert user_doc["created_at"] == datetime.strptime(
+            user["createdDateTime"], TIMESTAMP_FORMAT_PATCHED
         )
         assert user_doc["identity"]["email"] == expected_email
         assert user_doc["identity"]["username"] == expected_user
