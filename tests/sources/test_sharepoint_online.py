@@ -2088,7 +2088,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     async def test_get_access_control_with_dls_disabled(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
-        self.set_dls_enabled(source, False)
+        set_dls_enabled(source, False)
 
         patch_sharepoint_client.site_collections = AsyncIterator(
             [{"siteCollection": {"hostname": "localhost"}}]
@@ -2112,7 +2112,7 @@ class TestSharepointOnlineDataSource:
     )
     async def test_get_access_control_with_dls_enabled(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
-        self.set_dls_enabled(source, True)
+        set_dls_enabled(source, True)
 
         username = "user"
         email = "some_email@email.com"
