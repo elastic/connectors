@@ -20,7 +20,6 @@ from connectors.logger import logger
 from connectors.protocol import Features
 from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
-    DEFAULT_GROUPS,
     DEFAULT_RETRY_SECONDS,
     WILDCARD,
     DriveItemsPage,
