@@ -16,18 +16,20 @@ from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64, get_pem_format
+from connectors.utils import (
+    TIKA_SUPPORTED_FILETYPES,
+    RetryStrategy,
+    convert_to_b64,
+    get_pem_format,
+    retryable,
+)
 
-DEFAULT_RETRY_COUNT = 3
-DEFAULT_WAIT_MULTIPLIER = 2
-DEFAULT_FILE_SIZE_LIMIT = 10485760
+RETRIES = 3
+RETRY_INTERVAL = 2
+FILE_SIZE_LIMIT = 10485760  # ~ 10 Megabytes
 
-GOOGLE_DRIVE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
-API_NAME = "drive"
-API_VERSION = "v3"
 DRIVE_API_TIMEOUT = 1 * 60  # 1 min
 
-CORPORA = "allDrives"
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 
 
@@ -43,122 +45,135 @@ GOOGLE_DRIVE_EMULATOR_HOST = os.environ.get("GOOGLE_DRIVE_EMULATOR_HOST")
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
-DEFAULT_PEM_FILE = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "..",
-    "tests",
-    "sources",
-    "fixtures",
-    "google_drive",
-    "service_account_dummy_cert.pem",
-)
 
 
 class GoogleDriveClient:
     """A google client to handle api calls made to Google Drive."""
 
-    def __init__(self, retry_count, json_credentials):
+    def __init__(self, json_credentials):
         """Initialize the ServiceAccountCreds class using which api calls will be made.
 
         Args:
             retry_count (int): Maximum retries for the failed requests.
             json_credentials (dict): Service account credentials json.
         """
-        self.retry_count = retry_count
         self.service_account_credentials = ServiceAccountCreds(
-            scopes=[GOOGLE_DRIVE_READ_ONLY_SCOPE],
+            scopes=["https://www.googleapis.com/auth/drive.readonly"],
             **json_credentials,
         )
+        self._logger = logger
+
+    def set_logger(self, logger_):
+        self._logger = logger_
+
+    async def api_call_paged(
+        self,
+        resource,
+        method,
+        **kwargs,
+    ):
+        """Make a paged GET call to Google Drive API.
+
+        Args:
+            resource (aiogoogle.resource.Resource): Resource name for which the API call will be made.
+            method (aiogoogle.resource.Method): Method available for the resource.
+
+        Raises:
+            exception: An instance of an exception class.
+
+        Yields:
+            async generator: Paginated response returned by the resource method.
+        """
+
+        async def _call_api(google_client, method_object, kwargs):
+            first_page_with_next_attached = await google_client.as_service_account(
+                method_object(**kwargs),
+                full_res=True,
+                timeout=DRIVE_API_TIMEOUT,
+            )
+            async for page_items in first_page_with_next_attached:
+                yield page_items
+
+        async for item in self._execute_api_call(resource, method, _call_api, kwargs):
+            yield item
 
     async def api_call(
         self,
         resource,
         method,
-        sub_method=None,
-        full_response=False,
         **kwargs,
     ):
-        """Make a GET call to Google Drive API with retry for the failed calls.
+        """Make a non-paged GET call to Google Drive API.
 
         Args:
-            resource (aiogoogle.resource.Resource): Resource name for which api call will be made.
+            resource (aiogoogle.resource.Resource): Resource name for which the API call will be made.
             method (aiogoogle.resource.Method): Method available for the resource.
-            sub_method (aiogoogle.resource.Method, optional): Sub-method available for the method. Defaults to None.
-            full_response (bool, optional): Specifies whether the response is paginated or not. Defaults to False.
 
         Raises:
-            exception: A instance of an exception class.
+            exception: An instance of an exception class.
 
         Yields:
-            Dictionary: Response returned by the resource method.
+            dict: Response returned by the resource method.
         """
-        retry_counter = 0
-        while True:
-            try:
-                async with Aiogoogle(
-                    service_account_creds=self.service_account_credentials
-                ) as google_client:
-                    drive_client = await google_client.discover(
-                        api_name=API_NAME, api_version=API_VERSION
-                    )
-                    if RUNNING_FTEST and not sub_method and GOOGLE_DRIVE_EMULATOR_HOST:
-                        logger.debug(
-                            f"Using the google drive emulator at {GOOGLE_DRIVE_EMULATOR_HOST}"
-                        )
-                        # Redirecting calls to fake Google Drive server for e2e test.
-                        drive_client.discovery_document["rootUrl"] = (
-                            GOOGLE_DRIVE_EMULATOR_HOST + "/"
-                        )
-                    resource_object = getattr(drive_client, resource)
-                    method_object = getattr(resource_object, method)
-                    if full_response:
-                        first_page_with_next_attached = (
-                            await google_client.as_service_account(
-                                method_object(**kwargs),
-                                full_res=True,
-                                timeout=DRIVE_API_TIMEOUT,
-                            )
-                        )
 
-                        async for page_items in first_page_with_next_attached:
-                            yield page_items
-                            retry_counter = 0
-                    else:
-                        if sub_method:
-                            method_object = getattr(method_object, sub_method)
-                        yield await google_client.as_service_account(
-                            method_object(**kwargs), timeout=DRIVE_API_TIMEOUT
-                        )
-                    break
-            except AttributeError as exception:
-                logger.error(
-                    f"Error occurred while generating the resource/method object for an API call. Error: {exception}"
-                )
-                raise exception
-            except HTTPError as exception:
-                log_message = f"Retry count: {retry_counter} out of {self.retry_count}. Response code: {exception.res.status_code} Exception: {exception}."
-                retry_counter = await self._retry(retry_counter, log_message)
-            except Exception as exception:
-                log_message = f"Retry count: {retry_counter} out of {self.retry_count}. Exception: {exception}."
-                retry_counter = await self._retry(retry_counter, log_message)
+        async def _call_api(google_client, method_object, kwargs):
+            yield await google_client.as_service_account(
+                method_object(**kwargs), timeout=DRIVE_API_TIMEOUT
+            )
 
-    async def _retry(self, retry_counter, log_message):
-        """Retry logic for handling Google API calls
+        return await anext(self._execute_api_call(resource, method, _call_api, kwargs))
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def _execute_api_call(self, resource, method, call_api_func, kwargs):
+        """Execute the API call with common try/except logic.
 
         Args:
-            retry_counter (int): Current number of attempted retries
-            log_message (str): Warning message logged
+            resource (aiogoogle.resource.Resource): Resource name for which the API call will be made.
+            method (aiogoogle.resource.Method): Method available for the resource.
+            call_api_func (function): Function to call the API with specific logic.
+            kwargs: Additional arguments for the API call.
 
-        Returns:
-            int: increased retry_counter
+        Raises:
+            exception: An instance of an exception class.
+
+        Yields:
+            async generator: Response returned by the resource method.
         """
-        retry_counter += 1
-        if retry_counter > self.retry_count:
+        try:
+            async with Aiogoogle(
+                service_account_creds=self.service_account_credentials
+            ) as google_client:
+                drive_client = await google_client.discover(
+                    api_name="drive", api_version="v3"
+                )
+                if RUNNING_FTEST and GOOGLE_DRIVE_EMULATOR_HOST:
+                    drive_client.discovery_document["rootUrl"] = (
+                        GOOGLE_DRIVE_EMULATOR_HOST + "/"
+                    )
+
+                resource_object = getattr(drive_client, resource)
+                method_object = getattr(resource_object, method)
+
+                async for item in call_api_func(google_client, method_object, kwargs):
+                    yield item
+
+        except AttributeError as exception:
+            self._logger.error(
+                f"Error occurred while generating the resource/method object for an API call. Error: {exception}"
+            )
             raise
-        logger.warning(log_message)
-        await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry_counter)
-        return retry_counter
+        except HTTPError as exception:
+            self._logger.warning(
+                f"Response code: {exception.res.status_code} Exception: {exception}."
+            )
+            raise
+        except Exception as exception:
+            self._logger.warning(f"Exception: {exception}.")
+            raise
 
 
 class GoogleDriveDataSource(BaseDataSource):
@@ -175,6 +190,9 @@ class GoogleDriveDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
 
+    def _set_internal_logger(self):
+        self._google_drive_client.set_logger(self._logger)
+
     @classmethod
     def get_default_configuration(cls):
         """Get the default configuration for Google Drive.
@@ -182,36 +200,14 @@ class GoogleDriveDataSource(BaseDataSource):
         Returns:
             dict: Default configuration.
         """
-        default_credentials = {
-            "type": "service_account",
-            "project_id": "project_id",
-            "private_key_id": "abc",
-            "private_key": open(
-                os.path.abspath(DEFAULT_PEM_FILE)
-            ).read(),  # TODO: change this and provide meaningful defaults
-            "client_email": "123-abc@developer.gserviceaccount.com",
-            "client_id": "123-abc.apps.googleusercontent.com",
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "http://localhost:10339/token",
-        }
         return {
             "service_account_credentials": {
                 "display": "textarea",
                 "label": "Google Drive service account JSON",
                 "order": 1,
                 "type": "str",
-                "value": json.dumps(default_credentials),
-            },
-            "retry_count": {
-                "default_value": DEFAULT_RETRY_COUNT,
-                "display": "numeric",
-                "label": "Maximum retries for failed requests",
-                "order": 2,
-                "required": False,
-                "type": "int",
-                "ui_restrictions": ["advanced"],
-                "value": DEFAULT_RETRY_COUNT,
-            },
+                "value": "",
+            }
         }
 
     @cached_property
@@ -223,34 +219,24 @@ class GoogleDriveDataSource(BaseDataSource):
         """
         json_credentials = json.loads(self.configuration["service_account_credentials"])
 
-        if (
-            json_credentials.get("private_key")
-            and "\n" not in json_credentials["private_key"]
-        ):
-            json_credentials["private_key"] = get_pem_format(
-                key=json_credentials["private_key"].strip(),
-                max_split=2,
-            )
+        # Google Service Account JSON includes "universe_domain" key. That argument is not
+        # supported in aiogoogle library, therefore we are skipping it from the credentials payload
+        if "universe_domain" in json_credentials:
+            json_credentials.pop("universe_domain")
 
         return GoogleDriveClient(
             json_credentials=json_credentials,
-            retry_count=self.configuration["retry_count"],
         )
 
     async def ping(self):
         """""Verify the connection with Google Drive""" ""
-        if RUNNING_FTEST:
-            return
-
         try:
-            await anext(
-                self._google_drive_client.api_call(
-                    resource="about", method="get", fields="kind"
-                )
+            await self._google_drive_client.api_call(
+                resource="about", method="get", fields="kind"
             )
-            logger.info("Successfully connected to the Google Drive.")
+            self._logger.info("Successfully connected to the Google Drive.")
         except Exception:
-            logger.exception("Error while connecting to the Google Drive.")
+            self._logger.exception("Error while connecting to the Google Drive.")
             raise
 
     async def validate_config(self):
@@ -265,7 +251,7 @@ class GoogleDriveDataSource(BaseDataSource):
             json.loads(self.configuration["service_account_credentials"])
         except ValueError as e:
             raise ConfigurableFieldValueError(
-                "Google Drive service account is not a valid JSON."
+                f"Google Drive service account is not a valid JSON. Exception: {e}"
             ) from e
 
     async def get_drives(self):
@@ -275,11 +261,10 @@ class GoogleDriveDataSource(BaseDataSource):
             dict: Shared drive metadata.
         """
 
-        async for drive in self._google_drive_client.api_call(
+        async for drive in self._google_drive_client.api_call_paged(
             resource="drives",
             method="list",
             fields="nextPageToken,drives(id,name)",
-            full_response=True,
             pageSize=100,
         ):
             yield drive
@@ -291,8 +276,8 @@ class GoogleDriveDataSource(BaseDataSource):
             dict: mapping between drive id and its name
         """
         drives = {}
-        async for chunk in self.get_drives():
-            drives_chunk = chunk.get("drives", [])
+        async for page in self.get_drives():
+            drives_chunk = page.get("drives", [])
             for drive in drives_chunk:
                 drives[drive["id"]] = drive["name"]
 
@@ -304,13 +289,12 @@ class GoogleDriveDataSource(BaseDataSource):
         Yields:
             dict: Folder metadata.
         """
-        async for folder in self._google_drive_client.api_call(
+        async for folder in self._google_drive_client.api_call_paged(
             resource="files",
             method="list",
             corpora="allDrives",
             fields="nextPageToken,files(id,name,parents)",
             q=f"mimeType='{FOLDER_MIME_TYPE}' and trashed=false",
-            full_response=True,
             includeItemsFromAllDrives=True,
             supportsAllDrives=True,
             pageSize=1000,
@@ -324,8 +308,8 @@ class GoogleDriveDataSource(BaseDataSource):
             dict: mapping between folder id and its (name, parents)
         """
         folders = {}
-        async for chunk in self.get_folders():
-            folders_chunk = chunk.get("files", [])
+        async for page in self.get_folders():
+            folders_chunk = page.get("files", [])
             for folder in folders_chunk:
                 folders[folder["id"]] = {
                     "name": folder["name"],
@@ -347,7 +331,7 @@ class GoogleDriveDataSource(BaseDataSource):
         for id, drive_name in drives.items():
             folders[id] = {"name": drive_name, "parents": []}
 
-        logger.info(f"Resolving folder paths for {len(folders)} folders")
+        self._logger.info(f"Resolving folder paths for {len(folders)} folders")
 
         for folder in folders.values():
             path = [folder["name"]]  # Start with the folder name
@@ -382,14 +366,13 @@ class GoogleDriveDataSource(BaseDataSource):
         temp_file_name = ""
         blob_name = blob["name"]
 
-        logger.debug(f"Downloading {blob_name}")
+        self._logger.debug(f"Downloading {blob_name}")
 
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            await anext(
-                download_func(
-                    pipe_to=async_buffer,
-                )
+            await download_func(
+                pipe_to=async_buffer,
             )
+
             temp_file_name = async_buffer.name
 
         await asyncio.to_thread(
@@ -402,7 +385,9 @@ class GoogleDriveDataSource(BaseDataSource):
         async with aiofiles.open(file=temp_file_name, mode="r") as target_file:
             attachment = (await target_file.read()).strip()
 
-        logger.debug(f"Downloaded {blob_name} for {blob_size} bytes ")
+        self._logger.debug(
+            f"Downloaded {blob_name} with the size of {blob_size} bytes "
+        )
 
         await remove(str(temp_file_name))
 
@@ -441,9 +426,14 @@ class GoogleDriveDataSource(BaseDataSource):
             ),
         )
 
-        if blob_size > DEFAULT_FILE_SIZE_LIMIT:
-            logger.warning(
-                f"File size {blob_size} of file {blob_name} is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
+        # We need to do sanity size after downloading the file because:
+        # 1. We use files/export endpoint which converts large media-rich google slides/docs
+        #    into text/plain format. We usually we end up with tiny .txt files.
+        # 2. Google will ofter report the Google Workspace shared documents to have size 0
+        #    as they don't count against user's storage quota.
+        if blob_size > FILE_SIZE_LIMIT:
+            self._logger.warning(
+                f"File size {blob_size} of file {blob_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding the file content"
             )
             return
 
@@ -473,12 +463,12 @@ class GoogleDriveDataSource(BaseDataSource):
         )
 
         if blob_extension not in TIKA_SUPPORTED_FILETYPES:
-            logger.debug(f"{blob_name} can't be extracted")
+            self._logger.debug(f"{blob_name} can't be extracted")
             return
 
-        if blob_size > DEFAULT_FILE_SIZE_LIMIT:
-            logger.warning(
-                f"File size {blob_size} of file {blob_name} is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
+        if blob_size > FILE_SIZE_LIMIT:
+            self._logger.warning(
+                f"File size {blob_size} of file {blob_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding the file content"
             )
             return
 
@@ -487,7 +477,7 @@ class GoogleDriveDataSource(BaseDataSource):
             "_timestamp": blob["_timestamp"],
         }
 
-        attachment, blob_size = await self._download_content(
+        attachment, _ = await self._download_content(
             blob=blob,
             download_func=partial(
                 self._google_drive_client.api_call,
@@ -532,11 +522,10 @@ class GoogleDriveDataSource(BaseDataSource):
         Yields:
             dict: Documents from Google Drive.
         """
-        async for file in self._google_drive_client.api_call(
+        async for file in self._google_drive_client.api_call_paged(
             resource="files",
             method="list",
-            full_response=True,
-            corpora=CORPORA,
+            corpora="allDrives",
             q="trashed=false",
             orderBy="modifiedTime desc",
             fields="files,nextPageToken",

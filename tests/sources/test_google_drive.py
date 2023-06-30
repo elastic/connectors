@@ -32,31 +32,10 @@ def get_google_drive_source_object():
         GoogleDriveDataSource: Mocked object of the data source class.
     """
     configuration = DataSourceConfiguration(
-        {"service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS, "retry_count": 0}
+        {"service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS}
     )
     mocked_google_drive_object = GoogleDriveDataSource(configuration=configuration)
     return mocked_google_drive_object
-
-
-def test_get_configuration():
-    """Tests the get configurations method of the Google Drive source class."""
-
-    # Setup
-
-    google_drive_object = GoogleDriveDataSource
-
-    # Execute
-
-    config = DataSourceConfiguration(
-        config=google_drive_object.get_default_configuration()
-    )
-
-    # Assert
-
-    assert type(config["service_account_credentials"]) == str
-    assert json.loads(
-        config["service_account_credentials"].encode("unicode_escape").decode()
-    )
 
 
 @pytest.mark.asyncio
@@ -94,7 +73,7 @@ async def test_raise_on_invalid_configuration():
 
 
 @pytest.mark.asyncio
-async def test_ping_for_successful_connection(catch_stdout):
+async def test_ping_for_successful_connection():
     """Tests the ping functionality for ensuring connection to Google Drive."""
 
     # Setup
@@ -114,8 +93,9 @@ async def test_ping_for_successful_connection(catch_stdout):
         await mocked_gd_object.ping()
 
 
+@mock.patch("connectors.utils.apply_retry_strategy", mock.AsyncMock())
 @pytest.mark.asyncio
-async def test_ping_for_failed_connection(catch_stdout):
+async def test_ping_for_failed_connection():
     """Tests the ping functionality when connection can not be established to Google Drive."""
 
     # Setup
@@ -947,6 +927,7 @@ async def test_get_content_when_type_not_supported():
         assert content is None
 
 
+@mock.patch("connectors.utils.apply_retry_strategy", mock.AsyncMock())
 @pytest.mark.asyncio
 async def test_api_call_for_attribute_error():
     """Tests the api_call method when resource attribute is not present in the getattr."""
@@ -956,23 +937,17 @@ async def test_api_call_for_attribute_error():
 
     # Execute
     with pytest.raises(AttributeError):
-        async for _ in mocked_gd_object._google_drive_client.api_call(
-            resource="buckets_dummy",
-            method="list",
-            full_response=True,
-        ):
-            pass
+        await mocked_gd_object._google_drive_client.api_call(
+            resource="buckets_dummy", method="list"
+        )
 
 
-@mock.patch("connectors.sources.google_drive.DEFAULT_WAIT_MULTIPLIER", 0.1)
+@mock.patch("connectors.utils.apply_retry_strategy", mock.AsyncMock())
 @pytest.mark.asyncio
 async def test_api_call_http_error_retry():
     """Test handling retries for HTTPError exception in api_call() method."""
     # Setup
-    configuration = DataSourceConfiguration(
-        {"service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS, "retry_count": 1}
-    )
-    mocked_gd_object = GoogleDriveDataSource(configuration=configuration)
+    mocked_gd_object = get_google_drive_source_object()
 
     with mock.patch.object(
         Aiogoogle,
@@ -983,31 +958,15 @@ async def test_api_call_http_error_retry():
             await mocked_gd_object.ping()
 
 
-@mock.patch("connectors.sources.google_drive.DEFAULT_WAIT_MULTIPLIER", 0.1)
+@mock.patch("connectors.utils.apply_retry_strategy", mock.AsyncMock())
 @pytest.mark.asyncio
 async def test_api_call_other_exception_retry():
     """Test handling retries for generic Exception in api_call() method."""
     # Setup
-    configuration = DataSourceConfiguration(
-        {"service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS, "retry_count": 1}
-    )
-    mocked_gd_object = GoogleDriveDataSource(configuration=configuration)
+    mocked_gd_object = get_google_drive_source_object()
 
     with mock.patch.object(
         Aiogoogle, "as_service_account", side_effect=Exception("other")
     ):
         with pytest.raises(Exception):
             await mocked_gd_object.ping()
-
-
-@mock.patch("connectors.sources.google_drive.RUNNING_FTEST", True)
-@pytest.mark.asyncio
-async def test_ping_detects_ftest_mode():
-    """Test if RUNNING_FTEST mode is correctly detected in ping() method."""
-    # Setup
-    mocked_gd_object = get_google_drive_source_object()
-
-    # Execute and assert
-    with mock.patch.object(Aiogoogle, "as_service_account") as google_client:
-        await mocked_gd_object.ping()
-        google_client.as_service_account.assert_not_called()
