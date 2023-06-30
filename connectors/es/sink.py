@@ -546,7 +546,6 @@ class Extractor:
         try:
             async for doc in generator:
                 doc, _, _ = doc
-
                 count += 1
                 if count % self.display_every == 0:
                     self._logger.info(str(self))
