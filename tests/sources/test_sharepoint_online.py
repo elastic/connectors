@@ -2300,8 +2300,11 @@ class TestSharepointOnlineDataSource:
             ("", None),
             ("abc|", None),
             ("abc|def|", None),
+            ("abc|def|_o", None),
             (f"abc|def|{DOMAIN_GROUP_ID}", DOMAIN_GROUP_ID),
+            (f"abc|def|{DOMAIN_GROUP_ID}_o", DOMAIN_GROUP_ID),
             (f"abc|def|ghi/{DOMAIN_GROUP_ID}", DOMAIN_GROUP_ID),
+            (f"abc|def|ghi/{DOMAIN_GROUP_ID}_o", DOMAIN_GROUP_ID),
         ],
     )
     def test_domain_group_id(self, user_info_name, expected_domain_group_id):
