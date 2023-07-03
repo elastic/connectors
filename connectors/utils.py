@@ -29,7 +29,7 @@ from pympler import asizeof
 
 from connectors.logger import logger
 
-ACCESS_CONTROL_INDEX_PREFIX = "search-acl-filter-"
+ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_QUEUE_SIZE = 1024
 DEFAULT_DISPLAY_EVERY = 100
