@@ -364,7 +364,7 @@ class SharepointServerClient:
                 ):
                     yield response.get("value", [])  # pyright: ignore
 
-                    next_url = response.get("odata.nextLink", "")  # pyright: ignore
+                    next_url = response.get("odata.nextLink", "")
             else:
                 async for response in self._api_call(
                     url_name=param_name,
@@ -376,7 +376,7 @@ class SharepointServerClient:
                 ):
                     yield response.get("value", [])  # pyright: ignore
 
-                    next_url = response.get("odata.nextLink", "")  # pyright: ignore
+                    next_url = response.get("odata.nextLink", "")
             if next_url == "":
                 break
 
