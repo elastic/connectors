@@ -171,7 +171,9 @@ class JobExecutionService(BaseService):
                 )
 
                 try:
-                    logger.debug(f"Polling every {self.idling} seconds")
+                    logger.debug(
+                        f"Polling every {self.idling} seconds for Job Execution Service"
+                    )
                     supported_connector_ids = [
                         connector.id
                         async for connector in self.connector_index.supported_connectors(
@@ -181,7 +183,7 @@ class JobExecutionService(BaseService):
                     ]
 
                     if len(supported_connector_ids) == 0:
-                        logger.info(
+                        logger.debug(
                             f"There's no supported connectors found with native service types [{', '.join(native_service_types)}] or connector ids [{', '.join(connector_ids)}]"
                         )
                     else:
