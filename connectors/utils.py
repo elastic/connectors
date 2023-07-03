@@ -676,10 +676,21 @@ class ExtractionService:
     Requires the data extraction service to be running
     """
 
-    def __init__(self, extraction_config):
+    __EXTRACTION_CONFIG = {}  # setup by cli.py on startup
+
+    @classmethod
+    def get_extraction_config(cls):
+        return __EXTRACTION_CONFIG
+
+    @classmethod
+    def set_extraction_config(cls, extraction_config):
+        global __EXTRACTION_CONFIG
+        __EXTRACTION_CONFIG = extraction_config
+
+    def __init__(self):
         self.session = None
 
-        self.extraction_config = extraction_config
+        self.extraction_config = ExtractionService.get_extraction_config()
         if self.extraction_config is not None:
             self.host = self.extraction_config.get("host", None)
         else:

@@ -18,7 +18,6 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 from fastjsonschema import JsonSchemaValueException
 
-from connectors.config import get_framework_config
 from connectors.es.sink import OP_DELETE, OP_INDEX
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -764,9 +763,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         self._client = None
 
         if self.configuration["use_text_extraction_service"]:
-            self.extraction_service = ExtractionService(
-                get_framework_config().get("extraction_service", None)
-            )
+            self.extraction_service = ExtractionService()
         else:
             self.extraction_service = None
 

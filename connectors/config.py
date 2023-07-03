@@ -10,17 +10,6 @@ from envyaml import EnvYAML
 
 from connectors.logger import logger
 
-__CONNECTOR_FRAMEWORK_CONFIG = {}  # setup by cli.py on startup
-
-
-def get_framework_config():
-    return __CONNECTOR_FRAMEWORK_CONFIG
-
-
-def set_framework_config(framework_config):
-    global __CONNECTOR_FRAMEWORK_CONFIG
-    __CONNECTOR_FRAMEWORK_CONFIG = framework_config
-
 
 def load_config(config_file):
     logger.info(f"Loading config from {config_file}")

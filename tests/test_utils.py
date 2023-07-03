@@ -617,29 +617,26 @@ class TestExtractionService:
         ],
     )
     def test_check_configured(self, mock_config, expected_result):
-        extraction_service = ExtractionService(
-            mock_config.get("extraction_service", None)
-        )
-        assert extraction_service._check_configured() is expected_result
+        with patch(
+            "connectors.utils.ExtractionService.get_extraction_config",
+            return_value=mock_config.get("extraction_service", None),
+        ):
+            extraction_service = ExtractionService()
+            assert extraction_service._check_configured() is expected_result
 
     @pytest.mark.asyncio
     async def test_extract_text(self, mock_responses):
-        mock_config = {
-            "extraction_service": {
-                "host": "http://localhost:8090",
-            }
-        }
-
         filepath = "tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/"
         payload = {"extracted_text": "I've been extracted!"}
 
-        with patch("builtins.open", mock_open(read_data=b"data")):
+        with patch("builtins.open", mock_open(read_data=b"data")), patch(
+            "connectors.utils.ExtractionService.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ):
             mock_responses.post(url, status=200, payload=payload)
 
-            extraction_service = ExtractionService(
-                mock_config.get("extraction_service", None)
-            )
+            extraction_service = ExtractionService()
             extraction_service._begin_session()
 
             response = await extraction_service.extract_text(filepath, "notreal.txt")
@@ -651,17 +648,16 @@ class TestExtractionService:
     async def test_extract_text_when_response_isnt_200_logs_warning(
         self, mock_responses, patch_logger
     ):
-        mock_config = {"extraction_service": {"host": "http://localhost:8090"}}
-
         filepath = "tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/"
 
-        with patch("builtins.open", mock_open(read_data=b"data")):
+        with patch("builtins.open", mock_open(read_data=b"data")), patch(
+            "connectors.utils.ExtractionService.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ):
             mock_responses.post(url, status=400, payload={})
 
-            extraction_service = ExtractionService(
-                mock_config.get("extraction_service", None)
-            )
+            extraction_service = ExtractionService()
             extraction_service._begin_session()
 
             response = await extraction_service.extract_text(filepath, "notreal.txt")
@@ -676,20 +672,20 @@ class TestExtractionService:
     async def test_extract_text_when_response_is_200_with_error_logs_warning(
         self, mock_responses, patch_logger
     ):
-        mock_config = {"extraction_service": {"host": "http://localhost:8090"}}
         filepath = "tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/"
 
-        with patch("builtins.open", mock_open(read_data=b"data")):
+        with patch("builtins.open", mock_open(read_data=b"data")), patch(
+            "connectors.utils.ExtractionService.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ):
             mock_responses.post(
                 url,
                 status=200,
                 payload={"error": "oh no!", "message": "I'm all messed up..."},
             )
 
-            extraction_service = ExtractionService(
-                mock_config.get("extraction_service", None)
-            )
+            extraction_service = ExtractionService()
             extraction_service._begin_session()
 
             response = await extraction_service.extract_text(filepath, "notreal.txt")
