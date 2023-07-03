@@ -1143,7 +1143,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             created_at = iso_utc()
 
         return {
-            # Here we're intentionally using the email/username without the prefix
+            # For `_id` we're intentionally using the email/username without the prefix
             "_id": id_,
             "identity": {
                 "email": prefixed_mail,
