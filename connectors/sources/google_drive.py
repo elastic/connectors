@@ -216,7 +216,13 @@ class GoogleDriveDataSource(BaseDataSource):
         Returns:
             GoogleDriveClient: An instance of the GoogleDriveClient.
         """
-        json_credentials = json.loads(self.configuration["service_account_credentials"])
+
+        if RUNNING_FTEST:
+            # In ftests mode credentials are loaded as json from connectos.json file
+            json_credentials = self.configuration["service_account_credentials"]
+        else:
+            # Otherwise, load user-provided credentials from json string
+            json_credentials = json.loads(self.configuration["service_account_credentials"])
 
         # Google Service Account JSON includes "universe_domain" key. That argument is not
         # supported in aiogoogle library, therefore we are skipping it from the credentials payload
