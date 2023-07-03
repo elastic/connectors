@@ -8,6 +8,7 @@ import base64
 import re
 from datetime import datetime, timedelta, timezone
 from functools import partial
+from io import BytesIO
 from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
@@ -19,7 +20,7 @@ from connectors.logger import logger
 from connectors.protocol import Features
 from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
-    DEFAULT_GROUPS,
+    DEFAULT_RETRY_SECONDS,
     WILDCARD,
     DriveItemsPage,
     GraphAPIToken,
@@ -28,26 +29,57 @@ from connectors.sources.sharepoint_online import (
     MicrosoftAPISession,
     MicrosoftSecurityToken,
     NotFound,
+    PermissionsMissing,
     SharepointOnlineAdvancedRulesValidator,
     SharepointOnlineClient,
     SharepointOnlineDataSource,
+    SharepointRestAPIToken,
     SyncCursorEmpty,
     TokenFetchFailed,
+    _domain_group_id,
+    _emails_and_usernames_of_domain_group,
     _prefix_email,
     _prefix_group,
     _prefix_identity,
     _prefix_user,
+    is_domain_group,
+    is_person,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+
+TIMESTAMP_FORMAT_PATCHED = "%Y-%m-%dT%H:%M:%SZ"
+
+ONLY_USERNAMES = True
+USERNAMES_AND_EMAILS = False
+WITH_PREFIX = True
+WITHOUT_PREFIX = False
+IDENTITY_MAIL = "mail@spo.com"
+IDENTITY_USER_PRINCIPAL_NAME = "some identity"
+IDENTITY_WITH_MAIL_AND_PRINCIPAL_NAME = {
+    "mail": IDENTITY_MAIL,
+    "userPrincipalName": IDENTITY_USER_PRINCIPAL_NAME,
+}
+
+GROUP_ID = "some-group-id"
+
+DOMAIN_GROUP_ID = "domain-group-id"
+
+OWNER_TWO_USER_PRINCIPAL_NAME = "some.owner2@spo.com"
+
+OWNER_ONE_EMAIL = "some.owner1@spo.com"
+
+MEMBER_TWO_USER_PRINCIPAL_NAME = "some.member2spo.com"
+
+MEMBER_ONE_EMAIL = "some.member1@spo.com"
 
 GROUP_2 = "Group 2"
 
 GROUP_1 = "Group 1"
 
-USER_2 = "User 2"
+USER_ONE_EMAIL = "user1@spo.com"
 
-USER_1 = "User 1"
+USER_TWO_EMAIL = "user2@spo.com"
 
 NUMBER_OF_DEFAULT_GROUPS = 3
 
@@ -242,7 +274,7 @@ class TestSharepointRestAPIToken:
     async def token(self):
         session = aiohttp.ClientSession()
 
-        yield GraphAPIToken(session, None, None, None, None)
+        yield SharepointRestAPIToken(session, None, None, None, None)
 
         await session.close()
 
@@ -359,7 +391,9 @@ class TestMicrosoftAPISession:
         assert second_page in pages
 
     @pytest.mark.asyncio
-    async def test_scroll_with_data_link(self, microsoft_api_session, mock_responses):
+    async def test_scroll_delta_url_with_data_link(
+        self, microsoft_api_session, mock_responses
+    ):
         drive_item = {
             "id": "1",
             "size": 15,
@@ -390,12 +424,162 @@ class TestMicrosoftAPISession:
 
         pages = list()
 
-        async for page in microsoft_api_session.scroll_url(
+        async for page in microsoft_api_session.scroll_delta_url(
             url=responses["page1"]["url"]
         ):
             pages.append(page)
 
         assert len(pages) == len(responses)
+
+    @pytest.mark.asyncio
+    async def test_pipe(self, microsoft_api_session, mock_responses):
+        class AsyncStream:
+            def __init__(self):
+                self.stream = BytesIO()
+
+            async def write(self, data):
+                self.stream.write(data)
+
+            def read(self):
+                return self.stream.getvalue().decode()
+
+        url = "http://localhost:1234/download-some-sample-file"
+        file_content = "hello world, this is content of downloaded file"
+        stream = AsyncStream()
+        mock_responses.get(url, body=file_content)
+
+        await microsoft_api_session.pipe(url, stream)
+
+        assert stream.read() == file_content
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_429(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        payload = {"hello": "world"}
+        retry_after = 25
+
+        # First throttle, then do not throttle
+        first_request_error = ClientResponseError(None, None)
+        first_request_error.status = 429
+        first_request_error.message = "Something went wrong"
+        first_request_error.headers = {"Retry-After": str(retry_after)}
+
+        mock_responses.get(url, exception=first_request_error)
+        mock_responses.get(url, payload=payload)
+
+        async with microsoft_api_session._call_api(url) as response:
+            actual_payload = await response.json()
+            assert actual_payload == payload
+
+        patch_cancellable_sleeps.assert_awaited_with(retry_after)
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_429_without_retry_after(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        payload = {"hello": "world"}
+
+        # First throttle, then do not throttle
+        first_request_error = ClientResponseError(None, None)
+        first_request_error.status = 429
+        first_request_error.message = "Something went wrong"
+
+        mock_responses.get(url, exception=first_request_error)
+        mock_responses.get(url, payload=payload)
+
+        async with microsoft_api_session._call_api(url) as response:
+            actual_payload = await response.json()
+            assert actual_payload == payload
+
+        patch_cancellable_sleeps.assert_awaited_with(DEFAULT_RETRY_SECONDS)
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_403(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+
+        # First throttle, then do not throttle
+        unauthorized_error = ClientResponseError(None, None)
+        unauthorized_error.status = 403
+        unauthorized_error.message = "Something went wrong"
+
+        mock_responses.get(url, exception=unauthorized_error)
+        mock_responses.get(url, exception=unauthorized_error)
+        mock_responses.get(url, exception=unauthorized_error)
+
+        with pytest.raises(PermissionsMissing) as e:
+            async with microsoft_api_session._call_api(url) as _:
+                pass
+
+        assert e is not None
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_404(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+
+        # First throttle, then do not throttle
+        not_found_error = ClientResponseError(None, None)
+        not_found_error.status = 404
+        not_found_error.message = "Something went wrong"
+
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
+
+        with pytest.raises(NotFound) as e:
+            async with microsoft_api_session._call_api(url) as _:
+                pass
+
+        assert e is not None
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_unhandled_status(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+
+        error_message = "Something went wrong"
+
+        # First throttle, then do not throttle
+        not_found_error = ClientResponseError(MagicMock(), MagicMock())
+        not_found_error.status = 420
+        not_found_error.message = error_message
+
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
+
+        with pytest.raises(ClientResponseError) as e:
+            async with microsoft_api_session._call_api(url) as _:
+                pass
+
+        assert e.match(error_message)
 
 
 class TestSharepointOnlineClient:
@@ -437,6 +621,13 @@ class TestSharepointOnlineClient:
     async def patch_scroll(self):
         with patch.object(
             MicrosoftAPISession, "scroll", return_value=AsyncMock()
+        ) as scroll:
+            yield scroll
+
+    @pytest_asyncio.fixture
+    async def patch_scroll_delta_url(self):
+        with patch.object(
+            MicrosoftAPISession, "scroll_delta_url", return_value=AsyncMock()
         ) as scroll:
             yield scroll
 
@@ -561,10 +752,55 @@ class TestSharepointOnlineClient:
         assert returned_items == actual_items
 
     @pytest.mark.asyncio
-    async def test_drive_items_non_recursive(self, client, patch_fetch, patch_scroll):
-        """Basic setup for the test - no recursion through directories"""
-        pass
+    async def test_drive_items_delta(self, client, patch_fetch, patch_scroll_delta_url):
+        delta_url_input = "https://sharepoint.com/delta-link-lalal"
+        delta_url_next_page = "https://sharepoint.com/delta-link-lalal/page-2"
+        delta_url_next_sync = "https://sharepoint.com/delta-link-lalal/next-sync"
 
+        items_page_1 = ["1", "2"]
+        items_page_2 = ["3", "4"]
+
+        patch_scroll_delta_url.return_value = AsyncIterator(
+            [
+                {"@odata.nextLink": delta_url_next_page, "value": items_page_1},
+                {"@odata.deltaLink": delta_url_next_sync, "value": items_page_2},
+            ]
+        )
+
+        returned_items = []
+        async for item in client.drive_items_delta(delta_url_input):
+            returned_items.append(item)
+
+        return returned_items
+
+        assert len(returned_items) == len(items_page_1) + len(items_page_2)
+        assert returned_items == items_page_1 + items_page_2
+
+    @pytest.mark.asyncio
+    async def test_drive_items(self, client, patch_fetch):
+        drive_id = "12345"
+        delta_url_next_sync = "https://sharepoint.com/delta-link-lalal/page-2"
+        items_page_1 = ["1", "2"]
+        items_page_2 = ["3", "4"]
+
+        pages = AsyncIterator(
+            [
+                DriveItemsPage(items_page_1, delta_url_next_sync),
+                DriveItemsPage(items_page_2, delta_url_next_sync),
+            ]
+        )
+        returned_items = []
+
+        with patch.object(client, "drive_items_delta", return_value=pages):
+            async for page in client.drive_items(drive_id):
+                for item in page:
+                    returned_items.append(item)
+                assert page.delta_link() == delta_url_next_sync
+
+        assert len(returned_items) == len(items_page_1) + len(items_page_2)
+        assert returned_items == items_page_1 + items_page_2
+
+    @pytest.mark.asyncio
     @pytest.mark.asyncio
     async def test_download_drive_item(self, client, patch_pipe):
         """Basic setup for the test - no recursion through directories"""
@@ -889,21 +1125,6 @@ class TestSharepointOnlineClient:
         assert actual_users_and_groups == users_and_groups
 
     @pytest.mark.asyncio
-    async def test_groups_for_user(self, client, patch_fetch):
-        groups_for_user_url = (
-            f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/groups"
-        )
-
-        user_id = 1
-        groups = ["group_1", "group_2"]
-
-        patch_fetch.return_value = groups
-
-        actual_groups = await client.groups_for_user(groups_for_user_url, user_id)
-
-        assert actual_groups == groups
-
-    @pytest.mark.asyncio
     async def test_users_and_groups_for_role_assignment_not_found(
         self, client, patch_fetch
     ):
@@ -956,6 +1177,122 @@ class TestSharepointOnlineClient:
         )
 
         assert len(actual_users_and_groups) == 0
+
+    @pytest.mark.asyncio
+    async def test_user_information_lst(self, client, patch_scroll):
+        site_id = "12345"
+        user_info_one = {"name": "some user"}
+        user_info_two = {"name": "some other user"}
+
+        expected_user_infos = [user_info_one, user_info_two]
+
+        actual_user_infos = await self._execute_scrolling_method(
+            partial(client.user_information_list, site_id),
+            patch_scroll,
+            expected_user_infos,
+        )
+
+        assert len(actual_user_infos) == len(expected_user_infos)
+        assert actual_user_infos == expected_user_infos
+
+    @pytest.mark.asyncio
+    async def test_user_information_list_with_not_found_raised(
+        self, client, patch_scroll
+    ):
+        site_id = "12345"
+        patch_scroll.side_effect = NotFound()
+
+        returned_items = []
+        async for user_info in client.user_information_list(site_id):
+            returned_items.append(user_info)
+
+        assert len(returned_items) == 0
+
+    @pytest.mark.asyncio
+    async def test_groups_user_transitive_member_of(self, client, patch_scroll):
+        user_id = "12345"
+        group_one = {"name": "some group"}
+        group_two = {"name": "some other group"}
+
+        expected_groups = [group_one, group_two]
+
+        actual_groups = await self._execute_scrolling_method(
+            partial(client.groups_user_transitive_member_of, user_id),
+            patch_scroll,
+            expected_groups,
+        )
+
+        assert len(actual_groups) == len(expected_groups)
+        assert actual_groups == expected_groups
+
+    @pytest.mark.asyncio
+    async def test_groups_user_transitive_member_of_with_not_found_raised(
+        self, client, patch_scroll
+    ):
+        user_id = "12345"
+        patch_scroll.side_effect = NotFound()
+
+        returned_groups = []
+        async for groups in client.groups_user_transitive_member_of(user_id):
+            returned_groups.append(groups)
+
+        assert len(returned_groups) == 0
+
+    @pytest.mark.asyncio
+    async def test_group_members(self, client, patch_scroll):
+        group_id = "12345"
+        member_one = {"name": "some member"}
+        member_two = {"name": "some other member"}
+
+        expected_members = [member_one, member_two]
+
+        actual_members = await self._execute_scrolling_method(
+            partial(client.group_members, group_id),
+            patch_scroll,
+            expected_members,
+        )
+
+        assert len(actual_members) == len(expected_members)
+        assert actual_members == expected_members
+
+    @pytest.mark.asyncio
+    async def test_group_members_with_not_found_raised(self, client, patch_scroll):
+        group_id = "12345"
+        patch_scroll.side_effect = NotFound()
+
+        returned_members = []
+        async for member in client.group_members(group_id):
+            returned_members.append(member)
+
+        assert len(returned_members) == 0
+
+    @pytest.mark.asyncio
+    async def test_group_owners(self, client, patch_scroll):
+        group_id = "12345"
+        owner_one = {"name": "some owner"}
+        owner_two = {"name": "some other owner"}
+
+        expected_owners = [owner_one, owner_two]
+
+        actual_owners = await self._execute_scrolling_method(
+            partial(client.group_owners, group_id),
+            patch_scroll,
+            expected_owners,
+        )
+
+        assert len(actual_owners) == len(expected_owners)
+        assert actual_owners == expected_owners
+
+    @pytest.mark.asyncio
+    async def test_group_owners_with_not_found_raised(self, client, patch_scroll):
+        group_id = "12345"
+        patch_scroll.side_effect = NotFound()
+
+        returned_owners = []
+        async for owner in client.group_owners(group_id):
+            returned_owners.append(owner)
+
+        assert len(returned_owners) == 0
 
 
 class TestSharepointOnlineAdvancedRulesValidator:
@@ -1061,14 +1398,58 @@ class TestSharepointOnlineDataSource:
         return [{"Id": 4, "odata.id": "11", "GUID": "thats-not-a-guid"}]
 
     @property
+    def user_information_list(self):
+        return [
+            {
+                "fields": {
+                    "ContentType": "DomainGroup",
+                    "Name": f"i:0#.f|membership|{GROUP_1}",
+                }
+            },
+            {
+                "fields": {
+                    "ContentType": "DomainGroup",
+                    "Name": f"abc|def|ghi/{GROUP_2}",
+                }
+            },
+            {
+                "fields": {
+                    "ContentType": "Person",
+                    "Name": f"i:0#.f|membership|{USER_ONE_EMAIL}",
+                }
+            },
+            {"fields": {"ContentType": "Person", "EMail": USER_TWO_EMAIL}},
+        ]
+
+    @property
+    def group_members(self):
+        return [
+            {
+                "mail": MEMBER_ONE_EMAIL,
+            },
+            {"userPrincipalName": MEMBER_TWO_USER_PRINCIPAL_NAME},
+        ]
+
+    @property
+    def group_owners(self):
+        return [
+            {"mail": OWNER_ONE_EMAIL},
+            {"userPrincipalName": OWNER_TWO_USER_PRINCIPAL_NAME},
+        ]
+
+    @property
+    def group(self):
+        return {"id": GROUP_ID}
+
+    @property
     def site_groups(self):
         return [{"Title": GROUP_1}, {"Title": GROUP_2}, {}, {"Title": None}]
 
     @property
     def site_users(self):
         return [
-            {"UserPrincipalName": USER_1},
-            {"UserPrincipalName": USER_2},
+            {"UserPrincipalName": USER_ONE_EMAIL},
+            {"UserPrincipalName": USER_TWO_EMAIL},
             {},
             {"UserPrincipalName": None},
         ]
@@ -1078,12 +1459,12 @@ class TestSharepointOnlineDataSource:
         return {
             # three valid values: GROUP_1 (1x, will be de-deduplicated), USER_1 and USER_2
             "value": [
-                {"grantedToV2": {"user": {"loginName": USER_1}}},
+                {"grantedToV2": {"user": {"loginName": USER_ONE_EMAIL}}},
                 {
                     "grantedToV2": {"siteGroup": {"loginName": GROUP_1}},
                     "grantedTo": {"siteGroup": {"loginName": GROUP_1}},
                 },
-                {"grantedTo": {"user": {"loginName": USER_2}}},
+                {"grantedTo": {"user": {"loginName": USER_TWO_EMAIL}}},
                 {
                     "grantedTo": {
                         "user": {"email": None},
@@ -1115,7 +1496,7 @@ class TestSharepointOnlineDataSource:
 
     @property
     def users_and_groups_for_role_assignments(self):
-        return [USER_1, GROUP_1]
+        return [USER_ONE_EMAIL, GROUP_1]
 
     @property
     def site_list_item_role_assignments(self):
@@ -1163,6 +1544,10 @@ class TestSharepointOnlineDataSource:
             client.site_collections = AsyncIterator(self.site_collections)
             client.sites = AsyncIterator(self.sites)
             client.site_groups = AsyncIterator(self.site_groups)
+            client.user_information_list = AsyncIterator(self.user_information_list)
+            client.group = AsyncMock(return_value=self.group)
+            client.group_members = AsyncIterator(self.group_members)
+            client.group_owners = AsyncIterator(self.group_owners)
             client.site_users = AsyncIterator(self.site_users)
             client.drive_item_permissions = AsyncMock(
                 return_value=self.drive_item_permissions
@@ -1250,8 +1635,17 @@ class TestSharepointOnlineDataSource:
         ALLOW_ACCESS_CONTROL_PATCHED,
     )
     async def test_get_docs_with_access_control(self, patch_sharepoint_client):
+        def _access_control_matches(actual, expected):
+            return all([access_control in expected for access_control in actual])
+
+        group = "group"
+        email = "email"
+        user = "user"
+        expected_access_control = [group, email, user]
+
         source = create_source(SharepointOnlineDataSource)
         source._dls_enabled = Mock(return_value=True)
+        source._site_access_control = AsyncMock(return_value=expected_access_control)
 
         results = []
         async for doc, _download_func in source.get_docs():
@@ -1271,54 +1665,83 @@ class TestSharepointOnlineDataSource:
         assert len(results) == 11
 
         assert len(site_collections) == len(self.site_collections)
+        assert len(sites) == len(self.sites)
         assert all(
             [
-                ALLOW_ACCESS_CONTROL_PATCHED in site_collection
-                for site_collection in site_collections
+                _access_control_matches(
+                    site[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                )
+                for site in sites
             ]
         )
 
-        assert len(sites) == len(self.sites)
-        assert all([ALLOW_ACCESS_CONTROL_PATCHED in site for site in sites])
-
         assert len(site_drives) == len(self.site_drives)
         assert all(
-            [ALLOW_ACCESS_CONTROL_PATCHED in site_drive for site_drive in site_drives]
+            [
+                _access_control_matches(
+                    site_drive[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                )
+                for site_drive in site_drives
+            ]
         )
 
         assert len(drive_items) == sum([len(j) for j in self.drive_items])
 
         assert all(
-            [ALLOW_ACCESS_CONTROL_PATCHED in drive_item for drive_item in drive_items]
+            [
+                _access_control_matches(
+                    drive_item[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                )
+                for drive_item in drive_items
+            ]
         )
 
         assert len(site_lists) == len(self.site_lists)
         assert all(
-            [ALLOW_ACCESS_CONTROL_PATCHED in site_list for site_list in site_lists]
+            [
+                _access_control_matches(
+                    site_list[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                )
+                for site_list in site_lists
+            ]
         )
 
         assert (
             len(list_items) == len(self.site_list_items) - 1
         )  # -1 because one of them is ignored!
         assert all(
-            [ALLOW_ACCESS_CONTROL_PATCHED in list_item for list_item in list_items]
+            [
+                _access_control_matches(
+                    list_item[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                )
+                for list_item in list_items
+            ]
         )
 
         assert len(list_item_attachments) == len(self.site_list_item_attachments)
         assert all(
             [
-                ALLOW_ACCESS_CONTROL_PATCHED in list_item_attachment
+                _access_control_matches(
+                    list_item_attachment[ALLOW_ACCESS_CONTROL_PATCHED],
+                    expected_access_control,
+                )
                 for list_item_attachment in list_item_attachments
             ]
         )
 
         assert len(site_pages) == len(self.site_pages)
         assert all(
-            [ALLOW_ACCESS_CONTROL_PATCHED in site_page for site_page in site_pages]
+            [
+                _access_control_matches(
+                    site_page[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                )
+                for site_page in site_pages
+            ]
         )
 
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("sync_cursor", [None, {}])
-    async def test_get_docs_incrementaly_with_empty_cursor(
+    async def test_get_docs_incrementally_with_empty_cursor(
         self, patch_sharepoint_client, sync_cursor
     ):
         source = create_source(SharepointOnlineDataSource)
@@ -1605,145 +2028,25 @@ class TestSharepointOnlineDataSource:
             assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
-    async def test_with_site_access_control(self, patch_sharepoint_client):
+    async def test_site_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
         set_dls_enabled(source, True)
         patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
 
-        site = {"Id": 1, "webUrl": "some url"}
+        site = {"id": 1, "webUrl": "some url"}
 
-        site_with_access_control = await source._with_site_access_control(site)
-        access_control = site_with_access_control[ACCESS_CONTROL]
+        access_control = await source._site_access_control(site)
 
-        two_users = 2
+        two_other_users = 2
         two_groups = 2
 
-        assert len(access_control) == NUMBER_OF_DEFAULT_GROUPS + two_groups + two_users
-        assert _prefix_user(USER_1) in access_control
-        assert _prefix_user(USER_2) in access_control
+        assert len(access_control) == two_groups + two_other_users
+
         assert _prefix_group(GROUP_1) in access_control
         assert _prefix_group(GROUP_2) in access_control
 
-    @pytest.mark.asyncio
-    async def test_with_drive_item_access_control(self, patch_sharepoint_client):
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
-        site_drive = {"id": 1}
-        drive_item = {"id": 2}
-
-        drive_item_with_access_control = await source._with_drive_item_access_control(
-            site_drive, drive_item
-        )
-        access_control = drive_item_with_access_control[ACCESS_CONTROL]
-
-        two_users = 2
-        one_group = 1
-
-        assert len(access_control) == NUMBER_OF_DEFAULT_GROUPS + two_users + one_group
-        assert all(
-            [
-                _prefix_group(default_group) in access_control
-                for default_group in DEFAULT_GROUPS
-            ]
-        )
-        assert _prefix_user(USER_1) in access_control
-        assert _prefix_user(USER_2) in access_control
-        assert _prefix_group(GROUP_1) in access_control
-
-    @pytest.mark.asyncio
-    async def test_with_site_list_access_control(self, patch_sharepoint_client):
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
-        patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
-
-        site_web_url = "some url"
-        site_list = {"name": "site_list"}
-
-        site_list_with_access_control = await source._with_site_list_access_control(
-            site_web_url, site_list
-        )
-        access_control = site_list_with_access_control[ACCESS_CONTROL]
-
-        one_user = 1
-        one_group = 1
-
-        assert len(access_control) == NUMBER_OF_DEFAULT_GROUPS + one_user + one_group
-        assert all(
-            [
-                _prefix_group(default_group) in access_control
-                for default_group in DEFAULT_GROUPS
-            ]
-        )
-        assert USER_1 in access_control
-        assert GROUP_1 in access_control
-
-    @pytest.mark.asyncio
-    async def test_with_site_page_access_control(self, patch_sharepoint_client):
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
-        patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
-
-        site_web_url = "some url"
-        site_page = {"Id": 1}
-
-        site_page_with_access_control = await source._with_site_page_access_control(
-            site_web_url, site_page
-        )
-        access_control = site_page_with_access_control[ACCESS_CONTROL]
-
-        one_user = 1
-        one_group = 1
-
-        assert len(access_control) == NUMBER_OF_DEFAULT_GROUPS + one_user + one_group
-        assert all(
-            [
-                _prefix_group(default_group) in access_control
-                for default_group in DEFAULT_GROUPS
-            ]
-        )
-        assert USER_1 in access_control
-        assert GROUP_1 in access_control
-
-    @pytest.mark.asyncio
-    async def test_access_control_for_role_assignments(self, patch_sharepoint_client):
-        source = create_source(SharepointOnlineDataSource)
-        patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
-
-        site_web_url = "some url"
-        role_assignments = {"value": ["role"]}
-
-        access_control = await source._access_control_for_role_assignments(
-            site_web_url, role_assignments
-        )
-
-        one_user = 1
-        one_group = 1
-
-        assert len(access_control) == one_user + one_group
-        assert USER_1 in access_control
-        assert GROUP_1 in access_control
-
-    @pytest.mark.asyncio
-    async def test_with_list_item_access_control(self, patch_sharepoint_client):
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
-        patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
-
-        site_web_url = "some url"
-        site_list_name = "site_list"
-        list_item = {"id": 1}
-
-        list_item_with_access_control = await source._with_list_item_access_control(
-            site_web_url, site_list_name, list_item
-        )
-        access_control = list_item_with_access_control[ACCESS_CONTROL]
-
-        one_user = 1
-        one_group = 1
-
-        assert len(access_control) == NUMBER_OF_DEFAULT_GROUPS + one_user + one_group
-        assert USER_1 in access_control
-        assert GROUP_1 in access_control
+        assert _prefix_email(USER_ONE_EMAIL) in access_control
+        assert _prefix_email(USER_TWO_EMAIL) in access_control
 
     @pytest.mark.parametrize(
         "_dls_enabled, document, access_control, expected_decorated_document",
@@ -1751,33 +2054,43 @@ class TestSharepointOnlineDataSource:
             (
                 False,
                 {},
-                [USER_1],
+                [USER_ONE_EMAIL],
                 {},
             ),
             (
                 True,
                 {},
-                [USER_1],
-                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1, *DEFAULT_GROUPS_PATCHED]},
+                [USER_ONE_EMAIL],
+                {
+                    ALLOW_ACCESS_CONTROL_PATCHED: [
+                        USER_ONE_EMAIL,
+                        *DEFAULT_GROUPS_PATCHED,
+                    ]
+                },
             ),
             (True, {}, [], {ALLOW_ACCESS_CONTROL_PATCHED: DEFAULT_GROUPS_PATCHED}),
             (
                 True,
-                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1]},
-                [USER_2],
+                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_ONE_EMAIL]},
+                [USER_TWO_EMAIL],
                 {
                     ALLOW_ACCESS_CONTROL_PATCHED: [
-                        USER_1,
-                        USER_2,
+                        USER_ONE_EMAIL,
+                        USER_TWO_EMAIL,
                         *DEFAULT_GROUPS_PATCHED,
                     ]
                 },
             ),
             (
                 True,
-                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1]},
+                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_ONE_EMAIL]},
                 [],
-                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_1, *DEFAULT_GROUPS_PATCHED]},
+                {
+                    ALLOW_ACCESS_CONTROL_PATCHED: [
+                        USER_ONE_EMAIL,
+                        *DEFAULT_GROUPS_PATCHED,
+                    ]
+                },
             ),
         ],
     )
@@ -1854,27 +2167,66 @@ class TestSharepointOnlineDataSource:
         access_control_query = source.access_control_query(access_control)
 
         assert access_control_query == {
-            "query": {"template": {"params": {"access_control": access_control}}}
+            "query": {
+                "template": {"params": {"access_control": access_control}},
+                "source": {
+                    "bool": {
+                        "filter": {
+                            "bool": {
+                                "should": [
+                                    {
+                                        "bool": {
+                                            "must_not": {
+                                                "exists": {"field": ACCESS_CONTROL}
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "terms": {
+                                            f"{ACCESS_CONTROL}.enum": access_control
+                                        }
+                                    },
+                                ]
+                            }
+                        }
+                    }
+                },
+            }
         }
 
-    def test_user_doc(self):
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint_online.TIMESTAMP_FORMAT",
+        TIMESTAMP_FORMAT_PATCHED,
+    )
+    async def test_user_access_control_doc(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
+        created_at = "2023-05-25T13:30:54Z"
+        group_one = {"id": "group-one-id"}
+        group_two = {"id": "group-two-id"}
+        groups = [group_one, group_two]
+        patch_sharepoint_client.groups_user_transitive_member_of = AsyncIterator(groups)
 
-        user_id = 1
-        email = "some_email@email.com"
-        username = "username"
+        username = "user"
+        email = "user@spo.com"
+        user = {"UserName": username, "EMail": email, "createdDateTime": created_at}
 
-        user = {"Id": user_id, "Email": email, "LoginName": username}
+        expected_email = f"email:{email}"
+        expected_user = f"user:{username}"
+        expected_groups = list(map(lambda group: f"group:{group}", groups))
 
-        access_control = ["group_1"]
+        user_doc = await source._user_access_control_doc(user)
+        access_control = user_doc["query"]["template"]["params"]["access_control"]
 
-        user_doc = source._user_access_control_doc(user, access_control)
-
-        assert user_doc == {
-            "_id": user_id,
-            "identity": {"email": f"email:{email}", "username": f"user:{username}"},
-            "query": {"template": {"params": {"access_control": access_control}}},
-        }
+        assert user_doc["_id"] == email
+        assert user_doc["created_at"] == datetime.strptime(
+            user["createdDateTime"], TIMESTAMP_FORMAT_PATCHED
+        )
+        assert user_doc["identity"]["email"] == expected_email
+        assert user_doc["identity"]["username"] == expected_user
+        assert expected_email in access_control
+        assert expected_user in access_control
+        all([group in access_control for group in expected_groups])
 
     @pytest.mark.asyncio
     async def test_get_access_control_with_dls_disabled(self, patch_sharepoint_client):
@@ -1901,23 +2253,25 @@ class TestSharepointOnlineDataSource:
     @patch(
         "connectors.sources.sharepoint_online.DEFAULT_GROUPS", DEFAULT_GROUPS_PATCHED
     )
+    @patch(
+        "connectors.sources.sharepoint_online._emails_and_usernames_of_domain_group",
+        AsyncIterator([("some_email", "some_username")]),
+    )
     async def test_get_access_control_with_dls_enabled(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
         set_dls_enabled(source, True)
 
-        username = "user"
-        email = "some_email@email.com"
-        groups = [{"LoginName": "group_1"}]
+        member = {"Name": "some member"}
 
-        patch_sharepoint_client.site_collections = AsyncIterator(
-            [{"siteCollection": {"hostname": "localhost"}, "webUrl": "some url"}]
-        )
-        patch_sharepoint_client.sites = AsyncIterator([{"webUrl": "some url"}])
-        patch_sharepoint_client.site_users = AsyncIterator(
-            [{"Id": 1, "LoginName": username, "Email": email}]
-        )
-        patch_sharepoint_client.groups_for_user = AsyncMock(
-            return_value={"value": groups}
+        owner = {"Name": "some owner"}
+
+        user_doc_one = {"_id": "user1"}
+        user_doc_two = {"_id": "user2"}
+        user_doc_three = {"_id": "user3"}
+
+        patch_sharepoint_client.user = AsyncMock(side_effect=[member, owner])
+        source._user_access_control_doc = AsyncMock(
+            side_effect=[user_doc_one, user_doc_two, user_doc_three]
         )
 
         user_access_control_docs = []
@@ -1925,22 +2279,56 @@ class TestSharepointOnlineDataSource:
         async for doc in source.get_access_control():
             user_access_control_docs.append(doc)
 
-        assert len(user_access_control_docs) == 1
+        assert len(user_access_control_docs) == 3
 
-        access_control = user_access_control_docs[0]["query"]["template"]["params"][
-            "access_control"
-        ]
+    @pytest.mark.parametrize(
+        "user_info_name, expected_domain_group_id",
+        [
+            (None, None),
+            ("", None),
+            ("abc|", None),
+            ("abc|def|", None),
+            (f"abc|def|{DOMAIN_GROUP_ID}", DOMAIN_GROUP_ID),
+            (f"abc|def|ghi/{DOMAIN_GROUP_ID}", DOMAIN_GROUP_ID),
+        ],
+    )
+    def test_domain_group_id(self, user_info_name, expected_domain_group_id):
+        assert _domain_group_id(user_info_name) == expected_domain_group_id
 
-        assert _prefix_user(username) in access_control
-        assert _prefix_email(email) in access_control
+    @pytest.mark.parametrize(
+        "group_identities_generator, expected_emails_and_usernames",
+        [
+            (AsyncIterator([]), []),
+            (
+                AsyncIterator([IDENTITY_WITH_MAIL_AND_PRINCIPAL_NAME]),
+                [IDENTITY_MAIL, IDENTITY_USER_PRINCIPAL_NAME],
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_emails_and_usernames_of_domain_group(
+        self,
+        group_identities_generator,
+        expected_emails_and_usernames,
+    ):
+        actual_emails_and_usernames = []
+
+        async for email, username in _emails_and_usernames_of_domain_group(
+            "some id", group_identities_generator
+        ):
+            # ignore None values
+            if email:
+                actual_emails_and_usernames.append(email)
+
+            if username:
+                actual_emails_and_usernames.append(username)
+
+        assert len(actual_emails_and_usernames) == len(expected_emails_and_usernames)
         assert all(
             [
-                _prefix_group(group.get("LoginName")) in access_control
-                for group in groups
+                email_or_username in expected_emails_and_usernames
+                for email_or_username in actual_emails_and_usernames
             ]
-        )
-        assert all(
-            [_prefix_group(group) in access_control for group in DEFAULT_GROUPS_PATCHED]
         )
 
     def test_prefix_identity(self):
@@ -1975,3 +2363,15 @@ class TestSharepointOnlineDataSource:
         email = "email"
 
         assert _prefix_email(email) == "email:email"
+
+    def test_is_domain_group(self):
+        assert is_domain_group({"ContentType": "DomainGroup"})
+
+    def test_is_not_domain_group(self):
+        assert not is_domain_group({"ContentType": "Person"})
+
+    def test_is_person(self):
+        assert is_person({"ContentType": "Person"})
+
+    def test_is_not_person(self):
+        assert not is_person({"ContentType": "DomainGroup"})
