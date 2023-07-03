@@ -2296,20 +2296,11 @@ class TestSharepointOnlineDataSource:
         assert _domain_group_id(user_info_name) == expected_domain_group_id
 
     @pytest.mark.parametrize(
-        "group_identities_generator, prefix, expected_emails_and_usernames",
+        "group_identities_generator, expected_emails_and_usernames",
         [
-            (AsyncIterator([]), WITH_PREFIX, []),
+            (AsyncIterator([]), []),
             (
                 AsyncIterator([IDENTITY_WITH_MAIL_AND_PRINCIPAL_NAME]),
-                WITH_PREFIX,
-                [
-                    _prefix_email(IDENTITY_MAIL),
-                    _prefix_user(IDENTITY_USER_PRINCIPAL_NAME),
-                ],
-            ),
-            (
-                AsyncIterator([IDENTITY_WITH_MAIL_AND_PRINCIPAL_NAME]),
-                WITHOUT_PREFIX,
                 [IDENTITY_MAIL, IDENTITY_USER_PRINCIPAL_NAME],
             ),
         ],
@@ -2318,13 +2309,12 @@ class TestSharepointOnlineDataSource:
     async def test_emails_and_usernames_of_domain_group(
         self,
         group_identities_generator,
-        prefix,
         expected_emails_and_usernames,
     ):
         actual_emails_and_usernames = []
 
         async for email, username in _emails_and_usernames_of_domain_group(
-            "some id", group_identities_generator, prefix
+            "some id", group_identities_generator
         ):
             # ignore None values
             if email:

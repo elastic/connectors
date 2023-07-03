@@ -836,24 +836,20 @@ def _domain_group_id(user_info_name):
 
 
 async def _emails_and_usernames_of_domain_group(
-    domain_group_id, group_identities_generator, prefix=True
+    domain_group_id, group_identities_generator
 ):
     """Yield emails and/or usernames for a specific domain group.
     This function yields both to reduce the number of remote calls made to the group owners or group members API.
 
     Yields:
-        - Prefixed email or email without prefix
-        - Prefixed user principal name or user principal name without prefix
+        Tuple: tuple of the user's email and the user's username
 
     """
     async for identity in group_identities_generator(domain_group_id):
         email = identity.get("mail")
         username = identity.get("userPrincipalName")
 
-        if prefix:
-            yield _prefix_email(email), _prefix_user(username)
-        else:
-            yield email, username
+        yield email, username
 
 
 class SharepointOnlineDataSource(BaseDataSource):
@@ -1204,7 +1200,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                             async for member_email, member_username in _emails_and_usernames_of_domain_group(
                                 domain_group_id,
                                 self.client.group_members,
-                                prefix=False,
                             ):
                                 if _already_seen(member_email, member_username):
                                     continue
@@ -1221,7 +1216,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                             async for owner_email, owner_username in _emails_and_usernames_of_domain_group(
                                 domain_group_id,
                                 self.client.group_owners,
-                                prefix=False,
                             ):
                                 if _already_seen(owner_email, owner_username):
                                     continue
