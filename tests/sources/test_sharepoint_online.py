@@ -2255,7 +2255,7 @@ class TestSharepointOnlineDataSource:
     )
     @patch(
         "connectors.sources.sharepoint_online._emails_and_usernames_of_domain_group",
-        AsyncIterator(["some_username"]),
+        AsyncIterator([("some_email", "some_username")]),
     )
     async def test_get_access_control_with_dls_enabled(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
@@ -2296,12 +2296,11 @@ class TestSharepointOnlineDataSource:
         assert _domain_group_id(user_info_name) == expected_domain_group_id
 
     @pytest.mark.parametrize(
-        "group_identities_generator, only_usernames, prefix, expected_emails_and_usernames",
+        "group_identities_generator, prefix, expected_emails_and_usernames",
         [
-            (AsyncIterator([]), USERNAMES_AND_EMAILS, WITH_PREFIX, []),
+            (AsyncIterator([]), WITH_PREFIX, []),
             (
                 AsyncIterator([IDENTITY_WITH_MAIL_AND_PRINCIPAL_NAME]),
-                USERNAMES_AND_EMAILS,
                 WITH_PREFIX,
                 [
                     _prefix_email(IDENTITY_MAIL),
@@ -2310,19 +2309,6 @@ class TestSharepointOnlineDataSource:
             ),
             (
                 AsyncIterator([IDENTITY_WITH_MAIL_AND_PRINCIPAL_NAME]),
-                ONLY_USERNAMES,
-                WITH_PREFIX,
-                [_prefix_user(IDENTITY_USER_PRINCIPAL_NAME)],
-            ),
-            (
-                AsyncIterator([IDENTITY_WITH_MAIL_AND_PRINCIPAL_NAME]),
-                ONLY_USERNAMES,
-                WITHOUT_PREFIX,
-                [IDENTITY_USER_PRINCIPAL_NAME],
-            ),
-            (
-                AsyncIterator([IDENTITY_WITH_MAIL_AND_PRINCIPAL_NAME]),
-                USERNAMES_AND_EMAILS,
                 WITHOUT_PREFIX,
                 [IDENTITY_MAIL, IDENTITY_USER_PRINCIPAL_NAME],
             ),
@@ -2332,16 +2318,20 @@ class TestSharepointOnlineDataSource:
     async def test_emails_and_usernames_of_domain_group(
         self,
         group_identities_generator,
-        only_usernames,
         prefix,
         expected_emails_and_usernames,
     ):
         actual_emails_and_usernames = []
 
-        async for email_or_username in _emails_and_usernames_of_domain_group(
-            "some id", group_identities_generator, only_usernames, prefix
+        async for email, username in _emails_and_usernames_of_domain_group(
+            "some id", group_identities_generator, prefix
         ):
-            actual_emails_and_usernames.append(email_or_username)
+            # ignore None values
+            if email:
+                actual_emails_and_usernames.append(email)
+
+            if username:
+                actual_emails_and_usernames.append(username)
 
         assert len(actual_emails_and_usernames) == len(expected_emails_and_usernames)
         assert all(

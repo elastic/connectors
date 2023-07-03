@@ -836,7 +836,7 @@ def _domain_group_id(user_info_name):
 
 
 async def _emails_and_usernames_of_domain_group(
-    domain_group_id, group_identities_generator, only_usernames=False, prefix=True
+    domain_group_id, group_identities_generator, prefix=True
 ):
     """Yield emails and/or usernames for a specific domain group.
     This function yields both to reduce the number of remote calls made to the group owners or group members API.
@@ -848,20 +848,12 @@ async def _emails_and_usernames_of_domain_group(
     """
     async for identity in group_identities_generator(domain_group_id):
         email = identity.get("mail")
-
-        if not only_usernames and email:
-            if prefix:
-                yield _prefix_email(email)
-            else:
-                yield email
-
         username = identity.get("userPrincipalName")
 
-        if username:
-            if prefix:
-                yield _prefix_user(username)
-            else:
-                yield username
+        if prefix:
+            yield _prefix_email(email), _prefix_user(username)
+        else:
+            yield email, username
 
 
 class SharepointOnlineDataSource(BaseDataSource):
@@ -1042,15 +1034,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                         access_control.add(_prefix_email(email))
                         continue
 
-                if "EMail" not in user:
-                    continue
+                email = user.get("EMail")
 
-                email = user["EMail"]
-
-                if _prefix_email(email) in access_control:
-                    continue
-
-                access_control.add(_prefix_email(email))
+                if email:
+                    access_control.add(_prefix_email(email))
 
         return list(access_control)
 
@@ -1183,31 +1170,22 @@ class SharepointOnlineDataSource(BaseDataSource):
         already_seen_emails = set()
         already_seen_usernames = set()
 
-        def _identity_mail(identity):
-            return identity.get("EMail", identity.get("mail", None))
-
-        def _identity_username(identity):
-            return identity.get("UserName", identity.get("userPrincipalName", None))
-
-        def _already_seen(identity):
-            if _identity_mail(identity) in already_seen_emails:
+        def _already_seen(email_, username_):
+            if email_ in already_seen_emails:
                 return True
 
-            if _identity_username(identity) in already_seen_usernames:
+            if username_ in already_seen_usernames:
                 return True
 
             return False
 
-        def update_already_seen(identity):
-            mail = _identity_mail(identity)
-            username = _identity_username(identity)
-
+        def update_already_seen(email_, username_):
             # We want to make sure to not add 'None' to the already seen sets
-            if mail:
-                already_seen_emails.add(mail)
+            if email_:
+                already_seen_emails.add(email_)
 
-            if username:
-                already_seen_usernames.add(username)
+            if username_:
+                already_seen_usernames.add(username_)
 
         async for site_collection in self.client.site_collections():
             async for site in self.client.sites(
@@ -1220,41 +1198,37 @@ class SharepointOnlineDataSource(BaseDataSource):
                     user = user_information["fields"]
 
                     if is_domain_group(user):
-                        domain_group_id = _domain_group_id(user["Name"])
+                        domain_group_id = _domain_group_id(user.get("Name"))
 
                         if domain_group_id:
-                            async for member_username in _emails_and_usernames_of_domain_group(
+                            async for member_email, member_username in _emails_and_usernames_of_domain_group(
                                 domain_group_id,
                                 self.client.group_members,
-                                only_usernames=True,
                                 prefix=False,
                             ):
-                                member = await self.client.user(member_username)
-
-                                if _already_seen(member):
+                                if _already_seen(member_email, member_username):
                                     continue
 
-                                update_already_seen(member)
+                                update_already_seen(member_email, member_username)
 
+                                member = await self.client.user(member_username)
                                 member_access_control_doc = (
                                     await self._user_access_control_doc(member)
                                 )
                                 if member_access_control_doc:
                                     yield member_access_control_doc
 
-                            async for owner_username in _emails_and_usernames_of_domain_group(
+                            async for owner_email, owner_username in _emails_and_usernames_of_domain_group(
                                 domain_group_id,
                                 self.client.group_owners,
-                                only_usernames=True,
                                 prefix=False,
                             ):
-                                owner = await self.client.user(owner_username)
-
-                                if _already_seen(owner):
+                                if _already_seen(owner_email, owner_username):
                                     continue
 
-                                update_already_seen(owner)
+                                update_already_seen(owner_email, owner_username)
 
+                                owner = await self.client.user(owner_username)
                                 owner_access_control_doc = (
                                     await self._user_access_control_doc(owner)
                                 )
@@ -1262,10 +1236,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                                     yield owner_access_control_doc
 
                     elif is_person(user):
-                        if _already_seen(user):
+                        email = user.get("EMail", user.get("mail", None))
+                        username = user.get(
+                            "UserName", user.get("userPrincipalName", None)
+                        )
+
+                        if _already_seen(email, username):
                             continue
 
-                        update_already_seen(user)
+                        update_already_seen(email, username)
 
                         person_access_control_doc = await self._user_access_control_doc(
                             user
@@ -1292,8 +1271,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                 access_control = await self._site_access_control(site)
                 yield self._decorate_with_access_control(site, access_control), None
 
-                async for site_drive in self.site_drives(site, access_control):
-                    yield site_drive, None
+                async for site_drive in self.site_drives(site):
+                    yield self._decorate_with_access_control(
+                        site_drive, access_control
+                    ), None
 
                     async for page in self.client.drive_items(site_drive["id"]):
                         for drive_item in page:
@@ -1316,8 +1297,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                         )
 
                 # Sync site list and site list items
-                async for site_list in self.site_lists(site, access_control):
-                    yield site_list, None
+                async for site_list in self.site_lists(site):
+                    yield self._decorate_with_access_control(
+                        site_list, access_control
+                    ), None
 
                     async for list_item, download_func in self.site_list_items(
                         site_id=site["id"],
@@ -1326,11 +1309,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_list_name=site_list["name"],
                         access_control=access_control,
                     ):
-                        yield list_item, download_func
+                        yield self._decorate_with_access_control(
+                            list_item, access_control
+                        ), download_func
 
                 # Sync site pages
-                async for site_page in self.site_pages(site["webUrl"], access_control):
-                    yield site_page, None
+                async for site_page in self.site_pages(site["webUrl"]):
+                    yield self._decorate_with_access_control(
+                        site_page, access_control
+                    ), None
 
     async def get_docs_incrementally(self, sync_cursor, filtering=None):
         self._sync_cursor = sync_cursor
@@ -1358,8 +1345,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                     site, access_control
                 ), None, OP_INDEX
 
-                async for site_drive in self.site_drives(site, access_control):
-                    yield site_drive, None, OP_INDEX
+                async for site_drive in self.site_drives(site):
+                    yield self._decorate_with_access_control(
+                        site_drive, access_control
+                    ), None, OP_INDEX
 
                     delta_link = self.get_drive_delta_link(site_drive["id"])
 
@@ -1388,8 +1377,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                         )
 
                 # Sync site list and site list items
-                async for site_list in self.site_lists(site, access_control):
-                    yield site_list, None, OP_INDEX
+                async for site_list in self.site_lists(site):
+                    yield self._decorate_with_access_control(
+                        site_list, access_control
+                    ), None, OP_INDEX
 
                     async for list_item, download_func in self.site_list_items(
                         site_id=site["id"],
@@ -1398,11 +1389,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_list_name=site_list["name"],
                         access_control=access_control,
                     ):
-                        yield list_item, download_func, OP_INDEX
+                        yield self._decorate_with_access_control(
+                            list_item, access_control
+                        ), download_func, OP_INDEX
 
                 # Sync site pages
-                async for site_page in self.site_pages(site["webUrl"], access_control):
-                    yield site_page, None, OP_INDEX
+                async for site_page in self.site_pages(site["webUrl"]):
+                    yield self._decorate_with_access_control(
+                        site_page, access_control
+                    ), None, OP_INDEX
 
     async def site_collections(self):
         async for site_collection in self.client.site_collections():
@@ -1421,12 +1416,11 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             yield site
 
-    async def site_drives(self, site, access_control):
+    async def site_drives(self, site):
         async for site_drive in self.client.site_drives(site["id"]):
             site_drive["_id"] = site_drive["id"]
             site_drive["object_type"] = "site_drive"
 
-            site_drive = self._decorate_with_access_control(site_drive, access_control)
             yield site_drive
 
     async def drive_items(self, site_drive, max_drive_item_age):
@@ -1460,8 +1454,6 @@ class SharepointOnlineDataSource(BaseDataSource):
             ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
                 continue
 
-            list_item = self._decorate_with_access_control(list_item, access_control)
-
             if "Attachments" in list_item["fields"]:
                 async for list_item_attachment in self.client.site_list_item_attachments(
                     site_web_url, site_list_name, list_item_natural_id
@@ -1472,10 +1464,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                         "lastModifiedDateTime"
                     ]
 
-                    list_item_attachment = self._decorate_with_access_control(
-                        list_item_attachment,
-                        access_control,
-                    )
                     attachment_download_func = partial(
                         self.get_attachment_content, list_item_attachment
                     )
@@ -1483,23 +1471,19 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             yield list_item, None
 
-    async def site_lists(self, site, access_control):
+    async def site_lists(self, site):
         async for site_list in self.client.site_lists(site["id"]):
             site_list["_id"] = site_list["id"]
             site_list["object_type"] = "site_list"
 
-            site_list = self._decorate_with_access_control(site_list, access_control)
-
             yield site_list
 
-    async def site_pages(self, url, access_control):
+    async def site_pages(self, url):
         async for site_page in self.client.site_pages(url):
             site_page["_id"] = site_page[
                 "odata.id"
             ]  # Apparantly site_page["GUID"] is not globally unique
             site_page["object_type"] = "site_page"
-
-            site_page = self._decorate_with_access_control(site_page, access_control)
 
             for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:
                 if html_field in site_page:
