@@ -305,7 +305,7 @@ class MicrosoftAPISession:
             else:
                 break
 
-    async def scroll_url(self, url):
+    async def scroll_delta_url(self, url):
         scroll_url = url
 
         while True:
@@ -539,7 +539,7 @@ class SharepointOnlineClient:
                 yield site_drive
 
     async def drive_items_delta(self, url):
-        async for response in self._graph_api_client.scroll_url(url):
+        async for response in self._graph_api_client.scroll_delta_url(url):
             delta_link = (
                 response[DELTA_LINK_KEY] if DELTA_LINK_KEY in response else None
             )
