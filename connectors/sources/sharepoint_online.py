@@ -826,11 +826,14 @@ def _domain_group_id(user_info_name):
 
     domain_group_id = name_parts[2]
 
-    if len(domain_group_id) == 0:
-        return None
-
     if "/" in domain_group_id:
         domain_group_id = domain_group_id.split("/")[1]
+
+    if "_" in domain_group_id:
+        domain_group_id = domain_group_id.split("_")[0]
+
+    if len(domain_group_id) == 0:
+        return None
 
     return domain_group_id
 
