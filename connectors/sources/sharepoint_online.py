@@ -1301,7 +1301,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_list_id=site_list["id"],
                         site_web_url=site["webUrl"],
                         site_list_name=site_list["name"],
-                        access_control=access_control,
                     ):
                         yield self._decorate_with_access_control(
                             list_item, access_control
@@ -1381,7 +1380,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_list_id=site_list["id"],
                         site_web_url=site["webUrl"],
                         site_list_name=site_list["name"],
-                        access_control=access_control,
                     ):
                         yield self._decorate_with_access_control(
                             list_item, access_control
@@ -1427,7 +1425,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 yield drive_item, self.download_function(drive_item, max_drive_item_age)
 
     async def site_list_items(
-        self, site_id, site_list_id, site_web_url, site_list_name, access_control
+        self, site_id, site_list_id, site_web_url, site_list_name
     ):
         async for list_item in self.client.site_list_items(site_id, site_list_id):
             # List Item IDs are unique within list.
