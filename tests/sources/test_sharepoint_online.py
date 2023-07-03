@@ -19,7 +19,7 @@ from connectors.logger import logger
 from connectors.protocol import Features
 from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
-    DEFAULT_GROUPS,
+    DEFAULT_RETRY_SECONDS,
     WILDCARD,
     DriveItemsPage,
     GraphAPIToken,
@@ -28,26 +28,57 @@ from connectors.sources.sharepoint_online import (
     MicrosoftAPISession,
     MicrosoftSecurityToken,
     NotFound,
+    PermissionsMissing,
     SharepointOnlineAdvancedRulesValidator,
     SharepointOnlineClient,
     SharepointOnlineDataSource,
+    SharepointRestAPIToken,
     SyncCursorEmpty,
     TokenFetchFailed,
+    _domain_group_id,
+    _emails_and_usernames_of_domain_group,
     _prefix_email,
     _prefix_group,
     _prefix_identity,
     _prefix_user,
+    is_domain_group,
+    is_person,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+
+TIMESTAMP_FORMAT_PATCHED = "%Y-%m-%dT%H:%M:%SZ"
+
+ONLY_USERNAMES = True
+USERNAMES_AND_EMAILS = False
+WITH_PREFIX = True
+WITHOUT_PREFIX = False
+IDENTITY_MAIL = "mail@spo.com"
+IDENTITY_USER_PRINCIPAL_NAME = "some identity"
+IDENTITY_WITH_MAIL_AND_PRINCIPAL_NAME = {
+    "mail": IDENTITY_MAIL,
+    "userPrincipalName": IDENTITY_USER_PRINCIPAL_NAME,
+}
+
+GROUP_ID = "some-group-id"
+
+DOMAIN_GROUP_ID = "domain-group-id"
+
+OWNER_TWO_USER_PRINCIPAL_NAME = "some.owner2@spo.com"
+
+OWNER_ONE_EMAIL = "some.owner1@spo.com"
+
+MEMBER_TWO_USER_PRINCIPAL_NAME = "some.member2spo.com"
+
+MEMBER_ONE_EMAIL = "some.member1@spo.com"
 
 GROUP_2 = "Group 2"
 
 GROUP_1 = "Group 1"
 
-USER_2 = "User 2"
+USER_ONE_EMAIL = "user1@spo.com"
 
-USER_1 = "User 1"
+USER_TWO_EMAIL = "user2@spo.com"
 
 NUMBER_OF_DEFAULT_GROUPS = 3
 
@@ -242,7 +273,7 @@ class TestSharepointRestAPIToken:
     async def token(self):
         session = aiohttp.ClientSession()
 
-        yield GraphAPIToken(session, None, None, None, None)
+        yield SharepointRestAPIToken(session, None, None, None, None)
 
         await session.close()
 
@@ -1314,9 +1345,15 @@ class TestSharepointOnlineDataSource:
 
         assert len(site_pages) == len(self.site_pages)
         assert all(
-            [ALLOW_ACCESS_CONTROL_PATCHED in site_page for site_page in site_pages]
+            [
+                _access_control_matches(
+                    site_page[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                )
+                for site_page in site_pages
+            ]
         )
 
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("sync_cursor", [None, {}])
     async def test_get_docs_incrementaly_with_empty_cursor(
         self, patch_sharepoint_client, sync_cursor
