@@ -1888,7 +1888,10 @@ class TestSharepointOnlineDataSource:
 
         with patch(
             "connectors.utils.ExtractionService.extract_text", return_value=message
-        ) as extraction_service_mock:
+        ) as extraction_service_mock, patch(
+            "connectors.utils.ExtractionService.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ):
 
             async def download_func(attachment_id, async_buffer):
                 await async_buffer.write(bytes(message, "utf-8"))
@@ -1914,7 +1917,10 @@ class TestSharepointOnlineDataSource:
 
         with patch(
             "connectors.utils.ExtractionService.extract_text", return_value=message
-        ) as extraction_service_mock:
+        ) as extraction_service_mock, patch(
+            "connectors.utils.ExtractionService.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ):
 
             async def download_func(attachment_id, async_buffer):
                 await async_buffer.write(bytes(message, "utf-8"))
@@ -1978,7 +1984,10 @@ class TestSharepointOnlineDataSource:
 
         with patch(
             "connectors.utils.ExtractionService.extract_text", return_value=message
-        ) as extraction_service_mock:
+        ) as extraction_service_mock, patch(
+            "connectors.utils.ExtractionService.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ):
 
             async def download_func(drive_id, drive_item_id, async_buffer):
                 await async_buffer.write(bytes(message, "utf-8"))
@@ -2011,7 +2020,10 @@ class TestSharepointOnlineDataSource:
 
         with patch(
             "connectors.utils.ExtractionService.extract_text", return_value=message
-        ) as extraction_service_mock:
+        ) as extraction_service_mock, patch(
+            "connectors.utils.ExtractionService.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ):
 
             async def download_func(drive_id, drive_item_id, async_buffer):
                 await async_buffer.write(bytes(message, "utf-8"))
