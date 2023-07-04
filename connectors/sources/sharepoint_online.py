@@ -1513,11 +1513,15 @@ class SharepointOnlineDataSource(BaseDataSource):
             return None
 
         if "@microsoft.graph.downloadUrl" not in drive_item:
-            self._logger.debug(f"Not downloading file {drive_item['name']}: field \"@microsoft.graph.downloadUrl\" is missing")
+            self._logger.debug(
+                f"Not downloading file {drive_item['name']}: field \"@microsoft.graph.downloadUrl\" is missing"
+            )
             return None
 
         if "lastModifiedDateTime" not in drive_item:
-            self._logger.debug(f"Not downloading file {drive_item['name']}: field \"lastModifiedDateTime\" is missing")
+            self._logger.debug(
+                f"Not downloading file {drive_item['name']}: field \"lastModifiedDateTime\" is missing"
+            )
             return None
 
         modified_date = datetime.strptime(
