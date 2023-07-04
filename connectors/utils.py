@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from io import BytesIO
 
+import aiofiles
 import aiohttp
 from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 from base64io import Base64IO
@@ -693,6 +694,7 @@ class ExtractionService:
         self.extraction_config = ExtractionService.get_extraction_config()
         if self.extraction_config is not None:
             self.host = self.extraction_config.get("host", None)
+            self.timeout = self.extraction_config.get("timeout", 30)
         else:
             self.host = None
 
@@ -711,7 +713,7 @@ class ExtractionService:
         if self.session is not None:
             return self.session
 
-        timeout = aiohttp.ClientTimeout(total=5)
+        timeout = aiohttp.ClientTimeout(total=self.timeout)
         self.session = aiohttp.ClientSession(
             timeout=timeout,
             headers={
@@ -768,11 +770,17 @@ class ExtractionService:
 
         Returns a parsed response
         """
-        with open(filepath, "rb") as file:
-            async with self._begin_session().put(
-                f"{self.host}/extract_text/", data=file
-            ) as response:
-                return await self.parse_extraction_resp(filename, response)
+        async with self._begin_session().put(
+            f"{self.host}/extract_text/", data=self.file_sender(filepath)
+        ) as response:
+            return await self.parse_extraction_resp(filename, response)
+
+    async def file_sender(self, filepath):
+        async with aiofiles.open(filepath, 'rb') as f:
+            chunk = await f.read(64 * 1024)
+            while chunk:
+                yield chunk
+                chunk = await f.read(64 * 1024)
 
     async def parse_extraction_resp(self, filename, response):
         """Parses the response from the tika-server and logs any extraction failures.
