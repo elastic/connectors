@@ -14,14 +14,14 @@ To use this connector as a **connector client**, use the **Dropbox** tile from t
 
 For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
 
-Creating a Dropbox application is required to help the Dropbox connector to authenticate.
+Creating a Dropbox application is required to help the Dropbox connector to authenticate. Generating a refresh token is a required step to configure the connector.
 
 ## Dropbox API Authorization
 
 ### Create Dropbox OAuth App
 
 You'll need to create an OAuth app in the Dropbox platform by following these steps:
-1. Register a new app in the [Dropbox App Console](https://www.dropbox.com/developers/apps. Select **Full Dropbox API app** and choose the following required permissions:
+1. Register a new app in the [Dropbox App Console](https://www.dropbox.com/developers/apps). Select **Full Dropbox API app** and choose the following required permissions:
     - files.content.read
     - sharing.read
 
@@ -39,7 +39,7 @@ The HTTP response should contain an **authorization code** that you'll use to ge
 
 **Note:** An authorization code can only be used once to create a refresh token.
 
-2. Perform the following POST API call in the terminal:
+2. In your terminal, run the following `cURL` command, replacing `<AUTHORIZATION_CODE>`, `<APP_KEY>:<APP_SECRET>` with the values you saved earlier:
     ```shell
     curl -X POST "https://api.dropboxapi.com/oauth2/token?code=<AUTHORIZATION_CODE>&grant_type=authorization_code" -u "<APP_KEY>:<APP_SECRET>"
     ```
@@ -60,15 +60,15 @@ The following configuration fields are required to set up the connector:
 
 The folder path to fetch files/folders from Dropbox. Default value is `/`.
 
-#### `app_key`
+#### `app_key` (required)
 
 The App Key to authenticate your Dropbox application.
 
-#### `app_secret`
+#### `app_secret` (required)
 
 The App Secret to authenticate your Dropbox application.
 
-#### `refresh_token`
+#### `refresh_token` (required)
 
 The refresh token to authenticate your Dropbox application.
 
@@ -91,13 +91,16 @@ The connector syncs the following objects and entities:
 - **Files**
     - Includes metadata such as file name, path, size, content, etc.
 - **Folders**
+
 **NOTE**:
 - Files bigger than 10 MB won't be extracted
 - Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
+
 ## Sync rules
 
-- Files bigger than 10 MB won't be extracted
-- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
+[Basic sync rules](https://www.elastic.co/guide/en/enterprise-search/8.9/sync-rules.html#sync-rules-basic "Basic sync rules") are identical for all connectors and are available by default.
+
+Advanced sync rules are not available for this connector in the present version. Currently filtering is controlled via ingest pipelines.
 
 ## Connector Client operations
 
@@ -107,7 +110,7 @@ End-to-end testing is not available for this connector in this version.
 
 ## Known issues
 
-- There is a delay in the updated metadata of paper files to be reflected in the UI hence response does not have updated results. As soon as the change is reflected in the UI, the same is available in response.
+- There is a known issue where metadata updates to Paper files are not immediately reflected in the Dropbox UI, which delays the availability of updated results for the connector. Once the metadata changes are visible in the Dropbox UI, the updates are available.
 
 Refer to [Known issues](https://www.elastic.co/guide/en/enterprise-search/master/connectors-known-issues.html) for a list of known issues for all connectors.
 
