@@ -1354,8 +1354,16 @@ class TestSharepointOnlineDataSource:
         return [
             DriveItemsPage(
                 items=[
-                    {"id": "3", "lastModifiedDateTime": self.month_ago},
-                    {"id": "4", "lastModifiedDateTime": self.day_ago},
+                    {
+                        "id": "3",
+                        "name": "third.txt",
+                        "lastModifiedDateTime": self.month_ago,
+                    },
+                    {
+                        "id": "4",
+                        "name": "fourth.txt",
+                        "lastModifiedDateTime": self.day_ago,
+                    },
                 ],
                 delta_link="deltalinksample",
             )
@@ -1523,10 +1531,14 @@ class TestSharepointOnlineDataSource:
         return [
             DriveItemsPage(
                 items=[
-                    {"id": "3", "lastModifiedDateTime": self.month_ago},
-                    {"id": "4", "lastModifiedDateTime": self.day_ago},
-                    {"id": "5", "lastModifiedDateTime": self.day_ago},
-                    {"id": "6", "deleted": {"state": "deleted"}},
+                    {
+                        "id": "3",
+                        "name": "third",
+                        "lastModifiedDateTime": self.month_ago,
+                    },
+                    {"id": "4", "name": "fourth", "lastModifiedDateTime": self.day_ago},
+                    {"id": "5", "name": "fifth", "lastModifiedDateTime": self.day_ago},
+                    {"id": "6", "name": "sixth", "deleted": {"state": "deleted"}},
                 ],
                 delta_link="deltalinksample",
             )
@@ -1795,13 +1807,26 @@ class TestSharepointOnlineDataSource:
         assert (operations["delete"]) == deleted
 
     @pytest.mark.asyncio
+    async def test_download_function_for_folder(self):
+        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
+        drive_item = {
+            "name": "folder",
+            "folder": {},
+        }
+
+        download_result = source.download_function(drive_item, None)
+
+        assert download_result is None
+
+    @pytest.mark.asyncio
     async def test_download_function_with_filtering_rule(self):
         source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
         max_drive_item_age = 15
         drive_item = {
+            "name": "test",
             "lastModifiedDateTime": str(
                 datetime.utcnow() - timedelta(days=max_drive_item_age + 1)
-            )
+            ),
         }
 
         download_result = source.download_function(drive_item, max_drive_item_age)
