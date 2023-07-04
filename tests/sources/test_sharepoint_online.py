@@ -18,6 +18,7 @@ from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.logger import logger
 from connectors.protocol import Features
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
     DEFAULT_RETRY_SECONDS,
@@ -1812,6 +1813,21 @@ class TestSharepointOnlineDataSource:
         config = SharepointOnlineDataSource.get_default_configuration()
 
         assert config is not None
+
+    @pytest.mark.asyncio
+    async def test_validate_config_empty_config(self, patch_sharepoint_client):
+        source = create_source(
+            SharepointOnlineDataSource,
+            site_collections=WILDCARD,
+        )
+
+        with pytest.raises(ConfigurableFieldValueError) as e:
+            await source.validate_config()
+
+        assert e.match("Tenant ID")
+        assert e.match("Tenant name")
+        assert e.match("Client ID")
+        assert e.match("Secret value")
 
     @pytest.mark.asyncio
     async def test_validate_config(self, patch_sharepoint_client):
