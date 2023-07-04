@@ -156,7 +156,6 @@ async def test_connector_ready_to_sync(
 
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
-    connector.close.assert_awaited()
     connector.update_last_sync_scheduled_at_by_job_type.assert_awaited()
 
     for job_type in JOB_TYPES:

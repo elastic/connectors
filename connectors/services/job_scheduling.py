@@ -89,10 +89,10 @@ class JobSchedulingService(BaseService):
 
         source_klass = get_source_klass(self.source_list[connector.service_type])
         if connector.features.sync_rules_enabled():
+            data_source = source_klass(connector.configuration)
+            data_source.set_logger(connector.logger)
             try:
-                data_source = source_klass(connector.configuration)
-                data_source.set_logger(connector.logger)
-                await data_source.validate_filtering(validator=validator)
+                await connector.validate_filtering(validator=data_source)
             finally:
                 await data_source.close()
 
