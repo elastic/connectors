@@ -31,6 +31,12 @@ DRIVE_API_TIMEOUT = 1 * 60  # 1 min
 
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 
+# Google Service Account JSON includes "universe_domain" key. That argument is not
+# supported in aiogoogle library in version 5.3.0. The "universe_domain" key is allowed in
+# service account JSON but will be dropped before being passed to aiogoogle.auth.creds.ServiceAccountCreds.
+SERVICE_ACCOUNT_JSON_ALLOWED_KEYS = set(dict(ServiceAccountCreds()).keys()) | {
+    "universe_domain"
+}
 
 # Export Google Workspace documents to TIKA compatible format, prefer 'text/plain' where possible to be
 # mindful of the content extraction service resources
@@ -85,12 +91,12 @@ class GoogleDriveClient:
         """
 
         async def _call_api(google_client, method_object, kwargs):
-            first_page_with_next_attached = await google_client.as_service_account(
+            page_with_next_attached = await google_client.as_service_account(
                 method_object(**kwargs),
                 full_res=True,
                 timeout=DRIVE_API_TIMEOUT,
             )
-            async for page_items in first_page_with_next_attached:
+            async for page_items in page_with_next_attached:
                 yield page_items
 
         async for item in self._execute_api_call(resource, method, _call_api, kwargs):
@@ -216,6 +222,8 @@ class GoogleDriveDataSource(BaseDataSource):
         Returns:
             GoogleDriveClient: An instance of the GoogleDriveClient.
         """
+        self._validate_service_account_json()
+
         json_credentials = json.loads(self.configuration["service_account_credentials"])
 
         # Google Service Account JSON includes "universe_domain" key. That argument is not
@@ -227,6 +235,39 @@ class GoogleDriveDataSource(BaseDataSource):
             json_credentials=json_credentials,
         )
 
+    async def validate_config(self):
+        """Validates whether user inputs are valid or not for configuration field.
+
+        Raises:
+            Exception: The format of service account json is invalid.
+        """
+        self.configuration.check_valid()
+
+        self._validate_service_account_json()
+
+    def _validate_service_account_json(self):
+        """Validates whether service account JSON is a valid JSON string and
+        checks for unexpected keys.
+
+        Raises:
+            ConfigurableFieldValueError: The service account json is ininvalid.
+        """
+
+        try:
+            json_credentials = json.loads(
+                self.configuration["service_account_credentials"]
+            )
+        except ValueError as e:
+            raise ConfigurableFieldValueError(
+                f"Google Drive service account is not a valid JSON. Exception: {e}"
+            ) from e
+
+        for key in json_credentials.keys():
+            if key not in SERVICE_ACCOUNT_JSON_ALLOWED_KEYS:
+                raise ConfigurableFieldValueError(
+                    f"Google Drive service account JSON contains an unexpected key: '{key}'. Allowed keys are: {SERVICE_ACCOUNT_JSON_ALLOWED_KEYS}"
+                )
+
     async def ping(self):
         """""Verify the connection with Google Drive""" ""
         try:
@@ -237,21 +278,6 @@ class GoogleDriveDataSource(BaseDataSource):
         except Exception:
             self._logger.exception("Error while connecting to the Google Drive.")
             raise
-
-    async def validate_config(self):
-        """Validates whether user inputs are valid or not for configuration field.
-
-        Raises:
-            Exception: The format of service account json is invalid.
-        """
-        self.configuration.check_valid()
-
-        try:
-            json.loads(self.configuration["service_account_credentials"])
-        except ValueError as e:
-            raise ConfigurableFieldValueError(
-                f"Google Drive service account is not a valid JSON. Exception: {e}"
-            ) from e
 
     async def get_drives(self):
         """Fetch all shared drive (id, name) from Google Drive
