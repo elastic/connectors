@@ -126,6 +126,7 @@ def mock_connector(
     connector.validate_filtering = AsyncMock()
     connector.next_sync = Mock(return_value=next_sync)
 
+    connector.close = AsyncMock()
     connector.prepare = AsyncMock(side_effect=prepare_exception)
     connector.heartbeat = AsyncMock()
     connector.reload = AsyncMock()
@@ -155,6 +156,7 @@ async def test_connector_ready_to_sync(
 
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
+    connector.close.assert_awaited()
     connector.update_last_sync_scheduled_at_by_job_type.assert_awaited()
 
     for job_type in JOB_TYPES:
