@@ -110,7 +110,7 @@ End-to-end testing is not available for this connector in this version.
 
 ## Known issues
 
-- There is a known issue where metadata updates to Paper files are not immediately reflected in the Dropbox UI, which delays the availability of updated results for the connector. Once the metadata changes are visible in the Dropbox UI, the updates are available.
+- There is an issue where metadata updates to Paper files from Dropbox Paper application are not immediately reflected in the Dropbox UI, which delays the availability of updated results for the connector. Once the metadata changes are visible in the Dropbox UI, the updates are available.
 
 Refer to [Known issues](https://www.elastic.co/guide/en/enterprise-search/master/connectors-known-issues.html) for a list of known issues for all connectors.
 
