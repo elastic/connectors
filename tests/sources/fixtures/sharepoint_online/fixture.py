@@ -5,79 +5,152 @@
 #
 """Module to handle api calls received from connector."""
 
+import random
+import string
+from faker import Faker
+import uuid
+
 from flask import Flask, escape, request
 
 app = Flask(__name__)
 
+seed = 1597463007
 
-@app.route("/<string:tenant_id>/oauth2/v2.0/token", methods=["POST"])
-def get_graph_token(tenant_id):
-    return {"access_token": f"fake-graph-api-token-{tenant_id}", "expires_in": 3699}
+TOKEN_EXPIRATION_TIMEOUT = 3699  # seconds
 
+ROOT = "http://127.0.0.1:10337"
+TENANT = "functionaltest.sharepoint.fake"
 
-@app.route("/<string:tenant_id>/tokens/OAuth/2", methods=["POST"])
-def get_rest_token(tenant_id):
-    return {"access_token": f"fake-rest-api-token-{tenant_id}", "expires_in": 3699}
-
-
-@app.route("/common/userrealm/", methods=["GET"])
-def get_tenant():
-    return {
-        "NameSpaceType": "Managed",
-        "Login": "cj@something.onmicrosoft.com",
-        "DomainName": "something.onmicrosoft.com",
-        "FederationBrandName": "Elastic",
-        "TenantBrandingInfo": None,
-        "cloud_instance_name": "microsoftonline.com",
-    }
+random.seed(seed)
+fake = Faker()
+fake.seed_instance(seed)
 
 
-@app.route("/sites/", methods=["GET"])
-def get_site_collections():
-    return {
-        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites(siteCollection,webUrl)",
-        "value": [
-            {
-                "webUrl": "https://enterprisesearch.sharepoint.com/",
+NUMBER_OF_SITES = 40
+NUMBER_OF_DRIVE_ITEMS = 2000
+
+
+small_text = fake.text(max_nb_chars=500)
+medium_text = fake.text(max_nb_chars=2000)
+large_text = fake.text(max_nb_chars=50000)
+
+small_text_bytesize = len(small_text.encode('utf-8'))
+medium_text_bytesize = len(medium_text.encode('utf-8'))
+large_text_bytesize = len(large_text.encode('utf-8'))
+
+class RandomDataStorage:
+    """
+    RandomDataStorage class is responsible for generation of the
+    tree of data for Sharepoint Online.
+
+    When instantiated with a seed, this seed will be used to generate objects.
+
+    As soon as any object is requested or `generate` method is called, data is
+    generated.
+
+    Only data that is important for testing is generated - ids, types of files,
+    binary file content, timestamps, etc.
+
+    """
+
+    def __init__(self):
+        self.tenants = []
+        self.sites = []
+        self.sites_by_site_id = {}
+        self.sites_by_drive_id = {}
+        self.site_drives = {}
+        self.drive_items = {}
+        self.drive_item_content = {}
+
+    def generate(self):
+        self.tenants = [TENANT]
+
+        for i in range(NUMBER_OF_SITES):
+            site = {
+                "id": str(uuid.uuid4()),
+                "name": fake.company(),
+                "description": fake.paragraph()
+            }
+
+            self.sites.append(site)
+            self.sites_by_site_id[site["id"]] = site
+
+            drive = {
+                "id": str(uuid.uuid4()),
+                "description": fake.paragraph()
+            }
+
+            self.sites_by_drive_id[drive["id"]] = site
+            self.site_drives[site["id"]] = [ drive ]
+            self.drive_items[drive["id"]] = []
+
+            for j in range(NUMBER_OF_DRIVE_ITEMS):
+                drive_item = {
+                    "id": self.generate_sharepoint_id(),
+                }
+
+                if j % 20:
+                    drive_item["folder"] = True
+                    drive_item["name"] = fake.word()
+                else:
+                    drive_item["folder"] = False
+                    drive_item["name"] = fake.file_name(extension='txt')
+
+                    if j % 5: # 3/20 = 15% items
+                        self.drive_item_content[drive_item["id"]] = medium_text
+                        drive_item["size"] = medium_text_bytesize
+                    elif j % 17: # 1/20 = 5% items
+                        self.drive_item_content[drive_item["id"]] = large_text
+                        drive_item["size"] = large_text_bytesize
+                    else:
+                        self.drive_item_content[drive_item["id"]] = small_text
+                        drive_item["size"] = small_text_bytesize
+
+                self.drive_items[drive["id"]].append(drive_item)
+
+    def get_site_collections(self):
+        results = []
+
+        for tenant in self.tenants:
+            results.append({
+                "webUrl": f"https://{tenant}/",
                 "siteCollection": {
-                    "hostname": "enterprisesearch.sharepoint.com",
+                    "hostname": tenant,
                     "root": {},
                 },
-            }
-        ],
-    }
+            })
 
+        return results
 
-@app.route("/sites/<string:site_id>/sites", methods=["GET"])
-def get_sites(site_id):
-    return {
-        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites",
-        "value": [
-            {
+    def get_sites(self, skip=0, take=10):
+        results = []
+
+        for site in self.sites[skip:][:take]:
+            results.append({
+                "id": site["id"],
+                "name": site["name"],
+                "displayName": site["name"],
+                "description": site["description"],
+                "webUrl": f"{ROOT}/sites/{site['name']}",
                 "createdDateTime": "2023-05-31T16:08:46Z",
-                "description": "It's a private one",
-                "id": "enterprisesearch.sharepoint.com,792c7c37-803b-47af-88c2-88d8707aab65,e6ead828-d7a5-4c72-b8e7-0687c6a078e7",
                 "lastModifiedDateTime": "2023-05-31T16:08:48Z",
-                "name": "PrivateSubsite",
-                "webUrl": "http://localhost:10337/sites/ArtemsSiteForTesting",
-                "displayName": "Private Subsite",
-            }
-        ],
-    }
+            })
 
+        return results
 
-@app.route("/sites/<string:site_id>/drives", methods=["GET"])
-def get_site_drives(site_id):
-    return {
-        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#drives",
-        "value": [
-            {
-                "createdDateTime": "2023-05-31T16:08:47Z",
-                "description": "",
-                "id": "b!N3wseTuAr0eIwojYcHqrZSjY6ual13JMuOcGh8ageOexVaqPcFq1R7TWeUCQv6dv",
-                "lastModifiedDateTime": "2023-05-31T16:08:47Z",
+    def get_site_drives(self, site_id):
+        results = []
+
+        site = self.sites_by_site_id[site_id]
+
+        for drive in self.site_drives[site_id]:
+            results.append({
+                "id": drive["id"],
                 "name": "Documents",
-                "webUrl": "http://localhost:10337/sites/ArtemsSiteForTesting/Shared Documents",
+                "description": drive["description"],
+                "webUrl": f"{ROOT}/sites/{site['name']}/Shared Documents",
+                "createdDateTime": "2023-05-31T16:08:47Z",
+                "lastModifiedDateTime": "2023-05-31T16:08:47Z",
                 "driveType": "documentLibrary",
                 "createdBy": {
                     "user": {
@@ -100,39 +173,137 @@ def get_site_drives(site_id):
                     "total": 27487790694400,
                     "used": 0,
                 },
+            })
+
+        return results
+
+    def generate_sharepoint_id(self):
+        return ''.join(random.choices(string.ascii_uppercase + string.digits, k=32))
+
+    def get_drive_items(self, drive_id, skip=0, take=100):
+        results = []
+
+        site = self.sites_by_drive_id[drive_id]
+
+        for item in self.drive_items[drive_id]:
+            drive_item = {
+                "id": item["id"],
+                "name": item["name"],
+                "webUrl": f"{ROOT}/sites/{site['name']}/Shared Documents",
+                "createdDateTime": "2023-05-21T05:23:51Z",
+                "lastModifiedDateTime": "2023-05-21T05:23:51Z",
+                "parentReference": {"driveType": "documentLibrary", "driveId": drive_id},
+                "fileSystemInfo": {
+                    "createdDateTime": "2023-05-21T05:23:51Z",
+                    "lastModifiedDateTime": "2023-05-21T05:23:51Z",
+                }
             }
-        ],
+
+            if item["folder"]:
+                drive_item["folder"] = {"childCount": 0}
+                drive_item["size"] = 0
+            else:
+                drive_item["size"] = item["size"]
+                drive_item["@microsoft.graph.downloadUrl"] = f"{ROOT}/drives/{drive_id}/items/{item['id']}/content"
+
+            results.append(drive_item)
+
+        return results
+
+    def get_drive_item_content(self, drive_item_id):
+        return self.drive_item_content[drive_item_id]
+
+
+data_storage = RandomDataStorage()
+data_storage.generate()
+
+
+@app.route("/<string:tenant_id>/oauth2/v2.0/token", methods=["POST"])
+def get_graph_token(tenant_id):
+    return {
+        "access_token": f"fake-graph-api-token-{tenant_id}",
+        "expires_in": TOKEN_EXPIRATION_TIMEOUT,
     }
 
 
-@app.route("/drives/<string:drive_id>/root", methods=["GET"])
-def get_drive_root(drive_id):
+@app.route("/<string:tenant_id>/tokens/OAuth/2", methods=["POST"])
+def get_rest_token(tenant_id):
     return {
+        "access_token": f"fake-rest-api-token-{tenant_id}",
+        "expires_in": TOKEN_EXPIRATION_TIMEOUT,
+    }
+
+
+@app.route("/common/userrealm/", methods=["GET"])
+def get_tenant():
+    return {
+        "NameSpaceType": "Managed",
+        "Login": "cj@something.onmicrosoft.com",
+        "DomainName": "something.onmicrosoft.com",
+        "FederationBrandName": "Elastic",
+        "TenantBrandingInfo": None,
+        "cloud_instance_name": "microsoftonline.com",
+    }
+
+
+@app.route("/sites/", methods=["GET"])
+def get_site_collections():
+    # No paging as there's always one site collection
+    return {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites(siteCollection,webUrl)",
+        "value": data_storage.get_site_collections(),
+    }
+
+
+@app.route("/sites/<string:site_id>/sites", methods=["GET"])
+def get_sites(site_id):
+    # Sharepoint Online does not use skip/take, but we do it here just for lazy implementation
+    skip = int(request.args.get("$skip", 0))
+    take = int(request.args.get("$take", 10))
+
+    sites = data_storage.get_sites(skip, take)
+
+    response = {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites",
+        "value": sites,
+    }
+
+    if len(sites) == take:
+        response["@odata.nextLink"] = f"{ROOT}/sites/site_id/sites?$skip={skip+take}&$take={take}"
+
+    return response
+
+
+@app.route("/sites/<string:site_id>/drives", methods=["GET"])
+def get_site_drives(site_id):
+    return {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#drives",
+        "value": data_storage.get_site_drives(site_id),
+    }
+
+
+@app.route("/drives/<string:drive_id>/root/delta", methods=["GET"])
+def get_drive_root_delta(drive_id):
+    skip = int(request.args.get("$skip", 0))
+    take = int(request.args.get("$take", 100))
+
+    drive_items = data_storage.get_drive_items(drive_id, skip, take)
+    response = {
         "@odata.context": f"https://graph.microsoft.com/v1.0/$metadata#drives('{drive_id}')/root/$entity",
-        "createdDateTime": "2023-05-21T05:23:51Z",
-        "id": "01WDQZWT56Y2GOVW7725BZO354PWSELRRZ",
-        "lastModifiedDateTime": "2023-05-21T05:23:51Z",
-        "name": "root",
-        "webUrl": "http://localhost:10337/sites/PrivateSpace/Shared Documents",
-        "size": 0,
-        "parentReference": {"driveType": "documentLibrary", "driveId": drive_id},
-        "fileSystemInfo": {
-            "createdDateTime": "2023-05-21T05:23:51Z",
-            "lastModifiedDateTime": "2023-05-21T05:23:51Z",
-        },
-        "folder": {"childCount": 0},
-        "root": {},
+        "value": drive_items
     }
 
+    if len(drive_items) == take:
+        response["@odata.nextLink"] = f"{ROOT}/drives/{drive_id}/root/deltroot/delta?$skip={skip+take}&$take={take}"
 
-@app.route(
-    "/drives/<string:drive_id>/items/<string:drive_item_id>/children", methods=["GET"]
-)
-def get_drive_item_children(drive_id, drive_item_id):
-    return {
-        "@odata.context": f"https://graph.microsoft.com/v1.0/$metadata#drives('{drive_id}')/items('{drive_item_id}')/children",
-        "value": [],
-    }
+    return response
+
+
+@app.route("/drives/<string:drive_id>/items/<string:item_id>/content", methods=["GET"])
+def download_drive_item(drive_id, item_id):
+    content = data_storage.get_drive_item_content(item_id)
+
+    return content.encode("utf-8")
 
 
 @app.route("/sites/<string:site_id>/lists", methods=["GET"])
