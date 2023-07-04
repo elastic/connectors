@@ -1815,7 +1815,14 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_validate_config(self, patch_sharepoint_client):
-        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
+        source = create_source(
+            SharepointOnlineDataSource,
+            tenant_id="1",
+            tenant_name="test",
+            client_id="2",
+            secret_value="3",
+            site_collections=WILDCARD,
+        )
 
         await source.validate_config()
 
@@ -1831,7 +1838,10 @@ class TestSharepointOnlineDataSource:
 
         source = create_source(
             SharepointOnlineDataSource,
+            tenant_id="1",
             tenant_name=invalid_tenant_name,
+            client_id="2",
+            secret_value="3",
             site_collections=WILDCARD,
         )
         patch_sharepoint_client.tenant_details.return_value = {
@@ -1852,6 +1862,10 @@ class TestSharepointOnlineDataSource:
 
         source = create_source(
             SharepointOnlineDataSource,
+            tenant_id="1",
+            tenant_name="test",
+            client_id="2",
+            secret_value="3",
             site_collections=[non_existing_site, another_non_existing_site],
         )
 
