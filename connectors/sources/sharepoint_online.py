@@ -946,6 +946,8 @@ class SharepointOnlineDataSource(BaseDataSource):
         }
 
     async def validate_config(self):
+        self.configuration.check_valid()
+
         # Check that we can log in into Graph API
         await self.client.graph_api_token.get()
 
