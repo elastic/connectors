@@ -7,10 +7,11 @@
 
 import random
 import string
-from faker import Faker
 import uuid
 
+from faker import Faker
 from flask import Flask, escape, request
+from yattag import Doc
 
 app = Flask(__name__)
 
@@ -26,17 +27,29 @@ fake = Faker()
 fake.seed_instance(seed)
 
 
-NUMBER_OF_SITES = 40
-NUMBER_OF_DRIVE_ITEMS = 2000
+NUMBER_OF_SITES = 4
+NUMBER_OF_DRIVE_ITEMS = 200
+NUMBER_OF_PAGES = 20
 
 
-small_text = fake.text(max_nb_chars=500)
-medium_text = fake.text(max_nb_chars=2000)
-large_text = fake.text(max_nb_chars=50000)
+small_text = fake.text(max_nb_chars=5000)
+medium_text = fake.text(max_nb_chars=20000)
+large_text = fake.text(max_nb_chars=100000)
 
-small_text_bytesize = len(small_text.encode('utf-8'))
-medium_text_bytesize = len(medium_text.encode('utf-8'))
-large_text_bytesize = len(large_text.encode('utf-8'))
+small_text_bytesize = len(small_text.encode("utf-8"))
+medium_text_bytesize = len(medium_text.encode("utf-8"))
+large_text_bytesize = len(large_text.encode("utf-8"))
+
+
+class AutoIncrement:
+    def __init__(self):
+        self.val = 1
+
+    def get(self):
+        value = self.val
+        self.val += 1
+        return value
+
 
 class RandomDataStorage:
     """
@@ -54,34 +67,37 @@ class RandomDataStorage:
     """
 
     def __init__(self):
+        self.autoinc = AutoIncrement()
+
         self.tenants = []
         self.sites = []
         self.sites_by_site_id = {}
         self.sites_by_drive_id = {}
+        self.sites_by_site_name = {}
         self.site_drives = {}
         self.drive_items = {}
         self.drive_item_content = {}
+        self.site_pages = {}
 
     def generate(self):
         self.tenants = [TENANT]
 
         for i in range(NUMBER_OF_SITES):
             site = {
-                "id": str(uuid.uuid4()),
+                "id": str(fake.uuid4()),
                 "name": fake.company(),
-                "description": fake.paragraph()
+                "description": fake.paragraph(),
             }
 
             self.sites.append(site)
             self.sites_by_site_id[site["id"]] = site
+            self.sites_by_site_name[site["name"]] = site
 
-            drive = {
-                "id": str(uuid.uuid4()),
-                "description": fake.paragraph()
-            }
+            drive = {"id": str(fake.uuid4()), "description": fake.paragraph()}
 
             self.sites_by_drive_id[drive["id"]] = site
-            self.site_drives[site["id"]] = [ drive ]
+            self.site_drives[site["id"]] = [drive]
+            self.site_pages[site["id"]] = []
             self.drive_items[drive["id"]] = []
 
             for j in range(NUMBER_OF_DRIVE_ITEMS):
@@ -89,17 +105,17 @@ class RandomDataStorage:
                     "id": self.generate_sharepoint_id(),
                 }
 
-                if j % 20:
+                if j % 20 == 0:
                     drive_item["folder"] = True
                     drive_item["name"] = fake.word()
                 else:
                     drive_item["folder"] = False
-                    drive_item["name"] = fake.file_name(extension='txt')
+                    drive_item["name"] = fake.file_name(extension="txt")
 
-                    if j % 5: # 3/20 = 15% items
+                    if j % 5 == 0:  # 3/20 = 15% items
                         self.drive_item_content[drive_item["id"]] = medium_text
                         drive_item["size"] = medium_text_bytesize
-                    elif j % 17: # 1/20 = 5% items
+                    elif j % 17 == 0:  # 1/20 = 5% items
                         self.drive_item_content[drive_item["id"]] = large_text
                         drive_item["size"] = large_text_bytesize
                     else:
@@ -108,17 +124,51 @@ class RandomDataStorage:
 
                 self.drive_items[drive["id"]].append(drive_item)
 
+            for k in range(NUMBER_OF_PAGES):
+                doc, tag, text = Doc().tagtext()
+
+                with tag("html"):
+                    with tag("body", id="hello"):
+                        with tag("h1"):
+                            text(fake.word())
+                        with tag("p"):
+                            text(fake.paragraph())
+                        with tag("p"):
+                            text(fake.paragraph())
+                        with tag("ul"):
+                            with tag("li"):
+                                text(fake.word())
+                            with tag("li"):
+                                text(fake.word())
+                            with tag("li"):
+                                text(fake.word())
+                            doc.stag(
+                                "img",
+                                src=fake.pystr(min_chars=65536, max_chars=65536 << 1),
+                            )  # just fake invalid image as if it was base64-encoded png, purely to fill-in some data
+
+                page = {
+                    "id": self.autoinc.get(),
+                    "odata.id": str(fake.uuid4()),
+                    "guid": str(fake.uuid4()),
+                    "content": doc.getvalue(),
+                }
+
+                self.site_pages[site["id"]].append(page)
+
     def get_site_collections(self):
         results = []
 
         for tenant in self.tenants:
-            results.append({
-                "webUrl": f"https://{tenant}/",
-                "siteCollection": {
-                    "hostname": tenant,
-                    "root": {},
-                },
-            })
+            results.append(
+                {
+                    "webUrl": f"https://{tenant}/",
+                    "siteCollection": {
+                        "hostname": tenant,
+                        "root": {},
+                    },
+                }
+            )
 
         return results
 
@@ -126,15 +176,17 @@ class RandomDataStorage:
         results = []
 
         for site in self.sites[skip:][:take]:
-            results.append({
-                "id": site["id"],
-                "name": site["name"],
-                "displayName": site["name"],
-                "description": site["description"],
-                "webUrl": f"{ROOT}/sites/{site['name']}",
-                "createdDateTime": "2023-05-31T16:08:46Z",
-                "lastModifiedDateTime": "2023-05-31T16:08:48Z",
-            })
+            results.append(
+                {
+                    "id": site["id"],
+                    "name": site["name"],
+                    "displayName": site["name"],
+                    "description": site["description"],
+                    "webUrl": f"{ROOT}/sites/{site['name']}",
+                    "createdDateTime": "2023-05-31T16:08:46Z",
+                    "lastModifiedDateTime": "2023-05-31T16:08:48Z",
+                }
+            )
 
         return results
 
@@ -144,59 +196,116 @@ class RandomDataStorage:
         site = self.sites_by_site_id[site_id]
 
         for drive in self.site_drives[site_id]:
-            results.append({
-                "id": drive["id"],
-                "name": "Documents",
-                "description": drive["description"],
-                "webUrl": f"{ROOT}/sites/{site['name']}/Shared Documents",
-                "createdDateTime": "2023-05-31T16:08:47Z",
-                "lastModifiedDateTime": "2023-05-31T16:08:47Z",
-                "driveType": "documentLibrary",
-                "createdBy": {
-                    "user": {
-                        "email": "demo@enterprisesearch.onmicrosoft.com",
-                        "id": "baa37bda-0dd1-4799-ae22-f3476c2cf58d",
-                        "displayName": "Enterprise Search",
-                    }
-                },
-                "owner": {
-                    "user": {
-                        "email": "demo@enterprisesearch.onmicrosoft.com",
-                        "id": "baa37bda-0dd1-4799-ae22-f3476c2cf58d",
-                        "displayName": "Enterprise Search",
-                    }
-                },
-                "quota": {
-                    "deleted": 79501,
-                    "remaining": 27487790614899,
-                    "state": "normal",
-                    "total": 27487790694400,
-                    "used": 0,
-                },
-            })
+            results.append(
+                {
+                    "id": drive["id"],
+                    "name": "Documents",
+                    "description": drive["description"],
+                    "webUrl": f"{ROOT}/sites/{site['name']}/Shared Documents",
+                    "createdDateTime": "2023-05-31T16:08:47Z",
+                    "lastModifiedDateTime": "2023-05-31T16:08:47Z",
+                    "driveType": "documentLibrary",
+                    "createdBy": {
+                        "user": {
+                            "email": "demo@enterprisesearch.onmicrosoft.com",
+                            "id": "baa37bda-0dd1-4799-ae22-f3476c2cf58d",
+                            "displayName": "Enterprise Search",
+                        }
+                    },
+                    "owner": {
+                        "user": {
+                            "email": "demo@enterprisesearch.onmicrosoft.com",
+                            "id": "baa37bda-0dd1-4799-ae22-f3476c2cf58d",
+                            "displayName": "Enterprise Search",
+                        }
+                    },
+                    "quota": {
+                        "deleted": 79501,
+                        "remaining": 27487790614899,
+                        "state": "normal",
+                        "total": 27487790694400,
+                        "used": 0,
+                    },
+                }
+            )
+
+        return results
+
+    def get_site_pages(self, site_name, skip=0, take=10):
+        results = []
+
+        site = self.sites_by_site_name[site_name]
+        site_id = site["id"]
+
+        for site_page in self.site_pages[site_id][skip:][:take]:
+            results.append(
+                {
+                    "odata.type": "SP.Data.SitePagesItem",
+                    "odata.id": site_page["odata.id"],
+                    "odata.etag": '"3"',
+                    "odata.editLink": "Web/Lists(guid'0deb180c-9812-4ec6-b652-cd80214bb257')/Items(1)",
+                    "FileSystemObjectType": 0,
+                    "Id": site_page["id"],
+                    "ServerRedirectedEmbedUri": None,
+                    "ServerRedirectedEmbedUrl": "",
+                    "ContentTypeId": "0x0101009D1CB255DA76424F860D91F20E6C411800534CF5870D924347B78CC6E21791F9E2",
+                    "OData__ColorTag": None,
+                    "ComplianceAssetId": None,
+                    "WikiField": None,
+                    "Title": "Home",
+                    "CanvasContent1": site_page["content"],
+                    "BannerImageUrl": None,
+                    "Description": None,
+                    "PromotedState": 0.0,
+                    "FirstPublishedDate": None,
+                    "LayoutWebpartsContent": None,
+                    "OData__AuthorBylineId": None,
+                    "_AuthorBylineStringId": None,
+                    "OData__TopicHeader": None,
+                    "OData__SPSitePageFlags": None,
+                    "OData__SPCallToAction": None,
+                    "OData__OriginalSourceUrl": None,
+                    "OData__OriginalSourceSiteId": None,
+                    "OData__OriginalSourceWebId": None,
+                    "OData__OriginalSourceListId": None,
+                    "OData__OriginalSourceItemId": None,
+                    "ID": 1,
+                    "Created": "2023-05-31T16:08:48Z",
+                    "AuthorId": 6,
+                    "Modified": "2023-05-31T16:08:48Z",
+                    "EditorId": 6,
+                    "OData__CopySource": None,
+                    "CheckoutUserId": None,
+                    "OData__UIVersionString": "1.0",
+                    "GUID": site_page["guid"],
+                }
+            )
 
         return results
 
     def generate_sharepoint_id(self):
-        return ''.join(random.choices(string.ascii_uppercase + string.digits, k=32))
+        return "".join(random.choices(string.ascii_uppercase + string.digits, k=32))
 
     def get_drive_items(self, drive_id, skip=0, take=100):
         results = []
 
         site = self.sites_by_drive_id[drive_id]
 
-        for item in self.drive_items[drive_id]:
+        for item in self.drive_items[drive_id][skip:][:take]:
             drive_item = {
                 "id": item["id"],
                 "name": item["name"],
                 "webUrl": f"{ROOT}/sites/{site['name']}/Shared Documents",
                 "createdDateTime": "2023-05-21T05:23:51Z",
                 "lastModifiedDateTime": "2023-05-21T05:23:51Z",
-                "parentReference": {"driveType": "documentLibrary", "driveId": drive_id},
+                "parentReference": {
+                    "driveType": "documentLibrary",
+                    "driveId": drive_id,
+                },
                 "fileSystemInfo": {
                     "createdDateTime": "2023-05-21T05:23:51Z",
                     "lastModifiedDateTime": "2023-05-21T05:23:51Z",
-                }
+                },
             }
 
             if item["folder"]:
@@ -204,7 +313,9 @@ class RandomDataStorage:
                 drive_item["size"] = 0
             else:
                 drive_item["size"] = item["size"]
-                drive_item["@microsoft.graph.downloadUrl"] = f"{ROOT}/drives/{drive_id}/items/{item['id']}/content"
+                drive_item[
+                    "@microsoft.graph.downloadUrl"
+                ] = f"{ROOT}/drives/{drive_id}/items/{item['id']}/content"
 
             results.append(drive_item)
 
@@ -269,7 +380,9 @@ def get_sites(site_id):
     }
 
     if len(sites) == take:
-        response["@odata.nextLink"] = f"{ROOT}/sites/site_id/sites?$skip={skip+take}&$take={take}"
+        response[
+            "@odata.nextLink"
+        ] = f"{ROOT}/sites/site_id/sites?$skip={skip+take}&$take={take}"
 
     return response
 
@@ -290,11 +403,13 @@ def get_drive_root_delta(drive_id):
     drive_items = data_storage.get_drive_items(drive_id, skip, take)
     response = {
         "@odata.context": f"https://graph.microsoft.com/v1.0/$metadata#drives('{drive_id}')/root/$entity",
-        "value": drive_items
+        "value": drive_items,
     }
 
     if len(drive_items) == take:
-        response["@odata.nextLink"] = f"{ROOT}/drives/{drive_id}/root/deltroot/delta?$skip={skip+take}&$take={take}"
+        response[
+            "@odata.nextLink"
+        ] = f"{ROOT}/drives/{drive_id}/root/delta?$skip={skip+take}&$take={take}"
 
     return response
 
@@ -461,51 +576,14 @@ def get_list_item_attachments(site_name, list_title, list_item_id):
 
 
 @app.route("/sites/<string:site_name>/_api/web/lists/GetByTitle('Site Pages')/items")
-def get_list_item_pages(site_name):
+def get_site_pages(site_name):
+    skip = int(request.args.get("$skip", 0))
+    take = int(request.args.get("$take", 100))
+
+    site_pages = data_storage.get_site_pages(site_name, skip, take)
     return {
         "odata.metadata": "https://enterprisesearch.sharepoint.com/sites/ArtemsSiteForTesting/_api/$metadata#SP.ListData.SitePagesItems",
-        "value": [
-            {
-                "odata.type": "SP.Data.SitePagesItem",
-                "odata.id": "c1393c35-8dd0-4440-9563-ac8e4d277227",
-                "odata.etag": '"3"',
-                "odata.editLink": "Web/Lists(guid'0deb180c-9812-4ec6-b652-cd80214bb257')/Items(1)",
-                "FileSystemObjectType": 0,
-                "Id": 1,
-                "ServerRedirectedEmbedUri": None,
-                "ServerRedirectedEmbedUrl": "",
-                "ContentTypeId": "0x0101009D1CB255DA76424F860D91F20E6C411800534CF5870D924347B78CC6E21791F9E2",
-                "OData__ColorTag": None,
-                "ComplianceAssetId": None,
-                "WikiField": None,
-                "Title": "Home",
-                "CanvasContent1": None,
-                "BannerImageUrl": None,
-                "Description": None,
-                "PromotedState": 0.0,
-                "FirstPublishedDate": None,
-                "LayoutWebpartsContent": None,
-                "OData__AuthorBylineId": None,
-                "_AuthorBylineStringId": None,
-                "OData__TopicHeader": None,
-                "OData__SPSitePageFlags": None,
-                "OData__SPCallToAction": None,
-                "OData__OriginalSourceUrl": None,
-                "OData__OriginalSourceSiteId": None,
-                "OData__OriginalSourceWebId": None,
-                "OData__OriginalSourceListId": None,
-                "OData__OriginalSourceItemId": None,
-                "ID": 1,
-                "Created": "2023-05-31T16:08:48Z",
-                "AuthorId": 6,
-                "Modified": "2023-05-31T16:08:48Z",
-                "EditorId": 6,
-                "OData__CopySource": None,
-                "CheckoutUserId": None,
-                "OData__UIVersionString": "1.0",
-                "GUID": "ed7424f3-23d0-4c4a-926a-def0f36c7e4a",
-            }
-        ],
+        "value": site_pages,
     }
 
 
