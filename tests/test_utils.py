@@ -498,7 +498,7 @@ Certificate2
     formated_certificate = get_pem_format(key=certificate, max_split=1)
     assert formated_certificate == expected_formated_certificate
 
-        # Setup
+    # Setup
     expected_formated_multi_certificate = """-----BEGIN CERTIFICATE-----
 Certificate1
 -----END CERTIFICATE-----

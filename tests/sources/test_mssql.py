@@ -104,4 +104,3 @@ async def test_close():
     source = create_source(MSSQLDataSource)
     source.create_pem_file()
     await source.close()
-
