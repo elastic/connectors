@@ -17,7 +17,6 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from io import BytesIO
 
 import aiofiles
 import aiohttp
@@ -776,7 +775,7 @@ class ExtractionService:
             return await self.parse_extraction_resp(filename, response)
 
     async def file_sender(self, filepath):
-        async with aiofiles.open(filepath, 'rb') as f:
+        async with aiofiles.open(filepath, "rb") as f:
             chunk = await f.read(64 * 1024)
             while chunk:
                 yield chunk

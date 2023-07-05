@@ -634,7 +634,7 @@ class TestExtractionService:
             "connectors.utils.ExtractionService.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ):
-            mock_responses.post(url, status=200, payload=payload)
+            mock_responses.put(url, status=200, payload=payload)
 
             extraction_service = ExtractionService()
             extraction_service._begin_session()
@@ -655,7 +655,10 @@ class TestExtractionService:
             "connectors.utils.ExtractionService.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ):
-            mock_responses.post(url, status=400, payload={})
+            mock_responses.put(url, status=422, payload={
+                "error": "Unprocessable Entity",
+                "message": "Could not process file."
+            })
 
             extraction_service = ExtractionService()
             extraction_service._begin_session()
@@ -665,7 +668,7 @@ class TestExtractionService:
             assert response == ""
 
             patch_logger.assert_present(
-                "Extraction service could not parse `notreal.txt'. Status: [400]."
+                "Extraction service could not parse `notreal.txt'. Status: [422]; Unprocessable Entity: Could not process file."
             )
 
     @pytest.mark.asyncio
@@ -679,7 +682,7 @@ class TestExtractionService:
             "connectors.utils.ExtractionService.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ):
-            mock_responses.post(
+            mock_responses.put(
                 url,
                 status=200,
                 payload={"error": "oh no!", "message": "I'm all messed up..."},
@@ -693,5 +696,5 @@ class TestExtractionService:
             assert response == ""
 
             patch_logger.assert_present(
-                "Extraction service could not parse `notreal.txt'; oh no!: I'm all messed up..."
+                "Extraction service could not parse `notreal.txt'. Status: [200]; oh no!: I'm all messed up..."
             )
