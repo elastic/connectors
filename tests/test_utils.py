@@ -655,10 +655,14 @@ class TestExtractionService:
             "connectors.utils.ExtractionService.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ):
-            mock_responses.put(url, status=422, payload={
-                "error": "Unprocessable Entity",
-                "message": "Could not process file."
-            })
+            mock_responses.put(
+                url,
+                status=422,
+                payload={
+                    "error": "Unprocessable Entity",
+                    "message": "Could not process file.",
+                },
+            )
 
             extraction_service = ExtractionService()
             extraction_service._begin_session()
