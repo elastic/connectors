@@ -694,7 +694,7 @@ class ExtractionService:
         if self.extraction_config is not None:
             self.host = self.extraction_config.get("host", None)
             self.timeout = self.extraction_config.get("timeout", 30)
-            self.chunk_size = self.extraction_config.get("stream_chunk_size", 65535)
+            self.chunk_size = self.extraction_config.get("stream_chunk_size", 65536)
         else:
             self.host = None
 
