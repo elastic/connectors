@@ -13,6 +13,7 @@ from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
+from aiogoogle.sessions.aiohttp_session import AiohttpSession
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
@@ -50,6 +51,23 @@ GOOGLE_DRIVE_EMULATOR_HOST = os.environ.get("GOOGLE_DRIVE_EMULATOR_HOST")
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
+
+
+class RetryableAiohttpSession(AiohttpSession):
+    """A modified version of AiohttpSession from the aiogoogle library:
+    (https://github.com/omarryhan/aiogoogle/blob/master/aiogoogle/sessions/aiohttp_session.py)
+
+    The low-level send() method is wrapped with @retryable decorator that allows for retries
+    with exponential backoff before failing the request.
+    """
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def send(self, *args, **kwargs):
+        return await super().send(*args, **kwargs)
 
 
 class GoogleDriveClient:
@@ -128,11 +146,6 @@ class GoogleDriveClient:
 
         return await anext(self._execute_api_call(resource, method, _call_api, kwargs))
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
     async def _execute_api_call(self, resource, method, call_api_func, kwargs):
         """Execute the API call with common try/except logic.
 
@@ -150,7 +163,8 @@ class GoogleDriveClient:
         """
         try:
             async with Aiogoogle(
-                service_account_creds=self.service_account_credentials
+                service_account_creds=self.service_account_credentials,
+                session_factory=RetryableAiohttpSession,
             ) as google_client:
                 drive_client = await google_client.discover(
                     api_name="drive", api_version="v3"

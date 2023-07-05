@@ -6,6 +6,7 @@
 """Tests the Google Drive source class methods.
 """
 import asyncio
+import re
 from unittest import mock
 
 import pytest
@@ -14,7 +15,7 @@ from aiogoogle.auth.managers import ServiceAccountManager
 from aiogoogle.models import Request, Response
 
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
-from connectors.sources.google_drive import GoogleDriveDataSource
+from connectors.sources.google_drive import RETRIES, GoogleDriveDataSource
 
 SERVICE_ACCOUNT_CREDENTIALS = '{"project_id": "dummy123"}'
 API_NAME = "drive"
@@ -926,9 +927,9 @@ async def test_get_content_when_type_not_supported():
         assert content is None
 
 
-@mock.patch("connectors.utils.apply_retry_strategy", mock.AsyncMock())
 @pytest.mark.asyncio
-async def test_api_call_for_attribute_error():
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_api_call_for_attribute_error(mock_apply_retry_strategy):
     """Tests the api_call method when resource attribute is not present in the getattr."""
 
     # Setup
@@ -941,9 +942,9 @@ async def test_api_call_for_attribute_error():
         )
 
 
-@mock.patch("connectors.utils.apply_retry_strategy", mock.AsyncMock())
 @pytest.mark.asyncio
-async def test_api_call_http_error_retry():
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_api_call_http_error(mock_apply_retry_strategy):
     """Test handling retries for HTTPError exception in api_call() method."""
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -957,9 +958,9 @@ async def test_api_call_http_error_retry():
             await mocked_gd_object.ping()
 
 
-@mock.patch("connectors.utils.apply_retry_strategy", mock.AsyncMock())
 @pytest.mark.asyncio
-async def test_api_call_other_exception_retry():
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_api_call_other_exception(mock_apply_retry_strategy):
     """Test handling retries for generic Exception in api_call() method."""
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -969,3 +970,40 @@ async def test_api_call_other_exception_retry():
     ):
         with pytest.raises(Exception):
             await mocked_gd_object.ping()
+
+
+@pytest.mark.asyncio
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_api_call_ping_retries(mock_apply_retry_strategy, mock_responses):
+    """Test handling retries for generic Exception in api_call() method."""
+    # Setup
+    mocked_gd_object = get_google_drive_source_object()
+
+    mock_responses.get(url=re.compile(".*"), status=401)
+
+    with pytest.raises(Exception):
+        with mock.patch.object(ServiceAccountManager, "refresh"):
+            await mocked_gd_object.ping()
+
+    # Expect retry function to be triggered the expected number of retries,
+    # substract the first call
+    assert mock_apply_retry_strategy.call_count == RETRIES - 1
+
+
+@pytest.mark.asyncio
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_api_call_get_drives_retries(mock_apply_retry_strategy, mock_responses):
+    """Test handling retries for generic Exception in api_call() method."""
+    # Setup
+    mocked_gd_object = get_google_drive_source_object()
+
+    mock_responses.get(url=re.compile(".*"), status=401)
+
+    with pytest.raises(Exception):
+        with mock.patch.object(ServiceAccountManager, "refresh"):
+            async for _ in mocked_gd_object.get_drives():
+                continue
+
+    # Expect retry function to be triggered the expected number of retries,
+    # substract the first call
+    assert mock_apply_retry_strategy.call_count == RETRIES - 1
