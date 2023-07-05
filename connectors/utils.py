@@ -694,6 +694,7 @@ class ExtractionService:
         if self.extraction_config is not None:
             self.host = self.extraction_config.get("host", None)
             self.timeout = self.extraction_config.get("timeout", 30)
+            self.chunk_size = self.extraction_config.get("stream_chunk_size", 65535)
         else:
             self.host = None
 
@@ -776,10 +777,10 @@ class ExtractionService:
 
     async def file_sender(self, filepath):
         async with aiofiles.open(filepath, "rb") as f:
-            chunk = await f.read(64 * 1024)
+            chunk = await f.read(self.chunk_size)
             while chunk:
                 yield chunk
-                chunk = await f.read(64 * 1024)
+                chunk = await f.read(self.chunk_size)
 
     async def parse_extraction_resp(self, filename, response):
         """Parses the response from the tika-server and logs any extraction failures.
