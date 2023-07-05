@@ -1632,13 +1632,14 @@ class SharepointOnlineDataSource(BaseDataSource):
             async with NamedTemporaryFile(
                 mode="wb", delete=False, suffix=file_extension
             ) as async_buffer:
+                source_file_name = async_buffer.name
+
                 # download_func should always be a partial with async_buffer as last argument that is not filled by the caller!
                 # E.g. if download_func is download_drive_item(drive_id, item_id, async_buffer) then it
                 # should be passed as partial(download_drive_item, drive_id, item_id)
                 # This way async_buffer will be passed from here!!!
                 await download_func(async_buffer)
 
-                source_file_name = async_buffer.name
 
             if self.configuration["use_text_extraction_service"]:
                 body = ""
@@ -1657,7 +1658,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                     attachment = (await target_file.read()).strip()
         finally:
             if source_file_name:
-                await remove(source_file_name)
+                await remove(str(source_file_name))
 
         return attachment, body
 
