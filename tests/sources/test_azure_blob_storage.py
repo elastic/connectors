@@ -304,6 +304,49 @@ async def test_get_content():
 
 
 @pytest.mark.asyncio
+async def test_get_content_with_upper_extension():
+    """Test get_content method of AzureBlobStorageDataSource Class"""
+
+    # Setup
+    source = create_source(AzureBlobStorageDataSource)
+    source.connection_string = source._configure_connection_string()
+
+    class DownloadBlobMock:
+        """This class is used Mock object of download_blob"""
+
+        async def chunks(self):
+            """This Method is used to read content"""
+            yield b"Mock...."
+
+    mock_response = {
+        "type": "blob",
+        "id": "container1/blob1",
+        "_timestamp": "2022-04-21T12:12:30",
+        "created at": "2022-04-21T12:12:30",
+        "content type": "plain/text",
+        "container metadata": "{'key1': 'value1'}",
+        "metadata": "{'key1': 'value1', 'key2': 'value2'}",
+        "leasedata": "{'status': 'Locked', 'state': 'Leased', 'duration': 'Infinite'}",
+        "title": "blob1.TXT",
+        "tier": "private",
+        "size": 1000,
+        "container": "container1",
+    }
+    with patch.object(BlobClient, "download_blob", return_value=DownloadBlobMock()):
+        expected_output = {
+            "_id": "container1/blob1",
+            "_timestamp": "2022-04-21T12:12:30",
+            "_attachment": "TW9jay4uLi4=",
+        }
+
+        # Execute
+        actual_response = await source.get_content(mock_response, doit=True)
+
+        # Assert
+        assert actual_response == expected_output
+
+
+@pytest.mark.asyncio
 async def test_get_content_when_doit_false():
     """Test get_content method when doit is false."""
 

@@ -534,6 +534,29 @@ async def test_get_content():
 
 
 @pytest.mark.asyncio
+async def test_get_content_with_upper_extension():
+    """Tests the get content method."""
+    # Setup
+    source = create_source(JiraDataSource)
+
+    # Execute and Assert
+    with mock.patch("aiohttp.ClientSession.get", return_value=get_stream_reader()):
+        with mock.patch(
+            "aiohttp.StreamReader.iter_chunked",
+            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
+        ):
+            attachment = copy(EXPECTED_ATTACHMENT)
+            attachment["filename"] = "testfile.TXT"
+
+            response = await source.get_content(
+                issue_key="TP-1",
+                attachment=MOCK_ATTACHMENT[0],
+                doit=True,
+            )
+            assert response == EXPECTED_CONTENT
+
+
+@pytest.mark.asyncio
 async def test_get_content_when_filesize_is_large():
     """Tests the get content method for file size greater than max limit."""
     # Setup

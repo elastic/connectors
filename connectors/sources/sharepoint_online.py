@@ -1477,7 +1477,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         async for site_page in self.client.site_pages(url):
             site_page["_id"] = site_page[
                 "odata.id"
-            ]  # Apparantly site_page["GUID"] is not globally unique
+            ]  # Apparently site_page["GUID"] is not globally unique
             site_page["object_type"] = "site_page"
 
             for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:

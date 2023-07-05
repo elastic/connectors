@@ -434,6 +434,30 @@ async def test_fetch_attachment_content_with_doit():
 
 
 @pytest.mark.asyncio
+async def test_fetch_attachment_content_with_upper_extension():
+    source = create_source(ServiceNowDataSource)
+    source.servicenow_client._api_call = mock.AsyncMock(
+        return_value=MockResponse(res=b"Attachment Content", headers={})
+    )
+
+    response = await source.servicenow_client.fetch_attachment_content(
+        metadata={
+            "id": "id_1",
+            "_timestamp": "1212-12-12 12:12:12",
+            "file_name": "file_1.TXT",
+            "size_bytes": "2048",
+        },
+        doit=True,
+    )
+
+    assert response == {
+        "_id": "id_1",
+        "_timestamp": "1212-12-12 12:12:12",
+        "_attachment": "QXR0YWNobWVudCBDb250ZW50",
+    }
+
+
+@pytest.mark.asyncio
 async def test_fetch_attachment_content_without_doit():
     source = create_source(ServiceNowDataSource)
     source.servicenow_client._api_call = mock.AsyncMock(

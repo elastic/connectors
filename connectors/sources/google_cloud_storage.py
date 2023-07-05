@@ -366,7 +366,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             return
 
         blob_name = blob["name"]
-        if os.path.splitext(blob_name)[-1] not in TIKA_SUPPORTED_FILETYPES:
+        if (os.path.splitext(blob_name)[-1]).lower() not in TIKA_SUPPORTED_FILETYPES:
             self._logger.debug(f"{blob_name} can't be extracted")
             return
 
