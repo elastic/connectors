@@ -9,7 +9,7 @@ import re
 from collections.abc import Iterable, Sized
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from functools import cached_property, partial
+from functools import partial
 
 import aiofiles
 import aiohttp
@@ -31,9 +31,12 @@ from connectors.utils import (
     ExtractionService,
     convert_to_b64,
     html_to_text,
+    iso_utc,
     retryable,
     url_encode,
 )
+
+TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 ACCESS_CONTROL = "_allow_access_control"
 
@@ -302,7 +305,7 @@ class MicrosoftAPISession:
             else:
                 break
 
-    async def scroll_url(self, url):
+    async def scroll_delta_url(self, url):
         scroll_url = url
 
         while True:
@@ -459,6 +462,45 @@ class SharepointOnlineClient:
         except NotFound:
             return
 
+    async def user_information_list(self, site_id):
+        expand = "fields"
+        url = f"{GRAPH_API_URL}/sites/{site_id}/lists/User Information List/items?expand={expand}"
+
+        try:
+            async for page in self._graph_api_client.scroll(url):
+                for user_information in page:
+                    yield user_information
+        except NotFound:
+            return
+
+    async def user(self, user_principal_name):
+        url = f"{GRAPH_API_URL}/users/{user_principal_name}"
+
+        try:
+            return await self._graph_api_client.fetch(url)
+        except NotFound:
+            return {}
+
+    async def group_members(self, group_id):
+        url = f"{GRAPH_API_URL}/groups/{group_id}/members"
+
+        try:
+            async for page in self._graph_api_client.scroll(url):
+                for member in page:
+                    yield member
+        except NotFound:
+            return
+
+    async def group_owners(self, group_id):
+        url = f"{GRAPH_API_URL}/groups/{group_id}/owners"
+
+        try:
+            async for page in self._graph_api_client.scroll(url):
+                for owner in page:
+                    yield owner
+        except NotFound:
+            return
+
     async def site_users(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)
 
@@ -497,7 +539,7 @@ class SharepointOnlineClient:
                 yield site_drive
 
     async def drive_items_delta(self, url):
-        async for response in self._graph_api_client.scroll_url(url):
+        async for response in self._graph_api_client.scroll_delta_url(url):
             delta_link = (
                 response[DELTA_LINK_KEY] if DELTA_LINK_KEY in response else None
             )
@@ -634,15 +676,15 @@ class SharepointOnlineClient:
             # This can also mean "not found" so handling it explicitly
             return []
 
-    async def groups_for_user(self, site_web_url, user_id):
-        self._validate_sharepoint_rest_url(site_web_url)
-
-        url = f"{site_web_url}/_api/web/GetUserById('{user_id}')/groups"
+    async def groups_user_transitive_member_of(self, user_id):
+        url = f"{GRAPH_API_URL}/users/{user_id}/transitiveMemberOf"
 
         try:
-            return await self._rest_api_client.fetch(url)
+            async for page in self._graph_api_client.scroll(url):
+                for group in page:
+                    yield group
         except NotFound:
-            return {}
+            return
 
     async def tenant_details(self):
         url = f"{GRAPH_API_AUTH_URL}/common/userrealm/?user=cj@{self._tenant_name}.onmicrosoft.com&api-version=2.1&checkForMicrosoftAccount=false"
@@ -707,7 +749,7 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
     SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {
-            "dontExtractDriveItemsOlderThan": {"type": "integer"},  # in Days
+            "skipExtractingDriveItemsOlderThan": {"type": "integer"},  # in Days
         },
         "additionalProperties": False,
     }
@@ -746,6 +788,71 @@ def _prefix_user(user):
 
 def _prefix_email(email):
     return _prefix_identity("email", email)
+
+
+def _postfix_group(group):
+    if group is None:
+        return None
+
+    return f"{group} Members"
+
+
+def is_domain_group(user_fields):
+    return user_fields["ContentType"] == "DomainGroup"
+
+
+def is_person(user_fields):
+    return user_fields["ContentType"] == "Person"
+
+
+def _domain_group_id(user_info_name):
+    """Extracts the domain group id.
+
+    The domain group id can have the following formats:
+    - abc|def|domain-group-id
+    - abc|def|some-prefix/domain-group-id
+
+    Returns:
+        str: domain group id
+
+    """
+    if user_info_name is None or len(user_info_name) == 0:
+        return None
+
+    name_parts = user_info_name.split("|")
+
+    if len(name_parts) <= 2:
+        return None
+
+    domain_group_id = name_parts[2]
+
+    if "/" in domain_group_id:
+        domain_group_id = domain_group_id.split("/")[1]
+
+    if "_" in domain_group_id:
+        domain_group_id = domain_group_id.split("_")[0]
+
+    if len(domain_group_id) == 0:
+        return None
+
+    return domain_group_id
+
+
+async def _emails_and_usernames_of_domain_group(
+    domain_group_id, group_identities_generator
+):
+    """Yield emails and/or usernames for a specific domain group.
+    This function yields both to reduce the number of remote calls made to the group owners or group members API.
+
+    Yields:
+        Tuple: tuple of the user's email and the user's username
+
+    """
+    async for identity in group_identities_generator(domain_group_id):
+        email = identity.get("mail")
+        username = identity.get("userPrincipalName")
+
+        yield email, username
 
 
 class SharepointOnlineDataSource(BaseDataSource):
@@ -828,6 +935,14 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "bool",
                 "value": False,
             },
+            "use_document_level_security": {
+                "display": "toggle",
+                "label": "Enable document level security",
+                "order": 7,
+                "tooltip": "Document level security ensures identities and permissions set in Sharepoint Online are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "type": "bool",
+                "value": False,
+            },
         }
 
     async def validate_config(self):
@@ -871,255 +986,268 @@ class SharepointOnlineDataSource(BaseDataSource):
                 f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(remote_sites[:5])}]."
             )
 
-    @cached_property
-    def _default_groups(self):
-        return [_prefix_group(default_group) for default_group in DEFAULT_GROUPS]
-
     def _decorate_with_access_control(self, document, access_control):
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
-                set(
-                    document.get(ACCESS_CONTROL, [])
-                    + access_control
-                    + self._default_groups
-                )
+                set(document.get(ACCESS_CONTROL, []) + access_control)
             )
 
         return document
 
-    async def _with_site_access_control(self, site):
-        if not self._dls_enabled():
-            return site
+    async def _site_access_control(self, site):
+        """Fetches all permissions for all owners, members and visitors of a given site.
+        All groups and/or persons, which have permissions for a given site are returned with their given identity prefix ("user", "group" or "email").
+        For the given site all groups and its corresponding members and owners (username and/or email) are fetched.
 
-        site_web_url = site["webUrl"]
-
-        sharepoint_groups = []
-
-        async for sharepoint_group in self.client.site_groups(site_web_url):
-            sharepoint_groups.append(sharepoint_group)
-
-        sharepoint_groups = list(
-            map(
-                lambda group: _prefix_group(group),
-                filter(
-                    lambda group_title: group_title is not None,
-                    map(
-                        lambda group: group.get("Title"),
-                        sharepoint_groups,
-                    ),
-                ),
-            )
-        )
-
-        site_users = []
-
-        async for site_user in self.client.site_users(site_web_url):
-            site_users.append(site_user)
-
-        site_users = list(
-            map(
-                lambda user: _prefix_user(user),
-                filter(
-                    lambda user_name: user_name is not None,
-                    map(
-                        lambda user: user.get("UserPrincipalName"),
-                        site_users,
-                    ),
-                ),
-            )
-        )
-
-        return self._decorate_with_access_control(site, sharepoint_groups + site_users)
-
-    async def _with_drive_item_access_control(self, site_drive, drive_item):
-        """
-        Sample document returned:
-        {
-            "grantedToV2": {
-                "siteGroup": {
-                    "loginName": "some_group"
-                    }
-                },
-            "grantedTo": {
-                "siteGroup": {
-                    "loginName": "user"
-                    }
-                },
-                "user": {
-                    "email": USER_2
-                }
-            }
-
-        We're extracting "loginName" or "email" for groups or users inside "grantedToV2" or "grantedTo".
+        Returns:
+            list: access control list for a given site
+            [
+                "user:spo-user",
+                "email:some.user@spo.com",
+                "group:1234-abcd-id"
+            ]
         """
 
         if not self._dls_enabled():
-            return drive_item
+            return []
 
-        permissions = await self.client.drive_item_permissions(
-            site_drive.get("id"), drive_item.get("id")
-        )
+        access_control = set()
 
-        users = list(
-            set(
-                filter(
-                    lambda identity: identity is not None,
-                    map(
-                        lambda identity: (
-                            _prefix_user(identity.get("loginName"))
-                            or _prefix_email(identity.get("email"))
-                        )
-                        if identity is not None
-                        else None,
-                        map(
-                            lambda grantee: grantee.get("user"),
-                            map(
-                                lambda permission: (
-                                    (permission.get("grantedToV2") or {})
-                                    | (permission.get("grantedTo") or {})
-                                )
-                                if permission is not None
-                                else {},
-                                permissions.get("value"),
-                            ),
-                        ),
-                    ),
-                )
-            )
-        )
+        async for user_information in self.client.user_information_list(site["id"]):
+            user = user_information["fields"]
 
-        groups = list(
-            set(
-                filter(
-                    lambda identity: identity is not None,
-                    map(
-                        lambda identity: (_prefix_group(identity.get("loginName")))
-                        if identity is not None
-                        else None,
-                        map(
-                            lambda grantee: grantee.get("siteGroup"),
-                            map(
-                                lambda permission: (
-                                    (permission.get("grantedToV2") or {})
-                                    | (permission.get("grantedTo") or {})
-                                )
-                                if permission is not None
-                                else {},
-                                permissions.get("value"),
-                            ),
-                        ),
-                    ),
-                )
-            )
-        )
+            if is_domain_group(user):
+                domain_group_id = _domain_group_id(user["Name"])
 
-        access_control = groups + users
+                if domain_group_id:
+                    access_control.add(_prefix_group(domain_group_id))
 
-        return self._decorate_with_access_control(drive_item, access_control)
+            if is_person(user):
+                name = user.get("Name")
 
-    async def _with_site_list_access_control(self, site_web_url, site_list):
-        if not self._dls_enabled():
-            return site_list
+                if name and name.startswith("i:0#.f|membership|"):
+                    parts = name.split("|")
 
-        role_assignments = await self.client.site_list_role_assignments(
-            site_web_url, site_list["name"]
-        )
+                    if len(parts) > 2:
+                        email = parts[2]
+                        access_control.add(_prefix_email(email))
+                        continue
 
-        access_control = await self._access_control_for_role_assignments(
-            site_web_url, role_assignments
-        )
+                email = user.get("EMail")
 
-        return self._decorate_with_access_control(site_list, access_control)
+                if email:
+                    access_control.add(_prefix_email(email))
 
-    async def _with_site_page_access_control(self, site_web_url, site_page):
-        if not self._dls_enabled():
-            return site_page
-
-        role_assignments = await self.client.site_page_role_assignments(
-            site_web_url, site_page["Id"]
-        )
-
-        access_control = await self._access_control_for_role_assignments(
-            site_web_url, role_assignments
-        )
-
-        return self._decorate_with_access_control(site_page, access_control)
-
-    async def _access_control_for_role_assignments(
-        self, site_web_url, role_assignments
-    ):
-        access_control = []
-
-        for role_assignment in role_assignments.get("value", []):
-            access_control += await self.client.users_and_groups_for_role_assignment(
-                site_web_url, role_assignment
-            )
-
-        return access_control
-
-    async def _with_list_item_access_control(
-        self, site_web_url, site_list_name, list_item
-    ):
-        if not self._dls_enabled():
-            return list_item
-
-        list_item_role_assignments = await self.client.site_list_item_role_assignments(
-            site_web_url, site_list_name, list_item["id"]
-        )
-
-        access_control = await self._access_control_for_role_assignments(
-            site_web_url, list_item_role_assignments
-        )
-
-        return self._decorate_with_access_control(list_item, access_control)
+        return list(access_control)
 
     def _dls_enabled(self):
         if self._features is None:
             return False
 
-        return self._features.document_level_security_enabled()
+        if not self._features.document_level_security_enabled():
+            return False
+
+        return self.configuration["use_document_level_security"]
 
     def access_control_query(self, access_control):
-        return {"query": {"template": {"params": {"access_control": access_control}}}}
+        # filter out 'None' values
+        filtered_access_control = list(
+            filter(
+                lambda access_control_entity: access_control_entity is not None,
+                access_control,
+            )
+        )
 
-    def _user_access_control_doc(self, user, access_control):
         return {
-            "_id": user.get("Id"),
+            "query": {
+                "template": {"params": {"access_control": filtered_access_control}},
+                "source": {
+                    "bool": {
+                        "filter": {
+                            "bool": {
+                                "should": [
+                                    {
+                                        "bool": {
+                                            "must_not": {
+                                                "exists": {"field": ACCESS_CONTROL}
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "terms": {
+                                            f"{ACCESS_CONTROL}.enum": filtered_access_control
+                                        }
+                                    },
+                                ]
+                            }
+                        }
+                    }
+                },
+            }
+        }
+
+    async def _user_access_control_doc(self, user):
+        """Constructs a user access control document, which will be synced to the corresponding access control index.
+        The `_id` of the user access control document will either be the username (can also be the email sometimes) or the email itself.
+        Note: the `_id` field won't be prefixed with the corresponding identity prefix ("user" or "email").
+        The document contains all groups of a user and his email and/or username under `query.template.params.access_control`.
+
+        Returns:
+            dict: dictionary representing an user access control document
+            {
+                "_id": "some.user@spo.com",
+                "identity": {
+                    "email": "email:some.user@spo.com",
+                    "username": "user:some.user"
+                },
+                "created_at": "2023-06-30 12:00:00",
+                "query": {
+                    "template": {
+                        "params": {
+                            "access_control": [
+                                "email:some.user@spo.com",
+                                "user:some.user",
+                                "group:1234-abcd-id"
+                            ]
+                        }
+                    }
+                }
+            }
+        """
+
+        if "UserName" in user:
+            username_field = "UserName"
+        elif "userPrincipalName" in user:
+            username_field = "userPrincipalName"
+        else:
+            return
+
+        prefixed_groups = set()
+
+        async for group in self.client.groups_user_transitive_member_of(
+            user[username_field]
+        ):
+            group_id = group["id"]
+            if group_id:
+                prefixed_groups.add(_prefix_group(group_id))
+
+        email = user.get("EMail", user.get("mail", None))
+        username = user[username_field]
+
+        prefixed_mail = _prefix_email(email)
+        prefixed_username = _prefix_user(username)
+        id_ = email if email else username
+
+        access_control = list({prefixed_mail, prefixed_username}.union(prefixed_groups))
+
+        if "createdDateTime" in user:
+            created_at = datetime.strptime(user["createdDateTime"], TIMESTAMP_FORMAT)
+        else:
+            created_at = iso_utc()
+
+        return {
+            # For `_id` we're intentionally using the email/username without the prefix
+            "_id": id_,
             "identity": {
-                "email": _prefix_email(user.get("Email")),
-                "username": _prefix_user(user.get("LoginName")),
+                "email": prefixed_mail,
+                "username": prefixed_username,
             },
+            "created_at": created_at,
         } | self.access_control_query(access_control)
 
     async def get_access_control(self):
+        """Yields an access control document for every user of a site.
+        Note: this method will cache users and emails it has already and skip the ingestion for those.
+
+        Yields:
+             dict: dictionary representing a user access control document
+        """
+
         if not self._dls_enabled():
             return
 
+        already_seen_emails = set()
+        already_seen_usernames = set()
+
+        def _already_seen(email_, username_):
+            if email_ in already_seen_emails:
+                return True
+
+            if username_ in already_seen_usernames:
+                return True
+
+            return False
+
+        def update_already_seen(email_, username_):
+            # We want to make sure to not add 'None' to the already seen sets
+            if email_:
+                already_seen_emails.add(email_)
+
+            if username_:
+                already_seen_usernames.add(username_)
+
         async for site_collection in self.client.site_collections():
-            site_web_url = site_collection["webUrl"]
+            async for site in self.client.sites(
+                site_collection["siteCollection"]["hostname"],
+                self.configuration["site_collections"],
+            ):
+                async for user_information in self.client.user_information_list(
+                    site["id"]
+                ):
+                    user = user_information["fields"]
 
-            async for user in self.client.site_users(site_web_url):
-                groups = await self.client.groups_for_user(site_web_url, user.get("Id"))
-                groups = list(
-                    map(
-                        lambda group: _prefix_group(group.get("LoginName")),
-                        groups.get("value", []),
-                    )
-                )
+                    if is_domain_group(user):
+                        domain_group_id = _domain_group_id(user.get("Name"))
 
-                username = _prefix_user(user.get("LoginName", None))
-                email = _prefix_email(user.get("Email", None))
-                additional_fields = [
-                    value
-                    for value in [username, email]
-                    if value is not None and len(value) > 0
-                ]
+                        if domain_group_id:
+                            async for member_email, member_username in _emails_and_usernames_of_domain_group(
+                                domain_group_id,
+                                self.client.group_members,
+                            ):
+                                if _already_seen(member_email, member_username):
+                                    continue
 
-                access_control = list(
-                    set(groups + additional_fields + self._default_groups)
-                )
+                                update_already_seen(member_email, member_username)
 
-                yield self._user_access_control_doc(user, access_control)
+                                member = await self.client.user(member_username)
+                                member_access_control_doc = (
+                                    await self._user_access_control_doc(member)
+                                )
+                                if member_access_control_doc:
+                                    yield member_access_control_doc
+
+                            async for owner_email, owner_username in _emails_and_usernames_of_domain_group(
+                                domain_group_id,
+                                self.client.group_owners,
+                            ):
+                                if _already_seen(owner_email, owner_username):
+                                    continue
+
+                                update_already_seen(owner_email, owner_username)
+
+                                owner = await self.client.user(owner_username)
+                                owner_access_control_doc = (
+                                    await self._user_access_control_doc(owner)
+                                )
+                                if owner_access_control_doc:
+                                    yield owner_access_control_doc
+
+                    elif is_person(user):
+                        email = user.get("EMail", user.get("mail", None))
+                        username = user.get(
+                            "UserName", user.get("userPrincipalName", None)
+                        )
+
+                        if _already_seen(email, username):
+                            continue
+
+                        update_already_seen(email, username)
+
+                        person_access_control_doc = await self._user_access_control_doc(
+                            user
+                        )
+                        if person_access_control_doc:
+                            yield person_access_control_doc
 
     async def get_docs(self, filtering=None):
         max_drive_item_age = None
@@ -1128,7 +1256,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            max_drive_item_age = advanced_rules["dontExtractDriveItemsOlderThan"]
+            max_drive_item_age = advanced_rules["skipExtractingDriveItemsOlderThan"]
 
         async for site_collection in self.site_collections():
             yield site_collection, None
@@ -1137,10 +1265,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
             ):
-                yield site, None
+                access_control = await self._site_access_control(site)
+                yield self._decorate_with_access_control(site, access_control), None
 
                 async for site_drive in self.site_drives(site):
-                    yield site_drive, None
+                    yield self._decorate_with_access_control(
+                        site_drive, access_control
+                    ), None
 
                     async for page in self.client.drive_items(site_drive["id"]):
                         for drive_item in page:
@@ -1150,8 +1281,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 "lastModifiedDateTime"
                             ]
 
-                            drive_item = await self._with_drive_item_access_control(
-                                site_drive, drive_item
+                            drive_item = self._decorate_with_access_control(
+                                drive_item, access_control
                             )
 
                             yield drive_item, self.download_function(
@@ -1164,7 +1295,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 # Sync site list and site list items
                 async for site_list in self.site_lists(site):
-                    yield site_list, None
+                    yield self._decorate_with_access_control(
+                        site_list, access_control
+                    ), None
 
                     async for list_item, download_func in self.site_list_items(
                         site_id=site["id"],
@@ -1172,11 +1305,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_web_url=site["webUrl"],
                         site_list_name=site_list["name"],
                     ):
-                        yield list_item, download_func
+                        yield self._decorate_with_access_control(
+                            list_item, access_control
+                        ), download_func
 
                 # Sync site pages
                 async for site_page in self.site_pages(site["webUrl"]):
-                    yield site_page, None
+                    yield self._decorate_with_access_control(
+                        site_page, access_control
+                    ), None
 
     async def get_docs_incrementally(self, sync_cursor, filtering=None):
         self._sync_cursor = sync_cursor
@@ -1190,7 +1327,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            max_drive_item_age = advanced_rules["dontExtractDriveItemsOlderThan"]
+            max_drive_item_age = advanced_rules["skipExtractingDriveItemsOlderThan"]
 
         async for site_collection in self.site_collections():
             yield site_collection, None, OP_INDEX
@@ -1199,10 +1336,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
             ):
-                yield site, None, OP_INDEX
+                access_control = await self._site_access_control(site)
+                yield self._decorate_with_access_control(
+                    site, access_control
+                ), None, OP_INDEX
 
                 async for site_drive in self.site_drives(site):
-                    yield site_drive, None, OP_INDEX
+                    yield self._decorate_with_access_control(
+                        site_drive, access_control
+                    ), None, OP_INDEX
 
                     delta_link = self.get_drive_delta_link(site_drive["id"])
 
@@ -1218,8 +1360,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 else None
                             )
 
-                            drive_item = await self._with_drive_item_access_control(
-                                site_drive, drive_item
+                            drive_item = self._decorate_with_access_control(
+                                drive_item, access_control
                             )
 
                             yield drive_item, self.download_function(
@@ -1232,7 +1374,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 # Sync site list and site list items
                 async for site_list in self.site_lists(site):
-                    yield site_list, None, OP_INDEX
+                    yield self._decorate_with_access_control(
+                        site_list, access_control
+                    ), None, OP_INDEX
 
                     async for list_item, download_func in self.site_list_items(
                         site_id=site["id"],
@@ -1240,18 +1384,21 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_web_url=site["webUrl"],
                         site_list_name=site_list["name"],
                     ):
-                        yield list_item, download_func, OP_INDEX
+                        yield self._decorate_with_access_control(
+                            list_item, access_control
+                        ), download_func, OP_INDEX
 
                 # Sync site pages
                 async for site_page in self.site_pages(site["webUrl"]):
-                    yield site_page, None, OP_INDEX
+                    yield self._decorate_with_access_control(
+                        site_page, access_control
+                    ), None, OP_INDEX
 
     async def site_collections(self):
         async for site_collection in self.client.site_collections():
             site_collection["_id"] = site_collection["webUrl"]
             site_collection["object_type"] = "site_collection"
 
-            site_collection = self._decorate_with_access_control(site_collection, [])
             yield site_collection
 
     async def sites(self, hostname, collections):
@@ -1262,7 +1409,6 @@ class SharepointOnlineDataSource(BaseDataSource):
             site["_id"] = site["id"]
             site["object_type"] = "site"
 
-            site = await self._with_site_access_control(site)
             yield site
 
     async def site_drives(self, site):
@@ -1270,9 +1416,6 @@ class SharepointOnlineDataSource(BaseDataSource):
             site_drive["_id"] = site_drive["id"]
             site_drive["object_type"] = "site_drive"
 
-            site_drive = self._decorate_with_access_control(
-                site_drive, site.get(ACCESS_CONTROL, [])
-            )
             yield site_drive
 
     async def drive_items(self, site_drive, max_drive_item_age):
@@ -1281,9 +1424,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 drive_item["_id"] = drive_item["id"]
                 drive_item["object_type"] = "drive_item"
                 drive_item["_timestamp"] = drive_item["lastModifiedDateTime"]
-                drive_item = await self._with_drive_item_access_control(
-                    site_drive, drive_item
-                )
 
                 yield drive_item, self.download_function(drive_item, max_drive_item_age)
 
@@ -1309,10 +1449,6 @@ class SharepointOnlineDataSource(BaseDataSource):
             ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
                 continue
 
-            list_item = await self._with_list_item_access_control(
-                site_web_url, site_list_name, list_item
-            )
-
             if "Attachments" in list_item["fields"]:
                 async for list_item_attachment in self.client.site_list_item_attachments(
                     site_web_url, site_list_name, list_item_natural_id
@@ -1323,10 +1459,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                         "lastModifiedDateTime"
                     ]
 
-                    list_item_attachment = self._decorate_with_access_control(
-                        list_item_attachment,
-                        list_item.get(ACCESS_CONTROL, []),
-                    )
                     attachment_download_func = partial(
                         self.get_attachment_content, list_item_attachment
                     )
@@ -1339,10 +1471,6 @@ class SharepointOnlineDataSource(BaseDataSource):
             site_list["_id"] = site_list["id"]
             site_list["object_type"] = "site_list"
 
-            site_list = await self._with_site_list_access_control(
-                site["webUrl"], site_list
-            )
-
             yield site_list
 
     async def site_pages(self, url):
@@ -1351,8 +1479,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "odata.id"
             ]  # Apparantly site_page["GUID"] is not globally unique
             site_page["object_type"] = "site_page"
-
-            site_page = await self._with_site_page_access_control(url, site_page)
 
             for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:
                 if html_field in site_page:
@@ -1389,7 +1515,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             return None
 
         modified_date = datetime.strptime(
-            drive_item["lastModifiedDateTime"], "%Y-%m-%dT%H:%M:%SZ"
+            drive_item["lastModifiedDateTime"], TIMESTAMP_FORMAT
         )
 
         if max_drive_item_age and modified_date < datetime.utcnow() - timedelta(

@@ -20,7 +20,6 @@ from enum import Enum
 from io import BytesIO
 
 import aiohttp
-import yaml
 from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 from base64io import Base64IO
 from bs4 import BeautifulSoup
@@ -29,7 +28,7 @@ from pympler import asizeof
 
 from connectors.logger import logger
 
-ACCESS_CONTROL_INDEX_PREFIX = "search-acl-filter-"
+ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_QUEUE_SIZE = 1024
 DEFAULT_DISPLAY_EVERY = 100
@@ -674,21 +673,24 @@ class ExtractionService:
 
     Calling `extract_text` with a filename will begin text extraction
     using an instance of the data extraction service.
-    Requires the data extraction service to be running and
-    extraction_service settings in config.yml to be configured correctly.
+    Requires the data extraction service to be running
     """
 
-    def __init__(self):
-        # The config file is being opened here as a temporary measure for 8.9.
-        # This should be removed when the extraction service is expanded.
-        with open(
-            os.path.join(os.path.dirname(__file__), "..", "config.yml"), "r"
-        ) as file:
-            config = yaml.safe_load(file)
+    __EXTRACTION_CONFIG = {}  # setup by cli.py on startup
 
+    @classmethod
+    def get_extraction_config(cls):
+        return __EXTRACTION_CONFIG
+
+    @classmethod
+    def set_extraction_config(cls, extraction_config):
+        global __EXTRACTION_CONFIG
+        __EXTRACTION_CONFIG = extraction_config
+
+    def __init__(self):
         self.session = None
 
-        self.extraction_config = config.get("extraction_service", None)
+        self.extraction_config = ExtractionService.get_extraction_config()
         if self.extraction_config is not None:
             self.host = self.extraction_config.get("host", None)
         else:
