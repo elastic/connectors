@@ -593,7 +593,7 @@ class GoogleDriveDataSource(BaseDataSource):
             "created_at": blob.get("createdTime"),
             "last_updated": blob.get("modifiedTime"),
             "name": blob.get("name"),
-            "size": blob.get("size"),
+            "size": blob.get("size") or 0,  # handle folders and shortcuts
             "_timestamp": blob.get("modifiedTime"),
             "mime_type": blob.get("mimeType"),
             "file_extension": blob.get("fileExtension"),
@@ -625,10 +625,6 @@ class GoogleDriveDataSource(BaseDataSource):
             blob_document["updated_by_photo_url"] = last_modifying_user.get(
                 "photoLink", None
             )
-
-        # handle folders and shortcuts
-        if blob_document["size"] is None:
-            blob_document["size"] = 0
 
         # determine the path on google drive, note that google workspace files won't have a path
         blob_parents = blob.get("parents", None)
