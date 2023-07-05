@@ -1053,7 +1053,8 @@ async def test_api_call_when_server_is_down(patch_default_wait_multiplier):
                 )
 
 
-def test_get_session():
+@pytest.mark.asyncio
+async def test_get_session():
     """Test that the instance of session returned is always the same for the datasource class."""
     source = create_source(SharepointServerDataSource)
     first_instance = source.sharepoint_client._get_session()
