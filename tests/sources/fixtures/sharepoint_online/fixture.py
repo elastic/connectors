@@ -27,9 +27,10 @@ fake = Faker()
 fake.seed_instance(seed)
 
 
-NUMBER_OF_SITES = 4
+NUMBER_OF_SITES = 1
 NUMBER_OF_DRIVE_ITEMS = 200
 NUMBER_OF_PAGES = 20
+NUMBER_OF_LISTS = 30
 
 
 small_text = fake.text(max_nb_chars=5000)
@@ -78,6 +79,7 @@ class RandomDataStorage:
         self.drive_items = {}
         self.drive_item_content = {}
         self.site_pages = {}
+        self.site_lists = {}
 
     def generate(self):
         self.tenants = [TENANT]
@@ -98,6 +100,7 @@ class RandomDataStorage:
             self.sites_by_drive_id[drive["id"]] = site
             self.site_drives[site["id"]] = [drive]
             self.site_pages[site["id"]] = []
+            self.site_lists[site["id"]] = []
             self.drive_items[drive["id"]] = []
 
             for j in range(NUMBER_OF_DRIVE_ITEMS):
@@ -155,6 +158,15 @@ class RandomDataStorage:
                 }
 
                 self.site_pages[site["id"]].append(page)
+
+            for l in range(NUMBER_OF_LISTS):
+                site_list = {
+                    "id": str(fake.uuid4()),
+                    "name": f"{fake.word()} {fake.word()}",
+                    "display_name": fake.word(),
+                    "description": fake.paragraph(),
+                }
+                self.site_lists[site["id"]].append(site_list)
 
     def get_site_collections(self):
         results = []
@@ -324,6 +336,41 @@ class RandomDataStorage:
     def get_drive_item_content(self, drive_item_id):
         return self.drive_item_content[drive_item_id]
 
+    def get_site_lists(self, site_id, skip=0, take=100):
+        results = []
+
+        site = self.sites_by_site_id[site_id]
+
+        for site_list in self.site_lists[site_id][skip:][:take]:
+            results.append(
+                {
+                    "@odata.etag": '"8faa55b1-5a70-47b5-b4d6-794090bfa76f,1"',
+                    "eTag": '"8faa55b1-5a70-47b5-b4d6-794090bfa76f,1"',
+                    "id": site_list["id"],
+                    "name": site_list["name"],
+                    "description": site_list["description"],
+                    "displayName": site_list["display_name"],
+                    "createdDateTime": "2023-05-31T16:08:47Z",
+                    "lastModifiedDateTime": "2023-05-31T16:08:48Z",
+                    "webUrl": f"{ROOT}/sites/{site['name']}/{site_list['name']}",
+                    "createdBy": {
+                        "user": {
+                            "email": "demo@enterprisesearch.onmicrosoft.com",
+                            "id": "baa37bda-0dd1-4799-ae22-f3476c2cf58d",
+                            "displayName": "Enterprise Search",
+                        }
+                    },
+                    "parentReference": {"siteId": site["id"]},
+                    "list": {
+                        "contentTypesEnabled": False,
+                        "hidden": False,
+                        "template": "documentLibrary",
+                    },
+                }
+            )
+
+        return results
+
 
 data_storage = RandomDataStorage()
 data_storage.generate()
@@ -389,6 +436,7 @@ def get_sites(site_id):
 
 @app.route("/sites/<string:site_id>/drives", methods=["GET"])
 def get_site_drives(site_id):
+    # I don't bother to page cause it's mostly 1-2 drives
     return {
         "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#drives",
         "value": data_storage.get_site_drives(site_id),
@@ -423,36 +471,13 @@ def download_drive_item(drive_id, item_id):
 
 @app.route("/sites/<string:site_id>/lists", methods=["GET"])
 def get_site_lists(site_id):
+    skip = int(request.args.get("$skip", 0))
+    take = int(request.args.get("$take", 100))
+
+    site_lists = data_storage.get_site_lists(site_id, skip, take)
     return {
         "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites('enterprisesearch.sharepoint.com%2C792c7c37-803b-47af-88c2-88d8707aab65%2Ce6ead828-d7a5-4c72-b8e7-0687c6a078e7')/lists",
-        "value": [
-            {
-                "@odata.etag": '"8faa55b1-5a70-47b5-b4d6-794090bfa76f,1"',
-                "createdDateTime": "2023-05-31T16:08:47Z",
-                "description": "",
-                "eTag": '"8faa55b1-5a70-47b5-b4d6-794090bfa76f,1"',
-                "id": "8faa55b1-5a70-47b5-b4d6-794090bfa76f",
-                "lastModifiedDateTime": "2023-05-31T16:08:48Z",
-                "name": "Shared Documents",
-                "webUrl": "http://localhost:10337/sites/PrivateSubsite/Shared Documents",
-                "displayName": "Documents",
-                "createdBy": {
-                    "user": {
-                        "email": "demo@enterprisesearch.onmicrosoft.com",
-                        "id": "baa37bda-0dd1-4799-ae22-f3476c2cf58d",
-                        "displayName": "Enterprise Search",
-                    }
-                },
-                "parentReference": {
-                    "siteId": "enterprisesearch.sharepoint.com,792c7c37-803b-47af-88c2-88d8707aab65,e6ead828-d7a5-4c72-b8e7-0687c6a078e7"
-                },
-                "list": {
-                    "contentTypesEnabled": False,
-                    "hidden": False,
-                    "template": "documentLibrary",
-                },
-            }
-        ],
+        "value": site_lists,
     }
 
 
