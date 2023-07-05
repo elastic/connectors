@@ -37,6 +37,8 @@ from connectors.utils import (
     url_encode,
 )
 
+TMP_DIR = f"{os.path.abspath(os.curdir)}/tmp"
+
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 ACCESS_CONTROL = "_allow_access_control"
@@ -1630,7 +1632,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         try:
             async with NamedTemporaryFile(
-                mode="wb", delete=False, suffix=file_extension
+                mode="wb", delete=False, suffix=file_extension, dir=TMP_DIR
             ) as async_buffer:
                 source_file_name = async_buffer.name
 

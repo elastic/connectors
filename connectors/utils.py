@@ -752,7 +752,7 @@ class ExtractionService:
         )
 
         try:
-            content = await self.extract_with_file_send(filepath, filename)
+            content = await self.extract_with_file_path_send(filepath, filename)
         except (ClientConnectionError, ServerTimeoutError) as e:
             logger.error(
                 f"Connection to {self.host} failed while extracting data from {filename}. Error: {e}"
@@ -781,6 +781,18 @@ class ExtractionService:
             while chunk:
                 yield chunk
                 chunk = await f.read(self.chunk_size)
+
+    async def extract_with_file_path_send(self, filepath, filename):
+        """Sends a request to tika-server to extract text from a file path.
+
+        Returns a parsed response
+        """
+        # TODO replace with a constant
+        filepath = f"/tmp/files/{os.path.basename(filepath)}"
+        async with self._begin_session().put(
+            f"{self.host}/extract_local_file_text/?local_file_path={filepath}"
+        ) as response:
+            return await self.parse_extraction_resp(filename, response)
 
     async def parse_extraction_resp(self, filename, response):
         """Parses the response from the tika-server and logs any extraction failures.
