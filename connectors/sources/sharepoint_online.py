@@ -14,6 +14,7 @@ from functools import partial
 import aiofiles
 import aiohttp
 import fastjsonschema
+from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 from fastjsonschema import JsonSchemaValueException
@@ -1627,30 +1628,39 @@ class SharepointOnlineDataSource(BaseDataSource):
         source_file_name = ""
         file_extension = os.path.splitext(original_filename)[-1]
 
-        async with NamedTemporaryFile(
-            mode="wb", delete=False, suffix=file_extension
-        ) as async_buffer:
-            # download_func should always be a partial with async_buffer as last argument that is not filled by the caller!
-            # E.g. if download_func is download_drive_item(drive_id, item_id, async_buffer) then it
-            # should be passed as partial(download_drive_item, drive_id, item_id)
-            # This way async_buffer will be passed from here!!!
-            await download_func(async_buffer)
+        try:
+            async with NamedTemporaryFile(
+                mode="wb",
+                delete=False,
+                suffix=file_extension,
+                dir="/Users/vidok/projects/connectors-python/tmp",
+            ) as async_buffer:
+                # download_func should always be a partial with async_buffer as last argument that is not filled by the caller!
+                # E.g. if download_func is download_drive_item(drive_id, item_id, async_buffer) then it
+                # should be passed as partial(download_drive_item, drive_id, item_id)
+                # This way async_buffer will be passed from here!!!
+                await download_func(async_buffer)
 
-            source_file_name = async_buffer.name
+                source_file_name = async_buffer.name
 
-        if self.configuration["use_text_extraction_service"]:
-            body = ""
-            if self.extraction_service._check_configured():
-                body = await self.extraction_service.extract_text(
-                    source_file_name, original_filename
+            if self.configuration["use_text_extraction_service"]:
+                body = ""
+                if self.extraction_service._check_configured():
+                    body = await self.extraction_service.extract_text(
+                        source_file_name, original_filename
+                    )
+            else:
+                await asyncio.to_thread(
+                    convert_to_b64,
+                    source=source_file_name,
                 )
-        else:
-            await asyncio.to_thread(
-                convert_to_b64,
-                source=source_file_name,
-            )
-            async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-                attachment = (await target_file.read()).strip()
+                async with aiofiles.open(
+                    file=source_file_name, mode="r"
+                ) as target_file:
+                    attachment = (await target_file.read()).strip()
+        finally:
+            if source_file_name:
+                await remove(source_file_name)
 
         return attachment, body
 
