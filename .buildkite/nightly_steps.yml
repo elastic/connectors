@@ -81,3 +81,8 @@ steps:
       - ".buildkite/run_nigthly.sh github"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Google Drive"
+    command:
+      - ".buildkite/run_nigthly.sh google_drive"
+    artifact_paths:
+      - "perf8-report-*/**/*"
