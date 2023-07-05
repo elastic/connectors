@@ -1640,7 +1640,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 # This way async_buffer will be passed from here!!!
                 await download_func(async_buffer)
 
-
             if self.configuration["use_text_extraction_service"]:
                 body = ""
                 if self.extraction_service._check_configured():
