@@ -381,6 +381,10 @@ class GoogleDriveDataSource(BaseDataSource):
             # Traverse the parents until reaching the root or a missing parent
             while parent_id and parent_id in folders:
                 parent_folder = folders[parent_id]
+                # break the loop early if the path is resolved for the parent folder
+                if "path" in parent_folder:
+                    path.insert(0, parent_folder["path"])
+                    break
                 path.insert(
                     0, parent_folder["name"]
                 )  # Insert parent name at the beginning
