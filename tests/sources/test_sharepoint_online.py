@@ -18,6 +18,7 @@ from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.logger import logger
 from connectors.protocol import Features
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
     DEFAULT_RETRY_SECONDS,
@@ -1354,8 +1355,16 @@ class TestSharepointOnlineDataSource:
         return [
             DriveItemsPage(
                 items=[
-                    {"id": "3", "lastModifiedDateTime": self.month_ago},
-                    {"id": "4", "lastModifiedDateTime": self.day_ago},
+                    {
+                        "id": "3",
+                        "name": "third.txt",
+                        "lastModifiedDateTime": self.month_ago,
+                    },
+                    {
+                        "id": "4",
+                        "name": "fourth.txt",
+                        "lastModifiedDateTime": self.day_ago,
+                    },
                 ],
                 delta_link="deltalinksample",
             )
@@ -1523,10 +1532,14 @@ class TestSharepointOnlineDataSource:
         return [
             DriveItemsPage(
                 items=[
-                    {"id": "3", "lastModifiedDateTime": self.month_ago},
-                    {"id": "4", "lastModifiedDateTime": self.day_ago},
-                    {"id": "5", "lastModifiedDateTime": self.day_ago},
-                    {"id": "6", "deleted": {"state": "deleted"}},
+                    {
+                        "id": "3",
+                        "name": "third",
+                        "lastModifiedDateTime": self.month_ago,
+                    },
+                    {"id": "4", "name": "fourth", "lastModifiedDateTime": self.day_ago},
+                    {"id": "5", "name": "fifth", "lastModifiedDateTime": self.day_ago},
+                    {"id": "6", "name": "sixth", "deleted": {"state": "deleted"}},
                 ],
                 delta_link="deltalinksample",
             )
@@ -1795,13 +1808,26 @@ class TestSharepointOnlineDataSource:
         assert (operations["delete"]) == deleted
 
     @pytest.mark.asyncio
+    async def test_download_function_for_folder(self):
+        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
+        drive_item = {
+            "name": "folder",
+            "folder": {},
+        }
+
+        download_result = source.download_function(drive_item, None)
+
+        assert download_result is None
+
+    @pytest.mark.asyncio
     async def test_download_function_with_filtering_rule(self):
         source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
         max_drive_item_age = 15
         drive_item = {
+            "name": "test",
             "lastModifiedDateTime": str(
                 datetime.utcnow() - timedelta(days=max_drive_item_age + 1)
-            )
+            ),
         }
 
         download_result = source.download_function(drive_item, max_drive_item_age)
@@ -1814,8 +1840,30 @@ class TestSharepointOnlineDataSource:
         assert config is not None
 
     @pytest.mark.asyncio
+    async def test_validate_config_empty_config(self, patch_sharepoint_client):
+        source = create_source(
+            SharepointOnlineDataSource,
+            site_collections=WILDCARD,
+        )
+
+        with pytest.raises(ConfigurableFieldValueError) as e:
+            await source.validate_config()
+
+        assert e.match("Tenant ID")
+        assert e.match("Tenant name")
+        assert e.match("Client ID")
+        assert e.match("Secret value")
+
+    @pytest.mark.asyncio
     async def test_validate_config(self, patch_sharepoint_client):
-        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
+        source = create_source(
+            SharepointOnlineDataSource,
+            tenant_id="1",
+            tenant_name="test",
+            client_id="2",
+            secret_value="3",
+            site_collections=WILDCARD,
+        )
 
         await source.validate_config()
 
@@ -1831,7 +1879,10 @@ class TestSharepointOnlineDataSource:
 
         source = create_source(
             SharepointOnlineDataSource,
+            tenant_id="1",
             tenant_name=invalid_tenant_name,
+            client_id="2",
+            secret_value="3",
             site_collections=WILDCARD,
         )
         patch_sharepoint_client.tenant_details.return_value = {
@@ -1852,6 +1903,10 @@ class TestSharepointOnlineDataSource:
 
         source = create_source(
             SharepointOnlineDataSource,
+            tenant_id="1",
+            tenant_name="test",
+            client_id="2",
+            secret_value="3",
             site_collections=[non_existing_site, another_non_existing_site],
         )
 

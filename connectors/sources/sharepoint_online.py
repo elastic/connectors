@@ -946,6 +946,8 @@ class SharepointOnlineDataSource(BaseDataSource):
         }
 
     async def validate_config(self):
+        self.configuration.check_valid()
+
         # Check that we can log in into Graph API
         await self.client.graph_api_token.get()
 
@@ -1336,7 +1338,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
             ):
-                access_control = self._site_access_control(site)
+                access_control = await self._site_access_control(site)
                 yield self._decorate_with_access_control(
                     site, access_control
                 ), None, OP_INDEX
@@ -1508,10 +1510,20 @@ class SharepointOnlineDataSource(BaseDataSource):
             return OP_INDEX
 
     def download_function(self, drive_item, max_drive_item_age):
+        if "folder" in drive_item:
+            self._logger.debug(f"Not downloading folder {drive_item['name']}")
+            return None
+
         if "@microsoft.graph.downloadUrl" not in drive_item:
+            self._logger.debug(
+                f"Not downloading file {drive_item['name']}: field \"@microsoft.graph.downloadUrl\" is missing"
+            )
             return None
 
         if "lastModifiedDateTime" not in drive_item:
+            self._logger.debug(
+                f"Not downloading file {drive_item['name']}: field \"lastModifiedDateTime\" is missing"
+            )
             return None
 
         modified_date = datetime.strptime(
