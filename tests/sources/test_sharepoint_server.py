@@ -1076,7 +1076,8 @@ async def test_api_call_exception_for_kerberos(patch_default_wait_multiplier, ca
         assert "Skipping attachment for abc.com" in caplog.text
 
 
-def test_get_session():
+@pytest.mark.asyncio
+async def test_get_session():
     """Test that the instance of session returned is always the same for the datasource class."""
     source = create_source(SharepointServerDataSource)
     first_instance = source.sharepoint_client._get_session()
