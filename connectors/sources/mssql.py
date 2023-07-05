@@ -11,6 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 
 from connectors.sources.generic_database import GenericBaseDataSource, Queries
+from connectors.utils import get_pem_format
 
 # Connector will skip the below tables if it gets from the input
 TABLES_TO_SKIP = {"msdb": ["sysutility_ucp_configuration_internal"]}
@@ -142,28 +143,9 @@ class MSSQLDataSource(GenericBaseDataSource):
             return
         self.connection.close()
 
-    def get_pem_format(self, keys, max_split=-1):
-        """Convert keys into PEM format.
-
-        Args:
-            keys (str): Key in raw format.
-            max_split (int): Specifies how many splits to do. Defaults to -1.
-
-        Returns:
-            string: PEM format
-        """
-        all_cert = ""
-        for key in keys.split("-----END CERTIFICATE-----")[:-1]:
-            key = key.strip() + "\n" + "-----END CERTIFICATE-----"
-            key = key.replace(" ", "\n")
-            key = " ".join(key.split("\n", max_split))
-            key = " ".join(key.rsplit("\n", max_split))
-            all_cert += key + "\n"
-        return all_cert
-
     def create_pem_file(self):
         """Create pem file for SSL Verification"""
-        pem_certificates = self.get_pem_format(keys=self.ssl_ca, max_split=1)
+        pem_format = get_pem_format(key=self.ssl_ca, max_split=1)
         with NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as cert:
             cert.write(pem_certificates)
             self.certfile = cert.name

@@ -10,6 +10,7 @@ from urllib.parse import quote
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from connectors.sources.generic_database import GenericBaseDataSource, Queries
+from connectors.utils import get_pem_format
 
 # Below schemas are system schemas and the tables of the systems schema's will not get indexed
 SYSTEM_SCHEMA = ["pg_toast", "pg_catalog", "information_schema"]
@@ -104,24 +105,13 @@ class PostgreSQLDataSource(GenericBaseDataSource):
             connect_args=self.get_connect_args() if self.ssl_enabled else {},
         )
 
-    def get_pem_format(self):
-        """Convert ca data into PEM format
-
-        Returns:
-            string: PEM format
-        """
-        self.ssl_ca = self.ssl_ca.replace(" ", "\n")
-        pem_format = " ".join(self.ssl_ca.split("\n", 1))
-        pem_format = " ".join(pem_format.rsplit("\n", 1))
-        return pem_format
-
     def get_connect_args(self):
         """Convert string to pem format and create a SSL context
 
         Returns:
             dictionary: Connection arguments
         """
-        pem_format = self.get_pem_format()
+        pem_format = get_pem_format(key=self.ssl_ca, max_split=1)
         ctx = ssl.create_default_context()
         ctx.load_verify_locations(cadata=pem_format)
         connect_args = {"ssl": ctx}

@@ -518,20 +518,35 @@ def is_expired(expires_at):
     return datetime.utcnow() >= expires_at
 
 
-def get_pem_format(key, max_split=-1):
+def get_pem_format(
+    key,
+    postfix="-----END CERTIFICATE-----",
+    max_split=-1,
+):
     """Convert key into PEM format.
 
     Args:
         key (str): Key in raw format.
+        postfix (str): Certificate end string.
         max_split (int): Specifies how many splits to do. Defaults to -1.
 
     Returns:
         string: PEM format
     """
-    key = key.replace(" ", "\n")
-    key = " ".join(key.split("\n", max_split))
-    key = " ".join(key.rsplit("\n", max_split))
-    return key
+    pem_format = ""
+    if key.count(postfix) == 1:
+        key = key.replace(" ", "\n")
+        key = " ".join(key.split("\n", max_split))
+        key = " ".join(key.rsplit("\n", max_split))
+        pem_format = key
+    elif key.count(postfix) > 1:
+        for cert in key.split(postfix)[:-1]:
+            cert = cert.strip() + "\n" + postfix
+            cert = cert.replace(" ", "\n")
+            cert = " ".join(cert.split("\n", max_split))
+            cert = " ".join(cert.rsplit("\n", max_split))
+            pem_format += cert + "\n"
+    return pem_format
 
 
 def hash_id(_id):
