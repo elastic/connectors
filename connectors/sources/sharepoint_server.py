@@ -12,9 +12,11 @@ from urllib.parse import quote
 
 import aiofiles
 import aiohttp
+import requests
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ServerDisconnectedError
+from requests_kerberos import HTTPKerberosAuth
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
@@ -88,6 +90,8 @@ SCHEMA = {
         "_timestamp": "TimeLastModified",
     },
 }
+BASIC_AUTHENTICATION = "basic_authentication"
+KERBEROS_AUTHENTICATION = "kerberos_authentication"
 
 
 class SharepointServerClient:
@@ -102,6 +106,7 @@ class SharepointServerClient:
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.retry_count = self.configuration["retry_count"]
         self.site_collections = self.configuration["site_collections"]
+        self.authentication_type = self.configuration["authentication_type"]
 
         self.session = None
         if self.ssl_enabled and self.certificate:
@@ -127,15 +132,20 @@ class SharepointServerClient:
         }
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
 
-        self.session = aiohttp.ClientSession(
-            auth=aiohttp.BasicAuth(
-                login=self.configuration["username"],
-                password=self.configuration["password"],
-            ),  # pyright: ignore
-            headers=request_headers,
-            timeout=timeout,
-            raise_for_status=True,
-        )
+        if self.authentication_type == KERBEROS_AUTHENTICATION:
+            # To avoid content & headers response stripping whenever error raise, set sanitize_mutual_error_response to False.
+            self.auth = HTTPKerberosAuth(sanitize_mutual_error_response=False)
+            self.session = requests.Session()
+        else:
+            self.session = aiohttp.ClientSession(
+                auth=aiohttp.BasicAuth(
+                    login=self.configuration["username"],
+                    password=self.configuration["password"],
+                ),  # pyright: ignore
+                headers=request_headers,
+                timeout=timeout,
+                raise_for_status=True,
+            )
         return self.session
 
     def format_url(
@@ -165,7 +175,10 @@ class SharepointServerClient:
         self._sleeps.cancel()
         if self.session is None:
             return
-        await self.session.close()  # pyright: ignore
+        if self.authentication_type == KERBEROS_AUTHENTICATION:
+            self.session.close()
+        else:
+            await self.session.close()  # pyright: ignore
         self.session = None
 
     async def get_content(
@@ -205,10 +218,18 @@ class SharepointServerClient:
                 value=site_url,
                 file_relative_url=file_relative_url,
             ):
-                async for data in response.content.iter_chunked(  # pyright: ignore
-                    CHUNK_SIZE
-                ):
-                    await async_buffer.write(data)
+                if self.authentication_type == KERBEROS_AUTHENTICATION:
+                    if isinstance(response.content, bytes):
+                        await async_buffer.write(response.content)
+                    else:
+                        await async_buffer.write(
+                            bytes(response.content)  # pyright: ignore
+                        )
+                else:
+                    async for data in response.content.iter_chunked(  # pyright: ignore
+                        CHUNK_SIZE
+                    ):
+                        await async_buffer.write(data)
 
             source_file_name = async_buffer.name
 
@@ -337,16 +358,34 @@ class SharepointServerClient:
 
         while True:
             try:
-                async with self._get_session().get(  # pyright: ignore
-                    url=url,
-                    ssl=self.ssl_ctx,  # pyright: ignore
-                    headers=headers,
-                ) as result:
-                    if url_name == ATTACHMENT:
-                        yield result
-                    else:
-                        yield await result.json()
-                    break
+                if self.authentication_type == KERBEROS_AUTHENTICATION:
+                    headers = {
+                        "accept": "application/json",
+                        "content-type": "application/json",
+                    }
+                    with self._get_session().get(  # pyright: ignore
+                        auth=self.auth,
+                        url=url,
+                        verify=self.ssl_ctx,
+                        headers=headers,
+                    ) as result:
+                        result.raise_for_status()
+                        if url_name == ATTACHMENT:
+                            yield result
+                        else:
+                            yield result.json()
+                        break
+                else:
+                    async with self._get_session().get(  # pyright: ignore
+                        url=url,
+                        ssl=self.ssl_ctx,  # pyright: ignore
+                        headers=headers,
+                    ) as result:
+                        if url_name == ATTACHMENT:
+                            yield result
+                        else:
+                            yield await result.json()
+                        break
             except Exception as exception:
                 if isinstance(
                     exception,
@@ -612,43 +651,66 @@ class SharepointServerDataSource(BaseDataSource):
             dictionary: Default configuration.
         """
         return {
-            "username": {
-                "label": "SharePoint Server username",
+            "authentication_type": {
+                "display": "dropdown",
+                "label": "SharePoint Server authentication type",
+                "options": [
+                    {
+                        "label": "Basic Authentication",
+                        "value": BASIC_AUTHENTICATION,
+                    },
+                    {
+                        "label": "Kerberos Authentication",
+                        "value": KERBEROS_AUTHENTICATION,
+                    },
+                ],
                 "order": 1,
+                "type": "str",
+                "value": BASIC_AUTHENTICATION,
+            },
+            "username": {
+                "depends_on": [
+                    {"field": "authentication_type", "value": BASIC_AUTHENTICATION}
+                ],
+                "label": "SharePoint Server username",
+                "order": 2,
                 "type": "str",
                 "value": "demo_user",
             },
             "password": {
+                "depends_on": [
+                    {"field": "authentication_type", "value": BASIC_AUTHENTICATION}
+                ],
                 "label": "SharePoint Server password",
                 "sensitive": True,
-                "order": 2,
+                "order": 3,
                 "type": "str",
                 "value": "abc@123",
             },
             "host_url": {
                 "label": "SharePoint host",
-                "order": 3,
+                "order": 4,
                 "type": "str",
                 "value": "http://127.0.0.1:8491",
             },
             "site_collections": {
                 "display": "textarea",
                 "label": "Comma-separated list of SharePoint site collections to index",
-                "order": 4,
+                "order": 5,
                 "type": "list",
                 "value": "collection1",
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 5,
+                "order": 6,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 6,
+                "order": 7,
                 "type": "str",
                 "value": "",
             },
@@ -656,7 +718,7 @@ class SharepointServerDataSource(BaseDataSource):
                 "default_value": RETRIES,
                 "display": "numeric",
                 "label": "Retries per request",
-                "order": 7,
+                "order": 8,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
