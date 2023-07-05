@@ -1630,10 +1630,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         try:
             async with NamedTemporaryFile(
-                mode="wb",
-                delete=False,
-                suffix=file_extension,
-                dir="/Users/vidok/projects/connectors-python/tmp",
+                mode="wb", delete=False, suffix=file_extension
             ) as async_buffer:
                 # download_func should always be a partial with async_buffer as last argument that is not filled by the caller!
                 # E.g. if download_func is download_drive_item(drive_id, item_id, async_buffer) then it
