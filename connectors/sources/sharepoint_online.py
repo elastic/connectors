@@ -798,7 +798,11 @@ def _postfix_group(group):
 
 
 def is_domain_group(user_fields):
-    return user_fields["ContentType"] == "DomainGroup" and "federateddirectoryclaimprovider" in user_fields["Name"]
+    return user_fields.get(
+        "ContentType"
+    ) == "DomainGroup" and "federateddirectoryclaimprovider" in user_fields.get(
+        "Name", ""
+    )
 
 
 def is_person(user_fields):
@@ -1203,9 +1207,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                     user = user_information["fields"]
 
                     if is_domain_group(user):
-                        self._logger.debug(f"Detected a domain group: {user.get('Name')}")
+                        self._logger.debug(
+                            f"Detected a domain group: {user.get('Name')}"
+                        )
                         domain_group_id = _domain_group_id(user.get("Name"))
-                        self._logger.debug(f"Detected domain groupId as: {domain_group_id}")
+                        self._logger.debug(
+                            f"Detected domain groupId as: {domain_group_id}"
+                        )
 
                         if domain_group_id:
                             async for member_email, member_username in _emails_and_usernames_of_domain_group(
