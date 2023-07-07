@@ -408,6 +408,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         temp_file_name = ""
         blob_name = blob["name"]
+        attachment, blob_size = None, 0
 
         self._logger.debug(f"Downloading {blob_name}")
 
