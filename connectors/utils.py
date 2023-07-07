@@ -802,9 +802,6 @@ class ExtractionService:
                 f"Text extraction unexpectedly failed for {filename}. Error: {e}"
             )
 
-        if content:
-            logger.info(f"{filepath} WAS EXTRACTED")
-
         return content
 
     async def file_sender(self, filepath):
