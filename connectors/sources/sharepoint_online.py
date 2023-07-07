@@ -1559,6 +1559,15 @@ class SharepointOnlineDataSource(BaseDataSource):
             return OP_INDEX
 
     def download_function(self, drive_item, max_drive_item_age):
+        if "deleted" in drive_item:
+            # deleted drive items do not contain `name` property in the payload
+            # so drive_item['id'] is used
+            self._logger.debug(
+                f"Not downloading the item id={drive_item['id']} because it has been deleted"
+            )
+
+            return None
+
         if "folder" in drive_item:
             self._logger.debug(f"Not downloading folder {drive_item['name']}")
             return None
