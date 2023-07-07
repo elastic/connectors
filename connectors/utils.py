@@ -527,11 +527,19 @@ def get_pem_format(
 
     Args:
         key (str): Key in raw format.
-        postfix (str): Certificate end string.
+        postfix (str): Certificate footer.
         max_split (int): Specifies how many splits to do. Defaults to -1.
 
     Returns:
         string: PEM format
+
+    Example:
+        key = "-----BEGIN PRIVATE KEY----- PrivateKey -----END PRIVATE KEY-----"
+        postfix = "-----END PRIVATE KEY-----"
+        max_split = 2
+        pem_format = "-----BEGIN PRIVATE KEY-----
+                    PrivateKey
+                    -----END PRIVATE KEY-----"
     """
     pem_format = ""
     if key.count(postfix) == 1:
