@@ -374,7 +374,8 @@ def test_tweak_bulk_options():
     assert options["concurrent_downloads"] == 10
 
 
-def test_get_session():
+@pytest.mark.asyncio
+async def test_get_session():
     """Test that the instance of session returned is always the same for the datasource class."""
     source = create_source(JiraDataSource)
     first_instance = source.jira_client._get_session()

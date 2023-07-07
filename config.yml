@@ -37,6 +37,7 @@ sources:
   mysql: connectors.sources.mysql:MySqlDataSource
   network_drive: connectors.sources.network_drive:NASDataSource
   google_cloud_storage: connectors.sources.google_cloud_storage:GoogleCloudStorageDataSource
+  google_drive: connectors.sources.google_drive:GoogleDriveDataSource
   azure_blob_storage: connectors.sources.azure_blob_storage:AzureBlobStorageDataSource
   postgresql: connectors.sources.postgresql:PostgreSQLDataSource
   oracle: connectors.sources.oracle:OracleDataSource

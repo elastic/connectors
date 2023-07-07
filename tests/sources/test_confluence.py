@@ -720,7 +720,8 @@ async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_pat
     assert documents == expected_responses
 
 
-def test_get_session():
+@pytest.mark.asyncio
+async def test_get_session():
     """Test that the instance of session returned is always the same for the datasource class."""
     source = create_source(ConfluenceDataSource)
     first_instance = source.confluence_client._get_session()
