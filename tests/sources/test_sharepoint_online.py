@@ -1847,6 +1847,16 @@ class TestSharepointOnlineDataSource:
         assert download_result is None
 
     @pytest.mark.asyncio
+    async def test_download_function_for_deleted_item(self):
+        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
+        # deleted items don't have `name` property
+        drive_item = {"id": "testid", "deleted": {"state": "deleted"}}
+
+        download_result = source.download_function(drive_item, None)
+
+        assert download_result is None
+
+    @pytest.mark.asyncio
     async def test_download_function_with_filtering_rule(self):
         source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
         max_drive_item_age = 15
