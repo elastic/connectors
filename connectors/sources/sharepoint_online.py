@@ -9,7 +9,7 @@ import re
 from collections.abc import Iterable, Sized
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from functools import partial
+from functools import partial, wraps
 
 import aiofiles
 import aiohttp
@@ -59,6 +59,7 @@ else:
     GRAPH_API_AUTH_URL = "https://login.microsoftonline.com"
     REST_API_AUTH_URL = "https://accounts.accesscontrol.windows.net"
 
+DEFAULT_RETRY_COUNT = 3
 DEFAULT_RETRY_SECONDS = 30
 FILE_WRITE_CHUNK_SIZE = 1024
 MAX_DOCUMENT_SIZE = 10485760
@@ -236,7 +237,7 @@ class GraphAPIToken(MicrosoftSecurityToken):
 class SharepointRestAPIToken(MicrosoftSecurityToken):
     """Token to connect to Sharepoint REST API endpoints."""
 
-    @retryable(retries=3)
+    @retryable(retries=DEFAULT_RETRY_COUNT)
     async def _fetch_token(self):
         """Fetch API token for usage with Sharepoint REST API
 
@@ -323,8 +324,31 @@ class MicrosoftAPISession:
         async with self._call_api(absolute_url) as resp:
             return await resp.json()
 
+    def retryable_aiohttp_call(retries):
+        # TODO: improve utils.retryable to allow custom logic
+        # that can help choose what to retry
+        def wrapper(func):
+            @wraps(func)
+            async def wrapped(*args, **kwargs):
+                retry = 1
+                while retry <= retries:
+                    try:
+                        async for item in func(*args, **kwargs):
+                            yield item
+                        break
+                    except ClientResponseError as e:
+                        if retry >= retries:
+                            raise e
+
+                        await self._sleeps.sleep(0)
+                        retry += 1
+
+            return wrapped
+
+        return wrapper
+
     @asynccontextmanager
-    @retryable(retries=3)
+    @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
     async def _call_api(self, absolute_url):
         try:
             # Sharepoint / Graph API has quite strict throttling policies
