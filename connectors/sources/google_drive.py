@@ -408,31 +408,38 @@ class GoogleDriveDataSource(BaseDataSource):
 
         temp_file_name = ""
         blob_name = blob["name"]
+        attachment, blob_size = None, 0
 
         self._logger.debug(f"Downloading {blob_name}")
 
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            await download_func(
-                pipe_to=async_buffer,
+        try:
+            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+                await download_func(
+                    pipe_to=async_buffer,
+                )
+
+                temp_file_name = async_buffer.name
+
+            await asyncio.to_thread(
+                convert_to_b64,
+                source=temp_file_name,
             )
 
-            temp_file_name = async_buffer.name
+            blob_size = os.stat(temp_file_name).st_size
 
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=temp_file_name,
-        )
+            async with aiofiles.open(file=temp_file_name, mode="r") as target_file:
+                attachment = (await target_file.read()).strip()
 
-        blob_size = os.stat(temp_file_name).st_size
-
-        async with aiofiles.open(file=temp_file_name, mode="r") as target_file:
-            attachment = (await target_file.read()).strip()
-
-        self._logger.debug(
-            f"Downloaded {blob_name} with the size of {blob_size} bytes "
-        )
-
-        await remove(str(temp_file_name))
+            self._logger.debug(
+                f"Downloaded {blob_name} with the size of {blob_size} bytes "
+            )
+        except Exception as e:
+            self._logger.error(
+                f"Exception encountered when processing file: {blob_name}. Exception: {e}"
+            )
+        finally:
+            if temp_file_name:
+                await remove(str(temp_file_name))
 
         return attachment, blob_size
 
