@@ -667,8 +667,12 @@ class TestExtractionService:
         payload = {"extracted_text": "I've been extracted!"}
 
         with patch("builtins.open", mock_open(read_data=b"data")), patch(
-                "connectors.utils.ExtractionService.get_extraction_config",
-                return_value={"host": "http://localhost:8090", "use_file_pointers": True, "shared_volume_dir": "/tmp"},
+            "connectors.utils.ExtractionService.get_extraction_config",
+            return_value={
+                "host": "http://localhost:8090",
+                "use_file_pointers": True,
+                "shared_volume_dir": "/tmp",
+            },
         ):
             mock_responses.put(url, status=200, payload=payload)
 

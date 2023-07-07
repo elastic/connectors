@@ -714,9 +714,13 @@ class ExtractionService:
             self.timeout = self.extraction_config.get("timeout", 30)
             self.headers = {"accept": "application/json"}
 
-            self.use_file_pointers = self.extraction_config.get("use_file_pointers", False)
+            self.use_file_pointers = self.extraction_config.get(
+                "use_file_pointers", False
+            )
             if self.use_file_pointers:
-                self.volume_dir = self.extraction_config.get("fileshare_dir", "/app/files")
+                self.volume_dir = self.extraction_config.get(
+                    "fileshare_dir", "/app/files"
+                )
                 self.chunk_size = None
             else:
                 self.volume_dir = None
@@ -783,8 +787,10 @@ class ExtractionService:
 
         try:
             async with self._begin_session().put(
-                    f"{self.host}/extract_text/{self.filepointer_params(filepath)}",
-                    data=(self.file_sender(filepath) if not self.use_file_pointers else None)
+                f"{self.host}/extract_text/{self.filepointer_params(filepath)}",
+                data=(
+                    self.file_sender(filepath) if not self.use_file_pointers else None
+                ),
             ) as response:
                 return await self.parse_extraction_resp(filename, response)
         except (ClientConnectionError, ServerTimeoutError) as e:
@@ -810,7 +816,7 @@ class ExtractionService:
 
     def filepointer_params(self, filepath):
         if not self.use_file_pointers:
-            return ''
+            return ""
 
         return f"?local_file_path={filepath}"
 
