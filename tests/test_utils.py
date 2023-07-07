@@ -481,9 +481,7 @@ PrivateKey
 
     # Execute
     formated_privat_key = get_pem_format(
-        key=private_key,
-        postfix="-----END PRIVATE KEY-----",
-        max_split=2,
+        key=private_key, postfix="-----END PRIVATE KEY-----"
     )
     assert formated_privat_key == expected_formated_pem_key
 
@@ -495,7 +493,7 @@ Certificate2
     certificate = "-----BEGIN CERTIFICATE----- Certificate1 Certificate2 -----END CERTIFICATE-----"
 
     # Execute
-    formated_certificate = get_pem_format(key=certificate, max_split=1)
+    formated_certificate = get_pem_format(key=certificate)
     assert formated_certificate == expected_formated_certificate
 
     # Setup
@@ -509,7 +507,7 @@ Certificate2
     multi_certificate = "-----BEGIN CERTIFICATE----- Certificate1 -----END CERTIFICATE----- -----BEGIN CERTIFICATE----- Certificate2 -----END CERTIFICATE-----"
 
     # Execute
-    formated_multi_certificate = get_pem_format(key=multi_certificate, max_split=1)
+    formated_multi_certificate = get_pem_format(key=multi_certificate)
     assert formated_multi_certificate == expected_formated_multi_certificate
 
 

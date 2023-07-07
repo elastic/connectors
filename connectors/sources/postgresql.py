@@ -111,7 +111,7 @@ class PostgreSQLDataSource(GenericBaseDataSource):
         Returns:
             dictionary: Connection arguments
         """
-        pem_format = get_pem_format(key=self.ssl_ca, max_split=1)
+        pem_format = get_pem_format(key=self.ssl_ca)
         ctx = ssl.create_default_context()
         ctx.load_verify_locations(cadata=pem_format)
         connect_args = {"ssl": ctx}

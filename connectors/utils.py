@@ -472,7 +472,7 @@ def ssl_context(certificate):
     Returns:
         ssl_context: SSL context with certificate
     """
-    certificate = get_pem_format(certificate, max_split=1)
+    certificate = get_pem_format(certificate)
     ctx = ssl.create_default_context()
     ctx.load_verify_locations(cadata=certificate)
     return ctx
@@ -518,17 +518,12 @@ def is_expired(expires_at):
     return datetime.utcnow() >= expires_at
 
 
-def get_pem_format(
-    key,
-    postfix="-----END CERTIFICATE-----",
-    max_split=-1,
-):
+def get_pem_format(key, postfix="-----END CERTIFICATE-----"):
     """Convert key into PEM format.
 
     Args:
         key (str): Key in raw format.
         postfix (str): Certificate footer.
-        max_split (int): Specifies how many splits to do. Defaults to -1.
 
     Returns:
         string: PEM format
@@ -536,23 +531,23 @@ def get_pem_format(
     Example:
         key = "-----BEGIN PRIVATE KEY----- PrivateKey -----END PRIVATE KEY-----"
         postfix = "-----END PRIVATE KEY-----"
-        max_split = 2
         pem_format = "-----BEGIN PRIVATE KEY-----
                     PrivateKey
                     -----END PRIVATE KEY-----"
     """
     pem_format = ""
+    reverse_split = postfix.count(" ")
     if key.count(postfix) == 1:
         key = key.replace(" ", "\n")
-        key = " ".join(key.split("\n", max_split))
-        key = " ".join(key.rsplit("\n", max_split))
+        key = " ".join(key.split("\n", reverse_split))
+        key = " ".join(key.rsplit("\n", reverse_split))
         pem_format = key
     elif key.count(postfix) > 1:
         for cert in key.split(postfix)[:-1]:
             cert = cert.strip() + "\n" + postfix
             cert = cert.replace(" ", "\n")
-            cert = " ".join(cert.split("\n", max_split))
-            cert = " ".join(cert.rsplit("\n", max_split))
+            cert = " ".join(cert.split("\n", reverse_split))
+            cert = " ".join(cert.rsplit("\n", reverse_split))
             pem_format += cert + "\n"
     return pem_format
 

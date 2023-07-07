@@ -145,7 +145,7 @@ class MSSQLDataSource(GenericBaseDataSource):
 
     def create_pem_file(self):
         """Create pem file for SSL Verification"""
-        pem_certificates = get_pem_format(key=self.ssl_ca, max_split=1)
+        pem_certificates = get_pem_format(key=self.ssl_ca)
         with NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as cert:
             cert.write(pem_certificates)
             self.certfile = cert.name
