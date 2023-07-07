@@ -269,6 +269,33 @@ class SharepointRestAPIToken(MicrosoftSecurityToken):
             return access_token, expires_in
 
 
+def retryable_aiohttp_call(retries):
+    # TODO: improve utils.retryable to allow custom logic
+    # that can help choose what to retry
+    def wrapper(func):
+        @wraps(func)
+        async def wrapped(*args, **kwargs):
+            retry = 1
+            while retry <= retries:
+                try:
+                    async for item in func(*args, **kwargs):
+                        yield item
+                    break
+                except (
+                    ThrottledError,
+                    PermissionsMissing,
+                    InternalServerError,
+                ) as e:
+                    if retry >= retries:
+                        raise e
+
+                    retry += 1
+
+        return wrapped
+
+    return wrapper
+
+
 class MicrosoftAPISession:
     def __init__(self, http_session, api_token, scroll_field, logger_):
         self._http_session = http_session
@@ -329,32 +356,6 @@ class MicrosoftAPISession:
     async def _get_json(self, absolute_url):
         async with self._call_api(absolute_url) as resp:
             return await resp.json()
-
-    def retryable_aiohttp_call(retries):
-        # TODO: improve utils.retryable to allow custom logic
-        # that can help choose what to retry
-        def wrapper(func):
-            @wraps(func)
-            async def wrapped(*args, **kwargs):
-                retry = 1
-                while retry <= retries:
-                    try:
-                        async for item in func(*args, **kwargs):
-                            yield item
-                        break
-                    except (
-                        ThrottledError,
-                        PermissionsMissing,
-                        InternalServerError,
-                    ) as e:
-                        if retry >= retries:
-                            raise e
-
-                        retry += 1
-
-            return wrapped
-
-        return wrapper
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
