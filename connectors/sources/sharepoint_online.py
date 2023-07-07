@@ -9,7 +9,7 @@ import re
 from collections.abc import Iterable, Sized
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from functools import partial
+from functools import partial, wraps
 
 import aiofiles
 import aiohttp
@@ -59,6 +59,7 @@ else:
     GRAPH_API_AUTH_URL = "https://login.microsoftonline.com"
     REST_API_AUTH_URL = "https://accounts.accesscontrol.windows.net"
 
+DEFAULT_RETRY_COUNT = 3
 DEFAULT_RETRY_SECONDS = 30
 FILE_WRITE_CHUNK_SIZE = 1024
 MAX_DOCUMENT_SIZE = 10485760
@@ -88,6 +89,12 @@ class NotFound(Exception):
 
 class InternalServerError(Exception):
     """Internal exception class to handle 500s from the API, which could sometimes also mean NotFound."""
+
+    pass
+
+
+class ThrottledError(Exception):
+    """Internal exception class to indicate that request was throttled by the API"""
 
     pass
 
@@ -236,7 +243,7 @@ class GraphAPIToken(MicrosoftSecurityToken):
 class SharepointRestAPIToken(MicrosoftSecurityToken):
     """Token to connect to Sharepoint REST API endpoints."""
 
-    @retryable(retries=3)
+    @retryable(retries=DEFAULT_RETRY_COUNT)
     async def _fetch_token(self):
         """Fetch API token for usage with Sharepoint REST API
 
@@ -260,6 +267,33 @@ class SharepointRestAPIToken(MicrosoftSecurityToken):
             expires_in = int(json_response["expires_in"])
 
             return access_token, expires_in
+
+
+def retryable_aiohttp_call(retries):
+    # TODO: improve utils.retryable to allow custom logic
+    # that can help choose what to retry
+    def wrapper(func):
+        @wraps(func)
+        async def wrapped(*args, **kwargs):
+            retry = 1
+            while retry <= retries:
+                try:
+                    async for item in func(*args, **kwargs):
+                        yield item
+                    break
+                except (
+                    ThrottledError,
+                    PermissionsMissing,
+                    InternalServerError,
+                ) as e:
+                    if retry >= retries:
+                        raise e
+
+                    retry += 1
+
+        return wrapped
+
+    return wrapper
 
 
 class MicrosoftAPISession:
@@ -324,7 +358,7 @@ class MicrosoftAPISession:
             return await resp.json()
 
     @asynccontextmanager
-    @retryable(retries=3)
+    @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
     async def _call_api(self, absolute_url):
         try:
             # Sharepoint / Graph API has quite strict throttling policies
@@ -360,7 +394,7 @@ class MicrosoftAPISession:
                 )
 
                 await self._sleeps.sleep(retry_seconds)  # TODO: use CancellableSleeps
-                raise
+                raise ThrottledError from e
             elif (
                 e.status == 403 or e.status == 401
             ):  # Might work weird, but Graph returns 403 and REST returns 401
