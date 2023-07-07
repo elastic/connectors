@@ -92,6 +92,11 @@ class InternalServerError(Exception):
 
     pass
 
+class ThrottledError(Exception):
+    """Internal exception class to indicate that request was throttled by the API"""
+
+    pass
+
 
 class InvalidSharepointTenant(Exception):
     """Exception class to notify that tenant name is invalid or does not match tenant id provided"""
@@ -337,14 +342,13 @@ class MicrosoftAPISession:
                             yield item
                         break
                     except (
-                        ClientResponseError,
+                        ThrottledError,
                         PermissionsMissing,
                         InternalServerError,
                     ) as e:
                         if retry >= retries:
                             raise e
 
-                        await self._sleeps.sleep(0)
                         retry += 1
 
             return wrapped
@@ -388,7 +392,7 @@ class MicrosoftAPISession:
                 )
 
                 await self._sleeps.sleep(retry_seconds)  # TODO: use CancellableSleeps
-                raise
+                raise ThrottledError from e
             elif (
                 e.status == 403 or e.status == 401
             ):  # Might work weird, but Graph returns 403 and REST returns 401
