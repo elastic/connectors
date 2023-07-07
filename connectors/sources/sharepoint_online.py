@@ -336,7 +336,11 @@ class MicrosoftAPISession:
                         async for item in func(*args, **kwargs):
                             yield item
                         break
-                    except ClientResponseError as e:
+                    except (
+                        ClientResponseError,
+                        PermissionsMissing,
+                        InternalServerError,
+                    ) as e:
                         if retry >= retries:
                             raise e
 
