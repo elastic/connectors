@@ -92,6 +92,7 @@ class InternalServerError(Exception):
 
     pass
 
+
 class ThrottledError(Exception):
     """Internal exception class to indicate that request was throttled by the API"""
 
