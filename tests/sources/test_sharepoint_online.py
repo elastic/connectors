@@ -93,6 +93,10 @@ def set_dls_enabled(source, dls_enabled):
     source.configuration.set_field("use_document_level_security", value=dls_enabled)
 
 
+def set_fetch_users_by_site(source, fetch_users_by_site):
+    source.configuration.set_field("fetch_users_by_site", value=fetch_users_by_site)
+
+
 def dls_feature_flag_enabled(value):
     return value
 
@@ -2324,9 +2328,12 @@ class TestSharepointOnlineDataSource:
         "connectors.sources.sharepoint_online._emails_and_usernames_of_domain_group",
         AsyncIterator([("some_email", "some_username")]),
     )
-    async def test_get_access_control_with_dls_enabled(self, patch_sharepoint_client):
+    async def test_get_access_control_with_dls_enabled_and_users_by_site(
+        self, patch_sharepoint_client
+    ):
         source = create_source(SharepointOnlineDataSource)
         set_dls_enabled(source, True)
+        set_fetch_users_by_site(source, True)
 
         member = {"Name": "some member"}
 
@@ -2347,6 +2354,34 @@ class TestSharepointOnlineDataSource:
             user_access_control_docs.append(doc)
 
         assert len(user_access_control_docs) == 3
+
+    @pytest.mark.asyncio
+    async def test_get_access_control_with_dls_enabled_and_fetch_all_users(
+        self, patch_sharepoint_client
+    ):
+        source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, True)
+        set_fetch_users_by_site(source, False)
+
+        member_email = "member@acme.co"
+        member = {"userPrincipalName": "some member", "EMail": member_email}
+        owner_email = "owner@acme.co"
+        owner = {"UserName": "some owner", "mail": owner_email}
+
+        user_doc_one = {"_id": member_email}
+        user_doc_two = {"_id": owner_email}
+
+        patch_sharepoint_client.users = AsyncIterator([member, owner])
+        source._user_access_control_doc = AsyncMock(
+            side_effect=[user_doc_one, user_doc_two]
+        )
+
+        user_access_control_docs = []
+
+        async for doc in source.get_access_control():
+            user_access_control_docs.append(doc)
+
+        assert len(user_access_control_docs) == 2
 
     @pytest.mark.parametrize(
         "user_info_name, expected_domain_group_id",
