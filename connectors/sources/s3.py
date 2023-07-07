@@ -176,7 +176,7 @@ class S3Client:
         if not (doit):
             return
         filename = doc["filename"]
-        if os.path.splitext(filename)[-1] not in TIKA_SUPPORTED_FILETYPES:
+        if (os.path.splitext(filename)[-1]).lower() not in TIKA_SUPPORTED_FILETYPES:
             self._logger.debug(f"{filename} can't be extracted")
             return
         if doc["size_in_bytes"] > DEFAULT_MAX_FILE_SIZE:
