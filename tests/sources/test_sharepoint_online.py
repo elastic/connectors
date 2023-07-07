@@ -1439,13 +1439,13 @@ class TestSharepointOnlineDataSource:
             {
                 "fields": {
                     "ContentType": "DomainGroup",
-                    "Name": f"i:0#.f|membership|{GROUP_1}",
+                    "Name": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_1}",
                 }
             },
             {
                 "fields": {
                     "ContentType": "DomainGroup",
-                    "Name": f"abc|def|ghi/{GROUP_2}",
+                    "Name": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_2}_o",
                 }
             },
             {
@@ -2462,10 +2462,22 @@ class TestSharepointOnlineDataSource:
         assert _prefix_email(email) == "email:email"
 
     def test_is_domain_group(self):
-        assert is_domain_group({"ContentType": "DomainGroup"})
+        assert is_domain_group(
+            {
+                "ContentType": "DomainGroup",
+                "Name": "c:0o.c|federateddirectoryclaimprovider|97d055cf-5cdf-4e5e-b383-f01ed3a8844d",
+            }
+        )
 
     def test_is_not_domain_group(self):
         assert not is_domain_group({"ContentType": "Person"})
+        assert not is_domain_group({"ContentType": "DomainGroup"})
+        assert not is_domain_group(
+            {
+                "ContentType": "DomainGroup",
+                "Name": "c:0u.c|tenant|67f8dab3bb7a912bc3da51b94b6bc5d23edef0e83056056f1a3929b4e04b8624",
+            }
+        )
 
     def test_is_person(self):
         assert is_person({"ContentType": "Person"})

@@ -480,7 +480,9 @@ PrivateKey
     private_key = "-----BEGIN PRIVATE KEY----- PrivateKey -----END PRIVATE KEY-----"
 
     # Execute
-    formated_privat_key = get_pem_format(key=private_key, max_split=2)
+    formated_privat_key = get_pem_format(
+        key=private_key, postfix="-----END PRIVATE KEY-----"
+    )
     assert formated_privat_key == expected_formated_pem_key
 
     # Setup
@@ -491,8 +493,22 @@ Certificate2
     certificate = "-----BEGIN CERTIFICATE----- Certificate1 Certificate2 -----END CERTIFICATE-----"
 
     # Execute
-    formated_certificate = get_pem_format(key=certificate, max_split=1)
+    formated_certificate = get_pem_format(key=certificate)
     assert formated_certificate == expected_formated_certificate
+
+    # Setup
+    expected_formated_multi_certificate = """-----BEGIN CERTIFICATE-----
+Certificate1
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+Certificate2
+-----END CERTIFICATE-----
+"""
+    multi_certificate = "-----BEGIN CERTIFICATE----- Certificate1 -----END CERTIFICATE----- -----BEGIN CERTIFICATE----- Certificate2 -----END CERTIFICATE-----"
+
+    # Execute
+    formated_multi_certificate = get_pem_format(key=multi_certificate)
+    assert formated_multi_certificate == expected_formated_multi_certificate
 
 
 def test_hash_id():

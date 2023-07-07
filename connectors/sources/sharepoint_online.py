@@ -832,7 +832,11 @@ def _postfix_group(group):
 
 
 def is_domain_group(user_fields):
-    return user_fields["ContentType"] == "DomainGroup"
+    return user_fields.get(
+        "ContentType"
+    ) == "DomainGroup" and "federateddirectoryclaimprovider" in user_fields.get(
+        "Name", ""
+    )
 
 
 def is_person(user_fields):
@@ -1044,6 +1048,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             ]
         """
 
+        self._logger.debug(f"Looking at site: {site['id']}")
         if not self._dls_enabled():
             return []
 
@@ -1053,7 +1058,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             user = user_information["fields"]
 
             if is_domain_group(user):
+                self._logger.debug(f"It is a domain group with name: {user['Name']}")
                 domain_group_id = _domain_group_id(user["Name"])
+                self._logger.debug(f"Detected domain groupId as: {domain_group_id}")
 
                 if domain_group_id:
                     access_control.add(_prefix_group(domain_group_id))
@@ -1227,13 +1234,20 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
             ):
+                self._logger.debug(f"Looking at site: {site['id']}")
                 async for user_information in self.client.user_information_list(
                     site["id"]
                 ):
                     user = user_information["fields"]
 
                     if is_domain_group(user):
+                        self._logger.debug(
+                            f"Detected a domain group: {user.get('Name')}"
+                        )
                         domain_group_id = _domain_group_id(user.get("Name"))
+                        self._logger.debug(
+                            f"Detected domain groupId as: {domain_group_id}"
+                        )
 
                         if domain_group_id:
                             async for member_email, member_username in _emails_and_usernames_of_domain_group(

@@ -251,7 +251,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         ):
             json_credentials["private_key"] = get_pem_format(
                 key=json_credentials["private_key"].strip(),
-                max_split=2,
+                postfix="-----END PRIVATE KEY-----",
             )
 
         required_credentials = {
