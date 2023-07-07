@@ -721,9 +721,7 @@ class ExtractionService:
                 self.volume_dir = self.extraction_config.get(
                     "fileshare_dir", "/app/files"
                 )
-                self.chunk_size = None
             else:
-                self.volume_dir = None
                 self.chunk_size = self.extraction_config.get("stream_chunk_size", 65536)
                 self.headers["content-type"] = "application/octet-stream"
         else:
