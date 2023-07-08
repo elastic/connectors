@@ -170,7 +170,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             return
 
         blob_name = blob["title"]
-        if os.path.splitext(blob_name)[-1] not in TIKA_SUPPORTED_FILETYPES:
+        if (os.path.splitext(blob_name)[-1]).lower() not in TIKA_SUPPORTED_FILETYPES:
             self._logger.warning(f"{blob_name} can't be extracted")
             return
 
