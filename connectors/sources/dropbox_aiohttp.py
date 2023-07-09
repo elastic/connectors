@@ -386,6 +386,9 @@ class DropboxDataSource(BaseDataSource):
         self.dropbox_client = DropboxClient(configuration=configuration)
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
 
+    def _set_internal_logger(self):
+        self.dropbox_client.set_logger(self._logger)
+
     @classmethod
     def get_default_configuration(cls):
         """Get the default configuration for Dropbox
@@ -400,7 +403,6 @@ class DropboxDataSource(BaseDataSource):
                 "required": False,
                 "type": "str",
                 "value": "/",
-                "default_value": "/",
             },
             "app_key": {
                 "label": "Dropbox App Key",
