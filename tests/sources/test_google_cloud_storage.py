@@ -414,6 +414,54 @@ async def test_get_content():
 
 
 @pytest.mark.asyncio
+async def test_get_content_with_upper_extension():
+    """Test the module responsible for fetching the content of the file if it is extractable."""
+
+    # Setup
+    mocked_gcs_object = get_gcs_source_object()
+    blob_document = {
+        "id": "bucket_1/blob_1/123123123",
+        "component_count": None,
+        "content_encoding": None,
+        "content_language": None,
+        "created_at": None,
+        "last_updated": "2011-10-12T00:01:00Z",
+        "metadata": None,
+        "name": "blob_1.TXT",
+        "size": "15",
+        "storage_class": None,
+        "_timestamp": "2011-10-12T00:01:00Z",
+        "type": None,
+        "url": "https://console.cloud.google.com/storage/browser/_details/bucket_1/blob_1;tab=live_object?project=dummy123",
+        "version": None,
+        "bucket_name": "bucket_1",
+    }
+    expected_blob_document = {
+        "_id": "bucket_1/blob_1/123123123",
+        "_timestamp": "2011-10-12T00:01:00Z",
+        "_attachment": "",
+    }
+    blob_content_response = ""
+
+    # Execute and Assert
+    with mock.patch.object(
+        Aiogoogle, "as_service_account", return_value=blob_content_response
+    ):
+        async with Aiogoogle(
+            service_account_creds=mocked_gcs_object._google_storage_client.service_account_credentials
+        ) as google_client:
+            storage_client = await google_client.discover(
+                api_name=API_NAME, api_version=API_VERSION
+            )
+            storage_client.objects = mock.MagicMock()
+            content = await mocked_gcs_object.get_content(
+                blob=blob_document,
+                doit=True,
+            )
+            assert content == expected_blob_document
+
+
+@pytest.mark.asyncio
 async def test_get_content_when_type_not_supported():
     """Test the module responsible for fetching the content of the file if it is not extractable or doit is not true."""
 

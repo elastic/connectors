@@ -104,11 +104,3 @@ async def test_close():
     source = create_source(MSSQLDataSource)
     source.create_pem_file()
     await source.close()
-
-
-def test_get_pem_format():
-    source = create_source(MSSQLDataSource)
-    keys = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE----- -----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE----- -----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
-    expected_result = "-----BEGIN CERTIFICATE-----\nCertificate\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nCertificate\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nCertificate\n-----END CERTIFICATE-----\n"
-    actual_result = source.get_pem_format(keys=keys, max_split=1)
-    assert expected_result == actual_result

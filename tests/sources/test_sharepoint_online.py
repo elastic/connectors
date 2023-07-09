@@ -481,6 +481,33 @@ class TestMicrosoftAPISession:
         patch_cancellable_sleeps.assert_awaited_with(retry_after)
 
     @pytest.mark.asyncio
+    async def test_call_api_with_404(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        payload = {"hello": "world"}
+        retry_after = 25
+
+        # First throttle, then do not throttle
+        first_request_error = ClientResponseError(None, None)
+        first_request_error.status = 404
+        first_request_error.message = "Something went wrong"
+        first_request_error.headers = {"Retry-After": str(retry_after)}
+
+        mock_responses.get(url, exception=first_request_error)
+        mock_responses.get(url, payload=payload)
+
+        with pytest.raises(NotFound) as e:
+            async with microsoft_api_session._call_api(url) as _:
+                pass
+
+        assert e is not None
+
+    @pytest.mark.asyncio
     async def test_call_api_with_429_without_retry_after(
         self,
         microsoft_api_session,
@@ -1412,13 +1439,13 @@ class TestSharepointOnlineDataSource:
             {
                 "fields": {
                     "ContentType": "DomainGroup",
-                    "Name": f"i:0#.f|membership|{GROUP_1}",
+                    "Name": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_1}",
                 }
             },
             {
                 "fields": {
                     "ContentType": "DomainGroup",
-                    "Name": f"abc|def|ghi/{GROUP_2}",
+                    "Name": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_2}_o",
                 }
             },
             {
@@ -1814,6 +1841,16 @@ class TestSharepointOnlineDataSource:
             "name": "folder",
             "folder": {},
         }
+
+        download_result = source.download_function(drive_item, None)
+
+        assert download_result is None
+
+    @pytest.mark.asyncio
+    async def test_download_function_for_deleted_item(self):
+        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
+        # deleted items don't have `name` property
+        drive_item = {"id": "testid", "deleted": {"state": "deleted"}}
 
         download_result = source.download_function(drive_item, None)
 
@@ -2435,10 +2472,22 @@ class TestSharepointOnlineDataSource:
         assert _prefix_email(email) == "email:email"
 
     def test_is_domain_group(self):
-        assert is_domain_group({"ContentType": "DomainGroup"})
+        assert is_domain_group(
+            {
+                "ContentType": "DomainGroup",
+                "Name": "c:0o.c|federateddirectoryclaimprovider|97d055cf-5cdf-4e5e-b383-f01ed3a8844d",
+            }
+        )
 
     def test_is_not_domain_group(self):
         assert not is_domain_group({"ContentType": "Person"})
+        assert not is_domain_group({"ContentType": "DomainGroup"})
+        assert not is_domain_group(
+            {
+                "ContentType": "DomainGroup",
+                "Name": "c:0u.c|tenant|67f8dab3bb7a912bc3da51b94b6bc5d23edef0e83056056f1a3929b4e04b8624",
+            }
+        )
 
     def test_is_person(self):
         assert is_person({"ContentType": "Person"})
