@@ -1788,7 +1788,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             return False
 
         attachment_extension = list(os.path.splitext(filename))
-        if attachment_extension[-1].lower() not in TIKA_SUPPORTED_FILETYPES:
-            return False
+        if attachment_extension[-1].lower() in TIKA_SUPPORTED_FILETYPES:
+            return True
 
-        return True
+        return False

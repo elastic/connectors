@@ -1863,7 +1863,13 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     async def test_download_function_for_unsupported_file(self):
         source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
-        drive_item = {"id": "testid", "name": "filename.randomextention"}
+        drive_item = {
+            "id": "testid",
+            "name": "filename.randomextention",
+            "@microsoft.graph.downloadUrl": "http://localhost/filename",
+            "lastModifiedDateTime": "2023-07-10T22:12:56Z",
+            "size": 10,
+        }
 
         download_result = source.download_function(drive_item, None)
 
