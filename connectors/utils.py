@@ -785,13 +785,10 @@ class ExtractionService:
         )
 
         try:
-            async with self._begin_session().put(
-                f"{self.host}/extract_text/{self.filepointer_params(filepath)}",
-                data=(
-                    self.file_sender(filepath) if not self.use_file_pointers else None
-                ),
-            ) as response:
-                return await self.parse_extraction_resp(filename, response)
+            if self.use_file_pointers:
+                content = await self.send_filepointer(filepath, original_filename)
+            else:
+                content = await self.send_file(filepath, original_filename)
         except (ClientConnectionError, ServerTimeoutError) as e:
             logger.error(
                 f"Connection to {self.host} failed while extracting data from {filename}. Error: {e}"
@@ -803,18 +800,25 @@ class ExtractionService:
 
         return content
 
+    async def send_filepointer(self, filepath, filename):
+        async with self._begin_session().put(
+            f"{self.host}/extract_text/?local_file_path={filepath}",
+        ) as response:
+            return await self.parse_extraction_resp(filename, response)
+
+    async def send_file(self, filepath, filename):
+        async with self._begin_session().put(
+            f"{self.host}/extract_text/",
+            data=self.file_sender(filepath),
+        ) as response:
+            return await self.parse_extraction_resp(filename, response)
+
     async def file_sender(self, filepath):
         async with aiofiles.open(filepath, "rb") as f:
             chunk = await f.read(self.chunk_size)
             while chunk:
                 yield chunk
                 chunk = await f.read(self.chunk_size)
-
-    def filepointer_params(self, filepath):
-        if not self.use_file_pointers:
-            return ""
-
-        return f"?local_file_path={filepath}"
 
     async def parse_extraction_resp(self, filename, response):
         """Parses the response from the tika-server and logs any extraction failures.
