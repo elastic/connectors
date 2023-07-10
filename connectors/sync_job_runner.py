@@ -298,7 +298,7 @@ class SyncJobRunner:
             )
 
         try:
-            await self.connector.sync_starts(job_type=job_type)
+            await self.connector.sync_starts(job_type)
         except elasticsearch.ConflictError:
             raise
         except Exception as e:

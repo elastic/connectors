@@ -442,7 +442,7 @@ async def test_sync_starts(job_type, expected_doc_source_update):
     index.update = AsyncMock()
 
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.sync_starts(job_type=job_type)
+    await connector.sync_starts(job_type)
     index.update.assert_called_with(
         doc_id=connector.id,
         doc=expected_doc_source_update,
