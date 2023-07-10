@@ -27,10 +27,12 @@ fake = Faker()
 fake.seed_instance(seed)
 
 
-NUMBER_OF_SITES = 1
+NUMBER_OF_SITES = 20
 NUMBER_OF_DRIVE_ITEMS = 200
-NUMBER_OF_PAGES = 20
-NUMBER_OF_LISTS = 30
+NUMBER_OF_PAGES = 10
+NUMBER_OF_LISTS = 10
+NUMBER_OF_LIST_ITEMS = 10
+NUMBER_OF_LIST_ITEM_ATTACHMENTS = 5
 
 
 small_text = fake.text(max_nb_chars=5000)
@@ -40,6 +42,18 @@ large_text = fake.text(max_nb_chars=100000)
 small_text_bytesize = len(small_text.encode("utf-8"))
 medium_text_bytesize = len(medium_text.encode("utf-8"))
 large_text_bytesize = len(large_text.encode("utf-8"))
+
+
+TOTAL_RECORD_COUNT = NUMBER_OF_SITES * (
+    1 * NUMBER_OF_DRIVE_ITEMS
+    + NUMBER_OF_PAGES
+    + NUMBER_OF_LISTS * NUMBER_OF_LIST_ITEMS * NUMBER_OF_LIST_ITEM_ATTACHMENTS
+)
+
+if TOTAL_RECORD_COUNT < 30000:
+    print(
+        "Warning: this test setup contains less than 30000 items and won't pass FTEST"
+    )
 
 
 class AutoIncrement:
@@ -80,6 +94,10 @@ class RandomDataStorage:
         self.drive_item_content = {}
         self.site_pages = {}
         self.site_lists = {}
+        self.site_list_items = {}
+        self.site_lists_by_list_id = {}
+        self.site_lists_by_list_name = {}
+        self.list_item_attachment_content = {}
 
     def generate(self):
         self.tenants = [TENANT]
@@ -167,6 +185,43 @@ class RandomDataStorage:
                     "description": fake.paragraph(),
                 }
                 self.site_lists[site["id"]].append(site_list)
+                self.site_lists_by_list_id[site_list["id"]] = site_list
+                self.site_lists_by_list_name[site_list["name"]] = site_list
+                self.site_list_items[site_list["id"]] = []
+                self.list_item_attachment_content[site_list["id"]] = {}
+
+                list_id_autoinc = AutoIncrement()
+                for k in range(NUMBER_OF_LIST_ITEMS):
+                    list_item = {
+                        "id": list_id_autoinc.get(),
+                        "guid": str(fake.uuid4()),
+                        "title": fake.word(),
+                        "attachments": [],
+                    }
+
+                    self.list_item_attachment_content[list_item["id"]] = {}
+
+                    for m in range(NUMBER_OF_LIST_ITEM_ATTACHMENTS):
+                        list_item_attachment = {
+                            "title": fake.file_name(extension="txt")
+                        }
+
+                        if m % 5 == 0:  # Every 5th item
+                            self.list_item_attachment_content[list_item["id"]][
+                                list_item_attachment["title"]
+                            ] = medium_text
+                        elif m % 9 == 0:  # Every 9th item
+                            self.list_item_attachment_content[list_item["id"]][
+                                list_item_attachment["title"]
+                            ] = large_text
+                        else:
+                            self.list_item_attachment_content[list_item["id"]][
+                                list_item_attachment["title"]
+                            ] = small_text
+
+                        list_item["attachments"].append(list_item_attachment)
+
+                    self.site_list_items[site_list["id"]].append(list_item)
 
     def get_site_collections(self):
         results = []
@@ -371,6 +426,123 @@ class RandomDataStorage:
 
         return results
 
+    def get_site_list_items(self, site_id, list_id, skip=0, take=100):
+        results = []
+
+        list_ = self.site_lists_by_list_id[list_id]
+        site = self.sites_by_site_id[site_id]
+
+        for list_item in self.site_list_items[list_id][skip:][:take]:
+            results.append(
+                {
+                    "id": list_item["id"],
+                    "@odata.etag": '"35aef603-c870-4326-91c3-ffdf59c29677,2"',
+                    "createdDateTime": "2023-06-06T12:44:01Z",
+                    "eTag": '"35aef603-c870-4326-91c3-ffdf59c29677,2"',
+                    "lastModifiedDateTime": "2023-06-06T12:44:01Z",
+                    "webUrl": f"{ROOT}/sites/{site['name']}/Lists/{list['name']}/1_.000",
+                    "createdBy": {
+                        "user": {
+                            "email": "demo@enterprisesearch.onmicrosoft.com",
+                            "id": "baa37bda-0dd1-4799-ae22-f3476c2cf58d",
+                            "displayName": "Enterprise Search",
+                        }
+                    },
+                    "lastModifiedBy": {
+                        "user": {
+                            "email": "demo@enterprisesearch.onmicrosoft.com",
+                            "id": "baa37bda-0dd1-4799-ae22-f3476c2cf58d",
+                            "displayName": "Enterprise Search",
+                        }
+                    },
+                    "parentReference": {
+                        "id": list_id,
+                        "siteId": site_id,
+                    },
+                    "contentType": {
+                        "id": "0x0100B239ACAA35349546A923BB0F799FAD6E00C2E8F4FE62D4BC44AD1071D5AA4DE0B9",
+                        "name": "Item",
+                    },
+                    "fields@odata.context": f"https://graph.microsoft.com/v1.0/$metadata#sites('{site['id']}')/lists('{list['id']}')/items('{list_item['id']}')/fields/$entity",
+                    "fields": {
+                        "@odata.etag": '"35aef603-c870-4326-91c3-ffdf59c29677,2"',
+                        "id": list_item["id"],
+                        "Title": list_item["title"],
+                        "LinkTitle": list_item["title"],
+                        "ContentType": "Item",
+                        "Modified": "2023-06-06T12:44:01Z",
+                        "Created": "2023-06-06T12:44:01Z",
+                        "AuthorLookupId": "6",
+                        "EditorLookupId": "6",
+                        "_UIVersionString": "2.0",
+                        "Attachments": True,
+                        "Edit": "",
+                        "LinkTitleNoMenu": list_item["title"],
+                        "ItemChildCount": "0",
+                        "FolderChildCount": "0",
+                        "_ComplianceFlags": "",
+                        "_ComplianceTag": "",
+                        "_ComplianceTagWrittenTime": "",
+                        "_ComplianceTagUserId": "",
+                    },
+                }
+            )
+
+        return results
+
+    def get_site_list_item_attachments(self, site_name, list_name, list_item_id):
+        list_ = self.site_lists_by_list_name[list_name]
+        site = self.sites_by_site_name[site_name]
+        list_items = self.site_list_items[list_["id"]]
+
+        list_item = list_items[int(list_item_id) - 1]
+
+        result = {
+            "odata.metadata": "https://enterprisesearch.sharepoint.com/sites/Artem'sSiteForTesting/_api/$metadata#SP.ListData.Custom_x0020_Made_x0020_ListListItems/@Element",
+            "odata.type": "SP.Data.Custom_x0020_Made_x0020_ListListItem",
+            "odata.id": list_item["guid"],
+            "odata.etag": '"3"',
+            "odata.editLink": f"Web/Lists(guid'{list_['id']}')/Items({list_item_id})",
+            "AttachmentFiles@odata.navigationLinkUrl": f"Web/Lists(guid'{list_['id']}')/Items({list_item_id})/AttachmentFiles",
+            "AttachmentFiles": [],
+            "FileSystemObjectType": 0,
+            "Id": list_item["id"],
+            "ServerRedirectedEmbedUri": None,
+            "ServerRedirectedEmbedUrl": "",
+            "ContentTypeId": "0x01008A3E09918C44C042809E94957AE584ED0047CD5B88506EC84B8B4A0D415BC12E3D",
+            "Title": list_item["title"],
+            "OData__ColorTag": None,
+            "ComplianceAssetId": None,
+            "ID": 1,
+            "Modified": "2023-05-25T14:59:06Z",
+            "Created": "2023-05-25T14:58:42Z",
+            "AuthorId": 6,
+            "EditorId": 6,
+            "OData__UIVersionString": "3.0",
+            "Attachments": True,
+            "GUID": list_item["guid"],
+        }
+
+        for attachment in list_item["attachments"]:
+            result["AttachmentFiles"].append(
+                {
+                    "odata.type": "SP.Attachment",
+                    "odata.id": f"{ROOT}/sites/{site['name']}/_api/Web/Lists(guid'{list_['id']}')/Items({list_item_id})/AttachmentFiles('{list_item['title']}')",
+                    "odata.editLink": f"Web/Lists(guid'b84d6e6b-5123-47c4-831d-ab6192fdb88e')/Items({list_item_id})/AttachmentFiles('{list_item['title']}')",
+                    "FileName": list_item["title"],
+                    "FileNameAsPath": {"DecodedUrl": list_item["title"]},
+                    "ServerRelativePath": {
+                        "DecodedUrl": f"/sites/{site['name']}/Lists/{list['name']}/Attachments/{list_item_id}/{attachment['title']}"
+                    },
+                    "ServerRelativeUrl": f"/sites/site['name']/Lists/{list['name']}/Attachments/{list_item_id}/{attachment['title']}",
+                }
+            )
+
+        return result
+
+    def get_list_item_attachment_content(list_item_id, file_name):
+        return self.list_item_attachment_content[list_item_id][file_name]
+
 
 data_storage = RandomDataStorage()
 data_storage.generate()
@@ -475,71 +647,37 @@ def get_site_lists(site_id):
     take = int(request.args.get("$take", 100))
 
     site_lists = data_storage.get_site_lists(site_id, skip, take)
-    return {
+    response = {
         "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites('enterprisesearch.sharepoint.com%2C792c7c37-803b-47af-88c2-88d8707aab65%2Ce6ead828-d7a5-4c72-b8e7-0687c6a078e7')/lists",
         "value": site_lists,
     }
 
+    if len(site_lists) == take:
+        response[
+            "@odata.nextLink"
+        ] = f"{ROOT}/sites/{site_id}/lists?$skip={skip+take}&$take={take}"
+
+    return response
+
 
 @app.route("/sites/<string:site_id>/lists/<string:list_id>/items", methods=["GET"])
 def get_site_list_items(site_id, list_id):
-    return {
+    skip = int(request.args.get("$skip", 0))
+    take = int(request.args.get("$take", 100))
+
+    site_list_items = data_storage.get_site_list_items(site_id, list_id, skip, take)
+
+    response = {
         "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites('enterprisesearch.sharepoint.com%2C792c7c37-803b-47af-88c2-88d8707aab65%2C84b8c2b1-3d4a-46f7-93d6-d2c6c4e9523a')/lists('a3f3ce79-e34d-4c03-8f10-e1399e661a65')/items(fields())",
-        "value": [
-            {
-                "@odata.etag": '"35aef603-c870-4326-91c3-ffdf59c29677,2"',
-                "createdDateTime": "2023-06-06T12:44:01Z",
-                "eTag": '"35aef603-c870-4326-91c3-ffdf59c29677,2"',
-                "id": "1",
-                "lastModifiedDateTime": "2023-06-06T12:44:01Z",
-                "webUrl": "http://localhost:10337/sites/ArtemsSiteForTesting/Lists/asldlasdla/1_.000",
-                "createdBy": {
-                    "user": {
-                        "email": "demo@enterprisesearch.onmicrosoft.com",
-                        "id": "baa37bda-0dd1-4799-ae22-f3476c2cf58d",
-                        "displayName": "Enterprise Search",
-                    }
-                },
-                "lastModifiedBy": {
-                    "user": {
-                        "email": "demo@enterprisesearch.onmicrosoft.com",
-                        "id": "baa37bda-0dd1-4799-ae22-f3476c2cf58d",
-                        "displayName": "Enterprise Search",
-                    }
-                },
-                "parentReference": {
-                    "id": "c3429aae-3cd4-4ba8-a831-c575f8a65aa2",
-                    "siteId": "enterprisesearch.sharepoint.com,792c7c37-803b-47af-88c2-88d8707aab65,84b8c2b1-3d4a-46f7-93d6-d2c6c4e9523a",
-                },
-                "contentType": {
-                    "id": "0x0100B239ACAA35349546A923BB0F799FAD6E00C2E8F4FE62D4BC44AD1071D5AA4DE0B9",
-                    "name": "Item",
-                },
-                "fields@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites('enterprisesearch.sharepoint.com%2C792c7c37-803b-47af-88c2-88d8707aab65%2C84b8c2b1-3d4a-46f7-93d6-d2c6c4e9523a')/lists('a3f3ce79-e34d-4c03-8f10-e1399e661a65')/items('1')/fields/$entity",
-                "fields": {
-                    "@odata.etag": '"35aef603-c870-4326-91c3-ffdf59c29677,2"',
-                    "Title": "Hello world",
-                    "LinkTitle": "Hello world",
-                    "id": "1",
-                    "ContentType": "Item",
-                    "Modified": "2023-06-06T12:44:01Z",
-                    "Created": "2023-06-06T12:44:01Z",
-                    "AuthorLookupId": "6",
-                    "EditorLookupId": "6",
-                    "_UIVersionString": "2.0",
-                    "Attachments": True,
-                    "Edit": "",
-                    "LinkTitleNoMenu": "Hello world",
-                    "ItemChildCount": "0",
-                    "FolderChildCount": "0",
-                    "_ComplianceFlags": "",
-                    "_ComplianceTag": "",
-                    "_ComplianceTagWrittenTime": "",
-                    "_ComplianceTagUserId": "",
-                },
-            }
-        ],
+        "value": site_list_items,
     }
+
+    if len(site_list_items) == take:
+        response[
+            "@odata.nextLink"
+        ] = f"{ROOT}/sites/{site_id}/lists/{list_id}/items?$skip={skip+take}&$take={take}"
+
+    return response
 
 
 @app.route(
@@ -548,54 +686,9 @@ def get_site_list_items(site_id, list_id):
 def get_list_item_attachments(site_name, list_title, list_item_id):
     expand = request.args.get(escape("$expand"))
     if expand and "AttachmentFiles" in expand:
-        return {
-            "odata.metadata": "https://enterprisesearch.sharepoint.com/sites/Artem'sSiteForTesting/_api/$metadata#SP.ListData.Custom_x0020_Made_x0020_ListListItems/@Element",
-            "odata.type": "SP.Data.Custom_x0020_Made_x0020_ListListItem",
-            "odata.id": "5484fa3e-6288-4be6-9155-5355bde6a6fc",
-            "odata.etag": '"3"',
-            "odata.editLink": "Web/Lists(guid'b84d6e6b-5123-47c4-831d-ab6192fdb88e')/Items(1)",
-            "AttachmentFiles@odata.navigationLinkUrl": "Web/Lists(guid'b84d6e6b-5123-47c4-831d-ab6192fdb88e')/Items(1)/AttachmentFiles",
-            "AttachmentFiles": [
-                {
-                    "odata.type": "SP.Attachment",
-                    "odata.id": "http://localhost:10337/sites/Artem'sSiteForTesting/_api/Web/Lists(guid'b84d6e6b-5123-47c4-831d-ab6192fdb88e')/Items(1)/AttachmentFiles('pride-and-prejudice-145.txt')",
-                    "odata.editLink": "Web/Lists(guid'b84d6e6b-5123-47c4-831d-ab6192fdb88e')/Items(1)/AttachmentFiles('pride-and-prejudice-145.txt')",
-                    "FileName": "pride-and-prejudice-145.txt",
-                    "FileNameAsPath": {"DecodedUrl": "pride-and-prejudice-145.txt"},
-                    "ServerRelativePath": {
-                        "DecodedUrl": "/sites/Artem'sSiteForTesting/Lists/Custom Made List/Attachments/1/pride-and-prejudice-145.txt"
-                    },
-                    "ServerRelativeUrl": "/sites/Artem'sSiteForTesting/Lists/Custom Made List/Attachments/1/pride-and-prejudice-145.txt",
-                },
-                {
-                    "odata.type": "SP.Attachment",
-                    "odata.id": "http://localhost:10337/sites/Artem'sSiteForTesting/_api/Web/Lists(guid'b84d6e6b-5123-47c4-831d-ab6192fdb88e')/Items(1)/AttachmentFiles('txt.log')",
-                    "odata.editLink": "Web/Lists(guid'b84d6e6b-5123-47c4-831d-ab6192fdb88e')/Items(1)/AttachmentFiles('txt.log')",
-                    "FileName": "txt.log",
-                    "FileNameAsPath": {"DecodedUrl": "txt.log"},
-                    "ServerRelativePath": {
-                        "DecodedUrl": "/sites/Artem'sSiteForTesting/Lists/Custom Made List/Attachments/1/txt.log"
-                    },
-                    "ServerRelativeUrl": "/sites/Artem'sSiteForTesting/Lists/Custom Made List/Attachments/1/txt.log",
-                },
-            ],
-            "FileSystemObjectType": 0,
-            "Id": 1,
-            "ServerRedirectedEmbedUri": None,
-            "ServerRedirectedEmbedUrl": "",
-            "ContentTypeId": "0x01008A3E09918C44C042809E94957AE584ED0047CD5B88506EC84B8B4A0D415BC12E3D",
-            "Title": "File with attachment",
-            "OData__ColorTag": None,
-            "ComplianceAssetId": None,
-            "ID": 1,
-            "Modified": "2023-05-25T14:59:06Z",
-            "Created": "2023-05-25T14:58:42Z",
-            "AuthorId": 6,
-            "EditorId": 6,
-            "OData__UIVersionString": "3.0",
-            "Attachments": True,
-            "GUID": "79db5b37-4672-4826-abfe-8dc847d8baa7",
-        }
+        return data_storage.get_site_list_item_attachments(
+            site_name, list_title, list_item_id
+        )
     else:
         raise Exception("Nope")
 
@@ -606,10 +699,16 @@ def get_site_pages(site_name):
     take = int(request.args.get("$take", 100))
 
     site_pages = data_storage.get_site_pages(site_name, skip, take)
-    return {
+    response = {
         "odata.metadata": "https://enterprisesearch.sharepoint.com/sites/ArtemsSiteForTesting/_api/$metadata#SP.ListData.SitePagesItems",
         "value": site_pages,
     }
+    if len(site_pages) == take:
+        response[
+            "odata.nextLink"
+        ] = f"{ROOT}/sites/{site_name}/_api/web/lists/GetByTitle('Site Pages')/items?$skip={skip+take}&$take={take}"
+
+    return response
 
 
 @app.route(
@@ -617,7 +716,7 @@ def get_site_pages(site_name):
     methods=["GET"],
 )
 def get_list_item_attachment(site_name, list_id, list_item_id, file_name):
-    return b"lalala lalala this is some content"
+    return data_storage.get_list_item_attachment_content(list_item_id, file_name)
 
 
 if __name__ == "__main__":
