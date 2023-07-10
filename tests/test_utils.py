@@ -664,7 +664,7 @@ class TestExtractionService:
     async def test_extract_text_with_file_pointer(self, mock_responses):
         filepath = "/tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/?local_file_path=/tmp/notreal.txt"
-        payload = {"extracted_text": "I've been extracted!"}
+        payload = {"extracted_text": "I've been extracted from a local file!"}
 
         with patch("builtins.open", mock_open(read_data=b"data")), patch(
             "connectors.utils.ExtractionService.get_extraction_config",

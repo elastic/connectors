@@ -719,7 +719,7 @@ class ExtractionService:
             )
             if self.use_file_pointers:
                 self.volume_dir = self.extraction_config.get(
-                    "fileshare_dir", "/app/files"
+                    "shared_volume_dir", "/app/files"
                 )
             else:
                 self.chunk_size = self.extraction_config.get("stream_chunk_size", 65536)
