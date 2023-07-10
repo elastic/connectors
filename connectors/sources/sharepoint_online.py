@@ -1667,6 +1667,12 @@ class SharepointOnlineDataSource(BaseDataSource):
         if not doit:
             return
 
+        if not self.is_supported_format(attachment["_original_filename"]):
+            self._logger.debug(
+                f"Not downloading attachment {attachment['_original_filename']}: file type is not supported"
+            )
+            return
+
         # We don't know attachment sizes unfortunately, so cannot properly ignore them
 
         # Okay this gets weird.
