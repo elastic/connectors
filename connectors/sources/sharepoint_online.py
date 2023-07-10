@@ -921,8 +921,10 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if self.configuration["use_text_extraction_service"]:
             self.extraction_service = ExtractionService()
+            self.download_dir = self.extraction_service.get_volume_dir()
         else:
             self.extraction_service = None
+            self.download_dir = None
 
     def _set_internal_logger(self):
         self.client.set_logger(self._logger)
@@ -1729,7 +1731,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         try:
             async with NamedTemporaryFile(
-                mode="wb", delete=False, suffix=file_extension
+                mode="wb", delete=False, suffix=file_extension, dir=self.download_dir
             ) as async_buffer:
                 source_file_name = async_buffer.name
 

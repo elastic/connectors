@@ -645,6 +645,30 @@ class TestExtractionService:
             assert response == "I've been extracted!"
 
     @pytest.mark.asyncio
+    async def test_extract_text_with_file_pointer(self, mock_responses):
+        filepath = "/tmp/notreal.txt"
+        url = "http://localhost:8090/extract_text/?local_file_path=/tmp/notreal.txt"
+        payload = {"extracted_text": "I've been extracted from a local file!"}
+
+        with patch("builtins.open", mock_open(read_data=b"data")), patch(
+            "connectors.utils.ExtractionService.get_extraction_config",
+            return_value={
+                "host": "http://localhost:8090",
+                "use_file_pointers": True,
+                "shared_volume_dir": "/tmp",
+            },
+        ):
+            mock_responses.put(url, status=200, payload=payload)
+
+            extraction_service = ExtractionService()
+            extraction_service._begin_session()
+
+            response = await extraction_service.extract_text(filepath, "notreal.txt")
+            await extraction_service._end_session()
+
+            assert response == "I've been extracted from a local file!"
+
+    @pytest.mark.asyncio
     async def test_extract_text_when_response_isnt_200_logs_warning(
         self, mock_responses, patch_logger
     ):
