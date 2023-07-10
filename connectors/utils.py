@@ -713,6 +713,7 @@ class ExtractionService:
             self.host = self.extraction_config.get("host", None)
             self.timeout = self.extraction_config.get("timeout", 30)
             self.headers = {"accept": "application/json"}
+            self.chunk_size = self.extraction_config.get("stream_chunk_size", 65536)
 
             self.use_file_pointers = self.extraction_config.get(
                 "use_file_pointers", False
@@ -721,10 +722,8 @@ class ExtractionService:
                 self.volume_dir = self.extraction_config.get(
                     "shared_volume_dir", "/app/files"
                 )
-                self.chunk_size = None
             else:
                 self.volume_dir = None
-                self.chunk_size = self.extraction_config.get("stream_chunk_size", 65536)
                 self.headers["content-type"] = "application/octet-stream"
         else:
             self.host = None
