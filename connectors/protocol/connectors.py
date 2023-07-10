@@ -640,7 +640,7 @@ class Connector(ESDocument):
             case _:
                 raise ValueError(f"Unknown job type: {job_type}")
 
-    async def sync_starts(self, job_type=JobType.FULL):
+    async def sync_starts(self, job_type):
         if job_type == JobType.ACCESS_CONTROL:
             last_sync_information = {
                 "last_access_control_sync_status": JobStatus.IN_PROGRESS.value,
