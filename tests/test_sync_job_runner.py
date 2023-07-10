@@ -181,7 +181,9 @@ async def test_connector_access_control_sync_starts_fail():
         await sync_job_runner.execute()
 
     assert sync_job_runner.elastic_server is None
-    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited_with(
+        job_type=JobType.ACCESS_CONTROL
+    )
     sync_job_runner.sync_job.claim.assert_not_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
     sync_job_runner.sync_job.fail.assert_not_awaited()
@@ -213,7 +215,7 @@ async def test_source_not_changed(
     }
 
     assert sync_job_runner.elastic_server is None
-    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited_with(job_type=job_type)
     sync_job_runner.sync_job.claim.assert_awaited_with(sync_cursor=sync_cursor_to_claim)
     sync_job_runner.sync_job.done.assert_awaited_with(ingestion_stats=ingestion_stats)
     sync_job_runner.sync_job.fail.assert_not_awaited()
@@ -343,7 +345,9 @@ async def test_invalid_filtering_access_control_sync_still_executed(
 
     await sync_job_runner.execute()
 
-    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited_with(
+        job_type=JobType.ACCESS_CONTROL
+    )
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.sync_job.done.assert_awaited()
     sync_job_runner.sync_job.fail.assert_not_awaited()
@@ -406,7 +410,9 @@ async def test_access_control_sync_fails_with_insufficient_license(elastic_serve
     sync_job_runner = create_runner(job_type=JobType.ACCESS_CONTROL)
     await sync_job_runner.execute()
 
-    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited_with(
+        job_type=JobType.ACCESS_CONTROL
+    )
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_not_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
@@ -441,7 +447,7 @@ async def test_sync_job_runner(job_type, sync_cursor, elastic_server_mock):
 
     ingestion_stats["total_document_count"] = TOTAL_DOCUMENT_COUNT
 
-    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited_with(job_type=job_type)
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_awaited_with(ingestion_stats=ingestion_stats)
@@ -477,7 +483,7 @@ async def test_sync_job_runner_suspend(job_type, sync_cursor, elastic_server_moc
 
     ingestion_stats["total_document_count"] = TOTAL_DOCUMENT_COUNT
 
-    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited_with(job_type=job_type)
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
@@ -565,7 +571,7 @@ async def test_sync_job_runner_reporting_metadata(
     asyncio.get_event_loop().call_later(0.1, task.cancel)
     await task
 
-    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited_with(job_type=job_type)
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.update_metadata.assert_awaited_with(
@@ -606,7 +612,7 @@ async def test_sync_job_runner_connector_not_found(job_type, elastic_server_mock
     sync_job_runner.connector.reload.side_effect = _raise_document_not_found_error
     await sync_job_runner.execute()
 
-    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited_with(job_type=job_type)
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
@@ -643,7 +649,7 @@ async def test_sync_job_runner_sync_job_not_found(
     sync_job_runner.sync_job.reload.side_effect = DocumentNotFoundError()
     await sync_job_runner.execute()
 
-    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited_with(job_type=job_type)
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
@@ -680,7 +686,7 @@ async def test_sync_job_runner_canceled(job_type, sync_cursor, elastic_server_mo
     sync_job_runner.sync_job.reload.side_effect = _update_job_status
     await sync_job_runner.execute()
 
-    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited_with(job_type=job_type)
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
@@ -721,7 +727,7 @@ async def test_sync_job_runner_not_running(job_type, sync_cursor, elastic_server
     sync_job_runner.sync_job.reload.side_effect = _update_job_status
     await sync_job_runner.execute()
 
-    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.connector.sync_starts.assert_awaited_with(job_type=job_type)
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.elastic_server.async_bulk.assert_awaited()
     sync_job_runner.sync_job.done.assert_not_awaited()
