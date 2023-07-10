@@ -374,7 +374,8 @@ def test_tweak_bulk_options():
     assert options["concurrent_downloads"] == 10
 
 
-def test_get_session():
+@pytest.mark.asyncio
+async def test_get_session():
     """Test that the instance of session returned is always the same for the datasource class."""
     source = create_source(JiraDataSource)
     first_instance = source.jira_client._get_session()
@@ -525,6 +526,29 @@ async def test_get_content():
             "aiohttp.StreamReader.iter_chunked",
             return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
         ):
+            response = await source.get_content(
+                issue_key="TP-1",
+                attachment=MOCK_ATTACHMENT[0],
+                doit=True,
+            )
+            assert response == EXPECTED_CONTENT
+
+
+@pytest.mark.asyncio
+async def test_get_content_with_upper_extension():
+    """Tests the get content method."""
+    # Setup
+    source = create_source(JiraDataSource)
+
+    # Execute and Assert
+    with mock.patch("aiohttp.ClientSession.get", return_value=get_stream_reader()):
+        with mock.patch(
+            "aiohttp.StreamReader.iter_chunked",
+            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
+        ):
+            attachment = copy(EXPECTED_ATTACHMENT)
+            attachment["filename"] = "testfile.TXT"
+
             response = await source.get_content(
                 issue_key="TP-1",
                 attachment=MOCK_ATTACHMENT[0],

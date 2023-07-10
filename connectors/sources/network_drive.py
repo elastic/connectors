@@ -167,7 +167,8 @@ class NASDataSource(BaseDataSource):
         """
         if not (
             doit
-            and os.path.splitext(file["title"])[-1] in TIKA_SUPPORTED_FILETYPES
+            and (os.path.splitext(file["title"])[-1]).lower()
+            in TIKA_SUPPORTED_FILETYPES
             and file["size"]
         ):
             return

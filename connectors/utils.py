@@ -17,10 +17,9 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from io import BytesIO
 
+import aiofiles
 import aiohttp
-import yaml
 from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 from base64io import Base64IO
 from bs4 import BeautifulSoup
@@ -29,7 +28,7 @@ from pympler import asizeof
 
 from connectors.logger import logger
 
-ACCESS_CONTROL_INDEX_PREFIX = "search-acl-filter-"
+ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_QUEUE_SIZE = 1024
 DEFAULT_DISPLAY_EVERY = 100
@@ -473,7 +472,7 @@ def ssl_context(certificate):
     Returns:
         ssl_context: SSL context with certificate
     """
-    certificate = get_pem_format(certificate, max_split=1)
+    certificate = get_pem_format(certificate)
     ctx = ssl.create_default_context()
     ctx.load_verify_locations(cadata=certificate)
     return ctx
@@ -519,20 +518,38 @@ def is_expired(expires_at):
     return datetime.utcnow() >= expires_at
 
 
-def get_pem_format(key, max_split=-1):
+def get_pem_format(key, postfix="-----END CERTIFICATE-----"):
     """Convert key into PEM format.
 
     Args:
         key (str): Key in raw format.
-        max_split (int): Specifies how many splits to do. Defaults to -1.
+        postfix (str): Certificate footer.
 
     Returns:
         string: PEM format
+
+    Example:
+        key = "-----BEGIN PRIVATE KEY----- PrivateKey -----END PRIVATE KEY-----"
+        postfix = "-----END PRIVATE KEY-----"
+        pem_format = "-----BEGIN PRIVATE KEY-----
+                    PrivateKey
+                    -----END PRIVATE KEY-----"
     """
-    key = key.replace(" ", "\n")
-    key = " ".join(key.split("\n", max_split))
-    key = " ".join(key.rsplit("\n", max_split))
-    return key
+    pem_format = ""
+    reverse_split = postfix.count(" ")
+    if key.count(postfix) == 1:
+        key = key.replace(" ", "\n")
+        key = " ".join(key.split("\n", reverse_split))
+        key = " ".join(key.rsplit("\n", reverse_split))
+        pem_format = key
+    elif key.count(postfix) > 1:
+        for cert in key.split(postfix)[:-1]:
+            cert = cert.strip() + "\n" + postfix
+            cert = cert.replace(" ", "\n")
+            cert = " ".join(cert.split("\n", reverse_split))
+            cert = " ".join(cert.rsplit("\n", reverse_split))
+            pem_format += cert + "\n"
+    return pem_format
 
 
 def hash_id(_id):
@@ -674,23 +691,28 @@ class ExtractionService:
 
     Calling `extract_text` with a filename will begin text extraction
     using an instance of the data extraction service.
-    Requires the data extraction service to be running and
-    extraction_service settings in config.yml to be configured correctly.
+    Requires the data extraction service to be running
     """
 
-    def __init__(self):
-        # The config file is being opened here as a temporary measure for 8.9.
-        # This should be removed when the extraction service is expanded.
-        with open(
-            os.path.join(os.path.dirname(__file__), "..", "config.yml"), "r"
-        ) as file:
-            config = yaml.safe_load(file)
+    __EXTRACTION_CONFIG = {}  # setup by cli.py on startup
 
+    @classmethod
+    def get_extraction_config(cls):
+        return __EXTRACTION_CONFIG
+
+    @classmethod
+    def set_extraction_config(cls, extraction_config):
+        global __EXTRACTION_CONFIG
+        __EXTRACTION_CONFIG = extraction_config
+
+    def __init__(self):
         self.session = None
 
-        self.extraction_config = config.get("extraction_service", None)
+        self.extraction_config = ExtractionService.get_extraction_config()
         if self.extraction_config is not None:
             self.host = self.extraction_config.get("host", None)
+            self.timeout = self.extraction_config.get("timeout", 30)
+            self.chunk_size = self.extraction_config.get("stream_chunk_size", 65536)
         else:
             self.host = None
 
@@ -709,8 +731,14 @@ class ExtractionService:
         if self.session is not None:
             return self.session
 
-        timeout = aiohttp.ClientTimeout(total=5)
-        self.session = aiohttp.ClientSession(timeout=timeout)
+        timeout = aiohttp.ClientTimeout(total=self.timeout)
+        self.session = aiohttp.ClientSession(
+            timeout=timeout,
+            headers={
+                "content-type": "application/octet-stream",
+                "accept": "application/json",
+            },
+        )
 
     async def _end_session(self):
         if not self.session:
@@ -748,7 +776,9 @@ class ExtractionService:
                 f"Connection to {self.host} failed while extracting data from {filename}. Error: {e}"
             )
         except Exception as e:
-            logger.error(f"Text extraction unexpectedly failed. Error: {e}")
+            logger.error(
+                f"Text extraction unexpectedly failed for {filename}. Error: {e}"
+            )
 
         return content
 
@@ -758,29 +788,29 @@ class ExtractionService:
 
         Returns a parsed response
         """
-        with open(filepath, "rb") as file:
-            file_data = aiohttp.FormData()
-            file_data.add_field("file", BytesIO(file.read()), filename=filename)
+        async with self._begin_session().put(
+            f"{self.host}/extract_text/", data=self.file_sender(filepath)
+        ) as response:
+            return await self.parse_extraction_resp(filename, response)
 
-            async with self._begin_session().post(
-                f"{self.host}/extract_text/", data=file_data
-            ) as response:
-                return await self.parse_extraction_resp(filename, response)
+    async def file_sender(self, filepath):
+        async with aiofiles.open(filepath, "rb") as f:
+            chunk = await f.read(self.chunk_size)
+            while chunk:
+                yield chunk
+                chunk = await f.read(self.chunk_size)
 
     async def parse_extraction_resp(self, filename, response):
         """Parses the response from the tika-server and logs any extraction failures.
 
         Returns `extracted_text` from the response.
         """
-        content = await response.json()
+        content = await response.json(content_type=None)
 
-        if response.status != 200:
+        if response.status != 200 or content.get("error"):
             logger.warning(
-                f"Extraction service could not parse `{filename}'. Status: [{response.status}]."
+                f"Extraction service could not parse `{filename}'. Status: [{response.status}]; {content.get('error', 'unexpected error')}: {content.get('message', 'unknown cause')}"
             )
-        if content.get("error"):
-            logger.warning(
-                f"Extraction service could not parse `{filename}'; {content.get('error', 'unexpected error')}: {content.get('message', 'unknown cause')}"
-            )
+            return ""
 
         return content.get("extracted_text", "")

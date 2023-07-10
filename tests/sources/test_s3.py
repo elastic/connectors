@@ -241,6 +241,41 @@ async def test_get_content(s3_client):
                 }
 
 
+@mock.patch("aiobotocore.client.AioBaseClient")
+@pytest.mark.asyncio
+async def test_get_content_with_upper_extension(s3_client):
+    """Test get_content method of S3Client"""
+
+    # Setup
+    source = create_source(S3DataSource)
+    document = {
+        "id": "123",
+        "filename": "test.TXT",
+        "bucket": "test-bucket",
+        "_timestamp": "2022-01-01T00:00:00.000Z",
+        "size_in_bytes": 1024,
+    }
+    s3_client = MagicMock()
+    s3_client.download_fileobj = AsyncMock()
+    async_response = AsyncMock()
+    async_response.__aenter__ = AsyncMock(return_value=ReadAsyncMock)
+
+    with patch("aiofiles.os.remove"):
+        with patch("connectors.utils.convert_to_b64"):
+            with patch.object(aiofiles, "open", return_value=async_response):
+                # Execute
+                result = await source.s3_client.get_content(
+                    document, s3_client, timestamp=None, doit=True
+                )
+
+                # Assert
+                assert result == {
+                    "_id": "123",
+                    "_timestamp": "2022-01-01T00:00:00.000Z",
+                    "_attachment": b"test content",
+                }
+
+
 @pytest.mark.asyncio
 async def test_get_content_with_unsupported_file(mock_aws):
     """Test get_content method of S3Client for unsupported file"""

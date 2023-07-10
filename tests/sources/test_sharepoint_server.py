@@ -12,7 +12,8 @@ import aiohttp
 import pytest
 from aiohttp import StreamReader
 
-from connectors.source import DataSourceConfiguration
+from connectors.logger import logger
+from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.sharepoint_server import SharepointServerDataSource
 from tests.sources.support import create_source
 
@@ -101,6 +102,7 @@ async def test_ping_for_successful_connection():
 
     # Setup
     source = create_source(SharepointServerDataSource)
+    source._logger = logger
     source.sharepoint_client._api_call = Mock(
         return_value=async_native_coroutine_generator(200)
     )
@@ -125,6 +127,48 @@ async def test_ping_for_failed_connection_exception():
             # Execute
             with pytest.raises(Exception):
                 await source.ping()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_when_host_url_is_empty():
+    """This function test validate_config when host_url is empty"""
+    # Setup
+    source = create_source(SharepointServerDataSource)
+    source.configuration.set_field(name="host_url", value="")
+    # Execute
+    with pytest.raises(ConfigurableFieldValueError):
+        await source.validate_config()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_for_ssl_enabled_when_ssl_ca_not_empty_does_not_raise_error():
+    """This function test validate_config when ssl is enabled and certificate is missing"""
+    # Setup
+    source = create_source(SharepointServerDataSource)
+    source.sharepoint_client.ssl_enabled = True
+    source.sharepoint_client.ssl_ca = "test"
+    source.sharepoint_client.retry_count = 1
+    get_response = {
+        "value": [
+            {
+                "Id": "111111122222222-0fd8-471c-96aa-c75f71293131",
+                "ServerRelativeUrl": "/sites/collection1",
+                "Title": "ctest",
+            }
+        ]
+    }
+    source.sharepoint_client._api_call = Mock(
+        return_value=async_native_coroutine_generator(get_response)
+    )
+    await source.validate_config()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_for_ssl_enabled_when_ssl_ca_empty_raises_error():
+    source = create_source(SharepointServerDataSource, ssl_enabled=True)
+    # Execute
+    with pytest.raises(ConfigurableFieldValueError):
+        await source.validate_config()
 
 
 @pytest.mark.asyncio
@@ -963,52 +1007,20 @@ def patch_default_wait_multiplier():
         yield
 
 
-@pytest.mark.asyncio
-async def test_api_call_when_token_is_expired(patch_default_wait_multiplier):
-    """Tests the _api_call function while token expire."""
-
-    # Setup
-    source = create_source(SharepointServerDataSource)
-    mock_response = {"access_token": "test2344", "expires_in": "1234555"}
-    async_response = MockResponse(mock_response, 401)
-    source.sharepoint_client.retry_count = 2
-    async_response.headers = {"x-ms-diagnostics": "token has expired"}
-
-    with patch.object(
-        aiohttp.ClientSession,
-        "get",
-        side_effect=aiohttp.client_exceptions.ClientResponseError(
-            request_info=aiohttp.client_reqrep.RequestInfo,
-            history=None,
-            status=401,
-            message="Unauthorized",
-            headers=async_response.headers,
-        ),
-    ):
-        with patch("aiohttp.request", return_value=async_response):
-            with pytest.raises(aiohttp.client_exceptions.ClientResponseError):
-                source.sharepoint_client._get_session()
-
-                # Execute
-                await anext(
-                    source.sharepoint_client._api_call(
-                        url_name="attachment", url="abc.com"
-                    )
-                )
-            await source.close()
-
-
 class ClientErrorException:
     real_url = ""
 
 
 @pytest.mark.asyncio
-async def test_api_call_when_status_429_exception(patch_default_wait_multiplier):
+async def test_api_call_when_status_429_exception(
+    patch_default_wait_multiplier, caplog
+):
     # Setup
     source = create_source(SharepointServerDataSource)
     mock_response = {"access_token": "test2344", "expires_in": "1234555"}
     async_response = MockResponse(mock_response, 429)
     source.sharepoint_client.retry_count = 2
+    caplog.set_level("WARN")
 
     with patch.object(
         aiohttp.ClientSession,
@@ -1019,24 +1031,22 @@ async def test_api_call_when_status_429_exception(patch_default_wait_multiplier)
     ):
         with patch("aiohttp.request", return_value=async_response):
             source.sharepoint_client._get_session()
-            with pytest.raises(aiohttp.ClientResponseError):
-                # Execute
-                await anext(
-                    source.sharepoint_client._api_call(
-                        url_name="attachment", url="abc.com"
-                    )
-                )
+            async for _ in source.sharepoint_client._api_call(
+                url_name="attachment", url="abc.com"
+            ):
+                assert "Skipping attachment for abc.com" in caplog.text
             await source.close()
 
 
 @pytest.mark.asyncio
-async def test_api_call_when_server_is_down(patch_default_wait_multiplier):
+async def test_api_call_when_server_is_down(patch_default_wait_multiplier, caplog):
     """Tests the _api_call function while server gets disconnected."""
     # Setup
     source = create_source(SharepointServerDataSource)
     mock_response = {"access_token": "test2344", "expires_in": "1234555"}
     async_response = MockResponse(mock_response, 200)
     source.sharepoint_client.retry_count = 2
+    caplog.set_level("WARN")
     with patch.object(
         aiohttp.ClientSession,
         "get",
@@ -1044,16 +1054,30 @@ async def test_api_call_when_server_is_down(patch_default_wait_multiplier):
     ):
         with patch("aiohttp.request", return_value=async_response):
             source.sharepoint_client._get_session()
-            with pytest.raises(aiohttp.ServerDisconnectedError):
-                # Execute
-                await anext(
-                    source.sharepoint_client._api_call(
-                        url_name="attachment", url="abc.com"
-                    )
-                )
+            async for _ in source.sharepoint_client._api_call(
+                url_name="attachment", url="abc.com"
+            ):
+                assert "Skipping attachment for abc.com" in caplog.text
+            await source.close()
 
 
-def test_get_session():
+@pytest.mark.asyncio
+async def test_api_call_exception_for_kerberos(patch_default_wait_multiplier, caplog):
+    # Setup
+    source = create_source(SharepointServerDataSource)
+    source.sharepoint_client.authentication_type = "kerberos_authentication"
+    source.sharepoint_client.retry_count = 2
+    caplog.set_level("WARN")
+    # Execute
+    async for _ in source.sharepoint_client._api_call(
+        url_name="ping", site_collections="abc", host_url="http://sharepoint.com"
+    ):
+        # Assert
+        assert "Skipping attachment for abc.com" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_get_session():
     """Test that the instance of session returned is always the same for the datasource class."""
     source = create_source(SharepointServerDataSource)
     first_instance = source.sharepoint_client._get_session()

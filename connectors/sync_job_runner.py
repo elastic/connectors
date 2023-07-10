@@ -160,7 +160,7 @@ class SyncJobRunner:
         except ConnectorJobCanceledError:
             await self._sync_done(sync_status=JobStatus.CANCELED)
         except Exception as e:
-            self.sync_job.log_critical(e, exc_info=True)
+            self.sync_job.log_error(e, exc_info=True)
             await self._sync_done(sync_status=JobStatus.ERROR, sync_error=e)
         finally:
             self.running = False
