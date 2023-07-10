@@ -1231,9 +1231,8 @@ class SharepointOnlineDataSource(BaseDataSource):
             self._logger.info("Fetching all users")
             async for user in self.client.users():
                 user_doc = await process_user(user)
-                if not user_doc:
-                    continue
-                yield user_doc
+                if user_doc:
+                    yield user_doc
         else:
             self._logger.info("Fetching users site-by-site")
             async for site_collection in self.client.site_collections():
@@ -1301,9 +1300,8 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                         elif is_person(user):
                             user_doc = await process_user(user)
-                            if not user_doc:
-                                continue
-                            yield user_doc
+                            if user_doc:
+                                yield user_doc
 
                         else:
                             self._logger.debug(
