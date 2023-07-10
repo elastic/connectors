@@ -485,6 +485,33 @@ class TestMicrosoftAPISession:
         patch_cancellable_sleeps.assert_awaited_with(retry_after)
 
     @pytest.mark.asyncio
+    async def test_call_api_with_404(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        payload = {"hello": "world"}
+        retry_after = 25
+
+        # First throttle, then do not throttle
+        first_request_error = ClientResponseError(None, None)
+        first_request_error.status = 404
+        first_request_error.message = "Something went wrong"
+        first_request_error.headers = {"Retry-After": str(retry_after)}
+
+        mock_responses.get(url, exception=first_request_error)
+        mock_responses.get(url, payload=payload)
+
+        with pytest.raises(NotFound) as e:
+            async with microsoft_api_session._call_api(url) as _:
+                pass
+
+        assert e is not None
+
+    @pytest.mark.asyncio
     async def test_call_api_with_429_without_retry_after(
         self,
         microsoft_api_session,
@@ -1818,6 +1845,16 @@ class TestSharepointOnlineDataSource:
             "name": "folder",
             "folder": {},
         }
+
+        download_result = source.download_function(drive_item, None)
+
+        assert download_result is None
+
+    @pytest.mark.asyncio
+    async def test_download_function_for_deleted_item(self):
+        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
+        # deleted items don't have `name` property
+        drive_item = {"id": "testid", "deleted": {"state": "deleted"}}
 
         download_result = source.download_function(drive_item, None)
 
