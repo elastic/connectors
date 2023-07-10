@@ -1861,6 +1861,15 @@ class TestSharepointOnlineDataSource:
         assert download_result is None
 
     @pytest.mark.asyncio
+    async def test_download_function_for_unsupported_file(self):
+        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
+        drive_item = {"id": "testid", "name": "filename.randomextention"}
+
+        download_result = source.download_function(drive_item, None)
+
+        assert download_result is None
+
+    @pytest.mark.asyncio
     async def test_download_function_with_filtering_rule(self):
         source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
         max_drive_item_age = 15

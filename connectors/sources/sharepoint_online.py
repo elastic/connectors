@@ -27,6 +27,7 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import (
+    TIKA_SUPPORTED_FILETYPES,
     CacheWithTimeout,
     CancellableSleeps,
     ExtractionService,
@@ -1625,6 +1626,12 @@ class SharepointOnlineDataSource(BaseDataSource):
             )
             return None
 
+        if not self.is_supported_format(drive_item["name"]):
+            self._logger.debug(
+                f"Not downloading file {drive_item['name']}: file type is not supported"
+            )
+            return None
+
         if "lastModifiedDateTime" not in drive_item:
             self._logger.debug(
                 f"Not downloading file {drive_item['name']}: field \"lastModifiedDateTime\" is missing"
@@ -1775,3 +1782,13 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     def advanced_rules_validators(self):
         return [SharepointOnlineAdvancedRulesValidator()]
+
+    def is_supported_format(self, filename):
+        if "." not in filename:
+            return False
+
+        attachment_extension = list(os.path.splitext(filename))
+        if attachment_extension[-1].lower() not in TIKA_SUPPORTED_FILETYPES:
+            return False
+
+        return True
