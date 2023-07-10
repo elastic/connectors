@@ -597,6 +597,31 @@ async def test_download_attachment():
 
 
 @pytest.mark.asyncio
+async def test_download_attachment_with_upper_extension():
+    # Setup
+    source = create_source(ConfluenceDataSource)
+
+    async_response = AsyncMock()
+    async_response.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
+
+    # Execute
+    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+        with mock.patch(
+            "aiohttp.StreamReader.iter_chunked",
+            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
+        ):
+            attachment = copy(EXPECTED_ATTACHMENT)
+            attachment["title"] = "batch.TXT"
+
+            response = await source.download_attachment(
+                url="download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
+                attachment=EXPECTED_ATTACHMENT,
+                doit=True,
+            )
+            assert response == EXPECTED_CONTENT
+
+
+@pytest.mark.asyncio
 async def test_download_attachment_when_filesize_is_large_then_download_skips():
     """Tests the download attachments method for file size greater than max limit."""
     # Setup
@@ -695,7 +720,8 @@ async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_pat
     assert documents == expected_responses
 
 
-def test_get_session():
+@pytest.mark.asyncio
+async def test_get_session():
     """Test that the instance of session returned is always the same for the datasource class."""
     source = create_source(ConfluenceDataSource)
     first_instance = source.confluence_client._get_session()
