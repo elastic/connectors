@@ -1551,6 +1551,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                     list_item_attachment["_timestamp"] = list_item[
                         "lastModifiedDateTime"
                     ]
+                    list_item_attachment[
+                        "_original_filename"
+                    ] = list_item_attachment.get("FileName", "")
 
                     attachment_download_func = partial(
                         self.get_attachment_content, list_item_attachment
@@ -1674,13 +1677,13 @@ class SharepointOnlineDataSource(BaseDataSource):
             "_timestamp": new_timestamp,
         }
 
-        attachment, body = await self._download_content(
+        attached_file, body = await self._download_content(
             partial(self.client.download_attachment, attachment["odata.id"]),
             attachment["_original_filename"],
         )
 
-        if attachment:
-            doc["_attachment"] = attachment
+        if attached_file:
+            doc["_attachment"] = attached_file
         if body is not None:
             # accept empty strings for body
             doc["body"] = body
@@ -1704,7 +1707,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             "_timestamp": drive_item["lastModifiedDateTime"],
         }
 
-        attachment, body = await self._download_content(
+        attached_file, body = await self._download_content(
             partial(
                 self.client.download_drive_item,
                 drive_item["parentReference"]["driveId"],
@@ -1713,8 +1716,8 @@ class SharepointOnlineDataSource(BaseDataSource):
             drive_item["_original_filename"],
         )
 
-        if attachment:
-            doc["_attachment"] = attachment
+        if attached_file:
+            doc["_attachment"] = attached_file
         if body is not None:
             # accept empty strings for body
             doc["body"] = body
