@@ -61,6 +61,13 @@ TIKA_SUPPORTED_FILETYPES = [
     ".aspx",
     ".xlsb",
     ".xlsm",
+    ".tsv",
+    ".svg",
+    ".msg",
+    ".potx",
+    ".vsd",
+    ".vsdx",
+    ".vsdm",
 ]
 
 
