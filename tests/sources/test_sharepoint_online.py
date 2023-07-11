@@ -1861,6 +1861,21 @@ class TestSharepointOnlineDataSource:
         assert download_result is None
 
     @pytest.mark.asyncio
+    async def test_download_function_for_unsupported_file(self):
+        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
+        drive_item = {
+            "id": "testid",
+            "name": "filename.randomextention",
+            "@microsoft.graph.downloadUrl": "http://localhost/filename",
+            "lastModifiedDateTime": "2023-07-10T22:12:56Z",
+            "size": 10,
+        }
+
+        download_result = source.download_function(drive_item, None)
+
+        assert download_result is None
+
+    @pytest.mark.asyncio
     async def test_download_function_with_filtering_rule(self):
         source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
         max_drive_item_age = 15
@@ -1973,6 +1988,31 @@ class TestSharepointOnlineDataSource:
 
         assert download_result["_attachment"] == base64.b64encode(message).decode()
         assert "body" not in download_result
+
+    @pytest.mark.asyncio
+    async def test_get_attachment_content_unsupported_file_type(
+        self, patch_sharepoint_client
+    ):
+        filename = "file.unsupported_extention"
+        attachment = {
+            "odata.id": "1",
+            "_original_filename": filename,
+        }
+        message = b"This is content of attachment"
+
+        async def download_func(attachment_id, async_buffer):
+            await async_buffer.write(message)
+
+        patch_sharepoint_client.download_attachment = download_func
+        source = create_source(SharepointOnlineDataSource)
+
+        with patch.object(source._logger, "debug") as mock_method:
+            download_result = await source.get_attachment_content(attachment, doit=True)
+
+        assert download_result is None
+        mock_method.assert_called_once_with(
+            f"Not downloading attachment {filename}: file type is not supported"
+        )
 
     @pytest.mark.asyncio
     @patch("connectors.utils.ExtractionService._check_configured", lambda *_: True)
