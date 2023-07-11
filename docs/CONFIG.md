@@ -39,7 +39,7 @@ Configuration lives in [config.yml](../config.yml).
   - `job_cleanup_interval`: The interval (in seconds) to run job cleanup task.
   - `log_level`: Connector service log level. Defaults to `INFO`.
 - `extraction_service`: Local extraction service-related configurations. These configurations are optional and are not included by default. The presence of these configurations enables local content extraction.
-  - `host`: The host of the local extraction service
+  - `host`: The host of the local extraction service.
   - `timeout`: Request timeout for local extraction service requests, in seconds. Defaults to 30.
   - `use_file_pointers`: Whether or not to use file pointers for local extraction. Defaults to `false`.
   - `chunk_size`: The size that files are chunked to for streaming when sending a file to the local extraction service, in bytes. Only applicable if `use_file_pointers` is `false`. Defaults to 65536 (64KB).
