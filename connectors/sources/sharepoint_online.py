@@ -354,6 +354,7 @@ class MicrosoftAPISession:
                 break
 
     async def _get_json(self, absolute_url):
+        self._logger.debug(f"Fetching url: {absolute_url}")
         async with self._call_api(absolute_url) as resp:
             return await resp.json()
 
@@ -515,6 +516,16 @@ class SharepointOnlineClient:
             return await self._graph_api_client.fetch(url)
         except NotFound:
             return {}
+
+    async def users(self):
+        url = f"{GRAPH_API_URL}/users"
+
+        try:
+            async for page in self._graph_api_client.scroll(url):
+                for user in page:
+                    yield user
+        except NotFound:
+            return
 
     async def group_members(self, group_id):
         url = f"{GRAPH_API_URL}/groups/{group_id}/members"
@@ -910,8 +921,10 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if self.configuration["use_text_extraction_service"]:
             self.extraction_service = ExtractionService()
+            self.download_dir = self.extraction_service.get_volume_dir()
         else:
             self.extraction_service = None
+            self.download_dir = None
 
     def _set_internal_logger(self):
         self.client.set_logger(self._logger)
@@ -979,6 +992,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "label": "Enable document level security",
                 "order": 7,
                 "tooltip": "Document level security ensures identities and permissions set in Sharepoint Online are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "type": "bool",
+                "value": False,
+            },
+            "fetch_users_by_site": {
+                "depends_on": [{"field": "use_document_level_security", "value": True}],
+                "display": "toggle",
+                "label": "Discover users by site membership",
+                "order": 8,
+                "tooltip": "When syncing only a small subset of sites, it can be more efficient to only fetch users who have access to those sites. This becomes increasingly inefficient the more sites (and the more users) concerned.",
                 "type": "bool",
                 "value": False,
             },
@@ -1208,97 +1230,119 @@ class SharepointOnlineDataSource(BaseDataSource):
         """
 
         if not self._dls_enabled():
+            self._logger.warning("DLS is not enabled. Skipping")
             return
 
-        already_seen_emails = set()
-        already_seen_usernames = set()
+        already_seen_ids = set()
 
-        def _already_seen(email_, username_):
-            if email_ in already_seen_emails:
-                return True
-
-            if username_ in already_seen_usernames:
-                return True
+        def _already_seen(*ids):
+            for id in ids:
+                if id in already_seen_ids:
+                    self._logger.debug(f"We've already seen {id}")
+                    return True
 
             return False
 
-        def update_already_seen(email_, username_):
-            # We want to make sure to not add 'None' to the already seen sets
-            if email_:
-                already_seen_emails.add(email_)
+        def update_already_seen(*ids):
+            for id in ids:
+                # We want to make sure to not add 'None' to the already seen sets
+                if id:
+                    already_seen_ids.add(id)
 
-            if username_:
-                already_seen_usernames.add(username_)
+        async def process_user(user):
+            email = user.get("EMail", user.get("mail", None))
+            username = user.get("UserName", user.get("userPrincipalName", None))
+            self._logger.debug(f"Detected a person: {username}: {email}")
 
-        async for site_collection in self.client.site_collections():
-            async for site in self.client.sites(
-                site_collection["siteCollection"]["hostname"],
-                self.configuration["site_collections"],
-            ):
-                self._logger.debug(f"Looking at site: {site['id']}")
-                async for user_information in self.client.user_information_list(
-                    site["id"]
+            if _already_seen(email, username):
+                return None
+
+            update_already_seen(email, username)
+
+            person_access_control_doc = await self._user_access_control_doc(user)
+            if person_access_control_doc:
+                return person_access_control_doc
+
+        if not self.configuration["fetch_users_by_site"]:
+            self._logger.info("Fetching all users")
+            async for user in self.client.users():
+                user_doc = await process_user(user)
+                if user_doc:
+                    yield user_doc
+        else:
+            self._logger.info("Fetching users site-by-site")
+            async for site_collection in self.client.site_collections():
+                self._logger.debug(
+                    f"Looking at site collection for location: {site_collection.get('dataLocationCode')}"
+                )
+                async for site in self.client.sites(
+                    site_collection["siteCollection"]["hostname"],
+                    self.configuration["site_collections"],
                 ):
-                    user = user_information["fields"]
+                    site_id = site.get("id")
+                    self._logger.debug(f"Looking at site: {site_id}")
+                    if _already_seen(site_id):
+                        continue
+                    update_already_seen(site_id)
+                    async for user_information in self.client.user_information_list(
+                        site_id
+                    ):
+                        user = user_information["fields"]
 
-                    if is_domain_group(user):
-                        self._logger.debug(
-                            f"Detected a domain group: {user.get('Name')}"
-                        )
-                        domain_group_id = _domain_group_id(user.get("Name"))
-                        self._logger.debug(
-                            f"Detected domain groupId as: {domain_group_id}"
-                        )
+                        if is_domain_group(user):
+                            self._logger.debug(
+                                f"Detected a domain group: {user.get('Name')}"
+                            )
+                            domain_group_id = _domain_group_id(user.get("Name"))
+                            self._logger.debug(
+                                f"Detected domain groupId as: {domain_group_id}"
+                            )
 
-                        if domain_group_id:
-                            async for member_email, member_username in _emails_and_usernames_of_domain_group(
-                                domain_group_id,
-                                self.client.group_members,
-                            ):
-                                if _already_seen(member_email, member_username):
+                            if domain_group_id:
+                                if _already_seen(domain_group_id):
                                     continue
+                                update_already_seen(domain_group_id)
+                                async for member_email, member_username in _emails_and_usernames_of_domain_group(
+                                    domain_group_id,
+                                    self.client.group_members,
+                                ):
+                                    if _already_seen(member_email, member_username):
+                                        continue
 
-                                update_already_seen(member_email, member_username)
+                                    update_already_seen(member_email, member_username)
 
-                                member = await self.client.user(member_username)
-                                member_access_control_doc = (
-                                    await self._user_access_control_doc(member)
-                                )
-                                if member_access_control_doc:
-                                    yield member_access_control_doc
+                                    member = await self.client.user(member_username)
+                                    member_access_control_doc = (
+                                        await self._user_access_control_doc(member)
+                                    )
+                                    if member_access_control_doc:
+                                        yield member_access_control_doc
 
-                            async for owner_email, owner_username in _emails_and_usernames_of_domain_group(
-                                domain_group_id,
-                                self.client.group_owners,
-                            ):
-                                if _already_seen(owner_email, owner_username):
-                                    continue
+                                async for owner_email, owner_username in _emails_and_usernames_of_domain_group(
+                                    domain_group_id,
+                                    self.client.group_owners,
+                                ):
+                                    if _already_seen(owner_email, owner_username):
+                                        continue
 
-                                update_already_seen(owner_email, owner_username)
+                                    update_already_seen(owner_email, owner_username)
 
-                                owner = await self.client.user(owner_username)
-                                owner_access_control_doc = (
-                                    await self._user_access_control_doc(owner)
-                                )
-                                if owner_access_control_doc:
-                                    yield owner_access_control_doc
+                                    owner = await self.client.user(owner_username)
+                                    owner_access_control_doc = (
+                                        await self._user_access_control_doc(owner)
+                                    )
+                                    if owner_access_control_doc:
+                                        yield owner_access_control_doc
 
-                    elif is_person(user):
-                        email = user.get("EMail", user.get("mail", None))
-                        username = user.get(
-                            "UserName", user.get("userPrincipalName", None)
-                        )
+                        elif is_person(user):
+                            user_doc = await process_user(user)
+                            if user_doc:
+                                yield user_doc
 
-                        if _already_seen(email, username):
-                            continue
-
-                        update_already_seen(email, username)
-
-                        person_access_control_doc = await self._user_access_control_doc(
-                            user
-                        )
-                        if person_access_control_doc:
-                            yield person_access_control_doc
+                        else:
+                            self._logger.debug(
+                                "User information list item  was neither a person nor a group. Skipping..."
+                            )
 
     async def get_docs(self, filtering=None):
         max_drive_item_age = None
@@ -1509,6 +1553,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                     list_item_attachment["_timestamp"] = list_item[
                         "lastModifiedDateTime"
                     ]
+                    list_item_attachment[
+                        "_original_filename"
+                    ] = list_item_attachment.get("FileName", "")
 
                     attachment_download_func = partial(
                         self.get_attachment_content, list_item_attachment
@@ -1632,13 +1679,13 @@ class SharepointOnlineDataSource(BaseDataSource):
             "_timestamp": new_timestamp,
         }
 
-        attachment, body = await self._download_content(
+        attached_file, body = await self._download_content(
             partial(self.client.download_attachment, attachment["odata.id"]),
             attachment["_original_filename"],
         )
 
-        if attachment:
-            doc["_attachment"] = attachment
+        if attached_file:
+            doc["_attachment"] = attached_file
         if body is not None:
             # accept empty strings for body
             doc["body"] = body
@@ -1662,7 +1709,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             "_timestamp": drive_item["lastModifiedDateTime"],
         }
 
-        attachment, body = await self._download_content(
+        attached_file, body = await self._download_content(
             partial(
                 self.client.download_drive_item,
                 drive_item["parentReference"]["driveId"],
@@ -1671,8 +1718,8 @@ class SharepointOnlineDataSource(BaseDataSource):
             drive_item["_original_filename"],
         )
 
-        if attachment:
-            doc["_attachment"] = attachment
+        if attached_file:
+            doc["_attachment"] = attached_file
         if body is not None:
             # accept empty strings for body
             doc["body"] = body
@@ -1687,7 +1734,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         try:
             async with NamedTemporaryFile(
-                mode="wb", delete=False, suffix=file_extension
+                mode="wb", delete=False, suffix=file_extension, dir=self.download_dir
             ) as async_buffer:
                 source_file_name = async_buffer.name
 
