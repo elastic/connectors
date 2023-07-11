@@ -1,6 +1,6 @@
 # Google Drive Connector
 
-The [Elastic Google Drive connector](../connectors/sources/google_drive.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic Google Drive connector](../../connectors/sources/google_drive.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ## Availability and prerequisites
 
@@ -16,7 +16,7 @@ For additional operations, see [Usage](https://www.elastic.co/guide/en/enterpris
 
 ## Configuring the Google Drive Connector:
 
-You need to configure the Google Drive connector before syncing the data. Fot this you need to create a [service account](https://cloud.google.com/iam/docs/service-account-overview) with appropriate access to Google Drive API.
+You need to configure the Google Drive connector before syncing any data. For this you need to create a [service account](https://cloud.google.com/iam/docs/service-account-overview) with appropriate access to Google Drive API.
 
 To get started, log into [Google Cloud Platform](cloud.google.com) and go to the `Console`.
 
@@ -26,9 +26,15 @@ To get started, log into [Google Cloud Platform](cloud.google.com) and go to the
 
 3. **Create a Service Account.** In the `APIs & Services` section, click on `Credentials` and click on `Create credentials` to create a service account. Give your service account a name and a service account ID. This is like an email address and will be used to identify your service account in the future. Click `Done` to finish creating the service account.
 
-4. **Create a Key File**. In the Cloud Console, go to IAM and Admin > Service accounts page. Click the email address of the service account that you want to create a key for. Click the `Keys` tab. Click the `Add key` drop-down menu, then select `Create new key`. Select JSON as the Key type and then click `Create`. This will download a JSON file that will contain the service account credentials.
+4. **Create a Key File**.
+  - In the Cloud Console, go to `IAM and Admin` > `Service accounts` page.
+  - Click the email address of the service account that you want to create a key for.
+  - Click the `Keys` tab. Click the `Add key` drop-down menu, then select `Create new key`.
+  - Select JSON as the Key type and then click `Create`. This will download a JSON file that will contain the service account credentials.
 
-5. **Share Google Drive Folders.** Go to your Google Drive. Right-click the folder or shared drive, choose `Share` and add the email address of the service account you created in step 3. as a viewer to this folder. Note: When you grant a service account access to a specific folder or shared drive in Google Drive, it's important to note that the permissions extend to all the children within that folder or drive. This means that any folders or files contained within the granted folder or drive inherit the same access privileges as the parent.
+5. **Share Google Drive Folders.** Go to your Google Drive. Right-click the folder or shared drive, choose `Share` and add the email address of the service account you created in step 3. as a viewer to this folder.
+
+  Note: When you grant a service account access to a specific folder or shared drive in Google Drive, it's important to note that the permissions extend to all the children within that folder or drive. This means that any folders or files contained within the granted folder or drive inherit the same access privileges as the parent.
 
 ### Configuration
 
@@ -42,14 +48,12 @@ The service account JSON file includes the following information:
 - `Client Email`: The email address associated with the service account.
 - `Private Key`: A private key used to authenticate requests made by the service account.
 - `Private Key ID`: An identifier for the private key.
-- `Token URI`: The URI where the service account can obtain an access token.
 - `Project ID`: The ID of the Google Cloud project associated with the service account.
-- `Auth URI`, Token URI, Auth Provider X509 Cert URL: URLs used for authentication and authorization purposes.
-- `Client X509 Cert URL`: The URL of the public key certificate associated with the service account.
+- `Auth URI`, `Token URI`, `Auth Provider X509 Cert URL`: URLs used for authentication and authorization purposes.
 
 ### Content Extraction
 
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
+The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../../connectors/utils.py) file.
 
 ## Documents and syncs
 
