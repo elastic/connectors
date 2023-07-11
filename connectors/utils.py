@@ -694,7 +694,19 @@ class ExtractionService:
         if self.extraction_config is not None:
             self.host = self.extraction_config.get("host", None)
             self.timeout = self.extraction_config.get("timeout", 30)
+            self.headers = {"accept": "application/json"}
             self.chunk_size = self.extraction_config.get("stream_chunk_size", 65536)
+
+            self.use_file_pointers = self.extraction_config.get(
+                "use_file_pointers", False
+            )
+            if self.use_file_pointers:
+                self.volume_dir = self.extraction_config.get(
+                    "shared_volume_dir", "/app/files"
+                )
+            else:
+                self.volume_dir = None
+                self.headers["content-type"] = "application/octet-stream"
         else:
             self.host = None
 
@@ -716,10 +728,7 @@ class ExtractionService:
         timeout = aiohttp.ClientTimeout(total=self.timeout)
         self.session = aiohttp.ClientSession(
             timeout=timeout,
-            headers={
-                "content-type": "application/octet-stream",
-                "accept": "application/json",
-            },
+            headers=self.headers,
         )
 
     async def _end_session(self):
@@ -727,6 +736,12 @@ class ExtractionService:
             return
 
         await self.session.close()
+
+    def get_volume_dir(self):
+        if self.host is None:
+            return None
+
+        return self.volume_dir
 
     async def extract_text(self, filepath, original_filename):
         """Sends a text extraction request to tika-server using the supplied filename.
@@ -752,7 +767,10 @@ class ExtractionService:
         )
 
         try:
-            content = await self.extract_with_file_send(filepath, filename)
+            if self.use_file_pointers:
+                content = await self.send_filepointer(filepath, original_filename)
+            else:
+                content = await self.send_file(filepath, original_filename)
         except (ClientConnectionError, ServerTimeoutError) as e:
             logger.error(
                 f"Connection to {self.host} failed while extracting data from {filename}. Error: {e}"
@@ -764,14 +782,16 @@ class ExtractionService:
 
         return content
 
-    async def extract_with_file_send(self, filepath, filename):
-        """Sends a request to tika-server to extract text from a file.
-        Sends the file as body data in the request.
-
-        Returns a parsed response
-        """
+    async def send_filepointer(self, filepath, filename):
         async with self._begin_session().put(
-            f"{self.host}/extract_text/", data=self.file_sender(filepath)
+            f"{self.host}/extract_text/?local_file_path={filepath}",
+        ) as response:
+            return await self.parse_extraction_resp(filename, response)
+
+    async def send_file(self, filepath, filename):
+        async with self._begin_session().put(
+            f"{self.host}/extract_text/",
+            data=self.file_sender(filepath),
         ) as response:
             return await self.parse_extraction_resp(filename, response)
 
