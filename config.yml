@@ -27,8 +27,11 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'changeme'
-service_type: 'changeme'
+#connectors:
+#  changeme:
+#    service_type: changeme
+#    elasticsearch:
+#      api_key: changeme
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
