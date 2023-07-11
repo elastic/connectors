@@ -999,9 +999,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             "fetch_users_by_site": {
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
-                "label": "Fetch ACLs for users based on site membership",
+                "label": "Discover users by site membership",
                 "order": 8,
-                "tooltip": "When only syncing a small subset of sites, it may be more efficient to fetch only the users who have access to those sites. However, this becomes inefficent the more sites (and the more users) that are intended to be synced, as there can be a lot of redundancy in membership between sites. This should not be used if all sites are being synced.",
+                "tooltip": "When syncing only a small subset of sites, it can be more efficient to only fetch users who have access to those sites. This becomes increasingly inefficient the more sites (and the more users) concerned.",
                 "type": "bool",
                 "value": False,
             },
