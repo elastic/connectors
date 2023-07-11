@@ -1,6 +1,6 @@
 # Google Drive Connector
 
-The [Elastic Google Drive connector](../../connectors/sources/google_drive.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The _Elastic Google Drive connector_ is a connector for [Google Drive](https://www.google.com/drive) data sources.
 
 ## Availability and prerequisites
 
@@ -14,9 +14,9 @@ To use this connector as a **connector client**, use the **Google Drive** tile f
 
 For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
 
-## Configuring the Google Drive Connector:
+## Connector authentication
 
-You need to configure the Google Drive connector before syncing any data. For this you need to create a [service account](https://cloud.google.com/iam/docs/service-account-overview) with appropriate access to Google Drive API.
+Before syncing any data from Google Drive, you need to create a [service account](https://cloud.google.com/iam/docs/service-account-overview) with appropriate access to Google Drive API.
 
 To get started, log into [Google Cloud Platform](cloud.google.com) and go to the `Console`.
 
@@ -36,34 +36,17 @@ To get started, log into [Google Cloud Platform](cloud.google.com) and go to the
 
   Note: When you grant a service account access to a specific folder or shared drive in Google Drive, it's important to note that the permissions extend to all the children within that folder or drive. This means that any folders or files contained within the granted folder or drive inherit the same access privileges as the parent.
 
-### Configuration
+## Configuration
 
 The following configuration fields need to be provided for setting up the connector:
 ##### `Google Drive service account JSON`
-For Google Drive API, a service account JSON contains credentials and configuration information for your service account. This is the content of a JSON file obtained from step 4. of **Configuring the Google Drive Connector**.
-
-The service account JSON file includes the following information:
-
-- `Client ID`: A unique identifier for the service account.
-- `Client Email`: The email address associated with the service account.
-- `Private Key`: A private key used to authenticate requests made by the service account.
-- `Private Key ID`: An identifier for the private key.
-- `Project ID`: The ID of the Google Cloud project associated with the service account.
-- `Auth URI`, `Token URI`, `Auth Provider X509 Cert URL`: URLs used for authentication and authorization purposes.
-
-### Content Extraction
-
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../../connectors/utils.py) file.
+The service account credentials generated from Google Cloud Platform (JSON string). Refer to the [Google Cloud documentation](https://developers.google.com/workspace/guides/create-credentials#create_credentials_for_a_service_account) for more information.
 
 ## Documents and syncs
 
-The connector syncs the following objects and entities:
-- **Files**
-    - Includes metadata such as file name, path, size, content, etc.
-- **Folders**
-    - Includes metadata such as file name, path, size, etc.
-- **Google Suite Documents**
-    - Includes metadata such as file name, path, size, content, etc.
+The connector will fetch all files and folders the service account has access to.
+
+It will attempt to extract the content from Google Suite documents (Google Docs, Google Sheets and Google Slides) and regular files.
 
 **NOTE**:
 - Files bigger than 10 MB won't be extracted
@@ -75,6 +58,29 @@ The connector syncs the following objects and entities:
 
 Advanced sync rules are not available for this connector in the present version. Currently filtering is controlled via ingest pipelines.
 
+## Content extraction
+
+See [Content extraction](https://www.elastic.co/guide/en/enterprise-search/master/connectors-content-extraction.html).
+
+## End-to-end testing
+
+The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html#build-connector-testing) for more details.
+
+To perform E2E testing for the Google Drive connector, run the following command:
+
+```shell
+make ftest NAME=google_drive
+```
+For faster tests, add the `DATA_SIZE=small` flag:
+
+```shell
+make ftest NAME=google_drive DATA_SIZE=small
+```
+
+## Known issues
+
+There are currently no known issues for this connector.
+
 ## Troubleshooting
 
 See [Troubleshooting](https://www.elastic.co/guide/en/enterprise-search/master/connectors-troubleshooting.html).
@@ -83,15 +89,8 @@ See [Troubleshooting](https://www.elastic.co/guide/en/enterprise-search/master/c
 
 See [security](https://www.elastic.co/guide/en/enterprise-search/master/connectors-security.html).
 
+## Framework and source
 
-## E2E Tests
+This connector is included in the [Python connectors framework](https://github.com/elastic/connectors-python/tree/main).
 
-The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html#build-connector-testing) for more details.
-To perform E2E testing for the Google Drive connector, run the following command:
-```shell
-$ make ftest NAME=google_drive
-```
-
-ℹ️ Users can generate the [perf8](https://github.com/elastic/perf8) report using an argument i.e. `PERF8=True`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
-
-ℹ️ Users do not need to have a running Elasticsearch instance or a Google Drive source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Google Drive source using the docker image.
+View the [source code for this connector](https://github.com/elastic/connectors-python/blob/main/connectors/sources/google_drive.py).
