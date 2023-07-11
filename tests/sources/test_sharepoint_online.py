@@ -1993,9 +1993,10 @@ class TestSharepointOnlineDataSource:
     async def test_get_attachment_content_unsupported_file_type(
         self, patch_sharepoint_client
     ):
+        filename = "file.unsupported_extention"
         attachment = {
             "odata.id": "1",
-            "_original_filename": "file.unsupported_extention",
+            "_original_filename": filename,
         }
         message = b"This is content of attachment"
 
@@ -2005,9 +2006,13 @@ class TestSharepointOnlineDataSource:
         patch_sharepoint_client.download_attachment = download_func
         source = create_source(SharepointOnlineDataSource)
 
-        download_result = await source.get_attachment_content(attachment, doit=True)
+        with patch.object(source._logger, "debug") as mock_method:
+            download_result = await source.get_attachment_content(attachment, doit=True)
 
         assert download_result is None
+        mock_method.assert_called_once_with(
+            f"Not downloading attachment {filename}: file type is not supported"
+        )
 
     @pytest.mark.asyncio
     @patch("connectors.utils.ExtractionService._check_configured", lambda *_: True)

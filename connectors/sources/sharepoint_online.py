@@ -1793,7 +1793,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         if "." not in filename:
             return False
 
-        attachment_extension = list(os.path.splitext(filename))
+        attachment_extension = os.path.splitext(filename)
         if attachment_extension[-1].lower() in TIKA_SUPPORTED_FILETYPES:
             return True
 
