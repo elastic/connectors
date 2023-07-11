@@ -2007,7 +2007,7 @@ class TestSharepointOnlineDataSource:
 
         download_result = await source.get_attachment_content(attachment, doit=True)
 
-        assert download_result == None
+        assert download_result is None
 
     @pytest.mark.asyncio
     @patch("connectors.utils.ExtractionService._check_configured", lambda *_: True)
