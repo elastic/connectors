@@ -21,7 +21,6 @@
   - [Testing the connector](#testing-the-connector)
     - [Unit tests](#unit-tests)
     - [Integration tests](#integration-tests)
-- [Google Drive Connector](#google-drive-connector)
 
 ## General Configuration
 
@@ -347,7 +346,7 @@ For smaller-payload resources like Users and Groups, this can probably be safely
 ##### When should failure responses be retried?
 
 As discussed above, many APIs utilize rate limits and will issue 429 responses for requests that should be retried later.
-However, sometimes there are other cases that warrant retries.
+However, sometimes there are other cases that warrant retries. 
 
 Some services experience frequent-but-transient timeout issues.
 Some services experiencing a large volume of write operations may sometimes respond with 409 "conflict" codes.
@@ -450,7 +449,7 @@ async def get_docs(self, filtering=None):
         advanced_rules = filtering.get_advanced_rules()
         # your custom advanced rules implementation
     else:
-        # default fetch all data implementation
+        # default fetch all data implementation 
 ```
 
 For example, here you could pass custom queries to a database.
@@ -484,7 +483,7 @@ The framework expects the custom validators to return a `SyncRuleValidationResul
 
 ```python
 class MyValidator(AdvancedRulesValidator):
-
+    
     def validate(self, advanced_rules):
         # custom validation logic
         return SyncRuleValidationResult(...)
@@ -512,7 +511,7 @@ There are two possible ways to validate basic rules:
 - **Every rule gets validated in isolation**. Extend the class `BasicRuleValidator` located in [validation.py](../connectors/filtering/validation.py):
     ```python
     class MyBasicRuleValidator(BasicRuleValidator):
-
+        
         @classmethod
         def validate(cls, rule):
             # custom validation logic
@@ -521,7 +520,7 @@ There are two possible ways to validate basic rules:
 - **Validate the whole set of basic rules**. If you want to validate constraints on the set of rules, for example to detect duplicate or conflicting rules. Extend the class `BasicRulesSetValidator` located in [validation.py](../connectors/filtering/validation.py):
     ```python
     class MyBasicRulesSetValidator(BasicRulesSetValidator):
-
+        
         @classmethod
         def validate(cls, set_of_rules):
             # custom validation logic
@@ -534,7 +533,7 @@ class MyDataSource(BaseDataSource):
 
     @classmethod
     def basic_rules_validators(self):
-        return BaseDataSource.basic_rule_validators()
+        return BaseDataSource.basic_rule_validators() 
                 + [MyBasicRuleValidator, MyBasicRulesSetValidator]
 ```
 
@@ -566,70 +565,3 @@ This will configure the connector in Elasticsearch to run a full sync. The scrip
     ```shell
     $ System/Volumes/Data/Applications/Python\ 3.10/Install\ Certificates.command
     ```
-
-
-## Google Drive Connector
-
-The [Elastic Google Drive connector](../connectors/sources/google_drive.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
-
-### Availability and prerequisites
-
-This connector is available as a **connector client** from the **Python connectors framework**. To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
-
-This connector is in **beta** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Beta features are not subject to the support SLA of official GA features.
-
-### Usage
-
-To use this connector as a **connector client**, use the **build a connector** workflow. See [Connector clients and frameworks](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
-
-For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
-
-### Configuring the Google Drive Connector:
-
-You must configure the Google Drive connector before syncing the data. Fot this you need to create a [service account](https://cloud.google.com/iam/docs/service-account-overview) with appropriate access to Google Drive API.
-
-To get started, log into [Google Cloud Platform](cloud.google.com) and go to the `Console`.
-
-1. **Create a Google Cloud Project.** Give your project a name, change the project ID and click the Create button.
-
-2. **Enable Google APIs.** Choose APIs & Services from the left menu and click on `Enable APIs and Services`. You need to enable the Drive API.
-
-3. **Create a Service Account.** In the `APIs & Services` section, click on `Credentials` and click on `Create credentials` to create a service account. Give your service account a name and a service account ID. This is like an email address and will be used to identify your service account in the future. Click `Done` to finish creating the service account.
-
-4. **Create a Key File**. In the Cloud Console, go to IAM and Admin > Service accounts page. Click the email address of the service account that you want to create a key for. Click the `Keys` tab. Click the `Add key` drop-down menu, then select `Create new key`. Select JSON as the Key type and then click Create. This will download a JSON file that will contain your private key.
-
-5. **Share Google Drive Folders.** Go to your Google Drive. Right-click the folder or shared drive, choose Share and add the email address of the service account you created in step 3. as a viewer to this folder. Note: When you grant a service account access to a specific folder or shared drive in Google Drive, it's important to note that the permissions extend to all the children within that folder or drive. This means that any folders or files contained within the granted folder or drive inherit the same access privileges as the parent.
-
-### Configuration
-
-The following configuration fields need to be provided for setting up the connector:
-##### `Google Drive service account JSON`
-For Google Drive API, a service account JSON contains credentials and configuration information for your service account. This is the content of a JSON file obtained from step 4. of **Configuring the Google Drive Connector**.
-
-The service account JSON file includes the following information:
-
-- `Client ID`: A unique identifier for the service account.
-- `Client Email`: The email address associated with the service account.
-- `Private Key`: A private key used to authenticate requests made by the service account.
-- `Private Key ID`: An identifier for the private key.
-- `Token URI`: The URI where the service account can obtain an access token.
-- `Project ID`: The ID of the Google Cloud project associated with the service account.
-- `Auth URI`, Token URI, Auth Provider X509 Cert URL: URLs used for authentication and authorization purposes.
-- `Client X509 Cert URL`: The URL of the public key certificate associated with the service account.
-
-### Sync rules
-- Content of files bigger than 10 MB won't be extracted.
-- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elasticsearch Index.
-- Filtering rules are not available in the present version. Currently filtering is controlled via ingest pipelines.
-### E2E Tests
-The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html#build-connector-testing) for more details.
-To perform E2E testing for the Google Drive connector, run the following command:
-```shell
-$ make ftest NAME=google_drive
-```
-
-ℹ️ Users can generate the [perf8](https://github.com/elastic/perf8) report using an argument i.e. `PERF8=True`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
-
-ℹ️ Users do not need to have a running Elasticsearch instance or a Google Drive source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Google Drive source using the docker image.
-
-ℹ️ The connector uses the Elastic [ingest attachment processor](https://www.elastic.co/guide/en/enterprise-search/current/ingest-pipelines.html) plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
