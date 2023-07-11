@@ -519,7 +519,9 @@ class SharepointOnlineClient:
             return {}
 
     async def users(self):
-        url = f"{GRAPH_API_URL}/users"
+        expand = "transitiveMemberOf"
+        top = 999
+        url = f"{GRAPH_API_URL}/users?$expand={expand}&$top={top}"
 
         try:
             async for page in self._graph_api_client.scroll(url):
@@ -826,7 +828,7 @@ def _prefix_identity(prefix, identity):
 
 
 def _prefix_group(group):
-    return _prefix_identity("group", group)
+    return _prefix_identity("group", group) if group else None
 
 
 def _prefix_user(user):
@@ -1189,17 +1191,22 @@ class SharepointOnlineDataSource(BaseDataSource):
         else:
             return
 
-        prefixed_groups = set()
-
-        async for group in self.client.groups_user_transitive_member_of(
-            user[username_field]
-        ):
-            group_id = group["id"]
-            if group_id:
-                prefixed_groups.add(_prefix_group(group_id))
-
         email = user.get("EMail", user.get("mail", None))
         username = user[username_field]
+        prefixed_groups = set()
+
+        expanded_member_groups = user.get("transitiveMemberOf", [])
+        if len(expanded_member_groups) < 100: # $expand param has a max of 100: see: https://learn.microsoft.com/en-us/graph/known-issues#query-parameters
+            for group in expanded_member_groups:
+                prefixed_groups.add(_prefix_group(group.get("id", None)))
+        else:
+            self._logger.debug(f"User {username}: {email} belongs to a lot of groups - paging them separately")
+            async for group in self.client.groups_user_transitive_member_of(
+                user["id"]
+            ):
+                group_id = group["id"]
+                if group_id:
+                    prefixed_groups.add(_prefix_group(group_id))
 
         prefixed_mail = _prefix_email(email)
         prefixed_username = _prefix_user(username)
@@ -1336,7 +1343,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                                         yield owner_access_control_doc
 
                         elif is_person(user):
-                            user_doc = await process_user(user)
+                            user_doc = await process_user(user) # pretty sure this is fucked, no user id
                             if user_doc:
                                 yield user_doc
 
