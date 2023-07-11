@@ -1990,8 +1990,13 @@ class TestSharepointOnlineDataSource:
         assert "body" not in download_result
 
     @pytest.mark.asyncio
-    async def test_get_attachment_content_unsupported_file_type(self, patch_sharepoint_client):
-        attachment = {"odata.id": "1", "_original_filename": "file.unsupported_extention"}
+    async def test_get_attachment_content_unsupported_file_type(
+        self, patch_sharepoint_client
+    ):
+        attachment = {
+            "odata.id": "1",
+            "_original_filename": "file.unsupported_extention",
+        }
         message = b"This is content of attachment"
 
         async def download_func(attachment_id, async_buffer):
