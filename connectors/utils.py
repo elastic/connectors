@@ -64,10 +64,10 @@ TIKA_SUPPORTED_FILETYPES = [
     ".tsv",
     ".svg",
     ".msg",
-    ".potx"
+    ".potx",
     ".vsd",
     ".vsdx",
-    ".vsdm"
+    ".vsdm",
 ]
 
 
