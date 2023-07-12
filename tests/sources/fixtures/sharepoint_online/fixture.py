@@ -5,8 +5,8 @@
 #
 """Module to handle api calls received from connector."""
 
-import random
 import os
+import random
 import string
 import uuid
 
@@ -102,6 +102,7 @@ TOTAL_RECORD_COUNT = NUMBER_OF_SITES * (
 def get_num_docs():
     print(TOTAL_RECORD_COUNT)
 
+
 class AutoIncrement:
     def __init__(self):
         self.val = 1
@@ -175,7 +176,7 @@ class RandomDataStorage:
                     "id": self.generate_sharepoint_id(),
                 }
 
-                if j % 20 == 0: # Every 20th is a folder
+                if j % 20 == 0:  # Every 20th is a folder
                     drive_item["folder"] = True
                     drive_item["name"] = fake.word()
                 else:
@@ -188,7 +189,7 @@ class RandomDataStorage:
                     elif j % 17 == 0:  # Every 17th is large
                         self.drive_item_content[drive_item["id"]] = large_text
                         drive_item["size"] = large_text_bytesize
-                    else: # Every other is small
+                    else:  # Every other is small
                         self.drive_item_content[drive_item["id"]] = small_text
                         drive_item["size"] = small_text_bytesize
 
@@ -239,7 +240,7 @@ class RandomDataStorage:
                 self.site_lists_by_list_id[site_list["id"]] = site_list
                 self.site_lists_by_list_name[site_list["name"]] = site_list
                 self.site_list_items[site_list["id"]] = []
-                self.list_item_attachment_content[site_list['id']] = {}
+                self.list_item_attachment_content[site_list["id"]] = {}
 
                 # Generate List Items
                 list_id_autoinc = AutoIncrement()
@@ -251,7 +252,9 @@ class RandomDataStorage:
                         "attachments": [],
                     }
 
-                    self.list_item_attachment_content[site_list['id']][list_item["id"]] = {}
+                    self.list_item_attachment_content[site_list["id"]][
+                        list_item["id"]
+                    ] = {}
 
                     # Generate Attachments
                     for m in range(NUMBER_OF_LIST_ITEM_ATTACHMENTS):
@@ -270,9 +273,9 @@ class RandomDataStorage:
                         else:
                             generated_content = small_text
 
-                        self.list_item_attachment_content[site_list['id']][list_item["id"]][
-                            list_item_attachment["title"]
-                        ] = generated_content
+                        self.list_item_attachment_content[site_list["id"]][
+                            list_item["id"]
+                        ][list_item_attachment["title"]] = generated_content
 
                     self.site_list_items[site_list["id"]].append(list_item)
 
@@ -600,6 +603,13 @@ class RandomDataStorage:
 data_storage = RandomDataStorage()
 data_storage.generate()
 
+import json
+
+json_str = json.dumps(data_storage.list_item_attachment_content, indent=2)
+f = open("/tmp/data.json", "a")
+f.write(json_str)
+f.close()
+
 
 @app.route("/<string:tenant_id>/oauth2/v2.0/token", methods=["POST"])
 def get_graph_token(tenant_id):
@@ -769,7 +779,9 @@ def get_site_pages(site_name):
     methods=["GET"],
 )
 def get_list_item_attachment(site_name, list_id, list_item_id, file_name):
-    return data_storage.get_list_item_attachment_content(list_id, list_item_id, file_name)
+    return data_storage.get_list_item_attachment_content(
+        list_id, list_item_id, file_name
+    )
 
 
 if __name__ == "__main__":
