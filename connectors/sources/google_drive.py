@@ -739,24 +739,6 @@ class GoogleDriveDataSource(BaseDataSource):
             "url": file.get("webViewLink"),
         }
 
-        # mark the document if it is on shared drive
-        blob_drive_id = file.get("driveId", None)
-        shared_drive = paths.get(blob_drive_id, None)
-        if shared_drive:
-            file_document["shared_drive"] = shared_drive.get("name")
-
-
-        # check if dls_enabled() ..... for now do it be default
-
-        # Getting permissions works differenty for files on my drive and files on shared drives.
-        # Read more: https://developers.google.com/drive/api/guides/shared-drives-diffs
-        if shared_drive:
-            file_document[ACCESS_CONTROL] = await self._get_permissions_on_shared_drive(
-                file_id=file_id
-            )
-        else:
-            file_document[ACCESS_CONTROL] = self._get_permissions_on_my_drive(file=file)
-
         # record "file" or "folder" type
         file_document["type"] = (
             "folder" if file.get("mimeType") == FOLDER_MIME_TYPE else "file"
@@ -788,6 +770,23 @@ class GoogleDriveDataSource(BaseDataSource):
         if blob_parents and blob_parents[0] in paths:
             file_document["path"] = f"{paths[blob_parents[0]]['path']}/{file['name']}"
 
+        # mark the document if it is on shared drive
+        blob_drive_id = file.get("driveId", None)
+        shared_drive = paths.get(blob_drive_id, None)
+        if shared_drive:
+            file_document["shared_drive"] = shared_drive.get("name")
+
+
+        # check if dls_enabled() ..... for now do it be default
+        # Getting permissions works differenty for files on my drive and files on shared drives.
+        # Read more: https://developers.google.com/drive/api/guides/shared-drives-diffs
+        if shared_drive:
+            file_document[ACCESS_CONTROL] = await self._get_permissions_on_shared_drive(
+                file_id=file_id
+            )
+        else:
+            file_document[ACCESS_CONTROL] = self._get_permissions_on_my_drive(file=file)
+
         return file_document
 
     async def prepare_files(self, files_page, paths):
@@ -801,11 +800,12 @@ class GoogleDriveDataSource(BaseDataSource):
         """
         files = files_page.get("files", [])
 
-        async def process_file(file):
+        async def process_file(file, semaphore):
             async with semaphore:
                 return await self.prepare_file(file=file, paths=paths)
 
-        # Create the shared semaphore
+        # Create the shared semaphore, it controls how many concurrent
+        # permissions/list requests can be open at any given time
         semaphore = asyncio.Semaphore(20)
 
         tasks = [process_file(file, semaphore) for file in files]
