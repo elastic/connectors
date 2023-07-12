@@ -669,17 +669,17 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return access_controls
 
-    def _get_permissions_on_my_drive(self, document):
+    def _get_permissions_on_my_drive(self, file):
         """Formats the access permissions on a my drive for the given object.
 
         Args:
-            document (dict): The metadata of Google Drive object.
+            file (dict): The metadata of Google Drive file.
 
         Returns:
-            list: A list of access permissions on my drive for a give document.
+            list: A list of access permissions on my drive for a given file.
         """
 
-        permissions = document.get("permissions", [])
+        permissions = file.get("permissions", [])
         access_controls = self._process_permissions(permissions)
         return access_controls
 
@@ -707,7 +707,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return processed_permissions
 
-    async def prepare_blob_document(self, blob, paths):
+    async def prepare_file(self, file, paths):
         """Apply key mappings to the blob document.
 
         Args:
@@ -717,25 +717,25 @@ class GoogleDriveDataSource(BaseDataSource):
             dict: Blobs metadata mapped with the keys of `BLOB_ADAPTER`.
         """
 
-        file_id = blob.get("id")
+        file_id = file.get("id")
 
-        blob_document = {
+        file_document = {
             "_id": file_id,
-            "created_at": blob.get("createdTime"),
-            "last_updated": blob.get("modifiedTime"),
-            "name": blob.get("name"),
-            "size": blob.get("size") or 0,  # handle folders and shortcuts
-            "_timestamp": blob.get("modifiedTime"),
-            "mime_type": blob.get("mimeType"),
-            "file_extension": blob.get("fileExtension"),
-            "url": blob.get("webViewLink"),
+            "created_at": file.get("createdTime"),
+            "last_updated": file.get("modifiedTime"),
+            "name": file.get("name"),
+            "size": file.get("size") or 0,  # handle folders and shortcuts
+            "_timestamp": file.get("modifiedTime"),
+            "mime_type": file.get("mimeType"),
+            "file_extension": file.get("fileExtension"),
+            "url": file.get("webViewLink"),
         }
 
         # mark the document if it is on shared drive
-        blob_drive_id = blob.get("driveId", None)
+        blob_drive_id = file.get("driveId", None)
         shared_drive = paths.get(blob_drive_id, None)
         if shared_drive:
-            blob_document["shared_drive"] = shared_drive.get("name")
+            file_document["shared_drive"] = shared_drive.get("name")
 
         # + - this step is likely to make sync longer
         # incremental sync to the rescue for later syncs !
@@ -745,48 +745,46 @@ class GoogleDriveDataSource(BaseDataSource):
         # Getting permissions works differenty for files on my drive and files on shared drives.
         # Read more: https://developers.google.com/drive/api/guides/shared-drives-diffs
         if shared_drive:
-            blob_document[ACCESS_CONTROL] = await self._get_permissions_on_shared_drive(
+            file_document[ACCESS_CONTROL] = await self._get_permissions_on_shared_drive(
                 file_id=file_id
             )
         else:
-            blob_document[ACCESS_CONTROL] = self._get_permissions_on_my_drive(
-                document=blob
-            )
+            file_document[ACCESS_CONTROL] = self._get_permissions_on_my_drive(file=file)
 
         # record "file" or "folder" type
-        blob_document["type"] = (
-            "folder" if blob.get("mimeType") == FOLDER_MIME_TYPE else "file"
+        file_document["type"] = (
+            "folder" if file.get("mimeType") == FOLDER_MIME_TYPE else "file"
         )
 
         # populate owner-related fields if owner is present in the response from the Drive API
-        owners = blob.get("owners", None)
+        owners = file.get("owners", None)
         if owners:
-            first_owner = blob["owners"][0]
-            blob_document["author"] = ",".join(
+            first_owner = file["owners"][0]
+            file_document["author"] = ",".join(
                 [owner["displayName"] for owner in owners]
             )
-            blob_document["created_by"] = first_owner["displayName"]
-            blob_document["created_by_email"] = first_owner["emailAddress"]
+            file_document["created_by"] = first_owner["displayName"]
+            file_document["created_by_email"] = first_owner["emailAddress"]
 
         # handle last modifying user metadata
-        last_modifying_user = blob.get("lastModifyingUser", None)
+        last_modifying_user = file.get("lastModifyingUser", None)
         if last_modifying_user:
-            blob_document["updated_by"] = last_modifying_user.get("displayName", None)
-            blob_document["updated_by_email"] = last_modifying_user.get(
+            file_document["updated_by"] = last_modifying_user.get("displayName", None)
+            file_document["updated_by_email"] = last_modifying_user.get(
                 "emailAddress", None
             )
-            blob_document["updated_by_photo_url"] = last_modifying_user.get(
+            file_document["updated_by_photo_url"] = last_modifying_user.get(
                 "photoLink", None
             )
 
         # determine the path on google drive, note that google workspace files won't have a path
-        blob_parents = blob.get("parents", None)
+        blob_parents = file.get("parents", None)
         if blob_parents and blob_parents[0] in paths:
-            blob_document["path"] = f"{paths[blob_parents[0]]['path']}/{blob['name']}"
+            file_document["path"] = f"{paths[blob_parents[0]]['path']}/{file['name']}"
 
-        return blob_document
+        return file_document
 
-    async def get_blob_document(self, blobs, paths):
+    async def prepare_files(self, files_page, paths):
         """Generate blob document.
 
         Args:
@@ -795,19 +793,19 @@ class GoogleDriveDataSource(BaseDataSource):
         Yields:
             dict: Blobs metadata mapped with the keys of `BLOB_ADAPTER`.
         """
-        files = blobs.get("files", [])
+        files = files_page.get("files", [])
 
         async def process_file(file, semaphore):
             async with semaphore:
-                return await self.prepare_blob_document(blob=file, paths=paths)
+                return await self.prepare_file(file=file, paths=paths)
 
         # Create the shared semaphore
         semaphore = asyncio.Semaphore(20)
 
         tasks = [process_file(file, semaphore) for file in files]
-        blob_documents = await asyncio.gather(*tasks)
+        prepared_files = await asyncio.gather(*tasks)
 
-        for file in blob_documents:
+        for file in prepared_files:
             yield file
 
     async def get_docs(self, filtering=None):
@@ -824,8 +822,8 @@ class GoogleDriveDataSource(BaseDataSource):
         # Build a path lookup, parentId -> parent path
         resolved_paths = await self.resolve_paths()
 
-        async for files in self.list_files():
-            async for blob_document in self.get_blob_document(
-                blobs=files, paths=resolved_paths
+        async for files_page in self.list_files():
+            async for file in self.prepare_files(
+                files_page=files_page, paths=resolved_paths
             ):
-                yield blob_document, partial(self.get_content, blob_document)
+                yield file, partial(self.get_content, file)
