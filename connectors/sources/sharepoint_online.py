@@ -1027,7 +1027,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Fetch drive item permissions",
                 "order": 9,
-                "tooltip": "Enable this option to fetch drive item specific permissions, too. Note that this setting can potentially decrease ingestion performance.",
+                "tooltip": "Enable this option to fetch drive item specific permissions. Note that this setting can potentially increase sync time.",
                 "type": "bool",
                 "value": True,
             },
