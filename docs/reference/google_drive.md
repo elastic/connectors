@@ -42,6 +42,65 @@ The following configuration fields need to be provided for setting up the connec
 ##### `Google Drive service account JSON`
 The service account credentials generated from Google Cloud Platform (JSON string). Refer to the [Google Cloud documentation](https://developers.google.com/workspace/guides/create-credentials#create_credentials_for_a_service_account) for more information.
 
+## Deployment using Docker
+
+Follow these instructions to deploy the Google Drive connector using Docker.
+
+#### Step 1: Download sample configuration file
+
+```bash
+curl https://raw.githubusercontent.com/elastic/connectors-python/main/config.yml --output ~/connectors-python-config/config.yml
+```
+
+Remember to update the `--output` argument value if your directory name is different, or you want to use a different config file name.
+
+#### Step 2: Update the configuration file for your self-managed connector
+
+Update the configuration file with the following settings to match your environment:
+
+- `elasticsearch.host`
+- `elasticsearch.password`
+- `connector_id`
+- `service_type`
+
+Use `google_drive` as the `service_type` value. Don’t forget to uncomment `"google_drive"` in the sources section of the yaml file.
+
+If you’re running the connector service against a Dockerized version of Elasticsearch and Kibana, your config file will look like this:
+
+```yaml
+elasticsearch:
+  host: http://host.docker.internal:9200
+  username: elastic
+  password: <YOUR_PASSWORD>
+
+connector_id: <CONNECTOR_ID_FROM_KIBANA>
+service_type: google_cloud_storage
+
+sources:
+  google_drive: connectors.sources.google_drive:GoogleDriveDataSource
+  ...
+```
+
+Note that the config file you downloaded might contain more entries, so you will need to manually copy/change the settings that apply to you. Normally you’ll only need to update `elasticsearch.host`, `elasticsearch.password`, `connector_id` and `service_type` to run the connector service.
+
+#### Step 3: Run the Docker image
+
+Run the Docker image with the Connector Service using the following command:
+
+```bash
+docker run \
+-v ~/connectors-python-config:/config \
+--network "elastic" \
+--tty \
+--rm \
+docker.elastic.co/enterprise-search/elastic-connectors:8.10.0.0-SNAPSHOT \
+/app/bin/elastic-ingest \
+-c /config/config.yml
+```
+
+Refer to [this guide in the Python framework repository](https://github.com/elastic/connectors-python/blob/main/docs/DOCKER.md) for more details.
+
+
 ## Documents and syncs
 
 The connector will fetch all files and folders the service account has access to.
