@@ -800,8 +800,8 @@ class TestSharepointOnlineClient:
         )
 
         returned_drive_items_pages = []
-        async for item in client.drive_items_delta(delta_url_input):
-            returned_drive_items_pages.append(item)
+        async for page in client.drive_items_delta(delta_url_input):
+            returned_drive_items_pages.append(page)
 
         returned_drive_items = [
             item
