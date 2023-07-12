@@ -6,14 +6,37 @@
 """Module to handle api calls received from connector."""
 
 import random
+import os
 import string
 import uuid
 
 from faker import Faker
 from flask import Flask, escape, request
+from flask_limiter import HEADERS, Limiter
+from flask_limiter.util import get_remote_address
 from yattag import Doc
 
 app = Flask(__name__)
+
+THROTTLING = os.environ.get("THROTTLING", False)
+
+if THROTTLING:
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        storage_uri="memory://",
+        application_limits=[
+            "6000 per minute",
+            "600000 per day",
+        ],  # Sharepoint 50k+ licences limits
+        retry_after="delta_seconds",
+        headers_enabled=True,
+        header_name_mapping={
+            HEADERS.LIMIT: "RateLimit-Limit",
+            HEADERS.RESET: "RateLimit-Reset",
+            HEADERS.REMAINING: "RateLimit-Remaining",
+        },
+    )
 
 seed = 1597463007
 
@@ -26,14 +49,37 @@ random.seed(seed)
 fake = Faker()
 fake.seed_instance(seed)
 
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
 
-NUMBER_OF_SITES = 20
-NUMBER_OF_DRIVE_ITEMS = 200
-NUMBER_OF_PAGES = 10
-NUMBER_OF_LISTS = 10
-NUMBER_OF_LIST_ITEMS = 10
-NUMBER_OF_LIST_ITEM_ATTACHMENTS = 5
-
+match DATA_SIZE:
+    case "extra_small":
+        NUMBER_OF_SITES = 1
+        NUMBER_OF_DRIVE_ITEMS = 10
+        NUMBER_OF_PAGES = 1
+        NUMBER_OF_LISTS = 1
+        NUMBER_OF_LIST_ITEMS = 5
+        NUMBER_OF_LIST_ITEM_ATTACHMENTS = 1
+    case "small":
+        NUMBER_OF_SITES = 5
+        NUMBER_OF_DRIVE_ITEMS = 100
+        NUMBER_OF_PAGES = 10
+        NUMBER_OF_LISTS = 5
+        NUMBER_OF_LIST_ITEMS = 5
+        NUMBER_OF_LIST_ITEM_ATTACHMENTS = 1
+    case "medium":
+        NUMBER_OF_SITES = 10
+        NUMBER_OF_DRIVE_ITEMS = 200
+        NUMBER_OF_PAGES = 10
+        NUMBER_OF_LISTS = 10
+        NUMBER_OF_LIST_ITEMS = 10
+        NUMBER_OF_LIST_ITEM_ATTACHMENTS = 5
+    case "large":
+        NUMBER_OF_SITES = 30
+        NUMBER_OF_DRIVE_ITEMS = 400
+        NUMBER_OF_PAGES = 50
+        NUMBER_OF_LISTS = 100
+        NUMBER_OF_LIST_ITEMS = 10
+        NUMBER_OF_LIST_ITEM_ATTACHMENTS = 5
 
 small_text = fake.text(max_nb_chars=5000)
 medium_text = fake.text(max_nb_chars=20000)
@@ -43,6 +89,8 @@ small_text_bytesize = len(small_text.encode("utf-8"))
 medium_text_bytesize = len(medium_text.encode("utf-8"))
 large_text_bytesize = len(large_text.encode("utf-8"))
 
+fake_binary_image = fake.pystr(min_chars=65536, max_chars=65536 << 1)
+
 
 TOTAL_RECORD_COUNT = NUMBER_OF_SITES * (
     1 * NUMBER_OF_DRIVE_ITEMS
@@ -50,11 +98,9 @@ TOTAL_RECORD_COUNT = NUMBER_OF_SITES * (
     + NUMBER_OF_LISTS * NUMBER_OF_LIST_ITEMS * NUMBER_OF_LIST_ITEM_ATTACHMENTS
 )
 
-if TOTAL_RECORD_COUNT < 30000:
-    print(
-        "Warning: this test setup contains less than 30000 items and won't pass FTEST"
-    )
 
+def get_num_docs():
+    print(TOTAL_RECORD_COUNT)
 
 class AutoIncrement:
     def __init__(self):
@@ -103,6 +149,7 @@ class RandomDataStorage:
         self.tenants = [TENANT]
 
         for i in range(NUMBER_OF_SITES):
+            # Generate Sites
             site = {
                 "id": str(fake.uuid4()),
                 "name": fake.company(),
@@ -113,6 +160,7 @@ class RandomDataStorage:
             self.sites_by_site_id[site["id"]] = site
             self.sites_by_site_name[site["name"]] = site
 
+            # Generate 1 root drive
             drive = {"id": str(fake.uuid4()), "description": fake.paragraph()}
 
             self.sites_by_drive_id[drive["id"]] = site
@@ -121,30 +169,32 @@ class RandomDataStorage:
             self.site_lists[site["id"]] = []
             self.drive_items[drive["id"]] = []
 
+            # Generate Drive Items
             for j in range(NUMBER_OF_DRIVE_ITEMS):
                 drive_item = {
                     "id": self.generate_sharepoint_id(),
                 }
 
-                if j % 20 == 0:
+                if j % 20 == 0: # Every 20th is a folder
                     drive_item["folder"] = True
                     drive_item["name"] = fake.word()
                 else:
                     drive_item["folder"] = False
                     drive_item["name"] = fake.file_name(extension="txt")
 
-                    if j % 5 == 0:  # 3/20 = 15% items
+                    if j % 5 == 0:  # Every 5th is medium
                         self.drive_item_content[drive_item["id"]] = medium_text
                         drive_item["size"] = medium_text_bytesize
-                    elif j % 17 == 0:  # 1/20 = 5% items
+                    elif j % 17 == 0:  # Every 17th is large
                         self.drive_item_content[drive_item["id"]] = large_text
                         drive_item["size"] = large_text_bytesize
-                    else:
+                    else: # Every other is small
                         self.drive_item_content[drive_item["id"]] = small_text
                         drive_item["size"] = small_text_bytesize
 
                 self.drive_items[drive["id"]].append(drive_item)
 
+            # Generate Site Pages
             for k in range(NUMBER_OF_PAGES):
                 doc, tag, text = Doc().tagtext()
 
@@ -165,11 +215,11 @@ class RandomDataStorage:
                                 text(fake.word())
                             doc.stag(
                                 "img",
-                                src=fake.pystr(min_chars=65536, max_chars=65536 << 1),
+                                src=fake_binary_image,
                             )  # just fake invalid image as if it was base64-encoded png, purely to fill-in some data
 
                 page = {
-                    "id": self.autoinc.get(),
+                    "id": str(self.autoinc.get()),
                     "odata.id": str(fake.uuid4()),
                     "guid": str(fake.uuid4()),
                     "content": doc.getvalue(),
@@ -177,6 +227,7 @@ class RandomDataStorage:
 
                 self.site_pages[site["id"]].append(page)
 
+            # Generate Lists
             for l in range(NUMBER_OF_LISTS):
                 site_list = {
                     "id": str(fake.uuid4()),
@@ -188,38 +239,40 @@ class RandomDataStorage:
                 self.site_lists_by_list_id[site_list["id"]] = site_list
                 self.site_lists_by_list_name[site_list["name"]] = site_list
                 self.site_list_items[site_list["id"]] = []
-                self.list_item_attachment_content[site_list["id"]] = {}
+                self.list_item_attachment_content[site_list['id']] = {}
 
+                # Generate List Items
                 list_id_autoinc = AutoIncrement()
                 for k in range(NUMBER_OF_LIST_ITEMS):
                     list_item = {
-                        "id": list_id_autoinc.get(),
+                        "id": str(list_id_autoinc.get()),
                         "guid": str(fake.uuid4()),
                         "title": fake.word(),
                         "attachments": [],
                     }
 
-                    self.list_item_attachment_content[list_item["id"]] = {}
+                    self.list_item_attachment_content[site_list['id']][list_item["id"]] = {}
 
+                    # Generate Attachments
                     for m in range(NUMBER_OF_LIST_ITEM_ATTACHMENTS):
                         list_item_attachment = {
                             "title": fake.file_name(extension="txt")
                         }
 
-                        if m % 5 == 0:  # Every 5th item
-                            self.list_item_attachment_content[list_item["id"]][
-                                list_item_attachment["title"]
-                            ] = medium_text
-                        elif m % 9 == 0:  # Every 9th item
-                            self.list_item_attachment_content[list_item["id"]][
-                                list_item_attachment["title"]
-                            ] = large_text
-                        else:
-                            self.list_item_attachment_content[list_item["id"]][
-                                list_item_attachment["title"]
-                            ] = small_text
-
                         list_item["attachments"].append(list_item_attachment)
+
+                        # Generate Attachment Content
+                        generated_content = None
+                        if m % 5 == 0:  # Every 5th item
+                            generated_content = medium_text
+                        elif m % 9 == 0:  # Every 9th item
+                            generated_content = large_text
+                        else:
+                            generated_content = small_text
+
+                        self.list_item_attachment_content[site_list['id']][list_item["id"]][
+                            list_item_attachment["title"]
+                        ] = generated_content
 
                     self.site_list_items[site_list["id"]].append(list_item)
 
@@ -440,7 +493,7 @@ class RandomDataStorage:
                     "createdDateTime": "2023-06-06T12:44:01Z",
                     "eTag": '"35aef603-c870-4326-91c3-ffdf59c29677,2"',
                     "lastModifiedDateTime": "2023-06-06T12:44:01Z",
-                    "webUrl": f"{ROOT}/sites/{site['name']}/Lists/{list['name']}/1_.000",
+                    "webUrl": f"{ROOT}/sites/{site['name']}/Lists/{list_['name']}/1_.000",
                     "createdBy": {
                         "user": {
                             "email": "demo@enterprisesearch.onmicrosoft.com",
@@ -498,7 +551,7 @@ class RandomDataStorage:
         list_item = list_items[int(list_item_id) - 1]
 
         result = {
-            "odata.metadata": "https://enterprisesearch.sharepoint.com/sites/Artem'sSiteForTesting/_api/$metadata#SP.ListData.Custom_x0020_Made_x0020_ListListItems/@Element",
+            "odata.metadata": f"{ROOT}/sites/{site['name']}/_api/$metadata#SP.ListData.{list_name}ListItems/@Element",
             "odata.type": "SP.Data.Custom_x0020_Made_x0020_ListListItem",
             "odata.id": list_item["guid"],
             "odata.etag": '"3"',
@@ -527,10 +580,10 @@ class RandomDataStorage:
             result["AttachmentFiles"].append(
                 {
                     "odata.type": "SP.Attachment",
-                    "odata.id": f"{ROOT}/sites/{site['name']}/_api/Web/Lists(guid'{list_['id']}')/Items({list_item_id})/AttachmentFiles('{list_item['title']}')",
-                    "odata.editLink": f"Web/Lists(guid'b84d6e6b-5123-47c4-831d-ab6192fdb88e')/Items({list_item_id})/AttachmentFiles('{list_item['title']}')",
-                    "FileName": list_item["title"],
-                    "FileNameAsPath": {"DecodedUrl": list_item["title"]},
+                    "odata.id": f"{ROOT}/sites/{site['name']}/_api/Web/Lists(guid'{list_['id']}')/Items({list_item_id})/AttachmentFiles('{attachment['title']}')",
+                    "odata.editLink": f"Web/Lists(guid'b84d6e6b-5123-47c4-831d-ab6192fdb88e')/Items({list_item_id})/AttachmentFiles('{attachment['title']}')",
+                    "FileName": attachment["title"],
+                    "FileNameAsPath": {"DecodedUrl": attachment["title"]},
                     "ServerRelativePath": {
                         "DecodedUrl": f"/sites/{site['name']}/Lists/{list['name']}/Attachments/{list_item_id}/{attachment['title']}"
                     },
@@ -540,8 +593,8 @@ class RandomDataStorage:
 
         return result
 
-    def get_list_item_attachment_content(list_item_id, file_name):
-        return self.list_item_attachment_content[list_item_id][file_name]
+    def get_list_item_attachment_content(self, list_id, list_item_id, file_name):
+        return self.list_item_attachment_content[list_id][list_item_id][file_name]
 
 
 data_storage = RandomDataStorage()
@@ -716,7 +769,7 @@ def get_site_pages(site_name):
     methods=["GET"],
 )
 def get_list_item_attachment(site_name, list_id, list_item_id, file_name):
-    return data_storage.get_list_item_attachment_content(list_item_id, file_name)
+    return data_storage.get_list_item_attachment_content(list_id, list_item_id, file_name)
 
 
 if __name__ == "__main__":
