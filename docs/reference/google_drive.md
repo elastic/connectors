@@ -74,7 +74,7 @@ elasticsearch:
   password: <YOUR_PASSWORD>
 
 connector_id: <CONNECTOR_ID_FROM_KIBANA>
-service_type: google_cloud_storage
+service_type: google_drive
 
 sources:
   google_drive: connectors.sources.google_drive:GoogleDriveDataSource
