@@ -519,10 +519,11 @@ class SharepointOnlineClient:
             return {}
 
     async def active_users_with_groups(self):
-        expand = "transitiveMemberOf"
+        expand = "transitiveMemberOf($select=id)"
         top = 999  # this is accepted, but does not get taken litterally. Response size seems to max out at 100
         filter = "accountEnabled eq true"
-        url = f"{GRAPH_API_URL}/users?$expand={expand}&$top={top}&$filter={filter}"
+        select = "UserName,userPrincipalName,Email,mail,transitiveMemberOf,id,createdDateTime"
+        url = f"{GRAPH_API_URL}/users?$expand={expand}&$top={top}&$filter={filter}&$select={select}"
 
         try:
             async for page in self._graph_api_client.scroll(url):
