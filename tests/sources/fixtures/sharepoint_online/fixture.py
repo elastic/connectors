@@ -8,7 +8,6 @@
 import os
 import random
 import string
-import uuid
 
 from faker import Faker
 from flask import Flask, escape, request
@@ -149,7 +148,7 @@ class RandomDataStorage:
     def generate(self):
         self.tenants = [TENANT]
 
-        for i in range(NUMBER_OF_SITES):
+        for _ in range(NUMBER_OF_SITES):
             # Generate Sites
             site = {
                 "id": str(fake.uuid4()),
@@ -196,7 +195,7 @@ class RandomDataStorage:
                 self.drive_items[drive["id"]].append(drive_item)
 
             # Generate Site Pages
-            for k in range(NUMBER_OF_PAGES):
+            for _ in range(NUMBER_OF_PAGES):
                 doc, tag, text = Doc().tagtext()
 
                 with tag("html"):
@@ -229,7 +228,7 @@ class RandomDataStorage:
                 self.site_pages[site["id"]].append(page)
 
             # Generate Lists
-            for l in range(NUMBER_OF_LISTS):
+            for _ in range(NUMBER_OF_LISTS):
                 site_list = {
                     "id": str(fake.uuid4()),
                     "name": f"{fake.word()} {fake.word()}",
@@ -243,10 +242,9 @@ class RandomDataStorage:
                 self.list_item_attachment_content[site_list["id"]] = {}
 
                 # Generate List Items
-                list_id_autoinc = AutoIncrement()
                 for k in range(NUMBER_OF_LIST_ITEMS):
                     list_item = {
-                        "id": str(list_id_autoinc.get()),
+                        "id": str(k + 1),
                         "guid": str(fake.uuid4()),
                         "title": fake.word(),
                         "attachments": [],
@@ -602,13 +600,6 @@ class RandomDataStorage:
 
 data_storage = RandomDataStorage()
 data_storage.generate()
-
-import json
-
-json_str = json.dumps(data_storage.list_item_attachment_content, indent=2)
-f = open("/tmp/data.json", "a")
-f.write(json_str)
-f.close()
 
 
 @app.route("/<string:tenant_id>/oauth2/v2.0/token", methods=["POST"])
