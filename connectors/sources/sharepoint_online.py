@@ -606,9 +606,14 @@ class SharepointOnlineClient:
             yield page
 
     async def drive_item_permissions(self, drive_id, item_id):
-        return await self._graph_api_client.fetch(
-            f"{GRAPH_API_URL}/drives/{drive_id}/items/{item_id}/permissions"
-        )
+        try:
+            async for page in self._graph_api_client.scroll(
+                f"{GRAPH_API_URL}/drives/{drive_id}/items/{item_id}/permissions"
+            ):
+                for drive_item in page:
+                    yield drive_item
+        except NotFound:
+            return
 
     async def download_drive_item(self, drive_id, item_id, async_buffer):
         await self._graph_api_client.pipe(
@@ -829,8 +834,20 @@ def _prefix_group(group):
     return _prefix_identity("group", group)
 
 
+def _prefix_site_group(site_group):
+    return _prefix_identity("site_group", site_group)
+
+
 def _prefix_user(user):
     return _prefix_identity("user", user)
+
+
+def _prefix_site_user_id(site_user_id):
+    return _prefix_identity("site_user_id", site_user_id)
+
+
+def _prefix_user_id(user_id):
+    return _prefix_identity("user_id", user_id)
 
 
 def _prefix_email(email):
@@ -1005,6 +1022,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "bool",
                 "value": False,
             },
+            "fetch_drive_item_permissions": {
+                "depends_on": [{"field": "use_document_level_security", "value": True}],
+                "display": "toggle",
+                "label": "Fetch drive item permissions",
+                "order": 9,
+                "tooltip": "Enable this option to fetch drive item specific permissions, too. Note that this setting can potentially decrease ingestion performance.",
+                "type": "bool",
+                "value": True,
+            },
         }
 
     async def validate_config(self):
@@ -1165,7 +1191,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "_id": "some.user@spo.com",
                 "identity": {
                     "email": "email:some.user@spo.com",
-                    "username": "user:some.user"
+                    "username": "user:some.user",
+                    "user_id": "user_id:some user id"
                 },
                 "created_at": "2023-06-30 12:00:00",
                 "query": {
@@ -1203,6 +1230,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         prefixed_mail = _prefix_email(email)
         prefixed_username = _prefix_user(username)
+        prefixed_user_id = _prefix_user_id(user.get("id"))
         id_ = email if email else username
 
         access_control = list({prefixed_mail, prefixed_username}.union(prefixed_groups))
@@ -1218,6 +1246,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             "identity": {
                 "email": prefixed_mail,
                 "username": prefixed_username,
+                "user_id": prefixed_user_id,
             },
             "created_at": created_at,
         } | self.access_control_query(access_control)
@@ -1381,6 +1410,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 drive_item, access_control
                             )
 
+                            if self.configuration["fetch_drive_item_permissions"]:
+                                drive_item = await self._with_drive_item_permissions(
+                                    site_drive["id"], drive_item
+                                )
+
                             yield drive_item, self.download_function(
                                 drive_item, max_drive_item_age
                             )
@@ -1460,6 +1494,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 drive_item, access_control
                             )
 
+                            if self.configuration["fetch_drive_item_permissions"]:
+                                drive_item = await self._with_drive_item_permissions(
+                                    site_drive["id"], drive_item
+                                )
+
                             yield drive_item, self.download_function(
                                 drive_item, max_drive_item_age
                             ), self.drive_item_operation(drive_item)
@@ -1514,12 +1553,99 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             yield site_drive
 
+    async def _with_drive_item_permissions(self, site_drive_id, drive_item):
+        """Decorates a drive item with its permissions.
+
+        Args:
+            site_drive_id (str): id of a site drive.
+            drive_item (dict): drive item to fetch the permissions for.
+
+        Returns:
+            drive_item (dict): drive item decorated with its permissions.
+
+        Example permissions for a drive item:
+
+        {
+              ...
+              "grantedTo": { ... },
+              "grantedToV2": {
+                "user": {
+                  "id": "5D33DD65C6932946",
+                  "displayName": "Robin Danielsen"
+                },
+                "siteUser": {
+                  "id": "1",
+                  "displayName": "Robin Danielsen",
+                  "loginName": "Robin Danielsen"
+                },
+                "group": {
+                  "id": "23234DAJFKA234",
+                  "displayName": "Some group",
+                },
+                "siteGroup": {
+                  "id": "2",
+                  "displayName": "Some group"
+                }
+              }
+        }
+
+        "grantedTo" has been deprecated, so we only fetch the permissions under "grantedToV2".
+        A drive item can have six different identities assigned to it: "application", "device", "group", "user", "siteGroup" and "siteUser".
+        In this context we'll only fetch "group", "user", "siteGroup" and "siteUser" and prefix them with different strings to make them distinguishable from each other.
+
+        Note: A "siteUser" can be related to a "user", but not neccessarily (same for "group" and "siteGroup").
+        """
+
+        def _get_id(permissions, identity):
+            if identity not in permissions:
+                return None
+
+            return permissions.get(identity).get("id")
+
+        drive_item_id = drive_item.get("id")
+        access_control = []
+
+        async for permission in self.client.drive_item_permissions(
+            site_drive_id, drive_item_id
+        ):
+            granted_to_v2 = permission.get("grantedToV2")
+
+            if not granted_to_v2:
+                self._logger.debug(
+                    f"'grantedToV2' missing for drive item (id: '{drive_item_id}') under site drive (id: '{site_drive_id}'). Skipping permissions..."
+                )
+                continue
+
+            user_id = _get_id(granted_to_v2, "user")
+            group_id = _get_id(granted_to_v2, "group")
+            site_group_id = _get_id(granted_to_v2, "siteGroup")
+            site_user_id = _get_id(granted_to_v2, "siteUser")
+
+            if user_id:
+                access_control.append(_prefix_user_id(user_id))
+
+            if group_id:
+                access_control.append(_prefix_group(group_id))
+
+            if site_group_id:
+                access_control.append(_prefix_site_group(site_group_id))
+
+            if site_user_id:
+                access_control.append(_prefix_site_user_id(site_user_id))
+
+        return self._decorate_with_access_control(drive_item, access_control)
+
     async def drive_items(self, site_drive, max_drive_item_age):
         async for page in self.client.drive_items(site_drive["id"]):
             for drive_item in page:
                 drive_item["_id"] = drive_item["id"]
                 drive_item["object_type"] = "drive_item"
                 drive_item["_timestamp"] = drive_item["lastModifiedDateTime"]
+
+                if self.configuration["fetch_drive_item_permissions"]:
+                    drive_item = await self._with_drive_item_permissions(
+                        site_drive["id"], drive_item
+                    )
 
                 yield drive_item, self.download_function(drive_item, max_drive_item_age)
 
