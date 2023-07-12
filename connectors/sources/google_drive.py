@@ -205,6 +205,7 @@ def _prefix_identity(prefix, identity):
 
     return f"{prefix}:{identity}"
 
+
 def _prefix_group(group):
     return _prefix_identity("group", group)
 
@@ -218,16 +219,19 @@ def _prefix_domain(domain):
 
 
 def _is_user_permission(permission_type):
-    return permission_type == 'user'
+    return permission_type == "user"
+
 
 def _is_group_permission(permission_type):
-    return permission_type == 'group'
+    return permission_type == "group"
+
 
 def _is_domain_permission(permission_type):
-    return permission_type == 'domain'
+    return permission_type == "domain"
+
 
 def _is_anyone_permission(permission_type):
-    return permission_type == 'anyone'
+    return permission_type == "anyone"
 
 
 class GoogleDriveDataSource(BaseDataSource):
@@ -329,7 +333,6 @@ class GoogleDriveDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to the Google Drive.")
             raise
 
-
     # def _dls_enabled(self):
     #     if self._features is None:
     #         return False
@@ -338,7 +341,6 @@ class GoogleDriveDataSource(BaseDataSource):
     #         return False
 
     #     return self.configuration.get("use_document_level_security", False)
-
 
     async def get_drives(self):
         """Fetch all shared drive (id, name) from Google Drive
@@ -613,7 +615,6 @@ class GoogleDriveDataSource(BaseDataSource):
             # Get content from all other file types
             return await self.get_generic_file_content(blob, timestamp=timestamp)
 
-
     async def list_permissions(self, file_id):
         """Get permissions for a given file ID from Google Drive.
 
@@ -626,10 +627,9 @@ class GoogleDriveDataSource(BaseDataSource):
             fileId=file_id,
             fields="permissions(type,emailAddress,domain),nextPageToken",
             supportsAllDrives=True,
-            pageSize=100
+            pageSize=100,
         ):
             yield permission
-
 
     async def list_files(self):
         """Get files from Google Drive. Files can have any type.
@@ -650,7 +650,6 @@ class GoogleDriveDataSource(BaseDataSource):
         ):
             yield file
 
-
     async def _get_permissions_on_shared_drive(self, file_id):
         """Retrieves the access permissions on a shared drive for the given file ID.
 
@@ -664,12 +663,11 @@ class GoogleDriveDataSource(BaseDataSource):
         access_controls = []
 
         async for permissions_page in self.list_permissions(file_id):
-            permissions =  permissions_page.get('permissions', [])
+            permissions = permissions_page.get("permissions", [])
             access_controls_page = self._process_permissions(permissions)
             access_controls.extend(access_controls_page)
 
         return access_controls
-
 
     def _get_permissions_on_my_drive(self, document):
         """Formats the access permissions on a my drive for the given object.
@@ -681,18 +679,15 @@ class GoogleDriveDataSource(BaseDataSource):
             list: A list of access permissions on my drive for a give document.
         """
 
-
-        permissions = document.get('permissions', [])
+        permissions = document.get("permissions", [])
         access_controls = self._process_permissions(permissions)
         return access_controls
 
-
     def _process_permissions(self, permissions):
-
         processed_permissions = []
 
         for permission in permissions:
-            permission_type = permission['type']
+            permission_type = permission["type"]
             access_permission = None
 
             if _is_user_permission(permission_type):
@@ -702,15 +697,15 @@ class GoogleDriveDataSource(BaseDataSource):
             elif _is_domain_permission(permission_type):
                 access_permission = _prefix_domain(permission.get("domain"))
             elif _is_anyone_permission(permission_type):
-                access_permission = 'anyone'
+                access_permission = "anyone"
             else:
-                self._logger.warning(f'Unknown Google Drive permission type: {permission_type}.')
+                self._logger.warning(
+                    f"Unknown Google Drive permission type: {permission_type}."
+                )
 
             processed_permissions.append(access_permission)
 
         return processed_permissions
-
-
 
     async def prepare_blob_document(self, blob, paths):
         """Apply key mappings to the blob document.
@@ -737,22 +732,26 @@ class GoogleDriveDataSource(BaseDataSource):
         }
 
         # mark the document if it is on shared drive
-        blob_drive_id = blob.get('driveId', None)
+        blob_drive_id = blob.get("driveId", None)
         shared_drive = paths.get(blob_drive_id, None)
         if shared_drive:
-            blob_document['shared_drive'] = shared_drive.get('name')
-
+            blob_document["shared_drive"] = shared_drive.get("name")
 
         # + - this step is likely to make sync longer
         # incremental sync to the rescue for later syncs !
         # I know it's bad code will fix it later :)
         # if dls_enabled() ..... for now do it be default
 
-        # getting permissions works differenty for shared drive objects
+        # Getting permissions works differenty for files on my drive and files on shared drives.
+        # Read more: https://developers.google.com/drive/api/guides/shared-drives-diffs
         if shared_drive:
-            blob_document[ACCESS_CONTROL] = await self._get_permissions_on_shared_drive(file_id=file_id)
+            blob_document[ACCESS_CONTROL] = await self._get_permissions_on_shared_drive(
+                file_id=file_id
+            )
         else:
-            blob_document[ACCESS_CONTROL] = self._get_permissions_on_my_drive(document=blob)
+            blob_document[ACCESS_CONTROL] = self._get_permissions_on_my_drive(
+                document=blob
+            )
 
         # record "file" or "folder" type
         blob_document["type"] = (
