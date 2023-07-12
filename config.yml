@@ -28,10 +28,10 @@ service:
   log_level: INFO
 
 #connectors:
-#  changeme:
+#  -
+#    connector_id: changeme
 #    service_type: changeme
-#    elasticsearch:
-#      api_key: changeme
+#    api_key: changeme
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
