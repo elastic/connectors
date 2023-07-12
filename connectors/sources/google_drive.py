@@ -684,6 +684,14 @@ class GoogleDriveDataSource(BaseDataSource):
         return access_controls
 
     def _process_permissions(self, permissions):
+        """Formats the access permission list for Google Drive object.
+
+        Args:
+            permissions (list): List of permissions of Google Drive file returned from API.
+
+        Returns:
+            list: A list of processed access permissions for a given file.
+        """
         processed_permissions = []
 
         for permission in permissions:
@@ -737,10 +745,8 @@ class GoogleDriveDataSource(BaseDataSource):
         if shared_drive:
             file_document["shared_drive"] = shared_drive.get("name")
 
-        # + - this step is likely to make sync longer
-        # incremental sync to the rescue for later syncs !
-        # I know it's bad code will fix it later :)
-        # if dls_enabled() ..... for now do it be default
+
+        # check if dls_enabled() ..... for now do it be default
 
         # Getting permissions works differenty for files on my drive and files on shared drives.
         # Read more: https://developers.google.com/drive/api/guides/shared-drives-diffs
@@ -795,7 +801,7 @@ class GoogleDriveDataSource(BaseDataSource):
         """
         files = files_page.get("files", [])
 
-        async def process_file(file, semaphore):
+        async def process_file(file):
             async with semaphore:
                 return await self.prepare_file(file=file, paths=paths)
 
