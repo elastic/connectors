@@ -30,7 +30,11 @@ FILE_SIZE_LIMIT = 10485760  # ~ 10 Megabytes
 
 DRIVE_API_TIMEOUT = 1 * 60  # 1 min
 
+ACCESS_CONTROL = "_allow_access_control"
+
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
+
+DRIVE_ITEMS_FIELDS = "id,createdTime,driveId,modifiedTime,name,size,mimeType,fileExtension,webViewLink,permissions,owners,parents"
 
 # Google Service Account JSON includes "universe_domain" key. That argument is not
 # supported in aiogoogle library in version 5.3.0. The "universe_domain" key is allowed in
@@ -195,11 +199,43 @@ class GoogleDriveClient:
             raise
 
 
+def _prefix_identity(prefix, identity):
+    if prefix is None or identity is None:
+        return None
+
+    return f"{prefix}:{identity}"
+
+def _prefix_group(group):
+    return _prefix_identity("group", group)
+
+
+def _prefix_user(user):
+    return _prefix_identity("user", user)
+
+
+def _prefix_domain(domain):
+    return _prefix_identity("domain", domain)
+
+
+def _is_user_permission(permission_type):
+    return permission_type == 'user'
+
+def _is_group_permission(permission_type):
+    return permission_type == 'group'
+
+def _is_domain_permission(permission_type):
+    return permission_type == 'domain'
+
+def _is_anyone_permission(permission_type):
+    return permission_type == 'anyone'
+
+
 class GoogleDriveDataSource(BaseDataSource):
     """Google Drive"""
 
     name = "Google Drive"
     service_type = "google_drive"
+    dls_enabled = True
 
     def __init__(self, configuration):
         """Set up the connection to the Google Drive Client.
@@ -292,6 +328,17 @@ class GoogleDriveDataSource(BaseDataSource):
         except Exception:
             self._logger.exception("Error while connecting to the Google Drive.")
             raise
+
+
+    # def _dls_enabled(self):
+    #     if self._features is None:
+    #         return False
+
+    #     if not self._features.document_level_security_enabled():
+    #         return False
+
+    #     return self.configuration.get("use_document_level_security", False)
+
 
     async def get_drives(self):
         """Fetch all shared drive (id, name) from Google Drive
@@ -566,7 +613,25 @@ class GoogleDriveDataSource(BaseDataSource):
             # Get content from all other file types
             return await self.get_generic_file_content(blob, timestamp=timestamp)
 
-    async def fetch_files(self):
+
+    async def list_permissions(self, file_id):
+        """Get permissions for a given file ID from Google Drive.
+
+        Yields:
+            dictionary: Permissions from Google Drive for a file.
+        """
+        async for permission in self._google_drive_client.api_call_paged(
+            resource="permissions",
+            method="list",
+            fileId=file_id,
+            fields="permissions(type,emailAddress,domain),nextPageToken",
+            supportsAllDrives=True,
+            pageSize=100
+        ):
+            yield permission
+
+
+    async def list_files(self):
         """Get files from Google Drive. Files can have any type.
 
         Yields:
@@ -578,14 +643,76 @@ class GoogleDriveDataSource(BaseDataSource):
             corpora="allDrives",
             q="trashed=false",
             orderBy="modifiedTime desc",
-            fields="files,nextPageToken",
+            fields=f"files({DRIVE_ITEMS_FIELDS}),incompleteSearch,nextPageToken",
             includeItemsFromAllDrives=True,
             supportsAllDrives=True,
             pageSize=100,
         ):
             yield file
 
-    def prepare_blob_document(self, blob, paths):
+
+    async def _get_permissions_on_shared_drive(self, file_id):
+        """Retrieves the access permissions on a shared drive for the given file ID.
+
+        Args:
+            file_id (str): The ID of the file.
+
+        Returns:
+            list: A list of access permissions on the shared drive for a file.
+        """
+
+        access_controls = []
+
+        async for permissions_page in self.list_permissions(file_id):
+            permissions =  permissions_page.get('permissions', [])
+            access_controls_page = self._process_permissions(permissions)
+            access_controls.extend(access_controls_page)
+
+        return access_controls
+
+
+    def _get_permissions_on_my_drive(self, document):
+        """Formats the access permissions on a my drive for the given object.
+
+        Args:
+            document (dict): The metadata of Google Drive object.
+
+        Returns:
+            list: A list of access permissions on my drive for a give document.
+        """
+
+
+        permissions = document.get('permissions', [])
+        access_controls = self._process_permissions(permissions)
+        return access_controls
+
+
+    def _process_permissions(self, permissions):
+
+        processed_permissions = []
+
+        for permission in permissions:
+            permission_type = permission['type']
+            access_permission = None
+
+            if _is_user_permission(permission_type):
+                access_permission = _prefix_user(permission.get("emailAddress"))
+            elif _is_group_permission(permission_type):
+                access_permission = _prefix_group(permission.get("emailAddress"))
+            elif _is_domain_permission(permission_type):
+                access_permission = _prefix_domain(permission.get("domain"))
+            elif _is_anyone_permission(permission_type):
+                access_permission = 'anyone'
+            else:
+                self._logger.warning(f'Unknown Google Drive permission type: {permission_type}.')
+
+            processed_permissions.append(access_permission)
+
+        return processed_permissions
+
+
+
+    async def prepare_blob_document(self, blob, paths):
         """Apply key mappings to the blob document.
 
         Args:
@@ -595,8 +722,10 @@ class GoogleDriveDataSource(BaseDataSource):
             dict: Blobs metadata mapped with the keys of `BLOB_ADAPTER`.
         """
 
+        file_id = blob.get("id")
+
         blob_document = {
-            "_id": blob.get("id"),
+            "_id": file_id,
             "created_at": blob.get("createdTime"),
             "last_updated": blob.get("modifiedTime"),
             "name": blob.get("name"),
@@ -606,6 +735,24 @@ class GoogleDriveDataSource(BaseDataSource):
             "file_extension": blob.get("fileExtension"),
             "url": blob.get("webViewLink"),
         }
+
+        # mark the document if it is on shared drive
+        blob_drive_id = blob.get('driveId', None)
+        shared_drive = paths.get(blob_drive_id, None)
+        if shared_drive:
+            blob_document['shared_drive'] = shared_drive.get('name')
+
+
+        # + - this step is likely to make sync longer
+        # incremental sync to the rescue for later syncs !
+        # I know it's bad code will fix it later :)
+        # if dls_enabled() ..... for now do it be default
+
+        # getting permissions works differenty for shared drive objects
+        if shared_drive:
+            blob_document[ACCESS_CONTROL] = await self._get_permissions_on_shared_drive(file_id=file_id)
+        else:
+            blob_document[ACCESS_CONTROL] = self._get_permissions_on_my_drive(document=blob)
 
         # record "file" or "folder" type
         blob_document["type"] = (
@@ -640,7 +787,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return blob_document
 
-    def get_blob_document(self, blobs, paths):
+    async def get_blob_document(self, blobs, paths):
         """Generate blob document.
 
         Args:
@@ -649,8 +796,20 @@ class GoogleDriveDataSource(BaseDataSource):
         Yields:
             dict: Blobs metadata mapped with the keys of `BLOB_ADAPTER`.
         """
-        for blob in blobs.get("files", []):
-            yield self.prepare_blob_document(blob=blob, paths=paths)
+        files = blobs.get("files", [])
+
+        async def process_file(file, semaphore):
+            async with semaphore:
+                return await self.prepare_blob_document(blob=file, paths=paths)
+
+        # Create the shared semaphore
+        semaphore = asyncio.Semaphore(20)
+
+        tasks = [process_file(file, semaphore) for file in files]
+        blob_documents = await asyncio.gather(*tasks)
+
+        for file in blob_documents:
+            yield file
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch Google Drive objects in an async manner.
@@ -666,8 +825,8 @@ class GoogleDriveDataSource(BaseDataSource):
         # Build a path lookup, parentId -> parent path
         resolved_paths = await self.resolve_paths()
 
-        async for files in self.fetch_files():
-            for blob_document in self.get_blob_document(
+        async for files in self.list_files():
+            async for blob_document in self.get_blob_document(
                 blobs=files, paths=resolved_paths
             ):
                 yield blob_document, partial(self.get_content, blob_document)
