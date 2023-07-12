@@ -81,3 +81,8 @@ steps:
       - ".buildkite/run_nigthly.sh github"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Dropbox"
+    command:
+      - ".buildkite/run_nigthly.sh dropbox"
+    artifact_paths:
+      - "perf8-report-*/**/*"
