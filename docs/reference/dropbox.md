@@ -1,6 +1,6 @@
 # Dropbox Connector
 
-The [Elastic Dropbox connector](../connectors/sources/dropbox.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic Dropbox connector](../../connectors/sources/dropbox.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ## Availability and prerequisites
 
@@ -83,7 +83,7 @@ This can help speed up content extraction of attachments. Defaults to `100`.
 
 ### Content Extraction
 
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
+The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../../connectors/utils.py) file.
 
 ## Documents and syncs
 
