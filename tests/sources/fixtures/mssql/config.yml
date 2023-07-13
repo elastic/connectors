@@ -26,8 +26,10 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'mssql'
-service_type: 'mssql'
+connectors:
+  -
+    connector_id: 'mssql'
+    service_type: 'mssql'
 
 sources:
   mssql: connectors.sources.mssql:MSSQLDataSource
