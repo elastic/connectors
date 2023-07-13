@@ -105,26 +105,6 @@
         "value": false,
         "order": 7,
         "ui_restrictions": []
-      },
-      "fetch_users_by_site": {
-        "depends_on": [
-          {
-            "field": "use_document_level_security",
-            "value": true
-          }
-        ],
-        "display": "toggle",
-        "tooltip": "When only syncing a small subset of sites, it may be more efficient to fetch only the users who have access to those sites. However, this becomes inefficent the more sites (and the more users) that are intended to be synced, as there can be a lot of redundancy in membership between sites. This should not be used if all sites are being synced.",
-        "default_value": null,
-        "label": "Fetch ACLs for users based on site membership",
-        "sensitive": false,
-        "type": "bool",
-        "required": true,
-        "options": [],
-        "validations": [],
-        "value": false,
-        "order": 8,
-        "ui_restrictions": []
       }
     },
     "custom_scheduling": {},
