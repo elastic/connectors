@@ -460,8 +460,12 @@ async def test_resolve_paths():
     folders_future.set_result(folders)
 
     mocked_gd_object = get_google_drive_source_object()
-    mocked_gd_object.google_drive_client.retrieve_all_drives = mock.MagicMock(return_value=drives_future)
-    mocked_gd_object.google_drive_client.retrieve_all_folders = mock.MagicMock(return_value=folders_future)
+    mocked_gd_object.google_drive_client.retrieve_all_drives = mock.MagicMock(
+        return_value=drives_future
+    )
+    mocked_gd_object.google_drive_client.retrieve_all_folders = mock.MagicMock(
+        return_value=folders_future
+    )
 
     paths = await mocked_gd_object.resolve_paths()
 
