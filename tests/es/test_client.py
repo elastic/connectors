@@ -13,9 +13,11 @@ from elasticsearch import ConflictError, ConnectionError
 from connectors.es.client import ESClient, License, with_concurrency_control
 
 BASIC_CONFIG = {"username": "elastic", "password": "changeme"}
+API_CONFIG = {"api_key": "foo"}
+BASIC_API_CONFIG = {"username": "elastic", "password": "changeme", "api_key": "foo"}
 
 
-def test_esclient():
+def test_es_client():
     # creating a client with a minimal config should create one with sane
     # defaults
 
@@ -23,11 +25,23 @@ def test_esclient():
     assert es_client.host.host == "localhost"
     assert es_client.host.port == 9200
     assert es_client.host.scheme == "http"
-
-    # TODO: find a more elegant way
     assert es_client.client._retry_on_timeout
+
     basic = f"Basic {base64.b64encode(b'elastic:changeme').decode()}"
     assert es_client.client._headers["Authorization"] == basic
+
+
+@pytest.mark.parametrize(
+    "config, expected_auth_header",
+    [
+        (BASIC_CONFIG, f"Basic {base64.b64encode(b'elastic:changeme').decode()}"),
+        (API_CONFIG, "ApiKey foo"),
+        (BASIC_API_CONFIG, "ApiKey foo"),
+    ],
+)
+def test_es_client_with_auth(config, expected_auth_header):
+    es_client = ESClient(config)
+    assert es_client.client._headers["Authorization"] == expected_auth_header
 
 
 @pytest.mark.asyncio
