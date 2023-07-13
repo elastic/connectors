@@ -1,2 +1,4 @@
 flask==2.2.3
 flask_limiter==3.3.1
+faker==18.11.2
+yattag==1.15.1
