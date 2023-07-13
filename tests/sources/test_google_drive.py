@@ -923,9 +923,7 @@ async def test_get_content_when_type_not_supported():
     async with Aiogoogle(
         service_account_creds=mocked_gd_object.google_drive_client.service_account_credentials
     ) as google_client:
-        drive_client = await google_client.discover(
-            api_name="drive", api_version="v3"
-        )
+        drive_client = await google_client.discover(api_name="drive", api_version="v3")
         drive_client.files = mock.MagicMock()
         content = await mocked_gd_object.get_content(
             file=blob_document,
@@ -1423,7 +1421,6 @@ async def test_prepare_access_control_documents(
 
 @pytest.mark.asyncio
 async def test_get_access_control_dls_disabled():
-
     mocked_gd_object = get_google_drive_source_object()
 
     mocked_gd_object._dls_enabled = mock.MagicMock(return_value=False)
@@ -1444,19 +1441,23 @@ async def test_get_access_control_dls_enabled():
 
     mocked_gd_object._dls_enabled = mock.MagicMock(return_value=True)
 
-    mock_access_control = {'_id': 'user1@test.com', 'identity': {'name': 'User 1', 'email': 'user1@test.com'}, 'query': {}}
+    mock_access_control = {
+        "_id": "user1@test.com",
+        "identity": {"name": "User 1", "email": "user1@test.com"},
+        "query": {},
+    }
 
     mocked_gd_object.prepare_single_access_control_document = mock.AsyncMock(
         return_value=mock_access_control
     )
     expected_response = {
         "users": [
-                    {
-                        "id": "user1",
-                        "primaryEmail": "user1@test.com",
-                        "name": {"fullName": "User 1"},
-                    }
-                ]
+            {
+                "id": "user1",
+                "primaryEmail": "user1@test.com",
+                "name": {"fullName": "User 1"},
+            }
+        ]
     }
     expected_response_object = Response(
         status_code=200,
