@@ -698,7 +698,7 @@ class SharepointOnlineClient:
             return
         except ClientResponseError:
             # Some site pages don't have the required columns, and it's unclear why
-            self._logger.warn(f"Moving past 400 error for URL: {url}")
+            self._logger.warning(f"Moving past 400 error for URL: {url}")
             return
 
     async def site_page_role_assignments(self, site_web_url, site_page_id):
