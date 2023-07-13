@@ -579,7 +579,7 @@ class SharepointOnlineClient:
                 yield site
 
     async def site_drives(self, site_id):
-        select = ""
+        select = "createdDateTime,description,id,lastModifiedDateTime,name,webUrl,driveType,createdBy,lastModifiedBy,owner"
 
         async for page in self._graph_api_client.scroll(
             f"{GRAPH_API_URL}/sites/{site_id}/drives?$select={select}"
@@ -618,7 +618,7 @@ class SharepointOnlineClient:
         )
 
     async def site_lists(self, site_id):
-        select = ""
+        select = "createdDateTime,id,lastModifiedDateTime,name,webUrl,displayName,createdBy,lastModifiedBy"
 
         async for page in self._graph_api_client.scroll(
             f"{GRAPH_API_URL}/sites/{site_id}/lists?$select={select}"
@@ -639,8 +639,8 @@ class SharepointOnlineClient:
             return {}
 
     async def site_list_items(self, site_id, list_id):
-        select = ""
-        expand = "fields"
+        select = "createdDateTime,id,lastModifiedDateTime,weburl,createdBy,lastModifiedBy,contentType"
+        expand = "fields($select=Title,Link,Attachments,LinkTitle,LinkFilename,Description,Conversation)"
 
         async for page in self._graph_api_client.scroll(
             f"{GRAPH_API_URL}/sites/{site_id}/lists/{list_id}/items?$select={select}&$expand={expand}"
@@ -685,7 +685,7 @@ class SharepointOnlineClient:
     async def site_pages(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)
 
-        select = ""
+        select = "Id,Title,LayoutWebpartsContent,CanvasContent1,Description,Created,AuthorId,Modified,EditorId"
         url = f"{site_web_url}/_api/web/lists/GetByTitle('Site%20Pages')/items?$select={select}"
 
         try:
@@ -695,6 +695,10 @@ class SharepointOnlineClient:
         except NotFound:
             # I'm not sure if site can have no pages, but given how weird API is I put this here
             # Just to be on a safe side
+            return
+        except ClientResponseError:
+            # Some site pages don't have the required columns, and it's unclear why
+            self._logger.warn(f"Moving past 400 error for URL: {url}")
             return
 
     async def site_page_role_assignments(self, site_web_url, site_page_id):
@@ -1460,7 +1464,6 @@ class SharepointOnlineDataSource(BaseDataSource):
             list_item_natural_id = list_item["id"]
             list_item["_id"] = f"{site_list_id}-{list_item['id']}"
             list_item["object_type"] = "list_item"
-            list_item["_original_filename"] = list_item.get("FileName", "")
 
             content_type = list_item["contentType"]["name"]
 
