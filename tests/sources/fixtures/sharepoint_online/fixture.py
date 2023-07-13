@@ -80,16 +80,27 @@ match DATA_SIZE:
         NUMBER_OF_LIST_ITEMS = 10
         NUMBER_OF_LIST_ITEM_ATTACHMENTS = 5
 
-small_text = fake.text(max_nb_chars=5000)
-medium_text = fake.text(max_nb_chars=20000)
-large_text = fake.text(max_nb_chars=100000)
+
+fake_one_mb_image = fake.pystr(min_chars=1 << 20, max_chars=1 << 20 + 1)
+def _generate_html(text, number_of_large_images):
+    images = []
+    for i in range(number_of_large_images):
+        images.append(f"<img src='{fake_one_mb_image}'/>")
+
+    large_html = f"<html><head></head><body><div>{text}</div><div>{'<br/>'.join(images)}</div></body></html>"
+
+    return large_html
+
+
+small_text = _generate_html(fake.text(max_nb_chars=5000), 0)
+medium_text = _generate_html(fake.text(max_nb_chars=20000), 1)
+large_text = _generate_html(fake.text(max_nb_chars=100000), 10)
 
 small_text_bytesize = len(small_text.encode("utf-8"))
 medium_text_bytesize = len(medium_text.encode("utf-8"))
 large_text_bytesize = len(large_text.encode("utf-8"))
 
 fake_binary_image = fake.pystr(min_chars=65536, max_chars=65536 << 1)
-
 
 TOTAL_RECORD_COUNT = NUMBER_OF_SITES * (
     1 * NUMBER_OF_DRIVE_ITEMS
