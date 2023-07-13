@@ -62,7 +62,7 @@ else:
 
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_RETRY_SECONDS = 30
-DEFAULT_PARALLEL_CONNECTION_COUNT=10
+DEFAULT_PARALLEL_CONNECTION_COUNT = 10
 FILE_WRITE_CHUNK_SIZE = 1024
 MAX_DOCUMENT_SIZE = 10485760
 WILDCARD = "*"
@@ -369,6 +369,11 @@ class MicrosoftAPISession:
                 yield resp
 
                 return
+        except aiohttp.client_exceptions.ClientOSError as e:
+            self._logger.warning(
+                "Graph API dropped the connection. It might indicate, that connector makes too many requests - decrease concurrency settings, otherwise Graph API can block this app."
+            )
+            raise
         except ClientResponseError as e:
             if e.status == 429 or e.status == 503:
                 response_headers = e.headers or {}
@@ -411,6 +416,7 @@ class SharepointOnlineClient:
         # Change the value at your own risk
         tcp_connector = aiohttp.TCPConnector(limit=DEFAULT_PARALLEL_CONNECTION_COUNT)
         self._http_session = aiohttp.ClientSession(  # TODO: lazy create this
+            connector=tcp_connector,
             headers={
                 "accept": "application/json",
                 "content-type": "application/json",
