@@ -48,6 +48,11 @@ steps:
       - ".buildkite/run_nigthly.sh sharepoint_server extra_small"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Sharepoint Online"
+    command:
+      - ".buildkite/run_nigthly.sh sharepoint_online medium"
+    artifact_paths:
+      - "perf8-report-*/**/*"
   - label: "🔨 Microsoft SQL"
     command:
       - ".buildkite/run_nigthly.sh mssql"
