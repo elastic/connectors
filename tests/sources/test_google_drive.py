@@ -18,9 +18,6 @@ from connectors.source import ConfigurableFieldValueError, DataSourceConfigurati
 from connectors.sources.google_drive import RETRIES, GoogleDriveDataSource
 
 SERVICE_ACCOUNT_CREDENTIALS = '{"project_id": "dummy123"}'
-API_NAME = "drive"
-API_VERSION = "v3"
-
 
 MORE_THAN_DEFAULT_FILE_SIZE_LIMIT = 10485760 + 1
 
@@ -607,7 +604,7 @@ async def test_get_content():
             service_account_creds=mocked_gd_object.google_drive_client.service_account_credentials
         ) as google_client:
             drive_client = await google_client.discover(
-                api_name=API_NAME, api_version=API_VERSION
+                api_name="drive", api_version="v3"
             )
             drive_client.files = mock.MagicMock()
             content = await mocked_gd_object.get_content(
@@ -927,7 +924,7 @@ async def test_get_content_when_type_not_supported():
         service_account_creds=mocked_gd_object.google_drive_client.service_account_credentials
     ) as google_client:
         drive_client = await google_client.discover(
-            api_name=API_NAME, api_version=API_VERSION
+            api_name="drive", api_version="v3"
         )
         drive_client.files = mock.MagicMock()
         content = await mocked_gd_object.get_content(
@@ -1231,3 +1228,247 @@ async def test_prepare_file_on_my_drive_with_dls_enabled(file, expected_file):
     assert expected_file == await mocked_gd_object.prepare_file(
         file=file, paths=dummy_paths
     )
+
+
+@pytest.mark.parametrize(
+    "user, groups, access_control_doc",
+    [
+        (
+            {
+                "id": "user1",
+                "primaryEmail": "user1@test.com",
+                "name": {"fullName": "User 1"},
+            },
+            [
+                {"email": "group-1@test.com"},
+                {"email": "group-2@test.com"},
+                {"email": "group-3@test.com"},
+            ],
+            {
+                "_id": "user1@test.com",
+                "identity": {"name": "User 1", "email": "user1@test.com"},
+                "query": {
+                    "template": {
+                        "params": {
+                            "access_control": [
+                                "user:user1@test.com",
+                                "domain:test.com",
+                                "group:group-1@test.com",
+                                "group:group-2@test.com",
+                                "group:group-3@test.com",
+                            ]
+                        }
+                    },
+                    "source": {
+                        "bool": {
+                            "filter": {
+                                "bool": {
+                                    "should": [
+                                        {
+                                            "bool": {
+                                                "must_not": {
+                                                    "exists": {
+                                                        "field": "_allow_access_control"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "terms": {
+                                                "_allow_access_control.enum": [
+                                                    "user:user1@test.com",
+                                                    "domain:test.com",
+                                                    "group:group-1@test.com",
+                                                    "group:group-2@test.com",
+                                                    "group:group-3@test.com",
+                                                ]
+                                            }
+                                        },
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                },
+            },
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_prepare_access_control_doc(user, groups, access_control_doc):
+    """Test the method that formats the blob metadata from Google Drive API"""
+    # Setup
+
+    mocked_gd_object = get_google_drive_source_object()
+
+    mocked_gd_object._dls_enabled = mock.MagicMock(return_value=True)
+
+    expected_response_object = Response(
+        status_code=200,
+        url="dummy_url",
+        json={"groups": groups},
+        req=Request(method="GET", url="dummy_url"),
+    )
+
+    # Execute and Assert
+    with mock.patch.object(
+        Aiogoogle, "as_service_account", return_value=expected_response_object
+    ):
+        with mock.patch.object(ServiceAccountManager, "refresh"):
+            assert (
+                access_control_doc
+                == await mocked_gd_object.prepare_single_access_control_document(
+                    user=user
+                )
+            )
+
+
+@pytest.mark.parametrize(
+    "users_page, groups, access_control_docs",
+    [
+        (
+            {
+                "users": [
+                    {
+                        "id": "user1",
+                        "primaryEmail": "user1@test.com",
+                        "name": {"fullName": "User 1"},
+                    }
+                ]
+            },
+            [
+                {"email": "group-1@test.com"},
+                {"email": "group-2@test.com"},
+                {"email": "group-3@test.com"},
+            ],
+            [
+                {
+                    "_id": "user1@test.com",
+                    "identity": {"name": "User 1", "email": "user1@test.com"},
+                    "query": {
+                        "template": {
+                            "params": {
+                                "access_control": [
+                                    "user:user1@test.com",
+                                    "domain:test.com",
+                                    "group:group-1@test.com",
+                                    "group:group-2@test.com",
+                                    "group:group-3@test.com",
+                                ]
+                            }
+                        },
+                        "source": {
+                            "bool": {
+                                "filter": {
+                                    "bool": {
+                                        "should": [
+                                            {
+                                                "bool": {
+                                                    "must_not": {
+                                                        "exists": {
+                                                            "field": "_allow_access_control"
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            {
+                                                "terms": {
+                                                    "_allow_access_control.enum": [
+                                                        "user:user1@test.com",
+                                                        "domain:test.com",
+                                                        "group:group-1@test.com",
+                                                        "group:group-2@test.com",
+                                                        "group:group-3@test.com",
+                                                    ]
+                                                }
+                                            },
+                                        ]
+                                    }
+                                }
+                            }
+                        },
+                    },
+                },
+            ],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_prepare_access_control_documents(
+    users_page, groups, access_control_docs
+):
+    """Test the method that formats the blob metadata from Google Drive API"""
+    # Setup
+
+    mocked_gd_object = get_google_drive_source_object()
+
+    mocked_gd_object._dls_enabled = mock.MagicMock(return_value=True)
+
+    expected_response_object = Response(
+        status_code=200,
+        url="dummy_url",
+        json={"groups": groups},
+        req=Request(method="GET", url="dummy_url"),
+    )
+
+    # Execute and Assert
+    with mock.patch.object(
+        Aiogoogle, "as_service_account", return_value=expected_response_object
+    ):
+        with mock.patch.object(ServiceAccountManager, "refresh"):
+            assert access_control_docs[0] == await anext(
+                mocked_gd_object.prepare_access_control_documents(users_page=users_page)
+            )
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_dls_disabled():
+
+    mocked_gd_object = get_google_drive_source_object()
+
+    mocked_gd_object._dls_enabled = mock.MagicMock(return_value=False)
+
+    acl = []
+    async for access_control in mocked_gd_object.get_access_control():
+        acl.append(access_control)
+
+    assert len(acl) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_dls_enabled():
+    """Tests the module responsible to fetch and yield blobs documents from Google Drive."""
+
+    # Setup
+    mocked_gd_object = get_google_drive_source_object()
+
+    mocked_gd_object._dls_enabled = mock.MagicMock(return_value=True)
+
+    mock_access_control = {'_id': 'user1@test.com', 'identity': {'name': 'User 1', 'email': 'user1@test.com'}, 'query': {}}
+
+    mocked_gd_object.prepare_single_access_control_document = mock.AsyncMock(
+        return_value=mock_access_control
+    )
+    expected_response = {
+        "users": [
+                    {
+                        "id": "user1",
+                        "primaryEmail": "user1@test.com",
+                        "name": {"fullName": "User 1"},
+                    }
+                ]
+    }
+    expected_response_object = Response(
+        status_code=200,
+        url="dummy_url",
+        json=expected_response,
+        req=Request(method="GET", url="dummy_url"),
+    )
+
+    # Execute and Assert
+    with mock.patch.object(
+        Aiogoogle, "as_service_account", return_value=expected_response_object
+    ):
+        with mock.patch.object(ServiceAccountManager, "refresh"):
+            async for access_control in mocked_gd_object.get_access_control():
+                assert access_control == mock_access_control

@@ -595,7 +595,7 @@ class GoogleDriveDataSource(BaseDataSource):
             }
         }
 
-    async def _prepare_single_access_control_document(self, user):
+    async def prepare_single_access_control_document(self, user):
         """Generate access control document for a single user. Fetch group memberships for a given user.
         Generate a user_access_control query that includes information about user email, groups and domain.
 
@@ -628,7 +628,7 @@ class GoogleDriveDataSource(BaseDataSource):
             },
         } | self.access_control_query(access_control=user_access_control)
 
-    async def _prepare_access_control_documents(self, users_page):
+    async def prepare_access_control_documents(self, users_page):
         """Generate access control document.
 
         Args:
@@ -641,7 +641,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         async def process_user(user, semaphore):
             async with semaphore:
-                return await self._prepare_single_access_control_document(user=user)
+                return await self.prepare_single_access_control_document(user=user)
 
         # Create the shared semaphore, it controls how many concurrent
         # groups/list requests can be open at any given time
@@ -666,7 +666,7 @@ class GoogleDriveDataSource(BaseDataSource):
             return
 
         async for user_page in self.google_admin_directory_client.list_users():
-            async for access_control_doc in self._prepare_access_control_documents(
+            async for access_control_doc in self.prepare_access_control_documents(
                 users_page=user_page
             ):
                 yield access_control_doc
