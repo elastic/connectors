@@ -999,7 +999,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "tooltip": "Document level security ensures identities and permissions set in Sharepoint Online are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
-            }
+            },
         }
 
     async def validate_config(self):
