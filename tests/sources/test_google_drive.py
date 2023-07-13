@@ -111,7 +111,7 @@ async def test_ping_for_failed_connection():
 
 
 @pytest.mark.parametrize(
-    "blob_files, processed_blob_files",
+    "files, expected_files",
     [
         (
             [
@@ -148,20 +148,25 @@ async def test_ping_for_failed_connection():
         )
     ],
 )
-def test_get_blob_document(blob_files, processed_blob_files):
+@pytest.mark.asyncio
+async def test_prepare_files(files, expected_files):
     """Tests the function which modifies the fetched blobs and maps the values to keys."""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
 
-    # Execute and Assert
-    assert processed_blob_files == list(
-        mocked_gd_object.get_blob_document(blobs=blob_files[0], paths=dict())
-    )
+    processed_files = []
+
+    # Execute
+    async for file in mocked_gd_object.prepare_files(files_page=files[0], paths=dict()):
+        processed_files.append(file)
+
+    # Assert
+    assert processed_files == expected_files
 
 
 @pytest.mark.parametrize(
-    "blob, expected_blog",
+    "file, expected_file",
     [
         (
             {
@@ -289,7 +294,8 @@ def test_get_blob_document(blob_files, processed_blob_files):
         ),
     ],
 )
-def test_prepare_blob_document(blob, expected_blog):
+@pytest.mark.asyncio
+async def test_prepare_file(file, expected_file):
     """Test the method that formats the blob metadata from Google Drive API"""
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -303,8 +309,8 @@ def test_prepare_blob_document(blob, expected_blog):
     }
 
     # Execute and Assert
-    assert expected_blog == mocked_gd_object.prepare_blob_document(
-        blob=blob, paths=dummy_paths
+    assert expected_file == await mocked_gd_object.prepare_file(
+        file=file, paths=dummy_paths
     )
 
 
@@ -347,7 +353,7 @@ async def test_get_drives():
     ):
         with mock.patch.object(ServiceAccountManager, "refresh"):
             drives_list = []
-            async for drive in mocked_gd_object.get_drives():
+            async for drive in mocked_gd_object.google_drive_client.get_drives():
                 drives_list.append(drive)
 
     # Assert
@@ -399,7 +405,7 @@ async def test_get_folders():
     ):
         with mock.patch.object(ServiceAccountManager, "refresh"):
             folders_list = []
-            async for folder in mocked_gd_object.get_folders():
+            async for folder in mocked_gd_object.google_drive_client.get_folders():
                 folders_list.append(folder)
 
     # Assert
@@ -454,8 +460,8 @@ async def test_resolve_paths():
     folders_future.set_result(folders)
 
     mocked_gd_object = get_google_drive_source_object()
-    mocked_gd_object.retrieve_all_drives = mock.MagicMock(return_value=drives_future)
-    mocked_gd_object.retrieve_all_folders = mock.MagicMock(return_value=folders_future)
+    mocked_gd_object.google_drive_client.retrieve_all_drives = mock.MagicMock(return_value=drives_future)
+    mocked_gd_object.google_drive_client.retrieve_all_folders = mock.MagicMock(return_value=folders_future)
 
     paths = await mocked_gd_object.resolve_paths()
 
@@ -507,7 +513,7 @@ async def test_fetch_files():
     ):
         with mock.patch.object(ServiceAccountManager, "refresh"):
             files_list = []
-            async for file in mocked_gd_object.get_folders():
+            async for file in mocked_gd_object.google_drive_client.get_folders():
                 files_list.append(file)
 
     # Assert
@@ -594,14 +600,14 @@ async def test_get_content():
         Aiogoogle, "as_service_account", return_value=blob_content_response
     ):
         async with Aiogoogle(
-            service_account_creds=mocked_gd_object._google_drive_client.service_account_credentials
+            service_account_creds=mocked_gd_object.google_drive_client.service_account_credentials
         ) as google_client:
             drive_client = await google_client.discover(
                 api_name=API_NAME, api_version=API_VERSION
             )
             drive_client.files = mock.MagicMock()
             content = await mocked_gd_object.get_content(
-                blob=blob_document,
+                file=blob_document,
                 doit=True,
             )
             assert content == expected_blob_document
@@ -628,7 +634,7 @@ async def test_get_content_doit_false():
 
     # Execute and Assert
     content = await mocked_gd_object.get_content(
-        blob=blob_document,
+        file=blob_document,
         doit=False,
     )
     assert content is None
@@ -670,7 +676,7 @@ async def test_get_content_google_workspace_called():
 
     # Execute and Assert
     await mocked_gd_object.get_content(
-        blob=blob_document,
+        file=blob_document,
         timestamp=timestamp,
         doit=True,
     )
@@ -716,7 +722,7 @@ async def test_get_content_generic_files_called():
 
     # Execute and Assert
     await mocked_gd_object.get_content(
-        blob=blob_document,
+        file=blob_document,
         timestamp=timestamp,
         doit=True,
     )
@@ -758,7 +764,7 @@ async def test_get_google_workspace_content():
         return_value=future_blob_content_response
     )
     content = await mocked_gd_object.get_content(
-        blob=blob_document,
+        file=blob_document,
         doit=True,
     )
     assert content == expected_blob_document
@@ -793,7 +799,7 @@ async def test_get_google_workspace_content_size_limit():
         return_value=future_blob_content_response
     )
     content = await mocked_gd_object.get_content(
-        blob=blob_document,
+        file=blob_document,
         doit=True,
     )
     assert content is None
@@ -831,7 +837,7 @@ async def test_get_generic_file_content():
         return_value=future_blob_content_response
     )
     content = await mocked_gd_object.get_content(
-        blob=blob_document,
+        file=blob_document,
         doit=True,
     )
     assert content == expected_blob_document
@@ -859,7 +865,7 @@ async def test_get_generic_file_content_size_limit():
     # Execute and Assert
     mocked_gd_object._download_content = mock.MagicMock()
     content = await mocked_gd_object.get_content(
-        blob=blob_document,
+        file=blob_document,
         doit=True,
     )
     assert content is None
@@ -887,7 +893,7 @@ async def test_get_generic_file_content_empty_file():
     # Execute and Assert
     mocked_gd_object._download_content = mock.MagicMock()
     content = await mocked_gd_object.get_content(
-        blob=blob_document,
+        file=blob_document,
         doit=True,
     )
     assert content is None
@@ -914,14 +920,14 @@ async def test_get_content_when_type_not_supported():
 
     # Execute and Assert
     async with Aiogoogle(
-        service_account_creds=mocked_gd_object._google_drive_client.service_account_credentials
+        service_account_creds=mocked_gd_object.google_drive_client.service_account_credentials
     ) as google_client:
         drive_client = await google_client.discover(
             api_name=API_NAME, api_version=API_VERSION
         )
         drive_client.files = mock.MagicMock()
         content = await mocked_gd_object.get_content(
-            blob=blob_document,
+            file=blob_document,
             doit=True,
         )
         assert content is None
@@ -1001,7 +1007,7 @@ async def test_api_call_get_drives_retries(mock_apply_retry_strategy, mock_respo
 
     with pytest.raises(Exception):
         with mock.patch.object(ServiceAccountManager, "refresh"):
-            async for _ in mocked_gd_object.get_drives():
+            async for _ in mocked_gd_object.google_drive_client.get_drives():
                 continue
 
     # Expect retry function to be triggered the expected number of retries,

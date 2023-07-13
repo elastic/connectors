@@ -432,8 +432,8 @@ class GoogleDriveDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
 
     def _set_internal_logger(self):
-        self._google_drive_client.set_logger(self._logger)
-        self._google_admin_directory_client.set_logger(self._logger)
+        self.google_drive_client.set_logger(self._logger)
+        self.google_admin_directory_client.set_logger(self._logger)
 
     @classmethod
     def get_default_configuration(cls):
@@ -470,7 +470,7 @@ class GoogleDriveDataSource(BaseDataSource):
         }
 
     @cached_property
-    def _google_drive_client(self):
+    def google_drive_client(self):
         """Initialize and return the GoogleDriveClient
 
         Returns:
@@ -488,7 +488,7 @@ class GoogleDriveDataSource(BaseDataSource):
         return GoogleDriveClient(json_credentials=json_credentials)
 
     @cached_property
-    def _google_admin_directory_client(self):
+    def google_admin_directory_client(self):
         """Initialize and return the GoogleAdminDirectoryClient
 
         Returns:
@@ -550,7 +550,7 @@ class GoogleDriveDataSource(BaseDataSource):
     async def ping(self):
         """Verify the connection with Google Drive"""
         try:
-            await self._google_drive_client.ping()
+            await self.google_drive_client.ping()
             self._logger.info("Successfully connected to the Google Drive.")
         except Exception:
             self._logger.exception("Error while connecting to the Google Drive.")
@@ -609,7 +609,7 @@ class GoogleDriveDataSource(BaseDataSource):
         user_email = user.get("primaryEmail")
         user_domain = _get_domain_from_email(user_email)
         user_groups = []
-        async for groups_page in self._google_admin_directory_client.list_groups_for_user(
+        async for groups_page in self.google_admin_directory_client.list_groups_for_user(
             user_id
         ):
             for group in groups_page.get("groups", []):
@@ -665,7 +665,7 @@ class GoogleDriveDataSource(BaseDataSource):
             self._logger.warning("DLS is not enabled. Skipping access controls sync.")
             return
 
-        async for user_page in self._google_admin_directory_client.list_users():
+        async for user_page in self.google_admin_directory_client.list_users():
             async for access_control_doc in self._prepare_access_control_documents(
                 users_page=user_page
             ):
@@ -677,8 +677,8 @@ class GoogleDriveDataSource(BaseDataSource):
         Returns:
             dict: mapping between folder id and its (name, parents, path)
         """
-        folders = await self._google_drive_client.retrieve_all_folders()
-        drives = await self._google_drive_client.retrieve_all_drives()
+        folders = await self.google_drive_client.retrieve_all_folders()
+        drives = await self.google_drive_client.retrieve_all_drives()
 
         # for paths let's treat drives as top level folders
         for id, drive_name in drives.items():
@@ -782,7 +782,7 @@ class GoogleDriveDataSource(BaseDataSource):
         attachment, file_size = await self._download_content(
             file=file,
             download_func=partial(
-                self._google_drive_client.api_call,
+                self.google_drive_client.api_call,
                 resource="files",
                 method="export",
                 fileId=file_id,
@@ -844,7 +844,7 @@ class GoogleDriveDataSource(BaseDataSource):
         attachment, _ = await self._download_content(
             file=file,
             download_func=partial(
-                self._google_drive_client.api_call,
+                self.google_drive_client.api_call,
                 resource="files",
                 method="get",
                 fileId=file_id,
@@ -892,7 +892,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         access_controls = []
 
-        async for permissions_page in self._google_drive_client.list_permissions(
+        async for permissions_page in self.google_drive_client.list_permissions(
             file_id
         ):
             permissions = permissions_page.get("permissions", [])
@@ -1062,7 +1062,7 @@ class GoogleDriveDataSource(BaseDataSource):
         # Build a path lookup, parentId -> parent path
         resolved_paths = await self.resolve_paths()
 
-        async for files_page in self._google_drive_client.list_files():
+        async for files_page in self.google_drive_client.list_files():
             async for file in self.prepare_files(
                 files_page=files_page, paths=resolved_paths
             ):
