@@ -124,33 +124,41 @@ class PreflightCheck:
             )
 
         # Connector client mode
-        configured_connector_id = self.config.get("connector_id", None)
-        configred_service_type = self.config.get("service_type", None)
+        configured_connectors = self.config.get("connectors", []) or []
+        deprecated_connector_id = self.config.get("connector_id", None)
+        deprecated_service_type = self.config.get("service_type", None)
         if (
-            not (configured_connector_id and configred_service_type)
-            and not force_allowed_native
+            not configured_connectors
+            and deprecated_connector_id
+            and deprecated_service_type
         ):
+            configured_connectors[deprecated_connector_id] = {
+                "service_type": deprecated_service_type
+            }
+
+        if not configured_connectors and not force_allowed_native:
             logger.warning(
-                "Please update your config.yml to explicitly configure a 'connector_id' and a 'service_type'"
+                "Please update your config.yml to configure at least one connector"
             )
 
         # Unset configuration
-        if not configured_native_types and not (
-            configured_connector_id and configred_service_type
-        ):
-            logger.error("You must configure a 'connector_id' and a 'service_type'")
+        if not configured_native_types and not configured_connectors:
+            logger.error("You must configure at least one connector")
             return False
 
         # Default configuration
-        if (
-            configured_connector_id == "changeme"
-            or configred_service_type == "changeme"
-        ):
-            logger.error("Unmodified default configuration detected.")
-            logger.error(
-                "In your configuration, you must change 'connector_id' and 'service_type' to not be 'changeme'"
-            )
-            return False
+        for connector in configured_connectors:
+            configured_connector_id = connector.get("connector_id", None)
+            configured_service_type = connector.get("service_type", None)
+            if (
+                configured_connector_id == "changeme"
+                or configured_service_type == "changeme"
+            ):
+                logger.error("Unmodified default configuration detected.")
+                logger.error(
+                    "In your configuration, you must change 'connector_id' and 'service_type' to not be 'changeme'"
+                )
+                return False
 
         # if we made it here, we didn't hit any critical issues
         return True
