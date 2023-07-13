@@ -59,7 +59,7 @@ RUNNING_FTEST = (
 
 class RetryableAiohttpSession(AiohttpSession):
     """A modified version of AiohttpSession from the aiogoogle library:
-    (https://github.com/omarryhan/aiogoogle/file/master/aiogoogle/sessions/aiohttp_session.py)
+    (https://github.com/omarryhan/aiogoogle/blob/master/aiogoogle/sessions/aiohttp_session.py)
 
     The low-level send() method is wrapped with @retryable decorator that allows for retries
     with exponential backoff before failing the request.
