@@ -125,6 +125,26 @@
         "value": false,
         "order": 8,
         "ui_restrictions": []
+      },
+      "fetch_unique_page_permissions": {
+        "depends_on": [
+          {
+            "field": "use_document_level_security",
+            "value": true
+          }
+        ],
+        "display": "toggle",
+        "tooltip": "Enable this option to fetch unique page permissions. This setting can increase sync time. If this setting is disabled a page will inherit permissions from its parent site.",
+        "default_value": true,
+        "label": "Fetch unique page permissions",
+        "sensitive": false,
+        "type": "bool",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": true,
+        "order": 10,
+        "ui_restrictions": []
       }
     },
     "custom_scheduling": {},
