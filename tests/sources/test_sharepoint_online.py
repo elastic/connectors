@@ -799,14 +799,18 @@ class TestSharepointOnlineClient:
             ]
         )
 
-        returned_items = []
-        async for item in client.drive_items_delta(delta_url_input):
-            returned_items.append(item)
+        returned_drive_items_pages = []
+        async for page in client.drive_items_delta(delta_url_input):
+            returned_drive_items_pages.append(page)
 
-        return returned_items
+        returned_drive_items = [
+            item
+            for drive_item_page in returned_drive_items_pages
+            for item in drive_item_page
+        ]
 
-        assert len(returned_items) == len(items_page_1) + len(items_page_2)
-        assert returned_items == items_page_1 + items_page_2
+        assert len(returned_drive_items) == len(items_page_1) + len(items_page_2)
+        assert returned_drive_items == items_page_1 + items_page_2
 
     @pytest.mark.asyncio
     async def test_drive_items(self, client, patch_fetch):
