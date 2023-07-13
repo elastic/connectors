@@ -199,6 +199,46 @@ MOCK_PAPER_FILE = {
     "path_display": "/test/dummy_file.paper",
 }
 
+SKIPPED_ATTACHMENT = {
+    "id": "id:1",
+    "name": "dummy_file.txt",
+    "server_modified": "2023-01-01T06:06:06Z",
+    "size": 200,
+    "url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/dummy_file.txt?dl=0",
+    "is_downloadable": False,
+    "path_display": "/test/dummy_file.txt",
+}
+
+MOCK_ATTACHMENT_WITHOUT_EXTENSION = {
+    "id": "id:1",
+    "name": "dummy_file",
+    "server_modified": "2023-01-01T06:06:06Z",
+    "size": 200,
+    "url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/dummy_file?dl=0",
+    "is_downloadable": False,
+    "path_display": "/test/dummy_file",
+}
+
+MOCK_ATTACHMENT_WITH_LARGE_DATA = {
+    "id": "id:1",
+    "name": "dummy_file.txt",
+    "server_modified": "2023-01-01T06:06:06Z",
+    "size": 23000000,
+    "url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/dummy_file.txt?dl=0",
+    "is_downloadable": True,
+    "path_display": "/test/dummy_file.txt",
+}
+
+MOCK_ATTACHMENT_WITH_UNSUPPORTED_EXTENSION = {
+    "id": "id:1",
+    "name": "dummy_file.xyz",
+    "server_modified": "2023-01-01T06:06:06Z",
+    "size": 23000000,
+    "url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/dummy_file.xyz?dl=0",
+    "is_downloadable": True,
+    "path_display": "/test/dummy_file.xyz",
+}
+
 RESPONSE_CONTENT = "# This is the dummy file"
 EXPECTED_CONTENT = {
     "_id": "id:1",
@@ -510,72 +550,77 @@ def patch_default_wait_multiplier():
 
 
 @pytest.mark.asyncio
+@mock.patch("connectors.sources.dropbox_aiohttp.RETRY_INTERVAL", 0)
 @mock.patch("connectors.utils.apply_retry_strategy")
-async def test_api_call_when_token_is_expired(
-    mock_apply_retry_strategy,
-):
+async def test_api_call_when_token_is_expired(mock_apply_retry_strategy):
     source = create_source(DropboxDataSource)
     mock_apply_retry_strategy.return_value = mock.Mock()
 
     with patch.object(
         aiohttp.ClientSession,
         "post",
-        side_effect=ClientResponseError(
-            status=401,
-            request_info=aiohttp.RequestInfo(
-                real_url="", method=None, headers=None, url=""
+        side_effect=[
+            ClientResponseError(
+                status=401,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                history=None,
+                message="Unauthorized",
             ),
-            history=None,
-            message="Unauthorized",
-        ),
+            get_json_mock(MOCK_ACCESS_TOKEN, 200),
+            get_json_mock(MOCK_FILES_FOLDERS, 200),
+        ],
     ):
-        with pytest.raises(ClientResponseError):
-            await anext(
-                source.dropbox_client.api_call(
-                    base_url=HOST_URLS["FILES_FOLDERS_HOST_URL"],
-                    url_name=PING,
-                    data=json.dumps(None),
-                )
+        actual_response = await anext(
+            source.dropbox_client.api_call(
+                base_url=HOST_URLS["FILES_FOLDERS_HOST_URL"],
+                url_name=PING,
+                data=json.dumps(None),
             )
-        await source.close()
+        )
+        actual_response = await actual_response.json()
+        assert actual_response == MOCK_FILES_FOLDERS
 
 
 @pytest.mark.asyncio
 async def test_api_call_when_status_429_exception():
     source = create_source(DropboxDataSource)
-    source.dropbox_client.retry_count = 0
 
     source.dropbox_client._set_access_token = AsyncMock()
 
     with patch.object(
         aiohttp.ClientSession,
         "post",
-        side_effect=ClientResponseError(
-            status=429,
-            headers={"Retry-After": 0},
-            request_info=aiohttp.RequestInfo(
-                real_url="", method=None, headers=None, url=""
+        side_effect=[
+            ClientResponseError(
+                status=429,
+                headers={"Retry-After": 0},
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                history=(),
             ),
-            history=(),
-        ),
+            get_json_mock(MOCK_FILES_FOLDERS, 200),
+        ],
     ):
         _ = source.dropbox_client._get_session
-        with pytest.raises(ClientResponseError):
-            await anext(
-                source.dropbox_client.api_call(
-                    base_url=HOST_URLS["FILES_FOLDERS_HOST_URL"],
-                    url_name=PING,
-                    data=json.dumps(None),
-                )
+        response = await anext(
+            source.dropbox_client.api_call(
+                base_url=HOST_URLS["FILES_FOLDERS_HOST_URL"],
+                url_name=PING,
+                data=json.dumps(None),
             )
-        await source.close()
+        )
+        actual_response = await response.json()
+        assert actual_response == MOCK_FILES_FOLDERS
 
 
 @pytest.mark.asyncio
 @patch("connectors.sources.dropbox_aiohttp.DEFAULT_RETRY_AFTER", 0)
 async def test_api_call_when_status_429_exception_without_retry_after_header():
     source = create_source(DropboxDataSource)
-    source.dropbox_client.retry_count = 0
+    source.dropbox_client.retry_count = 1
 
     source.dropbox_client._set_access_token = AsyncMock()
 
@@ -604,7 +649,21 @@ async def test_api_call_when_status_429_exception_without_retry_after_header():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_is_downloadable_is_true():
+@pytest.mark.parametrize(
+    "attachment, is_shared, expected_content",
+    [
+        (MOCK_ATTACHMENT, False, EXPECTED_CONTENT),
+        (MOCK_PAPER_FILE, False, EXPECTED_CONTENT),
+        (MOCK_ATTACHMENT, True, EXPECTED_CONTENT),
+        (MOCK_ATTACHMENT_WITHOUT_EXTENSION, False, None),
+        (MOCK_ATTACHMENT_WITH_LARGE_DATA, False, None),
+        (MOCK_ATTACHMENT_WITH_UNSUPPORTED_EXTENSION, False, None),
+        (SKIPPED_ATTACHMENT, False, None),
+    ],
+)
+async def test_get_content_when_is_downloadable_is_true(
+    attachment, is_shared, expected_content
+):
     source = create_source(DropboxDataSource)
     source.dropbox_client._set_access_token = AsyncMock()
 
@@ -614,121 +673,11 @@ async def test_get_content_when_is_downloadable_is_true():
             return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
         ):
             response = await source.get_content(
-                attachment=MOCK_ATTACHMENT,
+                attachment=attachment,
+                is_shared=is_shared,
                 doit=True,
             )
-            assert response == EXPECTED_CONTENT
-
-
-@pytest.mark.asyncio
-async def test_get_content_when_is_shared_is_true():
-    source = create_source(DropboxDataSource)
-    source.dropbox_client._set_access_token = AsyncMock()
-
-    with mock.patch("aiohttp.ClientSession.post", return_value=get_stream_reader()):
-        with mock.patch(
-            "aiohttp.StreamReader.iter_chunked",
-            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
-        ):
-            response = await source.get_content(
-                attachment=MOCK_ATTACHMENT,
-                is_shared=True,
-                doit=True,
-            )
-            assert response == EXPECTED_CONTENT
-
-
-@pytest.mark.asyncio
-async def test_get_content_for_paper_files():
-    source = create_source(DropboxDataSource)
-    source.dropbox_client._set_access_token = AsyncMock()
-
-    with mock.patch("aiohttp.ClientSession.post", return_value=get_stream_reader()):
-        with mock.patch(
-            "aiohttp.StreamReader.iter_chunked",
-            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
-        ):
-            response = await source.get_content(
-                attachment=MOCK_PAPER_FILE,
-                doit=True,
-            )
-            assert response == EXPECTED_CONTENT
-
-
-@pytest.mark.asyncio
-async def test_get_content_when_no_condition_satisfied_then_skip():
-    source = create_source(DropboxDataSource)
-    source.dropbox_client._set_access_token = AsyncMock()
-
-    with mock.patch("aiohttp.ClientSession.post", return_value=get_stream_reader()):
-        with mock.patch(
-            "aiohttp.StreamReader.iter_chunked",
-            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
-        ):
-            SKIPPED_ATTACHMENT = MOCK_ATTACHMENT.copy()
-            SKIPPED_ATTACHMENT["is_downloadable"] = False
-            response = await source.get_content(
-                attachment=SKIPPED_ATTACHMENT,
-                doit=True,
-            )
-            assert response is None
-
-
-@pytest.mark.asyncio
-async def test_get_content_when_empty_extension_then_skip():
-    source = create_source(DropboxDataSource)
-    source.dropbox_client._set_access_token = AsyncMock()
-
-    with mock.patch("aiohttp.ClientSession.post", return_value=get_stream_reader()):
-        with mock.patch(
-            "aiohttp.StreamReader.iter_chunked",
-            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
-        ):
-            SKIPPED_ATTACHMENT = MOCK_ATTACHMENT.copy()
-            SKIPPED_ATTACHMENT["name"] = "dummy_file"
-            response = await source.get_content(
-                attachment=SKIPPED_ATTACHMENT,
-                doit=True,
-            )
-            assert response is None
-
-
-@pytest.mark.asyncio
-async def test_get_content_when_size_is_large_then_skip():
-    source = create_source(DropboxDataSource)
-    source.dropbox_client._set_access_token = AsyncMock()
-
-    with mock.patch("aiohttp.ClientSession.post", return_value=get_stream_reader()):
-        with mock.patch(
-            "aiohttp.StreamReader.iter_chunked",
-            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
-        ):
-            SKIPPED_ATTACHMENT = MOCK_ATTACHMENT.copy()
-            SKIPPED_ATTACHMENT["size"] = 23000000
-            response = await source.get_content(
-                attachment=SKIPPED_ATTACHMENT,
-                doit=True,
-            )
-            assert response is None
-
-
-@pytest.mark.asyncio
-async def test_get_content_when_extension_is_unsupported_then_skip():
-    source = create_source(DropboxDataSource)
-    source.dropbox_client._set_access_token = AsyncMock()
-
-    with mock.patch("aiohttp.ClientSession.post", return_value=get_stream_reader()):
-        with mock.patch(
-            "aiohttp.StreamReader.iter_chunked",
-            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
-        ):
-            SKIPPED_ATTACHMENT = MOCK_ATTACHMENT.copy()
-            SKIPPED_ATTACHMENT["name"] = "dummy_file.xyz"
-            response = await source.get_content(
-                attachment=SKIPPED_ATTACHMENT,
-                doit=True,
-            )
-            assert response is None
+            assert response == expected_content
 
 
 @pytest.mark.asyncio

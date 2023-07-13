@@ -194,11 +194,11 @@ class DropboxClient:
         return request_headers
 
     def _get_retry_after(self, retry, exception):
-        if retry > self.retry_count:
-            raise exception
         self._logger.warning(
             f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
         )
+        if retry >= self.retry_count:
+            raise exception
         retry += 1
         return retry, RETRY_INTERVAL**retry
 
@@ -207,34 +207,42 @@ class DropboxClient:
         match exception.status:
             case 401:
                 await self._set_access_token()
+            # For Dropbox APIs, 409 status code is responsible for endpoint-specific errors.
+            # Refer `Errors by status code` section in the documentation: https://www.dropbox.com/developers/documentation/http/documentation
             case 409:
                 raise InvalidPathException(
                     f"Configured Path: {self.path} is invalid or not found."
                 ) from exception
             case 429:
                 response_headers = exception.headers
+                updated_response_headers = {
+                    key.lower(): value for key, value in response_headers.items()
+                }
                 retry_seconds = int(
-                    response_headers.get("Retry-After", DEFAULT_RETRY_AFTER)
+                    updated_response_headers.get("retry-after", DEFAULT_RETRY_AFTER)
                 )
                 self._logger.warning(
                     f"Rate limited by Dropbox. Retrying after {retry_seconds} seconds"
                 )
+            case _:
+                raise
         self._logger.debug(f"Will retry in {retry_seconds} seconds")
         await self._sleeps.sleep(retry_seconds)
         return retry
 
     async def api_call(self, base_url, url_name, data=None, file_type=None, **kwargs):
-        retry = 0
+        retry = 1
         url = parse.urljoin(base_url, url_name)
         while True:
             try:
                 await self._set_access_token()
                 headers = self._get_request_headers(file_type=file_type, kwargs=kwargs)
-                async with self._get_session.post(  # pyright: ignore
+                async with self._get_session.post(
                     url=url, headers=headers, data=data
                 ) as response:
                     yield response
                     break
+            # These errors are handled in `check_errors` method
             except (InvalidClientCredentialException, InvalidRefreshTokenException):
                 raise
             except ClientResponseError as exception:
@@ -247,47 +255,57 @@ class DropboxClient:
                     ServerDisconnectedError,
                 ):
                     await self.close()
-                retry += 1
-                if retry > self.retry_count:
-                    raise exception
-                self._logger.warning(
-                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
+                retry, retry_seconds = self._get_retry_after(
+                    retry=retry, exception=exception
                 )
-                await self._sleeps.sleep(RETRY_INTERVAL**retry)
+                await self._sleeps.sleep(retry_seconds)
 
-    async def _paginated_api_call(self, is_shared=False, **kwargs):
+    async def _paginated_api_call(
+        self, base_url, breaking_field, is_shared=False, **kwargs
+    ):
         """Make a paginated API call for fetching Dropbox files/folders.
 
         Args:
+            base_url (str): Base URL for dropbox APIs
+            breaking_field (str): Breaking field to break the pagination
             is_shared (bool): Flag to determine the method flow. If `True` then fetching shared files, else normal files/folders.
+
+        Yields:
+            dictionary: JSON response
         """
         data = kwargs["data"]
         url_name = kwargs["url_name"]
         while True:
-            async for response in self.api_call(
-                base_url=kwargs["base_url"],
-                url_name=url_name,
-                data=json.dumps(data),
-            ):
-                json_response = await response.json()
-                yield json_response
+            try:
+                async for response in self.api_call(
+                    base_url=base_url,
+                    url_name=url_name,
+                    data=json.dumps(data),
+                ):
+                    json_response = await response.json()
+                    yield json_response
 
-                # Breaking condition for pagination
-                # breaking_fields:
-                #  - "has_more" for fetching files/folders
-                #  - "cursor" for fetching shared files
-                if not json_response.get(kwargs["breaking_field"]):
-                    return
+                    # Breaking condition for pagination
+                    # breaking_fields:
+                    #  - "has_more" for fetching files/folders
+                    #  - "cursor" for fetching shared files
+                    if not json_response.get(breaking_field):
+                        return
 
-                data = {
-                    BreakingField.CURSOR.value: json_response[
-                        BreakingField.CURSOR.value
-                    ]
-                }
-                if is_shared:
-                    url_name = ENDPOINTS["RECEIVED_FILES_CONTINUE"]
-                else:
-                    url_name = ENDPOINTS["FILES_FOLDERS_CONTINUE"]
+                    data = {
+                        BreakingField.CURSOR.value: json_response[
+                            BreakingField.CURSOR.value
+                        ]
+                    }
+                    if is_shared:
+                        url_name = ENDPOINTS["RECEIVED_FILES_CONTINUE"]
+                    else:
+                        url_name = ENDPOINTS["FILES_FOLDERS_CONTINUE"]
+            except Exception as exception:
+                self._logger.warning(
+                    f"Skipping of fetching files/folders for url: {parse.urljoin(base_url, url_name)}. Exception: {exception}"
+                )
+                return
 
     async def ping(self):
         await anext(
@@ -478,7 +496,7 @@ class DropboxDataSource(BaseDataSource):
 
     async def ping(self):
         await self.dropbox_client.ping()
-        self._logger.debug("Successfully connected to Dropbox")
+        self._logger.info("Successfully connected to Dropbox")
 
     async def _convert_file_to_b64(self, attachment_name, document, temp_filename):
         self._logger.debug(f"Calling convert_to_b64 for file : {attachment_name}")
@@ -535,14 +553,14 @@ class DropboxDataSource(BaseDataSource):
         self, attachment_extension, attachment_name, attachment_size
     ):
         if attachment_extension == "":
-            self._logger.warning(
-                f"Files without extension are not supported by TIKA, skipping {attachment_name}."
+            self._logger.debug(
+                f"Files without extension are not supported, skipping {attachment_name}."
             )
             return
 
         elif attachment_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.warning(
-                f"Files with the extension {attachment_extension} are not supported by TIKA, skipping {attachment_name}."
+            self._logger.debug(
+                f"Files with the extension {attachment_extension} are not supported, skipping {attachment_name}."
             )
             return
 
@@ -601,25 +619,25 @@ class DropboxDataSource(BaseDataSource):
         )
 
     def _adapt_dropbox_doc_to_es_doc(self, response):
-        is_file = response[".tag"] == "file"
-        timestamp = response["server_modified"] if is_file else iso_utc()
+        is_file = response.get(".tag") == "file"
+        timestamp = response.get("server_modified") if is_file else iso_utc()
         return {
-            "_id": response["id"],
+            "_id": response.get("id"),
             "type": FILE if is_file else FOLDER,
-            "name": response["name"],
-            "file path": response["path_display"],
-            "size": response["size"] if is_file else 0,
+            "name": response.get("name"),
+            "file path": response.get("path_display"),
+            "size": response.get("size") if is_file else 0,
             "_timestamp": timestamp,
         }
 
     def _adapt_dropbox_shared_file_doc_to_es_doc(self, response):
         return {
-            "_id": response["id"],
+            "_id": response.get("id"),
             "type": FILE,
-            "name": response["name"],
-            "url": response["url"],
-            "size": response["size"],
-            "_timestamp": response["server_modified"],
+            "name": response.get("name"),
+            "url": response.get("url"),
+            "size": response.get("size"),
+            "_timestamp": response.get("server_modified"),
         }
 
     async def _fetch_files_folders(self, path):
