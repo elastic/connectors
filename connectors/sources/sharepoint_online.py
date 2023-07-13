@@ -610,8 +610,8 @@ class SharepointOnlineClient:
             async for page in self._graph_api_client.scroll(
                 f"{GRAPH_API_URL}/drives/{drive_id}/items/{item_id}/permissions"
             ):
-                for drive_item in page:
-                    yield drive_item
+                for permission in page:
+                    yield permission
         except NotFound:
             return
 
