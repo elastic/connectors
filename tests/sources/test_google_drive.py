@@ -1017,3 +1017,217 @@ async def test_api_call_get_drives_retries(mock_apply_retry_strategy, mock_respo
     # Expect retry function to be triggered the expected number of retries,
     # substract the first call
     assert mock_apply_retry_strategy.call_count == RETRIES - 1
+
+
+@pytest.mark.parametrize(
+    "file, permissions, expected_file",
+    [
+        (
+            {
+                "kind": "drive#file",
+                "mimeType": "text/plain",
+                "id": "id1",
+                "name": "test.txt",
+                "parents": ["0APU6durKUAiqUk9PVA"],
+                "size": "28",
+                "modifiedTime": "2023-06-28T07:46:28.000Z",
+                "driveId": "drive1",
+            },
+            [
+                {"type": "user", "emailAddress": "user@xd.com"},
+                {"type": "group", "emailAddress": "group@xd.com"},
+                {"type": "domain", "domain": "xd.com"},
+                {"type": "anyone"},
+            ],
+            {
+                "_id": "id1",
+                "created_at": None,
+                "last_updated": "2023-06-28T07:46:28.000Z",
+                "name": "test.txt",
+                "size": "28",
+                "_timestamp": "2023-06-28T07:46:28.000Z",
+                "mime_type": "text/plain",
+                "file_extension": None,
+                "url": None,
+                "type": "file",
+                "shared_drive": "drive1",
+                "_allow_access_control": [
+                    "user:user@xd.com",
+                    "group:group@xd.com",
+                    "domain:xd.com",
+                    "anyone",
+                ],
+            },
+        ),
+        (
+            {
+                "kind": "drive#file",
+                "mimeType": "text/plain",
+                "id": "id1",
+                "name": "test.txt",
+                "parents": ["0APU6durKUAiqUk9PVA"],
+                "size": None,
+                "modifiedTime": "2023-06-28T07:46:28.000Z",
+                "driveId": "drive1",
+            },
+            [
+                {"type": "user", "emailAddress": "user@xd.com"},
+                {"type": "group", "emailAddress": "group@xd.com"},
+                {"type": "domain", "domain": "xd.com"},
+                {"type": "anyone"},
+            ],
+            {
+                "_id": "id1",
+                "created_at": None,
+                "last_updated": "2023-06-28T07:46:28.000Z",
+                "name": "test.txt",
+                "size": 0,
+                "_timestamp": "2023-06-28T07:46:28.000Z",
+                "mime_type": "text/plain",
+                "file_extension": None,
+                "url": None,
+                "type": "file",
+                "shared_drive": "drive1",
+                "_allow_access_control": [
+                    "user:user@xd.com",
+                    "group:group@xd.com",
+                    "domain:xd.com",
+                    "anyone",
+                ],
+            },
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_prepare_file_on_shared_drive_with_dls_enabled(
+    file, permissions, expected_file
+):
+    """Test the method that formats the blob metadata from Google Drive API"""
+    # Setup
+
+    mocked_gd_object = get_google_drive_source_object()
+
+    mocked_gd_object._dls_enabled = mock.MagicMock(return_value=True)
+
+    dummy_paths = {
+        "folderId4": {
+            "name": "Folder4",
+            "parents": ["driveId3"],
+            "path": "Drive3/Folder4",
+        },
+        "drive1": {"name": "drive1"},
+    }
+
+    expected_response_object = Response(
+        status_code=200,
+        url="dummy_url",
+        json={"permissions": permissions},
+        req=Request(method="GET", url="dummy_url"),
+    )
+
+    # Execute and Assert
+    with mock.patch.object(
+        Aiogoogle, "as_service_account", return_value=expected_response_object
+    ):
+        with mock.patch.object(ServiceAccountManager, "refresh"):
+            assert expected_file == await mocked_gd_object.prepare_file(
+                file=file, paths=dummy_paths
+            )
+
+
+@pytest.mark.parametrize(
+    "file, expected_file",
+    [
+        (
+            {
+                "kind": "drive#file",
+                "mimeType": "text/plain",
+                "id": "id1",
+                "name": "test.txt",
+                "parents": ["0APU6durKUAiqUk9PVA"],
+                "size": "28",
+                "modifiedTime": "2023-06-28T07:46:28.000Z",
+                "permissions": [
+                    {"type": "user", "emailAddress": "user@xd.com"},
+                    {"type": "group", "emailAddress": "group@xd.com"},
+                    {"type": "domain", "domain": "xd.com"},
+                    {"type": "anyone"},
+                ],
+            },
+            {
+                "_id": "id1",
+                "created_at": None,
+                "last_updated": "2023-06-28T07:46:28.000Z",
+                "name": "test.txt",
+                "size": "28",
+                "_timestamp": "2023-06-28T07:46:28.000Z",
+                "mime_type": "text/plain",
+                "file_extension": None,
+                "url": None,
+                "type": "file",
+                "_allow_access_control": [
+                    "user:user@xd.com",
+                    "group:group@xd.com",
+                    "domain:xd.com",
+                    "anyone",
+                ],
+            },
+        ),
+        (
+            {
+                "kind": "drive#file",
+                "mimeType": "text/plain",
+                "id": "id1",
+                "name": "test.txt",
+                "parents": ["0APU6durKUAiqUk9PVA"],
+                "size": None,
+                "modifiedTime": "2023-06-28T07:46:28.000Z",
+                "permissions": [
+                    {"type": "user", "emailAddress": "user@xd.com"},
+                    {"type": "group", "emailAddress": "group@xd.com"},
+                    {"type": "domain", "domain": "xd.com"},
+                    {"type": "anyone"},
+                ],
+            },
+            {
+                "_id": "id1",
+                "created_at": None,
+                "last_updated": "2023-06-28T07:46:28.000Z",
+                "name": "test.txt",
+                "size": 0,
+                "_timestamp": "2023-06-28T07:46:28.000Z",
+                "mime_type": "text/plain",
+                "file_extension": None,
+                "url": None,
+                "type": "file",
+                "_allow_access_control": [
+                    "user:user@xd.com",
+                    "group:group@xd.com",
+                    "domain:xd.com",
+                    "anyone",
+                ],
+            },
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_prepare_file_on_my_drive_with_dls_enabled(file, expected_file):
+    """Test the method that formats the blob metadata from Google Drive API"""
+    # Setup
+
+    mocked_gd_object = get_google_drive_source_object()
+
+    mocked_gd_object._dls_enabled = mock.MagicMock(return_value=True)
+
+    dummy_paths = {
+        "folderId4": {
+            "name": "Folder4",
+            "parents": ["driveId3"],
+            "path": "Drive3/Folder4",
+        }
+    }
+
+    # Execute and Assert
+    assert expected_file == await mocked_gd_object.prepare_file(
+        file=file, paths=dummy_paths
+    )
