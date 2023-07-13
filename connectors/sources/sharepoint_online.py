@@ -1410,10 +1410,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 drive_item, access_control
                             )
 
-                            if self.configuration["fetch_drive_item_permissions"]:
-                                drive_item = await self._with_drive_item_permissions(
-                                    site_drive["id"], drive_item
-                                )
+                            drive_item = await self._with_drive_item_permissions(
+                                site_drive["id"], drive_item
+                            )
 
                             yield drive_item, self.download_function(
                                 drive_item, max_drive_item_age
@@ -1494,10 +1493,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 drive_item, access_control
                             )
 
-                            if self.configuration["fetch_drive_item_permissions"]:
-                                drive_item = await self._with_drive_item_permissions(
-                                    site_drive["id"], drive_item
-                                )
+                            drive_item = await self._with_drive_item_permissions(
+                                site_drive["id"], drive_item
+                            )
 
                             yield drive_item, self.download_function(
                                 drive_item, max_drive_item_age
@@ -1595,6 +1593,8 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         Note: A "siteUser" can be related to a "user", but not neccessarily (same for "group" and "siteGroup").
         """
+        if not self.configuration["fetch_drive_item_permissions"]:
+            return drive_item
 
         def _get_id(permissions, identity):
             if identity not in permissions:
@@ -1642,10 +1642,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                 drive_item["object_type"] = "drive_item"
                 drive_item["_timestamp"] = drive_item["lastModifiedDateTime"]
 
-                if self.configuration["fetch_drive_item_permissions"]:
-                    drive_item = await self._with_drive_item_permissions(
-                        site_drive["id"], drive_item
-                    )
+                drive_item = await self._with_drive_item_permissions(
+                    site_drive["id"], drive_item
+                )
 
                 yield drive_item, self.download_function(drive_item, max_drive_item_age)
 
