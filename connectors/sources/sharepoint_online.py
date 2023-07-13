@@ -62,6 +62,7 @@ else:
 
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_RETRY_SECONDS = 30
+DEFAULT_PARALLEL_CONNECTION_COUNT=10
 FILE_WRITE_CHUNK_SIZE = 1024
 MAX_DOCUMENT_SIZE = 10485760
 WILDCARD = "*"
@@ -282,14 +283,11 @@ def retryable_aiohttp_call(retries):
                     async for item in func(*args, **kwargs):
                         yield item
                     break
-                except (
-                    ThrottledError,
-                    PermissionsMissing,
-                    InternalServerError,
-                ) as e:
+                except (NotFound, ClientResponseError):
+                    raise
+                except Exception:
                     if retry >= retries:
-                        raise e
-
+                        raise
                     retry += 1
 
         return wrapped
@@ -301,9 +299,6 @@ class MicrosoftAPISession:
     def __init__(self, http_session, api_token, scroll_field, logger_):
         self._http_session = http_session
         self._api_token = api_token
-        self._semaphore = asyncio.Semaphore(
-            10
-        )  # TODO: make configurable, that's a scary property
 
         # Graph API and Sharepoint API scroll over slightly different fields:
         # - odata.nextPage for Sharepoint REST API uses
@@ -363,12 +358,6 @@ class MicrosoftAPISession:
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
     async def _call_api(self, absolute_url):
         try:
-            # Sharepoint / Graph API has quite strict throttling policies
-            # If connector is overzealous, it can be banned for not respecting throttling policies
-            # However if connector has a low setting for the semaphore, then it'll just be slow.
-            # Change the value at your own risk
-            await self._semaphore.acquire()
-
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
             self._logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
@@ -412,12 +401,15 @@ class MicrosoftAPISession:
             self._logger.debug(
                 f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
             )
-        finally:
-            self._semaphore.release()
 
 
 class SharepointOnlineClient:
     def __init__(self, tenant_id, tenant_name, client_id, client_secret):
+        # Sharepoint / Graph API has quite strict throttling policies
+        # If connector is overzealous, it can be banned for not respecting throttling policies
+        # However if connector has a low setting for the tcp_connector limit, then it'll just be slow.
+        # Change the value at your own risk
+        tcp_connector = aiohttp.TCPConnector(limit=DEFAULT_PARALLEL_CONNECTION_COUNT)
         self._http_session = aiohttp.ClientSession(  # TODO: lazy create this
             headers={
                 "accept": "application/json",
