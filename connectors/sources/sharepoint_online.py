@@ -9,7 +9,6 @@ import re
 from collections.abc import Iterable, Sized
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from enum import Enum
 from functools import partial, wraps
 
 import aiofiles
@@ -78,11 +77,6 @@ CURSOR_SITE_DRIVE_KEY = "site_drives"
 
 DELTA_NEXT_LINK_KEY = "@odata.nextLink"
 DELTA_LINK_KEY = "@odata.deltaLink"
-
-
-class HTTPMethod(Enum):
-    GET = "GET"
-    POST = "POST"
 
 
 class NotFound(Exception):
@@ -334,11 +328,11 @@ class MicrosoftAPISession:
 
     async def post(self, url, payload):
         self._logger.debug(f"Post to url: {url}")
-        async with self._call_api(url, HTTPMethod.POST, payload) as resp:
+        async with self._post(url, payload) as resp:
             return await resp.json()
 
     async def pipe(self, url, stream):
-        async with self._call_api(url) as resp:
+        async with self._get(url) as resp:
             async for data in resp.content.iter_chunked(FILE_WRITE_CHUNK_SIZE):
                 await stream.write(data)
 
@@ -370,12 +364,12 @@ class MicrosoftAPISession:
 
     async def _get_json(self, absolute_url):
         self._logger.debug(f"Fetching url: {absolute_url}")
-        async with self._call_api(absolute_url) as resp:
+        async with self._get(absolute_url) as resp:
             return await resp.json()
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
-    async def _call_api(self, absolute_url, method=HTTPMethod.GET, payload=None):
+    async def _post(self, absolute_url, payload=None):
         try:
             # Sharepoint / Graph API has quite strict throttling policies
             # If connector is overzealous, it can be banned for not respecting throttling policies
@@ -387,61 +381,71 @@ class MicrosoftAPISession:
             headers = {"authorization": f"Bearer {token}"}
             self._logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
 
-            match method:
-                case HTTPMethod.GET:
-                    async with self._http_session.get(
-                        absolute_url,
-                        headers=headers,
-                    ) as resp:
-                        yield resp
-
-                case HTTPMethod.POST:
-                    async with self._http_session.post(
-                        absolute_url, headers=headers, json=payload
-                    ) as resp:
-                        yield resp
-
-                case _:
-                    self._logger.error(
-                        f"Unsupported http method for SPO client: '{method.value}'."
-                    )
-                    raise InternalServerError("Something unexpected occurred")
+            async with self._http_session.post(
+                absolute_url, headers=headers, json=payload
+            ) as resp:
+                yield resp
 
             return
         except ClientResponseError as e:
-            if e.status == 429 or e.status == 503:
-                response_headers = e.headers or {}
-                retry_seconds = None
-                if "Retry-After" in response_headers:
-                    retry_seconds = int(response_headers["Retry-After"])
-                else:
-                    self._logger.warning(
-                        f"Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
-                    )
-                    retry_seconds = DEFAULT_RETRY_SECONDS
-                self._logger.debug(
-                    f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
-                )
+            await self._handle_client_response_error(absolute_url, e)
+        finally:
+            self._semaphore.release()
 
-                await self._sleeps.sleep(retry_seconds)  # TODO: use CancellableSleeps
-                raise ThrottledError from e
-            elif (
-                e.status == 403 or e.status == 401
-            ):  # Might work weird, but Graph returns 403 and REST returns 401
-                raise PermissionsMissing(
-                    f"Received Unauthorized response for {absolute_url}.\nVerify that the correct Graph API and Sharepoint permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
-                ) from e
-            elif e.status == 404:
-                raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
-            elif e.status == 500:
-                raise InternalServerError from e
+    @asynccontextmanager
+    @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
+    async def _get(self, absolute_url):
+        try:
+            # Sharepoint / Graph API has quite strict throttling policies
+            # If connector is overzealous, it can be banned for not respecting throttling policies
+            # However if connector has a low setting for the semaphore, then it'll just be slow.
+            # Change the value at your own risk
+            await self._semaphore.acquire()
+
+            token = await self._api_token.get()
+            headers = {"authorization": f"Bearer {token}"}
+            self._logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
+
+            async with self._http_session.get(
+                absolute_url,
+                headers=headers,
+            ) as resp:
+                yield resp
+
+            return
+        except ClientResponseError as e:
+            await self._handle_client_response_error(absolute_url, e)
+        finally:
+            self._semaphore.release()
+
+    async def _handle_client_response_error(self, absolute_url, e):
+        if e.status == 429 or e.status == 503:
+            response_headers = e.headers or {}
+            if "Retry-After" in response_headers:
+                retry_seconds = int(response_headers["Retry-After"])
             else:
-                raise
+                self._logger.warning(
+                    f"Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                )
+                retry_seconds = DEFAULT_RETRY_SECONDS
             self._logger.debug(
                 f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
             )
-        finally:
-            self._semaphore.release()
+
+            await self._sleeps.sleep(retry_seconds)  # TODO: use CancellableSleeps
+            raise ThrottledError from e
+        elif (
+            e.status == 403 or e.status == 401
+        ):  # Might work weird, but Graph returns 403 and REST returns 401
+            raise PermissionsMissing(
+                f"Received Unauthorized response for {absolute_url}.\nVerify that the correct Graph API and Sharepoint permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
+            ) from e
+        elif e.status == 404:
+            raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
+        elif e.status == 500:
+            raise InternalServerError from e
+        else:
+            raise
 
 
 class SharepointOnlineClient:
@@ -648,9 +652,7 @@ class SharepointOnlineClient:
 
         for item_id in drive_item_ids:
             permissions_uri = f"/drives/{drive_id}/items/{item_id}/permissions"
-            requests.append(
-                {"id": item_id, "method": HTTPMethod.GET.value, "url": permissions_uri}
-            )
+            requests.append({"id": item_id, "method": "GET", "url": permissions_uri})
 
         try:
             batch_url = f"{GRAPH_API_URL}/$batch"

@@ -506,7 +506,7 @@ class TestMicrosoftAPISession:
         mock_responses.get(url, exception=first_request_error)
         mock_responses.get(url, payload=payload)
 
-        async with microsoft_api_session._call_api(url) as response:
+        async with microsoft_api_session._get(url) as response:
             actual_payload = await response.json()
             assert actual_payload == payload
 
@@ -534,7 +534,7 @@ class TestMicrosoftAPISession:
         mock_responses.get(url, payload=payload)
 
         with pytest.raises(NotFound) as e:
-            async with microsoft_api_session._call_api(url) as _:
+            async with microsoft_api_session._get(url) as _:
                 pass
 
         assert e is not None
@@ -558,7 +558,7 @@ class TestMicrosoftAPISession:
         mock_responses.get(url, exception=first_request_error)
         mock_responses.get(url, payload=payload)
 
-        async with microsoft_api_session._call_api(url) as response:
+        async with microsoft_api_session._get(url) as response:
             actual_payload = await response.json()
             assert actual_payload == payload
 
@@ -584,7 +584,7 @@ class TestMicrosoftAPISession:
         mock_responses.get(url, exception=unauthorized_error)
 
         with pytest.raises(PermissionsMissing) as e:
-            async with microsoft_api_session._call_api(url) as _:
+            async with microsoft_api_session._get(url) as _:
                 pass
 
         assert e is not None
@@ -609,7 +609,7 @@ class TestMicrosoftAPISession:
         mock_responses.get(url, exception=not_found_error)
 
         with pytest.raises(NotFound) as e:
-            async with microsoft_api_session._call_api(url) as _:
+            async with microsoft_api_session._get(url) as _:
                 pass
 
         assert e is not None
@@ -636,7 +636,7 @@ class TestMicrosoftAPISession:
         mock_responses.get(url, exception=not_found_error)
 
         with pytest.raises(ClientResponseError) as e:
-            async with microsoft_api_session._call_api(url) as _:
+            async with microsoft_api_session._get(url) as _:
                 pass
 
         assert e.match(error_message)
