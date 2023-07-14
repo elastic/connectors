@@ -487,17 +487,15 @@ class SharepointOnlineClient:
             for site_collection in page:
                 yield site_collection
 
-    async def site_groups(self, site_web_url):
+    async def site_group(self, site_web_url, group_principal_id):
         self._validate_sharepoint_rest_url(site_web_url)
 
-        url = f"{site_web_url}/_api/web/sitegroups"
+        url = f"{site_web_url}/_api/web/sitegroups/getbyid({group_principal_id})"
 
         try:
-            async for page in self._rest_api_client.scroll(url):
-                for group in page:
-                    yield group
+            return await self._rest_api_client.fetch(url)
         except NotFound:
-            return
+            return {}
 
     async def user_information_list(self, site_id):
         expand = "fields"
@@ -1586,7 +1584,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             yield site_list
 
-    def _get_access_control_from_role_assignment(self, role_assignment):
+    async def _get_access_control_from_role_assignment(self, url, role_assignment):
         """Extracts access control from a role assignment.
 
         Args:
@@ -1620,6 +1618,14 @@ class SharepointOnlineDataSource(BaseDataSource):
         is_user = identity_type == "SP.User"
 
         if is_group:
+            group_principal_id = role_assignment.get("PrincipalId")
+
+            if group_principal_id:
+                group_details = await self.client.site_group(url, group_principal_id)
+                dynamic_group_id = _get_login_name(group_details.get("LoginName"))
+                if dynamic_group_id:
+                    access_control.append(_prefix_group(dynamic_group_id))
+
             users = role_assignment.get("Member", {}).get("Users", [])
 
             for user in users:
@@ -1660,7 +1666,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                     url, site_page["ID"]
                 ):
                     page_access_control.extend(
-                        self._get_access_control_from_role_assignment(role_assignment)
+                        await self._get_access_control_from_role_assignment(
+                            url, role_assignment
+                        )
                     )
 
                 site_page = self._decorate_with_access_control(

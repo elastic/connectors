@@ -1005,29 +1005,27 @@ class TestSharepointOnlineClient:
         assert http_call_result == actual_result
 
     @pytest.mark.asyncio
-    async def test_site_groups(self, client, patch_scroll):
+    async def test_site_group(self, client, patch_fetch):
         site_groups_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/sitegroups"
-        groups = ["group1", "group2"]
+        group_principal_id = "1"
+        group = {"id": group_principal_id}
 
-        actual_groups = await self._execute_scrolling_method(
-            client.site_groups, patch_scroll, groups, site_groups_url
-        )
+        patch_fetch.return_value = group
 
-        patch_scroll.return_value = groups
+        actual_group = await client.site_group(site_groups_url, group_principal_id)
 
-        assert actual_groups == groups
+        assert actual_group == group
 
     @pytest.mark.asyncio
-    async def test_site_groups_not_found(self, client, patch_scroll):
+    async def test_site_group_not_found(self, client, patch_fetch):
         site_groups_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/sitegroups"
+        group_principal_id = "1"
 
-        patch_scroll.side_effect = NotFound()
+        patch_fetch.side_effect = NotFound()
 
-        returned_items = []
-        async for item in client.site_groups(site_groups_url):
-            returned_items.append(item)
+        site_group = await client.site_group(site_groups_url, group_principal_id)
 
-        assert len(returned_items) == 0
+        assert len(site_group) == 0
 
     @pytest.mark.asyncio
     async def test_site_users(self, client, patch_scroll):
@@ -1596,7 +1594,7 @@ class TestSharepointOnlineDataSource:
             client = new_mock.return_value
             client.site_collections = AsyncIterator(self.site_collections)
             client.sites = AsyncIterator(self.sites)
-            client.site_groups = AsyncIterator(self.site_groups)
+            client.site_group = AsyncIterator(self.site_groups)
             client.user_information_list = AsyncIterator(self.user_information_list)
             client.group = AsyncMock(return_value=self.group)
             client.group_members = AsyncIterator(self.group_members)
@@ -2638,13 +2636,15 @@ class TestSharepointOnlineDataSource:
             ),
         ],
     )
-    def test_get_access_control_from_role_assignment(
+    @pytest.mark.asyncio
+    async def test_get_access_control_from_role_assignment(
         self, role_assignment, expected_access_control
     ):
         source = create_source(SharepointOnlineDataSource)
+        url = "some url"
 
-        access_control = source._get_access_control_from_role_assignment(
-            role_assignment
+        access_control = await source._get_access_control_from_role_assignment(
+            url, role_assignment
         )
 
         assert len(access_control) == len(expected_access_control)
