@@ -120,7 +120,7 @@ class BaseService(metaclass=_Registry):
             for connector in configured_connectors:
                 connector_id = connector.get("connector_id")
                 if connector_id in connectors:
-                    logger.debug(
+                    logger.warning(
                         f"Found duplicate configuration for connector {connector_id}, overriding with the later config"
                     )
                 connectors[connector_id] = connector

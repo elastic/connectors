@@ -740,8 +740,6 @@ class Connector(ESDocument):
         configured_connector_id = config.get("connector_id", "")
         configured_service_type = config.get("service_type", "")
 
-        logger.info(f"config= {config}, configur")
-
         if self.id != configured_connector_id:
             # check configuration for native and other peripheral connectors
             if self.service_type not in sources:
