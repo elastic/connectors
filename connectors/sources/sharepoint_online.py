@@ -302,9 +302,6 @@ class MicrosoftAPISession:
     def __init__(self, http_session, api_token, scroll_field, logger_):
         self._http_session = http_session
         self._api_token = api_token
-        self._semaphore = asyncio.Semaphore(
-            10
-        )  # TODO: make configurable, that's a scary property
 
         # Graph API and Sharepoint API scroll over slightly different fields:
         # - odata.nextPage for Sharepoint REST API uses
@@ -369,10 +366,6 @@ class MicrosoftAPISession:
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
     async def _post(self, absolute_url, payload=None):
         try:
-            # Sharepoint / Graph API has quite strict throttling policies
-            # If connector is overzealous, it can be banned for not respecting throttling policies
-            # However if connector has a low setting for the semaphore, then it'll just be slow.
-            # Change the value at your own risk
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
             self._logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
