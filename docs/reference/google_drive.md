@@ -26,7 +26,7 @@ To get started, log into [Google Cloud Platform](cloud.google.com) and go to the
 
 3. **Create a Service Account.** In the `APIs & Services` section, click on `Credentials` and click on `Create credentials` to create a service account. Give your service account a name and a service account ID. This is like an email address and will be used to identify your service account in the future. Click `Done` to finish creating the service account.
 
-Ther service account needs to have access to at least a following scope:
+Your service account needs to have access to at least a following scope:
 - `https://www.googleapis.com/auth/drive.readonly`
 
 4. **Create a Key File**.
@@ -60,11 +60,7 @@ The service account credentials generated from Google Cloud Platform (JSON strin
 Toggle to enable [document level security (DLS)](https://www.elastic.co/guide/en/enterprise-search/master/dls.html). DLS is supported for the Google Drive connector. When enabled, full syncs will fetch access control lists for each document and store them in the `_allow_access_control` field. When enabled, access control syncs will fetch users' access control lists and store them in a separate index.
 
 ##### `Google Workspace admin email`
-Google Workspace admin email. Required to enable [document level security (DLS)](https://www.elastic.co/guide/en/enterprise-search/master/dls.html). A service account with delegated authority can impersonate an admin user with permissions to fetch Google Workspace user data and their group memberships
-
-
-
-
+Google Workspace admin email. Required to enable [document level security (DLS)](https://www.elastic.co/guide/en/enterprise-search/master/dls.html). A service account with delegated authority can impersonate an admin user with permissions to access Google Workspace user data and their group memberships. Refer to the [Google Cloud documentation](https://support.google.com/a/answer/162106?hl=en) for more information.
 
 ## Deployment using Docker
 
@@ -147,7 +143,7 @@ Document-level security (DLS) enables you to restrict access to documents based 
 
 Refer to [Document level security](https://www.elastic.co/guide/en/enterprise-search/master/dls.html) for more information.
 
-**Note:** Refer to [DLS in Search Applications](https://www.elastic.co/guide/en/enterprise-search/master/dls-e2e-guide.html) to learn how to ingest data from SharePoint Online with DLS enabled, when building a search application.
+**Note:** Refer to [DLS in Search Applications](https://www.elastic.co/guide/en/enterprise-search/master/dls-e2e-guide.html) to learn how to ingest data from Google Drive with DLS enabled, when building a search application.
 
 ## Content extraction
 
