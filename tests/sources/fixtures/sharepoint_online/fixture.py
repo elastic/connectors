@@ -41,7 +41,8 @@ seed = 1597463007
 
 TOKEN_EXPIRATION_TIMEOUT = 3699  # seconds
 
-ROOT = "http://127.0.0.1:10337"
+ROOT = os.environ.get("ROOT_HOST_URL", "http://127.0.0.1:10337") # possible to override if hosting somewhere else
+
 TENANT = "functionaltest.sharepoint.fake"
 
 random.seed(seed)
