@@ -693,6 +693,24 @@ async def aenumerate(asequence, start=0):
             i += 1
 
 
+def iterable_batches_generator(iterable, batch_size):
+    """Iterate over an iterable in batches.
+
+    If the batch size is bigger than the number of remaining elements then all remaining elements will be returned.
+
+    Args:
+        iterable (iter): iterable (for example a list)
+        batch_size (int): size of the returned batches
+
+    Yields:
+        batch (slice of the iterable): batch of size `batch_size`
+    """
+
+    num_items = len(iterable)
+    for idx in range(0, num_items, batch_size):
+        yield iterable[idx : min(idx + batch_size, num_items)]
+
+
 class ExtractionService:
     """Data extraction service manager
 
