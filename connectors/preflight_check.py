@@ -132,9 +132,12 @@ class PreflightCheck:
             and deprecated_connector_id
             and deprecated_service_type
         ):
-            configured_connectors[deprecated_connector_id] = {
-                "service_type": deprecated_service_type
-            }
+            configured_connectors.append(
+                {
+                    "connector_id": deprecated_connector_id,
+                    "service_type": deprecated_service_type,
+                }
+            )
 
         if not configured_connectors and not force_allowed_native:
             logger.warning(

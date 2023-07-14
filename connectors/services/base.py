@@ -131,7 +131,7 @@ class BaseService(metaclass=_Registry):
                     "connector_id": self.config["connector_id"],
                     "service_type": self.config["service_type"],
                 }
-        logger.info(f"connectors = {connectors}")
+
         return connectors
 
 
