@@ -81,13 +81,13 @@ match DATA_SIZE:
         NUMBER_OF_LIST_ITEM_ATTACHMENTS = 5
 
 
-fake_one_mb_image = fake.pystr(min_chars=1 << 20, max_chars=1 << 20 + 1)
+fake_large_image = fake.pystr(min_chars=1 << 20, max_chars=1 << 20 + 1)
 
 
 def _generate_html(text, number_of_large_images):
     images = []
     for _ in range(number_of_large_images):
-        images.append(f"<img src='{fake_one_mb_image}'/>")
+        images.append(f"<img src='{fake_large_image}'/>")
 
     large_html = f"<html><head></head><body><div>{text}</div><div>{'<br/>'.join(images)}</div></body></html>"
 
