@@ -105,6 +105,10 @@ def set_dls_enabled(source, dls_enabled):
     source.configuration.set_field("use_document_level_security", value=dls_enabled)
 
 
+def set_fetch_drive_item_permissions_enabled(source, enabled):
+    source.configuration.set_field("fetch_drive_item_permissions", enabled)
+
+
 def set_fetch_users_by_site(source, fetch_users_by_site):
     source.configuration.set_field("fetch_users_by_site", value=fetch_users_by_site)
 
@@ -365,6 +369,18 @@ class TestMicrosoftAPISession:
         response = await microsoft_api_session.fetch(url)
 
         assert response == payload
+
+    @pytest.mark.asyncio
+    async def test_post(self, microsoft_api_session, mock_responses):
+        url = "http://localhost:1234/url"
+        expected_response = {"test": "hello world"}
+        payload = {"key": "value"}
+
+        mock_responses.post(url, payload=expected_response)
+
+        response = await microsoft_api_session.post(url, payload)
+
+        assert response == expected_response
 
     @pytest.mark.asyncio
     async def test_fetch_with_retry(
@@ -660,6 +676,13 @@ class TestSharepointOnlineClient:
             MicrosoftAPISession, "fetch", return_value=AsyncMock()
         ) as fetch:
             yield fetch
+
+    @pytest_asyncio.fixture
+    def patch_post(self):
+        with patch.object(
+            MicrosoftAPISession, "post", return_value=AsyncMock()
+        ) as post:
+            yield post
 
     @pytest_asyncio.fixture
     async def patch_scroll(self):
@@ -1090,6 +1113,46 @@ class TestSharepointOnlineClient:
             returned_permissions.append(permission)
 
         assert len(returned_permissions) == 0
+
+    @pytest.mark.asyncio
+    async def test_drive_items_permissions_batch(self, client, patch_post):
+        drive_id = 1
+        drive_item_ids = [1, 2, 3]
+        batch_response = {
+            "responses": [{"id": drive_item_id} for drive_item_id in drive_item_ids]
+        }
+        expected_batch_request = {
+            "requests": [
+                {"id": drive_item_id, "method": ANY, "url": ANY}
+                for drive_item_id in drive_item_ids
+            ]
+        }
+
+        patch_post.return_value = batch_response
+
+        response_ids = set()
+        async for response in client.drive_items_permissions_batch(
+            drive_id, drive_item_ids
+        ):
+            response_ids.add(response.get("id"))
+
+        assert response_ids == set(drive_item_ids)
+        client._graph_api_client.post.assert_awaited_with(ANY, expected_batch_request)
+
+    @pytest.mark.asyncio
+    async def test_drive_items_permissions_batch_not_found(self, client, patch_post):
+        drive_id = 1
+        drive_item_ids = [1, 2, 3]
+
+        patch_post.side_effect = NotFound()
+
+        responses = []
+        async for response in client.drive_items_permissions_batch(
+            drive_id, drive_item_ids
+        ):
+            responses.append(response)
+
+        assert len(responses) == 0
 
     @pytest.mark.asyncio
     async def test_site_list_role_assignments(self, client, patch_fetch):
@@ -1579,12 +1642,7 @@ class TestSharepointOnlineDataSource:
     def drive_item_permissions(self):
         return [
             {
-                "id": "2",
-                "@deprecated.GrantedTo": "GrantedTo has been deprecated. Refer to GrantedToV2",
-                "roles": ["write"],
-                "grantedTo": {
-                    "user": {"id": "5D33DD65C6932946", "displayName": "Robin Danielsen"}
-                },
+                "id": "3",
                 "grantedToV2": {
                     "user": {
                         "id": USER_ONE_ID,
@@ -1597,12 +1655,62 @@ class TestSharepointOnlineDataSource:
                     },
                     "siteGroup": {"id": SITE_GROUP_ONE_ID},
                 },
-                "inheritedFrom": {
-                    "driveId": "1234567890ABD",
-                    "id": "1234567890ABC!123",
-                    "path": "/drive/root:/Documents",
+            },
+            {
+                "id": "4",
+                "grantedToV2": {
+                    "user": {
+                        "id": USER_ONE_ID,
+                    },
+                    "siteUser": {
+                        "id": SITE_USER_ONE_ID,
+                    },
+                    "group": {
+                        "id": GROUP_ONE_ID,
+                    },
+                    "siteGroup": {"id": SITE_GROUP_ONE_ID},
                 },
             },
+            {
+                "id": "5",
+                "grantedToV2": {
+                    "user": {
+                        "id": USER_ONE_ID,
+                    },
+                    "siteUser": {
+                        "id": SITE_USER_ONE_ID,
+                    },
+                    "group": {
+                        "id": GROUP_ONE_ID,
+                    },
+                    "siteGroup": {"id": SITE_GROUP_ONE_ID},
+                },
+            },
+            {
+                "id": "6",
+                "grantedToV2": {
+                    "user": {
+                        "id": USER_ONE_ID,
+                    },
+                    "siteUser": {
+                        "id": SITE_USER_ONE_ID,
+                    },
+                    "group": {
+                        "id": GROUP_ONE_ID,
+                    },
+                    "siteGroup": {"id": SITE_GROUP_ONE_ID},
+                },
+            },
+        ]
+
+    @property
+    def drive_items_permissions_batch(self):
+        return [
+            {
+                "id": drive_item_permission["id"],
+                "body": {"value": [drive_item_permission]},
+            }
+            for drive_item_permission in self.drive_item_permissions
         ]
 
     @pytest_asyncio.fixture
@@ -1623,6 +1731,9 @@ class TestSharepointOnlineDataSource:
             client.group_owners = AsyncIterator(self.group_owners)
             client.site_users = AsyncIterator(self.site_users)
             client.drive_item_permissions = AsyncIterator(self.drive_item_permissions)
+            client.drive_items_permissions_batch = AsyncIterator(
+                self.drive_items_permissions_batch
+            )
             client.site_list_role_assignments = AsyncMock(
                 return_value=self.site_list_role_assignments
             )
@@ -1832,7 +1943,7 @@ class TestSharepointOnlineDataSource:
                 pass
 
     @pytest.mark.asyncio
-    async def test_get_docs_incrementaly(self, patch_sharepoint_client):
+    async def test_get_docs_incrementally(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
 
         sync_cursor = {"site_drives": {}}
@@ -1885,18 +1996,16 @@ class TestSharepointOnlineDataSource:
 
         assert download_result is None
 
-    @pytest.mark.asyncio
-    async def test_with_drive_item_permissions(self, patch_sharepoint_client):
+    def test_with_drive_item_permissions(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
         set_dls_enabled(source, True)
-        drive_id = 1
         drive_item = {"id": 2}
         patch_sharepoint_client.drive_item_permissions = AsyncIterator(
             self.drive_item_permissions
         )
 
-        drive_item_with_access_control = await source._with_drive_item_permissions(
-            drive_id, drive_item
+        drive_item_with_access_control = source._with_drive_item_permissions(
+            drive_item, self.drive_item_permissions
         )
         drive_item_access_control = drive_item_with_access_control[ACCESS_CONTROL]
 
@@ -1905,6 +2014,64 @@ class TestSharepointOnlineDataSource:
         assert _prefix_group(GROUP_ONE_ID) in drive_item_access_control
         assert _prefix_site_user_id(SITE_USER_ONE_ID) in drive_item_access_control
         assert _prefix_site_group(SITE_GROUP_ONE_ID) in drive_item_access_control
+
+    @pytest.mark.asyncio
+    async def test_drive_items_batch_with_permissions_when_fetch_drive_item_permissions_enabled(
+        self, patch_sharepoint_client
+    ):
+        source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, True)
+
+        drive_id = 1
+        drive_item_ids = ["1", "2"]
+        drive_items_batch = [{"id": drive_item_id} for drive_item_id in drive_item_ids]
+
+        permissions_responses = [
+            {
+                "id": drive_item_id,
+                "body": {"value": [{"grantedToV2": {"user": {"id": "some user id"}}}]},
+            }
+            for drive_item_id in drive_item_ids
+        ]
+
+        patch_sharepoint_client.drive_items_permissions_batch = AsyncIterator(
+            permissions_responses
+        )
+
+        drive_items_with_permissions = []
+
+        async for drive_item_with_permission in source._drive_items_batch_with_permissions(
+            drive_id, drive_items_batch
+        ):
+            drive_items_with_permissions.append(drive_item_with_permission)
+
+        assert len(drive_items_with_permissions) == len(drive_item_ids)
+        assert all(
+            ACCESS_CONTROL in drive_item for drive_item in drive_items_with_permissions
+        )
+
+    @pytest.mark.asyncio
+    async def test_drive_items_batch_with_permissions_when_fetch_drive_item_permissions_disabled(
+        self,
+    ):
+        source = create_source(SharepointOnlineDataSource)
+        set_fetch_drive_item_permissions_enabled(source, False)
+
+        drive_id = 1
+        drive_items_batch = [{"id": "1"}, {"id": "2"}]
+
+        drive_items_without_permissions = []
+
+        async for drive_item_without_permissions in source._drive_items_batch_with_permissions(
+            drive_id, drive_items_batch
+        ):
+            drive_items_without_permissions.append(drive_item_without_permissions)
+
+        assert len(drive_items_without_permissions) == len(drive_items_batch)
+        assert not any(
+            ACCESS_CONTROL in drive_item
+            for drive_item in drive_items_without_permissions
+        )
 
     @pytest.mark.asyncio
     async def test_download_function_for_deleted_item(self):
