@@ -283,7 +283,7 @@ def retryable_aiohttp_call(retries):
                     async for item in func(*args, **kwargs):
                         yield item
                     break
-                except (NotFound, ClientResponseError):
+                except NotFound:
                     raise
                 except Exception:
                     if retry >= retries:
@@ -579,7 +579,7 @@ class SharepointOnlineClient:
                 yield site
 
     async def site_drives(self, site_id):
-        select = ""
+        select = "createdDateTime,description,id,lastModifiedDateTime,name,webUrl,driveType,createdBy,lastModifiedBy,owner"
 
         async for page in self._graph_api_client.scroll(
             f"{GRAPH_API_URL}/sites/{site_id}/drives?$select={select}"
@@ -618,7 +618,7 @@ class SharepointOnlineClient:
         )
 
     async def site_lists(self, site_id):
-        select = ""
+        select = "createdDateTime,id,lastModifiedDateTime,name,webUrl,displayName,createdBy,lastModifiedBy"
 
         async for page in self._graph_api_client.scroll(
             f"{GRAPH_API_URL}/sites/{site_id}/lists?$select={select}"
@@ -639,8 +639,8 @@ class SharepointOnlineClient:
             return {}
 
     async def site_list_items(self, site_id, list_id):
-        select = ""
-        expand = "fields"
+        select = "createdDateTime,id,lastModifiedDateTime,weburl,createdBy,lastModifiedBy,contentType"
+        expand = "fields($select=Title,Link,Attachments,LinkTitle,LinkFilename,Description,Conversation)"
 
         async for page in self._graph_api_client.scroll(
             f"{GRAPH_API_URL}/sites/{site_id}/lists/{list_id}/items?$select={select}&$expand={expand}"
@@ -685,13 +685,29 @@ class SharepointOnlineClient:
     async def site_pages(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)
 
-        select = ""
+        # select = "Id,Title,LayoutWebpartsContent,CanvasContent1,Description,Created,AuthorId,Modified,EditorId"
+        select = ""  # ^ is what we want, but site pages don't have consistent schemas, and this causes errors. Better to fetch all and slice
         url = f"{site_web_url}/_api/web/lists/GetByTitle('Site%20Pages')/items?$select={select}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
                 for site_page in page:
-                    yield site_page
+                    yield {
+                        k: site_page.get(k, None)
+                        for k in (
+                            "Id",
+                            "Title",
+                            "LayoutWebpartsContent",
+                            "CanvasContent1",
+                            "WikiField",
+                            "Description",
+                            "Created",
+                            "AuthorId",
+                            "Modified",
+                            "EditorId",
+                            "odata.id",
+                        )
+                    }
         except NotFound:
             # I'm not sure if site can have no pages, but given how weird API is I put this here
             # Just to be on a safe side
@@ -1460,7 +1476,6 @@ class SharepointOnlineDataSource(BaseDataSource):
             list_item_natural_id = list_item["id"]
             list_item["_id"] = f"{site_list_id}-{list_item['id']}"
             list_item["object_type"] = "list_item"
-            list_item["_original_filename"] = list_item.get("FileName", "")
 
             content_type = list_item["contentType"]["name"]
 
@@ -1504,7 +1519,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             ]  # Apparently site_page["GUID"] is not globally unique
             site_page["object_type"] = "site_page"
 
-            for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:
+            for html_field in ["LayoutWebpartsContent", "CanvasContent1", "WikiField"]:
                 if html_field in site_page:
                     site_page[html_field] = html_to_text(site_page[html_field])
 
