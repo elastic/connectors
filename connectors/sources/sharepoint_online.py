@@ -333,7 +333,9 @@ class MicrosoftAPISession:
         return await self._get_json(url)
 
     async def post(self, url, payload):
-        return await self._get_json(url, HTTPMethod.POST, payload)
+        self._logger.debug(f"Post to url: {url}")
+        async with self._call_api(url, HTTPMethod.POST, payload) as resp:
+            return await resp.json()
 
     async def pipe(self, url, stream):
         async with self._call_api(url) as resp:
@@ -366,9 +368,9 @@ class MicrosoftAPISession:
             else:
                 break
 
-    async def _get_json(self, absolute_url, method=HTTPMethod.GET, payload=None):
+    async def _get_json(self, absolute_url):
         self._logger.debug(f"Fetching url: {absolute_url}")
-        async with self._call_api(absolute_url, method, payload) as resp:
+        async with self._call_api(absolute_url) as resp:
             return await resp.json()
 
     @asynccontextmanager
