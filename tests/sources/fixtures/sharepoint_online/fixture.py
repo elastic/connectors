@@ -193,7 +193,7 @@ class RandomDataStorage:
                     drive_item["name"] = fake.word()
                 else:
                     drive_item["folder"] = False
-                    drive_item["name"] = fake.file_name(extension="txt")
+                    drive_item["name"] = fake.file_name(extension="html")
 
                     if j % 5 == 0:  # Every 5th is medium
                         self.drive_item_content[drive_item["id"]] = medium_text
