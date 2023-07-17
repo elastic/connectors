@@ -297,7 +297,10 @@ async def prepare(service_type, index_name, config, connector_definition=None):
 
         logger.info(f"Prepare {CONNECTORS_INDEX}")
         await upsert_index(
-            es, CONNECTORS_INDEX, docs=[doc], doc_ids=[config["connectors"][0]["connector_id"]]
+            es,
+            CONNECTORS_INDEX,
+            docs=[doc],
+            doc_ids=[config["connectors"][0]["connector_id"]],
         )
 
         logger.info(f"Prepare {JOBS_INDEX}")
