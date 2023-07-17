@@ -978,6 +978,26 @@ class TestSharepointOnlineClient:
         assert len(returned_items) == 0
 
     @pytest.mark.asyncio
+    async def test_site_page_has_unique_role_assignments(self, client, patch_fetch):
+        url = f"https://{self.tenant_name}.sharepoint.com"
+        site_page_id = 1
+
+        patch_fetch.return_value = {"value": True}
+
+        assert await client.site_page_has_unique_role_assignments(url, site_page_id)
+
+    @pytest.mark.asyncio
+    async def test_site_page_has_unique_role_assignments_not_found(
+        self, client, patch_fetch
+    ):
+        url = f"https://{self.tenant_name}.sharepoint.com"
+        site_page_id = 1
+
+        patch_fetch.side_effect = NotFound()
+
+        assert not await client.site_page_has_unique_role_assignments(url, site_page_id)
+
+    @pytest.mark.asyncio
     async def test_site_pages_wrong_tenant(self, client, patch_scroll):
         invalid_tenant_name = "something"
         page_url_path = f"https://{invalid_tenant_name}.sharepoint.com/random/totally/made/up/page.aspx"
@@ -1439,7 +1459,7 @@ class TestSharepointOnlineDataSource:
 
     @property
     def site_pages(self):
-        return [{"Id": 4, "odata.id": "11", "GUID": "thats-not-a-guid"}]
+        return [{"Id": "4", "odata.id": "11", "GUID": "thats-not-a-guid"}]
 
     @property
     def user_information_list(self):
@@ -1547,6 +1567,10 @@ class TestSharepointOnlineDataSource:
         return {"value": ["role"]}
 
     @property
+    def site_page_has_unique_role_assignments(self):
+        return True
+
+    @property
     def site_page_role_assignments(self):
         return {"value": ["role"]}
 
@@ -1606,8 +1630,11 @@ class TestSharepointOnlineDataSource:
             client.site_list_item_role_assignments = AsyncMock(
                 return_value=self.site_list_item_role_assignments
             )
-            client.site_page_role_assignments = AsyncMock(
-                return_value=self.site_page_role_assignments
+            client.site_page_has_unique_role_assignments = AsyncMock(
+                return_value=self.site_page_has_unique_role_assignments
+            )
+            client.site_page_role_assignments = AsyncIterator(
+                [self.site_page_role_assignments]
             )
             client.users_and_groups_for_role_assignment = AsyncMock(
                 return_value=self.users_and_groups_for_role_assignments

@@ -711,6 +711,17 @@ class SharepointOnlineClient:
             # Just to be on a safe side
             return
 
+    async def site_page_has_unique_role_assignments(self, site_web_url, site_page_id):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = f"{site_web_url}/_api/web/lists/GetByTitle('Site Pages')/items('{site_page_id}')/HasUniqueRoleAssignments"
+
+        try:
+            response = await self._rest_api_client.fetch(url)
+            return response.get("value", False)
+        except NotFound:
+            return False
+
     async def site_page_role_assignments(self, site_web_url, site_page_id):
         self._validate_sharepoint_rest_url(site_web_url)
 
@@ -1596,8 +1607,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "odata.id"
             ]  # Apparently site_page["GUID"] is not globally unique
             site_page["object_type"] = "site_page"
-            has_unique_role_assignments = site_page.get(
-                "HasUniqueRoleAssignments", False
+
+            has_unique_role_assignments = (
+                await self.client.site_page_has_unique_role_assignments(
+                    url, site_page["Id"]
+                )
             )
 
             # ignore parent site permissions and use unique per page permissions ("unique permissions" means breaking the inheritance to the parent site)
@@ -1612,7 +1626,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 page_access_control = []
 
                 async for role_assignment in self.client.site_page_role_assignments(
-                    url, site_page["ID"]
+                    url, site_page["Id"]
                 ):
                     page_access_control.extend(
                         await self._get_access_control_from_role_assignment(
