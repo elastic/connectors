@@ -421,7 +421,7 @@ class MicrosoftAPISession:
                 f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
             )
 
-            await self._sleeps.sleep(retry_seconds)  # TODO: use CancellableSleeps
+            await self._sleeps.sleep(retry_seconds)
             raise ThrottledError from e
         elif (
             e.status == 403 or e.status == 401
