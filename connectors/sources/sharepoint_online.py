@@ -704,7 +704,6 @@ class SharepointOnlineClient:
                             "Modified",
                             "EditorId",
                             "odata.id",
-                            "HasUniqueRoleAssignments"
                         )
                     }
         except NotFound:
