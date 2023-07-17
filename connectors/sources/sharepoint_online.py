@@ -63,7 +63,7 @@ else:
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_RETRY_SECONDS = 30
 DEFAULT_PARALLEL_CONNECTION_COUNT = 10
-FILE_WRITE_CHUNK_SIZE = 1024 * 64 # 64KB default SSD page size
+FILE_WRITE_CHUNK_SIZE = 1024 * 64  # 64KB default SSD page size
 MAX_DOCUMENT_SIZE = 10485760
 WILDCARD = "*"
 DRIVE_ITEMS_FIELDS = "id,content.downloadUrl,lastModifiedDateTime,lastModifiedBy,root,deleted,file,folder,package,name,webUrl,createdBy,createdDateTime,size,parentReference"
