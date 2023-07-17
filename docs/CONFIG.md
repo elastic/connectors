@@ -4,7 +4,7 @@ Configuration lives in [config.yml](../config.yml).
 
 - `elasticsearch`: Elasticsearch connection configurations.
   - `host`: The host of the Elasticsearch deployment.
-  - `api_key`: The API key for Elasticsearch connection. Using `api_key` is recommended instead of `username`/`password`. `api_key` will take precedence over `username`/`password`.
+  - `api_key`: The API key for Elasticsearch connection. Using `api_key` is recommended instead of `username`/`password`.
   - `username`: The username for the Elasticsearch connection. Using `username` requires `password` to also be configured. However, `api_key` is the recommended configuration choice.
   - `password`: The password for the Elasticsearch connection. Using `password` requires `username` to also be configured. However, `api_key` is the recommended configuration choice.
   - `ssl`: Whether SSL is used for the Elasticsearch connection.
@@ -71,14 +71,15 @@ Any converted native connector, net-new connector, or customized/modified connec
 3. Configure your connector service application. You need to configure the following fields, and leave the rest as default.
    1. `elasticsearch.host`: Configure this to the Elasticsearch endpoint.
    2. `elasticsearch.api_key`: Configure the API key generated in step 2. If you run multiple connector clients, or customized connectors in one connector service, you can configure the API key of any connector here. This is recommended over utilizing `elasticsearch.username/password` so that access can be automatically and narrowly scoped.
-   3. `connectors`: Configure per-connector configuration here. It should at least contain `connector_id` (You can find the `connector_id` in step 3 `Deploy a connector` under `Configuration` tab in Kibana), `service_type` and `api_key`. Example:
+   3. `connectors`: Configure per-connector configuration here. It should at least contain `connector_id` (You can find the `connector_id` in step 3 `Deploy a connector` under `Configuration` tab in Kibana) and `service_type`. You can also configure the `api_key` if the global `elasticsearch` configuration does not have access to the content index of this connector. One example:
+   
    ```yaml
    connectors:
      -
        connector_id: <connector_id>
        service_type: <service_type>
        api_key: <api_key>
-  ```
+    ```
 4. Run the connector service application with
     ```shell
     make run
