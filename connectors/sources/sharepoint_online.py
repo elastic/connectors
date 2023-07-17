@@ -374,8 +374,6 @@ class MicrosoftAPISession:
                 absolute_url, headers=headers, json=payload
             ) as resp:
                 yield resp
-
-            return
         except aiohttp.client_exceptions.ClientOSError:
             self._logger.warning(
                 "Graph API dropped the connection. It might indicate, that connector makes too many requests - decrease concurrency settings, otherwise Graph API can block this app."
