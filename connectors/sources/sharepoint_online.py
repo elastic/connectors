@@ -854,6 +854,13 @@ def is_domain_group(user_fields):
     )
 
 
+def is_dynamic_group(login_name):
+    if not login_name:
+        return False
+
+    return login_name.startswith("c:0o.c|federateddirectoryclaimprovider")
+
+
 def is_person(user_fields):
     return user_fields["ContentType"] == "Person"
 
@@ -909,7 +916,10 @@ async def _emails_and_usernames_of_domain_group(
 
 
 def _get_login_name(raw_login_name):
-    if raw_login_name and raw_login_name.startswith("i:0#.f|membership|"):
+    if raw_login_name and (
+        raw_login_name.startswith("i:0#.f|membership|")
+        or raw_login_name.startswith("c:0o.c|federateddirectoryclaimprovider|")
+    ):
         parts = raw_login_name.split("|")
 
         if len(parts) > 2:
@@ -1591,7 +1601,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             role_assignment (dict): dictionary representing a role assignment.
 
         Returns:
-            access_control (list): list of usernames, which have the role assigned.
+            access_control (list): list of usernames and dynamic group ids, which have the role assigned.
 
         A role can be assigned to a user directly or to a group (and therefore indirectly to the users beneath).
         If any role is assigned to a user this means at least "read" access.
@@ -1618,22 +1628,21 @@ class SharepointOnlineDataSource(BaseDataSource):
         is_user = identity_type == "SP.User"
 
         if is_group:
-            group_principal_id = role_assignment.get("PrincipalId")
-
-            if group_principal_id:
-                group_details = await self.client.site_group(url, group_principal_id)
-                dynamic_group_id = _get_login_name(group_details.get("LoginName"))
-                if dynamic_group_id:
-                    access_control.append(_prefix_group(dynamic_group_id))
-
             users = role_assignment.get("Member", {}).get("Users", [])
 
             for user in users:
                 access_control.extend(_access_control_for_user(user))
         elif is_user:
             user = role_assignment.get("Member", {})
+            login_name = user.get("LoginName")
 
-            access_control = _access_control_for_user(user)
+            # a dynamic group is of type 'SP.User'
+            if is_dynamic_group(login_name):
+                self._logger.debug(f"Detected dynamic group '{user.get('Title')}'.")
+                dynamic_group_id = _get_login_name(login_name)
+                access_control.append(_prefix_group(dynamic_group_id))
+            else:
+                access_control = _access_control_for_user(user)
         else:
             self._logger.debug(
                 f"Skipping unique page permissions for identity type '{identity_type}'."

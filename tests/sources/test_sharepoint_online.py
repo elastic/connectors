@@ -45,6 +45,7 @@ from connectors.sources.sharepoint_online import (
     _prefix_identity,
     _prefix_user,
     is_domain_group,
+    is_dynamic_group,
     is_person,
 )
 from tests.commons import AsyncIterator
@@ -2571,6 +2572,23 @@ class TestSharepointOnlineDataSource:
             }
         )
 
+    def test_is_dynamic_group(self):
+        assert is_dynamic_group(
+            "c:0o.c|federateddirectoryclaimprovider|1234-abcd-5678-efgh"
+        )
+
+    @pytest.mark.parametrize(
+        "login_name",
+        [
+            "c:0u.c|tenant|67f8dab3bb7a912bc3da51b94b6bc5d23edef0e83056056f1a3929b4e04b8624",
+            "1234",
+            "",
+            None,
+        ],
+    )
+    def test_is_not_dynamic_group(self, login_name):
+        assert not is_dynamic_group(login_name)
+
     def test_is_person(self):
         assert is_person({"ContentType": "Person"})
 
@@ -2624,6 +2642,16 @@ class TestSharepointOnlineDataSource:
                 [_prefix_user(USER_TWO_EMAIL), _prefix_user(USER_TWO_NAME)],
             ),
             (
+                # Dynamic group (access control: login name)
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "LoginName": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ID}",
+                    },
+                },
+                [_prefix_group(GROUP_ID)],
+            ),
+            (
                 # Unknown type (access control: nothing)
                 {
                     "Member": {
@@ -2655,6 +2683,7 @@ class TestSharepointOnlineDataSource:
         [
             (f"i:0#.f|membership|{USER_ONE_EMAIL}", USER_ONE_EMAIL),
             (f"membership|{USER_ONE_EMAIL}", None),
+            (f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ID}", GROUP_ID),
             (USER_ONE_EMAIL, None),
             ("", None),
             (None, None),
