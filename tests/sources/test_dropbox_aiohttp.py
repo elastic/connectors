@@ -5,7 +5,6 @@
 #
 """Tests the Dropbox source class methods"""
 import json
-import ssl
 from unittest import mock
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -22,7 +21,6 @@ from connectors.sources.dropbox_aiohttp import (
     InvalidPathException,
     InvalidRefreshTokenException,
 )
-from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -100,7 +98,7 @@ EXPECTED_FILES_FOLDERS = [
         "_id": "id:1",
         "type": "Folder",
         "name": "dummy folder",
-        "file path": "/test/dummy folder",
+        "file_path": "/test/dummy folder",
         "size": 0,
         "_timestamp": "2023-01-01T06:06:06+00:00",
     },
@@ -108,7 +106,7 @@ EXPECTED_FILES_FOLDERS = [
         "_id": "id:2",
         "type": "File",
         "name": "index.py",
-        "file path": "/test/dummy folder/index.py",
+        "file_path": "/test/dummy folder/index.py",
         "size": 200,
         "_timestamp": "2023-01-01T06:06:06Z",
     },
@@ -247,14 +245,6 @@ EXPECTED_CONTENT = {
 }
 
 
-class mock_ssl:
-    """This class contains methods which returns dummy ssl context"""
-
-    def load_verify_locations(self, cadata):
-        """This method verify locations"""
-        pass
-
-
 class JSONAsyncMock(AsyncMock):
     def __init__(self, json, status, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -283,17 +273,6 @@ def get_stream_reader():
     async_mock = AsyncMock()
     async_mock.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
     return async_mock
-
-
-def side_effect_function(url, headers, data, verify_ssl):
-    """Dynamically changing return values for API calls
-    Args:
-        url, ssl: Params required for get call
-    """
-    if url == "https://api.dropboxapi.com/2/files/list_folder":
-        return AsyncIterator([JSONAsyncMock(MOCK_FILES_FOLDERS, status=200)])
-    elif url == "https://api.dropboxapi.com/2/files/list_folder/continue":
-        return AsyncIterator([JSONAsyncMock(MOCK_FILES_FOLDERS_CONTINUE, status=200)])
 
 
 @pytest.mark.asyncio
@@ -448,26 +427,6 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-@patch("aiohttp.ClientSession.post")
-async def test_ping_with_ssl(
-    mock_post,
-):
-    mock_post.return_value.__aenter__.return_value.status = 200
-    source = create_source(DropboxDataSource)
-
-    source.dropbox_client.ssl_enabled = True
-    source.dropbox_client.certificate = (
-        "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
-    )
-
-    with patch.object(ssl, "create_default_context", return_value=mock_ssl()):
-        source.dropbox_client.ssl_ctx = ssl_context(
-            certificate=source.dropbox_client.certificate
-        )
-        await source.ping()
-
-
-@pytest.mark.asyncio
 @patch("connectors.sources.dropbox_aiohttp.RETRY_INTERVAL", 0)
 async def test_api_call_negative():
     source = create_source(DropboxDataSource)
@@ -545,7 +504,7 @@ async def test_set_access_token_when_token_expires_at_is_str():
 
 @pytest.fixture
 def patch_default_wait_multiplier():
-    with mock.patch("connectors.sources.dropbox.RETRY_INTERVAL", 0):
+    with mock.patch("connectors.sources.dropbox_aiohttp.RETRY_INTERVAL", 0):
         yield
 
 

@@ -65,18 +65,33 @@ else:
         "DOWNLOAD_BASE_URL": f"https://content.dropboxapi.com/{API_VERSION}/",
     }
 
+
+class EndpointName(Enum):
+    ACCESS_TOKEN = "ACCESS_TOKEN"
+    PING = "PING"
+    CHECK_PATH = "CHECK_PATH"
+    FILES_FOLDERS = "FILES_FOLDERS"
+    FILES_FOLDERS_CONTINUE = "FILES_FOLDERS_CONTINUE"
+    RECEIVED_FILES = "RECEIVED_FILES"
+    RECEIVED_FILES_CONTINUE = "RECEIVED_FILES_CONTINUE"
+    RECEIVED_FILE_METADATA = "RECEIVED_FILE_METADATA"
+    DOWNLOAD = "DOWNLOAD"
+    PAPER_FILE_DOWNLOAD = "PAPER_FILE_DOWNLOAD"
+    RECEIVED_FILE_DOWNLOAD = "RECEIVED_FILE_DOWNLOAD"
+
+
 ENDPOINTS = {
-    "ACCESS_TOKEN": "oauth2/token",
-    "PING": "users/get_current_account",
-    "CHECK_PATH": "files/get_metadata",
-    "FILES_FOLDERS": "files/list_folder",
-    "FILES_FOLDERS_CONTINUE": "files/list_folder/continue",
-    "RECEIVED_FILES": "sharing/list_received_files",
-    "RECEIVED_FILES_CONTINUE": "sharing/list_received_files/continue",
-    "RECEIVED_FILE_METADATA": "sharing/get_shared_link_metadata",
-    "DOWNLOAD": "files/download",
-    "PAPER_FILE_DOWNLOAD": "files/export",
-    "RECEIVED_FILE_DOWNLOAD": "sharing/get_shared_link_file",
+    EndpointName.ACCESS_TOKEN.value: "oauth2/token",
+    EndpointName.PING.value: "users/get_current_account",
+    EndpointName.CHECK_PATH.value: "files/get_metadata",
+    EndpointName.FILES_FOLDERS.value: "files/list_folder",
+    EndpointName.FILES_FOLDERS_CONTINUE.value: "files/list_folder/continue",
+    EndpointName.RECEIVED_FILES.value: "sharing/list_received_files",
+    EndpointName.RECEIVED_FILES_CONTINUE.value: "sharing/list_received_files/continue",
+    EndpointName.RECEIVED_FILE_METADATA.value: "sharing/get_shared_link_metadata",
+    EndpointName.DOWNLOAD.value: "files/download",
+    EndpointName.PAPER_FILE_DOWNLOAD.value: "files/export",
+    EndpointName.RECEIVED_FILE_DOWNLOAD.value: "sharing/get_shared_link_file",
 }
 
 
@@ -128,10 +143,10 @@ class DropboxClient:
         ):
             self.token_expiration_time = datetime.fromisoformat(
                 self.token_expiration_time
-            )  # pyright: ignore
+            )
         if not is_expired(expires_at=self.token_expiration_time):
             return
-        url = f"{BASE_URLS['ACCESS_TOKEN_BASE_URL']}{ENDPOINTS['ACCESS_TOKEN']}"
+        url = f"{BASE_URLS['ACCESS_TOKEN_BASE_URL']}{ENDPOINTS.get(EndpointName.ACCESS_TOKEN.value)}"
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         data = {
             "grant_type": "refresh_token",
@@ -167,7 +182,7 @@ class DropboxClient:
     @cached_property
     def _get_session(self):
         self._logger.debug("Generating aiohttp client session")
-        timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
+        timeout = aiohttp.ClientTimeout(total=None)
 
         return aiohttp.ClientSession(timeout=timeout, raise_for_status=True)
 
@@ -298,9 +313,13 @@ class DropboxClient:
                         ]
                     }
                     if is_shared:
-                        url_name = ENDPOINTS["RECEIVED_FILES_CONTINUE"]
+                        url_name = ENDPOINTS.get(
+                            EndpointName.RECEIVED_FILES_CONTINUE.value
+                        )
                     else:
-                        url_name = ENDPOINTS["FILES_FOLDERS_CONTINUE"]
+                        url_name = ENDPOINTS.get(
+                            EndpointName.FILES_FOLDERS_CONTINUE.value
+                        )
             except Exception as exception:
                 self._logger.warning(
                     f"Skipping of fetching files/folders for url: {parse.urljoin(base_url, url_name)}. Exception: {exception}"
@@ -311,7 +330,7 @@ class DropboxClient:
         await anext(
             self.api_call(
                 base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
-                url_name=ENDPOINTS["PING"],
+                url_name=ENDPOINTS.get(EndpointName.PING.value),
                 data=json.dumps(None),
             )
         )
@@ -320,7 +339,7 @@ class DropboxClient:
         return await anext(
             self.api_call(
                 base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
-                url_name=ENDPOINTS["CHECK_PATH"],
+                url_name=ENDPOINTS.get(EndpointName.CHECK_PATH.value),
                 data=json.dumps({"path": self.path}),
             )
         )
@@ -332,7 +351,7 @@ class DropboxClient:
         }
         async for result in self._paginated_api_call(
             base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
-            url_name=ENDPOINTS["FILES_FOLDERS"],
+            url_name=ENDPOINTS.get(EndpointName.FILES_FOLDERS.value),
             data=data,
             breaking_field=BreakingField.HAS_MORE.value,
         ):
@@ -345,7 +364,7 @@ class DropboxClient:
         async for result in self._paginated_api_call(
             is_shared=True,
             base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
-            url_name=ENDPOINTS["RECEIVED_FILES"],
+            url_name=ENDPOINTS.get(EndpointName.RECEIVED_FILES.value),
             data=data,
             breaking_field=BreakingField.CURSOR.value,
         ):
@@ -355,7 +374,7 @@ class DropboxClient:
         data = {"url": url}
         async for response in self.api_call(
             base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
-            url_name=ENDPOINTS["RECEIVED_FILE_METADATA"],
+            url_name=ENDPOINTS.get(EndpointName.RECEIVED_FILE_METADATA.value),
             data=json.dumps(data),
         ):
             yield response
@@ -363,7 +382,7 @@ class DropboxClient:
     async def download_files(self, path):
         async for response in self.api_call(
             base_url=BASE_URLS["DOWNLOAD_BASE_URL"],
-            url_name=ENDPOINTS["DOWNLOAD"],
+            url_name=ENDPOINTS.get(EndpointName.DOWNLOAD.value),
             file_type=FILE,
             path=path,
         ):
@@ -372,7 +391,7 @@ class DropboxClient:
     async def download_shared_file(self, url):
         async for response in self.api_call(
             base_url=BASE_URLS["DOWNLOAD_BASE_URL"],
-            url_name=ENDPOINTS["RECEIVED_FILE_DOWNLOAD"],
+            url_name=ENDPOINTS.get(EndpointName.RECEIVED_FILE_DOWNLOAD.value),
             file_type=RECEIVED_FILE,
             url=url,
         ):
@@ -381,7 +400,7 @@ class DropboxClient:
     async def download_paper_files(self, path):
         async for response in self.api_call(
             base_url=BASE_URLS["DOWNLOAD_BASE_URL"],
-            url_name=ENDPOINTS["PAPER_FILE_DOWNLOAD"],
+            url_name=ENDPOINTS.get(EndpointName.PAPER_FILE_DOWNLOAD.value),
             file_type=PAPER,
             path=path,
         ):
@@ -625,7 +644,7 @@ class DropboxDataSource(BaseDataSource):
             "_id": response.get("id"),
             "type": FILE if is_file else FOLDER,
             "name": response.get("name"),
-            "file path": response.get("path_display"),
+            "file_path": response.get("path_display"),
             "size": response.get("size") if is_file else 0,
             "_timestamp": timestamp,
         }
