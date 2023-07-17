@@ -132,6 +132,9 @@ class PreflightCheck:
             and deprecated_connector_id
             and deprecated_service_type
         ):
+            logger.warning(
+                "The configuration 'connector_id' and 'serivce_type' has been deprecated and will be removed in later release. Please configure the connector in 'connectors'."
+            )
             configured_connectors.append(
                 {
                     "connector_id": deprecated_connector_id,
