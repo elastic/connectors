@@ -145,11 +145,14 @@ def test_parse_connectors():
     local_config = deepcopy(config)
     local_config["connectors"] = [
         {"connector_id": "foo", "service_type": "bar"},
+        {"connector_id": "baz", "service_type": "qux"},
     ]
 
     service = BaseService(local_config)
     assert service.connectors["foo"]["connector_id"] == "foo"
     assert service.connectors["foo"]["service_type"] == "bar"
+    assert service.connectors["baz"]["connector_id"] == "baz"
+    assert service.connectors["baz"]["service_type"] == "qux"
 
 
 def test_parse_connectors_with_duplicate_connectors():
