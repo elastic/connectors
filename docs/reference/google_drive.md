@@ -26,7 +26,7 @@ To get started, log into [Google Cloud Platform](cloud.google.com) and go to the
 
 3. **Create a Service Account.** In the `APIs & Services` section, click on `Credentials` and click on `Create credentials` to create a service account. Give your service account a name and a service account ID. This is like an email address and will be used to identify your service account in the future. Click `Done` to finish creating the service account.
 
-Your service account needs to have access to at least a following scope:
+Your service account needs to have access to at least the following scope:
 - `https://www.googleapis.com/auth/drive.readonly`
 
 4. **Create a Key File**.
