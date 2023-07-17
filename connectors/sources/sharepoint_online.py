@@ -1558,8 +1558,8 @@ class SharepointOnlineDataSource(BaseDataSource):
         """Decorates a drive item with its permissions.
 
         Args:
-            site_drive_id (str): id of a site drive.
             drive_item (dict): drive item to fetch the permissions for.
+            drive_item_permissions (list): drive item permissions to add to the drive_item.
 
         Returns:
             drive_item (dict): drive item decorated with its permissions.
