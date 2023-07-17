@@ -34,7 +34,8 @@ ACCESS_CONTROL = "_allow_access_control"
 
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 
-DRIVE_ITEMS_FIELDS = "id,createdTime,driveId,modifiedTime,name,size,mimeType,fileExtension,webViewLink,permissions,owners,parents"
+DRIVE_ITEMS_FIELDS = "id,createdTime,driveId,modifiedTime,name,size,mimeType,fileExtension,webViewLink,owners,parents"
+DRIVE_ITEMS_FIELDS_WITH_PERMISSIONS = f"{DRIVE_ITEMS_FIELDS},permissions"
 
 # Google Service Account JSON includes "universe_domain" key. That argument is not
 # supported in aiogoogle library in version 5.3.0. The "universe_domain" key is allowed in
@@ -289,19 +290,29 @@ class GoogleDriveClient(GoogleAPIClient):
 
         return folders
 
-    async def list_files(self):
+    async def list_files(self, fetch_permissions=False):
         """Get files from Google Drive. Files can have any type.
+
+        Args:
+            include_permissions (bool): flag to select permissions in the request query
 
         Yields:
             dict: Documents from Google Drive.
         """
+
+        files_fields = (
+            DRIVE_ITEMS_FIELDS_WITH_PERMISSIONS
+            if fetch_permissions
+            else DRIVE_ITEMS_FIELDS
+        )
+
         async for file in self.api_call_paged(
             resource="files",
             method="list",
             corpora="allDrives",
             q="trashed=false",
             orderBy="modifiedTime desc",
-            fields=f"files({DRIVE_ITEMS_FIELDS}),incompleteSearch,nextPageToken",
+            fields=f"files({files_fields}),incompleteSearch,nextPageToken",
             includeItemsFromAllDrives=True,
             supportsAllDrives=True,
             pageSize=100,
@@ -310,6 +321,9 @@ class GoogleDriveClient(GoogleAPIClient):
 
     async def list_permissions(self, file_id):
         """Get permissions for a given file ID from Google Drive.
+
+        Args:
+            file_id (str): File ID
 
         Yields:
             dictionary: Permissions from Google Drive for a file.
@@ -1049,7 +1063,9 @@ class GoogleDriveDataSource(BaseDataSource):
         # Build a path lookup, parentId -> parent path
         resolved_paths = await self.resolve_paths()
 
-        async for files_page in self.google_drive_client.list_files():
+        async for files_page in self.google_drive_client.list_files(
+            fetch_permissions=self._dls_enabled()
+        ):
             async for file in self.prepare_files(
                 files_page=files_page, paths=resolved_paths
             ):
