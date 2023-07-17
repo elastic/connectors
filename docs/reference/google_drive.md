@@ -56,7 +56,7 @@ The following configuration fields need to be provided for setting up the connec
 ##### `Google Drive service account JSON`
 The service account credentials generated from Google Cloud Platform (JSON string). Refer to the [Google Cloud documentation](https://developers.google.com/workspace/guides/create-credentials#create_credentials_for_a_service_account) for more information.
 
-##### `Enable document level security`
+##### `Enable document-level security`
 Toggle to enable [document level security (DLS)](https://www.elastic.co/guide/en/enterprise-search/master/dls.html). DLS is supported for the Google Drive connector. When enabled, full syncs will fetch access control lists for each document and store them in the `_allow_access_control` field. When enabled, access control syncs will fetch users' access control lists and store them in a separate index.
 
 ##### `Google Workspace admin email`
