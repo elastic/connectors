@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-
+from copy import deepcopy
 from unittest.mock import patch
 
 import pytest
@@ -22,8 +22,12 @@ config = {
         "initial_backoff_duration": 0.1,
     },
     "service": {"preflight_max_attempts": 4, "preflight_idle": 0.1},
-    "connector_id": "connector_1",
-    "service_type": "some_type",
+    "connectors": [
+        {
+            "connector_id": "connector_1",
+            "service_type": "some_type",
+        },
+    ],
 }
 
 
@@ -114,10 +118,9 @@ async def test_native_config_is_warned(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
-    local_config = config.copy()
+    local_config = deepcopy(config)
     local_config["native_service_types"] = ["foo", "bar"]
-    del local_config["connector_id"]
-    del local_config["service_type"]
+    del local_config["connectors"]
     preflight = PreflightCheck(local_config)
     result = await preflight.run()
     assert result is True
@@ -128,7 +131,7 @@ async def test_native_config_is_warned(patched_logger, mock_responses):
         "Native Connectors are only supported internal to Elastic Cloud deployments, which this process is not."
     )
     patched_logger.warning.assert_any_call(
-        "Please update your config.yml to explicitly configure a 'connector_id' and a 'service_type'"
+        "Please update your config.yml to configure at least one connector"
     )
 
 
@@ -138,7 +141,7 @@ async def test_native_config_is_forced(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
-    local_config = config.copy()
+    local_config = deepcopy(config)
     local_config["native_service_types"] = ["foo", "bar"]
     local_config["_force_allow_native"] = True
     preflight = PreflightCheck(local_config)
@@ -153,9 +156,9 @@ async def test_client_config(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
-    local_config = config.copy()
-    local_config["connector_id"] = "foo"
-    local_config["service_type"] = "bar"
+    local_config = deepcopy(config)
+    local_config["connectors"][0]["connector_id"] = "foo"
+    local_config["connectors"][0]["service_type"] = "bar"
     preflight = PreflightCheck(local_config)
     result = await preflight.run()
     assert result is True
@@ -168,9 +171,9 @@ async def test_unmodified_default_config(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
-    local_config = config.copy()
-    local_config["connector_id"] = "changeme"
-    local_config["service_type"] = "changeme"
+    local_config = deepcopy(config)
+    local_config["connectors"][0]["connector_id"] = "changeme"
+    local_config["connectors"][0]["service_type"] = "changeme"
     preflight = PreflightCheck(local_config)
     result = await preflight.run()
     assert result is False
@@ -185,15 +188,12 @@ async def test_missing_mode_config(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
-    local_config = config.copy()
-    del local_config["connector_id"]
-    del local_config["service_type"]
+    local_config = deepcopy(config)
+    del local_config["connectors"]
     preflight = PreflightCheck(local_config)
     result = await preflight.run()
     assert result is False
-    patched_logger.errorassert_any_call(
-        "You must configure a 'connector_id' and a 'service_type'"
-    )
+    patched_logger.errorassert_any_call("You must configure at least one connector")
 
 
 @pytest.mark.asyncio
@@ -204,7 +204,7 @@ async def test_extraction_service_enabled_and_found_writes_info_log(
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
-    local_config = config.copy()
+    local_config = deepcopy(config)
     local_config["extraction_service"] = {"host": "http://localhost:8090"}
     preflight = PreflightCheck(local_config)
 
@@ -228,7 +228,7 @@ async def test_extraction_service_enabled_but_missing_logs_warning(
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
-    local_config = config.copy()
+    local_config = deepcopy(config)
     local_config["extraction_service"] = {"host": "http://localhost:8090"}
     preflight = PreflightCheck(local_config)
 
@@ -252,7 +252,7 @@ async def test_extraction_service_enabled_but_missing_logs_critical(
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX)
     mock_index_exists(mock_responses, JOBS_INDEX)
-    local_config = config.copy()
+    local_config = deepcopy(config)
     local_config["extraction_service"] = {"host": "http://localhost:8090"}
     preflight = PreflightCheck(local_config)
 

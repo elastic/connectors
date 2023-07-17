@@ -93,10 +93,6 @@ def set_dls_enabled(source, dls_enabled):
     source.configuration.set_field("use_document_level_security", value=dls_enabled)
 
 
-def set_fetch_users_by_site(source, fetch_users_by_site):
-    source.configuration.set_field("fetch_users_by_site", value=fetch_users_by_site)
-
-
 def dls_feature_flag_enabled(value):
     return value
 
@@ -799,14 +795,18 @@ class TestSharepointOnlineClient:
             ]
         )
 
-        returned_items = []
-        async for item in client.drive_items_delta(delta_url_input):
-            returned_items.append(item)
+        returned_drive_items_pages = []
+        async for page in client.drive_items_delta(delta_url_input):
+            returned_drive_items_pages.append(page)
 
-        return returned_items
+        returned_drive_items = [
+            item
+            for drive_item_page in returned_drive_items_pages
+            for item in drive_item_page
+        ]
 
-        assert len(returned_items) == len(items_page_1) + len(items_page_2)
-        assert returned_items == items_page_1 + items_page_2
+        assert len(returned_drive_items) == len(items_page_1) + len(items_page_2)
+        assert returned_drive_items == items_page_1 + items_page_2
 
     @pytest.mark.asyncio
     async def test_drive_items(self, client, patch_fetch):
@@ -952,14 +952,14 @@ class TestSharepointOnlineClient:
     @pytest.mark.asyncio
     async def test_site_pages(self, client, patch_scroll):
         page_url_path = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/page.aspx"
-        actual_items = ["1", "2", "3", "4"]
+        actual_items = [{"Id": "1"}, {"Id": "2"}, {"Id": "3"}, {"Id": "4"}]
 
         returned_items = await self._execute_scrolling_method(
             partial(client.site_pages, page_url_path), patch_scroll, actual_items
         )
 
         assert len(returned_items) == len(actual_items)
-        assert returned_items == actual_items
+        assert [{"Id": i["Id"]} for i in returned_items] == actual_items
 
     @pytest.mark.asyncio
     async def test_site_pages_not_found(self, client, patch_scroll):
@@ -1861,6 +1861,21 @@ class TestSharepointOnlineDataSource:
         assert download_result is None
 
     @pytest.mark.asyncio
+    async def test_download_function_for_unsupported_file(self):
+        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
+        drive_item = {
+            "id": "testid",
+            "name": "filename.randomextention",
+            "@microsoft.graph.downloadUrl": "http://localhost/filename",
+            "lastModifiedDateTime": "2023-07-10T22:12:56Z",
+            "size": 10,
+        }
+
+        download_result = source.download_function(drive_item, None)
+
+        assert download_result is None
+
+    @pytest.mark.asyncio
     async def test_download_function_with_filtering_rule(self):
         source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
         max_drive_item_age = 15
@@ -1973,6 +1988,31 @@ class TestSharepointOnlineDataSource:
 
         assert download_result["_attachment"] == base64.b64encode(message).decode()
         assert "body" not in download_result
+
+    @pytest.mark.asyncio
+    async def test_get_attachment_content_unsupported_file_type(
+        self, patch_sharepoint_client
+    ):
+        filename = "file.unsupported_extention"
+        attachment = {
+            "odata.id": "1",
+            "_original_filename": filename,
+        }
+        message = b"This is content of attachment"
+
+        async def download_func(attachment_id, async_buffer):
+            await async_buffer.write(message)
+
+        patch_sharepoint_client.download_attachment = download_func
+        source = create_source(SharepointOnlineDataSource)
+
+        with patch.object(source._logger, "debug") as mock_method:
+            download_result = await source.get_attachment_content(attachment, doit=True)
+
+        assert download_result is None
+        mock_method.assert_called_once_with(
+            f"Not downloading attachment {filename}: file type is not supported"
+        )
 
     @pytest.mark.asyncio
     @patch("connectors.utils.ExtractionService._check_configured", lambda *_: True)
@@ -2358,57 +2398,32 @@ class TestSharepointOnlineDataSource:
         assert len(access_control) == 0
 
     @pytest.mark.asyncio
-    @patch(
-        "connectors.sources.sharepoint_online.DEFAULT_GROUPS", DEFAULT_GROUPS_PATCHED
-    )
-    @patch(
-        "connectors.sources.sharepoint_online._emails_and_usernames_of_domain_group",
-        AsyncIterator([("some_email", "some_username")]),
-    )
-    async def test_get_access_control_with_dls_enabled_and_users_by_site(
-        self, patch_sharepoint_client
-    ):
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
-        set_fetch_users_by_site(source, True)
-
-        member = {"Name": "some member"}
-
-        owner = {"Name": "some owner"}
-
-        user_doc_one = {"_id": "user1"}
-        user_doc_two = {"_id": "user2"}
-        user_doc_three = {"_id": "user3"}
-
-        patch_sharepoint_client.user = AsyncMock(side_effect=[member, owner])
-        source._user_access_control_doc = AsyncMock(
-            side_effect=[user_doc_one, user_doc_two, user_doc_three]
-        )
-
-        user_access_control_docs = []
-
-        async for doc in source.get_access_control():
-            user_access_control_docs.append(doc)
-
-        assert len(user_access_control_docs) == 3
-
-    @pytest.mark.asyncio
     async def test_get_access_control_with_dls_enabled_and_fetch_all_users(
         self, patch_sharepoint_client
     ):
         source = create_source(SharepointOnlineDataSource)
         set_dls_enabled(source, True)
-        set_fetch_users_by_site(source, False)
 
+        group = {"@odata.type": "#microsoft.graph.group", "id": "doop"}
         member_email = "member@acme.co"
-        member = {"userPrincipalName": "some member", "EMail": member_email}
+        member = {
+            "userPrincipalName": "some member",
+            "EMail": member_email,
+            "transitiveMemberOf": group,
+        }
         owner_email = "owner@acme.co"
-        owner = {"UserName": "some owner", "mail": owner_email}
+        owner = {
+            "UserName": "some owner",
+            "mail": owner_email,
+            "transitiveMemberOf": group,
+        }
 
         user_doc_one = {"_id": member_email}
         user_doc_two = {"_id": owner_email}
 
-        patch_sharepoint_client.users = AsyncIterator([member, owner])
+        patch_sharepoint_client.active_users_with_groups = AsyncIterator(
+            [member, owner]
+        )
         source._user_access_control_doc = AsyncMock(
             side_effect=[user_doc_one, user_doc_two]
         )
