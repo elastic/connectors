@@ -385,7 +385,7 @@ class MicrosoftAPISession:
                         f"Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
                     )
                     retry_seconds = DEFAULT_RETRY_SECONDS
-                self._logger.debug(
+                self._logger.info(
                     f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
                 )
 
@@ -403,9 +403,6 @@ class MicrosoftAPISession:
                 raise InternalServerError from e
             else:
                 raise
-            self._logger.debug(
-                f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
-            )
 
 
 class SharepointOnlineClient:
