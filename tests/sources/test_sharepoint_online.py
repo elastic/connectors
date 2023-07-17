@@ -97,10 +97,6 @@ def set_dls_enabled(source, dls_enabled):
     source.configuration.set_field("use_document_level_security", value=dls_enabled)
 
 
-def set_fetch_users_by_site(source, fetch_users_by_site):
-    source.configuration.set_field("fetch_users_by_site", value=fetch_users_by_site)
-
-
 def dls_feature_flag_enabled(value):
     return value
 
@@ -960,14 +956,14 @@ class TestSharepointOnlineClient:
     @pytest.mark.asyncio
     async def test_site_pages(self, client, patch_scroll):
         page_url_path = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/page.aspx"
-        actual_items = ["1", "2", "3", "4"]
+        actual_items = [{"Id": "1"}, {"Id": "2"}, {"Id": "3"}, {"Id": "4"}]
 
         returned_items = await self._execute_scrolling_method(
             partial(client.site_pages, page_url_path), patch_scroll, actual_items
         )
 
         assert len(returned_items) == len(actual_items)
-        assert returned_items == actual_items
+        assert [{"Id": i["Id"]} for i in returned_items] == actual_items
 
     @pytest.mark.asyncio
     async def test_site_pages_not_found(self, client, patch_scroll):
@@ -2406,57 +2402,32 @@ class TestSharepointOnlineDataSource:
         assert len(access_control) == 0
 
     @pytest.mark.asyncio
-    @patch(
-        "connectors.sources.sharepoint_online.DEFAULT_GROUPS", DEFAULT_GROUPS_PATCHED
-    )
-    @patch(
-        "connectors.sources.sharepoint_online._emails_and_usernames_of_domain_group",
-        AsyncIterator([("some_email", "some_username")]),
-    )
-    async def test_get_access_control_with_dls_enabled_and_users_by_site(
-        self, patch_sharepoint_client
-    ):
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
-        set_fetch_users_by_site(source, True)
-
-        member = {"Name": "some member"}
-
-        owner = {"Name": "some owner"}
-
-        user_doc_one = {"_id": "user1"}
-        user_doc_two = {"_id": "user2"}
-        user_doc_three = {"_id": "user3"}
-
-        patch_sharepoint_client.user = AsyncMock(side_effect=[member, owner])
-        source._user_access_control_doc = AsyncMock(
-            side_effect=[user_doc_one, user_doc_two, user_doc_three]
-        )
-
-        user_access_control_docs = []
-
-        async for doc in source.get_access_control():
-            user_access_control_docs.append(doc)
-
-        assert len(user_access_control_docs) == 3
-
-    @pytest.mark.asyncio
     async def test_get_access_control_with_dls_enabled_and_fetch_all_users(
         self, patch_sharepoint_client
     ):
         source = create_source(SharepointOnlineDataSource)
         set_dls_enabled(source, True)
-        set_fetch_users_by_site(source, False)
 
+        group = {"@odata.type": "#microsoft.graph.group", "id": "doop"}
         member_email = "member@acme.co"
-        member = {"userPrincipalName": "some member", "EMail": member_email}
+        member = {
+            "userPrincipalName": "some member",
+            "EMail": member_email,
+            "transitiveMemberOf": group,
+        }
         owner_email = "owner@acme.co"
-        owner = {"UserName": "some owner", "mail": owner_email}
+        owner = {
+            "UserName": "some owner",
+            "mail": owner_email,
+            "transitiveMemberOf": group,
+        }
 
         user_doc_one = {"_id": member_email}
         user_doc_two = {"_id": owner_email}
 
-        patch_sharepoint_client.users = AsyncIterator([member, owner])
+        patch_sharepoint_client.active_users_with_groups = AsyncIterator(
+            [member, owner]
+        )
         source._user_access_control_doc = AsyncMock(
             side_effect=[user_doc_one, user_doc_two]
         )

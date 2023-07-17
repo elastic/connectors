@@ -62,6 +62,7 @@ else:
 
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_RETRY_SECONDS = 30
+DEFAULT_PARALLEL_CONNECTION_COUNT = 10
 FILE_WRITE_CHUNK_SIZE = 1024
 MAX_DOCUMENT_SIZE = 10485760
 WILDCARD = "*"
@@ -282,14 +283,11 @@ def retryable_aiohttp_call(retries):
                     async for item in func(*args, **kwargs):
                         yield item
                     break
-                except (
-                    ThrottledError,
-                    PermissionsMissing,
-                    InternalServerError,
-                ) as e:
+                except NotFound:
+                    raise
+                except Exception:
                     if retry >= retries:
-                        raise e
-
+                        raise
                     retry += 1
 
         return wrapped
@@ -301,9 +299,6 @@ class MicrosoftAPISession:
     def __init__(self, http_session, api_token, scroll_field, logger_):
         self._http_session = http_session
         self._api_token = api_token
-        self._semaphore = asyncio.Semaphore(
-            10
-        )  # TODO: make configurable, that's a scary property
 
         # Graph API and Sharepoint API scroll over slightly different fields:
         # - odata.nextPage for Sharepoint REST API uses
@@ -363,12 +358,6 @@ class MicrosoftAPISession:
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
     async def _call_api(self, absolute_url):
         try:
-            # Sharepoint / Graph API has quite strict throttling policies
-            # If connector is overzealous, it can be banned for not respecting throttling policies
-            # However if connector has a low setting for the semaphore, then it'll just be slow.
-            # Change the value at your own risk
-            await self._semaphore.acquire()
-
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
             self._logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
@@ -380,6 +369,11 @@ class MicrosoftAPISession:
                 yield resp
 
                 return
+        except aiohttp.client_exceptions.ClientOSError:
+            self._logger.warning(
+                "Graph API dropped the connection. It might indicate, that connector makes too many requests - decrease concurrency settings, otherwise Graph API can block this app."
+            )
+            raise
         except ClientResponseError as e:
             if e.status == 429 or e.status == 503:
                 response_headers = e.headers or {}
@@ -412,13 +406,17 @@ class MicrosoftAPISession:
             self._logger.debug(
                 f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
             )
-        finally:
-            self._semaphore.release()
 
 
 class SharepointOnlineClient:
     def __init__(self, tenant_id, tenant_name, client_id, client_secret):
+        # Sharepoint / Graph API has quite strict throttling policies
+        # If connector is overzealous, it can be banned for not respecting throttling policies
+        # However if connector has a low setting for the tcp_connector limit, then it'll just be slow.
+        # Change the value at your own risk
+        tcp_connector = aiohttp.TCPConnector(limit=DEFAULT_PARALLEL_CONNECTION_COUNT)
         self._http_session = aiohttp.ClientSession(  # TODO: lazy create this
+            connector=tcp_connector,
             headers={
                 "accept": "application/json",
                 "content-type": "application/json",
@@ -516,8 +514,12 @@ class SharepointOnlineClient:
         except NotFound:
             return {}
 
-    async def users(self):
-        url = f"{GRAPH_API_URL}/users"
+    async def active_users_with_groups(self):
+        expand = "transitiveMemberOf($select=id)"
+        top = 999  # this is accepted, but does not get taken litterally. Response size seems to max out at 100
+        filter = "accountEnabled eq true"
+        select = "UserName,userPrincipalName,Email,mail,transitiveMemberOf,id,createdDateTime"
+        url = f"{GRAPH_API_URL}/users?$expand={expand}&$top={top}&$filter={filter}&$select={select}"
 
         try:
             async for page in self._graph_api_client.scroll(url):
@@ -575,7 +577,7 @@ class SharepointOnlineClient:
                 yield site
 
     async def site_drives(self, site_id):
-        select = ""
+        select = "createdDateTime,description,id,lastModifiedDateTime,name,webUrl,driveType,createdBy,lastModifiedBy,owner"
 
         async for page in self._graph_api_client.scroll(
             f"{GRAPH_API_URL}/sites/{site_id}/drives?$select={select}"
@@ -614,7 +616,7 @@ class SharepointOnlineClient:
         )
 
     async def site_lists(self, site_id):
-        select = ""
+        select = "createdDateTime,id,lastModifiedDateTime,name,webUrl,displayName,createdBy,lastModifiedBy"
 
         async for page in self._graph_api_client.scroll(
             f"{GRAPH_API_URL}/sites/{site_id}/lists?$select={select}"
@@ -635,8 +637,8 @@ class SharepointOnlineClient:
             return {}
 
     async def site_list_items(self, site_id, list_id):
-        select = ""
-        expand = "fields"
+        select = "createdDateTime,id,lastModifiedDateTime,weburl,createdBy,lastModifiedBy,contentType"
+        expand = "fields($select=Title,Link,Attachments,LinkTitle,LinkFilename,Description,Conversation)"
 
         async for page in self._graph_api_client.scroll(
             f"{GRAPH_API_URL}/sites/{site_id}/lists/{list_id}/items?$select={select}&$expand={expand}"
@@ -681,13 +683,30 @@ class SharepointOnlineClient:
     async def site_pages(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)
 
-        select = "HasUniqueRoleAssignments,ID,Description,Modified,Title,CanvasContent1,LayoutWebpartsContent"
+        # select = "Id,Title,LayoutWebpartsContent,CanvasContent1,Description,Created,AuthorId,Modified,EditorId"
+        select = ""  # ^ is what we want, but site pages don't have consistent schemas, and this causes errors. Better to fetch all and slice
         url = f"{site_web_url}/_api/web/lists/GetByTitle('Site%20Pages')/items?$select={select}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
                 for site_page in page:
-                    yield site_page
+                    yield {
+                        k: site_page.get(k, None)
+                        for k in (
+                            "Id",
+                            "Title",
+                            "LayoutWebpartsContent",
+                            "CanvasContent1",
+                            "WikiField",
+                            "Description",
+                            "Created",
+                            "AuthorId",
+                            "Modified",
+                            "EditorId",
+                            "odata.id",
+                            "HasUniqueRoleAssignments"
+                        )
+                    }
         except NotFound:
             # I'm not sure if site can have no pages, but given how weird API is I put this here
             # Just to be on a safe side
@@ -1018,20 +1037,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "bool",
                 "value": False,
             },
-            "fetch_users_by_site": {
-                "depends_on": [{"field": "use_document_level_security", "value": True}],
-                "display": "toggle",
-                "label": "Discover users by site membership",
-                "order": 8,
-                "tooltip": "When syncing only a small subset of sites, it can be more efficient to only fetch users who have access to those sites. This becomes increasingly inefficient the more sites (and the more users) concerned.",
-                "type": "bool",
-                "value": False,
-            },
             "fetch_unique_page_permissions": {
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique page permissions",
-                "order": 10,
+                "order": 9,
                 "tooltip": "Enable this option to fetch unique page permissions. This setting can increase sync time. If this setting is disabled a page will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1215,17 +1225,24 @@ class SharepointOnlineDataSource(BaseDataSource):
         else:
             return
 
-        prefixed_groups = set()
-
-        async for group in self.client.groups_user_transitive_member_of(
-            user[username_field]
-        ):
-            group_id = group["id"]
-            if group_id:
-                prefixed_groups.add(_prefix_group(group_id))
-
         email = user.get("EMail", user.get("mail", None))
         username = user[username_field]
+        prefixed_groups = set()
+
+        expanded_member_groups = user.get("transitiveMemberOf", [])
+        if (
+            len(expanded_member_groups) < 100
+        ):  # $expand param has a max of 100: see: https://learn.microsoft.com/en-us/graph/known-issues#query-parameters
+            for group in expanded_member_groups:
+                prefixed_groups.add(_prefix_group(group.get("id", None)))
+        else:
+            self._logger.debug(
+                f"User {username}: {email} belongs to a lot of groups - paging them separately"
+            )
+            async for group in self.client.groups_user_transitive_member_of(user["id"]):
+                group_id = group["id"]
+                if group_id:
+                    prefixed_groups.add(_prefix_group(group_id))
 
         prefixed_mail = _prefix_email(email)
         prefixed_username = _prefix_user(username)
@@ -1290,86 +1307,11 @@ class SharepointOnlineDataSource(BaseDataSource):
             if person_access_control_doc:
                 return person_access_control_doc
 
-        if not self.configuration["fetch_users_by_site"]:
-            self._logger.info("Fetching all users")
-            async for user in self.client.users():
-                user_doc = await process_user(user)
-                if user_doc:
-                    yield user_doc
-        else:
-            self._logger.info("Fetching users site-by-site")
-            async for site_collection in self.client.site_collections():
-                self._logger.debug(
-                    f"Looking at site collection for location: {site_collection.get('dataLocationCode')}"
-                )
-                async for site in self.client.sites(
-                    site_collection["siteCollection"]["hostname"],
-                    self.configuration["site_collections"],
-                ):
-                    site_id = site.get("id")
-                    self._logger.debug(f"Looking at site: {site_id}")
-                    if _already_seen(site_id):
-                        continue
-                    update_already_seen(site_id)
-                    async for user_information in self.client.user_information_list(
-                        site_id
-                    ):
-                        user = user_information["fields"]
-
-                        if is_domain_group(user):
-                            self._logger.debug(
-                                f"Detected a domain group: {user.get('Name')}"
-                            )
-                            domain_group_id = _domain_group_id(user.get("Name"))
-                            self._logger.debug(
-                                f"Detected domain groupId as: {domain_group_id}"
-                            )
-
-                            if domain_group_id:
-                                if _already_seen(domain_group_id):
-                                    continue
-                                update_already_seen(domain_group_id)
-                                async for member_email, member_username in _emails_and_usernames_of_domain_group(
-                                    domain_group_id,
-                                    self.client.group_members,
-                                ):
-                                    if _already_seen(member_email, member_username):
-                                        continue
-
-                                    update_already_seen(member_email, member_username)
-
-                                    member = await self.client.user(member_username)
-                                    member_access_control_doc = (
-                                        await self._user_access_control_doc(member)
-                                    )
-                                    if member_access_control_doc:
-                                        yield member_access_control_doc
-
-                                async for owner_email, owner_username in _emails_and_usernames_of_domain_group(
-                                    domain_group_id,
-                                    self.client.group_owners,
-                                ):
-                                    if _already_seen(owner_email, owner_username):
-                                        continue
-
-                                    update_already_seen(owner_email, owner_username)
-
-                                    owner = await self.client.user(owner_username)
-                                    owner_access_control_doc = (
-                                        await self._user_access_control_doc(owner)
-                                    )
-                                    if owner_access_control_doc:
-                                        yield owner_access_control_doc
-
-                        elif is_person(user):
-                            user_doc = await process_user(user)
-                            if user_doc:
-                                yield user_doc
-
-                        else:
-                            self._logger.debug(
-                                "User information list item  was neither a person nor a group. Skipping..."
-                            )
+        self._logger.info("Fetching all users")
+        async for user in self.client.active_users_with_groups():
+            user_doc = await process_user(user)
+            if user_doc:
+                yield user_doc
 
     async def get_docs(self, filtering=None):
         max_drive_item_age = None
@@ -1557,7 +1499,6 @@ class SharepointOnlineDataSource(BaseDataSource):
             list_item_natural_id = list_item["id"]
             list_item["_id"] = f"{site_list_id}-{list_item['id']}"
             list_item["object_type"] = "list_item"
-            list_item["_original_filename"] = list_item.get("FileName", "")
 
             content_type = list_item["contentType"]["name"]
 
@@ -1688,7 +1629,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                     site_page, site_access_control
                 )
 
-            for html_field in ["LayoutWebpartsContent", "CanvasContent1"]:
+            for html_field in ["LayoutWebpartsContent", "CanvasContent1", "WikiField"]:
                 if html_field in site_page:
                     site_page[html_field] = html_to_text(site_page[html_field])
 
