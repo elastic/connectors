@@ -6,6 +6,7 @@
 import asyncio
 import functools
 from collections import defaultdict
+from copy import deepcopy
 
 import pytest
 
@@ -126,3 +127,66 @@ async def test_multiservice_stop_gracefully_stops_service_that_takes_too_long_to
     assert (
         not service_2.cancelled
     )  # we're not supposed to cancel it as it's already stopping
+
+
+config = {
+    "elasticsearch": {},
+    "service": {},
+}
+
+
+def test_parse_connectors_with_no_connectors():
+    local_config = deepcopy(config)
+    service = BaseService(local_config)
+    assert not service.connectors
+
+
+def test_parse_connectors():
+    local_config = deepcopy(config)
+    local_config["connectors"] = [
+        {"connector_id": "foo", "service_type": "bar"},
+        {"connector_id": "baz", "service_type": "qux"},
+    ]
+
+    service = BaseService(local_config)
+    assert service.connectors["foo"]["connector_id"] == "foo"
+    assert service.connectors["foo"]["service_type"] == "bar"
+    assert service.connectors["baz"]["connector_id"] == "baz"
+    assert service.connectors["baz"]["service_type"] == "qux"
+
+
+def test_parse_connectors_with_duplicate_connectors():
+    local_config = deepcopy(config)
+    local_config["connectors"] = [
+        {"connector_id": "foo", "service_type": "bar"},
+        {"connector_id": "foo", "service_type": "baz"},
+    ]
+
+    service = BaseService(local_config)
+    assert len(service.connectors) == 1
+    assert service.connectors["foo"]["connector_id"] == "foo"
+    assert service.connectors["foo"]["service_type"] == "baz"
+
+
+def test_parse_connectors_with_deprecated_config_and_new_config():
+    local_config = deepcopy(config)
+    local_config["connectors"] = [{"connector_id": "foo", "service_type": "bar"}]
+    local_config["connector_id"] = "deprecated"
+    local_config["service_type"] = "deprecated"
+
+    service = BaseService(local_config)
+    assert len(service.connectors) == 1
+    assert service.connectors["foo"]["connector_id"] == "foo"
+    assert service.connectors["foo"]["service_type"] == "bar"
+    assert "deprecated" not in service.connectors
+
+
+def test_parse_connectors_with_deprecated_config():
+    local_config = deepcopy(config)
+    local_config["connector_id"] = "deprecated"
+    local_config["service_type"] = "deprecated"
+
+    service = BaseService(local_config)
+    assert len(service.connectors) == 1
+    assert service.connectors["deprecated"]["connector_id"] == "deprecated"
+    assert service.connectors["deprecated"]["service_type"] == "deprecated"
