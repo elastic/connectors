@@ -67,17 +67,17 @@ else:
 
 
 class EndpointName(Enum):
-    ACCESS_TOKEN = "ACCESS_TOKEN"
-    PING = "PING"
-    CHECK_PATH = "CHECK_PATH"
-    FILES_FOLDERS = "FILES_FOLDERS"
-    FILES_FOLDERS_CONTINUE = "FILES_FOLDERS_CONTINUE"
-    RECEIVED_FILES = "RECEIVED_FILES"
-    RECEIVED_FILES_CONTINUE = "RECEIVED_FILES_CONTINUE"
-    RECEIVED_FILE_METADATA = "RECEIVED_FILE_METADATA"
-    DOWNLOAD = "DOWNLOAD"
-    PAPER_FILE_DOWNLOAD = "PAPER_FILE_DOWNLOAD"
-    RECEIVED_FILE_DOWNLOAD = "RECEIVED_FILE_DOWNLOAD"
+    ACCESS_TOKEN = "access_token"
+    PING = "ping"
+    CHECK_PATH = "check_path"
+    FILES_FOLDERS = "files_folders"
+    FILES_FOLDERS_CONTINUE = "files_folders_continue"
+    RECEIVED_FILES = "received_files"
+    RECEIVED_FILES_CONTINUE = "received_files_continue"
+    RECEIVED_FILE_METADATA = "received_files_metadata"
+    DOWNLOAD = "download"
+    PAPER_FILE_DOWNLOAD = "paper_file_download"
+    RECEIVED_FILE_DOWNLOAD = "received_files_download"
 
 
 ENDPOINTS = {
