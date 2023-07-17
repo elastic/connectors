@@ -40,7 +40,7 @@ Your service account needs to have access to at least the following scope:
   Note: When you grant a service account access to a specific folder or shared drive in Google Drive, it's important to note that the permissions extend to all the children within that folder or drive. This means that any folders or files contained within the granted folder or drive inherit the same access privileges as the parent.
 
 
-#### Additional authentication prerequisites for document-level security
+#### Additional authentication prerequisites for document level security
 
 To access user data on a Google Workspace domain, the service account that you created needs to be granted access by a super administrator for the domain. You can follow [official documentation](https://developers.google.com/cloud-search/docs/guides/delegation) to perform Google Workspace domain-wide delegation of authority.
 
@@ -56,8 +56,10 @@ The following configuration fields need to be provided for setting up the connec
 ##### `Google Drive service account JSON`
 The service account credentials generated from Google Cloud Platform (JSON string). Refer to the [Google Cloud documentation](https://developers.google.com/workspace/guides/create-credentials#create_credentials_for_a_service_account) for more information.
 
-##### `Enable document-level security`
-Toggle to enable [document level security (DLS)](https://www.elastic.co/guide/en/enterprise-search/master/dls.html). DLS is supported for the Google Drive connector. When enabled, full syncs will fetch access control lists for each document and store them in the `_allow_access_control` field. When enabled, access control syncs will fetch users' access control lists and store them in a separate index.
+##### `Enable document level security`
+Toggle to enable [document level security (DLS)](https://www.elastic.co/guide/en/enterprise-search/master/dls.html). DLS is supported for the Google Drive connector. When enabled:
+- Full syncs will fetch access control lists for each document and store them in the `_allow_access_control` field.
+- Access control syncs will fetch users' access control lists and store them in a separate index.
 
 ##### `Google Workspace admin email`
 Google Workspace admin email. Required to enable [document level security (DLS)](https://www.elastic.co/guide/en/enterprise-search/master/dls.html). A service account with delegated authority can impersonate an admin user with permissions to access Google Workspace user data and their group memberships. Refer to the [Google Cloud documentation](https://support.google.com/a/answer/162106?hl=en) for more information.
@@ -137,11 +139,11 @@ It will attempt to extract the content from Google Suite documents (Google Docs,
 
 Advanced sync rules are not available for this connector in the present version. Currently filtering is controlled via ingest pipelines.
 
-## Document-level security
+## Document level security
 
-Document-level security (DLS) enables you to restrict access to documents based on a user’s permissions. This feature is available by default for the Google Drive connector.
+Document level security (DLS) enables you to restrict access to documents based on a user’s permissions. This feature is available by default for the Google Drive connector.
 
-Refer to [Document level security](https://www.elastic.co/guide/en/enterprise-search/master/dls.html) for more information.
+Refer to [document level security](https://www.elastic.co/guide/en/enterprise-search/master/dls.html) for more information.
 
 **Note:** Refer to [DLS in Search Applications](https://www.elastic.co/guide/en/enterprise-search/master/dls-e2e-guide.html) to learn how to ingest data from Google Drive with DLS enabled, when building a search application.
 
