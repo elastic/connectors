@@ -433,7 +433,9 @@ class GoogleDriveDataSource(BaseDataSource):
 
     def _set_internal_logger(self):
         self.google_drive_client.set_logger(self._logger)
-        self.google_admin_directory_client.set_logger(self._logger)
+        # google_admin_directory_client is only used for dls
+        if self._dls_enabled():
+            self.google_admin_directory_client.set_logger(self._logger)
 
     @classmethod
     def get_default_configuration(cls):
@@ -881,39 +883,23 @@ class GoogleDriveDataSource(BaseDataSource):
             return await self.get_generic_file_content(file, timestamp=timestamp)
 
     async def _get_permissions_on_shared_drive(self, file_id):
-        """Retrieves the access permissions on a shared drive for the given file ID.
+        """Retrieves the permissions on a shared drive for the given file ID.
 
         Args:
             file_id (str): The ID of the file.
 
         Returns:
-            list: A list of access permissions on the shared drive for a file.
+            list: A list of permissions on the shared drive for a file.
         """
 
-        access_controls = []
+        permissions = []
 
         async for permissions_page in self.google_drive_client.list_permissions(
             file_id
         ):
-            permissions = permissions_page.get("permissions", [])
-            access_controls_page = self._process_permissions(permissions)
-            access_controls.extend(access_controls_page)
+            permissions.extend(permissions_page.get("permissions", []))
 
-        return access_controls
-
-    def _get_permissions_on_my_drive(self, file):
-        """Formats the access permissions on a my drive for the given object.
-
-        Args:
-            file (dict): The metadata of Google Drive file.
-
-        Returns:
-            list: A list of access permissions on my drive for a given file.
-        """
-
-        permissions = file.get("permissions", [])
-        access_controls = self._process_permissions(permissions)
-        return access_controls
+        return permissions
 
     def _process_permissions(self, permissions):
         """Formats the access permission list for Google Drive object.
@@ -942,6 +928,8 @@ class GoogleDriveDataSource(BaseDataSource):
                 self._logger.warning(
                     f"Unknown Google Drive permission type: {permission_type}."
                 )
+                # Continue so that 'None' permission is not appended to processed_permissions list
+                continue
 
             processed_permissions.append(access_permission)
 
@@ -1011,14 +999,13 @@ class GoogleDriveDataSource(BaseDataSource):
         if self._dls_enabled():
             # Getting permissions works differenty for files on my drive and files on shared drives.
             # Read more: https://developers.google.com/drive/api/guides/shared-drives-diffs
-            if shared_drive:
-                file_document[
-                    ACCESS_CONTROL
-                ] = await self._get_permissions_on_shared_drive(file_id=file_id)
-            else:
-                file_document[ACCESS_CONTROL] = self._get_permissions_on_my_drive(
-                    file=file
+            permissions = file.get("permissions", [])
+            if not permissions:
+                permissions = await self._get_permissions_on_shared_drive(
+                    file_id=file_id
                 )
+
+            file_document[ACCESS_CONTROL] = self._process_permissions(permissions)
 
         return file_document
 
