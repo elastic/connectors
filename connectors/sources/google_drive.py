@@ -580,7 +580,7 @@ class GoogleDriveDataSource(BaseDataSource):
         if not self._features.document_level_security_enabled():
             return False
 
-        return self.configuration.get("use_document_level_security", False)
+        return bool(self.configuration.get("use_document_level_security", False))
 
     def access_control_query(self, access_control):
         return {
