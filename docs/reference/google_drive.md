@@ -44,7 +44,7 @@ Your service account needs to have access to at least the following scope:
 
 To access user data on a Google Workspace domain, the service account that you created needs to be granted access by a super administrator for the domain. You can follow [official documentation](https://developers.google.com/cloud-search/docs/guides/delegation) to perform Google Workspace domain-wide delegation of authority.
 
-You need to grant following **OAuth Scopes** to your service account:
+You need to grant the following **OAuth Scopes** to your service account:
 - `https://www.googleapis.com/auth/admin.directory.group.readonly`
 - `https://www.googleapis.com/auth/admin.directory.user.readonly`
 
