@@ -987,14 +987,14 @@ class TestSharepointOnlineClient:
     @pytest.mark.asyncio
     async def test_site_pages(self, client, patch_scroll):
         page_url_path = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/page.aspx"
-        actual_items = ["1", "2", "3", "4"]
+        actual_items = [{"Id": "1"}, {"Id": "2"}, {"Id": "3"}, {"Id": "4"}]
 
         returned_items = await self._execute_scrolling_method(
             partial(client.site_pages, page_url_path), patch_scroll, actual_items
         )
 
         assert len(returned_items) == len(actual_items)
-        assert returned_items == actual_items
+        assert [{"Id": i["Id"]} for i in returned_items] == actual_items
 
     @pytest.mark.asyncio
     async def test_site_pages_not_found(self, client, patch_scroll):
