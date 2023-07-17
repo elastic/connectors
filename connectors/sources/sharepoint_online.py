@@ -368,7 +368,7 @@ class MicrosoftAPISession:
         try:
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
-            self._logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
+            self._logger.debug(f"Posting to Sharepoint Endpoint: {absolute_url}. Payload: {payload}")
 
             async with self._http_session.post(
                 absolute_url, headers=headers, json=payload
