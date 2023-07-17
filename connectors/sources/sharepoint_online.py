@@ -403,9 +403,6 @@ class MicrosoftAPISession:
                 raise InternalServerError from e
             else:
                 raise
-            self._logger.debug(
-                f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
-            )
 
 
 class SharepointOnlineClient:
