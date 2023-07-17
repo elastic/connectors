@@ -378,7 +378,7 @@ class MicrosoftAPISession:
                 yield resp
         except aiohttp.client_exceptions.ClientOSError:
             self._logger.warning(
-                "Graph API dropped the connection. It might indicate, that connector makes too many requests - decrease concurrency settings, otherwise Graph API can block this app."
+                "The Microsoft Graph API dropped the connection. It might indicate that the connector is making too many requests. Decrease concurrency settings, otherwise the Graph API may block this app."
             )
             raise
         except ClientResponseError as e:
