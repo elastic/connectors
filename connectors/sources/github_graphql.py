@@ -18,7 +18,6 @@ from gidgethub.aiohttp import GitHubAPI
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
-from connectors.sources.graphql_queries import GithubQuery
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -51,6 +50,327 @@ FILE_SCHEMA = {
     "extension": "extension",
     "_timestamp": "_timestamp",
 }
+
+
+class GithubQuery(Enum):
+    USER_QUERY = """
+        query {
+        viewer {
+            login
+        }
+    }
+    """
+    REPOS_QUERY = """
+    query ($login: String!, $cursor: String) {
+    user(login: $login) {
+        repositories(first: 100, after: $cursor) {
+        pageInfo {
+            hasNextPage
+            endCursor
+        }
+        nodes {
+            id
+            updatedAt
+            name
+            nameWithOwner
+            url
+            description
+            visibility
+            primaryLanguage {
+            name
+            }
+            defaultBranchRef {
+            name
+            }
+            isFork
+            stargazerCount
+            watchers {
+            totalCount
+            }
+            forkCount
+            createdAt
+        }
+        }
+    }
+    }
+    """
+    REPO_QUERY = """
+    query ($owner: String!, $repositoryName: String!) {
+    repository(owner: $owner, name: $repositoryName) {
+        id
+        updatedAt
+        name
+        nameWithOwner
+        url
+        description
+        visibility
+        primaryLanguage {
+        name
+        }
+        defaultBranchRef {
+        name
+        }
+        isFork
+        stargazerCount
+        watchers {
+        totalCount
+        }
+        forkCount
+        createdAt
+    }
+    }
+    """
+    PULL_REQUEST_QUERY = """
+    query ($owner: String!, $name: String!, $cursor: String) {
+    repository(owner: $owner, name: $name) {
+        pullRequests(first: 100, after: $cursor) {
+        pageInfo {
+            hasNextPage
+            endCursor
+        }
+        nodes {
+            id
+            updatedAt
+            number
+            url
+            createdAt
+            closedAt
+            title
+            body
+            state
+            mergedAt
+            assignees(first: 100) {
+            pageInfo {
+                hasNextPage
+                endCursor
+            }
+            nodes {
+                login
+            }
+            }
+            labels(first: 100) {
+            pageInfo {
+                hasNextPage
+                endCursor
+            }
+            nodes {
+                name
+                description
+            }
+            }
+            reviewRequests(first: 100) {
+            pageInfo {
+                hasNextPage
+                endCursor
+            }
+            nodes {
+                requestedReviewer {
+                ... on User {
+                    login
+                }
+                }
+            }
+            }
+            comments(first: 100) {
+            pageInfo {
+                hasNextPage
+                endCursor
+            }
+            nodes {
+                author {
+                login
+                }
+                body
+            }
+            }
+            reviews(first: 45) {
+            pageInfo {
+                hasNextPage
+                endCursor
+            }
+            nodes {
+                id
+                author {
+                login
+                }
+                state
+                body
+                comments(first: 100) {
+                pageInfo {
+                    hasNextPage
+                    endCursor
+                }
+                nodes {
+                    body
+                }
+                }
+            }
+            }
+        }
+        }
+    }
+    }
+    """
+    ISSUE_QUERY = """
+    query ($owner: String!, $name: String!, $cursor: String) {
+    repository(owner: $owner, name: $name) {
+        issues(first: 100, after: $cursor) {
+        pageInfo {
+            hasNextPage
+            endCursor
+        }
+        nodes {
+            id
+            updatedAt
+            number
+            url
+            createdAt
+            closedAt
+            title
+            body
+            state
+            assignees(first: 100) {
+            pageInfo {
+                hasNextPage
+                endCursor
+            }
+            nodes {
+                login
+            }
+            }
+            labels(first: 100) {
+            pageInfo {
+                hasNextPage
+                endCursor
+            }
+            nodes {
+                name
+                description
+            }
+            }
+            comments(first: 100) {
+            pageInfo {
+                hasNextPage
+                endCursor
+            }
+            nodes {
+                author {
+                login
+                }
+                body
+            }
+            }
+        }
+        }
+    }
+    }
+    """
+    COMMENT_QUERY = """
+    query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {{
+    repository(owner: $owner, name: $name) {{
+        {object_type}(number: $number) {{
+        comments(first: 100, after: $cursor) {{
+            pageInfo {{
+            hasNextPage
+            endCursor
+            }}
+            nodes {{
+            author {{
+                login
+            }}
+            body
+            }}
+        }}
+        }}
+    }}
+    }}
+    """
+    REVIEW_QUERY = """
+    query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {
+    repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+        reviews(first: 100, after: $cursor) {
+            pageInfo {
+            hasNextPage
+            endCursor
+            }
+            nodes {
+            id
+            author {
+                login
+            }
+            state
+            body
+            comments(first: 100) {
+                pageInfo {
+                hasNextPage
+                endCursor
+                }
+                nodes {
+                body
+                }
+            }
+            }
+        }
+        }
+    }
+    }
+    """
+    REVIEWERS_QUERY = """
+    query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {
+    repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+        reviewRequests(first: 100, after: $cursor) {
+            pageInfo {
+            hasNextPage
+            endCursor
+            }
+            nodes {
+                requestedReviewer {
+                    ... on User {
+                    login
+                }
+            }
+            }
+        }
+        }
+    }
+    }
+    """
+    LABELS_QUERY = """
+    query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {{
+    repository(owner: $owner, name: $name) {{
+        {object_type}(number: $number) {{
+        labels(first: 100, after: $cursor) {{
+            pageInfo {{
+            hasNextPage
+            endCursor
+            }}
+            nodes {{
+            name
+            }}
+        }}
+        }}
+    }}
+    }}
+    """
+    ASSIGNEES_QUERY = """
+    query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {{
+    repository(owner: $owner, name: $name) {{
+        {object_type}(number: $number) {{
+        assignees(first: 100, after: $cursor) {{
+            pageInfo {{
+            hasNextPage
+            endCursor
+            }}
+            nodes {{
+            login
+            }}
+        }}
+        }}
+    }}
+    }}
+    """
 
 
 class ObjectType(Enum):
@@ -140,7 +460,7 @@ class GitHubClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def api_call(self, query_data, need_headers=False):
+    async def post(self, query_data, need_headers=False):
         """Invoke GraphQL request to fetch repositories, pull requests, and issues.
 
         Args:
@@ -187,7 +507,7 @@ class GitHubClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def get_response(self, resource):
+    async def get_github_item(self, resource):
         """Execute request using getitem method of GitHubAPI which is using REST API.
         Using Rest API for fetching files and folder along with content.
 
@@ -241,7 +561,7 @@ class GitHubClient:
         """
         while True:
             query_data = {"query": query, "variables": variables}
-            response = await self.api_call(query_data=query_data)
+            response = await self.post(query_data=query_data)
             yield response
 
             page_info = self.get_page_info(response=response, keys=keys)
@@ -277,7 +597,7 @@ class GitHubClient:
             "query": GithubQuery.REPO_QUERY.value,
             "variables": repo_variables,
         }
-        repo_response = await self.api_call(query_data=query_data)
+        repo_response = await self.post(query_data=query_data)
         return repo_response.get("data", {}).get(REPOSITORY_OBJECT)  # pyright: ignore
 
     async def get_logged_in_user(self):
@@ -285,14 +605,14 @@ class GitHubClient:
             "query": GithubQuery.USER_QUERY.value,
             "variables": None,
         }
-        response = await self.api_call(query_data=query_data)
+        response = await self.post(query_data=query_data)
         return (
             response.get("data", {}).get("viewer", {}).get("login")  # pyright: ignore
         )
 
     async def ping(self):
         query_data = {"query": GithubQuery.USER_QUERY.value, "variables": None}
-        await self.api_call(query_data=query_data)
+        await self.post(query_data=query_data)
 
     async def close(self):
         self._sleeps.cancel()
@@ -413,6 +733,7 @@ class GitHubDataSource(BaseDataSource):
                         repo_name
                     ] = await self.github_client.get_foreign_repo(repo_name=repo_name)
                 except Exception:
+                    self._logger.debug(f"Detected invalid repository: {repo_name}.")
                     invalid_repos.append(repo_name)
             return invalid_repos
         except Exception as exception:
@@ -428,7 +749,7 @@ class GitHubDataSource(BaseDataSource):
             ConfigurableFieldValueError: Insufficient privileges error.
         """
         query_data = {"query": GithubQuery.USER_QUERY.value, "variables": None}
-        _, headers = await self.github_client.api_call(  # pyright: ignore
+        _, headers = await self.github_client.post(  # pyright: ignore
             query_data=query_data, need_headers=True
         )
         if "repo" not in headers.get("X-OAuth-Scopes"):  # pyright: ignore
@@ -461,10 +782,10 @@ class GitHubDataSource(BaseDataSource):
             raise
 
     def adapt_gh_doc_to_es_doc(self, github_document, schema):
-        document = {}
-        for es_field, github_field in schema.items():
-            document[es_field] = github_document[github_field]
-        return document
+        return {
+            es_field: github_document[github_field]
+            for es_field, github_field in schema.items()
+        }
 
     def _prepare_pull_request_doc(self, pull_request, reviews):
         return {
@@ -528,7 +849,7 @@ class GitHubDataSource(BaseDataSource):
                     "query": GithubQuery.REPO_QUERY.value,
                     "variables": {"owner": owner, "repositoryName": repo},
                 }
-                response = await self.github_client.api_call(query_data=query_data)
+                response = await self.github_client.post(query_data=query_data)
                 repo_object = response.get("data", {}).get(  # pyright: ignore
                     REPOSITORY_OBJECT
                 )
@@ -714,7 +1035,7 @@ class GitHubDataSource(BaseDataSource):
             )
 
     async def _fetch_last_commit_timestamp(self, repo_name, path):
-        commit, *_ = await self.github_client.get_response(  # pyright: ignore
+        commit, *_ = await self.github_client.get_github_item(  # pyright: ignore
             resource=self.github_client.endpoints["COMMITS"].format(
                 repo_name=repo_name, path=path
             )
@@ -723,7 +1044,7 @@ class GitHubDataSource(BaseDataSource):
 
     async def _fetch_files(self, repo_name, default_branch):
         try:
-            file_tree = await self.github_client.get_response(
+            file_tree = await self.github_client.get_github_item(
                 resource=self.github_client.endpoints["TREE"].format(
                     repo_name=repo_name, default_branch=default_branch
                 )
@@ -771,7 +1092,7 @@ class GitHubDataSource(BaseDataSource):
             )
 
     async def _get_document_with_content(self, url, attachment_name, document):
-        file_data = await self.github_client.get_response(resource=url)
+        file_data = await self.github_client.get_github_item(resource=url)
         temp_filename = ""
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
             await async_buffer.write(

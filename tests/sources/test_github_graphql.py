@@ -495,7 +495,7 @@ async def test_close_with_session():
 async def test_validate_config_with_invalid_token_then_raise(mock_apply_retry_strategy):
     source = create_source(GitHubDataSource)
     mock_apply_retry_strategy.return_value = Mock()
-    source.github_client.api_call = AsyncMock(
+    source.github_client.post = AsyncMock(
         return_value=({"user": "username"}, {"X-OAuth-Scopes": ""})
     )
     with pytest.raises(
@@ -513,7 +513,7 @@ async def test_validate_config_with_inaccessible_repositories_then_raise(
     source = create_source(GitHubDataSource)
     mock_apply_retry_strategy.return_value = Mock()
     source.github_client.repos = ["repo1", "owner1/repo1", "repo2", "owner2/repo2"]
-    source.github_client.api_call = AsyncMock(
+    source.github_client.post = AsyncMock(
         return_value=({"dummy": "dummy"}, {"X-OAuth-Scopes": "repo"})
     )
     source.get_invalid_repos = AsyncMock(return_value=["repo2"])
@@ -549,7 +549,7 @@ async def test_get_response_with_rate_limit_exceeded(mock_apply_retry_strategy):
     ):
         with pytest.raises(Exception):
             source.github_client._get_retry_after = AsyncMock(return_value=0)
-            await source.github_client.get_response("/user")
+            await source.github_client.get_github_item("/user")
 
 
 @pytest.mark.asyncio
@@ -577,7 +577,7 @@ async def test_get_retry_after():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.apply_retry_strategy")
-async def test_api_call_with_errors(mock_apply_retry_strategy):
+async def test_post_with_errors(mock_apply_retry_strategy):
     source = create_source(GitHubDataSource)
     mock_apply_retry_strategy.return_value = Mock()
     source.github_client._get_session.post = Mock(
@@ -587,14 +587,14 @@ async def test_api_call_with_errors(mock_apply_retry_strategy):
         )
     )
     with pytest.raises(Exception):
-        await source.github_client.api_call(
+        await source.github_client.post(
             {"variable": {"owner": "demo_user"}, "query": "QUERY"}
         )
 
 
 @pytest.mark.asyncio
 @patch("connectors.utils.apply_retry_strategy")
-async def test_api_call_with_unauthorized(mock_apply_retry_strategy):
+async def test_post_with_unauthorized(mock_apply_retry_strategy):
     source = create_source(GitHubDataSource)
     mock_apply_retry_strategy.return_value = Mock()
     source.github_client._get_session.post = Mock(
@@ -607,7 +607,7 @@ async def test_api_call_with_unauthorized(mock_apply_retry_strategy):
         )
     )
     with pytest.raises(UnauthorizedException):
-        await source.github_client.api_call(
+        await source.github_client.post(
             {"variable": {"owner": "demo_user"}, "query": "QUERY"}
         )
 
@@ -617,7 +617,7 @@ async def test_paginated_api_call():
     expected_response = MOCK_RESPONSE_REPO
     source = create_source(GitHubDataSource)
     actual_response = []
-    with patch.object(source.github_client, "api_call", side_effect=expected_response):
+    with patch.object(source.github_client, "post", side_effect=expected_response):
         async for data in source.github_client.paginated_api_call(
             {"owner": "demo_user"}, "demo_query", ["user", "repositories"]
         ):
@@ -630,7 +630,7 @@ async def test_get_invalid_repos():
     expected_response = ["owner1/repo2", "owner2/repo2"]
     source = create_source(GitHubDataSource)
     source.github_client.repos = ["repo1", "owner1/repo2", "repo2", "owner2/repo2"]
-    source.github_client.api_call = AsyncMock(
+    source.github_client.post = AsyncMock(
         side_effect=[
             {"data": {"viewer": {"login": "owner1"}}},
             {
@@ -729,7 +729,7 @@ async def test_get_content_with_unsupported_tika_file_type_then_skip():
 async def test_fetch_repos():
     source = create_source(GitHubDataSource)
     source.github_client.repos = ["*"]
-    source.github_client.api_call = AsyncMock(
+    source.github_client.post = AsyncMock(
         return_value={"data": {"viewer": {"login": "owner1"}}}
     )
     source.github_client.get_user_repos = Mock(
@@ -756,7 +756,7 @@ async def test_fetch_repos():
 async def test_fetch_repos_when_user_repos_is_available():
     source = create_source(GitHubDataSource)
     source.github_client.repos = ["demo_user/demo_repo", ""]
-    source.github_client.api_call = AsyncMock(
+    source.github_client.post = AsyncMock(
         side_effect=[
             {"data": {"viewer": {"login": "owner1"}}},
             {
@@ -782,7 +782,7 @@ async def test_fetch_repos_when_user_repos_is_available():
 @pytest.mark.asyncio
 async def test_fetch_repos_with_unauthorized_exception():
     source = create_source(GitHubDataSource)
-    source.github_client.api_call = Mock(side_effect=UnauthorizedException())
+    source.github_client.post = Mock(side_effect=UnauthorizedException())
     with pytest.raises(UnauthorizedException):
         async for _ in source._fetch_repos():
             pass
@@ -806,7 +806,7 @@ async def test_fetch_issues():
 @pytest.mark.asyncio
 async def test_fetch_issues_with_unauthorized_exception():
     source = create_source(GitHubDataSource)
-    source.github_client.api_call = Mock(side_effect=UnauthorizedException())
+    source.github_client.post = Mock(side_effect=UnauthorizedException())
     with pytest.raises(UnauthorizedException):
         async for _ in source._fetch_issues("demo_user/demo_repo"):
             pass
@@ -834,7 +834,7 @@ async def test_fetch_pull_requests():
 @pytest.mark.asyncio
 async def test_fetch_pull_requests_with_unauthorized_exception():
     source = create_source(GitHubDataSource)
-    source.github_client.api_call = Mock(side_effect=UnauthorizedException())
+    source.github_client.post = Mock(side_effect=UnauthorizedException())
     with pytest.raises(UnauthorizedException):
         async for _ in source._fetch_pull_requests("demo_user/demo_repo"):
             pass
@@ -870,7 +870,7 @@ async def test_fetch_files():
 
     with patch.object(
         source.github_client,
-        "get_response",
+        "get_github_item",
         side_effect=[MOCK_TREE, MOCK_COMMITS],
     ):
         async for document in source._fetch_files("demo_repo", "main"):
