@@ -527,7 +527,7 @@ async def test_get_invalid_repos_with_max_retries(mock_apply_retry_strategy):
     source = create_source(GitHubDataSource)
     mock_apply_retry_strategy.return_value = Mock()
     with pytest.raises(Exception):
-        source.github_client.paginated_api_call = Exception()
+        source.github_client.post = AsyncMock(side_effect=Exception())
         await source.get_invalid_repos()
 
 
