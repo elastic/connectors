@@ -34,9 +34,12 @@ from connectors.utils import (
     convert_to_b64,
     html_to_text,
     iso_utc,
+    iterable_batches_generator,
     retryable,
     url_encode,
 )
+
+SPO_API_MAX_BATCH_SIZE = 20
 
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -90,7 +93,7 @@ class NotFound(Exception):
 
 
 class InternalServerError(Exception):
-    """Internal exception class to handle 500s from the API, which could sometimes also mean NotFound."""
+    """Exception class to indicate that something went wrong on the server side."""
 
     pass
 
@@ -318,8 +321,13 @@ class MicrosoftAPISession:
     async def fetch(self, url):
         return await self._get_json(url)
 
+    async def post(self, url, payload):
+        self._logger.debug(f"Post to url: {url}")
+        async with self._post(url, payload) as resp:
+            return await resp.json()
+
     async def pipe(self, url, stream):
-        async with self._call_api(url) as resp:
+        async with self._get(url) as resp:
             async for data in resp.content.iter_chunked(FILE_WRITE_CHUNK_SIZE):
                 await stream.write(data)
 
@@ -351,12 +359,32 @@ class MicrosoftAPISession:
 
     async def _get_json(self, absolute_url):
         self._logger.debug(f"Fetching url: {absolute_url}")
-        async with self._call_api(absolute_url) as resp:
+        async with self._get(absolute_url) as resp:
             return await resp.json()
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
-    async def _call_api(self, absolute_url):
+    async def _post(self, absolute_url, payload=None):
+        try:
+            token = await self._api_token.get()
+            headers = {"authorization": f"Bearer {token}"}
+            self._logger.debug(f"Posting to Sharepoint Endpoint: {absolute_url}.")
+
+            async with self._http_session.post(
+                absolute_url, headers=headers, json=payload
+            ) as resp:
+                yield resp
+        except aiohttp.client_exceptions.ClientOSError:
+            self._logger.warning(
+                "The Microsoft Graph API dropped the connection. It might indicate that the connector is making too many requests. Decrease concurrency settings, otherwise the Graph API may block this app."
+            )
+            raise
+        except ClientResponseError as e:
+            await self._handle_client_response_error(absolute_url, e)
+
+    @asynccontextmanager
+    @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
+    async def _get(self, absolute_url):
         try:
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
@@ -367,42 +395,42 @@ class MicrosoftAPISession:
                 headers=headers,
             ) as resp:
                 yield resp
-
-                return
         except aiohttp.client_exceptions.ClientOSError:
             self._logger.warning(
                 "Graph API dropped the connection. It might indicate, that connector makes too many requests - decrease concurrency settings, otherwise Graph API can block this app."
             )
             raise
         except ClientResponseError as e:
-            if e.status == 429 or e.status == 503:
-                response_headers = e.headers or {}
-                retry_seconds = None
-                if "Retry-After" in response_headers:
-                    retry_seconds = int(response_headers["Retry-After"])
-                else:
-                    self._logger.warning(
-                        f"Response Code from Sharepoint Server is 429 but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
-                    )
-                    retry_seconds = DEFAULT_RETRY_SECONDS
-                self._logger.info(
-                    f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
-                )
+            await self._handle_client_response_error(absolute_url, e)
 
-                await self._sleeps.sleep(retry_seconds)  # TODO: use CancellableSleeps
-                raise ThrottledError from e
-            elif (
-                e.status == 403 or e.status == 401
-            ):  # Might work weird, but Graph returns 403 and REST returns 401
-                raise PermissionsMissing(
-                    f"Received Unauthorized response for {absolute_url}.\nVerify that the correct Graph API and Sharepoint permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
-                ) from e
-            elif e.status == 404:
-                raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
-            elif e.status == 500:
-                raise InternalServerError from e
+    async def _handle_client_response_error(self, absolute_url, e):
+        if e.status == 429 or e.status == 503:
+            response_headers = e.headers or {}
+            if "Retry-After" in response_headers:
+                retry_seconds = int(response_headers["Retry-After"])
             else:
-                raise
+                self._logger.warning(
+                    f"Response Code from Sharepoint Server is {e.status} but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                )
+                retry_seconds = DEFAULT_RETRY_SECONDS
+            self._logger.debug(
+                f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
+            )
+
+            await self._sleeps.sleep(retry_seconds)
+            raise ThrottledError from e
+        elif (
+            e.status == 403 or e.status == 401
+        ):  # Might work weird, but Graph returns 403 and REST returns 401
+            raise PermissionsMissing(
+                f"Received Unauthorized response for {absolute_url}.\nVerify that the correct Graph API and Sharepoint permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
+            ) from e
+        elif e.status == 404:
+            raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
+        elif e.status == 500:
+            raise InternalServerError from e
+        else:
+            raise
 
 
 class SharepointOnlineClient:
@@ -605,9 +633,31 @@ class SharepointOnlineClient:
             yield page
 
     async def drive_item_permissions(self, drive_id, item_id):
-        return await self._graph_api_client.fetch(
-            f"{GRAPH_API_URL}/drives/{drive_id}/items/{item_id}/permissions"
-        )
+        try:
+            async for page in self._graph_api_client.scroll(
+                f"{GRAPH_API_URL}/drives/{drive_id}/items/{item_id}/permissions"
+            ):
+                for permission in page:
+                    yield permission
+        except NotFound:
+            return
+
+    async def drive_items_permissions_batch(self, drive_id, drive_item_ids):
+        requests = []
+
+        for item_id in drive_item_ids:
+            permissions_uri = f"/drives/{drive_id}/items/{item_id}/permissions"
+            requests.append({"id": item_id, "method": "GET", "url": permissions_uri})
+
+        try:
+            batch_url = f"{GRAPH_API_URL}/$batch"
+            batch_request = {"requests": requests}
+            batch_response = await self._graph_api_client.post(batch_url, batch_request)
+
+            for response in batch_response.get("responses", []):
+                yield response
+        except NotFound:
+            return
 
     async def download_drive_item(self, drive_id, item_id, async_buffer):
         await self._graph_api_client.pipe(
@@ -783,9 +833,9 @@ class DriveItemsPage(Iterable, Sized):
 
     def __init__(self, items, delta_link):
         if items:
-            self._items = items
+            self.items = items
         else:
-            self._items = []
+            self.items = []
 
         if delta_link:
             self._delta_link = delta_link
@@ -793,10 +843,10 @@ class DriveItemsPage(Iterable, Sized):
             self._delta_link = None
 
     def __len__(self):
-        return len(self._items)
+        return len(self.items)
 
     def __iter__(self):
-        for item in self._items:
+        for item in self.items:
             yield item
 
     def delta_link(self):
@@ -841,11 +891,23 @@ def _prefix_identity(prefix, identity):
 
 
 def _prefix_group(group):
-    return _prefix_identity("group", group) if group else None
+    return _prefix_identity("group", group)
+
+
+def _prefix_site_group(site_group):
+    return _prefix_identity("site_group", site_group)
 
 
 def _prefix_user(user):
     return _prefix_identity("user", user)
+
+
+def _prefix_site_user_id(site_user_id):
+    return _prefix_identity("site_user_id", site_user_id)
+
+
+def _prefix_user_id(user_id):
+    return _prefix_identity("user_id", user_id)
 
 
 def _prefix_email(email):
@@ -1011,6 +1073,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "bool",
                 "value": False,
             },
+            "fetch_drive_item_permissions": {
+                "depends_on": [{"field": "use_document_level_security", "value": True}],
+                "display": "toggle",
+                "label": "Fetch drive item permissions",
+                "order": 8,
+                "tooltip": "Enable this option to fetch drive item specific permissions. This setting can increase sync time.",
+                "type": "bool",
+                "value": True,
+            },
         }
 
     async def validate_config(self):
@@ -1171,7 +1242,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "_id": "some.user@spo.com",
                 "identity": {
                     "email": "email:some.user@spo.com",
-                    "username": "user:some.user"
+                    "username": "user:some.user",
+                    "user_id": "user_id:some user id"
                 },
                 "created_at": "2023-06-30 12:00:00",
                 "query": {
@@ -1216,6 +1288,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         prefixed_mail = _prefix_email(email)
         prefixed_username = _prefix_user(username)
+        prefixed_user_id = _prefix_user_id(user.get("id"))
         id_ = email if email else username
 
         access_control = list({prefixed_mail, prefixed_username}.union(prefixed_groups))
@@ -1231,6 +1304,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             "identity": {
                 "email": prefixed_mail,
                 "username": prefixed_username,
+                "user_id": prefixed_user_id,
             },
             "created_at": created_at,
         } | self.access_control_query(access_control)
@@ -1283,6 +1357,38 @@ class SharepointOnlineDataSource(BaseDataSource):
             if user_doc:
                 yield user_doc
 
+    async def _drive_items_batch_with_permissions(self, drive_id, drive_items_batch):
+        """Decorate a batch of drive items with their permissions using one API request.
+
+        Args:
+            drive_id (int): id of the drive, where the drive items reside
+            drive_items_batch (list): list of drive items to decorate with permissions
+
+        Yields:
+            drive_item (dict): drive item with or without permissions depending on the config value of `fetch_drive_item_permissions`
+        """
+
+        if not self.configuration["fetch_drive_item_permissions"]:
+            for drive_item in drive_items_batch:
+                yield drive_item
+
+            return
+
+        ids_to_items = {
+            drive_item["id"]: drive_item for drive_item in drive_items_batch
+        }
+        drive_items_ids = list(ids_to_items.keys())
+
+        async for permissions_response in self.client.drive_items_permissions_batch(
+            drive_id, drive_items_ids
+        ):
+            drive_item_id = permissions_response.get("id")
+            drive_item = ids_to_items.get(drive_item_id)
+            permissions = permissions_response.get("body", {}).get("value", [])
+
+            if drive_item:
+                yield self._with_drive_item_permissions(drive_item, permissions)
+
     async def get_docs(self, filtering=None):
         max_drive_item_age = None
 
@@ -1299,29 +1405,36 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
             ):
-                access_control = await self._site_access_control(site)
-                yield self._decorate_with_access_control(site, access_control), None
+                site_access_control = await self._site_access_control(site)
+                yield self._decorate_with_access_control(
+                    site, site_access_control
+                ), None
 
                 async for site_drive in self.site_drives(site):
                     yield self._decorate_with_access_control(
-                        site_drive, access_control
+                        site_drive, site_access_control
                     ), None
 
                     async for page in self.client.drive_items(site_drive["id"]):
-                        for drive_item in page:
-                            drive_item["_id"] = drive_item["id"]
-                            drive_item["object_type"] = "drive_item"
-                            drive_item["_timestamp"] = drive_item[
-                                "lastModifiedDateTime"
-                            ]
+                        for drive_items_batch in iterable_batches_generator(
+                            page.items, SPO_API_MAX_BATCH_SIZE
+                        ):
+                            async for drive_item in self._drive_items_batch_with_permissions(
+                                site_drive["id"], drive_items_batch
+                            ):
+                                drive_item["_id"] = drive_item["id"]
+                                drive_item["object_type"] = "drive_item"
+                                drive_item["_timestamp"] = drive_item.get(
+                                    "lastModifiedDateTime"
+                                )
 
-                            drive_item = self._decorate_with_access_control(
-                                drive_item, access_control
-                            )
+                                drive_item = self._decorate_with_access_control(
+                                    drive_item, site_access_control
+                                )
 
-                            yield drive_item, self.download_function(
-                                drive_item, max_drive_item_age
-                            )
+                                yield drive_item, self.download_function(
+                                    drive_item, max_drive_item_age
+                                )
 
                         self.update_drive_delta_link(
                             drive_id=site_drive["id"], link=page.delta_link()
@@ -1330,7 +1443,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 # Sync site list and site list items
                 async for site_list in self.site_lists(site):
                     yield self._decorate_with_access_control(
-                        site_list, access_control
+                        site_list, site_access_control
                     ), None
 
                     async for list_item, download_func in self.site_list_items(
@@ -1340,13 +1453,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_list_name=site_list["name"],
                     ):
                         yield self._decorate_with_access_control(
-                            list_item, access_control
+                            list_item, site_access_control
                         ), download_func
 
                 # Sync site pages
                 async for site_page in self.site_pages(site["webUrl"]):
                     yield self._decorate_with_access_control(
-                        site_page, access_control
+                        site_page, site_access_control
                     ), None
 
     async def get_docs_incrementally(self, sync_cursor, filtering=None):
@@ -1370,14 +1483,14 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
             ):
-                access_control = await self._site_access_control(site)
+                site_access_control = await self._site_access_control(site)
                 yield self._decorate_with_access_control(
-                    site, access_control
+                    site, site_access_control
                 ), None, OP_INDEX
 
                 async for site_drive in self.site_drives(site):
                     yield self._decorate_with_access_control(
-                        site_drive, access_control
+                        site_drive, site_access_control
                     ), None, OP_INDEX
 
                     delta_link = self.get_drive_delta_link(site_drive["id"])
@@ -1385,22 +1498,25 @@ class SharepointOnlineDataSource(BaseDataSource):
                     async for page in self.client.drive_items(
                         drive_id=site_drive["id"], url=delta_link
                     ):
-                        for drive_item in page:
-                            drive_item["_id"] = drive_item["id"]
-                            drive_item["object_type"] = "drive_item"
-                            drive_item["_timestamp"] = (
-                                drive_item["lastModifiedDateTime"]
-                                if "lastModifiedDateTime" in drive_item
-                                else None
-                            )
+                        for drive_items_batch in iterable_batches_generator(
+                            page.items, SPO_API_MAX_BATCH_SIZE
+                        ):
+                            async for drive_item in self._drive_items_batch_with_permissions(
+                                site_drive["id"], drive_items_batch
+                            ):
+                                drive_item["_id"] = drive_item["id"]
+                                drive_item["object_type"] = "drive_item"
+                                drive_item["_timestamp"] = drive_item.get(
+                                    "lastModifiedDateTime"
+                                )
 
-                            drive_item = self._decorate_with_access_control(
-                                drive_item, access_control
-                            )
+                                drive_item = self._decorate_with_access_control(
+                                    drive_item, site_access_control
+                                )
 
-                            yield drive_item, self.download_function(
-                                drive_item, max_drive_item_age
-                            ), self.drive_item_operation(drive_item)
+                                yield drive_item, self.download_function(
+                                    drive_item, max_drive_item_age
+                                ), self.drive_item_operation(drive_item)
 
                         self.update_drive_delta_link(
                             drive_id=site_drive["id"], link=page.delta_link()
@@ -1409,7 +1525,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 # Sync site list and site list items
                 async for site_list in self.site_lists(site):
                     yield self._decorate_with_access_control(
-                        site_list, access_control
+                        site_list, site_access_control
                     ), None, OP_INDEX
 
                     async for list_item, download_func in self.site_list_items(
@@ -1419,13 +1535,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_list_name=site_list["name"],
                     ):
                         yield self._decorate_with_access_control(
-                            list_item, access_control
+                            list_item, site_access_control
                         ), download_func, OP_INDEX
 
                 # Sync site pages
                 async for site_page in self.site_pages(site["webUrl"]):
                     yield self._decorate_with_access_control(
-                        site_page, access_control
+                        site_page, site_access_control
                     ), None, OP_INDEX
 
     async def site_collections(self):
@@ -1452,12 +1568,98 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             yield site_drive
 
+    def _with_drive_item_permissions(self, drive_item, drive_item_permissions):
+        """Decorates a drive item with its permissions.
+
+        Args:
+            drive_item (dict): drive item to fetch the permissions for.
+            drive_item_permissions (list): drive item permissions to add to the drive_item.
+
+        Returns:
+            drive_item (dict): drive item decorated with its permissions.
+
+        Example permissions for a drive item:
+
+        {
+              ...
+              "grantedTo": { ... },
+              "grantedToV2": {
+                "user": {
+                  "id": "5D33DD65C6932946",
+                  "displayName": "Robin Danielsen"
+                },
+                "siteUser": {
+                  "id": "1",
+                  "displayName": "Robin Danielsen",
+                  "loginName": "Robin Danielsen"
+                },
+                "group": {
+                  "id": "23234DAJFKA234",
+                  "displayName": "Some group",
+                },
+                "siteGroup": {
+                  "id": "2",
+                  "displayName": "Some group"
+                }
+              }
+        }
+
+        "grantedTo" has been deprecated, so we only fetch the permissions under "grantedToV2".
+        A drive item can have six different identities assigned to it: "application", "device", "group", "user", "siteGroup" and "siteUser".
+        In this context we'll only fetch "group", "user", "siteGroup" and "siteUser" and prefix them with different strings to make them distinguishable from each other.
+
+        Note: A "siteUser" can be related to a "user", but not neccessarily (same for "group" and "siteGroup").
+        """
+        if not self.configuration["fetch_drive_item_permissions"]:
+            return drive_item
+
+        def _get_id(permissions, identity):
+            if identity not in permissions:
+                return None
+
+            return permissions.get(identity).get("id")
+
+        drive_item_id = drive_item.get("id")
+        access_control = []
+
+        for permission in drive_item_permissions:
+            granted_to_v2 = permission.get("grantedToV2")
+
+            if not granted_to_v2:
+                self._logger.debug(
+                    f"'grantedToV2' missing for drive item (id: '{drive_item_id}'). Skipping permissions..."
+                )
+                continue
+
+            user_id = _get_id(granted_to_v2, "user")
+            group_id = _get_id(granted_to_v2, "group")
+            site_group_id = _get_id(granted_to_v2, "siteGroup")
+            site_user_id = _get_id(granted_to_v2, "siteUser")
+
+            if user_id:
+                access_control.append(_prefix_user_id(user_id))
+
+            if group_id:
+                access_control.append(_prefix_group(group_id))
+
+            if site_group_id:
+                access_control.append(_prefix_site_group(site_group_id))
+
+            if site_user_id:
+                access_control.append(_prefix_site_user_id(site_user_id))
+
+        return self._decorate_with_access_control(drive_item, access_control)
+
     async def drive_items(self, site_drive, max_drive_item_age):
         async for page in self.client.drive_items(site_drive["id"]):
             for drive_item in page:
                 drive_item["_id"] = drive_item["id"]
                 drive_item["object_type"] = "drive_item"
                 drive_item["_timestamp"] = drive_item["lastModifiedDateTime"]
+
+                drive_item = await self._with_drive_item_permissions(
+                    site_drive["id"], drive_item
+                )
 
                 yield drive_item, self.download_function(drive_item, max_drive_item_age)
 

@@ -43,6 +43,7 @@ from connectors.utils import (
     hash_id,
     html_to_text,
     is_expired,
+    iterable_batches_generator,
     next_run,
     retryable,
     ssl_context,
@@ -609,6 +610,41 @@ def test_html_to_text_with_weird_html():
     invalid_html = "<div/>just</div> text"
 
     assert html_to_text(invalid_html) == "just\n text"
+
+
+def batch_size(value):
+    """Used for readability purposes in parametrized tests."""
+    return value
+
+
+@pytest.mark.parametrize(
+    "iterable, batch_size_, expected_batches",
+    [
+        ([1, 2, 3], batch_size(1), [[1], [2], [3]]),
+        ([1, 2, 3], batch_size(2), [[1, 2], [3]]),
+        (
+            [1, 2, 3],
+            batch_size(3),
+            [
+                [1, 2, 3],
+            ],
+        ),
+        (
+            [1, 2, 3],
+            batch_size(1000),
+            [
+                [1, 2, 3],
+            ],
+        ),
+    ],
+)
+def test_iterable_batches_generator(iterable, batch_size_, expected_batches):
+    actual_batches = []
+
+    for batch in iterable_batches_generator(iterable, batch_size_):
+        actual_batches.append(batch)
+
+    assert actual_batches == expected_batches
 
 
 class TestExtractionService:
