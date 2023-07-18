@@ -4,164 +4,275 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Dropbox source class methods"""
-import datetime
-from copy import copy
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+import json
+from unittest import mock
+from unittest.mock import AsyncMock, Mock, patch
 
+import aiohttp
 import pytest
-from dropbox.exceptions import ApiError, AuthError, BadInputError
-from dropbox.files import FileMetadata, FolderMetadata, ListFolderResult
-from dropbox.sharing import (
-    FileLinkMetadata,
-    FolderPolicy,
-    ListFilesResult,
-    SharedFileMetadata,
-)
+from aiohttp import StreamReader
+from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
 from freezegun import freeze_time
 
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
-from connectors.sources.dropbox import DropboxDataSource
+from connectors.sources.dropbox import (
+    DropboxDataSource,
+    InvalidClientCredentialException,
+    InvalidPathException,
+    InvalidRefreshTokenException,
+)
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
 PATH = "/"
 DUMMY_VALUES = "abc#123"
 
-MOCK_FILE_DATA = FileMetadata(
-    id="file_1",
-    name="test_file.txt",
-    path_display="/test/test_file.txt",
-    is_downloadable=True,
-    server_modified=datetime.datetime(2023, 1, 1, 6, 6, 6),
-    size=200,
-)
+HOST_URLS = {
+    "ACCESS_TOKEN_HOST_URL": "https://api.dropboxapi.com/",
+    "FILES_FOLDERS_HOST_URL": "https://api.dropboxapi.com/2/",
+    "DOWNLOAD_HOST_URL": "https://content.dropboxapi.com/2/",
+}
+PING = "users/get_current_account"
 
-MOCK_PAPER_FILE_DATA = FileMetadata(
-    id="paper_1",
-    name="dummy_file.paper",
-    path_display="/test/dummy_file.paper",
-    is_downloadable=False,
-    server_modified=datetime.datetime(2023, 1, 1, 6, 6, 6),
-    size=200,
-)
+MOCK_CURRENT_USER = {
+    "account_id": "acc_id:1234",
+    "name": {
+        "given_name": "John",
+        "surname": "Wilber",
+        "display_name": "John Wilber",
+        "abbreviated_name": "JW",
+    },
+    "email": "john.wilber@abcd.com",
+    "country": "US",
+}
 
-MOCK_FOLDER_DATA = FolderMetadata(
-    id="folder_1",
-    name="test",
-    path_display="/test",
-)
+MOCK_CHECK_PATH = {
+    ".tag": "folder",
+    "name": "shared",
+    "path_lower": "/shared",
+    "path_display": "/shared",
+    "id": "id:abcd",
+    "shared_folder_id": "1234",
+}
 
-MOCK_SHARED_FILE_DATA_1 = SharedFileMetadata(
-    id="id:shared_1",
-    name="shared_file_1.py",
-    path_display="/shared/shared_file_1.py",
-    preview_url="https://www.dropbox.com/scl/fi/12345/shared_file_1.py",
-    time_invited=datetime.datetime(2023, 1, 1, 6, 6, 6),
-    policy=FolderPolicy(),
-)
+MOCK_ACCESS_TOKEN = {"access_token": "test2344", "expires_in": "1234555"}
+MOCK_ACCESS_TOKEN_FOR_INVALID_REFRESH_TOKEN = {"error": "invalid_grant"}
+MOCK_ACCESS_TOKEN_FOR_INVALID_APP_KEY = {
+    "error": "invalid_client: Invalid client_id or client_secret"
+}
 
-MOCK_SHARED_FILE_DATA_2 = SharedFileMetadata(
-    id="id:shared_2",
-    name="shared_file_2.py",
-    path_display="/shared/shared_file_2.py",
-    preview_url="https://www.dropbox.com/scl/fi/12345/shared_file_2.py",
-    time_invited=datetime.datetime(2023, 1, 1, 6, 6, 6),
-    policy=FolderPolicy(),
-)
+MOCK_FILES_FOLDERS = {
+    "entries": [
+        {
+            ".tag": "folder",
+            "name": "dummy folder",
+            "path_lower": "/test/dummy folder",
+            "path_display": "/test/dummy folder",
+            "id": "id:1",
+        },
+    ],
+    "cursor": "abcd#1234",
+    "has_more": True,
+}
 
-FILE_LINK_METADATA = FileLinkMetadata(
-    id="id:shared_1",
-    name="shared_file_1.py",
-    size=200,
-    server_modified=datetime.datetime(2023, 1, 1, 6, 6, 6),
-)
+MOCK_FILES_FOLDERS_CONTINUE = {
+    "entries": [
+        {
+            ".tag": "file",
+            "name": "index.py",
+            "path_lower": "/test/dummy folder/index.py",
+            "path_display": "/test/dummy folder/index.py",
+            "id": "id:2",
+            "client_modified": "2023-01-01T06:06:06Z",
+            "server_modified": "2023-01-01T06:06:06Z",
+            "size": 200,
+            "is_downloadable": True,
+        },
+    ],
+    "cursor": None,
+    "has_more": False,
+}
 
-EXPECTED_FILE = {
-    "_id": "file_1",
-    "type": "File",
-    "name": "test_file.txt",
-    "file path": "/test/test_file.txt",
+EXPECTED_FILES_FOLDERS = [
+    {
+        "_id": "id:1",
+        "type": "Folder",
+        "name": "dummy folder",
+        "file_path": "/test/dummy folder",
+        "size": 0,
+        "_timestamp": "2023-01-01T06:06:06+00:00",
+    },
+    {
+        "_id": "id:2",
+        "type": "File",
+        "name": "index.py",
+        "file_path": "/test/dummy folder/index.py",
+        "size": 200,
+        "_timestamp": "2023-01-01T06:06:06Z",
+    },
+]
+
+MOCK_SHARED_FILES = {
+    "entries": [
+        {
+            "access_type": {".tag": "viewer"},
+            "name": "index1.py",
+            "id": "id:1",
+            "time_invited": "2023-01-01T06:06:06Z",
+            "preview_url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/index1.py?dl=0",
+        },
+    ],
+    "cursor": "abcd#1234",
+}
+
+MOCK_SHARED_FILES_CONTINUE = {
+    "entries": [
+        {
+            "access_type": {".tag": "viewer"},
+            "name": "index2.py",
+            "id": "id:2",
+            "time_invited": "2023-01-01T06:06:06Z",
+            "preview_url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/index2.py?dl=0",
+        },
+    ],
+    "cursor": None,
+}
+
+MOCK_RECEIVED_FILE_METADATA_1 = {
+    "name": "index1.py",
+    "id": "id:1",
+    "client_modified": "2023-01-01T06:06:06Z",
+    "server_modified": "2023-01-01T06:06:06Z",
     "size": 200,
-    "_timestamp": "2023-01-01T06:06:06",
+    "preview_type": "text",
+    "url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/index1.py?dl=0",
 }
 
-EXPECTED_FOLDER = {
-    "_id": "folder_1",
-    "type": "Folder",
-    "name": "test",
-    "file path": "/test",
-    "size": 0,
-    "_timestamp": "2023-01-01T06:06:06+00:00",
-}
-
-EXPECTED_SHARED_FILE_1 = {
-    "_id": "id:shared_1",
-    "type": "File",
-    "name": "shared_file_1.py",
-    "file path": "/shared/shared_file_1.py",
-    "url": "https://www.dropbox.com/scl/fi/12345/shared_file_1.py",
+MOCK_RECEIVED_FILE_METADATA_2 = {
+    "name": "index2.py",
+    "id": "id:2",
+    "client_modified": "2023-01-01T06:06:06Z",
+    "server_modified": "2023-01-01T06:06:06Z",
     "size": 200,
-    "_timestamp": "2023-01-01T06:06:06",
+    "preview_type": "text",
+    "url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/index2.py?dl=0",
 }
 
-EXPECTED_SHARED_FILE_2 = {
-    "_id": "id:shared_2",
-    "type": "File",
-    "name": "shared_file_2.py",
-    "file path": "/shared/shared_file_2.py",
-    "url": "https://www.dropbox.com/scl/fi/12345/shared_file_2.py",
+EXPECTED_SHARED_FILES = [
+    {
+        "_id": "id:1",
+        "type": "File",
+        "name": "index1.py",
+        "url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/index1.py?dl=0",
+        "size": 200,
+        "_timestamp": "2023-01-01T06:06:06Z",
+    },
+    {
+        "_id": "id:2",
+        "type": "File",
+        "name": "index2.py",
+        "url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/index2.py?dl=0",
+        "size": 200,
+        "_timestamp": "2023-01-01T06:06:06Z",
+    },
+]
+
+MOCK_ATTACHMENT = {
+    "id": "id:1",
+    "name": "dummy_file.txt",
+    "server_modified": "2023-01-01T06:06:06Z",
     "size": 200,
-    "_timestamp": "2023-01-01T06:06:06",
+    "url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/dummy_file.txt?dl=0",
+    "is_downloadable": True,
+    "path_display": "/test/dummy_file.txt",
 }
 
-EXPECTED_CONTENT_FOR_TEXT_FILE = {
-    "_id": "file_1",
-    "_timestamp": datetime.datetime(2023, 1, 1, 6, 6, 6),
-    "_attachment": "VGhpcyBpcyBhIHRleHQgY29udGVudA==",
+MOCK_PAPER_FILE = {
+    "id": "id:1",
+    "name": "dummy_file.paper",
+    "server_modified": "2023-01-01T06:06:06Z",
+    "size": 200,
+    "url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/dummy_file.paper?dl=0",
+    "is_downloadable": False,
+    "path_display": "/test/dummy_file.paper",
 }
 
-EXPECTED_CONTENT_FOR_PAPER_FILE = {
-    "_id": "paper_1",
-    "_timestamp": datetime.datetime(2023, 1, 1, 6, 6, 6),
-    "_attachment": "IyBUaGlzIGlzIGEgbWFya2Rvd24gY29udGVudA==",
+SKIPPED_ATTACHMENT = {
+    "id": "id:1",
+    "name": "dummy_file.txt",
+    "server_modified": "2023-01-01T06:06:06Z",
+    "size": 200,
+    "url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/dummy_file.txt?dl=0",
+    "is_downloadable": False,
+    "path_display": "/test/dummy_file.txt",
 }
 
-MOCK_FILES_LIST_FOLDER = ListFolderResult(
-    entries=[MOCK_FILE_DATA], has_more=True, cursor="cursor"
-)
+MOCK_ATTACHMENT_WITHOUT_EXTENSION = {
+    "id": "id:1",
+    "name": "dummy_file",
+    "server_modified": "2023-01-01T06:06:06Z",
+    "size": 200,
+    "url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/dummy_file?dl=0",
+    "is_downloadable": False,
+    "path_display": "/test/dummy_file",
+}
 
-MOCK_FILES_LIST_FOLDER_CONTINUE = ListFolderResult(
-    entries=[MOCK_FOLDER_DATA], has_more=False, cursor=None
-)
+MOCK_ATTACHMENT_WITH_LARGE_DATA = {
+    "id": "id:1",
+    "name": "dummy_file.txt",
+    "server_modified": "2023-01-01T06:06:06Z",
+    "size": 23000000,
+    "url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/dummy_file.txt?dl=0",
+    "is_downloadable": True,
+    "path_display": "/test/dummy_file.txt",
+}
 
-MOCK_SHARING_LIST_RECEIVED_FILES = ListFilesResult(
-    entries=[MOCK_SHARED_FILE_DATA_1],
-    cursor="cursor",
-)
+MOCK_ATTACHMENT_WITH_UNSUPPORTED_EXTENSION = {
+    "id": "id:1",
+    "name": "dummy_file.xyz",
+    "server_modified": "2023-01-01T06:06:06Z",
+    "size": 23000000,
+    "url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/dummy_file.xyz?dl=0",
+    "is_downloadable": True,
+    "path_display": "/test/dummy_file.xyz",
+}
 
-MOCK_SHARING_LIST_RECEIVED_FILES_CONTINUE = ListFilesResult(
-    entries=[MOCK_SHARED_FILE_DATA_2], cursor=None
-)
-
-
-class MockResponse:
-    def __init__(self):
-        self.name = "test name"
-        self.content = b"test content"
-        self.size = 200
-
-
-class MockError:
-    def is_path(self):
-        return True
-
-    def get_path(self):
-        return LookupError()
+RESPONSE_CONTENT = "# This is the dummy file"
+EXPECTED_CONTENT = {
+    "_id": "id:1",
+    "_timestamp": "2023-01-01T06:06:06Z",
+    "_attachment": "IyBUaGlzIGlzIHRoZSBkdW1teSBmaWxl",
+}
 
 
-class LookupError:
-    def is_not_found(self):
-        return True
+class JSONAsyncMock(AsyncMock):
+    def __init__(self, json, status, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._json = json
+        self.status = status
+
+    async def json(self):
+        return self._json
+
+
+class StreamReaderAsyncMock(AsyncMock):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.content = StreamReader
+
+
+def get_json_mock(mock_response, status):
+    async_mock = AsyncMock()
+    async_mock.__aenter__ = AsyncMock(
+        return_value=JSONAsyncMock(json=mock_response, status=status)
+    )
+    return async_mock
+
+
+def get_stream_reader():
+    async_mock = AsyncMock()
+    async_mock.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
+    return async_mock
 
 
 @pytest.mark.asyncio
@@ -190,81 +301,98 @@ async def test_validate_configuration_with_empty_fields_then_raise_exception(fie
 
 
 @pytest.mark.asyncio
-async def test_validate_configuration_for_valid_path():
+async def test_validate_configuration_with_valid_path():
     source = create_source(DropboxDataSource)
     source.dropbox_client.configuration.set_field(name="path", value="/shared")
 
     with patch.object(
-        source.dropbox_client._connection,
-        "files_get_metadata",
-        return_value=AsyncMock(),
+        aiohttp.ClientSession,
+        "post",
+        return_value=JSONAsyncMock(json=MOCK_CHECK_PATH, status=200),
     ):
         await source.validate_config()
 
 
 @pytest.mark.asyncio
-async def test_validate_configuration_with_invalid_path_then_raise_exception():
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_validate_configuration_with_invalid_path_then_raise_exception(
+    mock_apply_retry_strategy,
+):
     source = create_source(DropboxDataSource)
+    mock_apply_retry_strategy.return_value = mock.Mock()
     source.dropbox_client.path = "/abc"
 
     with patch.object(
-        source.dropbox_client._connection,
-        "files_get_metadata",
-        side_effect=ApiError(
-            request_id=1,
-            error=MockError(),
-            user_message_text="Api Error Occurred",
-            user_message_locale=None,
+        aiohttp.ClientSession,
+        "post",
+        side_effect=ClientResponseError(
+            status=409,
+            request_info=aiohttp.RequestInfo(
+                real_url="", method=None, headers=None, url=""
+            ),
+            history=None,
         ),
     ):
         with pytest.raises(
-            ConfigurableFieldValueError, match="Configured Path: /abc is invalid"
+            InvalidPathException, match="Configured Path: /abc is invalid"
         ):
             await source.validate_config()
 
 
 @pytest.mark.asyncio
-async def test_validate_configuration_with_invalid_app_key_and_app_secret_then_raise_exception():
+async def test_set_access_token():
     source = create_source(DropboxDataSource)
-    source.dropbox_client.path = "/abc"
 
     with patch.object(
-        source.dropbox_client._connection,
-        "files_get_metadata",
-        side_effect=BadInputError(request_id=2, message="Bad Input Error"),
+        aiohttp.ClientSession,
+        "post",
+        return_value=get_json_mock(mock_response=MOCK_ACCESS_TOKEN, status=200),
     ):
-        with pytest.raises(
-            ConfigurableFieldValueError,
-            match="Configured App Key or App Secret is invalid",
-        ):
-            await source.validate_config()
+        await source.dropbox_client._set_access_token()
+        assert source.dropbox_client.access_token == "test2344"
 
 
 @pytest.mark.asyncio
-async def test_validate_configuration_with_invalid_refresh_token_then_raise_exception():
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_set_access_token_with_incorrect_app_key_then_raise_exception(
+    mock_apply_retry_strategy,
+):
     source = create_source(DropboxDataSource)
-    source.dropbox_client.path = "/abc"
+    mock_apply_retry_strategy.return_value = mock.Mock()
 
     with patch.object(
-        source.dropbox_client._connection,
-        "files_get_metadata",
-        side_effect=AuthError(request_id=3, error="Auth Error"),
+        aiohttp.ClientSession,
+        "post",
+        return_value=get_json_mock(
+            mock_response=MOCK_ACCESS_TOKEN_FOR_INVALID_APP_KEY, status=400
+        ),
     ):
         with pytest.raises(
-            ConfigurableFieldValueError, match="Configured Refresh Token is invalid"
+            InvalidClientCredentialException,
+            match="Configured App Key or App Secret is invalid.",
         ):
-            await source.validate_config()
+            await source.dropbox_client._set_access_token()
 
 
 @pytest.mark.asyncio
-async def test_validate_config_with_invalid_concurrent_downloads():
-    source = create_source(DropboxDataSource, concurrent_downloads=1000)
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_set_access_token_with_incorrect_refresh_token_then_raise_exception(
+    mock_apply_retry_strategy,
+):
+    source = create_source(DropboxDataSource)
+    mock_apply_retry_strategy.return_value = mock.Mock()
 
-    with pytest.raises(
-        ConfigurableFieldValueError,
-        match="Field validation errors: 'Maximum concurrent downloads' value '1000' should be less than 101.",
+    with patch.object(
+        aiohttp.ClientSession,
+        "post",
+        return_value=get_json_mock(
+            mock_response=MOCK_ACCESS_TOKEN_FOR_INVALID_REFRESH_TOKEN, status=400
+        ),
     ):
-        await source.validate_config()
+        with pytest.raises(
+            InvalidRefreshTokenException, match="Configured Refresh Token is invalid."
+        ):
+            await source.dropbox_client._set_access_token()
 
 
 def test_tweak_bulk_options():
@@ -278,215 +406,312 @@ def test_tweak_bulk_options():
 
 
 @pytest.mark.asyncio
+async def test_close_with_client_session():
+    source = create_source(DropboxDataSource)
+    _ = source.dropbox_client._get_session
+
+    await source.close()
+    assert hasattr(source.dropbox_client.__dict__, "_get_session") is False
+
+
+@pytest.mark.asyncio
 async def test_ping():
     source = create_source(DropboxDataSource)
+    source.dropbox_client._set_access_token = AsyncMock()
     with patch.object(
-        source.dropbox_client._connection,
-        "users_get_current_account",
-        return_value=AsyncMock(return_value="Mock..."),
+        aiohttp.ClientSession,
+        "post",
+        return_value=get_json_mock(MOCK_CURRENT_USER, 200),
     ):
         await source.ping()
 
 
 @pytest.mark.asyncio
-async def test_ping_for_failed_connection_exception_then_raise_exception():
+@patch("connectors.sources.dropbox.RETRY_INTERVAL", 0)
+async def test_api_call_negative():
     source = create_source(DropboxDataSource)
+    source.dropbox_client.retry_count = 4
+    source.dropbox_client._set_access_token = AsyncMock()
+
     with patch.object(
-        source.dropbox_client._connection,
-        "users_get_current_account",
-        side_effect=Exception("Something went wrong"),
+        aiohttp.ClientSession, "post", side_effect=Exception("Something went wrong")
     ):
         with pytest.raises(Exception):
-            await source.ping()
+            await anext(
+                source.dropbox_client.api_call(
+                    base_url=HOST_URLS["FILES_FOLDERS_HOST_URL"],
+                    url_name=PING,
+                    data=json.dumps(None),
+                )
+            )
+
+    with patch.object(
+        aiohttp.ClientSession, "post", side_effect=ServerDisconnectedError()
+    ):
+        with pytest.raises(Exception):
+            await anext(
+                source.dropbox_client.api_call(
+                    base_url=HOST_URLS["FILES_FOLDERS_HOST_URL"],
+                    url_name=PING,
+                    data=json.dumps(None),
+                )
+            )
 
 
 @pytest.mark.asyncio
-async def test_ping_for_incorrect_app_key_and_app_secret_then_raise_exception():
+async def test_api_call():
     source = create_source(DropboxDataSource)
+    source.dropbox_client._set_access_token = AsyncMock()
+
     with patch.object(
-        source.dropbox_client._connection,
-        "users_get_current_account",
-        side_effect=BadInputError(request_id=2, message="Bad Input Error"),
+        aiohttp.ClientSession,
+        "post",
+        return_value=get_json_mock(MOCK_CURRENT_USER, 200),
     ):
-        with pytest.raises(
-            Exception, match="Configured App Key or App Secret is invalid"
+        EXPECTED_RESPONSE = {
+            "account_id": "acc_id:1234",
+            "name": {
+                "given_name": "John",
+                "surname": "Wilber",
+                "display_name": "John Wilber",
+                "abbreviated_name": "JW",
+            },
+            "email": "john.wilber@abcd.com",
+            "country": "US",
+        }
+        response = await anext(
+            source.dropbox_client.api_call(
+                base_url=HOST_URLS["FILES_FOLDERS_HOST_URL"],
+                url_name=PING,
+                data=json.dumps(None),
+            )
+        )
+        actual_response = await response.json()
+        assert actual_response == EXPECTED_RESPONSE
+
+
+@pytest.mark.asyncio
+async def test_set_access_token_when_token_expires_at_is_str():
+    source = create_source(DropboxDataSource)
+    source.dropbox_client.token_expiration_time = "2023-02-10T09:02:23.629821"
+    mock_token = {"access_token": "test2344", "expires_in": "1234555"}
+    async_response_token = get_json_mock(mock_token, 200)
+
+    with patch.object(aiohttp.ClientSession, "post", return_value=async_response_token):
+        actual_response = await source.dropbox_client._set_access_token()
+        assert actual_response is None
+
+
+@pytest.fixture
+def patch_default_wait_multiplier():
+    with mock.patch("connectors.sources.dropbox.RETRY_INTERVAL", 0):
+        yield
+
+
+@pytest.mark.asyncio
+@mock.patch("connectors.sources.dropbox.RETRY_INTERVAL", 0)
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_api_call_when_token_is_expired(mock_apply_retry_strategy):
+    source = create_source(DropboxDataSource)
+    mock_apply_retry_strategy.return_value = mock.Mock()
+
+    with patch.object(
+        aiohttp.ClientSession,
+        "post",
+        side_effect=[
+            ClientResponseError(
+                status=401,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                history=None,
+                message="Unauthorized",
+            ),
+            get_json_mock(MOCK_ACCESS_TOKEN, 200),
+            get_json_mock(MOCK_FILES_FOLDERS, 200),
+        ],
+    ):
+        actual_response = await anext(
+            source.dropbox_client.api_call(
+                base_url=HOST_URLS["FILES_FOLDERS_HOST_URL"],
+                url_name=PING,
+                data=json.dumps(None),
+            )
+        )
+        actual_response = await actual_response.json()
+        assert actual_response == MOCK_FILES_FOLDERS
+
+
+@pytest.mark.asyncio
+async def test_api_call_when_status_429_exception():
+    source = create_source(DropboxDataSource)
+
+    source.dropbox_client._set_access_token = AsyncMock()
+
+    with patch.object(
+        aiohttp.ClientSession,
+        "post",
+        side_effect=[
+            ClientResponseError(
+                status=429,
+                headers={"Retry-After": 0},
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                history=(),
+            ),
+            get_json_mock(MOCK_FILES_FOLDERS, 200),
+        ],
+    ):
+        _ = source.dropbox_client._get_session
+        response = await anext(
+            source.dropbox_client.api_call(
+                base_url=HOST_URLS["FILES_FOLDERS_HOST_URL"],
+                url_name=PING,
+                data=json.dumps(None),
+            )
+        )
+        actual_response = await response.json()
+        assert actual_response == MOCK_FILES_FOLDERS
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.dropbox.DEFAULT_RETRY_AFTER", 0)
+async def test_api_call_when_status_429_exception_without_retry_after_header():
+    source = create_source(DropboxDataSource)
+    source.dropbox_client.retry_count = 1
+
+    source.dropbox_client._set_access_token = AsyncMock()
+
+    with patch.object(
+        aiohttp.ClientSession,
+        "post",
+        side_effect=ClientResponseError(
+            status=429,
+            headers={},
+            request_info=aiohttp.RequestInfo(
+                real_url="", method=None, headers=None, url=""
+            ),
+            history=(),
+        ),
+    ):
+        _ = source.dropbox_client._get_session
+        with pytest.raises(ClientResponseError):
+            await anext(
+                source.dropbox_client.api_call(
+                    base_url=HOST_URLS["FILES_FOLDERS_HOST_URL"],
+                    url_name=PING,
+                    data=json.dumps(None),
+                )
+            )
+        await source.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "attachment, is_shared, expected_content",
+    [
+        (MOCK_ATTACHMENT, False, EXPECTED_CONTENT),
+        (MOCK_PAPER_FILE, False, EXPECTED_CONTENT),
+        (MOCK_ATTACHMENT, True, EXPECTED_CONTENT),
+        (MOCK_ATTACHMENT_WITHOUT_EXTENSION, False, None),
+        (MOCK_ATTACHMENT_WITH_LARGE_DATA, False, None),
+        (MOCK_ATTACHMENT_WITH_UNSUPPORTED_EXTENSION, False, None),
+        (SKIPPED_ATTACHMENT, False, None),
+    ],
+)
+async def test_get_content_when_is_downloadable_is_true(
+    attachment, is_shared, expected_content
+):
+    source = create_source(DropboxDataSource)
+    source.dropbox_client._set_access_token = AsyncMock()
+
+    with mock.patch("aiohttp.ClientSession.post", return_value=get_stream_reader()):
+        with mock.patch(
+            "aiohttp.StreamReader.iter_chunked",
+            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
         ):
-            await source.ping()
+            response = await source.get_content(
+                attachment=attachment,
+                is_shared=is_shared,
+                doit=True,
+            )
+            assert response == expected_content
 
 
 @pytest.mark.asyncio
-async def test_ping_for_incorrect_refresh_token_then_raise_exception():
-    source = create_source(DropboxDataSource)
-    with patch.object(
-        source.dropbox_client._connection,
-        "users_get_current_account",
-        side_effect=AuthError(request_id=3, error="Auth Error"),
-    ):
-        with pytest.raises(Exception, match="Configured Refresh Token is invalid"):
-            await source.ping()
-
-
-@pytest.mark.asyncio
-async def test_close_with_client_session():
-    source = create_source(DropboxDataSource)
-    _ = source.dropbox_client._connection
-
-    await source.close()
-    assert hasattr(source.dropbox_client.__dict__, "_connection") is False
-
-
-@pytest.mark.asyncio
-async def test_close_without_client_session():
-    source = create_source(DropboxDataSource)
-
-    await source.close()
-    assert source.dropbox_client._session is None
-
-
 @freeze_time("2023-01-01T06:06:06")
-@pytest.mark.asyncio
 async def test_fetch_files_folders():
     source = create_source(DropboxDataSource)
-    source.dropbox_client.path = "/test"
+    source.dropbox_client.path = "/"
 
-    mock_connection = Mock()
-    source.dropbox_client._connection = mock_connection
-
-    source.dropbox_client._connection.files_list_folder = Mock(
-        return_value=MOCK_FILES_LIST_FOLDER
-    )
-
-    source.dropbox_client._connection.files_list_folder_continue = Mock(
-        return_value=MOCK_FILES_LIST_FOLDER_CONTINUE
-    )
-
-    expected_response = [EXPECTED_FILE, EXPECTED_FOLDER]
     actual_response = []
-    async for _, result in source._fetch_files_folders():
-        actual_response.append(result)
+    with patch.object(
+        source.dropbox_client,
+        "api_call",
+        side_effect=[
+            AsyncIterator([JSONAsyncMock(MOCK_FILES_FOLDERS, status=200)]),
+            AsyncIterator([JSONAsyncMock(MOCK_FILES_FOLDERS_CONTINUE, status=200)]),
+        ],
+    ):
+        async for document, _ in source._fetch_files_folders("/"):
+            actual_response.append(document)
 
-    assert actual_response == expected_response
+    assert actual_response == EXPECTED_FILES_FOLDERS
 
 
 @pytest.mark.asyncio
+@freeze_time("2023-01-01T06:06:06")
 async def test_fetch_shared_files():
     source = create_source(DropboxDataSource)
+    source.dropbox_client.path = "/"
 
-    mock_connection = Mock()
-    source.dropbox_client._connection = mock_connection
-
-    source.dropbox_client._connection.sharing_list_received_files = Mock(
-        return_value=MOCK_SHARING_LIST_RECEIVED_FILES
-    )
-
-    source.dropbox_client._connection.sharing_list_received_files_continue = Mock(
-        return_value=MOCK_SHARING_LIST_RECEIVED_FILES_CONTINUE
-    )
-
-    source.dropbox_client._connection.sharing_get_shared_link_file = Mock(
-        return_value=(FILE_LINK_METADATA, MockResponse())
-    )
-
-    expected_response = [EXPECTED_SHARED_FILE_1, EXPECTED_SHARED_FILE_2]
     actual_response = []
-    async for _, _, result in source._fetch_shared_files():
-        actual_response.append(result)
+    with patch.object(
+        source.dropbox_client,
+        "api_call",
+        side_effect=[
+            AsyncIterator([JSONAsyncMock(MOCK_SHARED_FILES, status=200)]),
+            AsyncIterator([JSONAsyncMock(MOCK_RECEIVED_FILE_METADATA_1, status=200)]),
+            AsyncIterator([JSONAsyncMock(MOCK_SHARED_FILES_CONTINUE, status=200)]),
+            AsyncIterator([JSONAsyncMock(MOCK_RECEIVED_FILE_METADATA_2, status=200)]),
+        ],
+    ):
+        async for document, _ in source._fetch_shared_files():
+            actual_response.append(document)
 
-    assert actual_response == expected_response
-
-
-@pytest.mark.asyncio
-async def test_get_content_with_text_file():
-    source = create_source(DropboxDataSource)
-
-    mock_connection = Mock()
-    source.dropbox_client._connection = mock_connection
-
-    source.dropbox_client._connection.files_download.return_value = (
-        FileMetadata("/test/test_file.txt"),
-        MagicMock(content=b"This is a text content"),
-    )
-
-    response = await source.get_content(attachment=MOCK_FILE_DATA, doit=True)
-    assert response == EXPECTED_CONTENT_FOR_TEXT_FILE
+    assert actual_response == EXPECTED_SHARED_FILES
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_paper_file():
+@freeze_time("2023-01-01T06:06:06")
+@patch.object(
+    DropboxDataSource,
+    "_fetch_files_folders",
+    side_effect=AsyncIterator(
+        [
+            (EXPECTED_FILES_FOLDERS[0], "files-folders"),
+            (EXPECTED_FILES_FOLDERS[1], "files-folders"),
+        ],
+    ),
+)
+@patch.object(
+    DropboxDataSource,
+    "_fetch_shared_files",
+    return_value=AsyncIterator(
+        [
+            (EXPECTED_SHARED_FILES[0], "shared_files"),
+            (EXPECTED_SHARED_FILES[1], "shared_files"),
+        ],
+    ),
+)
+async def test_get_docs(files_folders_patch, shared_files_patch):
     source = create_source(DropboxDataSource)
+    expected_responses = [*EXPECTED_FILES_FOLDERS, *EXPECTED_SHARED_FILES]
+    source.get_content = Mock(return_value=EXPECTED_CONTENT)
 
-    mock_connection = Mock()
-    source.dropbox_client._connection = mock_connection
+    documents = []
+    async for item, _ in source.get_docs():
+        documents.append(item)
 
-    source.dropbox_client._connection.files_export.return_value = (
-        FileMetadata("/test/dummy_file.paper"),
-        MagicMock(content=b"# This is a markdown content"),
-    )
-
-    response = await source.get_content(attachment=MOCK_PAPER_FILE_DATA, doit=True)
-    assert response == EXPECTED_CONTENT_FOR_PAPER_FILE
-
-
-@pytest.mark.asyncio
-async def test_get_content_with_file_size_zero():
-    source = create_source(DropboxDataSource)
-
-    mock_file_with_size_zero = copy(MOCK_FILE_DATA)
-    mock_file_with_size_zero.size = 0
-    response = await source.get_content(attachment=mock_file_with_size_zero, doit=True)
-    assert response is None
-
-
-@pytest.mark.asyncio
-async def test_get_content_with_large_file_size():
-    source = create_source(DropboxDataSource)
-
-    mock_file_with_large_size = copy(MOCK_FILE_DATA)
-    mock_file_with_large_size.size = 23000000
-    response = await source.get_content(attachment=mock_file_with_large_size, doit=True)
-    assert response is None
-
-
-@pytest.mark.asyncio
-async def test_get_content_with_unsupported_tika_file_type_then_skip():
-    source = create_source(DropboxDataSource)
-
-    mock_file_with_unsupported_tika_extension = copy(MOCK_FILE_DATA)
-    mock_file_with_unsupported_tika_extension.name = "screenshot.png"
-    response = await source.get_content(
-        attachment=mock_file_with_unsupported_tika_extension, doit=True
-    )
-    assert response is None
-
-
-@pytest.mark.asyncio
-async def test_get_content_without_extension_then_skip():
-    source = create_source(DropboxDataSource)
-
-    mock_file_without_extension = copy(MOCK_FILE_DATA)
-    mock_file_without_extension.name = "ssh-new"
-    response = await source.get_content(
-        attachment=mock_file_without_extension, doit=True
-    )
-    assert response is None
-
-
-@pytest.mark.asyncio
-async def test_get_docs():
-    source = create_source(DropboxDataSource)
-
-    source._fetch_files_folders = AsyncIterator(
-        [(MOCK_FILE_DATA, EXPECTED_FILE), (MOCK_FOLDER_DATA, EXPECTED_FOLDER)]
-    )
-
-    source._fetch_shared_files = AsyncIterator(
-        [(FILE_LINK_METADATA, MockResponse(), EXPECTED_SHARED_FILE_1)]
-    )
-
-    source.get_content = AsyncMock(return_value=EXPECTED_CONTENT_FOR_TEXT_FILE)
-
-    response = []
-    async for document, _ in source.get_docs():
-        response.append(document)
-
-    assert response == [EXPECTED_FILE, EXPECTED_FOLDER, EXPECTED_SHARED_FILE_1]
+    assert documents == expected_responses
