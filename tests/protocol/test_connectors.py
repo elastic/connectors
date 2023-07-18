@@ -914,13 +914,13 @@ async def test_connector_prepare_different_id():
     config = {
         "connector_id": "2",
         "service_type": "banana",
-        "sources": {},
     }
+    sources = {}
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
     index.update = AsyncMock()
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.prepare(config)
+    await connector.prepare(config, sources)
     index.update.assert_not_awaited()
 
 
@@ -973,13 +973,13 @@ async def test_connector_prepare_with_prepared_connector():
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {"banana": "tests.protocol.test_connectors:Banana"},
     }
+    sources = {"banana": "tests.protocol.test_connectors:Banana"}
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
     index.update = AsyncMock()
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.prepare(config)
+    await connector.prepare(config, sources)
     index.update.assert_not_awaited()
 
 
@@ -1018,8 +1018,8 @@ async def test_connector_prepare_with_connector_missing_field_properties_creates
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {"banana": "tests.protocol.test_connectors:Banana"},
     }
+    sources = {"banana": "tests.protocol.test_connectors:Banana"}
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
     index.update = AsyncMock()
@@ -1032,7 +1032,7 @@ async def test_connector_prepare_with_connector_missing_field_properties_creates
     expected["one"]["extra_property"] = "hehe"
     del expected["two"]
 
-    await connector.prepare(config)
+    await connector.prepare(config, sources)
     index.update.assert_called_once_with(
         doc_id=doc_id,
         doc={"configuration": expected},
@@ -1054,14 +1054,14 @@ async def test_connector_prepare_with_service_type_not_configured():
     }
     config = {
         "connector_id": doc_id,
-        "sources": {"banana": "tests.protocol.test_connectors:Banana"},
     }
+    sources = {"banana": "tests.protocol.test_connectors:Banana"}
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
     index.update = AsyncMock()
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     with pytest.raises(ServiceTypeNotConfiguredError):
-        await connector.prepare(config)
+        await connector.prepare(config, sources)
         index.update.assert_not_awaited()
 
 
@@ -1079,14 +1079,14 @@ async def test_connector_prepare_with_service_type_not_supported():
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {},
     }
+    sources = {}
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
     index.update = AsyncMock()
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     with pytest.raises(ServiceTypeNotSupportedError):
-        await connector.prepare(config)
+        await connector.prepare(config, sources)
         index.update.assert_not_awaited()
 
 
@@ -1104,14 +1104,14 @@ async def test_connector_prepare_with_data_source_error():
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {"banana": "foobar"},
     }
+    sources = {"banana": "foobar"}
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
     index.update = AsyncMock()
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     with pytest.raises(DataSourceError):
-        await connector.prepare(config)
+        await connector.prepare(config, sources)
         index.update.assert_not_awaited()
 
 
@@ -1133,13 +1133,13 @@ async def test_connector_prepare_with_different_features():
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {"banana": "tests.protocol.test_connectors:Banana"},
     }
+    sources = {"banana": "tests.protocol.test_connectors:Banana"}
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
     index.update = AsyncMock()
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.prepare(config)
+    await connector.prepare(config, sources)
     index.update.assert_called_once_with(
         doc_id=doc_id,
         doc={"features": Banana.features()},
@@ -1162,13 +1162,13 @@ async def test_connector_prepare():
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {"banana": "tests.protocol.test_connectors:Banana"},
     }
+    sources = {"banana": "tests.protocol.test_connectors:Banana"}
     index = Mock()
     index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
     index.update = AsyncMock()
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.prepare(config)
+    await connector.prepare(config, sources)
     index.update.assert_called_once_with(
         doc_id=doc_id,
         doc={
@@ -1196,8 +1196,8 @@ async def test_connector_prepare_with_race_condition():
     config = {
         "connector_id": doc_id,
         "service_type": "banana",
-        "sources": {"banana": "tests.protocol.test_connectors:Banana"},
     }
+    sources = {"banana": "tests.protocol.test_connectors:Banana"}
     connector_doc_after_update = connector_doc | {
         "_source": {
             "service_type": "banana",
@@ -1217,7 +1217,7 @@ async def test_connector_prepare_with_race_condition():
         )
     )
     connector = Connector(elastic_index=index, doc_source=connector_doc)
-    await connector.prepare(config)
+    await connector.prepare(config, sources)
     index.update.assert_called_once_with(
         doc_id=doc_id,
         doc={

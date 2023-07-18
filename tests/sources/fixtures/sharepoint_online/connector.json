@@ -106,6 +106,26 @@
         "order": 7,
         "ui_restrictions": []
       },
+      "fetch_drive_item_permissions": {
+        "depends_on": [
+          {
+            "field": "use_document_level_security",
+            "value": true
+          }
+        ],
+        "display": "toggle",
+        "tooltip": "Enable this option to fetch drive item specific permissions. This setting can increase sync time.",
+        "default_value": true,
+        "label": "Fetch drive item permissions",
+        "sensitive": false,
+        "type": "bool",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": true,
+        "order": 8,
+        "ui_restrictions": []
+      },
       "fetch_unique_page_permissions": {
         "depends_on": [
           {

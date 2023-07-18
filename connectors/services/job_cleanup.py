@@ -21,13 +21,8 @@ class JobCleanUpService(BaseService):
     def __init__(self, config):
         super().__init__(config)
         self.idling = int(self.service_config.get("job_cleanup_interval", 60 * 5))
-        self.native_service_types = self.config.get("native_service_types")
-        if self.native_service_types is None:
-            self.native_service_types = []
-        if "connector_id" in self.config:
-            self.connector_ids = [self.config.get("connector_id")]
-        else:
-            self.connector_ids = []
+        self.native_service_types = self.config.get("native_service_types", []) or []
+        self.connector_ids = list(self.connectors.keys())
         self.connector_index = None
         self.sync_job_index = None
 
