@@ -664,7 +664,7 @@ class GitHubDataSource(BaseDataSource):
                 "label": "GitHub URL",
                 "order": 2,
                 "type": "str",
-                "value": "http://127.0.0.1:5000",
+                "value": "http://127.0.0.1:9091",
             },
             "token": {
                 "label": "GitHub Token",
