@@ -39,6 +39,7 @@ from connectors.sources.sharepoint_online import (
     TokenFetchFailed,
     _domain_group_id,
     _emails_and_usernames_of_domain_group,
+    _get_login_name,
     _prefix_email,
     _prefix_group,
     _prefix_identity,
@@ -47,6 +48,7 @@ from connectors.sources.sharepoint_online import (
     _prefix_user,
     _prefix_user_id,
     is_domain_group,
+    is_dynamic_group,
     is_person,
 )
 from tests.commons import AsyncIterator
@@ -93,6 +95,8 @@ SITE_USER_ONE_ID = "site-user-id-1"
 USER_ONE_EMAIL = "user1@spo.com"
 
 USER_TWO_EMAIL = "user2@spo.com"
+
+USER_TWO_NAME = "user2"
 
 NUMBER_OF_DEFAULT_GROUPS = 3
 
@@ -1009,6 +1013,26 @@ class TestSharepointOnlineClient:
         assert len(returned_items) == 0
 
     @pytest.mark.asyncio
+    async def test_site_page_has_unique_role_assignments(self, client, patch_fetch):
+        url = f"https://{self.tenant_name}.sharepoint.com"
+        site_page_id = 1
+
+        patch_fetch.return_value = {"value": True}
+
+        assert await client.site_page_has_unique_role_assignments(url, site_page_id)
+
+    @pytest.mark.asyncio
+    async def test_site_page_has_unique_role_assignments_not_found(
+        self, client, patch_fetch
+    ):
+        url = f"https://{self.tenant_name}.sharepoint.com"
+        site_page_id = 1
+
+        patch_fetch.side_effect = NotFound()
+
+        assert not await client.site_page_has_unique_role_assignments(url, site_page_id)
+
+    @pytest.mark.asyncio
     async def test_site_pages_wrong_tenant(self, client, patch_scroll):
         invalid_tenant_name = "something"
         page_url_path = f"https://{invalid_tenant_name}.sharepoint.com/random/totally/made/up/page.aspx"
@@ -1033,29 +1057,27 @@ class TestSharepointOnlineClient:
         assert http_call_result == actual_result
 
     @pytest.mark.asyncio
-    async def test_site_groups(self, client, patch_scroll):
+    async def test_site_group(self, client, patch_fetch):
         site_groups_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/sitegroups"
-        groups = ["group1", "group2"]
+        group_principal_id = "1"
+        group = {"id": group_principal_id}
 
-        actual_groups = await self._execute_scrolling_method(
-            client.site_groups, patch_scroll, groups, site_groups_url
-        )
+        patch_fetch.return_value = group
 
-        patch_scroll.return_value = groups
+        actual_group = await client.site_group(site_groups_url, group_principal_id)
 
-        assert actual_groups == groups
+        assert actual_group == group
 
     @pytest.mark.asyncio
-    async def test_site_groups_not_found(self, client, patch_scroll):
+    async def test_site_group_not_found(self, client, patch_fetch):
         site_groups_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/sitegroups"
+        group_principal_id = "1"
 
-        patch_scroll.side_effect = NotFound()
+        patch_fetch.side_effect = NotFound()
 
-        returned_items = []
-        async for item in client.site_groups(site_groups_url):
-            returned_items.append(item)
+        site_group = await client.site_group(site_groups_url, group_principal_id)
 
-        assert len(returned_items) == 0
+        assert len(site_group) == 0
 
     @pytest.mark.asyncio
     async def test_site_users(self, client, patch_scroll):
@@ -1208,31 +1230,33 @@ class TestSharepointOnlineClient:
         assert len(role_assignments) == 0
 
     @pytest.mark.asyncio
-    async def test_site_page_role_assignments(self, client, patch_fetch):
-        site_page_role_assignments_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
+    async def test_site_page_role_assignments(self, client, patch_scroll):
+        site_web_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
         site_page_id = 1
-        role_assignments = {"value": ["role"]}
+        role_assignments = [{"value": ["role"]}]
 
-        patch_fetch.return_value = role_assignments
-
-        actual_role_assignments = await client.site_page_role_assignments(
-            site_page_role_assignments_url, site_page_id
+        actual_role_assignments = await self._execute_scrolling_method(
+            partial(client.site_page_role_assignments, site_web_url, site_page_id),
+            patch_scroll,
+            role_assignments,
         )
 
         assert actual_role_assignments == role_assignments
 
     @pytest.mark.asyncio
-    async def test_site_page_role_assignments_not_found(self, client, patch_fetch):
+    async def test_site_page_role_assignments_not_found(self, client, patch_scroll):
         site_page_role_assignments_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
         site_page_id = 1
 
-        patch_fetch.side_effect = NotFound
+        patch_scroll.side_effect = NotFound
 
-        role_assignments = await client.site_page_role_assignments(
+        returned_items = []
+        async for item in client.site_page_role_assignments(
             site_page_role_assignments_url, site_page_id
-        )
+        ):
+            returned_items.append(item)
 
-        assert len(role_assignments) == 0
+        assert len(returned_items) == 0
 
     @pytest.mark.asyncio
     async def test_users_and_groups_for_role_assignment(self, client, patch_fetch):
@@ -1529,7 +1553,7 @@ class TestSharepointOnlineDataSource:
 
     @property
     def site_pages(self):
-        return [{"Id": 4, "odata.id": "11", "GUID": "thats-not-a-guid"}]
+        return [{"Id": "4", "odata.id": "11", "GUID": "thats-not-a-guid"}]
 
     @property
     def user_information_list(self):
@@ -1599,6 +1623,10 @@ class TestSharepointOnlineDataSource:
     @property
     def site_list_item_role_assignments(self):
         return {"value": ["role"]}
+
+    @property
+    def site_page_has_unique_role_assignments(self):
+        return True
 
     @property
     def site_page_role_assignments(self):
@@ -1720,7 +1748,7 @@ class TestSharepointOnlineDataSource:
             client = new_mock.return_value
             client.site_collections = AsyncIterator(self.site_collections)
             client.sites = AsyncIterator(self.sites)
-            client.site_groups = AsyncIterator(self.site_groups)
+            client.site_group = AsyncIterator(self.site_groups)
             client.user_information_list = AsyncIterator(self.user_information_list)
             client.group = AsyncMock(return_value=self.group)
             client.group_members = AsyncIterator(self.group_members)
@@ -1736,8 +1764,11 @@ class TestSharepointOnlineDataSource:
             client.site_list_item_role_assignments = AsyncMock(
                 return_value=self.site_list_item_role_assignments
             )
-            client.site_page_role_assignments = AsyncMock(
-                return_value=self.site_page_role_assignments
+            client.site_page_has_unique_role_assignments = AsyncMock(
+                return_value=self.site_page_has_unique_role_assignments
+            )
+            client.site_page_role_assignments = AsyncIterator(
+                [self.site_page_role_assignments]
             )
             client.users_and_groups_for_role_assignment = AsyncMock(
                 return_value=self.users_and_groups_for_role_assignments
@@ -2412,7 +2443,7 @@ class TestSharepointOnlineDataSource:
         assert _prefix_group(GROUP_ONE) in access_control
         assert _prefix_group(GROUP_TWO) in access_control
 
-        assert _prefix_email(USER_ONE_EMAIL) in access_control
+        assert _prefix_user(USER_ONE_EMAIL) in access_control
         assert _prefix_email(USER_TWO_EMAIL) in access_control
 
     @pytest.mark.parametrize(
@@ -2781,8 +2812,122 @@ class TestSharepointOnlineDataSource:
             }
         )
 
+    def test_is_dynamic_group(self):
+        assert is_dynamic_group(
+            "c:0o.c|federateddirectoryclaimprovider|1234-abcd-5678-efgh"
+        )
+
+    @pytest.mark.parametrize(
+        "login_name",
+        [
+            "c:0u.c|tenant|67f8dab3bb7a912bc3da51b94b6bc5d23edef0e83056056f1a3929b4e04b8624",
+            "1234",
+            "",
+            None,
+        ],
+    )
+    def test_is_not_dynamic_group(self, login_name):
+        assert not is_dynamic_group(login_name)
+
     def test_is_person(self):
         assert is_person({"ContentType": "Person"})
 
     def test_is_not_person(self):
         assert not is_person({"ContentType": "DomainGroup"})
+
+    @pytest.mark.parametrize(
+        "role_assignment, expected_access_control",
+        [
+            (
+                # Group (access control: one user's principal name and one user's login name)
+                {
+                    "Member": {
+                        "odata.type": "SP.Group",
+                        "Users": [
+                            {
+                                "odata.type": "SP.User",
+                                "LoginName": None,
+                                "UserPrincipalName": USER_ONE_EMAIL,
+                            },
+                            {
+                                "odata.type": "SP.User",
+                                "LoginName": f"i:0#.f|membership|{USER_TWO_EMAIL}",
+                                "UserPrincipalName": None,
+                            },
+                        ],
+                    },
+                },
+                [_prefix_user(USER_ONE_EMAIL), _prefix_user(USER_TWO_EMAIL)],
+            ),
+            (
+                # User (access control: only principal name)
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "LoginName": None,
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                },
+                [_prefix_user(USER_ONE_EMAIL)],
+            ),
+            (
+                # User (access control: login name and principal name)
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "LoginName": f"i:0#.f|membership|{USER_TWO_EMAIL}",
+                        "UserPrincipalName": USER_TWO_NAME,
+                    },
+                },
+                [_prefix_user(USER_TWO_EMAIL), _prefix_user(USER_TWO_NAME)],
+            ),
+            (
+                # Dynamic group (access control: login name)
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "LoginName": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ONE_ID}",
+                    },
+                },
+                [_prefix_group(GROUP_ONE_ID)],
+            ),
+            (
+                # Unknown type (access control: nothing)
+                {
+                    "Member": {
+                        "odata.type": "Unknown type",
+                        "LoginName": None,
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                },
+                [],
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_get_access_control_from_role_assignment(
+        self, role_assignment, expected_access_control
+    ):
+        source = create_source(SharepointOnlineDataSource)
+        url = "some url"
+
+        access_control = await source._get_access_control_from_role_assignment(
+            url, role_assignment
+        )
+
+        assert len(access_control) == len(expected_access_control)
+        assert all(identity in access_control for identity in expected_access_control)
+
+    @pytest.mark.parametrize(
+        "raw_login_name, expected_login_name",
+        [
+            (f"i:0#.f|membership|{USER_ONE_EMAIL}", USER_ONE_EMAIL),
+            (f"membership|{USER_ONE_EMAIL}", None),
+            (f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ONE_ID}", GROUP_ONE_ID),
+            (USER_ONE_EMAIL, None),
+            ("", None),
+            (None, None),
+        ],
+    )
+    def test_get_login_name(self, raw_login_name, expected_login_name):
+        assert _get_login_name(raw_login_name) == expected_login_name
