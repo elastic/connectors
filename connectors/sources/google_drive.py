@@ -462,6 +462,7 @@ class GoogleDriveDataSource(BaseDataSource):
             "service_account_credentials": {
                 "display": "textarea",
                 "label": "Google Drive service account JSON",
+                "sensitive": True,
                 "order": 1,
                 "type": "str",
                 "value": "",

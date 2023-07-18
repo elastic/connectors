@@ -7,7 +7,7 @@
       "tooltip": null,
       "default_value": null,
       "label": "Google Drive service account JSON",
-      "sensitive": false,
+      "sensitive": true,
       "type": "str",
       "required": true,
       "options": [],
