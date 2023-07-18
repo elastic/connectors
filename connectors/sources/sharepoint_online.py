@@ -1494,7 +1494,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ), download_func
 
                 # Sync site pages
-                async for site_page in self.site_pages(site["webUrl"], access_control):
+                async for site_page in self.site_pages(site["webUrl"], site_access_control):
                     yield site_page, None
 
     async def get_docs_incrementally(self, sync_cursor, filtering=None):
@@ -1574,7 +1574,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ), download_func, OP_INDEX
 
                 # Sync site pages
-                async for site_page in self.site_pages(site["webUrl"], access_control):
+                async for site_page in self.site_pages(site["webUrl"], site_access_control):
                     yield site_page, None, OP_INDEX
 
     async def site_collections(self):

@@ -2886,10 +2886,10 @@ class TestSharepointOnlineDataSource:
                 {
                     "Member": {
                         "odata.type": "SP.User",
-                        "LoginName": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ID}",
+                        "LoginName": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ONE_ID}",
                     },
                 },
-                [_prefix_group(GROUP_ID)],
+                [_prefix_group(GROUP_ONE_ID)],
             ),
             (
                 # Unknown type (access control: nothing)
@@ -2923,7 +2923,7 @@ class TestSharepointOnlineDataSource:
         [
             (f"i:0#.f|membership|{USER_ONE_EMAIL}", USER_ONE_EMAIL),
             (f"membership|{USER_ONE_EMAIL}", None),
-            (f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ID}", GROUP_ID),
+            (f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ONE_ID}", GROUP_ONE_ID),
             (USER_ONE_EMAIL, None),
             ("", None),
             (None, None),
