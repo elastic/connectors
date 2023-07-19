@@ -511,9 +511,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "validations": [
-                    {"type": "greater_than", "constraint": 0}
-                ],
+                "validations": [{"type": "greater_than", "constraint": 0}],
                 "value": GOOGLE_API_MAX_CONCURRENCY,
             },
         }
@@ -588,7 +586,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Google Drive"""
-        print('Max concurrency:')
+        print("Max concurrency:")
         print(self._max_concurrency())
         try:
             await self.google_drive_client.ping()
@@ -606,7 +604,6 @@ class GoogleDriveDataSource(BaseDataSource):
             return False
 
         return bool(self.configuration.get("use_document_level_security", False))
-
 
     def _max_concurrency(self):
         return self.configuration.get("max_concurrency")

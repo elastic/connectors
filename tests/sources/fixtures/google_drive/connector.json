@@ -33,7 +33,7 @@
       "options": [],
       "validations": [],
       "value": "admin@your-organization.com",
-      "order": 4,
+      "order": 3,
       "ui_restrictions": []
     },
     "use_document_level_security": {
@@ -50,6 +50,28 @@
       "value": false,
       "order": 2,
       "ui_restrictions": []
+    },
+    "max_concurrency": {
+      "depends_on": [],
+      "display": "numeric",
+      "tooltip": null,
+      "default_value": 25,
+      "label": "Maximum concurrent open connections",
+      "sensitive": false,
+      "type": "int",
+      "required": false,
+      "options": [],
+      "validations": [
+        {
+          "constraint": 0,
+          "type": "greater_than"
+        }
+      ],
+      "value": 25,
+      "order": 4,
+      "ui_restrictions": [
+        "advanced"
+      ]
     }
   },
   "custom_scheduling": {},
