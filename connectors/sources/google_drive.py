@@ -28,7 +28,7 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 FILE_SIZE_LIMIT = 10485760  # ~ 10 Megabytes
 
-GOOGLE_API_MAX_CONCURRENCY = 30  # Max open connections to Google API
+GOOGLE_API_MAX_CONCURRENCY = 25  # Max open connections to Google API
 
 DRIVE_API_TIMEOUT = 1 * 60  # 1 min
 
@@ -482,6 +482,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 "label": "Google Drive service account JSON",
                 "sensitive": True,
                 "order": 1,
+                "tooltip": "This connectors authenticates as a service account to synchronize content from Google Drive.",
                 "type": "str",
                 "value": "",
             },
@@ -497,10 +498,23 @@ class GoogleDriveDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "text",
                 "label": "Google Workspace admin email",
-                "order": 4,
+                "order": 3,
                 "tooltip": "In order to use Document Level Security you need to enable Google Workspace domain-wide delegation of authority for your service account. A service account with delegated authority can impersonate admin user with sufficient permissions to fetch all users and their corresponding permissions.",
                 "type": "str",
                 "value": "admin@your-organization.com",
+            },
+            "max_concurrency": {
+                "default_value": GOOGLE_API_MAX_CONCURRENCY,
+                "display": "numeric",
+                "label": "Maximum concurrent open connections",
+                "order": 4,
+                "required": False,
+                "type": "int",
+                "ui_restrictions": ["advanced"],
+                "validations": [
+                    {"type": "greater_than", "constraint": 0}
+                ],
+                "value": GOOGLE_API_MAX_CONCURRENCY,
             },
         }
 
@@ -574,6 +588,8 @@ class GoogleDriveDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Google Drive"""
+        print('Max concurrency:')
+        print(self._max_concurrency())
         try:
             await self.google_drive_client.ping()
             self._logger.info("Successfully connected to the Google Drive.")
@@ -590,6 +606,10 @@ class GoogleDriveDataSource(BaseDataSource):
             return False
 
         return bool(self.configuration.get("use_document_level_security", False))
+
+
+    def _max_concurrency(self):
+        return self.configuration.get("max_concurrency")
 
     def access_control_query(self, access_control):
         return {
@@ -644,8 +664,8 @@ class GoogleDriveDataSource(BaseDataSource):
             async with semaphore:
                 return await process_item_func(item)
 
-        # Create a semaphore with a concurrency limit of GOOGLE_API_MAX_CONCURRENCY
-        semaphore = asyncio.Semaphore(GOOGLE_API_MAX_CONCURRENCY)
+        # Create a semaphore with a concurrency limit of max_concurrency in the config
+        semaphore = asyncio.Semaphore(self._max_concurrency())
 
         # Create tasks for each item, processing them concurrently with the semaphore
         tasks = [process_item(item, semaphore) for item in items]
