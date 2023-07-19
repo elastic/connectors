@@ -606,7 +606,8 @@ class GoogleDriveDataSource(BaseDataSource):
         return bool(self.configuration.get("use_document_level_security", False))
 
     def _max_concurrency(self):
-        return self.configuration.get("max_concurrency")
+        """Get maximum concurrent open connections from the user config"""
+        return self.configuration.get("max_concurrency") or GOOGLE_API_MAX_CONCURRENCY
 
     def access_control_query(self, access_control):
         return {
