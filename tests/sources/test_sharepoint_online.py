@@ -513,7 +513,7 @@ class TestMicrosoftAPISession:
         patch_cancellable_sleeps.assert_awaited_with(retry_after)
 
     @pytest.mark.asyncio
-    async def test_call_api_with_404(
+    async def test_call_api_with_404_with_retry_after_header(
         self,
         microsoft_api_session,
         mock_responses,
