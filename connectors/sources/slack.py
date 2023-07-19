@@ -28,6 +28,8 @@ ENDPOINTS = {
 # - set up vault creds for slack
 # - configure which channels to sync?
 # - configure how far back to sync?
+# - links:read scope needed?
+# - configurably invite yourself to public channels?
 
 def retryable_aiohttp_call(retries): # TODO, make a base client class
     # TODO: improve utils.retryable to allow custom logic
