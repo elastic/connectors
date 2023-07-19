@@ -147,7 +147,7 @@ async def test_ping_for_failed_connection():
 )
 @pytest.mark.asyncio
 async def test_prepare_files(files, expected_files):
-    """Tests the function which modifies the fetched blobs and maps the values to keys."""
+    """Tests the function which modifies the fetched files and maps the values to keys."""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -293,7 +293,7 @@ async def test_prepare_files(files, expected_files):
 )
 @pytest.mark.asyncio
 async def test_prepare_file(file, expected_file):
-    """Test the method that formats the blob metadata from Google Drive API"""
+    """Test the method that formats the file metadata from Google Drive API"""
     # Setup
     mocked_gd_object = get_google_drive_source_object()
 
@@ -312,7 +312,7 @@ async def test_prepare_file(file, expected_file):
 
 
 @pytest.mark.asyncio
-async def test_get_drives():
+async def test_list_drives():
     """Tests the method which lists the shared drives from Google Drive."""
 
     # Setup
@@ -350,7 +350,7 @@ async def test_get_drives():
     ):
         with mock.patch.object(ServiceAccountManager, "refresh"):
             drives_list = []
-            async for drive in mocked_gd_object.google_drive_client.get_drives():
+            async for drive in mocked_gd_object.google_drive_client.list_drives():
                 drives_list.append(drive)
 
     # Assert
@@ -358,7 +358,7 @@ async def test_get_drives():
 
 
 @pytest.mark.asyncio
-async def test_get_folders():
+async def test_list_folders():
     """Tests the method which lists the folders from Google Drive."""
 
     # Setup
@@ -402,7 +402,7 @@ async def test_get_folders():
     ):
         with mock.patch.object(ServiceAccountManager, "refresh"):
             folders_list = []
-            async for folder in mocked_gd_object.google_drive_client.get_folders():
+            async for folder in mocked_gd_object.google_drive_client.list_folders():
                 folders_list.append(folder)
 
     # Assert
@@ -457,10 +457,10 @@ async def test_resolve_paths():
     folders_future.set_result(folders)
 
     mocked_gd_object = get_google_drive_source_object()
-    mocked_gd_object.google_drive_client.retrieve_all_drives = mock.MagicMock(
+    mocked_gd_object.google_drive_client.get_all_drives = mock.MagicMock(
         return_value=drives_future
     )
-    mocked_gd_object.google_drive_client.retrieve_all_folders = mock.MagicMock(
+    mocked_gd_object.google_drive_client.get_all_folders = mock.MagicMock(
         return_value=folders_future
     )
 
@@ -514,7 +514,7 @@ async def test_fetch_files():
     ):
         with mock.patch.object(ServiceAccountManager, "refresh"):
             files_list = []
-            async for file in mocked_gd_object.google_drive_client.get_folders():
+            async for file in mocked_gd_object.google_drive_client.list_folders():
                 files_list.append(file)
 
     # Assert
@@ -523,7 +523,7 @@ async def test_fetch_files():
 
 @pytest.mark.asyncio
 async def test_get_docs():
-    """Tests the module responsible to fetch and yield blobs documents from Google Drive."""
+    """Tests the module responsible to fetch and yield files documents from Google Drive."""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -541,7 +541,7 @@ async def test_get_docs():
             }
         ],
     }
-    expected_blob_document = {
+    expected_file_document = {
         "_id": "id1",
         "created_at": None,
         "last_updated": "2023-06-28T07:46:28.000Z",
@@ -567,8 +567,8 @@ async def test_get_docs():
         Aiogoogle, "as_service_account", return_value=expected_response_object
     ):
         with mock.patch.object(ServiceAccountManager, "refresh"):
-            async for blob_document in mocked_gd_object.get_docs():
-                assert blob_document[0] == expected_blob_document
+            async for file_document in mocked_gd_object.get_docs():
+                assert file_document[0] == expected_file_document
 
 
 @pytest.mark.asyncio
@@ -577,7 +577,7 @@ async def test_get_content():
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
-    blob_document = {
+    file_document = {
         "id": "id1",
         "created_at": None,
         "last_updated": "2023-06-28T07:46:28.000Z",
@@ -589,16 +589,16 @@ async def test_get_content():
         "url": None,
         "type": "file",
     }
-    expected_blob_document = {
+    expected_file_document = {
         "_id": "id1",
         "_timestamp": "2023-06-28T07:46:28.000Z",
         "_attachment": "",
     }
-    blob_content_response = ""
+    file_content_response = ""
 
     # Execute and Assert
     with mock.patch.object(
-        Aiogoogle, "as_service_account", return_value=blob_content_response
+        Aiogoogle, "as_service_account", return_value=file_content_response
     ):
         async with Aiogoogle(
             service_account_creds=mocked_gd_object.google_drive_client.service_account_credentials
@@ -608,10 +608,10 @@ async def test_get_content():
             )
             drive_client.files = mock.MagicMock()
             content = await mocked_gd_object.get_content(
-                file=blob_document,
+                file=file_document,
                 doit=True,
             )
-            assert content == expected_blob_document
+            assert content == expected_file_document
 
 
 @pytest.mark.asyncio
@@ -620,7 +620,7 @@ async def test_get_content_doit_false():
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
-    blob_document = {
+    file_document = {
         "id": "id1",
         "created_at": None,
         "last_updated": "2023-06-28T07:46:28.000Z",
@@ -635,7 +635,7 @@ async def test_get_content_doit_false():
 
     # Execute and Assert
     content = await mocked_gd_object.get_content(
-        file=blob_document,
+        file=file_document,
         doit=False,
     )
     assert content is None
@@ -650,7 +650,7 @@ async def test_get_content_google_workspace_called():
 
     timestamp = "1234"
 
-    blob_document = {
+    file_document = {
         "id": "id1",
         "created_at": None,
         "last_updated": "2023-06-28T07:46:28.000Z",
@@ -677,12 +677,12 @@ async def test_get_content_google_workspace_called():
 
     # Execute and Assert
     await mocked_gd_object.get_content(
-        file=blob_document,
+        file=file_document,
         timestamp=timestamp,
         doit=True,
     )
     mocked_gd_object.get_google_workspace_content.assert_called_once_with(
-        blob_document, timestamp=timestamp
+        file_document, timestamp=timestamp
     )
     mocked_gd_object.get_generic_file_content.assert_not_called()
 
@@ -696,7 +696,7 @@ async def test_get_content_generic_files_called():
 
     timestamp = "1234"
 
-    blob_document = {
+    file_document = {
         "id": "id1",
         "created_at": None,
         "last_updated": "2023-06-28T07:46:28.000Z",
@@ -723,13 +723,13 @@ async def test_get_content_generic_files_called():
 
     # Execute and Assert
     await mocked_gd_object.get_content(
-        file=blob_document,
+        file=file_document,
         timestamp=timestamp,
         doit=True,
     )
     mocked_gd_object.get_google_workspace_content.assert_not_called()
     mocked_gd_object.get_generic_file_content.assert_called_once_with(
-        blob_document, timestamp=timestamp
+        file_document, timestamp=timestamp
     )
 
 
@@ -739,7 +739,7 @@ async def test_get_google_workspace_content():
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
-    blob_document = {
+    file_document = {
         "id": "id1",
         "created_at": None,
         "last_updated": "2023-06-28T07:46:28.000Z",
@@ -751,24 +751,24 @@ async def test_get_google_workspace_content():
         "url": None,
         "type": "file",
     }
-    expected_blob_document = {
+    expected_file_document = {
         "_id": "id1",
         "_timestamp": "2023-06-28T07:46:28.000Z",
         "_attachment": "I love unit tests",
     }
-    blob_content_response = ("I love unit tests", 1234)
-    future_blob_content_response = asyncio.Future()
-    future_blob_content_response.set_result(blob_content_response)
+    file_content_response = ("I love unit tests", 1234)
+    future_file_content_response = asyncio.Future()
+    future_file_content_response.set_result(file_content_response)
 
     # Execute and Assert
     mocked_gd_object._download_content = mock.MagicMock(
-        return_value=future_blob_content_response
+        return_value=future_file_content_response
     )
     content = await mocked_gd_object.get_content(
-        file=blob_document,
+        file=file_document,
         doit=True,
     )
-    assert content == expected_blob_document
+    assert content == expected_file_document
 
 
 @pytest.mark.asyncio
@@ -778,7 +778,7 @@ async def test_get_google_workspace_content_size_limit():
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
-    blob_document = {
+    file_document = {
         "id": "id1",
         "created_at": None,
         "last_updated": "2023-06-28T07:46:28.000Z",
@@ -791,16 +791,16 @@ async def test_get_google_workspace_content_size_limit():
         "type": "file",
     }
 
-    blob_content_response = ("I love unit tests", MORE_THAN_DEFAULT_FILE_SIZE_LIMIT)
-    future_blob_content_response = asyncio.Future()
-    future_blob_content_response.set_result(blob_content_response)
+    file_content_response = ("I love unit tests", MORE_THAN_DEFAULT_FILE_SIZE_LIMIT)
+    future_file_content_response = asyncio.Future()
+    future_file_content_response.set_result(file_content_response)
 
     # Execute and Assert
     mocked_gd_object._download_content = mock.MagicMock(
-        return_value=future_blob_content_response
+        return_value=future_file_content_response
     )
     content = await mocked_gd_object.get_content(
-        file=blob_document,
+        file=file_document,
         doit=True,
     )
     assert content is None
@@ -812,7 +812,7 @@ async def test_get_generic_file_content():
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
-    blob_document = {
+    file_document = {
         "id": "id1",
         "created_at": None,
         "last_updated": "2023-06-28T07:46:28.000Z",
@@ -824,24 +824,24 @@ async def test_get_generic_file_content():
         "url": None,
         "type": "file",
     }
-    expected_blob_document = {
+    expected_file_document = {
         "_id": "id1",
         "_timestamp": "2023-06-28T07:46:28.000Z",
         "_attachment": "I love unit tests generic file",
     }
-    blob_content_response = ("I love unit tests generic file", 1234)
-    future_blob_content_response = asyncio.Future()
-    future_blob_content_response.set_result(blob_content_response)
+    file_content_response = ("I love unit tests generic file", 1234)
+    future_file_content_response = asyncio.Future()
+    future_file_content_response.set_result(file_content_response)
 
     # Execute and Assert
     mocked_gd_object._download_content = mock.MagicMock(
-        return_value=future_blob_content_response
+        return_value=future_file_content_response
     )
     content = await mocked_gd_object.get_content(
-        file=blob_document,
+        file=file_document,
         doit=True,
     )
-    assert content == expected_blob_document
+    assert content == expected_file_document
 
 
 @pytest.mark.asyncio
@@ -850,7 +850,7 @@ async def test_get_generic_file_content_size_limit():
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
-    blob_document = {
+    file_document = {
         "id": "id1",
         "created_at": None,
         "last_updated": "2023-06-28T07:46:28.000Z",
@@ -866,7 +866,7 @@ async def test_get_generic_file_content_size_limit():
     # Execute and Assert
     mocked_gd_object._download_content = mock.MagicMock()
     content = await mocked_gd_object.get_content(
-        file=blob_document,
+        file=file_document,
         doit=True,
     )
     assert content is None
@@ -878,7 +878,7 @@ async def test_get_generic_file_content_empty_file():
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
-    blob_document = {
+    file_document = {
         "id": "id1",
         "created_at": None,
         "last_updated": "2023-06-28T07:46:28.000Z",
@@ -894,7 +894,7 @@ async def test_get_generic_file_content_empty_file():
     # Execute and Assert
     mocked_gd_object._download_content = mock.MagicMock()
     content = await mocked_gd_object.get_content(
-        file=blob_document,
+        file=file_document,
         doit=True,
     )
     assert content is None
@@ -906,7 +906,7 @@ async def test_get_content_when_type_not_supported():
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()
-    blob_document = {
+    file_document = {
         "id": "id1",
         "created_at": None,
         "last_updated": "2023-06-28T07:46:28.000Z",
@@ -926,7 +926,7 @@ async def test_get_content_when_type_not_supported():
         drive_client = await google_client.discover(api_name="drive", api_version="v3")
         drive_client.files = mock.MagicMock()
         content = await mocked_gd_object.get_content(
-            file=blob_document,
+            file=file_document,
             doit=True,
         )
         assert content is None
@@ -997,7 +997,7 @@ async def test_api_call_ping_retries(mock_apply_retry_strategy, mock_responses):
 
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
-async def test_api_call_get_drives_retries(mock_apply_retry_strategy, mock_responses):
+async def test_api_call_list_drives_retries(mock_apply_retry_strategy, mock_responses):
     """Test handling retries for generic Exception in api_call() method."""
     # Setup
     mocked_gd_object = get_google_drive_source_object()
@@ -1006,7 +1006,7 @@ async def test_api_call_get_drives_retries(mock_apply_retry_strategy, mock_respo
 
     with pytest.raises(Exception):
         with mock.patch.object(ServiceAccountManager, "refresh"):
-            async for _ in mocked_gd_object.google_drive_client.get_drives():
+            async for _ in mocked_gd_object.google_drive_client.list_drives():
                 continue
 
     # Expect retry function to be triggered the expected number of retries,
@@ -1066,8 +1066,8 @@ async def test_api_call_get_drives_retries(mock_apply_retry_strategy, mock_respo
                 "driveId": "drive1",
             },
             [
-                {"type": "user", "emailAddress": "user@xd.com"},
-                {"type": "group", "emailAddress": "group@xd.com"},
+                {"type": "user", "emailAddress": "user2@xd.com"},
+                {"type": "group", "emailAddress": "group2@xd.com"},
                 {"type": "domain", "domain": "xd.com"},
                 {"type": "anyone"},
             ],
@@ -1084,8 +1084,8 @@ async def test_api_call_get_drives_retries(mock_apply_retry_strategy, mock_respo
                 "type": "file",
                 "shared_drive": "drive1",
                 "_allow_access_control": [
-                    "user:user@xd.com",
-                    "group:group@xd.com",
+                    "user:user2@xd.com",
+                    "group:group2@xd.com",
                     "domain:xd.com",
                     "anyone",
                 ],
@@ -1097,7 +1097,7 @@ async def test_api_call_get_drives_retries(mock_apply_retry_strategy, mock_respo
 async def test_prepare_file_on_shared_drive_with_dls_enabled(
     file, permissions, expected_file
 ):
-    """Test the method that formats the blob metadata from Google Drive API"""
+    """Test the method that formats the file metadata from Google Drive API"""
     # Setup
 
     mocked_gd_object = get_google_drive_source_object()
@@ -1178,8 +1178,8 @@ async def test_prepare_file_on_shared_drive_with_dls_enabled(
                 "size": None,
                 "modifiedTime": "2023-06-28T07:46:28.000Z",
                 "permissions": [
-                    {"type": "user", "emailAddress": "user@xd.com"},
-                    {"type": "group", "emailAddress": "group@xd.com"},
+                    {"type": "user", "emailAddress": "user2@xd.com"},
+                    {"type": "group", "emailAddress": "group2@xd.com"},
                     {"type": "domain", "domain": "xd.com"},
                     {"type": "anyone"},
                 ],
@@ -1196,8 +1196,8 @@ async def test_prepare_file_on_shared_drive_with_dls_enabled(
                 "url": None,
                 "type": "file",
                 "_allow_access_control": [
-                    "user:user@xd.com",
-                    "group:group@xd.com",
+                    "user:user2@xd.com",
+                    "group:group2@xd.com",
                     "domain:xd.com",
                     "anyone",
                 ],
@@ -1207,7 +1207,7 @@ async def test_prepare_file_on_shared_drive_with_dls_enabled(
 )
 @pytest.mark.asyncio
 async def test_prepare_file_on_my_drive_with_dls_enabled(file, expected_file):
-    """Test the method that formats the blob metadata from Google Drive API"""
+    """Test the method that formats the file metadata from Google Drive API"""
     # Setup
 
     mocked_gd_object = get_google_drive_source_object()
@@ -1294,7 +1294,7 @@ async def test_prepare_file_on_my_drive_with_dls_enabled(file, expected_file):
 )
 @pytest.mark.asyncio
 async def test_prepare_access_control_doc(user, groups, access_control_doc):
-    """Test the method that formats the blob metadata from Google Drive API"""
+    """Test the method that formats the users data from Google Drive API"""
     # Setup
 
     mocked_gd_object = get_google_drive_source_object()
@@ -1395,7 +1395,7 @@ async def test_prepare_access_control_doc(user, groups, access_control_doc):
 async def test_prepare_access_control_documents(
     users_page, groups, access_control_docs
 ):
-    """Test the method that formats the blob metadata from Google Drive API"""
+    """Test the method that formats the users data from Google Drive API"""
     # Setup
 
     mocked_gd_object = get_google_drive_source_object()
@@ -1434,7 +1434,7 @@ async def test_get_access_control_dls_disabled():
 
 @pytest.mark.asyncio
 async def test_get_access_control_dls_enabled():
-    """Tests the module responsible to fetch and yield blobs documents from Google Drive."""
+    """Tests the module responsible to fetch users data from Google Drive."""
 
     # Setup
     mocked_gd_object = get_google_drive_source_object()

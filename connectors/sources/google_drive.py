@@ -28,6 +28,8 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 FILE_SIZE_LIMIT = 10485760  # ~ 10 Megabytes
 
+GOOGLE_API_MAX_CONCURRENCY = 30  # Max open connections to Google API
+
 DRIVE_API_TIMEOUT = 1 * 60  # 1 min
 
 ACCESS_CONTROL = "_allow_access_control"
@@ -89,6 +91,9 @@ class GoogleAPIClient:
             subject (str): For service accounts with domain-wide delegation enabled. A user
                            account to impersonate - e.g "admin@your-organization.com"
         """
+
+        self._remove_universe_domain(json_credentials=json_credentials)
+
         self.service_account_credentials = ServiceAccountCreds(
             scopes=scopes,
             subject=subject,
@@ -100,6 +105,19 @@ class GoogleAPIClient:
 
     def set_logger(self, logger_):
         self._logger = logger_
+
+    def _remove_universe_domain(self, json_credentials):
+        """Remove the "universe_domain" key from the Google Service Account JSON.
+
+        The "universe_domain" key is not supported in the aiogoogle library, so this method is used
+        to remove it from the provided JSON credentials payload.
+
+        Args:
+            json_credentials (dict): The Google Service Account JSON credentials.
+
+        """
+        if "universe_domain" in json_credentials:
+            json_credentials.pop("universe_domain")
 
     async def api_call_paged(
         self,
@@ -226,7 +244,7 @@ class GoogleDriveClient(GoogleAPIClient):
     async def ping(self):
         return await self.api_call(resource="about", method="get", fields="kind")
 
-    async def get_drives(self):
+    async def list_drives(self):
         """Fetch all shared drive (id, name) from Google Drive
 
         Yields:
@@ -241,21 +259,21 @@ class GoogleDriveClient(GoogleAPIClient):
         ):
             yield drive
 
-    async def retrieve_all_drives(self):
+    async def get_all_drives(self):
         """Retrieves all shared drives from Google Drive
 
         Returns:
             dict: mapping between drive id and its name
         """
         drives = {}
-        async for page in self.get_drives():
+        async for page in self.list_drives():
             drives_chunk = page.get("drives", [])
             for drive in drives_chunk:
                 drives[drive["id"]] = drive["name"]
 
         return drives
 
-    async def get_folders(self):
+    async def list_folders(self):
         """Fetch all folders (id, name, parent) from Google Drive
 
         Yields:
@@ -273,14 +291,14 @@ class GoogleDriveClient(GoogleAPIClient):
         ):
             yield folder
 
-    async def retrieve_all_folders(self):
+    async def get_all_folders(self):
         """Retrieves all folders from Google Drive
 
         Returns:
             dict: mapping between folder id and its (name, parents)
         """
         folders = {}
-        async for page in self.get_folders():
+        async for page in self.list_folders():
             folders_chunk = page.get("files", [])
             for folder in folders_chunk:
                 folders[folder["id"]] = {
@@ -497,11 +515,6 @@ class GoogleDriveDataSource(BaseDataSource):
 
         json_credentials = json.loads(self.configuration["service_account_credentials"])
 
-        # Google Service Account JSON includes "universe_domain" key. That argument is not
-        # supported in aiogoogle library, therefore we are skipping it from the credentials payload
-        if "universe_domain" in json_credentials:
-            json_credentials.pop("universe_domain")
-
         return GoogleDriveClient(json_credentials=json_credentials)
 
     @cached_property
@@ -514,11 +527,6 @@ class GoogleDriveDataSource(BaseDataSource):
         self._validate_service_account_json()
 
         json_credentials = json.loads(self.configuration["service_account_credentials"])
-
-        # Google Service Account JSON includes "universe_domain" key. That argument is not
-        # supported in aiogoogle library, therefore we are skipping it from the credentials payload
-        if "universe_domain" in json_credentials:
-            json_credentials.pop("universe_domain")
 
         return GoogleAdminDirectoryClient(
             json_credentials=json_credentials,
@@ -612,6 +620,39 @@ class GoogleDriveDataSource(BaseDataSource):
             }
         }
 
+    async def _process_items_concurrently(self, items, process_item_func):
+        """Process a list of items concurrently using a semaphore for concurrency control.
+
+        This function applies the `process_item_func` to each item in the `items` list
+        using a semaphore to control the level of concurrency.
+
+        Args:
+            items (list): List of items to process.
+            process_item_func (function): The function to be called for each item.
+                This function should be asynchronous.
+
+        Returns:
+            list: A list containing the results of processing each item.
+
+        Note:
+            The `process_item_func` should be an asynchronous function that takes
+            one argument (item) and returns a coroutine.
+
+        """
+
+        async def process_item(item, semaphore):
+            async with semaphore:
+                return await process_item_func(item)
+
+        # Create a semaphore with a concurrency limit of GOOGLE_API_MAX_CONCURRENCY
+        semaphore = asyncio.Semaphore(GOOGLE_API_MAX_CONCURRENCY)
+
+        # Create tasks for each item, processing them concurrently with the semaphore
+        tasks = [process_item(item, semaphore) for item in items]
+
+        # Gather the results of all tasks concurrently
+        return await asyncio.gather(*tasks)
+
     async def prepare_single_access_control_document(self, user):
         """Generate access control document for a single user. Fetch group memberships for a given user.
         Generate a user_access_control query that includes information about user email, groups and domain.
@@ -655,18 +696,9 @@ class GoogleDriveDataSource(BaseDataSource):
             dict: Access control doc.
         """
         users = users_page.get("users", [])
-
-        async def process_user(user, semaphore):
-            async with semaphore:
-                return await self.prepare_single_access_control_document(user=user)
-
-        # Create the shared semaphore, it controls how many concurrent
-        # groups/list requests can be open at any given time
-        semaphore = asyncio.Semaphore(20)
-
-        # Fetch user groups concurrently, it speeds up access control sync
-        tasks = [process_user(user, semaphore) for user in users]
-        prepared_ac_docs = await asyncio.gather(*tasks)
+        prepared_ac_docs = await self._process_items_concurrently(
+            users, self.prepare_single_access_control_document
+        )
 
         for ac_doc in prepared_ac_docs:
             yield ac_doc
@@ -694,8 +726,8 @@ class GoogleDriveDataSource(BaseDataSource):
         Returns:
             dict: mapping between folder id and its (name, parents, path)
         """
-        folders = await self.google_drive_client.retrieve_all_folders()
-        drives = await self.google_drive_client.retrieve_all_drives()
+        folders = await self.google_drive_client.get_all_folders()
+        drives = await self.google_drive_client.get_all_drives()
 
         # for paths let's treat drives as top level folders
         for id, drive_name in drives.items():
@@ -1035,17 +1067,9 @@ class GoogleDriveDataSource(BaseDataSource):
         """
         files = files_page.get("files", [])
 
-        async def process_file(file, semaphore):
-            async with semaphore:
-                return await self.prepare_file(file=file, paths=paths)
-
-        # Create the shared semaphore, it controls how many concurrent
-        # permissions/list requests can be open at any given time
-        semaphore = asyncio.Semaphore(20)
-
-        # Fetch file permissions concurrently
-        tasks = [process_file(file, semaphore) for file in files]
-        prepared_files = await asyncio.gather(*tasks)
+        prepared_files = await self._process_items_concurrently(
+            files, lambda f: self.prepare_file(file=f, paths=paths)
+        )
 
         for file in prepared_files:
             yield file
