@@ -122,7 +122,7 @@
         "required": true,
         "options": [],
         "validations": [],
-        "value": true,
+        "value": false,
         "order": 8,
         "ui_restrictions": []
       },
@@ -142,7 +142,7 @@
         "required": true,
         "options": [],
         "validations": [],
-        "value": true,
+        "value": false,
         "order": 9,
         "ui_restrictions": []
       }
