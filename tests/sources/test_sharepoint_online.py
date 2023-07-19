@@ -872,7 +872,6 @@ class TestSharepointOnlineClient:
         assert returned_items == items_page_1 + items_page_2
 
     @pytest.mark.asyncio
-    @pytest.mark.asyncio
     async def test_download_drive_item(self, client, patch_pipe):
         """Basic setup for the test - no recursion through directories"""
         drive_id = "1"
