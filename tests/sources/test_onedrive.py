@@ -73,7 +73,7 @@ async def test_close_with_client_session():
 
     await source.close()
 
-    assert hasattr(source.onedrive_client.__dict__, "_get_session") is False
+    assert not hasattr(source.onedrive_client.__dict__, "_get_session")
 
 
 @pytest.mark.asyncio
