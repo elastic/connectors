@@ -69,11 +69,11 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
 @pytest.mark.asyncio
 async def test_close_with_client_session():
     source = create_source(OneDriveDataSource)
-    source.onedrive_client.access_token = "dummy"
+    source.get_client.access_token = "dummy"
 
     await source.close()
 
-    assert not hasattr(source.onedrive_client.__dict__, "_get_session")
+    assert not hasattr(source.get_client.__dict__, "_get_session")
 
 
 @pytest.mark.asyncio
@@ -84,16 +84,16 @@ async def test_set_access_token():
     async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(mock_token, 200))
 
     with patch("aiohttp.request", return_value=async_response):
-        await source.onedrive_client.token._set_access_token()
+        await source.get_client.token._set_access_token()
 
-        assert source.onedrive_client.token.access_token == "msgraphtoken"
+        assert source.get_client.token.access_token == "msgraphtoken"
 
 
 @pytest.mark.asyncio
 async def test_ping_for_successful_connection():
     source = create_source(OneDriveDataSource)
     DUMMY_RESPONSE = {}
-    source.onedrive_client.api_call = AsyncIterator([[DUMMY_RESPONSE]])
+    source.get_client.get = AsyncIterator([[DUMMY_RESPONSE]])
 
     await source.ping()
 
@@ -104,7 +104,7 @@ async def test_ping_for_failed_connection_exception(mock_get):
     source = create_source(OneDriveDataSource)
 
     with patch.object(
-        OneDriveClient, "api_call", side_effect=Exception("Something went wrong")
+        OneDriveClient, "get", side_effect=Exception("Something went wrong")
     ):
         with pytest.raises(Exception):
             await source.ping()

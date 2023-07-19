@@ -119,7 +119,7 @@ class OneDriveClient:
             ClientSession: Base client session
         """
 
-        timeout = aiohttp.ClientTimeout(total=None)
+        timeout = aiohttp.ClientTimeout(total=300)
         return aiohttp.ClientSession(
             timeout=timeout,
             raise_for_status=True,
@@ -135,7 +135,7 @@ class OneDriveClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def api_call(self, url_name):
+    async def get(self, url_name):
         url = parse.urljoin(BASE_URL, url_name)
         access_token = await self.token.get()
         headers = {"authorization": f"Bearer {access_token}"}
@@ -156,10 +156,14 @@ class OneDriveDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self.onedrive_client = OneDriveClient(configuration)
+        self.configuration = configuration
+
+    @cached_property
+    def get_client(self):
+        return OneDriveClient(self.configuration)
 
     def _set_internal_logger(self):
-        self.onedrive_client.set_logger(self._logger)
+        self.get_client.set_logger(self._logger)
 
     @classmethod
     def get_default_configuration(cls):
@@ -202,12 +206,12 @@ class OneDriveDataSource(BaseDataSource):
 
     async def close(self):
         """Closes unclosed client session"""
-        await self.onedrive_client.close_session()
+        await self.get_client.close_session()
 
     async def ping(self):
         """Verify the connection with OneDrive"""
         try:
-            await anext(self.onedrive_client.api_call(url_name=ENDPOINTS["PING"]))
+            await anext(self.get_client.get(url_name=ENDPOINTS["PING"]))
             self._logger.info("Successfully connected to OneDrive")
         except Exception:
             self._logger.exception("Error while connecting to OneDrive")
