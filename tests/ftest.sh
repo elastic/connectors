@@ -103,18 +103,26 @@ if [[ $PERF8 == "yes" ]]; then
 fi
 
 # make sure the ingest processes are terminated
+set +e # if the PID disappears right before the kill, that's not an error
 if ps -p $PID > /dev/null
 then
   echo 'Killing the ingest process'
   kill -TERM $PID
   sleep 5
-  kill -KILL $PID
+  if ps -p $PID > /dev/null
+  then
+    kill -KILL $PID
+  fi
 fi
 
 if ps -p $PID_2 > /dev/null
 then
-  echo 'Killing the ingest process'
+  echo 'Killing the second ingest process'
   kill -TERM $PID_2
   sleep 5
-  kill -KILL $PID_2
+  if ps -p $PID_2 > /dev/null
+  then
+    kill -KILL $PID_2
+  fi
 fi
+set -e
