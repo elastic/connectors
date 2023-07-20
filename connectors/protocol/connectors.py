@@ -724,7 +724,7 @@ class Connector(ESDocument):
         await self.index.update(doc_id=self.id, doc=doc)
 
     @with_concurrency_control()
-    async def prepare(self, config):
+    async def prepare(self, config, sources):
         """Prepares the connector, given a configuration
         If the connector id and the service type is in the config, we want to
         populate the service type and then sets the default configuration.
@@ -742,14 +742,14 @@ class Connector(ESDocument):
 
         if self.id != configured_connector_id:
             # check configuration for native and other peripheral connectors
-            if self.service_type not in config["sources"]:
+            if self.service_type not in sources:
                 self.log_debug(
                     f"Peripheral connector has invalid service type {self.service_type}, cannot check configuration formatting."
                 )
                 return
 
             await self.validate_configuration_formatting(
-                config["sources"][self.service_type], self.service_type
+                sources[self.service_type], self.service_type
             )
 
             return
@@ -758,16 +758,16 @@ class Connector(ESDocument):
             self.log_error("Service type is not configured")
             raise ServiceTypeNotConfiguredError("Service type is not configured.")
 
-        if configured_service_type not in config["sources"]:
+        if configured_service_type not in sources:
             raise ServiceTypeNotSupportedError(configured_service_type)
 
         if self.service_type is not None and not self.configuration.is_empty():
             await self.validate_configuration_formatting(
-                config["sources"][configured_service_type], configured_service_type
+                sources[configured_service_type], configured_service_type
             )
 
         doc = {}
-        fqn = config["sources"][configured_service_type]
+        fqn = sources[configured_service_type]
         try:
             source_klass = get_source_klass(fqn)
         except Exception as e:
