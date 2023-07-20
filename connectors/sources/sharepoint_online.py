@@ -958,13 +958,6 @@ def is_domain_group(user_fields):
     )
 
 
-def is_dynamic_group(login_name):
-    if not login_name:
-        return False
-
-    return login_name.startswith("c:0o.c|federateddirectoryclaimprovider")
-
-
 def is_person(user_fields):
     return user_fields["ContentType"] == "Person"
 
@@ -1847,8 +1840,14 @@ class SharepointOnlineDataSource(BaseDataSource):
             user = role_assignment.get("Member", {})
             login_name = user.get("LoginName")
 
-            # a dynamic group is of type 'SP.User'
-            if is_dynamic_group(login_name):
+            # in this context the 'odata.type' being 'SP.User' and the 'LoginName' looking like a group indicates a dynamic group
+            is_dynamic_group = (
+                login_name.startswith("c:0o.c|federateddirectoryclaimprovider|")
+                if login_name
+                else False
+            )
+
+            if is_dynamic_group:
                 self._logger.debug(f"Detected dynamic group '{user.get('Title')}'.")
                 dynamic_group_id = _get_login_name(login_name)
                 access_control.append(_prefix_group(dynamic_group_id))
