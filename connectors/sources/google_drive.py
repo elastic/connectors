@@ -9,7 +9,7 @@ import os
 from functools import cached_property, partial
 
 import aiofiles
-from aiofiles.os import remove
+from aiofiles.os import remove, stat
 from aiofiles.tempfile import NamedTemporaryFile
 from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
@@ -807,7 +807,8 @@ class GoogleDriveDataSource(BaseDataSource):
                 source=temp_file_name,
             )
 
-            file_size = os.stat(temp_file_name).st_size
+            file_stat = await stat(temp_file_name)
+            file_size = file_stat.st_size
 
             async with aiofiles.open(file=temp_file_name, mode="r") as target_file:
                 attachment = (await target_file.read()).strip()
