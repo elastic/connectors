@@ -21,16 +21,21 @@ ENDPOINTS = {
 }
 
 # TODO list
-# - write unit tests
-# - write an ftest
 # - replace square brackest with get()
 # - better error handling/retrying
-# - do something to fix emojis?
 # - document required scopes
 # - set up vault creds for slack
-# - configure which channels to sync?
+# - configure which channels to sync via deny list
+# - who do I hand this off too? What quality bar?
+# - write unit tests
+# - write an ftest
+# Nice to haves:
+# - expand links
+#   - links:read scope needed?
+# To Verify:
+# - when messages were authored vs edited
+# - threads vs messages
 # - configure how far back to sync?
-# - links:read scope needed?
 
 def retryable_aiohttp_call(retries): # TODO, make a base client class
     # TODO: improve utils.retryable to allow custom logic
