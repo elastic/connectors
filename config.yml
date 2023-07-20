@@ -52,3 +52,4 @@ sources:
   servicenow: connectors.sources.servicenow:ServiceNowDataSource
   sharepoint_online: connectors.sources.sharepoint_online:SharepointOnlineDataSource
   github: connectors.sources.github:GitHubDataSource
+  onedrive: connectors.sources.onedrive:OneDriveDataSource
