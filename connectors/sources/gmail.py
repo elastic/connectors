@@ -38,10 +38,8 @@ GMAIL_API_TIMEOUT = GOOGLE_DIRECTORY_TIMEOUT = 1 * 60  # 1 min
 class GMailAdvancedRulesValidator(AdvancedRulesValidator):
     MESSAGES_SCHEMA_DEFINITION = {
         "type": "array",
-        "items": {
-            "type": "string"
-        },
-        "minItems": 1
+        "items": {"type": "string"},
+        "minItems": 1,
     }
 
     SCHEMA_DEFINITION = {
