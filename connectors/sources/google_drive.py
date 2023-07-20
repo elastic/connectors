@@ -587,8 +587,6 @@ class GoogleDriveDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Google Drive"""
-        print("Max concurrency:")
-        print(self._max_concurrency())
         try:
             await self.google_drive_client.ping()
             self._logger.info("Successfully connected to the Google Drive.")
