@@ -1,6 +1,7 @@
 from connectors.source import BaseDataSource
 
 import aiohttp
+import re
 from contextlib import asynccontextmanager
 from functools import partial, wraps
 
@@ -10,11 +11,13 @@ BASE_URL = "https://slack.com/api"
 LIST_CONVERSATIONS = "list_convos"
 JOIN_CONVERSATIONS = "join_convos"
 CONVERSATION_HISTORY = "convo_history"
+LIST_USERS = "list_users"
 
 ENDPOINTS = {
     LIST_CONVERSATIONS: "conversations.list",
     JOIN_CONVERSATIONS: "conversations.join",
     CONVERSATION_HISTORY: "conversations.history",
+    LIST_USERS: "users.list",
 }
 
 # TODO list
@@ -22,14 +25,12 @@ ENDPOINTS = {
 # - write an ftest
 # - replace square brackest with get()
 # - better error handling/retrying
-# - sync users to doctor author and content
 # - do something to fix emojis?
 # - document required scopes
 # - set up vault creds for slack
 # - configure which channels to sync?
 # - configure how far back to sync?
 # - links:read scope needed?
-# - configurably invite yourself to public channels?
 
 def retryable_aiohttp_call(retries): # TODO, make a base client class
     # TODO: improve utils.retryable to allow custom logic
@@ -56,7 +57,6 @@ def retryable_aiohttp_call(retries): # TODO, make a base client class
 class SlackClient:
     def __init__(self, configuration):
         self.token = configuration['token']
-        self.auto_join_channels = configuration['auto_join_channels']
         self._http_session = aiohttp.ClientSession(
             headers=self._headers(),
             timeout=aiohttp.ClientTimeout(total=None),
@@ -72,25 +72,13 @@ class SlackClient:
     def close(self):
         return
 
-    async def get_all_messages(self):
-        async for channel in self.list_channels(not self.auto_join_channels):
-            self._logger.info(f"Listed channel: '{channel['name']}'")
-            channel_id = channel['id']
-            should_list_messages = True
-            if self.auto_join_channels:
-                join_response = await self.join_channel(channel_id) # can't get channel content if the bot is not in the channel
-            if not self.auto_join_channels or join_response.get("ok"):
-                async for message in self.list_messages(channel_id):
-                    yield message | {"channel": channel['name']}
-            else:
-                self._logger.warning(f"Not syncing channel: '{channel['name']}' because: {join_response.get('error')}")
-
 
     async def list_channels(self, only_my_channels):
         url = f"{BASE_URL}/{ENDPOINTS[LIST_CONVERSATIONS]}"
         response = await self._get_json(url)
         for channel in response['channels']:
             if only_my_channels and not channel.get('is_member', False):
+                self._logger.debug(f"Skipping over channel '{channel['name']}', because the bot is not a member")
                 continue
             yield channel
 
@@ -107,6 +95,19 @@ class SlackClient:
             for message in response['messages']:
                 if message['type'] == 'message':
                     yield {"text": message["text"], "author": message["user"], "_id": message["ts"], "ts": message["ts"]} # TODO: other fields too?
+            cursor = response.get("response_metadata", {}).get("next_cursor")
+            if not cursor:
+                break
+
+    async def list_users(self, cursor=None):
+        user_batch_limit = 200
+        while True:
+            url =f"{BASE_URL}/{ENDPOINTS[LIST_USERS]}?limit={user_batch_limit}"
+            if cursor:
+                url = f"{url}&cursor={cursor}"
+            response = await self._get_json(url)
+            for member in response['members']:
+                yield {"id": member["id"], "username": member["name"]}
             cursor = response.get("response_metadata", {}).get("next_cursor")
             if not cursor:
                 break
@@ -145,6 +146,7 @@ class SlackDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
         self.slack_client = SlackClient(configuration)
+        self.auto_join_channels = configuration['auto_join_channels']
 
     def _set_internal_logger(self):
         self.slack_client.set_logger(self._logger)
@@ -179,5 +181,35 @@ class SlackDataSource(BaseDataSource):
         self.slack_client.close()
 
     async def get_docs(self, filtering=None):
-        async for message in self.slack_client.get_all_messages():
+        self._logger.info("Fetching all users")
+        self.usernames = {}
+        async for user in self.slack_client.list_users():
+            self.usernames[user['id']] = user['username']
+        async for message in self.get_all_messages(self.usernames):
             yield message, None
+
+
+    def convert_usernames(self, match_obj):
+        if match_obj.group(1) is not None:
+            return f"@{self.usernames[match_obj.group(1)]}"
+    async def get_all_messages(self, usernames):
+        """
+        Get all the messages from all the slack channels
+        :param usernames: a dictionary of userID -> username mappings, to facilitate replacing message references to userids with usernames
+        :return: generator for messages
+        """
+        async for channel in self.slack_client.list_channels(not self.auto_join_channels):
+            self._logger.info(f"Listed channel: '{channel['name']}'")
+            channel_id = channel['id']
+            should_list_messages = True
+            if self.auto_join_channels:
+                join_response = await self.slack_client.join_channel(channel_id) # can't get channel content if the bot is not in the channel
+            if not self.auto_join_channels or join_response.get("ok"):
+                async for message in self.slack_client.list_messages(channel_id):
+                    message['author'] = usernames[message['author']]
+                    message['text'] = re.sub(r"<@([A-Z0-9]+)>", self.convert_usernames, message['text'])
+                    yield message | {"channel": channel['name']}
+            else:
+                self._logger.warning(f"Not syncing channel: '{channel['name']}' because: {join_response.get('error')}")
+
+
