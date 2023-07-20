@@ -31,6 +31,7 @@ from connectors.utils import (
     InvalidIndexNameError,
     MemQueue,
     RetryStrategy,
+    base64url_to_base64,
     convert_to_b64,
     decode_base64_value,
     deep_merge_dicts,
@@ -708,3 +709,11 @@ class TestExtractionService:
                 patch_logger.assert_present(
                     "Extraction service could not parse `notreal.txt'; oh no!: I'm all messed up..."
                 )
+
+
+@pytest.mark.parametrize(
+    "base64url_encoded_value, base64_expected_value",
+    [("YQ-_", "YQ+/"), ("", ""), (None, None)],
+)
+def test_base64url_to_base64(base64url_encoded_value, base64_expected_value):
+    assert base64url_to_base64(base64url_encoded_value) == base64_expected_value
