@@ -42,7 +42,7 @@ class TestGoogleDirectoryClient:
         try:
             await google_directory_client.ping()
         except Exception:
-            assert False, "Ping should've been successful"
+            raise AssertionError("Ping should've been successful") from None
 
     @pytest.mark.asyncio
     async def test_ping_failed(self, patch_google_service_account_client):
@@ -96,7 +96,7 @@ class TestGMailClient:
         try:
             await gmail_client.ping()
         except Exception:
-            assert False, "Ping should've been successful"
+            raise AssertionError("Ping should've been successful") from None
 
     @pytest.mark.asyncio
     async def test_ping_failed(self, patch_google_service_account_client):

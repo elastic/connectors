@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -138,7 +138,7 @@ class TestGMailDataSource:
         try:
             await source.ping()
         except Exception:
-            assert False, "Ping should've been successful"
+            raise AssertionError("Ping should've been successful") from None
 
     @pytest.mark.asyncio
     async def test_ping_gmail_client_fails(
@@ -173,7 +173,7 @@ class TestGMailDataSource:
         try:
             await source.validate_config()
         except ConfigurableFieldValueError:
-            assert False, "Should've been a valid config"
+            raise AssertionError("Should've been a valid config") from None
 
     @pytest.mark.asyncio
     async def test_validate_config_invalid(self):
