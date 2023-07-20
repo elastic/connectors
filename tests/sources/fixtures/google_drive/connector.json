@@ -54,9 +54,9 @@
     "max_concurrency": {
       "depends_on": [],
       "display": "numeric",
-      "tooltip": null,
+      "tooltip": "This setting determines the maximum number of concurrent HTTP requests sent to the Google API to fetch data. Increasing this value can improve data retrieval speed, but it may also place higher demands on system resources and network bandwidth.",
       "default_value": 25,
-      "label": "Maximum concurrent open connections",
+      "label": "Maximum concurrent HTTP requests",
       "sensitive": false,
       "type": "int",
       "required": false,

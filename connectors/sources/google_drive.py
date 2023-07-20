@@ -506,9 +506,10 @@ class GoogleDriveDataSource(BaseDataSource):
             "max_concurrency": {
                 "default_value": GOOGLE_API_MAX_CONCURRENCY,
                 "display": "numeric",
-                "label": "Maximum concurrent open connections",
+                "label": "Maximum concurrent HTTP requests",
                 "order": 4,
                 "required": False,
+                "tooltip": "This setting determines the maximum number of concurrent HTTP requests sent to the Google API to fetch data. Increasing this value can improve data retrieval speed, but it may also place higher demands on system resources and network bandwidth.",
                 "type": "int",
                 "ui_restrictions": ["advanced"],
                 "validations": [{"type": "greater_than", "constraint": 0}],
