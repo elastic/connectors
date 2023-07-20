@@ -14,7 +14,7 @@ To use this connector as a **connector client**, use the **Google Drive** tile f
 
 For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
 
-## Connector authentication
+## Connector authentication prerequisites
 
 Before syncing any data from Google Drive, you need to create a [service account](https://cloud.google.com/iam/docs/service-account-overview) with appropriate access to Google Drive API.
 
@@ -26,6 +26,9 @@ To get started, log into [Google Cloud Platform](cloud.google.com) and go to the
 
 3. **Create a Service Account.** In the `APIs & Services` section, click on `Credentials` and click on `Create credentials` to create a service account. Give your service account a name and a service account ID. This is like an email address and will be used to identify your service account in the future. Click `Done` to finish creating the service account.
 
+Your service account needs to have access to at least the following scope:
+- `https://www.googleapis.com/auth/drive.readonly`
+
 4. **Create a Key File**.
   - In the Cloud Console, go to `IAM and Admin` > `Service accounts` page.
   - Click the email address of the service account that you want to create a key for.
@@ -36,11 +39,30 @@ To get started, log into [Google Cloud Platform](cloud.google.com) and go to the
 
   Note: When you grant a service account access to a specific folder or shared drive in Google Drive, it's important to note that the permissions extend to all the children within that folder or drive. This means that any folders or files contained within the granted folder or drive inherit the same access privileges as the parent.
 
+
+#### Additional authentication prerequisites for document level security
+
+To access user data on a Google Workspace domain, the service account that you created needs to be granted access by a super administrator for the domain. You can follow [official documentation](https://developers.google.com/cloud-search/docs/guides/delegation) to perform Google Workspace domain-wide delegation of authority.
+
+You need to grant the following **OAuth Scopes** to your service account:
+- `https://www.googleapis.com/auth/admin.directory.group.readonly`
+- `https://www.googleapis.com/auth/admin.directory.user.readonly`
+
+This step allows the connector to access user data and their group memberships in your Google Workspace organization.
+
 ## Configuration
 
 The following configuration fields need to be provided for setting up the connector:
 ##### `Google Drive service account JSON`
 The service account credentials generated from Google Cloud Platform (JSON string). Refer to the [Google Cloud documentation](https://developers.google.com/workspace/guides/create-credentials#create_credentials_for_a_service_account) for more information.
+
+##### `Enable document level security`
+Toggle to enable [document level security (DLS)](https://www.elastic.co/guide/en/enterprise-search/master/dls.html). DLS is supported for the Google Drive connector. When enabled:
+- Full syncs will fetch access control lists for each document and store them in the `_allow_access_control` field.
+- Access control syncs will fetch users' access control lists and store them in a separate index.
+
+##### `Google Workspace admin email`
+Google Workspace admin email. Required to enable [document level security (DLS)](https://www.elastic.co/guide/en/enterprise-search/master/dls.html). A service account with delegated authority can impersonate an admin user with permissions to access Google Workspace user data and their group memberships. Refer to the [Google Cloud documentation](https://support.google.com/a/answer/162106?hl=en) for more information.
 
 ## Deployment using Docker
 
@@ -116,6 +138,14 @@ It will attempt to extract the content from Google Suite documents (Google Docs,
 [Basic sync rules](https://www.elastic.co/guide/en/enterprise-search/8.9/sync-rules.html#sync-rules-basic "Basic sync rules") are identical for all connectors and are available by default.
 
 Advanced sync rules are not available for this connector in the present version. Currently filtering is controlled via ingest pipelines.
+
+## Document level security
+
+Document level security (DLS) enables you to restrict access to documents based on a user’s permissions. This feature is available by default for the Google Drive connector.
+
+Refer to [document level security](https://www.elastic.co/guide/en/enterprise-search/master/dls.html) for more information.
+
+**Note:** Refer to [DLS in Search Applications](https://www.elastic.co/guide/en/enterprise-search/master/dls-e2e-guide.html) to learn how to ingest data from Google Drive with DLS enabled, when building a search application.
 
 ## Content extraction
 
