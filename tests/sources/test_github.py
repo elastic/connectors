@@ -4,79 +4,321 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Github source class methods"""
-from http import HTTPStatus
-from unittest import mock
+from unittest.mock import AsyncMock, Mock, patch
 
+import aiohttp
 import pytest
-from gidgethub import BadRequest
+from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
-from connectors.sources import github
 from connectors.sources.github import GitHubDataSource, UnauthorizedException
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
-MOCK_RESPONSE_REPO = {
-    "_id": "625848393",
-    "_timestamp": "2023-04-19T09:32:54Z",
+REPOS = {
     "name": "demo_repo",
-    "full_name": "demo_user/demo_repo",
-    "html_url": "https://github.com/demo_user/demo_repo",
-    "owner": "demo_user",
+    "nameWithOwner": "demo_user/demo_repo",
+    "url": "https://github.com/demo_user/demo_repo",
+    "description": "Demo repo for poc",
+    "visibility": "PUBLIC",
+    "primaryLanguage": {"name": "Python"},
+    "defaultBranchRef": {"name": "main"},
+    "isFork": False,
+    "stargazerCount": 0,
+    "watchers": {"totalCount": 1},
+    "forkCount": 0,
+    "createdAt": "2023-04-17T06:06:25Z",
+    "_id": "R_kgDOJXuc8A",
+    "_timestamp": "2023-06-20T07:09:34Z",
+    "isArchived": False,
     "type": "Repository",
-    "description": "this is a test repository",
-    "visibility": "public",
-    "language": "Python",
-    "default_branch": "main",
-    "fork": "false",
-    "open_issues": 4,
-    "forks_count": 2,
-    "watchers": 10,
-    "stargazers_count": 10,
-    "created_at": "2023-04-19T09:32:54Z",
 }
+MOCK_RESPONSE_REPO = [
+    {
+        "data": {
+            "user": {
+                "repositories": {
+                    "pageInfo": {"hasNextPage": True, "endCursor": "abcd1234"},
+                    "nodes": [
+                        {
+                            "name": "demo_repo",
+                            "nameWithOwner": "demo_user/demo_repo",
+                        }
+                    ],
+                }
+            }
+        }
+    },
+    {
+        "data": {
+            "user": {
+                "repositories": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
+                    "nodes": [
+                        {
+                            "name": "test_repo",
+                            "nameWithOwner": "test_repo",
+                        }
+                    ],
+                }
+            }
+        }
+    },
+]
 
 MOCK_RESPONSE_ISSUE = {
-    "_id": "1672779543",
-    "_timestamp": "2023-04-20T08:56:23Z",
+    "data": {
+        "repository": {
+            "issues": {
+                "nodes": [
+                    {
+                        "number": 1,
+                        "url": "https://github.com/demo_user/demo_repo/issues/1",
+                        "createdAt": "2023-04-18T10:12:21Z",
+                        "closedAt": None,
+                        "title": "demo issues",
+                        "body": "demo issues test",
+                        "state": "OPEN",
+                        "id": "I_kwDOJXuc8M5jtMsK",
+                        "type": "Issue",
+                        "updatedAt": "2023-04-19T08:56:23Z",
+                        "comments": {
+                            "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
+                            "nodes": [
+                                {
+                                    "author": {"login": "demo_user"},
+                                    "body": "demo comments updated!!",
+                                }
+                            ],
+                        },
+                        "labels": {
+                            "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
+                            "nodes": [
+                                {
+                                    "name": "enhancement",
+                                    "description": "New feature or request",
+                                }
+                            ],
+                        },
+                        "assignees": {
+                            "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
+                            "nodes": [{"login": "demo_user"}],
+                        },
+                    }
+                ]
+            }
+        }
+    }
+}
+EXPECTED_ISSUE = {
     "number": 1,
-    "html_url": "https://github.com/demo_user/demo_repo/issues/1",
-    "created_at": "2023-04-19T08:56:23Z",
-    "closed_at": "2023-04-20T08:56:23Z",
+    "url": "https://github.com/demo_user/demo_repo/issues/1",
+    "createdAt": "2023-04-18T10:12:21Z",
+    "closedAt": None,
     "title": "demo issues",
     "body": "demo issues test",
-    "state": "open",
+    "state": "OPEN",
     "type": "Issue",
-    "owner": "demo_user",
-    "repository": "demo_repo",
-    "assignees": ["demo_user"],
-    "labels": ["bug"],
-    "comments": [{"author": "demo_user", "body": "demo comments"}],
+    "_id": "I_kwDOJXuc8M5jtMsK",
+    "_timestamp": "2023-04-19T08:56:23Z",
+    "issue_comments": [
+        {"author": {"login": "demo_user"}, "body": "demo comments updated!!"}
+    ],
+    "labels_field": [{"name": "enhancement", "description": "New feature or request"}],
+    "assignees_list": [{"login": "demo_user"}],
 }
 MOCK_RESPONSE_PULL = {
-    "_id": "1313560788",
-    "_timestamp": "2023-04-24T08:44:00Z",
+    "data": {
+        "repository": {
+            "pullRequests": {
+                "nodes": [
+                    {
+                        "id": "1",
+                        "updatedAt": "2023-07-03T12:24:16Z",
+                        "number": 2,
+                        "url": "https://github.com/demo_repo/demo_repo/pull/2",
+                        "createdAt": "2023-04-19T09:06:01Z",
+                        "closedAt": "None",
+                        "title": "test pull request",
+                        "body": "test pull request",
+                        "state": "OPEN",
+                        "mergedAt": "None",
+                        "assignees": {
+                            "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
+                            "nodes": [{"login": "test_user"}],
+                        },
+                        "labels": {
+                            "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
+                            "nodes": [
+                                {
+                                    "name": "bug",
+                                    "description": "Something isn't working",
+                                },
+                            ],
+                        },
+                        "reviewRequests": {
+                            "pageInfo": {"hasNextPage": True, "endCursor": "abcd1234"},
+                            "nodes": [{"requestedReviewer": {"login": "test_user"}}],
+                        },
+                        "comments": {
+                            "pageInfo": {
+                                "hasNextPage": True,
+                                "endCursor": "Y3Vyc29yOnYyOpHOXmz8gA==",
+                            },
+                            "nodes": [
+                                {
+                                    "author": {"login": "test_user"},
+                                    "body": "issues comments",
+                                },
+                            ],
+                        },
+                        "reviews": {
+                            "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
+                            "nodes": [
+                                {
+                                    "author": {"login": "test_user"},
+                                    "state": "COMMENTED",
+                                    "body": "add some comments",
+                                    "comments": {
+                                        "pageInfo": {
+                                            "hasNextPage": False,
+                                            "endCursor": "abcd",
+                                        },
+                                        "nodes": [{"body": "nice!!!"}],
+                                    },
+                                },
+                            ],
+                        },
+                    }
+                ]
+            }
+        }
+    }
+}
+EXPECTED_PULL_RESPONSE = {
     "number": 2,
-    "html_url": "https://github.com/demo_user/demo_repo/pull/2",
-    "created_at": "2023-04-24T08:44:00Z",
-    "closed_at": "2023-04-25T08:44:00Z",
-    "title": "update hello world",
-    "state": "open",
-    "merged_at": "2023-04-25T08:44:00Z",
-    "merge_commit_sha": "2123bad7d8sfsa4fds54",
-    "body": "Update hello world",
+    "url": "https://github.com/demo_repo/demo_repo/pull/2",
+    "createdAt": "2023-04-19T09:06:01Z",
+    "closedAt": "None",
+    "title": "test pull request",
+    "body": "test pull request",
+    "state": "OPEN",
+    "mergedAt": "None",
+    "_id": "1",
+    "_timestamp": "2023-07-03T12:24:16Z",
     "type": "Pull request",
-    "owner": "demo_user",
-    "repository": "demo_repo",
-    "head_label": "branch1",
-    "base_label": "main",
-    "assignees": ["demo_user"],
-    "requested_reviewers": ["test_user"],
-    "requested_teams": ["team1"],
-    "labels": ["V8.8"],
-    "review_comments": [{"author": "demo_user", "body": "review comments"}],
-    "comments": [{"author": "demo_user", "body": "issue comments"}],
-    "reviews": [{"author": "demo_user", "body": "demo comments", "state": "Commented"}],
+    "issue_comments": [
+        {"author": {"login": "test_user"}, "body": "issues comments"},
+        {"author": {"login": "test_user"}, "body": "more_comments"},
+    ],
+    "reviews_comments": [
+        {
+            "author": "test_user",
+            "body": "add some comments",
+            "state": "COMMENTED",
+            "comments": [{"body": "nice!!!"}],
+        },
+        {
+            "author": "test_user",
+            "body": "LGTM",
+            "state": "APPROVED",
+            "comments": [{"body": "LGTM"}],
+        },
+    ],
+    "labels_field": [
+        {"name": "bug", "description": "Something isn't working"},
+        {"name": "8.8.0", "description": "8.8 Version"},
+    ],
+    "assignees_list": [{"login": "test_user"}, {"login": "test_user"}],
+    "requested_reviewers": [
+        {"requestedReviewer": {"login": "test_user"}},
+        {"requestedReviewer": {"login": "other_user"}},
+    ],
+}
+MOCK_REVIEWS_RESPONSE = {
+    "data": {
+        "repository": {
+            "pullRequest": {
+                "reviews": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+                    "nodes": [
+                        {
+                            "author": {"login": "test_user"},
+                            "state": "APPROVED",
+                            "body": "LGTM",
+                            "comments": {
+                                "pageInfo": {
+                                    "hasNextPage": False,
+                                    "endCursor": "abcd",
+                                },
+                                "nodes": [{"body": "LGTM"}],
+                            },
+                        },
+                    ],
+                }
+            }
+        }
+    }
+}
+MOCK_REVIEW_REQUESTED_RESPONSE = {
+    "data": {
+        "repository": {
+            "pullRequest": {
+                "reviewRequests": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd1234"},
+                    "nodes": [{"requestedReviewer": {"login": "other_user"}}],
+                }
+            }
+        }
+    }
+}
+MOCK_COMMENTS_RESPONSE = {
+    "data": {
+        "repository": {
+            "pullRequest": {
+                "comments": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+                    "nodes": [
+                        {
+                            "author": {"login": "test_user"},
+                            "body": "more_comments",
+                        },
+                    ],
+                }
+            }
+        }
+    }
+}
+MOCK_LABELS_RESPONSE = {
+    "data": {
+        "repository": {
+            "pullRequest": {
+                "labels": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+                    "nodes": [
+                        {
+                            "name": "8.8.0",
+                            "description": "8.8 Version",
+                        },
+                    ],
+                }
+            }
+        }
+    }
+}
+MOCK_ASSIGNEE_RESPONSE = {
+    "data": {
+        "repository": {
+            "pullRequest": {
+                "assignees": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+                    "nodes": [
+                        {"login": "test_user"},
+                    ],
+                }
+            }
+        }
+    }
 }
 MOCK_RESPONSE_ATTACHMENTS = (
     {
@@ -162,15 +404,33 @@ MOCK_COMMITS = [
 ]
 
 
+class JSONAsyncMock(AsyncMock):
+    def __init__(self, json, status, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._json = json
+        self.status = status
+
+    async def json(self):
+        return self._json
+
+
+def get_json_mock(mock_response, status):
+    async_mock = AsyncMock()
+    async_mock.__aenter__ = AsyncMock(
+        return_value=JSONAsyncMock(json=mock_response, status=status)
+    )
+    return async_mock
+
+
 def test_get_default_configuration():
     config = DataSourceConfiguration(GitHubDataSource.get_default_configuration())
 
     assert config["repositories"] == ["*"]
-    assert config["github_token"] == "changeme"
+    assert config["token"] == "changeme"
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("field", ["repositories", "github_token"])
+@pytest.mark.parametrize("field", ["repositories", "token"])
 async def test_validate_config_missing_fields_then_raise(field):
     source = create_source(GitHubDataSource)
     source.configuration.set_field(name=field, value="")
@@ -182,18 +442,33 @@ async def test_validate_config_missing_fields_then_raise(field):
 @pytest.mark.asyncio
 async def test_ping_with_successful_connection():
     source = create_source(GitHubDataSource)
-    source.github_client._get_client.getitem = mock.AsyncMock(
-        return_value={"user": "username"}
+    source.github_client._get_session.post = Mock(
+        return_value=get_json_mock(mock_response={"user": "username"}, status=200)
     )
     await source.ping()
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_get_user_repos():
+    actual_response = []
+    source = create_source(GitHubDataSource)
+    source.github_client.paginated_api_call = Mock(
+        return_value=AsyncIterator(MOCK_RESPONSE_REPO)
+    )
+    async for repo in source.github_client.get_user_repos():
+        actual_response.append(repo)
+    assert actual_response == [
+        {"name": "demo_repo", "nameWithOwner": "demo_user/demo_repo"},
+        {"name": "test_repo", "nameWithOwner": "test_repo"},
+    ]
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.apply_retry_strategy")
 async def test_ping_with_unsuccessful_connection(mock_apply_retry_strategy):
     source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    with mock.patch.object(
+    mock_apply_retry_strategy.return_value = Mock()
+    with patch.object(
         source.github_client,
         "ping",
         side_effect=Exception("Something went wrong"),
@@ -211,18 +486,18 @@ async def test_close_without_session():
 @pytest.mark.asyncio
 async def test_close_with_session():
     source = create_source(GitHubDataSource)
-    source.github_client._get_client  # noqa
+    source.github_client._get_session  # noqa
     await source.close()
-    assert hasattr(source, "_get_client") is False
+    assert hasattr(source, "_get_session") is False
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
+@patch("connectors.utils.apply_retry_strategy")
 async def test_validate_config_with_invalid_token_then_raise(mock_apply_retry_strategy):
     source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    source.github_client._get_client._request = mock.AsyncMock(
-        return_value=(200, {"X-OAuth-Scopes": ""}, {"user": "username"})
+    mock_apply_retry_strategy.return_value = Mock()
+    source.github_client.post = AsyncMock(
+        return_value=({"user": "username"}, {"X-OAuth-Scopes": ""})
     )
     with pytest.raises(
         ConfigurableFieldValueError,
@@ -232,103 +507,156 @@ async def test_validate_config_with_invalid_token_then_raise(mock_apply_retry_st
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_validate_config_with_unauthorized_user(mock_apply_retry_strategy):
-    source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    source.github_client.get_response_headers = mock.AsyncMock(
-        return_value={"X-OAuth-Scopes": ""}
-    )
-    with pytest.raises(ConfigurableFieldValueError):
-        await source.validate_config()
-
-
-@pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
+@patch("connectors.utils.apply_retry_strategy")
 async def test_validate_config_with_inaccessible_repositories_then_raise(
     mock_apply_retry_strategy,
 ):
     source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
+    mock_apply_retry_strategy.return_value = Mock()
     source.github_client.repos = ["repo1", "owner1/repo1", "repo2", "owner2/repo2"]
-    source.github_client.get_response_headers = mock.AsyncMock(
-        return_value={"X-OAuth-Scopes": "repo"}
+    source.github_client.post = AsyncMock(
+        return_value=({"dummy": "dummy"}, {"X-OAuth-Scopes": "repo"})
     )
-    source.get_invalid_repos = mock.AsyncMock(return_value=["repo2"])
+    source.get_invalid_repos = AsyncMock(return_value=["repo2"])
     with pytest.raises(ConfigurableFieldValueError):
         await source.validate_config()
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
+@patch("connectors.utils.apply_retry_strategy")
 async def test_get_invalid_repos_with_max_retries(mock_apply_retry_strategy):
     source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
+    mock_apply_retry_strategy.return_value = Mock()
     with pytest.raises(Exception):
-        source.github_client.get_paginated_response = Exception()
+        source.github_client.post = AsyncMock(side_effect=Exception())
         await source.get_invalid_repos()
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_get_response_headers_with_rate_limit_exceeded(mock_apply_retry_strategy):
+@patch("connectors.utils.apply_retry_strategy")
+async def test_get_response_with_rate_limit_exceeded(mock_apply_retry_strategy):
     source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    with mock.patch.object(
+    mock_apply_retry_strategy.return_value = Mock()
+    with patch.object(
         source.github_client._get_client,
-        "_request",
-        side_effect=[
-            (403, {"X-OAuth-Scopes": ""}, b'{"message": "API rate limit is exceeded"}'),
-            (200, {"X-OAuth-Scopes": ""}, {"user": "username"}),
-        ],
+        "getitem",
+        side_effect=ClientResponseError(
+            status=403,
+            request_info=aiohttp.RequestInfo(
+                real_url="", method=None, headers=None, url=""
+            ),
+            history=None,
+        ),
     ):
-        source.github_client._get_retry_after = mock.AsyncMock(return_value=0)
-        await source.github_client.get_response_headers(
-            method="GET", url=github.ENDPOINTS["USER"]
-        )
+        with pytest.raises(Exception):
+            source.github_client._get_retry_after = AsyncMock(return_value=0)
+            await source.github_client.get_github_item("/user")
+
+
+@pytest.mark.asyncio
+async def test_put_to_sleep():
+    source = create_source(GitHubDataSource)
+    source.github_client._get_retry_after = AsyncMock(return_value=0)
+    with pytest.raises(Exception, match="Rate limit exceeded."):
+        await source.github_client._put_to_sleep("core")
 
 
 @pytest.mark.asyncio
 async def test_get_retry_after():
     source = create_source(GitHubDataSource)
-    source.github_client._get_client.getitem = mock.AsyncMock(
-        {"resource": {"code": {"reset": 1686563525}}}
+    source.github_client._get_client.getitem = AsyncMock(
+        return_value={
+            "resources": {
+                "core": {"reset": 1686563525},
+                "graphql": {"reset": 1686563525},
+            }
+        }
     )
-    await source.github_client._get_retry_after()
+    await source.github_client._get_retry_after(type="core")
+    await source.github_client._get_retry_after(type="graphql")
 
 
 @pytest.mark.asyncio
-async def test_get_paginated_response():
-    expected_response = {"name": "repo1"}
+@patch("connectors.utils.apply_retry_strategy")
+async def test_post_with_errors(mock_apply_retry_strategy):
     source = create_source(GitHubDataSource)
-    with mock.patch.object(
-        source.github_client, "get_response", side_effect=[[{"name": "repo1"}], []]
-    ):
-        async for data in source.github_client.get_paginated_response(
-            github.ENDPOINTS["ALL_REPOS"]
+    mock_apply_retry_strategy.return_value = Mock()
+    source.github_client._get_session.post = Mock(
+        return_value=get_json_mock(
+            mock_response={"errors": [{"type": "QUERY", "message": "Invalid query"}]},
+            status=200,
+        )
+    )
+    with pytest.raises(Exception):
+        await source.github_client.post(
+            {"variable": {"owner": "demo_user"}, "query": "QUERY"}
+        )
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.apply_retry_strategy")
+async def test_post_with_unauthorized(mock_apply_retry_strategy):
+    source = create_source(GitHubDataSource)
+    mock_apply_retry_strategy.return_value = Mock()
+    source.github_client._get_session.post = Mock(
+        side_effect=ClientResponseError(
+            status=401,
+            request_info=aiohttp.RequestInfo(
+                real_url="", method=None, headers=None, url=""
+            ),
+            history=None,
+        )
+    )
+    with pytest.raises(UnauthorizedException):
+        await source.github_client.post(
+            {"variable": {"owner": "demo_user"}, "query": "QUERY"}
+        )
+
+
+@pytest.mark.asyncio
+async def test_paginated_api_call():
+    expected_response = MOCK_RESPONSE_REPO
+    source = create_source(GitHubDataSource)
+    actual_response = []
+    with patch.object(source.github_client, "post", side_effect=expected_response):
+        async for data in source.github_client.paginated_api_call(
+            {"owner": "demo_user"}, "demo_query", ["user", "repositories"]
         ):
-            assert expected_response == data
+            actual_response.append(data)
+        assert expected_response == actual_response
 
 
 @pytest.mark.asyncio
 async def test_get_invalid_repos():
     expected_response = ["owner1/repo2", "owner2/repo2"]
     source = create_source(GitHubDataSource)
-    source.github_client.repos = ["repo1", "owner1/repo1", "repo2", "owner2/repo2"]
-    source.github_client.get_user_repos = mock.Mock(
-        return_value=AsyncIterator([{"full_name": "owner1/repo1"}])
-    )
-    with mock.patch.object(
-        source.github_client,
-        "get_response",
+    source.github_client.repos = ["repo1", "owner1/repo2", "repo2", "owner2/repo2"]
+    source.github_client.post = AsyncMock(
         side_effect=[
-            {"login": "owner1"},
-            {"name": "repo1"},
-            BadRequest(status_code=HTTPStatus.NOT_FOUND),
-        ],
-    ):
-        invalid_repos = await source.get_invalid_repos()
-        assert expected_response == invalid_repos
+            {"data": {"viewer": {"login": "owner1"}}},
+            {
+                "data": {
+                    "user": {
+                        "repositories": {
+                            "pageInfo": {"hasNextPage": True, "endCursor": "abcd1234"},
+                            "nodes": [
+                                {
+                                    "name": "owner1",
+                                    "nameWithOwner": "owner1/repo2",
+                                }
+                            ],
+                        }
+                    }
+                }
+            },
+            Exception(),
+        ]
+    )
+    source.github_client.get_user_repos = Mock(
+        return_value=AsyncIterator([{"nameWithOwner": "owner1/repo1"}])
+    )
+    invalid_repos = await source.get_invalid_repos()
+    assert expected_response == invalid_repos
 
 
 @pytest.mark.asyncio
@@ -339,9 +667,9 @@ async def test_get_content_with_text_file():
         "_attachment": "VGVzdCBGaWxlICEhISDwn5iCCg==",
     }
     source = create_source(GitHubDataSource)
-    with mock.patch.object(
-        source.github_client,
-        "get_response",
+    with patch.object(
+        source.github_client._get_client,
+        "getitem",
         side_effect=[MOCK_RESPONSE_ATTACHMENTS[1]],
     ):
         actual_response = await source.get_content(
@@ -401,201 +729,116 @@ async def test_get_content_with_unsupported_tika_file_type_then_skip():
 @pytest.mark.asyncio
 async def test_fetch_repos():
     source = create_source(GitHubDataSource)
-    mock_repo = MOCK_RESPONSE_REPO.copy()
-    mock_repo["id"] = mock_repo.pop("_id")
-    mock_repo["updated_at"] = mock_repo.pop("_timestamp")
-    mock_repo["owner"] = {"login": "demo_user"}
-    mock_repo["default_branch"] = "main"
-    source.github_client.get_paginated_response = mock.Mock(
-        return_value=AsyncIterator([mock_repo])
+    source.github_client.repos = ["*"]
+    source.github_client.post = AsyncMock(
+        return_value={"data": {"viewer": {"login": "owner1"}}}
     )
-    async for repo in source.fetch_repos():
-        assert repo == MOCK_RESPONSE_REPO
+    source.github_client.get_user_repos = Mock(
+        return_value=AsyncIterator(
+            [
+                {
+                    "id": "123",
+                    "updatedAt": "2023-04-17T12:55:01Z",
+                    "nameWithOwner": "owner1/repo1",
+                }
+            ]
+        )
+    )
+    async for repo in source._fetch_repos():
+        assert repo == {
+            "nameWithOwner": "owner1/repo1",
+            "_id": "123",
+            "_timestamp": "2023-04-17T12:55:01Z",
+            "type": "Repository",
+        }
 
 
 @pytest.mark.asyncio
 async def test_fetch_repos_when_user_repos_is_available():
     source = create_source(GitHubDataSource)
-    mock_repo = MOCK_RESPONSE_REPO.copy()
-    mock_repo["id"] = mock_repo.pop("_id")
-    mock_repo["updated_at"] = mock_repo.pop("_timestamp")
-    mock_repo["owner"] = {"login": "demo_user"}
-    mock_repo["default_branch"] = "main"
-    source.user_repos = {"demo_user/mock_repo": mock_repo}
-    async for repo in source.fetch_repos():
-        assert repo == MOCK_RESPONSE_REPO
+    source.github_client.repos = ["demo_user/demo_repo", ""]
+    source.github_client.post = AsyncMock(
+        side_effect=[
+            {"data": {"viewer": {"login": "owner1"}}},
+            {
+                "data": {
+                    "repository": {
+                        "id": "123",
+                        "updatedAt": "2023-04-17T12:55:01Z",
+                        "nameWithOwner": "demo_user/demo_repo",
+                    }
+                }
+            },
+        ]
+    )
+    async for repo in source._fetch_repos():
+        assert repo == {
+            "nameWithOwner": "demo_user/demo_repo",
+            "_id": "123",
+            "_timestamp": "2023-04-17T12:55:01Z",
+            "type": "Repository",
+        }
 
 
 @pytest.mark.asyncio
 async def test_fetch_repos_with_unauthorized_exception():
     source = create_source(GitHubDataSource)
-    source.github_client.get_paginated_response = mock.Mock(
-        side_effect=UnauthorizedException()
-    )
+    source.github_client.post = Mock(side_effect=UnauthorizedException())
     with pytest.raises(UnauthorizedException):
-        async for _ in source.fetch_repos():
+        async for _ in source._fetch_repos():
             pass
-
-
-@pytest.mark.asyncio
-async def test_fetch_repos_with_configured_repos():
-    user = {"login": "demo_user"}
-    source = create_source(GitHubDataSource)
-    source.github_client.repos = ["demo_repo"]
-    source.user = None
-    mock_repo = MOCK_RESPONSE_REPO.copy()
-    mock_repo["id"] = mock_repo.pop("_id")
-    mock_repo["updated_at"] = mock_repo.pop("_timestamp")
-    mock_repo["owner"] = user
-    with mock.patch.object(
-        source.github_client,
-        "get_response",
-        side_effect=[user, mock_repo],
-    ):
-        async for repo in source.fetch_repos():
-            assert repo == MOCK_RESPONSE_REPO
-
-
-@pytest.mark.asyncio
-async def test_fetch_repos_when_foreign_repo_is_available():
-    user = {"login": "demo_user"}
-    source = create_source(GitHubDataSource)
-    source.github_client.repos = ["demo_user/demo_repo"]
-    source.user = "demo_user"
-    mock_repo = MOCK_RESPONSE_REPO.copy()
-    mock_repo["id"] = mock_repo.pop("_id")
-    mock_repo["updated_at"] = mock_repo.pop("_timestamp")
-    mock_repo["owner"] = user
-    source.foreign_repos = {"demo_user/demo_repo": mock_repo}
-    async for repo in source.fetch_repos():
-        assert repo == MOCK_RESPONSE_REPO
 
 
 @pytest.mark.asyncio
 async def test_fetch_issues():
     source = create_source(GitHubDataSource)
-    mock_issues = MOCK_RESPONSE_ISSUE.copy()
-    mock_issues.update(
-        {
-            "id": mock_issues.pop("_id"),
-            "updated_at": mock_issues.pop("_timestamp"),
-            "user": {"login": "demo_user"},
-            "assignees": [{"login": "demo_user"}],
-            "labels": [{"name": "bug"}],
-        }
-    )
-    with mock.patch.object(
+    source.fetch_extra_fields = AsyncMock()
+    with patch.object(
         source.github_client,
-        "get_paginated_response",
+        "paginated_api_call",
         side_effect=[
-            AsyncIterator([mock_issues]),
-            AsyncIterator([{"user": {"login": "demo_user"}, "body": "demo comments"}]),
+            AsyncIterator([MOCK_RESPONSE_ISSUE]),
         ],
     ):
-        async for issue in source.fetch_issues("demo_repo"):
-            assert issue == MOCK_RESPONSE_ISSUE
+        async for issue in source._fetch_issues("demo_user/demo_repo"):
+            assert issue == EXPECTED_ISSUE
 
 
 @pytest.mark.asyncio
 async def test_fetch_issues_with_unauthorized_exception():
     source = create_source(GitHubDataSource)
-    source.github_client.get_paginated_response = mock.Mock(
-        side_effect=UnauthorizedException()
-    )
+    source.github_client.post = Mock(side_effect=UnauthorizedException())
     with pytest.raises(UnauthorizedException):
-        async for _ in source.fetch_issues("demo_repo"):
+        async for _ in source._fetch_issues("demo_user/demo_repo"):
             pass
 
 
 @pytest.mark.asyncio
 async def test_fetch_pull_requests():
     source = create_source(GitHubDataSource)
-    mock_pull_request = MOCK_RESPONSE_PULL.copy()
-    mock_pull_request["id"] = mock_pull_request.pop("_id")
-    mock_pull_request.update(
-        {
-            "updated_at": mock_pull_request.pop("_timestamp"),
-            "user": {"login": "demo_user"},
-            "head": {"label": "branch1"},
-            "base": {"label": "main"},
-            "assignees": [{"login": "demo_user"}],
-            "requested_reviewers": [{"login": "test_user"}],
-            "requested_teams": [{"name": "team1"}],
-            "labels": [{"name": "V8.8"}],
-        }
-    )
-    with mock.patch.object(
+    with patch.object(
         source.github_client,
-        "get_paginated_response",
+        "paginated_api_call",
         side_effect=[
-            AsyncIterator([mock_pull_request]),
-            AsyncIterator(
-                [{"user": {"login": "demo_user"}, "body": "review comments"}]
-            ),
-            AsyncIterator([{"user": {"login": "demo_user"}, "body": "issue comments"}]),
-            AsyncIterator(
-                [
-                    {
-                        "user": {"login": "demo_user"},
-                        "body": "demo comments",
-                        "state": "Commented",
-                    }
-                ]
-            ),
+            AsyncIterator([MOCK_RESPONSE_PULL]),
+            AsyncIterator([MOCK_COMMENTS_RESPONSE]),
+            AsyncIterator([MOCK_REVIEW_REQUESTED_RESPONSE]),
+            AsyncIterator([MOCK_LABELS_RESPONSE]),
+            AsyncIterator([MOCK_ASSIGNEE_RESPONSE]),
+            AsyncIterator([MOCK_REVIEWS_RESPONSE]),
         ],
     ):
-        async for pull in source.fetch_pull_requests("demo_repo"):
-            assert pull == MOCK_RESPONSE_PULL
+        async for pull in source._fetch_pull_requests("demo_user/demo_repo"):
+            assert pull == EXPECTED_PULL_RESPONSE
 
 
 @pytest.mark.asyncio
 async def test_fetch_pull_requests_with_unauthorized_exception():
     source = create_source(GitHubDataSource)
-    source.github_client.get_paginated_response = mock.Mock(
-        side_effect=UnauthorizedException()
-    )
+    source.github_client.post = Mock(side_effect=UnauthorizedException())
     with pytest.raises(UnauthorizedException):
-        async for _ in source.fetch_pull_requests("demo_repo"):
+        async for _ in source._fetch_pull_requests("demo_user/demo_repo"):
             pass
-
-
-@pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_fetch_repos_with_max_retries(mock_apply_retry_strategy):
-    source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    source.github_client._get_client.getitem = mock.Mock(
-        side_effect=BadRequest(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
-    )
-    async for _ in source.fetch_repos():
-        pass
-    assert mock_apply_retry_strategy.call_count == 2
-
-
-@pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_fetch_pull_requests_with_max_retries(mock_apply_retry_strategy):
-    source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    source.github_client._get_client.getitem = mock.Mock(
-        side_effect=BadRequest(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
-    )
-    async for _ in source.fetch_pull_requests("demo_repo"):
-        pass
-    assert mock_apply_retry_strategy.call_count == 2
-
-
-@pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_fetch_issues_with_max_retries(mock_apply_retry_strategy):
-    source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    source.github_client._get_client.getitem = mock.Mock(
-        side_effect=BadRequest(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
-    )
-    async for _ in source.fetch_issues("demo_repo"):
-        pass
-    assert mock_apply_retry_strategy.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -626,33 +869,29 @@ async def test_fetch_files():
     )
     source = create_source(GitHubDataSource)
 
-    with mock.patch.object(
+    with patch.object(
         source.github_client,
-        "get_response",
+        "get_github_item",
         side_effect=[MOCK_TREE, MOCK_COMMITS],
     ):
-        async for document in source.fetch_files("demo_repo", "main"):
+        async for document in source._fetch_files("demo_repo", "main"):
             assert expected_response == document
 
 
 @pytest.mark.asyncio
 async def test_get_docs():
     expected_response = [
-        MOCK_RESPONSE_REPO,
+        REPOS,
         MOCK_RESPONSE_PULL,
         MOCK_RESPONSE_ISSUE,
         MOCK_RESPONSE_ATTACHMENTS[0],
     ]
     actual_response = []
     source = create_source(GitHubDataSource)
-    source.fetch_repos = mock.Mock(return_value=AsyncIterator([MOCK_RESPONSE_REPO]))
-    source.fetch_issues = mock.Mock(return_value=AsyncIterator([MOCK_RESPONSE_ISSUE]))
-    source.fetch_pull_requests = mock.Mock(
-        return_value=AsyncIterator([MOCK_RESPONSE_PULL])
-    )
-    source.fetch_files = mock.Mock(
-        return_value=AsyncIterator([MOCK_RESPONSE_ATTACHMENTS])
-    )
+    source._fetch_repos = Mock(return_value=AsyncIterator([REPOS]))
+    source._fetch_issues = Mock(return_value=AsyncIterator([MOCK_RESPONSE_ISSUE]))
+    source._fetch_pull_requests = Mock(return_value=AsyncIterator([MOCK_RESPONSE_PULL]))
+    source._fetch_files = Mock(return_value=AsyncIterator([MOCK_RESPONSE_ATTACHMENTS]))
     async for document, _ in source.get_docs():
         actual_response.append(document)
     assert expected_response == actual_response
