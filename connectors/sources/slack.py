@@ -54,9 +54,10 @@ def retryable_aiohttp_call(retries): # TODO, make a base client class
     return wrapper
 
 class SlackClient:
-    def __init__(self, token):
-        self.token = token
-        self._http_session = aiohttp.ClientSession(  # TODO: lazy create this
+    def __init__(self, configuration):
+        self.token = configuration['token']
+        self.auto_join_channels = configuration['auto_join_channels']
+        self._http_session = aiohttp.ClientSession(
             headers=self._headers(),
             timeout=aiohttp.ClientTimeout(total=None),
             raise_for_status=True,
@@ -72,21 +73,25 @@ class SlackClient:
         return
 
     async def get_all_messages(self):
-        async for channel in self.list_channels():
+        async for channel in self.list_channels(not self.auto_join_channels):
             self._logger.info(f"Listed channel: '{channel['name']}'")
             channel_id = channel['id']
-            join_response = await self.join_channel(channel_id) # can't get channel content if the bot is not in the channel
-            if join_response.get("ok"):
+            should_list_messages = True
+            if self.auto_join_channels:
+                join_response = await self.join_channel(channel_id) # can't get channel content if the bot is not in the channel
+            if not self.auto_join_channels or join_response.get("ok"):
                 async for message in self.list_messages(channel_id):
                     yield message | {"channel": channel['name']}
             else:
                 self._logger.warning(f"Not syncing channel: '{channel['name']}' because: {join_response.get('error')}")
 
 
-    async def list_channels(self):
+    async def list_channels(self, only_my_channels):
         url = f"{BASE_URL}/{ENDPOINTS[LIST_CONVERSATIONS]}"
         response = await self._get_json(url)
         for channel in response['channels']:
+            if only_my_channels and not channel.get('is_member', False):
+                continue
             yield channel
 
     async def join_channel(self, channel_id):
@@ -139,8 +144,7 @@ class SlackDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        token = configuration["token"]
-        self.slack_client = SlackClient(token)
+        self.slack_client = SlackClient(configuration)
 
     def _set_internal_logger(self):
         self.slack_client.set_logger(self._logger)
@@ -157,6 +161,14 @@ class SlackDataSource(BaseDataSource):
                 "required": True,
                 "value": "",
             },
+            "auto_join_channels": {
+                "label": "Automatically join channels",
+                "tooltip": "The Slack application bot will only be able to read conversation history from channels it has joined. The default requires it to be manually invited to channels. Enabling this allows it to automatically invite itself into all public channels.",
+                "order": 2,
+                "type": "bool",
+                "display": "toggle",
+                "value": False,
+            }
             # TODO, configure which channels?
         }
 
