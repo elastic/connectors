@@ -75,11 +75,29 @@ def test_field():
 
 
 def test_field_convert():
+    assert Field("name", value="", type="str").value == ""
+    assert Field("name", value="1", type="str").value == "1"
+    assert Field("name", value="foo", type="str").value == "foo"
+    assert Field("name", value=None, type="str").value == ""
+
     assert Field("name", value="1", type="int").value == 1
+    assert Field("name", value="", type="int").value == None
+    assert Field("name", value=None, type="int").value == None
+
     assert Field("name", value="1.2", type="float").value == 1.2
-    assert Field("name", value="YeS", type="bool").value
+    assert Field("name", value="", type="float").value == None
+    assert Field("name", value=None, type="float").value == None
+
+    assert Field("name", value="foo", type="bool").value == True
+    assert Field("name", value="", type="bool").value == False
+    assert Field("name", value=None, type="bool").value == None
+
+    assert Field("name", value="1", type="list").value == ["1"]
     assert Field("name", value="1,2,3", type="list").value == ["1", "2", "3"]
-    assert not Field("name", value="false", type="bool").value
+    assert Field("name", value=[1, 2], type="list").value == [1, 2]
+    assert Field("name", value=0, type="list").value == [0]
+    assert Field("name", value="", type="list").value == []
+    assert Field("name", value=None, type="list").value == []
 
 
 def test_data_source_configuration():
@@ -104,7 +122,7 @@ def test_default():
         # that is because `.value` does care about validation, it only returns a value
         # strings
         ("str", True, "default", "input", "input"),
-        ("str", True, "default", None, None),
+        ("str", True, "default", None, ""),
         ("str", True, "default", "", ""),
         ("str", False, "default", "input", "input"),
         ("str", False, "default", None, "default"),
@@ -119,17 +137,12 @@ def test_default():
         ("list", True, ["1", "2"], [], []),
         ("list", True, ["1", "2"], [""], [""]),
         ("list", True, ["1", "2"], [None], [None]),
-        ("list", True, ["1", "2"], None, None),
+        ("list", True, ["1", "2"], None, []),
         ("list", False, ["1", "2"], ["3", "4"], ["3", "4"]),
         ("list", False, ["1", "2"], [], ["1", "2"]),
         ("list", False, ["1", "2"], [""], ["1", "2"]),
         ("list", False, ["1", "2"], [None], ["1", "2"]),
         ("list", False, ["1", "2"], None, ["1", "2"]),
-        # booleans
-        ("bool", True, True, False, False),
-        ("bool", True, True, None, None),
-        ("bool", False, True, False, False),
-        ("bool", False, True, None, True),
     ],
 )
 def test_value_returns_correct_value(
@@ -225,7 +238,7 @@ def test_get_source_klasses():
             # list_type int
             {
                 "option_list": {
-                    "type": "int",
+                    "type": "list",
                     "value": [1, 2, 3],
                     "validations": [
                         {"type": ValidationTypes.LIST_TYPE.value, "constraint": "int"},
@@ -577,7 +590,7 @@ async def test_check_valid_when_validations_succeed_no_errors_raised(config):
         ),
         (
             {
-                "int_field": {
+                "list_field": {
                     "type": "list",
                     "required": True,
                     "value": [],
@@ -587,7 +600,7 @@ async def test_check_valid_when_validations_succeed_no_errors_raised(config):
         ),
         (
             {
-                "int_field": {
+                "list_field": {
                     "type": "list",
                     "required": True,
                     "value": None,
@@ -597,7 +610,7 @@ async def test_check_valid_when_validations_succeed_no_errors_raised(config):
         ),
         (
             {
-                "int_field": {
+                "bool_field": {
                     "type": "bool",
                     "required": True,
                     "value": None,

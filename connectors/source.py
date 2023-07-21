@@ -106,19 +106,27 @@ class Field:
         self._value = value
 
     def _convert(self, value, type_):
-        if not isinstance(value, str):
-            # we won't convert the value if it's not a str
-            return value
-
-        if type_ == "int":
-            return int(value)
-        elif type_ == "float":
-            return float(value)
-        elif type_ == "bool":
-            return value.lower() in ("y", "yes", "true", "1")
-        elif type_ == "list":
-            return [item.strip() for item in value.split(",")]
-        return value
+        match type_:
+            case "int":
+                if isinstance(value, int):
+                    return value
+                return int(value) if value else None
+            case "float":
+                if isinstance(value, float):
+                    return value
+                return float(value) if value else None
+            case "bool":
+                if isinstance(value, bool):
+                    return value
+                return bool(value) if value is not None else None
+            case "list":
+                if isinstance(value, list):
+                    return value
+                if isinstance(value, str):
+                    return [item.strip() for item in value.split(",")] if value else []
+                return [value] if value is not None else []
+            case _:  # str
+                return str(value) if value else ""
 
     def is_value_empty(self):
         """Checks if the `value` field is empty or not.
@@ -239,7 +247,7 @@ class DataSourceConfiguration:
 
     def set_defaults(self, default_config):
         for name, item in default_config.items():
-            self._defaults[name] = item["value"]
+            self._defaults[name] = item.get("value", None)
             if name in self._config:
                 self._config[name].type = item["type"]
 
