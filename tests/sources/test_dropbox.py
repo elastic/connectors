@@ -569,7 +569,7 @@ async def test_paginated_api_call_when_skipping_api_call():
         async for response in source.dropbox_client._paginated_api_call(
             base_url=HOST_URLS["FILES_FOLDERS_HOST_URL"],
             breaking_field="xyz",
-            is_shared=False,
+            continue_endpoint="shared_file",
             data={"data": "xyz"},
             url_name="url_name",
         ):

@@ -285,7 +285,7 @@ class DropboxClient:
                 await self._sleeps.sleep(retry_seconds)
 
     async def _paginated_api_call(
-        self, base_url, breaking_field, is_shared=False, **kwargs
+        self, base_url, breaking_field, continue_endpoint=None, **kwargs
     ):
         """Make a paginated API call for fetching Dropbox files/folders.
 
@@ -321,11 +321,11 @@ class DropboxClient:
                             BreakingField.CURSOR.value
                         ]
                     }
-                    if is_shared:
+                    if continue_endpoint == "shared_file":
                         url_name = ENDPOINTS.get(
                             EndpointName.RECEIVED_FILES_CONTINUE.value
                         )
-                    elif kwargs.get("search_file") is True:
+                    elif continue_endpoint == "search_file":
                         url_name = ENDPOINTS.get(EndpointName.SEARCH_CONTINUE.value)
                     else:
                         url_name = ENDPOINTS.get(
@@ -373,7 +373,7 @@ class DropboxClient:
             "limit": LIMIT,
         }
         async for result in self._paginated_api_call(
-            is_shared=True,
+            continue_endpoint="shared_file",
             base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
             url_name=ENDPOINTS.get(EndpointName.RECEIVED_FILES.value),
             data=data,
@@ -423,7 +423,7 @@ class DropboxClient:
             url_name=ENDPOINTS.get(EndpointName.SEARCH.value),
             data=rule,
             breaking_field=BreakingField.HAS_MORE.value,
-            search_file=True,
+            continue_endpoint="search_file",
         ):
             yield result
 
@@ -817,33 +817,30 @@ class DropboxDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the files.
         """
+
+        def document_tuple(document, attachment):
+            if document.get("type") == FILE:
+                if document.get("url"):
+                    return document, partial(
+                        self.get_content, attachment=attachment, is_shared=True
+                    )
+                else:
+                    return document, partial(self.get_content, attachment=attachment)
+            else:
+                return document, None
+
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
             for rule in advanced_rules:
                 self._logger.debug(f"Fetching files using advanced sync rule: {rule}")
 
                 async for document, attachment in self.advanced_sync(rule=rule):
-                    if document["type"] == FILE:
-                        if document.get("url"):
-                            yield document, partial(
-                                self.get_content, attachment=attachment, is_shared=True
-                            )
-                        else:
-                            yield document, partial(
-                                self.get_content, attachment=attachment
-                            )
-                    else:
-                        yield document, None
+                    yield document_tuple(document=document, attachment=attachment)
         else:
             async for document, attachment in self._fetch_files_folders(
                 path=self.dropbox_client.path
             ):
-                if document["type"] == FILE:
-                    yield document, partial(self.get_content, attachment=attachment)
-                else:
-                    yield document, None
+                yield document_tuple(document=document, attachment=attachment)
 
             async for document, attachment in self._fetch_shared_files():
-                yield document, partial(
-                    self.get_content, attachment=attachment, is_shared=True
-                )
+                yield document_tuple(document=document, attachment=attachment)
