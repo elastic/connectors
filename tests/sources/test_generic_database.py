@@ -161,7 +161,7 @@ async def test_validate_config_ssl():
     """Test validate_config method check ssl"""
     # Setup
     source = create_source(PostgreSQLDataSource)
-    source.configuration.set_field(name="ssl_enabled", value=True)
+    source.configuration.set_field(name="ssl_enabled", type="bool", value=True)
 
     with pytest.raises(ConfigurableFieldValueError):
         # Execute
