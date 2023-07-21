@@ -102,6 +102,17 @@ The connector syncs the following objects and entities:
 
 Advanced sync rules are not available for this connector in the present version. Currently filtering is controlled via ingest pipelines.
 
+## Advanced Sync Rules
+
+Advanced Sync Rules are now available in elastic 8.10 version.
+
+- Users can add [Dropbox queries](https://www.dropbox.com/developers/documentation/http/documentation#files-search) for syncing the source.
+    - Check the search response from [Dropbox API Explorer](https://dropbox.github.io/dropbox-api-v2-explorer/#files_search_v2).
+- All the data returned by queries will be indexed.
+- You can refer to [DROPBOX.md](../connectors/docs/sync-rules/DROPBOX.md) for the correct format to add sync rules. Any errors encountered, will be presented to the user visually in the sync rules overview.
+
+**Note:** "path" configuration field will be overridden by the advanced rules.
+
 ## Connector Client operations
 
 ### End-to-end Testing
