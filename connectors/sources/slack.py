@@ -29,13 +29,16 @@ ENDPOINTS = {
 # - who do I hand this off too? What quality bar?
 # - write unit tests
 # - write an ftest
+# - do index users and channels along with messages
+# - configurable how far back to sync. Default 6 months.
 # Nice to haves:
 # - expand links
 #   - links:read scope needed?
+# - more dynamic username treatment - use display name where able
 # To Verify:
 # - when messages were authored vs edited
 # - threads vs messages
-# - configure how far back to sync?
+
 
 def retryable_aiohttp_call(retries): # TODO, make a base client class
     # TODO: improve utils.retryable to allow custom logic
