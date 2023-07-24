@@ -26,8 +26,10 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'network_drive'
-service_type: 'network_drive'
+connectors:
+  -
+    connector_id: 'network_drive'
+    service_type: 'network_drive'
 
 sources:
   network_drive: connectors.sources.network_drive:NASDataSource
