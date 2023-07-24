@@ -246,7 +246,7 @@ Rich Configurable Fields are defined as JSON objects with the following key-valu
 Explanation of possible validation rules, where `value` refers to validated value:
 - `less_than` - The `constraint` has to be numeric. Validator checks for `value < constraint`.
 - `greater_than` - The `constraint` has to be numeric. Validator checks for `value > constraint`.
-- `list_type` - The constraint has to be either `'int'` or `'str'`. The `value` has to be of list type. The validator checks the type of each element in the `value` list.
+- `list_type` - The constraint has to be either `int` or `str`. The `value` has to be of list type. The validator checks the type of each element in the `value` list.
 - `included_in` - The constraint has to be of `list` type and include allowed values. The `value` has to be of list type. The validator checks if `value is subset of constraint`
 - `regex` - The constrain has to be a [valid regex expression](https://docs.python.org/3/library/re.html). The `value` has to be `str`. The validator checks if `value` matches the `constraint` regular expression.
 
