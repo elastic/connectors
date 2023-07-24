@@ -126,6 +126,7 @@ def mock_connector(
     connector.validate_filtering = AsyncMock()
     connector.next_sync = Mock(return_value=next_sync)
 
+    connector.close = AsyncMock()
     connector.prepare = AsyncMock(side_effect=prepare_exception)
     connector.heartbeat = AsyncMock()
     connector.reload = AsyncMock()

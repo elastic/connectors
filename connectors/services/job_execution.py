@@ -143,18 +143,9 @@ class JobExecutionService(BaseService):
         self.connector_index = ConnectorIndex(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
 
-        native_service_types = self.config.get("native_service_types")
-        if native_service_types is None:
-            native_service_types = []
+        native_service_types = self.config.get("native_service_types", []) or []
         logger.debug(f"Native support for {', '.join(native_service_types)}")
-
-        # TODO: we can support multiple connectors but Ruby can't so let's use a
-        # single id
-        # connector_ids = self.config.get("connector_ids", [])
-        if "connector_id" in self.config:
-            connector_ids = [self.config.get("connector_id")]
-        else:
-            connector_ids = []
+        connector_ids = list(self.connectors.keys())
 
         logger.info(
             f"Service started, listening to events from {self.es_config['host']}"
@@ -171,7 +162,9 @@ class JobExecutionService(BaseService):
                 )
 
                 try:
-                    logger.debug(f"Polling every {self.idling} seconds")
+                    logger.debug(
+                        f"Polling every {self.idling} seconds for Job Execution Service"
+                    )
                     supported_connector_ids = [
                         connector.id
                         async for connector in self.connector_index.supported_connectors(
@@ -181,7 +174,7 @@ class JobExecutionService(BaseService):
                     ]
 
                     if len(supported_connector_ids) == 0:
-                        logger.info(
+                        logger.debug(
                             f"There's no supported connectors found with native service types [{', '.join(native_service_types)}] or connector ids [{', '.join(connector_ids)}]"
                         )
                     else:

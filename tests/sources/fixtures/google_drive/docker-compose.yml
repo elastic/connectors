@@ -1,4 +1,4 @@
-version: "3.9"
+version: '3.9'
 
 services:
   elasticsearch:
@@ -25,23 +25,23 @@ services:
       - esnet
 
   kibana:
-    image: docker.elastic.co/kibana/kibana:${VERSION}
-    ports:
-      - 5601:5601
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-        - "elasticsearch"
-    profiles:
-      - "enterprise-search"
-    environment:
-      ELASTICSEARCH_URL: http://host.docker.internal:9200
-      ELASTICSEARCH_HOSTS: http://host.docker.internal:9200
-      ENTERPRISESEARCH_HOST: http://host.docker.internal:3002
-      ELASTICSEARCH_USERNAME: kibana_system
-      ELASTICSEARCH_PASSWORD: changeme
-    networks:
-      - esnet
+      image: docker.elastic.co/kibana/kibana:${VERSION}
+      ports:
+        - 5601:5601
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
+      depends_on:
+          - "elasticsearch"
+      profiles:
+        - "enterprise-search"
+      environment:
+        ELASTICSEARCH_URL: http://host.docker.internal:9200
+        ELASTICSEARCH_HOSTS: http://host.docker.internal:9200
+        ENTERPRISESEARCH_HOST: http://host.docker.internal:3002
+        ELASTICSEARCH_USERNAME: kibana_system
+        ELASTICSEARCH_PASSWORD: changeme
+      networks:
+        - esnet
 
   enterprise_search:
     image: docker.elastic.co/enterprise-search/enterprise-search:${VERSION}
@@ -73,11 +73,11 @@ services:
     networks:
       - esnet
 
-  sharepoint_online:
+  google_drive:
     build: .
     command: python fixture.py
     ports:
-      - 10337:10337
+      - "10339:10339"
     volumes:
       - .:/python-flask
     restart: always
