@@ -8,6 +8,10 @@ from functools import partial, wraps
 
 BASE_URL = "https://slack.com/api"
 
+CURSOR = "cursor"
+RESPONSE_METADATA = "response_metadata"
+NEXT_CURSOR = "next_cursor"
+
 LIST_CONVERSATIONS = "list_convos"
 JOIN_CONVERSATIONS = "join_convos"
 CONVERSATION_HISTORY = "convo_history"
@@ -81,14 +85,21 @@ class SlackClient:
         return
 
 
-    async def list_channels(self, only_my_channels):
-        url = f"{BASE_URL}/{ENDPOINTS[LIST_CONVERSATIONS]}"
-        response = await self._get_json(url)
-        for channel in response['channels']:
-            if only_my_channels and not channel.get('is_member', False):
-                self._logger.debug(f"Skipping over channel '{channel['name']}', because the bot is not a member")
-                continue
-            yield channel
+    async def list_channels(self, only_my_channels, cursor=None):
+        conversation_batch_limit = 200
+        while True:
+            url = f"{BASE_URL}/{ENDPOINTS[LIST_CONVERSATIONS]}?limit={conversation_batch_limit}"
+            if cursor:
+                url = self._add_cursor(url, cursor)
+            response = await self._get_json(url)
+            for channel in response['channels']:
+                if only_my_channels and not channel.get('is_member', False):
+                    self._logger.debug(f"Skipping over channel '{channel['name']}', because the bot is not a member")
+                    continue
+                yield channel
+            cursor = self._get_next_cursor(response)
+            if not cursor:
+                break
 
     async def join_channel(self, channel_id):
         url = f"{BASE_URL}/{ENDPOINTS[JOIN_CONVERSATIONS]}?channel={channel_id}"
@@ -98,12 +109,12 @@ class SlackClient:
         while True:
             url = f"{BASE_URL}/{ENDPOINTS[CONVERSATION_HISTORY]}?channel={channel_id}"
             if cursor:
-                url = f"{url}&cursor={cursor}"
+                url = self._add_cursor(url, cursor)
             response = await self._get_json(url)
             for message in response['messages']:
                 if message['type'] == 'message':
-                    yield {"text": message["text"], "author": message["user"], "_id": message["ts"], "ts": message["ts"]} # TODO: other fields too?
-            cursor = response.get("response_metadata", {}).get("next_cursor")
+                    yield message
+            cursor = self._get_next_cursor(response)
             if not cursor:
                 break
 
@@ -112,13 +123,19 @@ class SlackClient:
         while True:
             url =f"{BASE_URL}/{ENDPOINTS[LIST_USERS]}?limit={user_batch_limit}"
             if cursor:
-                url = f"{url}&cursor={cursor}"
+                url = self._add_cursor(url, cursor)
             response = await self._get_json(url)
             for member in response['members']:
-                yield {"id": member["id"], "username": member["name"]}
-            cursor = response.get("response_metadata", {}).get("next_cursor")
+                yield member
+            cursor = self._get_next_cursor(response)
             if not cursor:
                 break
+
+    def _add_cursor(self, url, cursor):
+        return f"{url}&{CURSOR}={cursor}"
+
+    def _get_next_cursor(self, response):
+        return response.get(RESPONSE_METADATA, {}).get(NEXT_CURSOR)
 
     async def _get_json(self, absolute_url):
         self._logger.debug(f"Fetching url: {absolute_url}")
@@ -178,6 +195,14 @@ class SlackDataSource(BaseDataSource):
                 "type": "bool",
                 "display": "toggle",
                 "value": False,
+            },
+            "sync_users": {
+                "label": "Sync users",
+                "tooltip": "Whether or not Slack Users should be indexed as documents in Elasticsearch.",
+                "order": 3,
+                "type": "bool",
+                "display": "toggle",
+                "value": True,
             }
             # TODO, configure which channels?
         }
@@ -192,15 +217,14 @@ class SlackDataSource(BaseDataSource):
         self._logger.info("Fetching all users")
         self.usernames = {}
         async for user in self.slack_client.list_users():
-            self.usernames[user['id']] = user['username']
-        async for message in self.get_all_messages(self.usernames):
+            self.usernames[user['id']] = self.get_username(user)
+            if self.configuration['sync_users']:
+                yield self.adapt_user(user), None
+        async for message in self.channels_and_messages(self.usernames):
             yield message, None
 
 
-    def convert_usernames(self, match_obj):
-        if match_obj.group(1) is not None:
-            return f"@{self.usernames[match_obj.group(1)]}"
-    async def get_all_messages(self, usernames):
+    async def channels_and_messages(self, usernames):
         """
         Get all the messages from all the slack channels
         :param usernames: a dictionary of userID -> username mappings, to facilitate replacing message references to userids with usernames
@@ -208,16 +232,76 @@ class SlackDataSource(BaseDataSource):
         """
         async for channel in self.slack_client.list_channels(not self.auto_join_channels):
             self._logger.info(f"Listed channel: '{channel['name']}'")
+            yield self.adapt_channel(channel, usernames)
             channel_id = channel['id']
-            should_list_messages = True
             if self.auto_join_channels:
                 join_response = await self.slack_client.join_channel(channel_id) # can't get channel content if the bot is not in the channel
             if not self.auto_join_channels or join_response.get("ok"):
                 async for message in self.slack_client.list_messages(channel_id):
-                    message['author'] = usernames[message['author']]
-                    message['text'] = re.sub(r"<@([A-Z0-9]+)>", self.convert_usernames, message['text'])
-                    yield message | {"channel": channel['name']}
+                    yield self.adapt_message(message, channel, usernames)
             else:
                 self._logger.warning(f"Not syncing channel: '{channel['name']}' because: {join_response.get('error')}")
+
+
+
+    def get_username(self, user):
+        user_profile = user.get('profile', {})
+        if user_profile.get('display_name_normalized'):
+            return user_profile['display_name_normalized']
+        elif user_profile.get('real_name_normalized'):
+            return user_profile['real_name_normalized']
+        elif user.get('real_name'):
+            return user['real_name']
+        elif user.get('name'):
+            return user['name']
+        else:
+            return user['id']
+
+
+    def adapt_user(self, user):
+        user_profile = user.get('profile', {})
+        user['real_name_normalized'] = user_profile.get("real_name_normalized")
+        user['profile_real_name'] = user_profile.get("real_name")
+        user['display_name'] = user_profile.get("display_name")
+        user['display_name_normalized'] = user_profile.get("display_name_normalized")
+        user['first_name'] = user_profile.get("first_name")
+        user['last_name'] = user_profile.get("last_name")
+        user = self._dict_slice(user, ('id', 'name', 'deleted', 'real_name', 'real_name_normalized', 'profile_real_name', 'display_name', 'display_name_normalized', 'first_name', 'last_name', 'is_admin', 'is_owner', 'is_bot'))
+        user ['_id'] = user['id']
+        user ['type'] = 'user'
+        return user
+
+    def adapt_channel(self, channel, usernames):
+        topic = channel.get('topic', {})
+        topic_creator_id = topic.get('creator')
+        purpose = channel.get('purpose', {})
+        purpose_creator_id = purpose.get('creator')
+        channel['topic'] = topic.get('value')
+        channel['topic_author'] = usernames.get(topic_creator_id, topic_creator_id)
+        channel['topic_last_updated'] = topic.get('last_set')
+        channel['purpose'] = purpose.get('value')
+        channel['purpose_author'] = usernames.get(purpose_creator_id, purpose_creator_id)
+        channel['purpose_last_updated'] = purpose.get('last_set')
+        channel['last_updated'] = channel.get('updated')
+        channel = self._dict_slice(channel, ('id', 'name', 'name_normalized', 'topic', 'topic_author', 'topic_last_updated', 'purpose', 'purpose_author', 'purpose_last_updated', 'last_updated', 'created'))
+        channel['_id'] = channel['id']
+        channel['type'] = 'channel'
+        return channel
+
+    def adapt_message(self, message, channel, usernames):
+        user_id = message.get('user', message.get('bot_id'))
+        message['author'] = usernames.get(user_id, user_id)
+        message['text'] = re.sub(r"<@([A-Z0-9]+)>", self.convert_usernames, message['text'])
+        message =  self._dict_slice(message, ('client_msg_id', 'text', 'author', 'ts', 'type', 'subtype'))
+        message['_id'] = message['client_msg_id']
+        return message | {"channel": channel['name']}
+
+
+    def convert_usernames(self, match_obj):
+        if match_obj.group(1) is not None:
+            return f"<@{self.usernames[match_obj.group(1)]}>"
+
+    def _dict_slice(self, hsh, keys):
+        return {k: hsh.get(k) for k in keys}
 
 
