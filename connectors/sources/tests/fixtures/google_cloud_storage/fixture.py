@@ -14,12 +14,26 @@ import string
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import storage
 
-NUMBER_OF_SMALL_FILES = 9500
-NUMBER_OF_LARGE_FILES = 500
 client_connection = None
 NUMBER_OF_BLOBS_TO_BE_DELETED = 10
 HERE = os.path.dirname(__file__)
 HOSTS = "/etc/hosts"
+
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
+
+match DATA_SIZE:
+    case "extra_small":
+        NUMBER_OF_SMALL_FILES = 50
+        NUMBER_OF_LARGE_FILES = 5
+    case "small":
+        NUMBER_OF_SMALL_FILES = 1000
+        NUMBER_OF_LARGE_FILES = 10
+    case "medium":
+        NUMBER_OF_SMALL_FILES = 5000
+        NUMBER_OF_LARGE_FILES = 50
+    case "large":
+        NUMBER_OF_SMALL_FILES = 9500
+        NUMBER_OF_LARGE_FILES = 500
 
 
 class PrerequisiteException(Exception):
@@ -30,6 +44,10 @@ class PrerequisiteException(Exception):
             f"Error while running e2e test for the Google Cloud Storage connector. \nReason: {errors}"
         )
         self.errors = errors
+
+
+def get_num_docs():
+    print(NUMBER_OF_LARGE_FILES + NUMBER_OF_SMALL_FILES - NUMBER_OF_BLOBS_TO_BE_DELETED)
 
 
 def verify():
