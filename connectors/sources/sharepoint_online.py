@@ -510,17 +510,15 @@ class SharepointOnlineClient:
             for site_collection in page:
                 yield site_collection
 
-    async def site_groups(self, site_web_url):
+    async def site_group(self, site_web_url, group_principal_id):
         self._validate_sharepoint_rest_url(site_web_url)
 
-        url = f"{site_web_url}/_api/web/sitegroups"
+        url = f"{site_web_url}/_api/web/sitegroups/getbyid({group_principal_id})"
 
         try:
-            async for page in self._rest_api_client.scroll(url):
-                for group in page:
-                    yield group
+            return await self._rest_api_client.fetch(url)
         except NotFound:
-            return
+            return {}
 
     async def user_information_list(self, site_id):
         expand = "fields"
@@ -667,23 +665,39 @@ class SharepointOnlineClient:
     async def site_lists(self, site_id):
         select = "createdDateTime,id,lastModifiedDateTime,name,webUrl,displayName,createdBy,lastModifiedBy"
 
-        async for page in self._graph_api_client.scroll(
-            f"{GRAPH_API_URL}/sites/{site_id}/lists?$select={select}"
-        ):
-            for site_list in page:
-                yield site_list
+        try:
+            async for page in self._graph_api_client.scroll(
+                f"{GRAPH_API_URL}/sites/{site_id}/lists?$select={select}"
+            ):
+                for site_list in page:
+                    yield site_list
+        except NotFound:
+            return
+
+    async def site_list_has_unique_role_assignments(self, site_web_url, site_list_name):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/HasUniqueRoleAssignments"
+
+        try:
+            response = await self._rest_api_client.fetch(url)
+            return response.get("value", False)
+        except NotFound:
+            return False
 
     async def site_list_role_assignments(self, site_web_url, site_list_name):
         self._validate_sharepoint_rest_url(site_web_url)
 
-        url = (
-            f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/roleassignments"
-        )
+        expand = "Member/users,RoleDefinitionBindings"
+
+        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/roleassignments?$expand={expand}"
 
         try:
-            return await self._rest_api_client.fetch(url)
+            async for page in self._rest_api_client.scroll(url):
+                for role_assignment in page:
+                    yield role_assignment
         except NotFound:
-            return {}
+            return
 
     async def site_list_items(self, site_id, list_id):
         select = "createdDateTime,id,lastModifiedDateTime,weburl,createdBy,lastModifiedBy,contentType"
@@ -760,15 +774,30 @@ class SharepointOnlineClient:
             # Just to be on a safe side
             return
 
+    async def site_page_has_unique_role_assignments(self, site_web_url, site_page_id):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = f"{site_web_url}/_api/web/lists/GetByTitle('Site Pages')/items('{site_page_id}')/HasUniqueRoleAssignments"
+
+        try:
+            response = await self._rest_api_client.fetch(url)
+            return response.get("value", False)
+        except NotFound:
+            return False
+
     async def site_page_role_assignments(self, site_web_url, site_page_id):
         self._validate_sharepoint_rest_url(site_web_url)
 
-        url = f"{site_web_url}/_api/web/lists/GetByTitle('Site Pages')/items({site_page_id})/RoleAssignments"
+        expand = "Member/users,RoleDefinitionBindings"
+
+        url = f"{site_web_url}/_api/web/lists/GetByTitle('Site Pages')/items('{site_page_id}')/roleassignments?$expand={expand}"
 
         try:
-            return await self._rest_api_client.fetch(url)
+            async for page in self._rest_api_client.scroll(url):
+                for role_assignment in page:
+                    yield role_assignment
         except NotFound:
-            return {}
+            return
 
     async def users_and_groups_for_role_assignment(self, site_web_url, role_assignment):
         self._validate_sharepoint_rest_url(site_web_url)
@@ -983,6 +1012,19 @@ async def _emails_and_usernames_of_domain_group(
         yield email, username
 
 
+def _get_login_name(raw_login_name):
+    if raw_login_name and (
+        raw_login_name.startswith("i:0#.f|membership|")
+        or raw_login_name.startswith("c:0o.c|federateddirectoryclaimprovider|")
+    ):
+        parts = raw_login_name.split("|")
+
+        if len(parts) > 2:
+            return parts[2]
+
+    return None
+
+
 class SharepointOnlineDataSource(BaseDataSource):
     """Sharepoint Online"""
 
@@ -1082,6 +1124,24 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "bool",
                 "value": True,
             },
+            "fetch_unique_page_permissions": {
+                "depends_on": [{"field": "use_document_level_security", "value": True}],
+                "display": "toggle",
+                "label": "Fetch unique page permissions",
+                "order": 9,
+                "tooltip": "Enable this option to fetch unique page permissions. This setting can increase sync time. If this setting is disabled a page will inherit permissions from its parent site.",
+                "type": "bool",
+                "value": True,
+            },
+            "fetch_unique_list_permissions": {
+                "depends_on": [{"field": "use_document_level_security", "value": True}],
+                "display": "toggle",
+                "label": "Fetch unique list permissions",
+                "order": 10,
+                "tooltip": "Enable this option to fetch unique list permissions. This setting can increase sync time. If this setting is disabled a list will inherit permissions from its parent site.",
+                "type": "bool",
+                "value": True,
+            },
         }
 
     async def validate_config(self):
@@ -1167,15 +1227,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                     access_control.add(_prefix_group(domain_group_id))
 
             if is_person(user):
-                name = user.get("Name")
+                login_name = _get_login_name(user.get("Name"))
 
-                if name and name.startswith("i:0#.f|membership|"):
-                    parts = name.split("|")
-
-                    if len(parts) > 2:
-                        email = parts[2]
-                        access_control.add(_prefix_email(email))
-                        continue
+                if login_name:
+                    access_control.add(_prefix_user(login_name))
 
                 email = user.get("EMail")
 
@@ -1441,10 +1496,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                         )
 
                 # Sync site list and site list items
-                async for site_list in self.site_lists(site):
-                    yield self._decorate_with_access_control(
-                        site_list, site_access_control
-                    ), None
+                async for site_list in self.site_lists(site, site_access_control):
+                    yield site_list, None
 
                     async for list_item, download_func in self.site_list_items(
                         site_id=site["id"],
@@ -1457,10 +1510,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ), download_func
 
                 # Sync site pages
-                async for site_page in self.site_pages(site["webUrl"]):
-                    yield self._decorate_with_access_control(
-                        site_page, site_access_control
-                    ), None
+                async for site_page in self.site_pages(
+                    site["webUrl"], site_access_control
+                ):
+                    yield site_page, None
 
     async def get_docs_incrementally(self, sync_cursor, filtering=None):
         self._sync_cursor = sync_cursor
@@ -1523,10 +1576,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                         )
 
                 # Sync site list and site list items
-                async for site_list in self.site_lists(site):
-                    yield self._decorate_with_access_control(
-                        site_list, site_access_control
-                    ), None, OP_INDEX
+                async for site_list in self.site_lists(site, site_access_control):
+                    yield site_list, None, OP_INDEX
 
                     async for list_item, download_func in self.site_list_items(
                         site_id=site["id"],
@@ -1539,10 +1590,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ), download_func, OP_INDEX
 
                 # Sync site pages
-                async for site_page in self.site_pages(site["webUrl"]):
-                    yield self._decorate_with_access_control(
-                        site_page, site_access_control
-                    ), None, OP_INDEX
+                async for site_page in self.site_pages(
+                    site["webUrl"], site_access_control
+                ):
+                    yield site_page, None, OP_INDEX
 
     async def site_collections(self):
         async for site_collection in self.client.site_collections():
@@ -1704,19 +1755,151 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             yield list_item, None
 
-    async def site_lists(self, site):
+    async def site_lists(self, site, site_access_control):
         async for site_list in self.client.site_lists(site["id"]):
             site_list["_id"] = site_list["id"]
             site_list["object_type"] = "site_list"
+            site_url = site["webUrl"]
+            site_list_name = site_list["name"]
+
+            has_unique_role_assignments = False
+
+            if self.configuration["fetch_unique_list_permissions"]:
+                has_unique_role_assignments = (
+                    await self.client.site_list_has_unique_role_assignments(
+                        site_url, site_list_name
+                    )
+                )
+
+                if has_unique_role_assignments:
+                    self._logger.debug(
+                        f"Fetching unique list permissions for list with id '{site_list['_id']}'. Ignoring parent site permissions."
+                    )
+
+                    site_list_access_control = []
+
+                    async for role_assignment in self.client.site_list_role_assignments(
+                        site_url, site_list_name
+                    ):
+                        site_list_access_control.extend(
+                            await self._get_access_control_from_role_assignment(
+                                role_assignment
+                            )
+                        )
+
+                    site_list = self._decorate_with_access_control(
+                        site_list, site_list_access_control
+                    )
+
+            if not has_unique_role_assignments:
+                site_list = self._decorate_with_access_control(
+                    site_list, site_access_control
+                )
 
             yield site_list
 
-    async def site_pages(self, url):
+    async def _get_access_control_from_role_assignment(self, role_assignment):
+        """Extracts access control from a role assignment.
+
+        Args:
+            role_assignment (dict): dictionary representing a role assignment.
+
+        Returns:
+            access_control (list): list of usernames and dynamic group ids, which have the role assigned.
+
+        A role can be assigned to a user directly or to a group (and therefore indirectly to the users beneath).
+        If any role is assigned to a user this means at least "read" access.
+        """
+
+        def _access_control_for_user(user_):
+            user_access_control = []
+
+            user_principal_name = user_.get("UserPrincipalName")
+            login_name = _get_login_name(user_.get("LoginName"))
+
+            if user_principal_name:
+                user_access_control.append(_prefix_user(user_principal_name))
+
+            if login_name:
+                user_access_control.append(_prefix_user(login_name))
+
+            return user_access_control
+
+        access_control = []
+
+        identity_type = role_assignment.get("Member", {}).get("odata.type", "")
+        is_group = identity_type == "SP.Group"
+        is_user = identity_type == "SP.User"
+
+        if is_group:
+            users = role_assignment.get("Member", {}).get("Users", [])
+
+            for user in users:
+                access_control.extend(_access_control_for_user(user))
+        elif is_user:
+            user = role_assignment.get("Member", {})
+            login_name = user.get("LoginName")
+
+            # in this context the 'odata.type' being 'SP.User' and the 'LoginName' looking like a group indicates a dynamic group
+            is_dynamic_group = (
+                login_name.startswith("c:0o.c|federateddirectoryclaimprovider|")
+                if login_name
+                else False
+            )
+
+            if is_dynamic_group:
+                self._logger.debug(f"Detected dynamic group '{user.get('Title')}'.")
+                dynamic_group_id = _get_login_name(login_name)
+                access_control.append(_prefix_group(dynamic_group_id))
+            else:
+                access_control = _access_control_for_user(user)
+        else:
+            self._logger.debug(
+                f"Skipping unique page permissions for identity type '{identity_type}'."
+            )
+
+        return access_control
+
+    async def site_pages(self, url, site_access_control):
         async for site_page in self.client.site_pages(url):
             site_page["_id"] = site_page[
                 "odata.id"
             ]  # Apparently site_page["GUID"] is not globally unique
             site_page["object_type"] = "site_page"
+
+            has_unique_role_assignments = (
+                await self.client.site_page_has_unique_role_assignments(
+                    url, site_page["Id"]
+                )
+            )
+
+            # ignore parent site permissions and use unique per page permissions ("unique permissions" means breaking the inheritance to the parent site)
+            if (
+                self.configuration["fetch_unique_page_permissions"]
+                and has_unique_role_assignments
+            ):
+                self._logger.debug(
+                    f"Fetching unique page permissions for page with id '{site_page['_id']}'. Ignoring parent site permissions."
+                )
+
+                page_access_control = []
+
+                async for role_assignment in self.client.site_page_role_assignments(
+                    url, site_page["Id"]
+                ):
+                    page_access_control.extend(
+                        await self._get_access_control_from_role_assignment(
+                            role_assignment
+                        )
+                    )
+
+                site_page = self._decorate_with_access_control(
+                    site_page, page_access_control
+                )
+            else:
+                site_page = self._decorate_with_access_control(
+                    site_page, site_access_control
+                )
 
             for html_field in ["LayoutWebpartsContent", "CanvasContent1", "WikiField"]:
                 if html_field in site_page:

@@ -15,29 +15,11 @@ from aiohttp import StreamReader
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.sharepoint_server import SharepointServerDataSource
+from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
 EXCEPTION_MESSAGE = "Something went wrong"
 HOST_URL = "http://127.0.0.1:8491"
-
-
-class AsyncIter:
-    """This Class is use to return async generator"""
-
-    def __init__(self, items):
-        """Setup list of dictionary
-
-        Args:
-            items (any): Item to iter on
-        """
-        self.items = items
-
-    async def __aiter__(self):
-        """This Method is used to return async generator"""
-        if isinstance(self.items, str):
-            yield self.items.encode().decode()
-        else:
-            yield self.items
 
 
 class MockResponse:
@@ -290,9 +272,7 @@ async def test_get_sites_when_no_site_available():
     source = create_source(SharepointServerDataSource)
     api_response = []
     # Execute
-    source.sharepoint_client._fetch_data_with_query = Mock(
-        return_value=AsyncIter(api_response)
-    )
+    source.sharepoint_client._fetch_data_with_query = AsyncIterator(api_response)
     actual_response = None
     async for item in source.sharepoint_client.get_sites(
         site_url="sites/collection1/ctest"
@@ -382,9 +362,7 @@ async def test_get_list_items():
         },
     ]
     attachment_response = {"UniqueId": "1"}
-    source.sharepoint_client._fetch_data_with_next_url = Mock(
-        return_value=AsyncIter(api_response)
-    )
+    source.sharepoint_client._fetch_data_with_next_url = AsyncIterator([api_response])
     source.sharepoint_client._api_call = Mock(
         return_value=async_native_coroutine_generator(attachment_response)
     )
@@ -475,9 +453,7 @@ async def test_get_drive_items():
         ),
     ]
 
-    source.sharepoint_client._fetch_data_with_next_url = Mock(
-        return_value=AsyncIter(api_response)
-    )
+    source.sharepoint_client._fetch_data_with_next_url = AsyncIterator([api_response])
     expected_response = []
     # Execute
     async for item in source.sharepoint_client.get_drive_items(
@@ -497,17 +473,19 @@ async def test_get_docs_list_items():
 
     # Setup
     source = create_source(SharepointServerDataSource)
-    item_content_response = {
-        "RootFolder": {
-            "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
-        },
-        "Created": "2023-03-19T05:02:52Z",
-        "BaseType": 0,
-        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
-        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
-        "ParentWebUrl": "/sites/enterprise/ctest/_api",
-        "Title": "HelloWorld",
-    }
+    item_content_response = [
+        {
+            "RootFolder": {
+                "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
+            },
+            "Created": "2023-03-19T05:02:52Z",
+            "BaseType": 0,
+            "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+            "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+            "ParentWebUrl": "/sites/enterprise/ctest/_api",
+            "Title": "HelloWorld",
+        }
+    ]
     list_content_response = {
         "AttachmentFiles": {},
         "Id": 1,
@@ -523,12 +501,12 @@ async def test_get_docs_list_items():
         "url": "/sites/enterprise/ctest/_api",
     }
     actual_response = []
-    source.sharepoint_client._fetch_data_with_query = Mock(return_value=AsyncIter([]))
-    source.sharepoint_client.get_lists = Mock(
-        return_value=AsyncIter([item_content_response])
+    source.sharepoint_client._fetch_data_with_query = Mock(
+        return_value=AsyncIterator([])
     )
-    source.sharepoint_client.get_list_items = Mock(
-        return_value=AsyncIter((list_content_response, None))
+    source.sharepoint_client.get_lists = AsyncIterator([item_content_response])
+    source.sharepoint_client.get_list_items = AsyncIterator(
+        [(list_content_response, None)]
     )
     # Execute
     async for document, _ in source.get_docs():
@@ -543,17 +521,19 @@ async def test_get_docs_list_items_when_relativeurl_is_not_none():
 
     # Setup
     source = create_source(SharepointServerDataSource)
-    item_content_response = {
-        "RootFolder": {
-            "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
-        },
-        "Created": "2023-03-19T05:02:52Z",
-        "BaseType": 0,
-        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
-        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
-        "ParentWebUrl": "/sites/enterprise/ctest/_api",
-        "Title": "HelloWorld",
-    }
+    item_content_response = [
+        {
+            "RootFolder": {
+                "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
+            },
+            "Created": "2023-03-19T05:02:52Z",
+            "BaseType": 0,
+            "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+            "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+            "ParentWebUrl": "/sites/enterprise/ctest/_api",
+            "Title": "HelloWorld",
+        }
+    ]
     list_content_response = {
         "AttachmentFiles": {},
         "Id": 1,
@@ -569,13 +549,12 @@ async def test_get_docs_list_items_when_relativeurl_is_not_none():
         "url": "/sites/enterprise/ctest/_api",
     }
     actual_response = []
-    source.sharepoint_client._fetch_data_with_query = Mock(return_value=AsyncIter([]))
-    source.sharepoint_client.get_lists = Mock(
-        return_value=AsyncIter([item_content_response])
+    source.sharepoint_client._fetch_data_with_query = AsyncIterator([])
+    source.sharepoint_client.get_lists = AsyncIterator([item_content_response])
+    source.sharepoint_client.get_list_items = AsyncIterator(
+        [(list_content_response, "/sites/enterprise/ctest/_api")]
     )
-    source.sharepoint_client.get_list_items = Mock(
-        return_value=AsyncIter((list_content_response, "/sites/enterprise/ctest/_api"))
-    )
+
     # Execute
     async for document, _ in source.get_docs():
         actual_response.append(document)
@@ -589,17 +568,19 @@ async def test_get_docs_drive_items():
 
     # Setup
     source = create_source(SharepointServerDataSource)
-    item_content_response = {
-        "RootFolder": {
-            "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
-        },
-        "Created": "2023-03-19T05:02:52Z",
-        "BaseType": 1,
-        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
-        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
-        "ParentWebUrl": "/sites/enterprise/ctest/_api",
-        "Title": "HelloWorld",
-    }
+    item_content_response = [
+        {
+            "RootFolder": {
+                "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
+            },
+            "Created": "2023-03-19T05:02:52Z",
+            "BaseType": 1,
+            "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+            "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+            "ParentWebUrl": "/sites/enterprise/ctest/_api",
+            "Title": "HelloWorld",
+        }
+    ]
     drive_content_response = {
         "File": {
             "Length": "3356",
@@ -616,13 +597,12 @@ async def test_get_docs_drive_items():
         "item_type": "File",
     }
     actual_response = []
-    source.sharepoint_client._fetch_data_with_query = Mock(return_value=AsyncIter([]))
-    source.sharepoint_client.get_lists = Mock(
-        return_value=AsyncIter([item_content_response])
+    source.sharepoint_client._fetch_data_with_query = AsyncIterator([])
+    source.sharepoint_client.get_lists = AsyncIterator([item_content_response])
+    source.sharepoint_client.get_drive_items = AsyncIterator(
+        [(drive_content_response, None)]
     )
-    source.sharepoint_client.get_drive_items = Mock(
-        return_value=AsyncIter((drive_content_response, None))
-    )
+
     # Execute
     async for document, _ in source.get_docs():
         actual_response.append(document)
@@ -634,17 +614,19 @@ async def test_get_docs_drive_items():
 async def test_get_docs_drive_items_for_web_pages():
     # Setup
     source = create_source(SharepointServerDataSource)
-    item_content_response = {
-        "RootFolder": {
-            "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
-        },
-        "Created": "2023-03-19T05:02:52Z",
-        "BaseType": 1,
-        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
-        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
-        "ParentWebUrl": "/sites/enterprise/ctest/_api",
-        "Title": "Site Pages",
-    }
+    item_content_response = [
+        {
+            "RootFolder": {
+                "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
+            },
+            "Created": "2023-03-19T05:02:52Z",
+            "BaseType": 1,
+            "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+            "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+            "ParentWebUrl": "/sites/enterprise/ctest/_api",
+            "Title": "Site Pages",
+        }
+    ]
     drive_content_response = {
         "File": {
             "Length": "3356",
@@ -661,12 +643,10 @@ async def test_get_docs_drive_items_for_web_pages():
         "item_type": "File",
     }
     actual_response = []
-    source.sharepoint_client._fetch_data_with_query = Mock(return_value=AsyncIter([]))
-    source.sharepoint_client.get_lists = Mock(
-        return_value=AsyncIter([item_content_response])
-    )
-    source.sharepoint_client.get_drive_items = Mock(
-        return_value=AsyncIter((drive_content_response, None))
+    source.sharepoint_client._fetch_data_with_query = AsyncIterator([])
+    source.sharepoint_client.get_lists = AsyncIterator([item_content_response])
+    source.sharepoint_client.get_drive_items = AsyncIterator(
+        [(drive_content_response, None)]
     )
     # Execute
     async for document, _ in source.get_docs():
@@ -682,9 +662,11 @@ async def test_get_docs_when_no_site_available():
     # Setup
     source = create_source(SharepointServerDataSource)
     actual_response = []
-    source.sharepoint_client._fetch_data_with_query = Mock(return_value=AsyncIter([]))
+    source.sharepoint_client._fetch_data_with_query = Mock(
+        return_value=AsyncIterator([])
+    )
     source.sharepoint_client._fetch_data_with_next_url = Mock(
-        return_value=AsyncIter([])
+        return_value=AsyncIterator([])
     )
     # Execute
     async for document, _ in source.get_docs():
@@ -700,8 +682,8 @@ async def test_get_content():
     source = create_source(SharepointServerDataSource)
     async_response = MockObjectResponse()
 
-    RESPONSE_CONTENT = "This is a dummy sharepoint body response"
-    EXPECTED_ATTACHMENT = {
+    response_content = "This is a dummy sharepoint body response"
+    expected_attachment = {
         "id": 1,
         "server_relative_url": "/url",
         "_timestamp": "2022-06-20T10:37:44Z",
@@ -709,26 +691,26 @@ async def test_get_content():
         "type": "sites",
         "file_name": "dummy.pdf",
     }
-    EXPECTED_CONTENT = {
+    expected_content = {
         "_id": 1,
         "_attachment": "VGhpcyBpcyBhIGR1bW15IHNoYXJlcG9pbnQgYm9keSByZXNwb25zZQ==",
         "_timestamp": "2022-06-20T10:37:44Z",
     }
-    source.sharepoint_client._api_call = Mock(return_value=AsyncIter(async_response))
+    source.sharepoint_client._api_call = AsyncIterator([async_response])
     with mock.patch(
         "aiohttp.StreamReader.iter_chunked",
-        return_value=AsyncIter(bytes(RESPONSE_CONTENT, "utf-8")),
+        return_value=AsyncIterator([bytes(response_content, "utf-8")]),
     ):
         # Execute
         response_content = await source.sharepoint_client.get_content(
-            document=EXPECTED_ATTACHMENT,
+            document=expected_attachment,
             file_relative_url="abc.com",
             site_url="/site",
             doit=True,
         )
 
     # Assert
-    assert response_content == EXPECTED_CONTENT
+    assert response_content == expected_content
 
 
 class ContentResponse:
@@ -1200,9 +1182,7 @@ async def test_get_list_items_with_no_extension():
         },
     ]
     attachment_response = {"UniqueId": "1"}
-    source.sharepoint_client._fetch_data_with_next_url = Mock(
-        return_value=AsyncIter(api_response)
-    )
+    source.sharepoint_client._fetch_data_with_next_url = AsyncIterator([api_response])
     source.sharepoint_client._api_call = Mock(
         return_value=async_native_coroutine_generator(attachment_response)
     )
@@ -1270,9 +1250,7 @@ async def test_get_list_items_with_extension_only():
         },
     ]
     attachment_response = {"UniqueId": "1"}
-    source.sharepoint_client._fetch_data_with_next_url = Mock(
-        return_value=AsyncIter(api_response)
-    )
+    source.sharepoint_client._fetch_data_with_next_url = AsyncIterator([api_response])
     source.sharepoint_client._api_call = Mock(
         return_value=async_native_coroutine_generator(attachment_response)
     )
