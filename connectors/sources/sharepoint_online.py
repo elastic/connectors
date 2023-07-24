@@ -1867,36 +1867,38 @@ class SharepointOnlineDataSource(BaseDataSource):
             ]  # Apparently site_page["GUID"] is not globally unique
             site_page["object_type"] = "site_page"
 
-            has_unique_role_assignments = (
-                await self.client.site_page_has_unique_role_assignments(
-                    url, site_page["Id"]
-                )
-            )
+            has_unique_role_assignments = False
 
             # ignore parent site permissions and use unique per page permissions ("unique permissions" means breaking the inheritance to the parent site)
-            if (
-                self.configuration["fetch_unique_page_permissions"]
-                and has_unique_role_assignments
-            ):
-                self._logger.debug(
-                    f"Fetching unique page permissions for page with id '{site_page['_id']}'. Ignoring parent site permissions."
+            if self.configuration["fetch_unique_page_permissions"]:
+                has_unique_role_assignments = (
+                    await self.client.site_page_has_unique_role_assignments(
+                        url, site_page["Id"]
+                    )
                 )
 
-                page_access_control = []
-
-                async for role_assignment in self.client.site_page_role_assignments(
-                    url, site_page["Id"]
-                ):
-                    page_access_control.extend(
-                        await self._get_access_control_from_role_assignment(
-                            role_assignment
-                        )
+                if has_unique_role_assignments:
+                    self._logger.debug(
+                        f"Fetching unique page permissions for page with id '{site_page['_id']}'. Ignoring parent site permissions."
                     )
 
-                site_page = self._decorate_with_access_control(
-                    site_page, page_access_control
-                )
-            else:
+                    page_access_control = []
+
+                    async for role_assignment in self.client.site_page_role_assignments(
+                        url, site_page["Id"]
+                    ):
+                        page_access_control.extend(
+                            await self._get_access_control_from_role_assignment(
+                                role_assignment
+                            )
+                        )
+
+                    site_page = self._decorate_with_access_control(
+                        site_page, page_access_control
+                    )
+
+            # set parent site access control
+            if not has_unique_role_assignments:
                 site_page = self._decorate_with_access_control(
                     site_page, site_access_control
                 )

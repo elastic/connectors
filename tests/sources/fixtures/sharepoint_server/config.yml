@@ -26,8 +26,10 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'sharepoint_server'
-service_type: 'sharepoint_server'
+connectors:
+  -
+    connector_id: 'sharepoint_server'
+    service_type: 'sharepoint_server'
 
 sources:
   sharepoint_server: connectors.sources.sharepoint_server:SharepointServerDataSource

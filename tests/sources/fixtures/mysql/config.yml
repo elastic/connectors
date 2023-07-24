@@ -26,8 +26,10 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'mysql'
-service_type: 'mysql'
+connectors:
+  -
+    connector_id: 'mysql'
+    service_type: 'mysql'
 
 sources:
   mysql: connectors.sources.mysql:MySqlDataSource
