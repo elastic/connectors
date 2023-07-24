@@ -106,7 +106,7 @@
         "order": 7,
         "ui_restrictions": []
       },
-      "fetch_users_by_site": {
+      "fetch_drive_item_permissions": {
         "depends_on": [
           {
             "field": "use_document_level_security",
@@ -114,9 +114,9 @@
           }
         ],
         "display": "toggle",
-        "tooltip": "When only syncing a small subset of sites, it may be more efficient to fetch only the users who have access to those sites. However, this becomes inefficent the more sites (and the more users) that are intended to be synced, as there can be a lot of redundancy in membership between sites. This should not be used if all sites are being synced.",
-        "default_value": null,
-        "label": "Fetch ACLs for users based on site membership",
+        "tooltip": "Enable this option to fetch drive item specific permissions. This setting can increase sync time.",
+        "default_value": true,
+        "label": "Fetch drive item permissions",
         "sensitive": false,
         "type": "bool",
         "required": true,
@@ -124,6 +124,46 @@
         "validations": [],
         "value": false,
         "order": 8,
+        "ui_restrictions": []
+      },
+      "fetch_unique_page_permissions": {
+        "depends_on": [
+          {
+            "field": "use_document_level_security",
+            "value": true
+          }
+        ],
+        "display": "toggle",
+        "tooltip": "Enable this option to fetch unique page permissions. This setting can increase sync time. If this setting is disabled a page will inherit permissions from its parent site.",
+        "default_value": true,
+        "label": "Fetch unique page permissions",
+        "sensitive": false,
+        "type": "bool",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": false,
+        "order": 9,
+        "ui_restrictions": []
+      },
+      "fetch_unique_list_permissions": {
+        "depends_on": [
+          {
+            "field": "use_document_level_security",
+            "value": true
+          }
+        ],
+        "display": "toggle",
+        "tooltip": "Enable this option to fetch unique list permissions. This setting can increase sync time. If this setting is disabled a list will inherit permissions from its parent site.",
+        "default_value": true,
+        "label": "Fetch unique list permissions",
+        "sensitive": false,
+        "type": "bool",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": false,
+        "order": 10,
         "ui_restrictions": []
       }
     },

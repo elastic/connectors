@@ -43,9 +43,13 @@ Configuration lives in [config.yml](../config.yml).
   - `timeout`: Request timeout for local extraction service requests, in seconds. Defaults to 30.
   - `use_file_pointers`: Whether or not to use file pointers for local extraction. Defaults to `false`.
   - `stream_chunk_size`: The size that files are chunked to for streaming when sending a file to the local extraction service, in bytes. Only applicable if `use_file_pointers` is `false`. Defaults to 65536 (64KB).
-  - `shared_volume_dir`: The location for files to be extracted from. Only applicable if `use_file_pointers` is `true`. Defaults to `/app/files`. 
-- `connector_id`: The ID of the connector.
-- `service_type` The service type of the connector.
+  - `shared_volume_dir`: The location for files to be extracted from. Only applicable if `use_file_pointers` is `true`. Defaults to `/app/files`.
+- `connector_id`: (Deprecated. Configure the connector client in `connectors`) The ID of the connector.
+- `service_type`: (Deprecated. Configure the connector client in `connectors`) The service type of the connector.
+- `connectors`: A list of connector clients/customized connectors configuration, including:
+  - `connector_id`: The ID of the connector.
+  - `service_type`: The service type of the connector.
+  - `api_key`: The API key to write data into the content index.
 - `sources`: A mapping/dictionary between service type and [Fully Qualified Name
 (FQN)](https://en.wikipedia.org/wiki/Fully_qualified_name). E.g. `mongodb: connectors.sources.mongo:MongoDataSource`.
 
@@ -66,9 +70,16 @@ Any converted native connector, net-new connector, or customized/modified connec
 2. Create an API key to work with the connector. It should be done using the `Generate API key` button under `Configuration` tab.
 3. Configure your connector service application. You need to configure the following fields, and leave the rest as default.
    1. `elasticsearch.host`: Configure this to the Elasticsearch endpoint.
-   2. `elasticsearch.api_key`: Configure the API key generated in step 2. This is recommended over utilizing `elasticsearch.username/password` so that access can be automatically and narrowly scoped.
-   3. `connector_id`: You can find the `connector_id` in step 3 `Deploy a connector` under `Configuration` tab in Kibana.
-   4. `service_type`: Configure it to the service type of your new connector.
+   2. `elasticsearch.api_key`: Configure the API key generated in step 2. If you run multiple connector clients, or customized connectors in one connector service, you can configure the API key of any connector here. This is recommended over utilizing `elasticsearch.username/password` so that access can be automatically and narrowly scoped.
+   3. `connectors`: Configure per-connector configuration here. It should at least contain `connector_id` (You can find the `connector_id` in step 3 `Deploy a connector` under `Configuration` tab in Kibana) and `service_type`. You can also configure the `api_key` if the global `elasticsearch` configuration does not have access to the content index of this connector. One example:
+   
+   ```yaml
+   connectors:
+     -
+       connector_id: <connector_id>
+       service_type: <service_type>
+       api_key: <api_key>
+    ```
 4. Run the connector service application with
     ```shell
     make run
