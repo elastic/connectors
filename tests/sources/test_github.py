@@ -231,7 +231,6 @@ async def test_validate_config_with_invalid_token_then_raise(mock_apply_retry_st
     ):
         await source.validate_config()
     await source.close()
-    
 
 
 @pytest.mark.asyncio
