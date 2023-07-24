@@ -538,6 +538,7 @@ def test_load_max_concurrent_access_control_syncs_fallback_on_default():
 
 
 def test_override_es_config():
+    connector_api_key = "connector_api_key"
     config = {
         "elasticsearch": {
             "username": "username",
@@ -550,7 +551,7 @@ def test_override_es_config():
             {
                 "connector_id": "foo",
                 "service_type": "bar",
-                "api_key": "connector_api_key",
+                "api_key": connector_api_key,
             }
         ],
     }
@@ -561,4 +562,4 @@ def test_override_es_config():
     override_config = service._override_es_config(connector)
     assert "username" not in override_config
     assert "password" not in override_config
-    assert override_config["api_key"] == "connector_api_key"
+    assert override_config["api_key"] == connector_api_key
