@@ -193,14 +193,15 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             "type": "service_account",
             "project_id": "dummy_project_id",
             "private_key_id": "abc",
-            "private_key": open(
-                os.path.abspath(DEFAULT_PEM_FILE)
-            ).read(),  # TODO: change this and provide meaningful defaults
+            "private_key": None,
             "client_email": "123-abc@developer.gserviceaccount.com",
             "client_id": "123-abc.apps.googleusercontent.com",
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "http://localhost:4444/token",
         }
+        with open(os.path.abspath(DEFAULT_PEM_FILE)) as f:
+            default_credentials["private_key"] = f.read()
+
         return {
             "service_account_credentials": {
                 "display": "textarea",

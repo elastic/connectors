@@ -403,6 +403,7 @@ async def test_remote_validation_when_space_keys_are_valid():
 
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
         await source._remote_validation()
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -420,6 +421,7 @@ async def test_remote_validation_when_space_keys_are_unavailable_then_raise_exce
             match="Spaces 'CS' are not available. Available spaces are: 'DM, ES'",
         ):
             await source._remote_validation()
+    await source.close()
 
 
 class MockSSL:
@@ -482,6 +484,7 @@ async def test_ping_with_ssl(mock_get):
             certificate=source.confluence_client.certificate
         )
         await source.ping()
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -523,6 +526,7 @@ async def test_fetch_spaces():
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
         async for response in source.fetch_spaces():
             assert response == EXPECTED_SPACE
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -536,6 +540,7 @@ async def test_fetch_documents():
     with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
         async for response, _ in source.fetch_documents(api_query=""):
             assert response == EXPECTED_PAGE
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -556,6 +561,7 @@ async def test_fetch_attachments():
             parent_type="page",
         ):
             assert response == EXPECTED_ATTACHMENT
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -572,6 +578,7 @@ async def test_search_by_query():
         ):
             documents.append(response)
     assert documents == EXPECTED_SEARCH_RESULT
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -594,6 +601,7 @@ async def test_download_attachment():
                 doit=True,
             )
             assert response == EXPECTED_CONTENT
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -619,6 +627,7 @@ async def test_download_attachment_with_upper_extension():
                 doit=True,
             )
             assert response == EXPECTED_CONTENT
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -646,6 +655,7 @@ async def test_download_attachment_when_filesize_is_large_then_download_skips():
                 doit=True,
             )
             assert response is None
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -672,6 +682,7 @@ async def test_download_attachment_when_unsupported_filetype_used_then_fail_down
                 doit=True,
             )
             assert response is None
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -727,3 +738,4 @@ async def test_get_session():
     first_instance = source.confluence_client._get_session()
     second_instance = source.confluence_client._get_session()
     assert first_instance is second_instance
+    await source.close()

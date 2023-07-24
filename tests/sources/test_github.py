@@ -186,6 +186,7 @@ async def test_ping_with_successful_connection():
         return_value={"user": "username"}
     )
     await source.ping()
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -229,6 +230,8 @@ async def test_validate_config_with_invalid_token_then_raise(mock_apply_retry_st
         match="Configured token does not have required rights to fetch the content",
     ):
         await source.validate_config()
+    await source.close()
+    
 
 
 @pytest.mark.asyncio
@@ -241,6 +244,7 @@ async def test_validate_config_with_unauthorized_user(mock_apply_retry_strategy)
     )
     with pytest.raises(ConfigurableFieldValueError):
         await source.validate_config()
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -267,6 +271,7 @@ async def test_get_invalid_repos_with_max_retries(mock_apply_retry_strategy):
     with pytest.raises(Exception):
         source.github_client.get_paginated_response = Exception()
         await source.get_invalid_repos()
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -286,6 +291,7 @@ async def test_get_response_headers_with_rate_limit_exceeded(mock_apply_retry_st
         await source.github_client.get_response_headers(
             method="GET", url=github.ENDPOINTS["USER"]
         )
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -295,6 +301,7 @@ async def test_get_retry_after():
         {"resource": {"code": {"reset": 1686563525}}}
     )
     await source.github_client._get_retry_after()
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -308,6 +315,7 @@ async def test_get_paginated_response():
             github.ENDPOINTS["ALL_REPOS"]
         ):
             assert expected_response == data
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -329,6 +337,7 @@ async def test_get_invalid_repos():
     ):
         invalid_repos = await source.get_invalid_repos()
         assert expected_response == invalid_repos
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -348,6 +357,7 @@ async def test_get_content_with_text_file():
             attachment=MOCK_ATTACHMENT, doit=True
         )
         assert actual_response == expected_response
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -411,6 +421,7 @@ async def test_fetch_repos():
     )
     async for repo in source.fetch_repos():
         assert repo == MOCK_RESPONSE_REPO
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -454,6 +465,7 @@ async def test_fetch_repos_with_configured_repos():
     ):
         async for repo in source.fetch_repos():
             assert repo == MOCK_RESPONSE_REPO
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -494,6 +506,7 @@ async def test_fetch_issues():
     ):
         async for issue in source.fetch_issues("demo_repo"):
             assert issue == MOCK_RESPONSE_ISSUE
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -546,6 +559,7 @@ async def test_fetch_pull_requests():
     ):
         async for pull in source.fetch_pull_requests("demo_repo"):
             assert pull == MOCK_RESPONSE_PULL
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -570,6 +584,7 @@ async def test_fetch_repos_with_max_retries(mock_apply_retry_strategy):
     async for _ in source.fetch_repos():
         pass
     assert mock_apply_retry_strategy.call_count == 2
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -583,6 +598,7 @@ async def test_fetch_pull_requests_with_max_retries(mock_apply_retry_strategy):
     async for _ in source.fetch_pull_requests("demo_repo"):
         pass
     assert mock_apply_retry_strategy.call_count == 2
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -596,6 +612,7 @@ async def test_fetch_issues_with_max_retries(mock_apply_retry_strategy):
     async for _ in source.fetch_issues("demo_repo"):
         pass
     assert mock_apply_retry_strategy.call_count == 2
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -633,6 +650,7 @@ async def test_fetch_files():
     ):
         async for document in source.fetch_files("demo_repo", "main"):
             assert expected_response == document
+    await source.close()
 
 
 @pytest.mark.asyncio

@@ -958,6 +958,7 @@ async def test_api_call_negative(patch_default_wait_multiplier):
         with pytest.raises(Exception):
             # Execute
             await anext(source.sharepoint_client._api_call(url_name="ping"))
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -981,6 +982,7 @@ async def test_api_call_successfully():
         ):
             # Assert
             assert response == [{"name": "dummy_project", "id": "test123"}]
+    await source.close()
 
 
 @pytest.fixture
@@ -1065,6 +1067,7 @@ async def test_get_session():
     first_instance = source.sharepoint_client._get_session()
     second_instance = source.sharepoint_client._get_session()
     assert first_instance is second_instance
+    await source.close()
 
 
 @pytest.mark.asyncio

@@ -274,6 +274,7 @@ async def test_api_call_negative():
         source.jira_client.is_cloud = False
         with pytest.raises(Exception):
             await anext(source.jira_client.api_call(url_name="ping"))
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -292,6 +293,7 @@ async def test_api_call_when_server_is_down():
     ):
         with pytest.raises(aiohttp.ServerDisconnectedError):
             await anext(source.jira_client.api_call(url_name="ping"))
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -316,6 +318,7 @@ async def test_ping_with_ssl(
             certificate=source.jira_client.certificate
         )
         await source.ping()
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -381,6 +384,7 @@ async def test_get_session():
     first_instance = source.jira_client._get_session()
     second_instance = source.jira_client._get_session()
     assert first_instance is second_instance
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -416,6 +420,7 @@ async def test_get_timezone():
     with patch.object(aiohttp.ClientSession, "get", side_effect=side_effect_function):
         timezone = await source._get_timezone()
         assert timezone == "Asia/Kolkata"
+    await source.close()
 
 
 @freeze_time("2023-01-24T04:07:19")
@@ -437,6 +442,7 @@ async def test_get_projects():
             else:
                 source_projects.append(project)
         assert source_projects == expected_projects
+    await source.close()
 
 
 @freeze_time("2023-01-24T04:07:19")
@@ -461,6 +467,7 @@ async def test_get_projects_for_specific_project():
         await source._get_projects()
         _, project = await source.queue.get()
         assert project[0] == EXPECTED_PROJECT[0]
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -471,6 +478,7 @@ async def test_verify_projects():
 
     with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
         await source._verify_projects()
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -481,6 +489,7 @@ async def test_verify_projects_with_unavailable_project_keys():
     with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
         with pytest.raises(Exception, match="Configured unavailable projects: AP"):
             await source._verify_projects()
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -495,6 +504,7 @@ async def test_put_issue():
     with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
         await source._put_issue(issue=MOCK_ISSUE)
         assert source.queue.qsize() == 3
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -532,6 +542,7 @@ async def test_get_content():
                 doit=True,
             )
             assert response == EXPECTED_CONTENT
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -555,6 +566,7 @@ async def test_get_content_with_upper_extension():
                 doit=True,
             )
             assert response == EXPECTED_CONTENT
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -580,6 +592,7 @@ async def test_get_content_when_filesize_is_large():
                 doit=True,
             )
             assert response is None
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -605,6 +618,7 @@ async def test_get_content_for_unsupported_filetype():
                 doit=True,
             )
             assert response is None
+    await source.close()
 
 
 @pytest.mark.asyncio
@@ -642,6 +656,7 @@ async def test_get_docs():
     ):
         async for item, _ in source.get_docs():
             assert item in EXPECTED_RESPONSES
+    await source.close()
 
 
 @pytest.mark.parametrize(
@@ -678,3 +693,4 @@ async def test_get_docs_with_advanced_rules(filtering, expected_docs):
             yielded_docs.append(item)
 
     assert yielded_docs == expected_docs
+    await source.close()
