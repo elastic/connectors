@@ -122,7 +122,7 @@
         "required": true,
         "options": [],
         "validations": [],
-        "value": true,
+        "value": false,
         "order": 8,
         "ui_restrictions": []
       },
@@ -142,8 +142,28 @@
         "required": true,
         "options": [],
         "validations": [],
-        "value": true,
+        "value": false,
         "order": 9,
+        "ui_restrictions": []
+      },
+      "fetch_unique_list_permissions": {
+        "depends_on": [
+          {
+            "field": "use_document_level_security",
+            "value": true
+          }
+        ],
+        "display": "toggle",
+        "tooltip": "Enable this option to fetch unique list permissions. This setting can increase sync time. If this setting is disabled a list will inherit permissions from its parent site.",
+        "default_value": true,
+        "label": "Fetch unique list permissions",
+        "sensitive": false,
+        "type": "bool",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": false,
+        "order": 10,
         "ui_restrictions": []
       }
     },
