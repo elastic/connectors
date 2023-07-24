@@ -550,6 +550,7 @@ class DropboxDataSource(BaseDataSource):
                 "label": "Path to fetch files/folders",
                 "order": 1,
                 "required": False,
+                "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "str",
                 "value": "/",
             },
