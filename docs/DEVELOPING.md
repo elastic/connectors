@@ -227,6 +227,15 @@ The connector configuration, expressed as list of RCFs, is stored in the Connect
 
 Rich Configurable Fields are defined as JSON objects with the following key-value pairs:
 
+
+<!---
+You can use online tools to edit the table in visual mode. To edit:
+- copy the table source
+- go to https://www.tablesgenerator.com/markdown_tables
+- file -> paste table data -> paste your clipboard
+- the table will be loaded and ready to edit
+-->
+
 | Key | Description | Value |
 |---|---|---|
 | `default_value` | The value used if `value` is empty (only for non-required fields) | `any` |
