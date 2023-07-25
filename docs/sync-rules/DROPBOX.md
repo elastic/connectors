@@ -4,7 +4,7 @@ See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 
 ### Example advanced sync rules
 
-#### Two rules for indexing content based on the query only
+#### Two rules for indexing content based on queries only
 
 ```json
 [
@@ -17,7 +17,7 @@ See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 ]
 ```
 
-#### One query for indexing data based on the file_extensions
+#### Single query for indexing data based on file extensions
 
 ```json
 [
@@ -33,7 +33,7 @@ See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 ]
 ```
 
-#### One query for indexing data based on file_categories
+#### Single query for indexing data based on file categories
 ```json
 [
   {
@@ -54,8 +54,8 @@ See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 **Note** 
 
 - `query` contains a string that matches words in the filename.
-- In case, both `file_extensions` and `file_categories` are provided, priority is given to `file_categories`.
+- If both `file_extensions` and `file_categories` are provided, priority is given to `file_categories`.
 
 ### Limitations
 
-- Content extraction is not supported for paper files with advanced sync rules enabled.
+- Content extraction is not supported for Dropbox Paper files when advanced sync rules are enabled.
