@@ -18,7 +18,9 @@ service:
   max_concurrent_access_control_syncs: 10
   log_level: INFO
 
-connector_id: '1'
+connectors:
+  -
+    connector_id: '1'
 
 sources:
   fake: fake_sources:FakeSource
