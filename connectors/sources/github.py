@@ -43,8 +43,9 @@ REPOSITORY_OBJECT = "repository"
 RETRIES = 3
 RETRY_INTERVAL = 2
 FILE_SIZE_LIMIT = 10485760  # ~ 10 Megabytes
-PAGE_SIZE = 100
 FORBIDDEN = 403
+NODE_SIZE = 100
+REVIEWS_COUNT = 45
 
 FILE_SCHEMA = {
     "name": "name",
@@ -65,15 +66,15 @@ class GithubQuery(Enum):
         }
     }
     """
-    REPOS_QUERY = """
-    query ($login: String!, $cursor: String) {
-    user(login: $login) {
-        repositories(first: 100, after: $cursor) {
-        pageInfo {
+    REPOS_QUERY = f"""
+    query ($login: String!, $cursor: String) {{
+    user(login: $login) {{
+        repositories(first: {NODE_SIZE}, after: $cursor) {{
+        pageInfo {{
             hasNextPage
             endCursor
-        }
-        nodes {
+        }}
+        nodes {{
             id
             updatedAt
             name
@@ -81,24 +82,24 @@ class GithubQuery(Enum):
             url
             description
             visibility
-            primaryLanguage {
+            primaryLanguage {{
             name
-            }
-            defaultBranchRef {
+            }}
+            defaultBranchRef {{
             name
-            }
+            }}
             isFork
             stargazerCount
-            watchers {
+            watchers {{
             totalCount
-            }
+            }}
             forkCount
             createdAt
             isArchived
-        }
-        }
-    }
-    }
+        }}
+        }}
+    }}
+    }}
     """
     REPO_QUERY = """
     query ($owner: String!, $repositoryName: String!) {
@@ -127,15 +128,15 @@ class GithubQuery(Enum):
     }
     }
     """
-    PULL_REQUEST_QUERY = """
-    query ($owner: String!, $name: String!, $cursor: String) {
-    repository(owner: $owner, name: $name) {
-        pullRequests(first: 100, after: $cursor) {
-        pageInfo {
+    PULL_REQUEST_QUERY = f"""
+    query ($owner: String!, $name: String!, $cursor: String) {{
+    repository(owner: $owner, name: $name) {{
+        pullRequests(first: {NODE_SIZE}, after: $cursor) {{
+        pageInfo {{
             hasNextPage
             endCursor
-        }
-        nodes {
+        }}
+        nodes {{
             id
             updatedAt
             number
@@ -146,87 +147,87 @@ class GithubQuery(Enum):
             body
             state
             mergedAt
-            assignees(first: 100) {
-            pageInfo {
+            assignees(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
+            }}
+            nodes {{
                 login
-            }
-            }
-            labels(first: 100) {
-            pageInfo {
+            }}
+            }}
+            labels(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
+            }}
+            nodes {{
                 name
                 description
-            }
-            }
-            reviewRequests(first: 100) {
-            pageInfo {
+            }}
+            }}
+            reviewRequests(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
-                requestedReviewer {
-                ... on User {
+            }}
+            nodes {{
+                requestedReviewer {{
+                ... on User {{
                     login
-                }
-                }
-            }
-            }
-            comments(first: 100) {
-            pageInfo {
+                }}
+                }}
+            }}
+            }}
+            comments(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
-                author {
+            }}
+            nodes {{
+                author {{
                 login
-                }
+                }}
                 body
-            }
-            }
-            reviews(first: 45) {
-            pageInfo {
+            }}
+            }}
+            reviews(first: {REVIEWS_COUNT}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
+            }}
+            nodes {{
                 id
-                author {
+                author {{
                 login
-                }
+                }}
                 state
                 body
-                comments(first: 100) {
-                pageInfo {
+                comments(first: {NODE_SIZE}) {{
+                pageInfo {{
                     hasNextPage
                     endCursor
-                }
-                nodes {
+                }}
+                nodes {{
                     body
-                }
-                }
-            }
-            }
-        }
-        }
-    }
-    }
+                }}
+                }}
+            }}
+            }}
+        }}
+        }}
+    }}
+    }}
     """
-    ISSUE_QUERY = """
-    query ($owner: String!, $name: String!, $cursor: String) {
-    repository(owner: $owner, name: $name) {
-        issues(first: 100, after: $cursor) {
-        pageInfo {
+    ISSUE_QUERY = f"""
+    query ($owner: String!, $name: String!, $cursor: String) {{
+    repository(owner: $owner, name: $name) {{
+        issues(first: {NODE_SIZE}, after: $cursor) {{
+        pageInfo {{
             hasNextPage
             endCursor
-        }
-        nodes {
+        }}
+        nodes {{
             id
             updatedAt
             number
@@ -236,47 +237,47 @@ class GithubQuery(Enum):
             title
             body
             state
-            assignees(first: 100) {
-            pageInfo {
+            assignees(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
+            }}
+            nodes {{
                 login
-            }
-            }
-            labels(first: 100) {
-            pageInfo {
+            }}
+            }}
+            labels(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
+            }}
+            nodes {{
                 name
                 description
-            }
-            }
-            comments(first: 100) {
-            pageInfo {
+            }}
+            }}
+            comments(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
-                author {
+            }}
+            nodes {{
+                author {{
                 login
-                }
+                }}
                 body
-            }
-            }
-        }
-        }
-    }
-    }
+            }}
+            }}
+        }}
+        }}
+    }}
+    }}
     """
     COMMENT_QUERY = """
     query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {{
     repository(owner: $owner, name: $name) {{
         {object_type}(number: $number) {{
-        comments(first: 100, after: $cursor) {{
+        comments(first: {node_size}, after: $cursor) {{
             pageInfo {{
             hasNextPage
             endCursor
@@ -292,63 +293,63 @@ class GithubQuery(Enum):
     }}
     }}
     """
-    REVIEW_QUERY = """
-    query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {
-    repository(owner: $owner, name: $name) {
-        pullRequest(number: $number) {
-        reviews(first: 100, after: $cursor) {
-            pageInfo {
+    REVIEW_QUERY = f"""
+    query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {{
+    repository(owner: $owner, name: $name) {{
+        pullRequest(number: $number) {{
+        reviews(first: {NODE_SIZE}, after: $cursor) {{
+            pageInfo {{
             hasNextPage
             endCursor
-            }
-            nodes {
+            }}
+            nodes {{
             id
-            author {
+            author {{
                 login
-            }
+            }}
             state
             body
-            comments(first: 100) {
-                pageInfo {
+            comments(first: {NODE_SIZE}) {{
+                pageInfo {{
                 hasNextPage
                 endCursor
-                }
-                nodes {
+                }}
+                nodes {{
                 body
-                }
-            }
-            }
-        }
-        }
-    }
-    }
+                }}
+            }}
+            }}
+        }}
+        }}
+    }}
+    }}
     """
-    REVIEWERS_QUERY = """
-    query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {
-    repository(owner: $owner, name: $name) {
-        pullRequest(number: $number) {
-        reviewRequests(first: 100, after: $cursor) {
-            pageInfo {
+    REVIEWERS_QUERY = f"""
+    query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {{
+    repository(owner: $owner, name: $name) {{
+        pullRequest(number: $number) {{
+        reviewRequests(first: {NODE_SIZE}, after: $cursor) {{
+            pageInfo {{
             hasNextPage
             endCursor
-            }
-            nodes {
-                requestedReviewer {
-                    ... on User {
+            }}
+            nodes {{
+                requestedReviewer {{
+                    ... on User {{
                     login
-                }
-            }
-            }
-        }
-        }
-    }
-    }
+                }}
+            }}
+            }}
+        }}
+        }}
+    }}
+    }}
     """
     LABELS_QUERY = """
     query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {{
     repository(owner: $owner, name: $name) {{
         {object_type}(number: $number) {{
-        labels(first: 100, after: $cursor) {{
+        labels(first: {node_size}, after: $cursor) {{
             pageInfo {{
             hasNextPage
             endCursor
@@ -365,7 +366,7 @@ class GithubQuery(Enum):
     query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {{
     repository(owner: $owner, name: $name) {{
         {object_type}(number: $number) {{
-        assignees(first: 100, after: $cursor) {{
+        assignees(first: {node_size}, after: $cursor) {{
             pageInfo {{
             hasNextPage
             endCursor
@@ -378,15 +379,15 @@ class GithubQuery(Enum):
     }}
     }}
     """
-    SEARCH_QUERY = """
-    query ($filter_query: String!, $cursor: String) {
-    search(query: $filter_query, type: ISSUE, first: 100, after: $cursor) {
-        pageInfo {
+    SEARCH_QUERY = f"""
+    query ($filter_query: String!, $cursor: String) {{
+    search(query: $filter_query, type: ISSUE, first: {NODE_SIZE}, after: $cursor) {{
+        pageInfo {{
         hasNextPage
         endCursor
-        }
-        nodes {
-        ... on Issue {
+        }}
+        nodes {{
+        ... on Issue {{
             id
             updatedAt
             number
@@ -396,39 +397,39 @@ class GithubQuery(Enum):
             title
             body
             state
-            assignees(first: 100) {
-            pageInfo {
+            assignees(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
+            }}
+            nodes {{
                 login
-            }
-            }
-            labels(first: 100) {
-            pageInfo {
+            }}
+            }}
+            labels(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
+            }}
+            nodes {{
                 name
                 description
-            }
-            }
-            comments(first: 100) {
-            pageInfo {
+            }}
+            }}
+            comments(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
-                author {
+            }}
+            nodes {{
+                author {{
                 login
-                }
+                }}
                 body
-            }
-            }
-        }
-        ... on PullRequest {
+            }}
+            }}
+        }}
+        ... on PullRequest {{
             id
             updatedAt
             number
@@ -439,77 +440,77 @@ class GithubQuery(Enum):
             body
             state
             mergedAt
-            assignees(first: 100) {
-            pageInfo {
+            assignees(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
+            }}
+            nodes {{
                 login
-            }
-            }
-            labels(first: 100) {
-            pageInfo {
+            }}
+            }}
+            labels(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
+            }}
+            nodes {{
                 name
                 description
-            }
-            }
-            reviewRequests(first: 100) {
-            pageInfo {
+            }}
+            }}
+            reviewRequests(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
-                requestedReviewer {
-                ... on User {
+            }}
+            nodes {{
+                requestedReviewer {{
+                ... on User {{
                     login
-                }
-                }
-            }
-            }
-            comments(first: 100) {
-            pageInfo {
+                }}
+                }}
+            }}
+            }}
+            comments(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
-                author {
+            }}
+            nodes {{
+                author {{
                 login
-                }
+                }}
                 body
-            }
-            }
-            reviews(first: 45) {
-            pageInfo {
+            }}
+            }}
+            reviews(first: {REVIEWS_COUNT}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
+            }}
+            nodes {{
                 id
-                author {
+                author {{
                 login
-                }
+                }}
                 state
                 body
-                comments(first: 100) {
-                pageInfo {
+                comments(first: {NODE_SIZE}) {{
+                pageInfo {{
                     hasNextPage
                     endCursor
-                }
-                nodes {
+                }}
+                nodes {{
                     body
-                }
-                }
-            }
-            }
-        }
-        }
-    }
-    }
+                }}
+                }}
+            }}
+            }}
+        }}
+        }}
+    }}
+    }}
     """
 
 
@@ -517,6 +518,8 @@ class ObjectType(Enum):
     REPOSITORY = "Repository"
     ISSUE = "Issue"
     PULL_REQUEST = "Pull request"
+    PR = "pr"
+    BRANCH = "branch"
 
 
 class UnauthorizedException(Exception):
@@ -772,9 +775,9 @@ class GitHubAdvancedRulesValidator(AdvancedRulesValidator):
             "filter": {
                 "type": "object",
                 "properties": {
-                    "issue": {"type": "string", "minLength": 1},
-                    "pr": {"type": "string", "minLength": 1},
-                    "branch": {"type": "string", "minLength": 1},
+                    ObjectType.ISSUE.value.lower(): {"type": "string", "minLength": 1},
+                    ObjectType.PR.value: {"type": "string", "minLength": 1},
+                    ObjectType.BRANCH.value: {"type": "string", "minLength": 1},
                 },
                 "minProperties": 1,
                 "additionalProperties": False,
@@ -1119,17 +1122,19 @@ class GitHubDataSource(BaseDataSource):
             },
             "comments": {
                 "query": GithubQuery.COMMENT_QUERY.value.format(
-                    object_type=object_type
+                    object_type=object_type, node_size=NODE_SIZE
                 ),
                 "es_field": "issue_comments",
             },
             "labels": {
-                "query": GithubQuery.LABELS_QUERY.value.format(object_type=object_type),
+                "query": GithubQuery.LABELS_QUERY.value.format(
+                    object_type=object_type, node_size=NODE_SIZE
+                ),
                 "es_field": "labels_field",
             },
             "assignees": {
                 "query": GithubQuery.ASSIGNEES_QUERY.value.format(
-                    object_type=object_type
+                    object_type=object_type, node_size=NODE_SIZE
                 ),
                 "es_field": "assignees_list",
             },
@@ -1181,9 +1186,13 @@ class GitHubDataSource(BaseDataSource):
         repo_name,
         response_key=(REPOSITORY_OBJECT, "pullRequests"),
         filter_query=None,
-        query=GithubQuery.PULL_REQUEST_QUERY.value,
     ):
         try:
+            query = (
+                GithubQuery.SEARCH_QUERY.value
+                if filter_query
+                else GithubQuery.PULL_REQUEST_QUERY.value
+            )
             owner, repo = self.github_client.get_repo_details(repo_name=repo_name)
             pull_request_variables = {
                 "owner": owner,
@@ -1218,7 +1227,7 @@ class GitHubDataSource(BaseDataSource):
             for field in ["comments", "labels", "assignees"]:
                 await self._fetch_remaining_fields(
                     type_obj=issue,
-                    object_type="issue",
+                    object_type=ObjectType.ISSUE.value.lower(),
                     owner=owner,
                     repo=repo,
                     field_type=field,
@@ -1231,9 +1240,13 @@ class GitHubDataSource(BaseDataSource):
         repo_name,
         response_key=(REPOSITORY_OBJECT, "issues"),
         filter_query=None,
-        query=GithubQuery.ISSUE_QUERY.value,
     ):
         try:
+            query = (
+                GithubQuery.SEARCH_QUERY.value
+                if filter_query
+                else GithubQuery.ISSUE_QUERY.value
+            )
             owner, repo = self.github_client.get_repo_details(repo_name=repo_name)
             issue_variables = {
                 "owner": owner,
@@ -1409,13 +1422,13 @@ class GitHubDataSource(BaseDataSource):
         Returns:
             tuple: A tuple containing a boolean value indicating whether the query should be included or excluded and the modified query.
         """
-        if query_type == "pr":
+        if query_type == ObjectType.PR.value:
             if "is:issue" in query:
                 return False, query
             elif "is:pr" in query:
                 return True, f"repo:{repo} {query}"
             return True, f"repo:{repo} is:pr {query}"
-        elif query_type == "issue":
+        elif query_type == ObjectType.ISSUE.value.lower():
             if "is:pr" in query:
                 return False, query
             elif "is:issue" in query:
@@ -1448,18 +1461,17 @@ class GitHubDataSource(BaseDataSource):
                 yield repo, None
                 repo_name = repo.get("nameWithOwner")
 
-                if pull_request_query := rule["filter"].get("pr"):
+                if pull_request_query := rule["filter"].get(ObjectType.PR.value):
                     query_status, pull_request_query = self._filter_rule_query(
                         repo=repo_name,
                         query=pull_request_query,
-                        query_type="pr",
+                        query_type=ObjectType.PR.value,
                     )
                     if query_status:
                         async for pull_request in self._fetch_pull_requests(
                             repo_name=repo_name,
                             response_key=("search",),
                             filter_query=pull_request_query,
-                            query=GithubQuery.SEARCH_QUERY.value,
                         ):
                             yield pull_request, None
                     else:
@@ -1467,22 +1479,23 @@ class GitHubDataSource(BaseDataSource):
                             f"Skipping pr for rule: {pull_request_query}"
                         )
 
-                if issue_query := rule["filter"].get("issue"):
+                if issue_query := rule["filter"].get(ObjectType.ISSUE.value.lower()):
                     query_status, issue_query = self._filter_rule_query(
-                        repo=repo_name, query=issue_query, query_type="issue"
+                        repo=repo_name,
+                        query=issue_query,
+                        query_type=ObjectType.ISSUE.value.lower(),
                     )
                     if query_status:
                         async for issue in self._fetch_issues(
                             repo_name=repo_name,
                             response_key=("search",),
                             filter_query=issue_query,
-                            query=GithubQuery.SEARCH_QUERY.value,
                         ):
                             yield issue, None
                     else:
                         self._logger.warning(f"Skipping issue for query: {issue_query}")
 
-                if branch := rule["filter"].get("branch"):
+                if branch := rule["filter"].get(ObjectType.BRANCH.value):
                     async for file_document, attachment_metadata in self._fetch_files(
                         repo_name=repo_name, default_branch=branch
                     ):
