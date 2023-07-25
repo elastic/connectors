@@ -6,7 +6,7 @@
 """Tests the Dropbox source class methods"""
 import json
 from unittest import mock
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import aiohttp
 import pytest
@@ -14,8 +14,12 @@ from aiohttp import StreamReader
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
 from freezegun import freeze_time
 
+from connectors.filtering.validation import SyncRuleValidationResult
+from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.dropbox import (
+    DropBoxAdvancedRulesValidator,
+    DropboxClient,
     DropboxDataSource,
     InvalidClientCredentialException,
     InvalidPathException,
@@ -26,6 +30,7 @@ from tests.sources.support import create_source
 
 PATH = "/"
 DUMMY_VALUES = "abc#123"
+ADVANCED_SNIPPET = "advanced_snippet"
 
 HOST_URLS = {
     "ACCESS_TOKEN_HOST_URL": "https://api.dropboxapi.com/",
@@ -242,6 +247,68 @@ EXPECTED_CONTENT = {
     "_id": "id:1",
     "_timestamp": "2023-01-01T06:06:06Z",
     "_attachment": "IyBUaGlzIGlzIHRoZSBkdW1teSBmaWxl",
+}
+
+MOCK_SEARCH_FILE_1 = {
+    "has_more": False,
+    "matches": [
+        {
+            "match_type": {".tag": "filename_and_content"},
+            "metadata": {
+                ".tag": "metadata",
+                "metadata": {
+                    ".tag": "file",
+                    "client_modified": "2023-01-01T06:06:06Z",
+                    "content_hash": "abc123",
+                    "id": "id:bJ86SIuuyXkAAAAAAAAAEQ",
+                    "is_downloadable": True,
+                    "name": "500_Copy.py",
+                    "path_display": "/500_files/500_Copy.py",
+                    "path_lower": "/500_files/500_Copy.py",
+                    "rev": "015fbe2ba5a15440000000214a950e0",
+                    "server_modified": "2023-01-01T06:06:06Z",
+                    "size": 512000,
+                },
+            },
+        }
+    ],
+}
+
+MOCK_SEARCH_FILE_2 = {
+    "has_more": False,
+    "matches": [
+        {
+            "match_type": {".tag": "filename_and_content"},
+            "metadata": {
+                ".tag": "metadata",
+                "metadata": {
+                    ".tag": "file",
+                    "client_modified": "2023-01-01T06:06:06Z",
+                    "content_hash": "abc321",
+                    "id": "id:bJ86SIuuyXkAAAAAAAAAEQ",
+                    "is_downloadable": True,
+                    "name": "dummy_file.txt",
+                    "preview_url": "https://www.dropbox.com/scl/fi/xyz456/dummy_file.txt?dl=0",
+                    "rev": "015fbe2ba5a15440000000214a950e0",
+                    "server_modified": "2023-01-01T06:06:06Z",
+                    "size": 200,
+                },
+            },
+        }
+    ],
+}
+
+MOCK_SEARCH_FILE_3 = {
+    ".tag": "file",
+    "client_modified": "2023-01-01T06:06:06Z",
+    "content_hash": "pqr123",
+    "id": "id:bJ86SIuuyXkAAAAAAAAAEQ",
+    "is_downloadable": True,
+    "name": "dummy_file.txt",
+    "url": "https://www.dropbox.com/scl/fi/pqr123/dummy_file.txt?dl=0",
+    "rev": "015fbe2ba5a15440000000214a950e0",
+    "server_modified": "2023-01-01T06:06:06Z",
+    "size": 200,
 }
 
 
@@ -491,6 +558,25 @@ async def test_api_call():
 
 
 @pytest.mark.asyncio
+async def test_paginated_api_call_when_skipping_api_call():
+    source = create_source(DropboxDataSource)
+    source.dropbox_client.retry_count = 1
+    source.dropbox_client._set_access_token = AsyncMock()
+
+    with patch.object(
+        source.dropbox_client, "api_call", side_effect=Exception("Something went wrong")
+    ):
+        async for response in source.dropbox_client._paginated_api_call(
+            base_url=HOST_URLS["FILES_FOLDERS_HOST_URL"],
+            breaking_field="xyz",
+            continue_endpoint="shared_file",
+            data={"data": "xyz"},
+            url_name="url_name",
+        ):
+            assert response is None
+
+
+@pytest.mark.asyncio
 async def test_set_access_token_when_token_expires_at_is_str():
     source = create_source(DropboxDataSource)
     source.dropbox_client.token_expiration_time = "2023-02-10T09:02:23.629821"
@@ -685,6 +771,42 @@ async def test_fetch_shared_files():
 
 @pytest.mark.asyncio
 @freeze_time("2023-01-01T06:06:06")
+async def test_search_files():
+    source = create_source(DropboxDataSource)
+    rule = {
+        "query": "copy",
+        "options": {
+            "path": "/500_files",
+            "file_status": "active",
+        },
+    }
+
+    actual_response = []
+    with patch.object(
+        source.dropbox_client,
+        "api_call",
+        side_effect=[
+            AsyncIterator([JSONAsyncMock(MOCK_SEARCH_FILE_1, status=200)]),
+            AsyncIterator([JSONAsyncMock(MOCK_SEARCH_FILE_2, status=200)]),
+        ],
+    ):
+        async for document, _ in source.advanced_sync(rule=rule):
+            actual_response.append(document)
+
+    assert actual_response == [
+        {
+            "_id": "id:bJ86SIuuyXkAAAAAAAAAEQ",
+            "type": "File",
+            "name": "500_Copy.py",
+            "file_path": "/500_files/500_Copy.py",
+            "size": 512000,
+            "_timestamp": "2023-01-01T06:06:06Z",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+@freeze_time("2023-01-01T06:06:06")
 @patch.object(
     DropboxDataSource,
     "_fetch_files_folders",
@@ -715,3 +837,120 @@ async def test_get_docs(files_folders_patch, shared_files_patch):
         documents.append(item)
 
     assert documents == expected_responses
+
+
+@pytest.mark.parametrize(
+    "advanced_rules, expected_validation_result",
+    [
+        (
+            [
+                {
+                    "query": "copy",
+                    "options": {
+                        "path": "/invalid_path",
+                        "file_status": {".tag": "active"},
+                    },
+                }
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        )
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation_with_invalid_repos(
+    advanced_rules, expected_validation_result
+):
+    source = create_source(DropboxDataSource)
+    source.dropbox_client.check_path = AsyncMock(side_effect=InvalidPathException())
+
+    validation_result = await DropBoxAdvancedRulesValidator(source).validate(
+        advanced_rules
+    )
+
+    assert validation_result == expected_validation_result
+
+
+@pytest.mark.parametrize(
+    "filtering",
+    [
+        Filter(
+            {
+                ADVANCED_SNIPPET: {
+                    "value": [
+                        {
+                            "query": "copy",
+                            "options": {
+                                "path": "/500_files",
+                                "file_status": {
+                                    ".tag": "active",
+                                },
+                            },
+                        },
+                        {
+                            "query": "dummy",
+                            "options": {
+                                "file_extensions": ["txt"],
+                            },
+                        },
+                        {
+                            "query": "manager",
+                            "options": {
+                                "file_categories": [{".tag": "paper"}, {".tag": "pdf"}],
+                            },
+                        },
+                    ]
+                }
+            }
+        ),
+    ],
+)
+@patch.object(
+    DropboxClient,
+    "search_files_folders",
+    side_effect=AsyncIterator(
+        [
+            MOCK_SEARCH_FILE_1,
+            MOCK_SEARCH_FILE_2,
+        ],
+    ),
+)
+@patch.object(
+    DropboxClient,
+    "api_call",
+    side_effect=AsyncIterator(
+        [JSONAsyncMock(MOCK_SEARCH_FILE_3, 200)],
+    ),
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules(
+    received_files_patch, files_folders_patch, filtering
+):
+    source = create_source(DropboxDataSource)
+    source.get_content = Mock(return_value=EXPECTED_CONTENT)
+
+    documents = []
+    async for item, _ in source.get_docs(filtering):
+        documents.append(item)
+
+    assert documents == [
+        {
+            "_id": "id:bJ86SIuuyXkAAAAAAAAAEQ",
+            "type": "File",
+            "name": "500_Copy.py",
+            "file_path": "/500_files/500_Copy.py",
+            "size": 512000,
+            "_timestamp": "2023-01-01T06:06:06Z",
+        },
+        {
+            "_id": "id:bJ86SIuuyXkAAAAAAAAAEQ",
+            "type": "File",
+            "name": "dummy_file.txt",
+            "url": "https://www.dropbox.com/scl/fi/pqr123/dummy_file.txt?dl=0",
+            "size": 200,
+            "_timestamp": "2023-01-01T06:06:06Z",
+        },
+    ]

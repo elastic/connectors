@@ -15,10 +15,15 @@ from urllib import parse
 
 import aiofiles
 import aiohttp
+import fastjsonschema
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
 
+from connectors.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import (
@@ -78,6 +83,8 @@ class EndpointName(Enum):
     DOWNLOAD = "download"
     PAPER_FILE_DOWNLOAD = "paper_file_download"
     RECEIVED_FILE_DOWNLOAD = "received_files_download"
+    SEARCH = "search"
+    SEARCH_CONTINUE = "search_continue"
 
 
 ENDPOINTS = {
@@ -92,6 +99,8 @@ ENDPOINTS = {
     EndpointName.DOWNLOAD.value: "files/download",
     EndpointName.PAPER_FILE_DOWNLOAD.value: "files/export",
     EndpointName.RECEIVED_FILE_DOWNLOAD.value: "sharing/get_shared_link_file",
+    EndpointName.SEARCH.value: "files/search_v2",
+    EndpointName.SEARCH_CONTINUE.value: "files/search/continue_v2",
 }
 
 
@@ -276,7 +285,7 @@ class DropboxClient:
                 await self._sleeps.sleep(retry_seconds)
 
     async def _paginated_api_call(
-        self, base_url, breaking_field, is_shared=False, **kwargs
+        self, base_url, breaking_field, continue_endpoint=None, **kwargs
     ):
         """Make a paginated API call for fetching Dropbox files/folders.
 
@@ -312,10 +321,12 @@ class DropboxClient:
                             BreakingField.CURSOR.value
                         ]
                     }
-                    if is_shared:
+                    if continue_endpoint == "shared_file":
                         url_name = ENDPOINTS.get(
                             EndpointName.RECEIVED_FILES_CONTINUE.value
                         )
+                    elif continue_endpoint == "search_file":
+                        url_name = ENDPOINTS.get(EndpointName.SEARCH_CONTINUE.value)
                     else:
                         url_name = ENDPOINTS.get(
                             EndpointName.FILES_FOLDERS_CONTINUE.value
@@ -362,7 +373,7 @@ class DropboxClient:
             "limit": LIMIT,
         }
         async for result in self._paginated_api_call(
-            is_shared=True,
+            continue_endpoint="shared_file",
             base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
             url_name=ENDPOINTS.get(EndpointName.RECEIVED_FILES.value),
             data=data,
@@ -406,12 +417,113 @@ class DropboxClient:
         ):
             yield response
 
+    async def search_files_folders(self, rule):
+        async for result in self._paginated_api_call(
+            base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
+            url_name=ENDPOINTS.get(EndpointName.SEARCH.value),
+            data=rule,
+            breaking_field=BreakingField.HAS_MORE.value,
+            continue_endpoint="search_file",
+        ):
+            yield result
+
+
+class DropBoxAdvancedRulesValidator(AdvancedRulesValidator):
+    FILE_CATEGORY_DEFINITION = {
+        "type": "object",
+        "properties": {
+            ".tag": {"type": "string", "minLength": 1},
+        },
+    }
+
+    OPTIONS_DEFINITION = {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "max_results": {"type": "string", "minLength": 1},
+            "order_by": FILE_CATEGORY_DEFINITION,
+            "file_status": FILE_CATEGORY_DEFINITION,
+            "account_id": {"type": "string", "minLength": 1},
+            "file_extensions": {
+                "type": "array",
+                "items": {"type": "string"},
+                "minItems": 1,
+            },
+            "file_categories": {
+                "type": "array",
+                "items": FILE_CATEGORY_DEFINITION,
+                "minItems": 1,
+            },
+        },
+    }
+
+    RULES_OBJECT_SCHEMA_DEFINITION = {
+        "type": "object",
+        "properties": {
+            "match_field_options": {"type": "object"},
+            "options": OPTIONS_DEFINITION,
+            "query": {"type": "string", "minLength": 1},
+        },
+        "required": ["query"],
+        "additionalProperties": False,
+    }
+
+    SCHEMA_DEFINITION = {"type": "array", "items": RULES_OBJECT_SCHEMA_DEFINITION}
+
+    SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
+
+    def __init__(self, source):
+        self.source = source
+
+    async def validate(self, advanced_rules):
+        if len(advanced_rules) == 0:
+            return SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            )
+
+        return await self._remote_validation(advanced_rules)
+
+    @retryable(
+        retries=RETRY_COUNT,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def _remote_validation(self, advanced_rules):
+        try:
+            DropBoxAdvancedRulesValidator.SCHEMA(advanced_rules)
+        except fastjsonschema.JsonSchemaValueException as e:
+            return SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=e.message,
+            )
+
+        invalid_paths = []
+        for rule in advanced_rules:
+            self.source.dropbox_client.path = rule.get("options", {}).get("path")
+            try:
+                if self.source.dropbox_client.path:
+                    await self.source.dropbox_client.check_path()
+            except InvalidPathException:
+                invalid_paths.append(self.source.dropbox_client.path)
+
+        if len(invalid_paths) > 0:
+            return SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=f"Invalid paths '{', '.join(invalid_paths)}'.",
+            )
+        return SyncRuleValidationResult.valid_result(
+            SyncRuleValidationResult.ADVANCED_RULES
+        )
+
 
 class DropboxDataSource(BaseDataSource):
     """Dropbox"""
 
     name = "Dropbox"
     service_type = "dropbox"
+    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the Dropbox
@@ -438,6 +550,7 @@ class DropboxDataSource(BaseDataSource):
                 "label": "Path to fetch files/folders",
                 "order": 1,
                 "required": False,
+                "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "str",
                 "value": "/",
             },
@@ -501,6 +614,9 @@ class DropboxDataSource(BaseDataSource):
             raise Exception(
                 f"Error while validating path: {self.dropbox_client.path}. Error: {exception}"
             ) from exception
+
+    def advanced_rules_validators(self):
+        return [DropBoxAdvancedRulesValidator(self)]
 
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by dropbox
@@ -639,7 +755,10 @@ class DropboxDataSource(BaseDataSource):
 
     def _adapt_dropbox_doc_to_es_doc(self, response):
         is_file = response.get(".tag") == "file"
-        timestamp = response.get("server_modified") if is_file else iso_utc()
+        if is_file and response.get("name").split(".")[-1] == PAPER:
+            timestamp = response.get("client_modified")
+        else:
+            timestamp = response.get("server_modified") if is_file else iso_utc()
         return {
             "_id": response.get("id"),
             "type": FILE if is_file else FOLDER,
@@ -675,6 +794,21 @@ class DropboxDataSource(BaseDataSource):
                         response=json_metadata
                     ), json_metadata
 
+    async def advanced_sync(self, rule):
+        async for response in self.dropbox_client.search_files_folders(rule=rule):
+            for entry in response.get("matches"):
+                data = entry.get("metadata", {}).get("metadata")
+                if data.get("preview_url") and not data.get("export_info"):
+                    async for metadata in self.dropbox_client.get_received_file_metadata(
+                        url=data["preview_url"]
+                    ):
+                        json_metadata = await metadata.json()
+                        yield self._adapt_dropbox_shared_file_doc_to_es_doc(
+                            response=json_metadata
+                        ), json_metadata
+                else:
+                    yield self._adapt_dropbox_doc_to_es_doc(response=data), data
+
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch dropbox objects in async manner
 
@@ -684,15 +818,30 @@ class DropboxDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the files.
         """
-        async for document, attachment in self._fetch_files_folders(
-            path=self.dropbox_client.path
-        ):
-            if document["type"] == FILE:
-                yield document, partial(self.get_content, attachment=attachment)
-            else:
-                yield document, None
 
-        async for document, attachment in self._fetch_shared_files():
-            yield document, partial(
-                self.get_content, attachment=attachment, is_shared=True
-            )
+        def document_tuple(document, attachment):
+            if document.get("type") == FILE:
+                if document.get("url"):
+                    return document, partial(
+                        self.get_content, attachment=attachment, is_shared=True
+                    )
+                else:
+                    return document, partial(self.get_content, attachment=attachment)
+            else:
+                return document, None
+
+        if filtering and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
+            for rule in advanced_rules:
+                self._logger.debug(f"Fetching files using advanced sync rule: {rule}")
+
+                async for document, attachment in self.advanced_sync(rule=rule):
+                    yield document_tuple(document=document, attachment=attachment)
+        else:
+            async for document, attachment in self._fetch_files_folders(
+                path=self.dropbox_client.path
+            ):
+                yield document_tuple(document=document, attachment=attachment)
+
+            async for document, attachment in self._fetch_shared_files():
+                yield document_tuple(document=document, attachment=attachment)
