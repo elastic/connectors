@@ -12,6 +12,7 @@
 """
 import asyncio
 import time
+from copy import deepcopy
 
 from connectors.logger import logger
 from connectors.utils import CancellableSleeps
@@ -71,6 +72,7 @@ class BaseService(metaclass=_Registry):
         self.config = config
         self.service_config = self.config["service"]
         self.es_config = self.config["elasticsearch"]
+        self.connectors = self._parse_connectors()
         self.running = False
         self._sleeps = CancellableSleeps()
         self.errors = [0, time.time()]
@@ -110,6 +112,27 @@ class BaseService(metaclass=_Registry):
 
         self.errors[0] = errors
         self.errors[1] = first
+
+    def _parse_connectors(self):
+        connectors = {}
+        configured_connectors = deepcopy(self.config.get("connectors"))
+        if configured_connectors is not None:
+            for connector in configured_connectors:
+                connector_id = connector.get("connector_id")
+                if connector_id in connectors:
+                    logger.warning(
+                        f"Found duplicate configuration for connector {connector_id}, overriding with the later config"
+                    )
+                connectors[connector_id] = connector
+
+        if not connectors:
+            if "connector_id" in self.config and "service_type" in self.config:
+                connectors[self.config["connector_id"]] = {
+                    "connector_id": self.config["connector_id"],
+                    "service_type": self.config["service_type"],
+                }
+
+        return connectors
 
 
 class MultiService:

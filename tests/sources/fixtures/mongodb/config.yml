@@ -26,8 +26,10 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'mongo'
-service_type: 'mongodb'
+connectors:
+  -
+    connector_id: 'mongo'
+    service_type: 'mongodb'
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource

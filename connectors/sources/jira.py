@@ -354,7 +354,9 @@ class JiraDataSource(BaseDataSource):
             return
 
         attachment_name = attachment["filename"]
-        if os.path.splitext(attachment_name)[-1] not in TIKA_SUPPORTED_FILETYPES:
+        if (
+            os.path.splitext(attachment_name)[-1]
+        ).lower() not in TIKA_SUPPORTED_FILETYPES:
             self._logger.warning(
                 f"{attachment_name} is not supported by TIKA, skipping"
             )

@@ -38,6 +38,7 @@ class NASDataSource(BaseDataSource):
         self.server_ip = self.configuration["server_ip"]
         self.port = self.configuration["server_port"]
         self.drive_path = self.configuration["drive_path"]
+        self.session = None
 
     @classmethod
     def get_default_configuration(cls):
@@ -83,7 +84,7 @@ class NASDataSource(BaseDataSource):
 
     def create_connection(self):
         """Creates an SMB session to the shared drive."""
-        smbclient.register_session(
+        self.session = smbclient.register_session(
             server=self.server_ip,
             username=self.username,
             password=self.password,
@@ -98,6 +99,8 @@ class NASDataSource(BaseDataSource):
 
     async def close(self):
         """Close all the open smb sessions"""
+        if self.session is None:
+            return
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(
             executor=None,
@@ -167,7 +170,8 @@ class NASDataSource(BaseDataSource):
         """
         if not (
             doit
-            and os.path.splitext(file["title"])[-1] in TIKA_SUPPORTED_FILETYPES
+            and (os.path.splitext(file["title"])[-1]).lower()
+            in TIKA_SUPPORTED_FILETYPES
             and file["size"]
         ):
             return
