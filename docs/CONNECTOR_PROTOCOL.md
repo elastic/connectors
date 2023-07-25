@@ -50,9 +50,9 @@ This is our main communication index, used to communicate the connector's config
       tooltip: string;      -> Text for populating the Kibana tooltip element
       type: string;         -> The field value type (str, int, bool, list)
       ui_restrictions: string[];    -> List of places in the UI to restrict the field to
-      validations: [                -> Array of rules to validate the field's value against
-        type: string;               -> The validation type
-        constraint: string | number -> The rule to use for this validation
+      validations: [                         -> Array of rules to validate the field's value against
+        type: string;                        -> The validation type
+        constraint: string | number | list;  -> The rule to use for this validation
       ];
       value: any;           -> The value of the field configured in Kibana
     }
@@ -82,9 +82,9 @@ This is our main communication index, used to communicate the connector's config
     };                                  -> Features to enable/disable for this connector
   };
   filtering: [          -> Array of filtering rules, connectors use the first entry by default
-    {          
+    {
       domain: string,     -> what data domain these rules apply to
-      active: {           -> "active" rules are run in jobs. 
+      active: {           -> "active" rules are run in jobs.
         rules: {
           id: string,         -> rule identifier
           policy: string,     -> one of ["include", "exclude"]
@@ -119,7 +119,7 @@ This is our main communication index, used to communicate the connector's config
   last_access_control_sync_status: string:  -> Status of the last access control sync job, or null if no job has been executed
   last_deleted_document_count: number;    -> How many documents were deleted in the last job
   last_incremental_sync_scheduled_at: date; -> Date/time when the last incremental sync job is scheduled (UTC)
-  last_indexed_document_count: number;    -> How many documents were indexed in the last job  
+  last_indexed_document_count: number;    -> How many documents were indexed in the last job
   last_seen: date;      -> Connector writes check-in date-time regularly (UTC)
   last_sync_error: string;   -> Optional last full or incremental sync job error message
   last_sync_status: string;  -> Status of the last content sync job, or null if no job has been executed
@@ -487,7 +487,7 @@ For every half hour, and every time a job is executed, the connector should upda
 For custom connectors, the connector should also update `configuration` field if its status is `created`.
 
 The connector should also sync data for connectors:
-- Read connector definitions from `.elastic-connectors` regularly, and determine whether to sync data based on `scheduling` and `custom_scheduling` values. 
+- Read connector definitions from `.elastic-connectors` regularly, and determine whether to sync data based on `scheduling` and `custom_scheduling` values.
 - Set the index mappings of the to-be-written-to index if not already present.
 - Sync with the data source and index resulting documents into the correct index.
 - Log jobs to `.elastic-connectors-sync-jobs`.
