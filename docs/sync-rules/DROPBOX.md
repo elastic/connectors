@@ -1,4 +1,4 @@
-### Setting up the Jira connector
+### Setting up the Dropbox connector
 
 See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 

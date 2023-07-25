@@ -104,7 +104,7 @@ Advanced sync rules are not available for this connector in the present version.
 
 ## Advanced Sync Rules
 
-Advanced Sync Rules are now available in elastic 8.10 version.
+Advanced Sync Rules are available as of Elastic version 8.10.
 
 - Users can add [Dropbox queries](https://www.dropbox.com/developers/documentation/http/documentation#files-search) for syncing the source.
     - Check the search response from [Dropbox API Explorer](https://dropbox.github.io/dropbox-api-v2-explorer/#files_search_v2).
