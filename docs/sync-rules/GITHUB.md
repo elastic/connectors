@@ -58,7 +58,7 @@ See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 ]
 ```
 
-**NOTE**: All documents pulled by a given rule are indexed regardless of whether the document has already been indexed by the previous rule. In such cases, document duplication won't happen but the count of indexed documents will be different in the logs. The correct count of documents can be referred from the ElasticSearch index.
+**NOTE**: All documents pulled by a given rule are indexed regardless of whether the document has already been indexed by the previous rule. In such cases, document duplication will happen, but the count of indexed documents will be different in the logs. The correct count of documents can be referred from the ElasticSearch index.
 
 #### Advanced rules for overlapping
 

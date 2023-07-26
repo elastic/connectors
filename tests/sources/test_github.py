@@ -969,7 +969,7 @@ async def test_get_docs():
             ),
         ),
         (
-            # invalid: invalid key
+            # invalid: invalid array value
             [
                 {
                     "repository": "repo_name",
@@ -985,7 +985,7 @@ async def test_get_docs():
             ),
         ),
         (
-            # invalid: repository can be empty
+            # invalid: repository can not be empty
             [
                 {
                     "repository": "",
@@ -1076,7 +1076,7 @@ async def test_advanced_rules_validation_with_invalid_repos(
             ],
         ),
         (
-            # Configured invalid queries, without branch
+            # Configured invalid queries, with branch
             Filter(
                 {
                     ADVANCED_SNIPPET: {
