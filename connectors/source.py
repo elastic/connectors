@@ -147,6 +147,13 @@ class Field:
                 # int and bool
                 return value is None
 
+    def is_bool_valid(self):
+        if self.type != "bool":
+            return True
+
+        value = self._value
+        return isinstance(value, bool) or value is None
+
     def validate(self):
         """Used to validate the `value` of a Field using its `validations`.
         If `value` is empty and the field is not required,
@@ -312,6 +319,10 @@ class DataSourceConfiguration:
                 validation_errors.extend([f"'{field.label}' cannot be empty."])
                 continue
 
+            if field.type == 'bool' and field.is_bool_valid():
+                validation_errors.extend([f"'{field.label}' should be a bool, but is a {type(field.value).__name__}. Please change value to bool."])
+                continue
+
             # finally check actual validations
             validation_errors.extend(field.validate())
 
@@ -340,7 +351,6 @@ class DataSourceConfiguration:
                 return False
 
         return True
-
 
 class BaseDataSource:
     """Base class, defines a loose contract."""

@@ -11,9 +11,6 @@ from sqlalchemy import create_engine
 
 from connectors.sources.generic_database import GenericBaseDataSource, Queries
 
-DEFAULT_PROTOCOL = "TCP"
-DEFAULT_ORACLE_HOME = ""
-
 
 class OracleQueries(Queries):
     """Class contains methods which return query"""
@@ -90,15 +87,14 @@ class OracleDataSource(GenericBaseDataSource):
                     ],
                     "order": 9,
                     "type": "str",
-                    "value": DEFAULT_PROTOCOL,
+                    "value": "TCP",
                 },
                 "oracle_home": {
-                    "default_value": DEFAULT_ORACLE_HOME,
+                    "default_value": "",
                     "label": "Path of Oracle Service",
                     "order": 10,
                     "required": False,
                     "type": "str",
-                    "value": DEFAULT_ORACLE_HOME,
                 },
                 "wallet_configuration_path": {
                     "default_value": "",
@@ -106,7 +102,6 @@ class OracleDataSource(GenericBaseDataSource):
                     "order": 11,
                     "required": False,
                     "type": "str",
-                    "value": "",
                 },
             }
         )

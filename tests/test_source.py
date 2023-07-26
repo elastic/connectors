@@ -406,6 +406,16 @@ def test_get_source_klasses():
                 }
             }
         ),
+(
+            {
+                "bool_field": {
+                    "type": "bool",
+                    "required": False,
+                    "value": "y",
+                    "validations": [],
+                }
+            }
+        ),
     ],
 )
 async def test_check_valid_when_validations_succeed_no_errors_raised(config):

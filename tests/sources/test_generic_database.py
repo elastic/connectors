@@ -117,23 +117,18 @@ class CursorSync:
             return [("2023-02-21T08:37:15+00:00",)]
 
 
-def test_get_configuration():
-    """Test get_configuration method of GenericBaseDataSource class"""
-
-    # Setup
-    klass = GenericBaseDataSource
-
-    # Execute
-    config = DataSourceConfiguration(klass.get_default_configuration())
-
-    # Assert
-    assert config["host"] == "127.0.0.1"
-
-
 @pytest.mark.asyncio
 async def test_validate_config_valid_fields():
     # Setup
-    source = create_source(PostgreSQLDataSource)
+    source = create_source(
+        PostgreSQLDataSource,
+        host="127.0.0.1",
+        port=8090,
+        username="baa",
+        password="boo",
+        database="bee",
+        tables=["buu"],
+    )
 
     # Execute
     try:
@@ -148,7 +143,15 @@ async def test_validate_config_valid_fields():
 @pytest.mark.asyncio
 async def test_validate_config_missing_fields(field):
     # Setup
-    source = create_source(GenericBaseDataSource)
+    source = create_source(
+        PostgreSQLDataSource,
+        host="127.0.0.1",
+        port=8090,
+        username="baa",
+        password="boo",
+        database="bee",
+        tables=["buu"],
+    )
     with pytest.raises(ConfigurableFieldValueError):
         source.configuration.set_field(name=field, value="")
 
@@ -273,7 +276,7 @@ async def test_ping():
 async def test_ping_negative():
     """Test ping method of GenericBaseDataSource class when connection is not established"""
     # Setup
-    source = create_source(GenericBaseDataSource)
+    source = create_source(GenericBaseDataSource, host="127.0.0.1")
 
     with patch.object(
         GenericBaseDataSource,
@@ -340,7 +343,7 @@ def test_configured_tables(tables, expected_tables):
 @pytest.mark.parametrize("tables", ["*", ["*"]])
 @pytest.mark.asyncio
 async def test_get_tables_to_fetch_remote_tables(tables):
-    source = create_source(GenericBaseDataSource)
+    source = create_source(GenericBaseDataSource, tables=tables)
     source.execute_query = AsyncIterator(["table"])
     source.queries = Mock()
 

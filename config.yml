@@ -27,11 +27,10 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-#connectors:
-#  -
-#    connector_id: changeme
-#    service_type: changeme
-#    api_key: changeme
+connectors:
+  -
+    connector_id: "sndeeYkBf9amgbjx15ma"
+    service_type: "mssql"
 
 sources:
   mongodb: connectors.sources.mongo:MongoDataSource
