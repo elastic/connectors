@@ -84,7 +84,7 @@ match DATA_SIZE:
         NUMBER_OF_LIST_ITEM_ATTACHMENTS = 5
 
 
-fake_large_image = fake.pystr(min_chars=1 << 20, max_chars=1 << 20 + 1)
+fake_large_image = fake.pystr(min_chars=1 << 15, max_chars=1 << 15 + 1)
 
 
 def _generate_html(text, number_of_large_images):
@@ -97,9 +97,9 @@ def _generate_html(text, number_of_large_images):
     return large_html
 
 
-small_text = _generate_html(fake.text(max_nb_chars=5000), 0)
-medium_text = _generate_html(fake.text(max_nb_chars=20000), 1)
-large_text = _generate_html(fake.text(max_nb_chars=100000), 10)
+small_text = _generate_html(fake.text(max_nb_chars=500), 0)
+medium_text = _generate_html(fake.text(max_nb_chars=5000), 1)
+large_text = _generate_html(fake.text(max_nb_chars=10000), 5)
 
 small_text_bytesize = len(small_text.encode("utf-8"))
 medium_text_bytesize = len(medium_text.encode("utf-8"))
