@@ -119,6 +119,13 @@ class BaseService(metaclass=_Registry):
         if configured_connectors is not None:
             for connector in configured_connectors:
                 connector_id = connector.get("connector_id")
+                if not connector_id:
+                    logger.warning(
+                        f"Found invalid connector configuration. Connector id is missing for {connector}"
+                    )
+                    continue
+
+                connector_id = str(connector_id)
                 if connector_id in connectors:
                     logger.warning(
                         f"Found duplicate configuration for connector {connector_id}, overriding with the later config"
@@ -127,8 +134,9 @@ class BaseService(metaclass=_Registry):
 
         if not connectors:
             if "connector_id" in self.config and "service_type" in self.config:
-                connectors[self.config["connector_id"]] = {
-                    "connector_id": self.config["connector_id"],
+                connector_id = str(self.config["connector_id"])
+                connectors[connector_id] = {
+                    "connector_id": connector_id,
                     "service_type": self.config["service_type"],
                 }
 
