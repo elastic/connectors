@@ -225,7 +225,9 @@ class NASDataSource(BaseDataSource):
         try:
             files = await loop.run_in_executor(None, smbclient.scandir, path)
         except (SMBOSError, SMBException) as exception:
-            self._logger.exception(f"Error while scanning the path {path}. Error {exception}")
+            self._logger.exception(
+                f"Error while scanning the path {path}. Error {exception}"
+            )
 
         for file in files:
             file_details = file._dir_info.fields
