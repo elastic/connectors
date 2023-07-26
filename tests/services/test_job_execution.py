@@ -535,3 +535,31 @@ def test_load_max_concurrent_access_control_syncs_from_config():
 )
 def test_load_max_concurrent_access_control_syncs_fallback_on_default():
     assert load_max_concurrent_access_control_syncs({}) == MAX_SIX_CONCURRENT_SYNCS
+
+
+def test_override_es_config():
+    connector_api_key = "connector_api_key"
+    config = {
+        "elasticsearch": {
+            "username": "username",
+            "password": "password",
+            "api_key": "global_api_key",
+        },
+        "service": {"idling": 30},
+        "sources": [],
+        "connectors": [
+            {
+                "connector_id": "foo",
+                "service_type": "bar",
+                "api_key": connector_api_key,
+            }
+        ],
+    }
+
+    service = JobExecutionService(config)
+    connector = Mock()
+    connector.id = "foo"
+    override_config = service._override_es_config(connector)
+    assert "username" not in override_config
+    assert "password" not in override_config
+    assert override_config["api_key"] == connector_api_key
