@@ -28,3 +28,4 @@ See the [official end-user documentation](https://www.elastic.co/guide/en/enterp
 - [JIRA](docs/sync-rules/JIRA.md)
 - [CONFLUENCE](docs/sync-rules/CONFLUENCE.md)
 - [SERVICENOW](docs/sync-rules/SERVICENOW.md)
+- [NETWORK_DRIVE](docs/sync-rules/NETWORK_DRIVE.md)

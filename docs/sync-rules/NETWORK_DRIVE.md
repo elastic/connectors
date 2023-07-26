@@ -18,10 +18,10 @@ The advanced sync rules would contain a set of glob patterns provided by the use
 ```json
 [
   {
-    "pattern": "Folder-shared/a/mock/**",
+    "pattern": "Folder-shared/a/mock/**"
   },
   {
-    "pattern": "Folder-shared/b/alpha/**",
+    "pattern": "Folder-shared/b/alpha/**"
   }
 ]
 ```
@@ -31,7 +31,7 @@ The advanced sync rules would contain a set of glob patterns provided by the use
 ```json
 [
   {
-    "pattern": "Folder-shared/a/b/test",
+    "pattern": "Folder-shared/a/b/test"
   }
 ]
 ```
@@ -51,7 +51,7 @@ The advanced sync rules would contain a set of glob patterns provided by the use
 ```json
 [
   {
-    "pattern": "Folder-shared/**/all-tests/test[!7]",
+    "pattern": "Folder-shared/**/all-tests/test[!7]"
   }
 ]
 ```
