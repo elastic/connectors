@@ -11,11 +11,16 @@ from functools import cached_property, partial
 
 import aiofiles
 import aiohttp
+import fastjsonschema
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 from gidgethub.aiohttp import GitHubAPI
 
+from connectors.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
@@ -38,8 +43,9 @@ REPOSITORY_OBJECT = "repository"
 RETRIES = 3
 RETRY_INTERVAL = 2
 FILE_SIZE_LIMIT = 10485760  # ~ 10 Megabytes
-PAGE_SIZE = 100
 FORBIDDEN = 403
+NODE_SIZE = 100
+REVIEWS_COUNT = 45
 
 FILE_SCHEMA = {
     "name": "name",
@@ -60,15 +66,15 @@ class GithubQuery(Enum):
         }
     }
     """
-    REPOS_QUERY = """
-    query ($login: String!, $cursor: String) {
-    user(login: $login) {
-        repositories(first: 100, after: $cursor) {
-        pageInfo {
+    REPOS_QUERY = f"""
+    query ($login: String!, $cursor: String) {{
+    user(login: $login) {{
+        repositories(first: {NODE_SIZE}, after: $cursor) {{
+        pageInfo {{
             hasNextPage
             endCursor
-        }
-        nodes {
+        }}
+        nodes {{
             id
             updatedAt
             name
@@ -76,24 +82,24 @@ class GithubQuery(Enum):
             url
             description
             visibility
-            primaryLanguage {
+            primaryLanguage {{
             name
-            }
-            defaultBranchRef {
+            }}
+            defaultBranchRef {{
             name
-            }
+            }}
             isFork
             stargazerCount
-            watchers {
+            watchers {{
             totalCount
-            }
+            }}
             forkCount
             createdAt
             isArchived
-        }
-        }
-    }
-    }
+        }}
+        }}
+    }}
+    }}
     """
     REPO_QUERY = """
     query ($owner: String!, $repositoryName: String!) {
@@ -122,15 +128,15 @@ class GithubQuery(Enum):
     }
     }
     """
-    PULL_REQUEST_QUERY = """
-    query ($owner: String!, $name: String!, $cursor: String) {
-    repository(owner: $owner, name: $name) {
-        pullRequests(first: 100, after: $cursor) {
-        pageInfo {
+    PULL_REQUEST_QUERY = f"""
+    query ($owner: String!, $name: String!, $cursor: String) {{
+    repository(owner: $owner, name: $name) {{
+        pullRequests(first: {NODE_SIZE}, after: $cursor) {{
+        pageInfo {{
             hasNextPage
             endCursor
-        }
-        nodes {
+        }}
+        nodes {{
             id
             updatedAt
             number
@@ -141,87 +147,87 @@ class GithubQuery(Enum):
             body
             state
             mergedAt
-            assignees(first: 100) {
-            pageInfo {
+            assignees(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
+            }}
+            nodes {{
                 login
-            }
-            }
-            labels(first: 100) {
-            pageInfo {
+            }}
+            }}
+            labels(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
+            }}
+            nodes {{
                 name
                 description
-            }
-            }
-            reviewRequests(first: 100) {
-            pageInfo {
+            }}
+            }}
+            reviewRequests(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
-                requestedReviewer {
-                ... on User {
+            }}
+            nodes {{
+                requestedReviewer {{
+                ... on User {{
                     login
-                }
-                }
-            }
-            }
-            comments(first: 100) {
-            pageInfo {
+                }}
+                }}
+            }}
+            }}
+            comments(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
-                author {
+            }}
+            nodes {{
+                author {{
                 login
-                }
+                }}
                 body
-            }
-            }
-            reviews(first: 45) {
-            pageInfo {
+            }}
+            }}
+            reviews(first: {REVIEWS_COUNT}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
+            }}
+            nodes {{
                 id
-                author {
+                author {{
                 login
-                }
+                }}
                 state
                 body
-                comments(first: 100) {
-                pageInfo {
+                comments(first: {NODE_SIZE}) {{
+                pageInfo {{
                     hasNextPage
                     endCursor
-                }
-                nodes {
+                }}
+                nodes {{
                     body
-                }
-                }
-            }
-            }
-        }
-        }
-    }
-    }
+                }}
+                }}
+            }}
+            }}
+        }}
+        }}
+    }}
+    }}
     """
-    ISSUE_QUERY = """
-    query ($owner: String!, $name: String!, $cursor: String) {
-    repository(owner: $owner, name: $name) {
-        issues(first: 100, after: $cursor) {
-        pageInfo {
+    ISSUE_QUERY = f"""
+    query ($owner: String!, $name: String!, $cursor: String) {{
+    repository(owner: $owner, name: $name) {{
+        issues(first: {NODE_SIZE}, after: $cursor) {{
+        pageInfo {{
             hasNextPage
             endCursor
-        }
-        nodes {
+        }}
+        nodes {{
             id
             updatedAt
             number
@@ -231,47 +237,47 @@ class GithubQuery(Enum):
             title
             body
             state
-            assignees(first: 100) {
-            pageInfo {
+            assignees(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
+            }}
+            nodes {{
                 login
-            }
-            }
-            labels(first: 100) {
-            pageInfo {
+            }}
+            }}
+            labels(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
+            }}
+            nodes {{
                 name
                 description
-            }
-            }
-            comments(first: 100) {
-            pageInfo {
+            }}
+            }}
+            comments(first: {NODE_SIZE}) {{
+            pageInfo {{
                 hasNextPage
                 endCursor
-            }
-            nodes {
-                author {
+            }}
+            nodes {{
+                author {{
                 login
-                }
+                }}
                 body
-            }
-            }
-        }
-        }
-    }
-    }
+            }}
+            }}
+        }}
+        }}
+    }}
+    }}
     """
     COMMENT_QUERY = """
     query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {{
     repository(owner: $owner, name: $name) {{
         {object_type}(number: $number) {{
-        comments(first: 100, after: $cursor) {{
+        comments(first: {node_size}, after: $cursor) {{
             pageInfo {{
             hasNextPage
             endCursor
@@ -287,63 +293,63 @@ class GithubQuery(Enum):
     }}
     }}
     """
-    REVIEW_QUERY = """
-    query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {
-    repository(owner: $owner, name: $name) {
-        pullRequest(number: $number) {
-        reviews(first: 100, after: $cursor) {
-            pageInfo {
+    REVIEW_QUERY = f"""
+    query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {{
+    repository(owner: $owner, name: $name) {{
+        pullRequest(number: $number) {{
+        reviews(first: {NODE_SIZE}, after: $cursor) {{
+            pageInfo {{
             hasNextPage
             endCursor
-            }
-            nodes {
+            }}
+            nodes {{
             id
-            author {
+            author {{
                 login
-            }
+            }}
             state
             body
-            comments(first: 100) {
-                pageInfo {
+            comments(first: {NODE_SIZE}) {{
+                pageInfo {{
                 hasNextPage
                 endCursor
-                }
-                nodes {
+                }}
+                nodes {{
                 body
-                }
-            }
-            }
-        }
-        }
-    }
-    }
+                }}
+            }}
+            }}
+        }}
+        }}
+    }}
+    }}
     """
-    REVIEWERS_QUERY = """
-    query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {
-    repository(owner: $owner, name: $name) {
-        pullRequest(number: $number) {
-        reviewRequests(first: 100, after: $cursor) {
-            pageInfo {
+    REVIEWERS_QUERY = f"""
+    query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {{
+    repository(owner: $owner, name: $name) {{
+        pullRequest(number: $number) {{
+        reviewRequests(first: {NODE_SIZE}, after: $cursor) {{
+            pageInfo {{
             hasNextPage
             endCursor
-            }
-            nodes {
-                requestedReviewer {
-                    ... on User {
+            }}
+            nodes {{
+                requestedReviewer {{
+                    ... on User {{
                     login
-                }
-            }
-            }
-        }
-        }
-    }
-    }
+                }}
+            }}
+            }}
+        }}
+        }}
+    }}
+    }}
     """
     LABELS_QUERY = """
     query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {{
     repository(owner: $owner, name: $name) {{
         {object_type}(number: $number) {{
-        labels(first: 100, after: $cursor) {{
+        labels(first: {node_size}, after: $cursor) {{
             pageInfo {{
             hasNextPage
             endCursor
@@ -360,7 +366,7 @@ class GithubQuery(Enum):
     query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {{
     repository(owner: $owner, name: $name) {{
         {object_type}(number: $number) {{
-        assignees(first: 100, after: $cursor) {{
+        assignees(first: {node_size}, after: $cursor) {{
             pageInfo {{
             hasNextPage
             endCursor
@@ -373,12 +379,147 @@ class GithubQuery(Enum):
     }}
     }}
     """
+    SEARCH_QUERY = f"""
+    query ($filter_query: String!, $cursor: String) {{
+    search(query: $filter_query, type: ISSUE, first: {NODE_SIZE}, after: $cursor) {{
+        pageInfo {{
+        hasNextPage
+        endCursor
+        }}
+        nodes {{
+        ... on Issue {{
+            id
+            updatedAt
+            number
+            url
+            createdAt
+            closedAt
+            title
+            body
+            state
+            assignees(first: {NODE_SIZE}) {{
+            pageInfo {{
+                hasNextPage
+                endCursor
+            }}
+            nodes {{
+                login
+            }}
+            }}
+            labels(first: {NODE_SIZE}) {{
+            pageInfo {{
+                hasNextPage
+                endCursor
+            }}
+            nodes {{
+                name
+                description
+            }}
+            }}
+            comments(first: {NODE_SIZE}) {{
+            pageInfo {{
+                hasNextPage
+                endCursor
+            }}
+            nodes {{
+                author {{
+                login
+                }}
+                body
+            }}
+            }}
+        }}
+        ... on PullRequest {{
+            id
+            updatedAt
+            number
+            url
+            createdAt
+            closedAt
+            title
+            body
+            state
+            mergedAt
+            assignees(first: {NODE_SIZE}) {{
+            pageInfo {{
+                hasNextPage
+                endCursor
+            }}
+            nodes {{
+                login
+            }}
+            }}
+            labels(first: {NODE_SIZE}) {{
+            pageInfo {{
+                hasNextPage
+                endCursor
+            }}
+            nodes {{
+                name
+                description
+            }}
+            }}
+            reviewRequests(first: {NODE_SIZE}) {{
+            pageInfo {{
+                hasNextPage
+                endCursor
+            }}
+            nodes {{
+                requestedReviewer {{
+                ... on User {{
+                    login
+                }}
+                }}
+            }}
+            }}
+            comments(first: {NODE_SIZE}) {{
+            pageInfo {{
+                hasNextPage
+                endCursor
+            }}
+            nodes {{
+                author {{
+                login
+                }}
+                body
+            }}
+            }}
+            reviews(first: {REVIEWS_COUNT}) {{
+            pageInfo {{
+                hasNextPage
+                endCursor
+            }}
+            nodes {{
+                id
+                author {{
+                login
+                }}
+                state
+                body
+                comments(first: {NODE_SIZE}) {{
+                pageInfo {{
+                    hasNextPage
+                    endCursor
+                }}
+                nodes {{
+                    body
+                }}
+                }}
+            }}
+            }}
+        }}
+        }}
+    }}
+    }}
+    """
 
 
 class ObjectType(Enum):
     REPOSITORY = "Repository"
     ISSUE = "Issue"
     PULL_REQUEST = "Pull request"
+    PR = "pr"
+    BRANCH = "branch"
 
 
 class UnauthorizedException(Exception):
@@ -533,22 +674,24 @@ class GitHubClient:
         except Exception:
             raise
 
-    def get_page_info(self, response, keys):
-        """Get page information from the response.
+    def get_data_by_keys(self, response, keys, endKey):
+        """Retrieve data from a nested dictionary using a list of keys and an end key.
 
         Args:
-            response (dict): Response of GitHub
-            Keys (list): List of fields to get pageInfo
+            response (dict): The nested dictionary from which data will be extracted.
+            keys (list): A list of strings representing the keys to navigate the nested dictionary.
+            endKey (str): The final key to retrieve the desired data from the nested dictionary.
 
-        Return:
-            dict: dictionary containing page information.
+        Returns:
+            The value corresponding to the `endKey` in the nested dictionary, if all the keys
+            in the `keys` list are found in the dictionary. If any key is missing, None is returned.
         """
-        current_level = response.get("data")
+        current_level = response.get("data", {})
         for key in keys:
             current_level = current_level.get(key)
             if current_level is None:
                 break
-        return current_level.get("pageInfo")
+        return current_level.get(endKey)
 
     async def paginated_api_call(self, variables, query, keys):
         """Make a paginated API call for fetching GitHub objects.
@@ -566,7 +709,9 @@ class GitHubClient:
             response = await self.post(query_data=query_data)
             yield response
 
-            page_info = self.get_page_info(response=response, keys=keys)
+            page_info = self.get_data_by_keys(
+                response=response, keys=keys, endKey="pageInfo"
+            )
             if not page_info.get("hasNextPage"):
                 break
             variables["cursor"] = page_info["endCursor"]
@@ -622,11 +767,74 @@ class GitHubClient:
         del self._get_session
 
 
+class GitHubAdvancedRulesValidator(AdvancedRulesValidator):
+    RULES_OBJECT_SCHEMA_DEFINITION = {
+        "type": "object",
+        "properties": {
+            "repository": {"type": "string", "minLength": 1},
+            "filter": {
+                "type": "object",
+                "properties": {
+                    ObjectType.ISSUE.value.lower(): {"type": "string", "minLength": 1},
+                    ObjectType.PR.value: {"type": "string", "minLength": 1},
+                    ObjectType.BRANCH.value: {"type": "string", "minLength": 1},
+                },
+                "minProperties": 1,
+                "additionalProperties": False,
+            },
+        },
+        "required": ["repository", "filter"],
+        "additionalProperties": False,
+    }
+
+    SCHEMA_DEFINITION = {"type": "array", "items": RULES_OBJECT_SCHEMA_DEFINITION}
+
+    SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
+
+    def __init__(self, source):
+        self.source = source
+
+    async def validate(self, advanced_rules):
+        if len(advanced_rules) == 0:
+            return SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            )
+
+        return await self._remote_validation(advanced_rules)
+
+    async def _remote_validation(self, advanced_rules):
+        try:
+            GitHubAdvancedRulesValidator.SCHEMA(advanced_rules)
+        except fastjsonschema.JsonSchemaValueException as e:
+            return SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=e.message,
+            )
+
+        self.source.github_client.repos = set(
+            rule["repository"] for rule in advanced_rules
+        )
+        invalid_repos = await self.source.get_invalid_repos()
+
+        if len(invalid_repos) > 0:
+            return SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=f"Inaccessible repositories '{', '.join(invalid_repos)}'.",
+            )
+
+        return SyncRuleValidationResult.valid_result(
+            SyncRuleValidationResult.ADVANCED_RULES
+        )
+
+
 class GitHubDataSource(BaseDataSource):
     """GitHub"""
 
     name = "GitHub"
     service_type = "github"
+    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the GitHub instance.
@@ -638,9 +846,13 @@ class GitHubDataSource(BaseDataSource):
         self.github_client = GitHubClient(configuration=configuration)
         self.user_repos = {}
         self.foreign_repos = {}
+        self.prev_repos = []
 
     def _set_internal_logger(self):
         self.github_client.set_logger(self._logger)
+
+    def advanced_rules_validators(self):
+        return [GitHubAdvancedRulesValidator(self)]
 
     @classmethod
     def get_default_configuration(cls):
@@ -679,6 +891,7 @@ class GitHubDataSource(BaseDataSource):
                 "display": "textarea",
                 "label": "List of repositories",
                 "order": 4,
+                "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
                 "value": WILDCARD,
             },
@@ -833,8 +1046,8 @@ class GitHubDataSource(BaseDataSource):
             )
             yield repo_object
 
-    async def _get_configured_repos(self):
-        for repo_name in self.github_client.repos:
+    async def _get_configured_repos(self, configured_repos):
+        for repo_name in configured_repos:
             if repo_name in ["", None]:
                 continue
 
@@ -855,6 +1068,7 @@ class GitHubDataSource(BaseDataSource):
                 repo_object = response.get("data", {}).get(  # pyright: ignore
                     REPOSITORY_OBJECT
                 )
+            repo_object = repo_object.copy()
             repo_object.update(
                 {
                     "_id": repo_object.pop("id"),
@@ -873,7 +1087,9 @@ class GitHubDataSource(BaseDataSource):
                 async for repo_object in self._get_personal_repos():
                     yield repo_object
             else:
-                async for repo_object in self._get_configured_repos():
+                async for repo_object in self._get_configured_repos(
+                    configured_repos=self.github_client.repos
+                ):
                     yield repo_object
         except UnauthorizedException:
             raise
@@ -906,17 +1122,19 @@ class GitHubDataSource(BaseDataSource):
             },
             "comments": {
                 "query": GithubQuery.COMMENT_QUERY.value.format(
-                    object_type=object_type
+                    object_type=object_type, node_size=NODE_SIZE
                 ),
                 "es_field": "issue_comments",
             },
             "labels": {
-                "query": GithubQuery.LABELS_QUERY.value.format(object_type=object_type),
+                "query": GithubQuery.LABELS_QUERY.value.format(
+                    object_type=object_type, node_size=NODE_SIZE
+                ),
                 "es_field": "labels_field",
             },
             "assignees": {
                 "query": GithubQuery.ASSIGNEES_QUERY.value.format(
-                    object_type=object_type
+                    object_type=object_type, node_size=NODE_SIZE
                 ),
                 "es_field": "assignees_list",
             },
@@ -963,24 +1181,32 @@ class GitHubDataSource(BaseDataSource):
             pull_request.pop(field)
         yield pull_request
 
-    async def _fetch_pull_requests(self, repo_name):
+    async def _fetch_pull_requests(
+        self,
+        repo_name,
+        response_key=(REPOSITORY_OBJECT, "pullRequests"),
+        filter_query=None,
+    ):
         try:
+            query = (
+                GithubQuery.SEARCH_QUERY.value
+                if filter_query
+                else GithubQuery.PULL_REQUEST_QUERY.value
+            )
             owner, repo = self.github_client.get_repo_details(repo_name=repo_name)
             pull_request_variables = {
                 "owner": owner,
                 "name": repo,
                 "cursor": None,
+                "filter_query": filter_query,
             }
             async for response in self.github_client.paginated_api_call(
                 variables=pull_request_variables,
-                query=GithubQuery.PULL_REQUEST_QUERY.value,
-                keys=[REPOSITORY_OBJECT, "pullRequests"],
+                query=query,
+                keys=response_key,
             ):
-                for pull_request in (
-                    response.get("data", {})  # pyright: ignore
-                    .get(REPOSITORY_OBJECT, {})
-                    .get("pullRequests", {})
-                    .get("nodes")
+                for pull_request in self.github_client.get_data_by_keys(
+                    response=response, keys=response_key, endKey="nodes"
                 ):
                     async for pull_request_doc in self._extract_pull_request(
                         pull_request=pull_request, owner=owner, repo=repo
@@ -993,18 +1219,15 @@ class GitHubDataSource(BaseDataSource):
                 f"Something went wrong while fetching the pull requests. Exception: {exception}"
             )
 
-    async def _extract_issues(self, response, owner, repo):
-        for issue in (
-            response.get("data", {})
-            .get(REPOSITORY_OBJECT, {})
-            .get("issues", {})
-            .get("nodes")
+    async def _extract_issues(self, response, owner, repo, response_key):
+        for issue in self.github_client.get_data_by_keys(
+            response=response, keys=response_key, endKey="nodes"
         ):
             issue.update(self._prepare_issue_doc(issue=issue))
             for field in ["comments", "labels", "assignees"]:
                 await self._fetch_remaining_fields(
                     type_obj=issue,
-                    object_type="issue",
+                    object_type=ObjectType.ISSUE.value.lower(),
                     owner=owner,
                     repo=repo,
                     field_type=field,
@@ -1012,21 +1235,32 @@ class GitHubDataSource(BaseDataSource):
                 issue.pop(field)
             yield issue
 
-    async def _fetch_issues(self, repo_name):
+    async def _fetch_issues(
+        self,
+        repo_name,
+        response_key=(REPOSITORY_OBJECT, "issues"),
+        filter_query=None,
+    ):
         try:
+            query = (
+                GithubQuery.SEARCH_QUERY.value
+                if filter_query
+                else GithubQuery.ISSUE_QUERY.value
+            )
             owner, repo = self.github_client.get_repo_details(repo_name=repo_name)
             issue_variables = {
                 "owner": owner,
                 "name": repo,
                 "cursor": None,
+                "filter_query": filter_query,
             }
             async for response in self.github_client.paginated_api_call(
                 variables=issue_variables,
-                query=GithubQuery.ISSUE_QUERY.value,
-                keys=[REPOSITORY_OBJECT, "issues"],
+                query=query,
+                keys=response_key,
             ):
                 async for issue in self._extract_issues(
-                    response=response, owner=owner, repo=repo
+                    response=response, owner=owner, repo=repo, response_key=response_key
                 ):
                     yield issue
         except UnauthorizedException:
@@ -1176,6 +1410,39 @@ class GitHubDataSource(BaseDataSource):
             document=document,
         )
 
+    def _filter_rule_query(self, repo, query, query_type):
+        """
+        Filters a query based on the query type.
+
+        Args:
+            repo (str): Query repo name.
+            query (str): The input query.
+            query_type (str): The type of query ("pr" or "issue").
+
+        Returns:
+            tuple: A tuple containing a boolean value indicating whether the query should be included or excluded and the modified query.
+        """
+        if query_type == ObjectType.PR.value:
+            if "is:issue" in query:
+                return False, query
+            elif "is:pr" in query:
+                return True, f"repo:{repo} {query}"
+            return True, f"repo:{repo} is:pr {query}"
+        elif query_type == ObjectType.ISSUE.value.lower():
+            if "is:pr" in query:
+                return False, query
+            elif "is:issue" in query:
+                return True, f"repo:{repo} {query}"
+            return True, f"repo:{repo} is:issue {query}"
+        else:
+            return False, query
+
+    def is_previous_repo(self, repo_name):
+        if repo_name in self.prev_repos:
+            return True
+        self.prev_repos.append(repo_name)
+        return False
+
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch GitHub objects in async manner.
 
@@ -1185,28 +1452,86 @@ class GitHubDataSource(BaseDataSource):
         Yields:
             dict: Documents from GitHub.
         """
-        async for repo in self._fetch_repos():
-            yield repo, None
-            repo_name = repo.get("nameWithOwner")
-            default_branch = (
-                repo.get("defaultBranchRef", {}).get("name")
-                if repo.get("defaultBranchRef")
-                else None
-            )
+        if filtering and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
+            for rule in advanced_rules:
+                repo = await anext(
+                    self._get_configured_repos(configured_repos=[rule["repository"]])
+                )
+                yield repo, None
+                repo_name = repo.get("nameWithOwner")
 
-            async for pull_request in self._fetch_pull_requests(repo_name=repo_name):
-                yield pull_request, None
-
-            async for issue in self._fetch_issues(repo_name=repo_name):
-                yield issue, None
-
-            if default_branch:
-                async for file_document, attachment_metadata in self._fetch_files(
-                    repo_name=repo_name, default_branch=default_branch
-                ):
-                    if file_document["type"] == BLOB:
-                        yield file_document, partial(
-                            self.get_content, attachment=attachment_metadata
-                        )
+                if pull_request_query := rule["filter"].get(ObjectType.PR.value):
+                    query_status, pull_request_query = self._filter_rule_query(
+                        repo=repo_name,
+                        query=pull_request_query,
+                        query_type=ObjectType.PR.value,
+                    )
+                    if query_status:
+                        async for pull_request in self._fetch_pull_requests(
+                            repo_name=repo_name,
+                            response_key=("search",),
+                            filter_query=pull_request_query,
+                        ):
+                            yield pull_request, None
                     else:
-                        yield file_document, None
+                        self._logger.warning(
+                            f"Skipping pr for rule: {pull_request_query}"
+                        )
+
+                if issue_query := rule["filter"].get(ObjectType.ISSUE.value.lower()):
+                    query_status, issue_query = self._filter_rule_query(
+                        repo=repo_name,
+                        query=issue_query,
+                        query_type=ObjectType.ISSUE.value.lower(),
+                    )
+                    if query_status:
+                        async for issue in self._fetch_issues(
+                            repo_name=repo_name,
+                            response_key=("search",),
+                            filter_query=issue_query,
+                        ):
+                            yield issue, None
+                    else:
+                        self._logger.warning(f"Skipping issue for query: {issue_query}")
+
+                if branch := rule["filter"].get(ObjectType.BRANCH.value):
+                    async for file_document, attachment_metadata in self._fetch_files(
+                        repo_name=repo_name, default_branch=branch
+                    ):
+                        if file_document["type"] == BLOB:
+                            yield file_document, partial(
+                                self.get_content, attachment=attachment_metadata
+                            )
+                        else:
+                            yield file_document, None
+        else:
+            async for repo in self._fetch_repos():
+                if self.is_previous_repo(repo["nameWithOwner"]):
+                    continue
+                yield repo, None
+                repo_name = repo.get("nameWithOwner")
+                default_branch = (
+                    repo.get("defaultBranchRef", {}).get("name")
+                    if repo.get("defaultBranchRef")
+                    else None
+                )
+
+                async for pull_request in self._fetch_pull_requests(
+                    repo_name=repo_name
+                ):
+                    yield pull_request, None
+
+                async for issue in self._fetch_issues(repo_name=repo_name):
+                    yield issue, None
+
+                if default_branch:
+                    async for file_document, attachment_metadata in self._fetch_files(
+                        repo_name=repo_name, default_branch=default_branch
+                    ):
+                        if file_document["type"] == BLOB:
+                            yield file_document, partial(
+                                self.get_content, attachment=attachment_metadata
+                            )
+                        else:
+                            yield file_document, None
