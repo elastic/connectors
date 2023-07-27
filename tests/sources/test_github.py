@@ -329,21 +329,21 @@ MOCK_ASSIGNEE_RESPONSE = {
 }
 MOCK_RESPONSE_ATTACHMENTS = (
     {
-        "_id": "demo_repo/source/source.txt",
+        "_id": "demo_repo/source/source.md",
         "_timestamp": "2023-04-17T12:55:01Z",
-        "name": "source.txt",
+        "name": "source.md",
         "size": 19,
         "type": "blob",
     },
     {
-        "name": "source.txt",
-        "path": "source/source.txt",
+        "name": "source.md",
+        "path": "source/source.md",
         "sha": "c36b795f98fc9c188fc6gd5a4795vc6j6e0y69a37",
         "size": 19,
-        "url": "https://api.github.com/repos/demo_user/demo_repo/contents/source/source.txt?ref=main",
-        "html_url": "https://github.com/demo_user/demo_repo/blob/main/source/source.txt",
+        "url": "https://api.github.com/repos/demo_user/demo_repo/contents/source/source.md?ref=main",
+        "html_url": "https://github.com/demo_user/demo_repo/blob/main/source/source.md",
         "git_url": "https://api.github.com/repos/demo_user/demo_repo/git/blobs/c36b795f98fc9c188fc6gd5a4795vc6j6e0y69a37",
-        "download_url": "https://raw.githubusercontent.com/demo_user/demo_repo/main/source/source.txt",
+        "download_url": "https://raw.githubusercontent.com/demo_user/demo_repo/main/source/source.md",
         "type": "file",
         "content": "VGVzdCBGaWxlICEhISDwn5iCCg==\n",
         "encoding": "base64",
@@ -351,7 +351,7 @@ MOCK_RESPONSE_ATTACHMENTS = (
     },
 )
 MOCK_ATTACHMENT = {
-    "path": "source/source.txt",
+    "path": "source/source.md",
     "mode": "100644",
     "type": "blob",
     "sha": "36888b54c2a2f75tfbf2b7e7e95f68d0g8911ccb",
@@ -359,15 +359,15 @@ MOCK_ATTACHMENT = {
     "url": "https://api.github.com/repos/demo_user/demo_repo/git/blobs/36888b54c2a2f75tfbf2b7e7e95f68d0g8911ccb",
     "_timestamp": "2023-04-17T12:55:01Z",
     "repo_name": "demo_repo",
-    "name": "source.txt",
-    "extension": ".txt",
+    "name": "source.md",
+    "extension": ".md",
 }
 MOCK_TREE = {
     "sha": "88e3af5daf88e64b273648h37gdf6a561d7092be",
     "url": "https://api.github.com/repos/demo_user/demo_repo/git/trees/88e3af5daf88e64b273648h37gdf6a561d7092be",
     "tree": [
         {
-            "path": "source/source.txt",
+            "path": "source/source.md",
             "mode": "100644",
             "type": "blob",
             "sha": "36888b54c2a2f75tfbf2b7e7e95f68d0g8911ccb",
@@ -667,9 +667,9 @@ async def test_get_invalid_repos():
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_text_file():
+async def test_get_content_with_md_file():
     expected_response = {
-        "_id": "demo_repo/source.txt",
+        "_id": "demo_repo/source.md",
         "_timestamp": "2023-04-17T12:55:01Z",
         "_attachment": "VGVzdCBGaWxlICEhISDwn5iCCg==",
     }
@@ -686,51 +686,20 @@ async def test_get_content_with_text_file():
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_file_size_zero():
+@pytest.mark.parametrize(
+    "size, expected_content",
+    [
+        (0, None),
+        (23000000, None),
+    ],
+)
+async def test_get_content_with_differernt_size(size, expected_content):
     source = create_source(GitHubDataSource)
 
     attachment_with_size_zero = MOCK_ATTACHMENT.copy()
-    attachment_with_size_zero["size"] = 0
+    attachment_with_size_zero["size"] = size
     response = await source.get_content(attachment=attachment_with_size_zero, doit=True)
-    assert response is None
-
-
-@pytest.mark.asyncio
-async def test_get_content_with_file_without_extension():
-    source = create_source(GitHubDataSource)
-
-    attachment_without_extension = MOCK_ATTACHMENT.copy()
-    attachment_without_extension["name"] = "demo"
-    attachment_without_extension["extension"] = ""
-    response = await source.get_content(
-        attachment=attachment_without_extension, doit=True
-    )
-    assert response is None
-
-
-@pytest.mark.asyncio
-async def test_get_content_with_large_file_size():
-    source = create_source(GitHubDataSource)
-
-    attachment_with_large_size = MOCK_ATTACHMENT.copy()
-    attachment_with_large_size["size"] = 23000000
-    response = await source.get_content(
-        attachment=attachment_with_large_size, doit=True
-    )
-    assert response is None
-
-
-@pytest.mark.asyncio
-async def test_get_content_with_unsupported_tika_file_type_then_skip():
-    source = create_source(GitHubDataSource)
-
-    attachment_with_unsupported_tika_extension = MOCK_ATTACHMENT.copy()
-    attachment_with_unsupported_tika_extension["name"] = "screenshot.png"
-    attachment_with_unsupported_tika_extension["extension"] = ".png"
-    response = await source.get_content(
-        attachment=attachment_with_unsupported_tika_extension, doit=True
-    )
-    assert response is None
+    assert response is expected_content
 
 
 @pytest.mark.asyncio
@@ -852,17 +821,17 @@ async def test_fetch_pull_requests_with_unauthorized_exception():
 async def test_fetch_files():
     expected_response = (
         {
-            "name": "source.txt",
+            "name": "source.md",
             "size": 30,
             "type": "blob",
-            "path": "source/source.txt",
+            "path": "source/source.md",
             "mode": "100644",
-            "extension": ".txt",
+            "extension": ".md",
             "_timestamp": "2023-04-17T12:55:01Z",
-            "_id": "demo_repo/source/source.txt",
+            "_id": "demo_repo/source/source.md",
         },
         {
-            "path": "source/source.txt",
+            "path": "source/source.md",
             "mode": "100644",
             "type": "blob",
             "sha": "36888b54c2a2f75tfbf2b7e7e95f68d0g8911ccb",
@@ -870,8 +839,8 @@ async def test_fetch_files():
             "url": "https://api.github.com/repos/demo_user/demo_repo/git/blobs/36888b54c2a2f75tfbf2b7e7e95f68d0g8911ccb",
             "_timestamp": "2023-04-17T12:55:01Z",
             "repo_name": "demo_repo",
-            "name": "source.txt",
-            "extension": ".txt",
+            "name": "source.md",
+            "extension": ".md",
         },
     )
     source = create_source(GitHubDataSource)

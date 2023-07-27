@@ -24,7 +24,6 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
     RetryStrategy,
     convert_to_b64,
@@ -46,6 +45,8 @@ FILE_SIZE_LIMIT = 10485760  # ~ 10 Megabytes
 FORBIDDEN = 403
 NODE_SIZE = 100
 REVIEWS_COUNT = 45
+
+SUPPORTED_EXTENSION = [".markdown", ".md", ".rst"]
 
 FILE_SCHEMA = {
     "name": "name",
@@ -1287,9 +1288,6 @@ class GitHubDataSource(BaseDataSource):
             )
 
             for repo_object in file_tree.get("tree", []):
-                last_commit_timestamp = await self._fetch_last_commit_timestamp(
-                    repo_name=repo_name, path=repo_object["path"]
-                )
                 if repo_object["type"] == BLOB:
                     file_name = repo_object["path"].split("/")[-1]
                     file_extension = (
@@ -1297,29 +1295,25 @@ class GitHubDataSource(BaseDataSource):
                         if "." in file_name
                         else ""
                     )
-                    repo_object.update(
-                        {
-                            "_timestamp": last_commit_timestamp,
-                            "repo_name": repo_name,
-                            "name": file_name,
-                            "extension": file_extension,
-                        }
-                    )
+                    if file_extension.lower() in SUPPORTED_EXTENSION:
+                        last_commit_timestamp = await self._fetch_last_commit_timestamp(
+                            repo_name=repo_name, path=repo_object["path"]
+                        )
+                        repo_object.update(
+                            {
+                                "_timestamp": last_commit_timestamp,
+                                "repo_name": repo_name,
+                                "name": file_name,
+                                "extension": file_extension,
+                            }
+                        )
 
-                    document = self.adapt_gh_doc_to_es_doc(
-                        github_document=repo_object, schema=FILE_SCHEMA
-                    )
+                        document = self.adapt_gh_doc_to_es_doc(
+                            github_document=repo_object, schema=FILE_SCHEMA
+                        )
 
-                    document["_id"] = f"{repo_name}/{repo_object['path']}"
-                    yield document, repo_object
-                else:
-                    repo_object.update(
-                        {
-                            "_id": f"{repo_name}/{repo_object['path']}",
-                            "_timestamp": last_commit_timestamp,
-                        }
-                    )
-                    yield repo_object, None
+                        document["_id"] = f"{repo_name}/{repo_object['path']}"
+                        yield document, repo_object
         except UnauthorizedException:
             raise
         except Exception as exception:
@@ -1350,28 +1344,6 @@ class GitHubDataSource(BaseDataSource):
             )
         return document
 
-    def _pre_checks_for_get_content(
-        self, attachment_extension, attachment_name, attachment_size
-    ):
-        if attachment_extension == "":
-            self._logger.warning(
-                f"Files without extension are not supported by TIKA, skipping {attachment_name}."
-            )
-            return
-
-        elif attachment_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.warning(
-                f"Files with the extension {attachment_extension} are not supported by TIKA, skipping {attachment_name}."
-            )
-            return
-
-        if attachment_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
-            return
-        return True
-
     async def get_content(self, attachment, timestamp=None, doit=False):
         """Extracts the content for Apache TIKA supported file types.
 
@@ -1388,13 +1360,11 @@ class GitHubDataSource(BaseDataSource):
             return
 
         attachment_name = attachment["name"]
-        attachment_extension = attachment["extension"]
 
-        if not self._pre_checks_for_get_content(
-            attachment_extension=attachment_extension,
-            attachment_name=attachment_name,
-            attachment_size=attachment_size,
-        ):
+        if attachment_size > FILE_SIZE_LIMIT:
+            self._logger.warning(
+                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
+            )
             return
 
         self._logger.debug(f"Downloading {attachment_name}")
