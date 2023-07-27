@@ -26,8 +26,10 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'dropbox'
-service_type: 'dropbox'
+connectors:
+  -
+    connector_id: 'dropbox'
+    service_type: 'dropbox'
 
 sources:
   dropbox: connectors.sources.dropbox:DropboxDataSource
