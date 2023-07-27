@@ -114,7 +114,7 @@ class CursorAsync:
         pass
 
 
-def test_get_connect_argss():
+def test_get_connect_args():
     """This function test get_connect_args with dummy certificate"""
     # Setup
     source = create_source(PostgreSQLDataSource)
