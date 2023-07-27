@@ -26,10 +26,8 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connectors:
-  -
-    connector_id: 'mongo_serverless'
-    service_type: 'mongodb'
+connector_id: 'dropbox'
+service_type: 'dropbox'
 
 sources:
-  mongodb: connectors.sources.mongo:MongoDataSource
+  dropbox: connectors.sources.dropbox:DropboxDataSource
