@@ -14,11 +14,11 @@ To use this connector as a **connector client**, use the **GitHub** tile from th
 
 For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
 
-## Get a GitHub Token
+## GitHub  access token
 
-In order to authenticate via the GitHub, the user needs to configure GitHub Token to fetch the data from GitHub. 
+Configure a GitHub  access token to fetch data from GitHub. 
 
-To generate GitHub Token, user needs to follow below steps:
+Follow these steps to generate a GitHub  access token:
  - Go to GitHub Settings → Developer settings → Personal access tokens → Tokens(classic).
  - Click `Generate new token`.
  - Add a note and select the "repo" scope.
@@ -28,11 +28,11 @@ To generate GitHub Token, user needs to follow below steps:
 
 ### Configure GitHub connector
 
-The following configuration fields need to be provided for setting up the connector:
+The following configuration fields are required:
 
 #### `github_token`
 
-The GitHub Token to authenticate the GitHub instance.
+GitHub  access token to authenticate the GitHub instance.
 
 #### `repositories`
 
@@ -48,7 +48,7 @@ The number of retry attempts after failed request to GitHub. Default value is `3
 ### Content Extraction
 
 
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../connectors/utils.py) file.
+See [Content extraction](https://www.elastic.co/guide/en/enterprise-search/current/connectors-content-extraction.html).
 
 ## Documents and Sync
 
@@ -57,11 +57,15 @@ The connector syncs the following objects and entities:
 - **Pull Requests**
 - **Issues**
 - **Files & Folder**
+*NOTE*:
+- Files bigger than 10 MB won't be extracted
+- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment
 
 ## Sync rules
 
-- Files bigger than 10 MB won't be extracted
-- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
+[Basic sync rules](https://www.elastic.co/guide/en/enterprise-search/current/sync-rules.html#sync-rules-basic) are identical for all connectors and are available by default.
+
+Advanced sync rules are not available for this connector in the present version. Currently filtering is controlled by ingest pipelines.
 
 ## Connector Client operations
 
