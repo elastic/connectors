@@ -1485,7 +1485,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                                 # Drive items should inherit site access controls only if
                                 # 'fetch_drive_item_permissions' is disabled in the config
-                                if not self.configuration["fetch_drive_item_permissions"]:
+                                if not self.configuration[
+                                    "fetch_drive_item_permissions"
+                                ]:
                                     drive_item = self._decorate_with_access_control(
                                         drive_item, site_access_control
                                     )
