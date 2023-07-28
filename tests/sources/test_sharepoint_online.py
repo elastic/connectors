@@ -135,8 +135,10 @@ def dls_enabled(value):
 def access_control_matches(actual, expected):
     return all([access_control in expected for access_control in actual])
 
+
 def access_control_is_equal(actual, expected):
     return set(actual) == set(expected)
+
 
 class TestMicrosoftSecurityToken:
     class StubMicrosoftSecurityToken(MicrosoftSecurityToken):
@@ -2209,7 +2211,9 @@ class TestSharepointOnlineDataSource:
         "connectors.sources.sharepoint_online.ACCESS_CONTROL",
         ALLOW_ACCESS_CONTROL_PATCHED,
     )
-    async def test_drive_items_permissions_when_fetch_drive_item_permissions_enabled(self, patch_sharepoint_client):
+    async def test_drive_items_permissions_when_fetch_drive_item_permissions_enabled(
+        self, patch_sharepoint_client
+    ):
         group = _prefix_group("do-not-inherit-me")
         email = _prefix_email("should-not@be-inherited.com")
         user = _prefix_user("sorry-no-access-here")
@@ -2257,7 +2261,6 @@ class TestSharepointOnlineDataSource:
                 for drive_item in drive_items
             ]
         )
-
 
     @pytest.mark.asyncio
     async def test_download_function_for_deleted_item(self):
