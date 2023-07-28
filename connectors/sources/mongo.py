@@ -200,8 +200,6 @@ class MongoDataSource(BaseDataSource):
             async for doc in self.collection.find():
                 yield self.serialize(doc), None
 
-        self._dirty = False
-
     async def validate_config(self):
         self.configuration.check_valid()
 

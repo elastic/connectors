@@ -26,8 +26,10 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'confluence'
-service_type: 'confluence'
+connectors:
+  -
+    connector_id: 'confluence'
+    service_type: 'confluence'
 
 sources:
   confluence: connectors.sources.confluence:ConfluenceDataSource

@@ -251,7 +251,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         ):
             json_credentials["private_key"] = get_pem_format(
                 key=json_credentials["private_key"].strip(),
-                max_split=2,
+                postfix="-----END PRIVATE KEY-----",
             )
 
         required_credentials = {
@@ -366,7 +366,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             return
 
         blob_name = blob["name"]
-        if os.path.splitext(blob_name)[-1] not in TIKA_SUPPORTED_FILETYPES:
+        if (os.path.splitext(blob_name)[-1]).lower() not in TIKA_SUPPORTED_FILETYPES:
             self._logger.debug(f"{blob_name} can't be extracted")
             return
 
