@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Salesforce source module responsible to fetch documents from Salesforce."""
-from functools import cached_property, partial
+from functools import cached_property
 
 import aiohttp
 
