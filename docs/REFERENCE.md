@@ -13,4 +13,7 @@
 - [Oracle](https://www.elastic.co/guide/en/enterprise-search/master/connectors-oracle.html)
 - [PostgreSQL](https://www.elastic.co/guide/en/enterprise-search/master/connectors-postgresql.html)
 - [S3](https://www.elastic.co/guide/en/enterprise-search/master/connectors-s3.html)
+- [ServiceNow](https://www.elastic.co/guide/en/enterprise-search/master/connectors-servicenow.html)
+- [SharePoint Online](https://www.elastic.co/guide/en/enterprise-search/master/connectors-sharepoint-online.html)
+- [SharePoint Server](https://www.elastic.co/guide/en/enterprise-search/master/connectors-sharepoint.html)
 - [GitHub](./reference/github.md)
