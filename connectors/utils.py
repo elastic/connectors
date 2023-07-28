@@ -858,5 +858,5 @@ class ExtractionService:
             )
             return ""
 
-        logger.debug(f"Text extraction successful for `{filename}'.")
+        logger.debug(f"Text extraction is successful for `{filename}'.")
         return content.get("extracted_text", "")
