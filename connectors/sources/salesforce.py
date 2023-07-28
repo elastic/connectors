@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Salesforce source module responsible to fetch documents from Salesforce."""
+from functools import cached_property, partial
+
 import aiohttp
 
 from connectors.source import BaseDataSource
@@ -18,7 +20,6 @@ TOKEN_ENDPOINT = "/services/oauth2/token"
 
 class SalesforceClient:
     def __init__(self, configuration):
-        self.session = None
         self.token = None
         self.token_issued_at = None
 
@@ -34,15 +35,12 @@ class SalesforceClient:
     def set_logger(self, logger_):
         self._logger = logger_
 
-    def _get_session(self):
-        if self.session is not None:
-            return self.session
-
-        self.session = aiohttp.ClientSession(
+    @cached_property
+    def session(self):
+        return aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=None),
             raise_for_status=True,
         )
-        return self.session
 
     @retryable(
         retries=RETRIES,
@@ -62,12 +60,13 @@ class SalesforceClient:
     async def close_session(self):
         if self.session is not None:
             await self.session.close()
+            del self.session
 
     def _auth_headers(self):
         return {"authorization": f"Bearer {self.token}"}
 
     async def _api_request(self, url, method, data=None):
-        return await getattr(self._get_session(), method)(url=url, data=data)
+        return await getattr(self.session, method)(url=url, data=data)
 
 
 class SalesforceDataSource(BaseDataSource):
