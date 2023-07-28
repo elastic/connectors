@@ -1213,10 +1213,16 @@ class SharepointOnlineDataSource(BaseDataSource):
         if not self._dls_enabled():
             return []
 
+        def _is_site_admin(user):
+            return user.get("IsSiteAdmin", False)
+
         access_control = set()
+        site_admins_access_control = set()
 
         async for user_information in self.client.user_information_list(site["id"]):
             user = user_information["fields"]
+
+            user_access_control = set()
 
             if is_domain_group(user):
                 self._logger.debug(f"It is a domain group with name: {user['Name']}")
@@ -1224,20 +1230,25 @@ class SharepointOnlineDataSource(BaseDataSource):
                 self._logger.debug(f"Detected domain groupId as: {domain_group_id}")
 
                 if domain_group_id:
-                    access_control.add(_prefix_group(domain_group_id))
+                    user_access_control.add(_prefix_group(domain_group_id))
 
             if is_person(user):
                 login_name = _get_login_name(user.get("Name"))
 
                 if login_name:
-                    access_control.add(_prefix_user(login_name))
+                    user_access_control.add(_prefix_user(login_name))
 
                 email = user.get("EMail")
 
                 if email:
-                    access_control.add(_prefix_email(email))
+                    user_access_control.add(_prefix_email(email))
 
-        return list(access_control)
+            if _is_site_admin(user):
+                site_admins_access_control |= user_access_control
+
+            access_control |= user_access_control
+
+        return list(access_control), list(site_admins_access_control)
 
     def _dls_enabled(self):
         if self._features is None:
@@ -1460,7 +1471,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
             ):
-                site_access_control = await self._site_access_control(site)
+                (
+                    site_access_control,
+                    site_admin_access_control,
+                ) = await self._site_access_control(site)
+
                 yield self._decorate_with_access_control(
                     site, site_access_control
                 ), None
@@ -1518,6 +1533,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                 async for site_page in self.site_pages(
                     site["webUrl"], site_access_control
                 ):
+                    # Always include site admins in site page access controls
+                    site_page = self._decorate_with_access_control(
+                        site_page, site_admin_access_control
+                    )
                     yield site_page, None
 
     async def get_docs_incrementally(self, sync_cursor, filtering=None):
@@ -1541,7 +1560,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
             ):
-                site_access_control = await self._site_access_control(site)
+                (
+                    site_access_control,
+                    site_admin_access_control,
+                ) = await self._site_access_control(site)
+
                 yield self._decorate_with_access_control(
                     site, site_access_control
                 ), None, OP_INDEX
@@ -1598,6 +1621,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                 async for site_page in self.site_pages(
                     site["webUrl"], site_access_control
                 ):
+                    # Always include site admins in site page access controls
+                    site_page = self._decorate_with_access_control(
+                        site_page, site_admin_access_control
+                    )
                     yield site_page, None, OP_INDEX
 
     async def site_collections(self):
