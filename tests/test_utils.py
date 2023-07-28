@@ -695,7 +695,7 @@ class TestExtractionService:
             await extraction_service._end_session()
 
             assert response == "I've been extracted!"
-            patch_logger.assert_present("Text extraction successful for `notreal.txt'.")
+            patch_logger.assert_present("Text extraction is successful for `notreal.txt'.")
 
     @pytest.mark.asyncio
     async def test_extract_text_with_file_pointer(self, mock_responses, patch_logger):
