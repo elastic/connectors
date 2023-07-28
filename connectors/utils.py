@@ -17,10 +17,9 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from io import BytesIO
 
+import aiofiles
 import aiohttp
-import yaml
 from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 from base64io import Base64IO
 from bs4 import BeautifulSoup
@@ -62,6 +61,13 @@ TIKA_SUPPORTED_FILETYPES = [
     ".aspx",
     ".xlsb",
     ".xlsm",
+    ".tsv",
+    ".svg",
+    ".msg",
+    ".potx",
+    ".vsd",
+    ".vsdx",
+    ".vsdm",
 ]
 
 
@@ -674,23 +680,40 @@ class ExtractionService:
 
     Calling `extract_text` with a filename will begin text extraction
     using an instance of the data extraction service.
-    Requires the data extraction service to be running and
-    extraction_service settings in config.yml to be configured correctly.
+    Requires the data extraction service to be running
     """
 
-    def __init__(self):
-        # The config file is being opened here as a temporary measure for 8.9.
-        # This should be removed when the extraction service is expanded.
-        with open(
-            os.path.join(os.path.dirname(__file__), "..", "config.yml"), "r"
-        ) as file:
-            config = yaml.safe_load(file)
+    __EXTRACTION_CONFIG = {}  # setup by cli.py on startup
 
+    @classmethod
+    def get_extraction_config(cls):
+        return __EXTRACTION_CONFIG
+
+    @classmethod
+    def set_extraction_config(cls, extraction_config):
+        global __EXTRACTION_CONFIG
+        __EXTRACTION_CONFIG = extraction_config
+
+    def __init__(self):
         self.session = None
 
-        self.extraction_config = config.get("extraction_service", None)
+        self.extraction_config = ExtractionService.get_extraction_config()
         if self.extraction_config is not None:
             self.host = self.extraction_config.get("host", None)
+            self.timeout = self.extraction_config.get("timeout", 30)
+            self.headers = {"accept": "application/json"}
+            self.chunk_size = self.extraction_config.get("stream_chunk_size", 65536)
+
+            self.use_file_pointers = self.extraction_config.get(
+                "use_file_pointers", False
+            )
+            if self.use_file_pointers:
+                self.volume_dir = self.extraction_config.get(
+                    "shared_volume_dir", "/app/files"
+                )
+            else:
+                self.volume_dir = None
+                self.headers["content-type"] = "application/octet-stream"
         else:
             self.host = None
 
@@ -709,14 +732,23 @@ class ExtractionService:
         if self.session is not None:
             return self.session
 
-        timeout = aiohttp.ClientTimeout(total=5)
-        self.session = aiohttp.ClientSession(timeout=timeout)
+        timeout = aiohttp.ClientTimeout(total=self.timeout)
+        self.session = aiohttp.ClientSession(
+            timeout=timeout,
+            headers=self.headers,
+        )
 
     async def _end_session(self):
         if not self.session:
             return
 
         await self.session.close()
+
+    def get_volume_dir(self):
+        if self.host is None:
+            return None
+
+        return self.volume_dir
 
     async def extract_text(self, filepath, original_filename):
         """Sends a text extraction request to tika-server using the supplied filename.
@@ -742,45 +774,52 @@ class ExtractionService:
         )
 
         try:
-            content = await self.extract_with_file_send(filepath, filename)
+            if self.use_file_pointers:
+                content = await self.send_filepointer(filepath, original_filename)
+            else:
+                content = await self.send_file(filepath, original_filename)
         except (ClientConnectionError, ServerTimeoutError) as e:
             logger.error(
                 f"Connection to {self.host} failed while extracting data from {filename}. Error: {e}"
             )
         except Exception as e:
-            logger.error(f"Text extraction unexpectedly failed. Error: {e}")
+            logger.error(
+                f"Text extraction unexpectedly failed for {filename}. Error: {e}"
+            )
 
         return content
 
-    async def extract_with_file_send(self, filepath, filename):
-        """Sends a request to tika-server to extract text from a file.
-        Sends the file as body data in the request.
+    async def send_filepointer(self, filepath, filename):
+        async with self._begin_session().put(
+            f"{self.host}/extract_text/?local_file_path={filepath}",
+        ) as response:
+            return await self.parse_extraction_resp(filename, response)
 
-        Returns a parsed response
-        """
-        with open(filepath, "rb") as file:
-            file_data = aiohttp.FormData()
-            file_data.add_field("file", BytesIO(file.read()), filename=filename)
+    async def send_file(self, filepath, filename):
+        async with self._begin_session().put(
+            f"{self.host}/extract_text/",
+            data=self.file_sender(filepath),
+        ) as response:
+            return await self.parse_extraction_resp(filename, response)
 
-            async with self._begin_session().post(
-                f"{self.host}/extract_text/", data=file_data
-            ) as response:
-                return await self.parse_extraction_resp(filename, response)
+    async def file_sender(self, filepath):
+        async with aiofiles.open(filepath, "rb") as f:
+            chunk = await f.read(self.chunk_size)
+            while chunk:
+                yield chunk
+                chunk = await f.read(self.chunk_size)
 
     async def parse_extraction_resp(self, filename, response):
         """Parses the response from the tika-server and logs any extraction failures.
 
         Returns `extracted_text` from the response.
         """
-        content = await response.json()
+        content = await response.json(content_type=None)
 
-        if response.status != 200:
+        if response.status != 200 or content.get("error"):
             logger.warning(
-                f"Extraction service could not parse `{filename}'. Status: [{response.status}]."
+                f"Extraction service could not parse `{filename}'. Status: [{response.status}]; {content.get('error', 'unexpected error')}: {content.get('message', 'unknown cause')}"
             )
-        if content.get("error"):
-            logger.warning(
-                f"Extraction service could not parse `{filename}'; {content.get('error', 'unexpected error')}: {content.get('message', 'unknown cause')}"
-            )
+            return ""
 
         return content.get("extracted_text", "")

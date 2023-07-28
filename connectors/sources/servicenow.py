@@ -310,7 +310,7 @@ class ServiceNowClient:
                 f"Files without extension are not supported by TIKA, skipping {attachment_name}."
             )
             return
-        elif attachment_extension not in TIKA_SUPPORTED_FILETYPES:
+        elif attachment_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
             self._logger.warning(
                 f"Files with the extension {attachment_extension} are not supported by TIKA, skipping {attachment_name}."
             )

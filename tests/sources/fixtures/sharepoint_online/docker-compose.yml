@@ -77,7 +77,7 @@ services:
     build: .
     command: python fixture.py
     ports:
-      - "10337:10337"
+      - 10337:10337
     volumes:
       - .:/python-flask
     restart: always
