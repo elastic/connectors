@@ -5,6 +5,7 @@
 #
 """Postgresql source module is responsible to fetch documents from PostgreSQL."""
 import ssl
+from functools import cached_property
 from urllib.parse import quote
 
 from asyncpg.exceptions._base import InternalClientError
@@ -62,6 +63,231 @@ class PostgreSQLQueries(Queries):
         return "SELECT schema_name FROM information_schema.schemata"
 
 
+class PostgreSQLClient:
+    def __init__(
+        self,
+        host,
+        port,
+        user,
+        password,
+        database,
+        tables,
+        ssl_enabled,
+        ssl_ca,
+        logger_,
+        retry_count=DEFAULT_RETRY_COUNT,
+        fetch_size=DEFAULT_FETCH_SIZE,
+    ):
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.database = database
+        self.tables = tables
+        self.retry_count = retry_count
+        self.fetch_size = fetch_size
+        self.ssl_enabled = ssl_enabled
+        self.ssl_ca = ssl_ca
+        self.queries = PostgreSQLQueries()
+        self.connection_pool = None
+        self.connection = None
+        self._logger = logger_
+        self._sleeps = CancellableSleeps()
+
+    def set_logger(self, logger_):
+        self._logger = logger_
+
+    def close(self):
+        self._sleeps.cancel()
+
+    @cached_property
+    def engine(self):
+        connection_string = f"postgresql+asyncpg://{self.user}:{quote(self.password)}@{self.host}:{self.port}/{self.database}"
+        return create_async_engine(
+            connection_string,
+            connect_args=self._get_connect_args(),
+        )
+
+    async def get_cursor(self, query):
+        """Execute the passed query on the Async supported Database server and return cursor.
+
+        Args:
+            query (str): Database query to be executed.
+
+        Returns:
+            cursor: Asynchronous cursor
+        """
+        try:
+            async with self.engine.connect() as connection:  # pyright: ignore
+                cursor = await connection.execute(text(query))
+                return cursor
+        except Exception as exception:
+            self._logger.warning(
+                f"Something went wrong while executing query. Exception: {exception}"
+            )
+            raise
+
+    async def ping(self):
+        return await anext(
+            self.execute_query(
+                query=self.queries.ping(),
+            )
+        )
+
+    async def get_all_schemas(self):
+        return await anext(self.execute_query(query=self.queries.all_schemas()))
+
+    async def get_tables_to_fetch(self, schema):
+        tables = configured_tables(self.tables)
+        return list(
+            map(
+                lambda table: table[0],  # type: ignore
+                await anext(
+                    self.execute_query(
+                        query=self.queries.all_tables(
+                            database=self.database,
+                            schema=schema,
+                        )
+                    )
+                ),
+            )
+            if is_wildcard(tables)
+            else tables
+        )
+
+    async def get_table_row_count(self, schema, table):
+        [[row_count]] = await anext(
+            self.execute_query(
+                query=self.queries.table_data_count(
+                    schema=schema,
+                    table=table,
+                ),
+            )
+        )
+        return row_count
+
+    async def get_table_primary_key(self, schema, table):
+        return await anext(
+            self.execute_query(
+                query=self.queries.table_primary_key(
+                    schema=schema,
+                    table=table,
+                ),
+            )
+        )
+
+    async def get_table_last_update_time(self, schema, table):
+        return await anext(
+            self.execute_query(
+                query=self.queries.table_last_update_time(
+                    schema=schema,
+                    table=table,
+                ),
+            )
+        )
+
+    async def data_streamer(self, schema, table):
+        """Streaming data from a table
+
+        Args:
+            schema (str): Schema.
+            table (str): Table.
+
+        Raises:
+            exception: Raise an exception after retrieving
+
+        Yields:
+            list: It will first yield the column names, then data in each row
+        """
+        async for data in self.execute_query(
+            query=self.queries.table_data(
+                schema=schema,
+                table=table,
+            ),
+            fetch_many=True,
+            schema=schema,
+            table=table,
+        ):
+            yield data
+
+    async def execute_query(self, query, fetch_many=False, **kwargs):
+        """Executes a query and yield rows
+
+        Args:
+            query (str): Query.
+            fetch_many (bool): Flag to use fetchmany method. Defaults to False.
+
+        Raises:
+            exception: Raise an exception after retrieving
+
+        Yields:
+            list: Column names and query response
+        """
+        retry = 1
+        yield_once = True
+
+        rows_fetched = 0
+
+        while retry <= self.retry_count:
+            try:
+                cursor = await self.get_cursor(query=query)
+                if fetch_many:
+                    # sending back column names only once
+                    if yield_once:
+                        if kwargs["schema"] is not None:
+                            yield [
+                                f"{kwargs['schema']}_{kwargs['table']}_{column}".lower()
+                                for column in cursor.keys()  # pyright: ignore
+                            ]
+                        else:
+                            yield [
+                                f"{kwargs['table']}_{column}".lower()
+                                for column in cursor.keys()  # pyright: ignore
+                            ]
+                        yield_once = False
+
+                    while True:
+                        rows = cursor.fetchmany(size=self.fetch_size)  # pyright: ignore
+                        rows_length = len(rows)
+
+                        if not rows_length:
+                            break
+
+                        for row in rows:
+                            yield row
+
+                        rows_fetched += rows_length
+                        await self._sleeps.sleep(0)
+                else:
+                    yield cursor.fetchall()  # pyright: ignore
+                break
+            except (InternalClientError, ProgrammingError):
+                raise
+            except Exception as exception:
+                self._logger.warning(
+                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
+                )
+                if retry == self.retry_count:
+                    raise exception
+                await self._sleeps.sleep(DEFAULT_WAIT_MULTIPLIER**retry)
+                retry += 1
+
+    def _get_connect_args(self):
+        """Convert string to pem format and create an SSL context
+
+        Returns:
+            dictionary: Connection arguments
+        """
+        if not self.ssl_enabled:
+            return {}
+
+        pem_format = get_pem_format(key=self.ssl_ca)
+        ctx = ssl.create_default_context()
+        ctx.load_verify_locations(cadata=pem_format)
+        connect_args = {"ssl": ctx}
+        return connect_args
+
+
 class PostgreSQLDataSource(BaseDataSource):
     """PostgreSQL"""
 
@@ -75,20 +301,23 @@ class PostgreSQLDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self._sleeps = CancellableSleeps()
-
-        # Connector configurations
-        self.retry_count = self.configuration["retry_count"]
-
-        # Connection related configurations
         self.database = self.configuration["database"]
-        self.tables = self.configuration["tables"]
-        self.host = self.configuration["host"]
-        self.ssl_enabled = self.configuration["ssl_enabled"]
-        self.ssl_ca = self.configuration["ssl_ca"]
-        self.connection_string = f"postgresql+asyncpg://{self.configuration['username']}:{quote(self.configuration['password'])}@{self.host}:{self.configuration['port']}/{self.database}"
-        self.queries = PostgreSQLQueries()
-        self.engine = None
+        self.postgresql_client = PostgreSQLClient(
+            host=self.configuration["host"],
+            port=self.configuration["port"],
+            user=self.configuration["username"],
+            password=self.configuration["password"],
+            database=self.configuration["database"],
+            tables=self.configuration["tables"],
+            ssl_enabled=self.configuration["ssl_enabled"],
+            ssl_ca=self.configuration["ssl_ca"],
+            retry_count=self.configuration["retry_count"],
+            fetch_size=self.configuration["fetch_size"],
+            logger_=self._logger,
+        )
+
+    def _set_internal_logger(self):
+        self.postgresql_client.set_logger(self._logger)
 
     @classmethod
     def get_default_configuration(cls):
@@ -170,127 +399,16 @@ class PostgreSQLDataSource(BaseDataSource):
         }
 
     async def close(self):
-        self._sleeps.cancel()
-
-    async def execute_query(self, query, fetch_many=False, **kwargs):
-        """Executes a query and yield rows
-
-        Args:
-            query (str): Query.
-            fetch_many (bool): Flag to use fetchmany method. Defaults to False.
-
-        Raises:
-            exception: Raise an exception after retrieving
-
-        Yields:
-            list: Column names and query response
-        """
-        size = self.configuration["fetch_size"]
-
-        retry = 1
-        yield_once = True
-
-        rows_fetched = 0
-
-        while retry <= self.retry_count:
-            try:
-                cursor = await self._async_connect(query=query)
-                if fetch_many:
-                    # sending back column names only once
-                    if yield_once:
-                        if kwargs["schema"] is not None:
-                            yield [
-                                f"{kwargs['schema']}_{kwargs['table']}_{column}".lower()
-                                for column in cursor.keys()  # pyright: ignore
-                            ]
-                        else:
-                            yield [
-                                f"{kwargs['table']}_{column}".lower()
-                                for column in cursor.keys()  # pyright: ignore
-                            ]
-                        yield_once = False
-
-                    while True:
-                        rows = cursor.fetchmany(size=size)  # pyright: ignore
-                        rows_length = len(rows)
-
-                        if not rows_length:
-                            break
-
-                        for row in rows:
-                            yield row
-
-                        rows_fetched += rows_length
-                        await self._sleeps.sleep(0)
-                else:
-                    yield cursor.fetchall()  # pyright: ignore
-                break
-            except (InternalClientError, ProgrammingError):
-                raise
-            except Exception as exception:
-                self._logger.warning(
-                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
-                )
-                if retry == self.retry_count:
-                    raise exception
-                await self._sleeps.sleep(DEFAULT_WAIT_MULTIPLIER**retry)
-                retry += 1
-
-    async def _async_connect(self, query):
-        """Execute the passed query on the Async supported Database server and return cursor.
-
-        Args:
-            query (str): Database query to be executed.
-
-        Returns:
-            cursor: Asynchronous cursor
-        """
-        try:
-            if self.engine is None:
-                self._create_engine()
-            async with self.engine.connect() as connection:  # pyright: ignore
-                cursor = await connection.execute(text(query))
-                return cursor
-        except Exception as exception:
-            self._logger.warning(
-                f"Something went wrong while executing query. Exception: {exception}"
-            )
-            raise
-
-    def _create_engine(self):
-        """Create async engine for postgresql"""
-        self.engine = create_async_engine(
-            self.connection_string,
-            connect_args=self.get_connect_args(),
-        )
-
-    def get_connect_args(self):
-        """Convert string to pem format and create a SSL context
-
-        Returns:
-            dictionary: Connection arguments
-        """
-        if not self.ssl_enabled:
-            return {}
-
-        pem_format = get_pem_format(key=self.ssl_ca)
-        ctx = ssl.create_default_context()
-        ctx.load_verify_locations(cadata=pem_format)
-        connect_args = {"ssl": ctx}
-        return connect_args
+        self.postgresql_client.close()
 
     async def ping(self):
         """Verify the connection with the database-server configured by user"""
         self._logger.info("Validating the Connector Configuration...")
         try:
-            await anext(
-                self.execute_query(
-                    query=self.queries.ping(),
-                )
-            )
+            await self.postgresql_client.ping()
             self._logger.info("Successfully connected to Postgresql.")
         except Exception as e:
-            raise Exception(f"Can't connect to Postgresql on {self.host}") from e
+            raise Exception("Can't connect to Postgresql.") from e
 
     async def fetch_documents(self, table, schema):
         """Fetches all the table entries and format them in Elasticsearch documents
@@ -303,23 +421,13 @@ class PostgreSQLDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
         try:
-            [[row_count]] = await anext(
-                self.execute_query(
-                    query=self.queries.table_data_count(
-                        schema=schema,
-                        table=table,
-                    ),
-                )
+            row_count = await self.postgresql_client.get_table_row_count(
+                schema=schema, table=table
             )
             if row_count > 0:
                 # Query to get the table's primary key
-                columns = await anext(
-                    self.execute_query(
-                        query=self.queries.table_primary_key(
-                            schema=schema,
-                            table=table,
-                        ),
-                    )
+                columns = await self.postgresql_client.get_table_primary_key(
+                    schema=schema, table=table
                 )
                 keys = [
                     f"{schema}_{table}_{column_name}"
@@ -328,12 +436,9 @@ class PostgreSQLDataSource(BaseDataSource):
                 ]
                 if keys:
                     try:
-                        last_update_time = await anext(
-                            self.execute_query(
-                                query=self.queries.table_last_update_time(
-                                    schema=schema,
-                                    table=table,
-                                ),
+                        last_update_time = (
+                            await self.postgresql_client.get_table_last_update_time(
+                                schema=schema, table=table
                             )
                         )
                         last_update_time = last_update_time[0][0]
@@ -342,14 +447,8 @@ class PostgreSQLDataSource(BaseDataSource):
                             f"Unable to fetch last_updated_time for {table}"
                         )
                         last_update_time = None
-                    streamer = self.execute_query(
-                        query=self.queries.table_data(
-                            schema=schema,
-                            table=table,
-                        ),
-                        fetch_many=True,
-                        schema=schema,
-                        table=table,
+                    streamer = self.postgresql_client.data_streamer(
+                        schema=schema, table=table
                     )
                     column_names = await anext(streamer)
                     async for row in streamer:
@@ -382,60 +481,33 @@ class PostgreSQLDataSource(BaseDataSource):
                 f"Something went wrong while fetching document for table {table}. Error: {exception}"
             )
 
-    async def fetch_rows(self, schema=None):
-        """Fetches all the rows from all the tables of the database.
-
-        Args:
-            schema (str): Name of schema. Defaults to None.
-
-        Yields:
-            Dict: Row document to index
-        """
-        tables_to_fetch = await self.get_tables_to_fetch(schema)
-        tables_to_fetch = list(tables_to_fetch)
-        for table in tables_to_fetch:
-            self._logger.debug(f"Found table: {table} in database: {self.database}.")
-            async for row in self.fetch_documents(
-                table=table,
-                schema=schema,
-            ):
-                yield row
-        if len(tables_to_fetch) < 1:
-            if schema:
-                self._logger.warning(
-                    f"Fetched 0 tables for schema: {schema} and database: {self.database}"
-                )
-            else:
-                self._logger.warning(
-                    f"Fetched 0 tables for the database: {self.database}"
-                )
-
-    async def get_tables_to_fetch(self, schema):
-        tables = configured_tables(self.tables)
-        return (
-            map(
-                lambda table: table[0],  # type: ignore
-                await anext(
-                    self.execute_query(
-                        query=self.queries.all_tables(
-                            database=self.database,
-                            schema=schema,
-                        )
-                    )
-                ),
-            )
-            if is_wildcard(tables)
-            else tables
-        )
-
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch databases, tables and rows in async manner.
 
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        schema_list = await anext(self.execute_query(query=self.queries.all_schemas()))
+        schema_list = await self.postgresql_client.get_all_schemas()
         for [schema] in schema_list:
             if schema not in SYSTEM_SCHEMA:
-                async for row in self.fetch_rows(schema=schema):
-                    yield row, None
+                tables_to_fetch = await self.postgresql_client.get_tables_to_fetch(
+                    schema
+                )
+                for table in tables_to_fetch:
+                    self._logger.debug(
+                        f"Found table: {table} in database: {self.database}."
+                    )
+                    async for row in self.fetch_documents(
+                        table=table,
+                        schema=schema,
+                    ):
+                        yield row, None
+                if len(tables_to_fetch) < 1:
+                    if schema:
+                        self._logger.warning(
+                            f"Fetched 0 tables for schema: {schema} and database: {self.database}"
+                        )
+                    else:
+                        self._logger.warning(
+                            f"Fetched 0 tables for the database: {self.database}"
+                        )
