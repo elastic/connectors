@@ -285,11 +285,11 @@ class GitHubAPI:
         if args.get("recursive") == "1":
             tree_list = [
                 {
-                    "path": f"dummy_file_{file_number}.txt",
+                    "path": f"dummy_file_{file_number}.md",
                     "mode": "100644",
                     "type": "blob",
                     "sha": file_number,
-                    "size": 30,
+                    "size": FILE_SIZE,
                     "url": f"http://127.0.0.1:9091/api/v3/repos/demo_user/demo_repo/git/blobs/{file_number}",
                 }
                 for file_number in range(self.file_count)
@@ -299,10 +299,10 @@ class GitHubAPI:
 
     def get_content(self, commit_id):
         return {
-            "name": f"dummy_file_{commit_id}.txt",
-            "path": f"dummy_file_{commit_id}.txt",
+            "name": f"dummy_file_{commit_id}.md",
+            "path": f"dummy_file_{commit_id}.md",
             "sha": commit_id,
-            "size": 5545,
+            "size": FILE_SIZE,
             "type": "file",
             "content": encode_data(LARGE_DATA),
             "encoding": "base64",
