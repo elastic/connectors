@@ -2,8 +2,12 @@ from connectors.source import BaseDataSource
 
 import aiohttp
 import re
+from datetime import datetime, timedelta
+import time
 from contextlib import asynccontextmanager
 from functools import partial, wraps
+from aiohttp.client_exceptions import ClientResponseError
+
 
 
 BASE_URL = "https://slack.com/api"
@@ -11,6 +15,7 @@ BASE_URL = "https://slack.com/api"
 CURSOR = "cursor"
 RESPONSE_METADATA = "response_metadata"
 NEXT_CURSOR = "next_cursor"
+DEFAULT_RETRY_SECONDS = 30
 
 LIST_CONVERSATIONS = "list_convos"
 JOIN_CONVERSATIONS = "join_convos"
@@ -25,23 +30,21 @@ ENDPOINTS = {
 }
 
 # TODO list
-# - replace square brackest with get()
-# - better error handling/retrying
+# Must haves:
+# - configurable how far back to sync. Default 6 months.
 # - document required scopes
 # - set up vault creds for slack
-# - configure which channels to sync via deny list
-# - who do I hand this off too? What quality bar?
-# - write unit tests
-# - write an ftest
-# - do index users and channels along with messages
-# - configurable how far back to sync. Default 6 months.
-# Nice to haves:
-# - expand links
-#   - links:read scope needed?
-# - more dynamic username treatment - use display name where able
 # To Verify:
 # - when messages were authored vs edited
 # - threads vs messages
+# Nice to haves:
+# - expand links
+#   - links:read scope needed?
+# - configure which channels to sync via deny list
+# - write unit tests
+# - write an ftest
+# - replace square brackest with get()
+# - better error handling/retrying
 
 
 def retryable_aiohttp_call(retries): # TODO, make a base client class
@@ -66,6 +69,11 @@ def retryable_aiohttp_call(retries): # TODO, make a base client class
 
     return wrapper
 
+class ThrottledError(Exception):
+    """Internal exception class to indicate that request was throttled by the API"""
+
+    pass
+
 class SlackClient:
     def __init__(self, configuration):
         self.token = configuration['token']
@@ -87,15 +95,19 @@ class SlackClient:
 
     async def list_channels(self, only_my_channels, cursor=None):
         conversation_batch_limit = 200
+        self._logger.debug(f"Iterating over all channels")
+        if only_my_channels:
+            self._logger.debug(f"Will only yield channels the bot belongs to")
         while True:
             url = f"{BASE_URL}/{ENDPOINTS[LIST_CONVERSATIONS]}?limit={conversation_batch_limit}"
             if cursor:
                 url = self._add_cursor(url, cursor)
             response = await self._get_json(url)
+
             for channel in response['channels']:
                 if only_my_channels and not channel.get('is_member', False):
-                    self._logger.debug(f"Skipping over channel '{channel['name']}', because the bot is not a member")
                     continue
+                self._logger.debug(f"Yielding channel '{channel['name']}'")
                 yield channel
             cursor = self._get_next_cursor(response)
             if not cursor:
@@ -105,17 +117,17 @@ class SlackClient:
         url = f"{BASE_URL}/{ENDPOINTS[JOIN_CONVERSATIONS]}?channel={channel_id}"
         return await self._get_json(url)
 
-    async def list_messages(self, channel_id, cursor=None):
+    async def list_messages(self, channel_id, oldest, latest):
+        self._logger.info(f"Fetching messages between {oldest} and {latest} from channel: '{channel_id}'")
+        message_batch_limit = 200
         while True:
-            url = f"{BASE_URL}/{ENDPOINTS[CONVERSATION_HISTORY]}?channel={channel_id}"
-            if cursor:
-                url = self._add_cursor(url, cursor)
+            url = f"{BASE_URL}/{ENDPOINTS[CONVERSATION_HISTORY]}?channel={channel_id}&limit={message_batch_limit}&oldest={oldest}&latest={latest}"
             response = await self._get_json(url)
             for message in response['messages']:
+                latest = message['ts']
                 if message['type'] == 'message':
                     yield message
-            cursor = self._get_next_cursor(response)
-            if not cursor:
+            if not response['has_more']:
                 break
 
     async def list_users(self, cursor=None):
@@ -145,12 +157,34 @@ class SlackClient:
     @asynccontextmanager
     @retryable_aiohttp_call(retries=3)
     async def _call_api(self, absolute_url):
-        async with self._http_session.get(
+        try:
+            async with self._http_session.get(
                 absolute_url,
                 headers=self._headers(),
-        ) as resp:
-            yield resp
-            return
+            ) as resp:
+                yield resp
+                return
+        except ClientResponseError as e:
+            await self._handle_client_response_error(absolute_url, e)
+
+    async def _handle_client_response_error(self, absolute_url, e):
+        if e.status == 429:
+            response_headers = e.headers or {}
+            if "Retry-After" in response_headers:
+                retry_seconds = int(response_headers["Retry-After"])
+            else:
+                self._logger.warning(
+                    f"Response Code from Slack is {e.status} but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                )
+                retry_seconds = DEFAULT_RETRY_SECONDS
+            self._logger.debug(
+                f"Rate Limited by Slack: retry in {retry_seconds} seconds"
+            )
+
+            await self._sleeps.sleep(retry_seconds)
+            raise ThrottledError from e # will get retried - important thing is that we just slept
+        else:
+            raise
 
     def _headers(self):
         return {
@@ -172,6 +206,7 @@ class SlackDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.slack_client = SlackClient(configuration)
         self.auto_join_channels = configuration['auto_join_channels']
+        self.n_days_to_fetch = configuration['fetch_last_n_days']
 
     def _set_internal_logger(self):
         self.slack_client.set_logger(self._logger)
@@ -188,10 +223,18 @@ class SlackDataSource(BaseDataSource):
                 "required": True,
                 "value": "",
             },
+            "fetch_last_n_days": {
+                "label": "Days of message history to fetch",
+                "tooltip": "How far back in time to request message history from slack. Messages older than this will not be indexed.",
+                "order": 2,
+                "type": "int",
+                "value": 180,
+                "display": "numeric",
+            },
             "auto_join_channels": {
                 "label": "Automatically join channels",
                 "tooltip": "The Slack application bot will only be able to read conversation history from channels it has joined. The default requires it to be manually invited to channels. Enabling this allows it to automatically invite itself into all public channels.",
-                "order": 2,
+                "order": 3,
                 "type": "bool",
                 "display": "toggle",
                 "value": False,
@@ -199,7 +242,7 @@ class SlackDataSource(BaseDataSource):
             "sync_users": {
                 "label": "Sync users",
                 "tooltip": "Whether or not Slack Users should be indexed as documents in Elasticsearch.",
-                "order": 3,
+                "order": 4,
                 "type": "bool",
                 "display": "toggle",
                 "value": True,
@@ -230,6 +273,9 @@ class SlackDataSource(BaseDataSource):
         :param usernames: a dictionary of userID -> username mappings, to facilitate replacing message references to userids with usernames
         :return: generator for messages
         """
+        delta = timedelta(days=self.n_days_to_fetch)
+        past_unix_timestamp = time.mktime((datetime.utcnow() - delta).timetuple())
+        current_unix_timestamp = time.mktime(datetime.utcnow().timetuple())
         async for channel in self.slack_client.list_channels(not self.auto_join_channels):
             self._logger.info(f"Listed channel: '{channel['name']}'")
             yield self.adapt_channel(channel, usernames)
@@ -237,7 +283,7 @@ class SlackDataSource(BaseDataSource):
             if self.auto_join_channels:
                 join_response = await self.slack_client.join_channel(channel_id) # can't get channel content if the bot is not in the channel
             if not self.auto_join_channels or join_response.get("ok"):
-                async for message in self.slack_client.list_messages(channel_id):
+                async for message in self.slack_client.list_messages(channel_id, past_unix_timestamp, current_unix_timestamp):
                     yield self.adapt_message(message, channel, usernames)
             else:
                 self._logger.warning(f"Not syncing channel: '{channel['name']}' because: {join_response.get('error')}")
