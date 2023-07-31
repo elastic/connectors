@@ -35,6 +35,13 @@ async def test_create_engine_in_thick_mode(mock_fun):
 
 
 @pytest.mark.asyncio
+async def test_ping():
+    async with create_source(OracleDataSource) as source:
+        with patch.object(Engine, "connect", return_value=ConnectionSync(OracleQueries())):
+            await source.ping()
+
+
+@pytest.mark.asyncio
 @patch("connectors.sources.oracle.create_engine")
 async def test_create_engine_in_thin_mode(mock_fun):
     """Test create_engine method of OracleDataSource class in thin mode"""
@@ -48,7 +55,7 @@ async def test_create_engine_in_thin_mode(mock_fun):
 
 
 @pytest.mark.asyncio
-async def test_get_docs_oracle():
+async def test_get_docs():
     # Setup
     async with create_source(OracleDataSource) as source:
         with patch.object(
