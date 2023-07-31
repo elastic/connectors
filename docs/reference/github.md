@@ -14,11 +14,11 @@ To use this connector as a **connector client**, use the **GitHub** tile from th
 
 For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
 
-## GitHub  access token
+## GitHub access token
 
-Configure a GitHub  access token to fetch data from GitHub. 
+Configure a GitHub access token to fetch data from GitHub. 
 
-Follow these steps to generate a GitHub  access token:
+Follow these steps to generate a GitHub access token:
  - Go to GitHub Settings → Developer settings → Personal access tokens → Tokens(classic).
  - Click `Generate new token`.
  - Add a note and select the "repo" scope.
@@ -30,9 +30,19 @@ Follow these steps to generate a GitHub  access token:
 
 The following configuration fields are required:
 
-#### `github_token`
+#### `data_source`
 
-GitHub  access token to authenticate the GitHub instance.
+Dropdown to determine GitHub platform type: `GitHub Cloud` or `GitHub Server`. Default value is `GitHub Server`.
+
+#### `host`
+
+The domain where GitHub is hosted. Examples:
+
+- `https://test-server.github.dev`
+
+#### `token`
+
+GitHub access token to authenticate the GitHub instance.
 
 #### `repositories`
 
@@ -41,14 +51,29 @@ Comma-separated list of repositories to fetch data from GitHub instance. If the 
 - `Repository1, Repository2`
 - `*`
 
+#### `ssl_enabled`
+
+Whether SSL verification will be enabled. Default value is `False`.
+
+#### `ssl_ca`
+
+Content of SSL certificate. Note: In case of ssl_enabled is `False`, keep `ssl_ca` field empty. Example certificate:
+
+- ```
+    -----BEGIN CERTIFICATE-----
+    MIID+jCCAuKgAwIBAgIGAJJMzlxLMA0GCSqGSIb3DQEBCwUAMHoxCzAJBgNVBAYT
+    ...
+    7RhLQyWn2u00L7/9Omw=
+    -----END CERTIFICATE-----
+    ```
+
 #### `retry_count`
 
 The number of retry attempts after failed request to GitHub. Default value is `3`.
 
 ### Content Extraction
 
-
-See [Content extraction](https://www.elastic.co/guide/en/enterprise-search/current/connectors-content-extraction.html).
+The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be `.md`, `.markdown`, `.rst`.
 
 ## Documents and Sync
 
@@ -56,7 +81,8 @@ The connector syncs the following objects and entities:
 - **Repositories**
 - **Pull Requests**
 - **Issues**
-- **Files & Folder**
+- **Markdown & README Files**
+
 *NOTE*:
 - Files bigger than 10 MB won't be extracted
 - Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment
@@ -65,7 +91,15 @@ The connector syncs the following objects and entities:
 
 [Basic sync rules](https://www.elastic.co/guide/en/enterprise-search/current/sync-rules.html#sync-rules-basic) are identical for all connectors and are available by default.
 
-Advanced sync rules are not available for this connector in the present version. Currently filtering is controlled by ingest pipelines.
+## Advanced Sync Rules
+
+Advanced Sync Rules are now available in elastic 8.10 version.
+
+- Users can add [Github queries](https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests) for syncing the source.
+- All the data returned by queries will be indexed.
+- You can refer to [GITHUB.md](../connectors/docs/sync-rules/GITHUB.md) for the correct format to add sync rules. Any errors encountered, will be presented to the user visually in the sync rules overview.
+
+**Note:** "List of repositories" configuration field will be overridden by the advanced rules.
 
 ## Connector Client operations
 
