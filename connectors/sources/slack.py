@@ -1,3 +1,9 @@
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
+
 import re
 import time
 from contextlib import asynccontextmanager
@@ -91,6 +97,7 @@ class SlackClient:
         return
 
     def close(self):
+        self._http_session.close()
         return
 
     async def list_channels(self, only_my_channels, cursor=None):
@@ -125,9 +132,9 @@ class SlackClient:
         while True:
             url = f"{BASE_URL}/{ENDPOINTS[CONVERSATION_HISTORY]}?channel={channel_id}&limit={message_batch_limit}&oldest={oldest}&latest={latest}"
             response = await self._get_json(url)
-            for message in response["messages"]:
-                latest = message["ts"]
-                if message["type"] == "message":
+            for message in response.get("messages", []):
+                latest = message.get("ts")
+                if message.get("type") == "message":
                     if message.get("reply_count", 0) > 0:
                         async for thread_message in self.list_thread_messages(
                             channel_id, message["ts"]
@@ -135,7 +142,7 @@ class SlackClient:
                             yield thread_message
                     else:
                         yield message
-            if not response["has_more"]:
+            if not response.get("has_more"):
                 break
 
     async def list_thread_messages(self, channel_id, parent_ts):
@@ -269,7 +276,7 @@ class SlackDataSource(BaseDataSource):
                 "type": "bool",
                 "display": "toggle",
                 "value": True,
-            }
+            },
         }
 
     async def ping(self):
