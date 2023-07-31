@@ -74,9 +74,8 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
             )
 
         self.source.create_connection()
-        self.source.advanced_rules = advanced_rules
 
-        _, invalid_rules = self.source.find_matching_paths
+        _, invalid_rules = self.source.find_matching_paths(advanced_rules)
 
         if len(invalid_rules) > 0:
             return SyncRuleValidationResult(
@@ -110,7 +109,6 @@ class NASDataSource(BaseDataSource):
         self.port = self.configuration["server_port"]
         self.drive_path = self.configuration["drive_path"]
         self.session = None
-        self.advanced_rules = []
 
     def advanced_rules_validators(self):
         return [NetworkDriveAdvancedRulesValidator(self)]
@@ -166,13 +164,16 @@ class NASDataSource(BaseDataSource):
             port=self.port,
         )
 
-    def get_directory_details(self):
-        return smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}")
-
     @cached_property
-    def find_matching_paths(self):
+    def get_directory_details(self):
+        return list(smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}"))
+
+    def find_matching_paths(self, advanced_rules):
         """
         Find matching paths based on advanced rules.
+
+        Args:
+            advanced_rules (list): List of advanced rules configured
 
         Returns:
             matched_paths (set): Set of paths that match the advanced rules.
@@ -180,10 +181,10 @@ class NASDataSource(BaseDataSource):
         """
         invalid_rules = []
         matched_paths = set()
-        for rule in self.advanced_rules:
+        for rule in advanced_rules:
             rule_valid = False
             glob_pattern = rule["pattern"].replace("\\", "/")
-            for path, _, _ in self.get_directory_details():
+            for path, _, _ in self.get_directory_details:
                 normalized_path = path.split("/", 1)[1].replace("\\", "/")
                 is_match = glob.globmatch(
                     normalized_path, glob_pattern, flags=glob.GLOBSTAR
@@ -307,10 +308,10 @@ class NASDataSource(BaseDataSource):
         """
 
         if filtering and filtering.has_advanced_rules():
-            self.advanced_rules = filtering.get_advanced_rules()
-            matched_paths, _ = self.find_matching_paths
+            advanced_rules = filtering.get_advanced_rules()
+            matched_paths, _ = self.find_matching_paths(advanced_rules)
         else:
-            matched_paths = (path for path, _, _ in self.get_directory_details())
+            matched_paths = (path for path, _, _ in self.get_directory_details)
 
         for path in matched_paths:
             async for file in self.get_files(path=path):
