@@ -4,17 +4,24 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Github source class methods"""
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import aiohttp
 import pytest
 from aiohttp.client_exceptions import ClientResponseError
 
+from connectors.filtering.validation import SyncRuleValidationResult
+from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
-from connectors.sources.github import GitHubDataSource, UnauthorizedException
+from connectors.sources.github import (
+    GitHubAdvancedRulesValidator,
+    GitHubDataSource,
+    UnauthorizedException,
+)
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
+ADVANCED_SNIPPET = "advanced_snippet"
 REPOS = {
     "name": "demo_repo",
     "nameWithOwner": "demo_user/demo_repo",
@@ -322,21 +329,21 @@ MOCK_ASSIGNEE_RESPONSE = {
 }
 MOCK_RESPONSE_ATTACHMENTS = (
     {
-        "_id": "demo_repo/source/source.txt",
+        "_id": "demo_repo/source/source.md",
         "_timestamp": "2023-04-17T12:55:01Z",
-        "name": "source.txt",
+        "name": "source.md",
         "size": 19,
         "type": "blob",
     },
     {
-        "name": "source.txt",
-        "path": "source/source.txt",
+        "name": "source.md",
+        "path": "source/source.md",
         "sha": "c36b795f98fc9c188fc6gd5a4795vc6j6e0y69a37",
         "size": 19,
-        "url": "https://api.github.com/repos/demo_user/demo_repo/contents/source/source.txt?ref=main",
-        "html_url": "https://github.com/demo_user/demo_repo/blob/main/source/source.txt",
+        "url": "https://api.github.com/repos/demo_user/demo_repo/contents/source/source.md?ref=main",
+        "html_url": "https://github.com/demo_user/demo_repo/blob/main/source/source.md",
         "git_url": "https://api.github.com/repos/demo_user/demo_repo/git/blobs/c36b795f98fc9c188fc6gd5a4795vc6j6e0y69a37",
-        "download_url": "https://raw.githubusercontent.com/demo_user/demo_repo/main/source/source.txt",
+        "download_url": "https://raw.githubusercontent.com/demo_user/demo_repo/main/source/source.md",
         "type": "file",
         "content": "VGVzdCBGaWxlICEhISDwn5iCCg==\n",
         "encoding": "base64",
@@ -344,7 +351,7 @@ MOCK_RESPONSE_ATTACHMENTS = (
     },
 )
 MOCK_ATTACHMENT = {
-    "path": "source/source.txt",
+    "path": "source/source.md",
     "mode": "100644",
     "type": "blob",
     "sha": "36888b54c2a2f75tfbf2b7e7e95f68d0g8911ccb",
@@ -352,15 +359,15 @@ MOCK_ATTACHMENT = {
     "url": "https://api.github.com/repos/demo_user/demo_repo/git/blobs/36888b54c2a2f75tfbf2b7e7e95f68d0g8911ccb",
     "_timestamp": "2023-04-17T12:55:01Z",
     "repo_name": "demo_repo",
-    "name": "source.txt",
-    "extension": ".txt",
+    "name": "source.md",
+    "extension": ".md",
 }
 MOCK_TREE = {
     "sha": "88e3af5daf88e64b273648h37gdf6a561d7092be",
     "url": "https://api.github.com/repos/demo_user/demo_repo/git/trees/88e3af5daf88e64b273648h37gdf6a561d7092be",
     "tree": [
         {
-            "path": "source/source.txt",
+            "path": "source/source.md",
             "mode": "100644",
             "type": "blob",
             "sha": "36888b54c2a2f75tfbf2b7e7e95f68d0g8911ccb",
@@ -660,9 +667,9 @@ async def test_get_invalid_repos():
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_text_file():
+async def test_get_content_with_md_file():
     expected_response = {
-        "_id": "demo_repo/source.txt",
+        "_id": "demo_repo/source.md",
         "_timestamp": "2023-04-17T12:55:01Z",
         "_attachment": "VGVzdCBGaWxlICEhISDwn5iCCg==",
     }
@@ -679,51 +686,20 @@ async def test_get_content_with_text_file():
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_file_size_zero():
+@pytest.mark.parametrize(
+    "size, expected_content",
+    [
+        (0, None),
+        (23000000, None),
+    ],
+)
+async def test_get_content_with_differernt_size(size, expected_content):
     source = create_source(GitHubDataSource)
 
     attachment_with_size_zero = MOCK_ATTACHMENT.copy()
-    attachment_with_size_zero["size"] = 0
+    attachment_with_size_zero["size"] = size
     response = await source.get_content(attachment=attachment_with_size_zero, doit=True)
-    assert response is None
-
-
-@pytest.mark.asyncio
-async def test_get_content_with_file_without_extension():
-    source = create_source(GitHubDataSource)
-
-    attachment_without_extension = MOCK_ATTACHMENT.copy()
-    attachment_without_extension["name"] = "demo"
-    attachment_without_extension["extension"] = ""
-    response = await source.get_content(
-        attachment=attachment_without_extension, doit=True
-    )
-    assert response is None
-
-
-@pytest.mark.asyncio
-async def test_get_content_with_large_file_size():
-    source = create_source(GitHubDataSource)
-
-    attachment_with_large_size = MOCK_ATTACHMENT.copy()
-    attachment_with_large_size["size"] = 23000000
-    response = await source.get_content(
-        attachment=attachment_with_large_size, doit=True
-    )
-    assert response is None
-
-
-@pytest.mark.asyncio
-async def test_get_content_with_unsupported_tika_file_type_then_skip():
-    source = create_source(GitHubDataSource)
-
-    attachment_with_unsupported_tika_extension = MOCK_ATTACHMENT.copy()
-    attachment_with_unsupported_tika_extension["name"] = "screenshot.png"
-    attachment_with_unsupported_tika_extension["extension"] = ".png"
-    response = await source.get_content(
-        attachment=attachment_with_unsupported_tika_extension, doit=True
-    )
-    assert response is None
+    assert response is expected_content
 
 
 @pytest.mark.asyncio
@@ -845,17 +821,17 @@ async def test_fetch_pull_requests_with_unauthorized_exception():
 async def test_fetch_files():
     expected_response = (
         {
-            "name": "source.txt",
+            "name": "source.md",
             "size": 30,
             "type": "blob",
-            "path": "source/source.txt",
+            "path": "source/source.md",
             "mode": "100644",
-            "extension": ".txt",
+            "extension": ".md",
             "_timestamp": "2023-04-17T12:55:01Z",
-            "_id": "demo_repo/source/source.txt",
+            "_id": "demo_repo/source/source.md",
         },
         {
-            "path": "source/source.txt",
+            "path": "source/source.md",
             "mode": "100644",
             "type": "blob",
             "sha": "36888b54c2a2f75tfbf2b7e7e95f68d0g8911ccb",
@@ -863,8 +839,8 @@ async def test_fetch_files():
             "url": "https://api.github.com/repos/demo_user/demo_repo/git/blobs/36888b54c2a2f75tfbf2b7e7e95f68d0g8911ccb",
             "_timestamp": "2023-04-17T12:55:01Z",
             "repo_name": "demo_repo",
-            "name": "source.txt",
-            "extension": ".txt",
+            "name": "source.md",
+            "extension": ".md",
         },
     )
     source = create_source(GitHubDataSource)
@@ -895,3 +871,233 @@ async def test_get_docs():
     async for document, _ in source.get_docs():
         actual_response.append(document)
     assert expected_response == actual_response
+
+
+@pytest.mark.parametrize(
+    "advanced_rules, expected_validation_result",
+    [
+        (
+            # valid: empty array should be valid
+            [],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: empty object should also be valid -> default value in Kibana
+            {},
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: valid queries
+            [
+                {
+                    "repository": "repo_name",
+                    "filter": {"issue": "is:open", "pr": "is:open", "branch": "main"},
+                }
+            ],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: optional pr key
+            [
+                {
+                    "repository": "repo_name",
+                    "filter": {"issue": "is:open", "branch": "main"},
+                }
+            ],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # invalid: repository key missing
+            [{"filter": {"issue": "is:open", "pr": "is:open", "branch": "main"}}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: invalid key
+            [
+                {
+                    "repository": "repo_name",
+                    "filters": {"issue": "is:open", "pr": "is:open", "branch": "main"},
+                }
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: invalid array value
+            [
+                {
+                    "repository": "repo_name",
+                    "filters": [
+                        {"issue": "is:open", "pr": "is:open", "branch": "main"}
+                    ],
+                }
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: repository can not be empty
+            [
+                {
+                    "repository": "",
+                    "filters": [
+                        {"issue": "is:open", "pr": "is:open", "branch": "main"}
+                    ],
+                }
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+    source = create_source(GitHubDataSource)
+    source.get_invalid_repos = AsyncMock(return_value=[])
+
+    validation_result = await GitHubAdvancedRulesValidator(source).validate(
+        advanced_rules
+    )
+
+    assert validation_result == expected_validation_result
+
+
+@pytest.mark.parametrize(
+    "advanced_rules, expected_validation_result",
+    [
+        (
+            # invalid: invalid repos
+            [
+                {
+                    "repository": "repo_name",
+                    "filter": {"issue": "is:open", "pr": "is:open", "branch": "main"},
+                }
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        )
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation_with_invalid_repos(
+    advanced_rules, expected_validation_result
+):
+    source = create_source(GitHubDataSource)
+    source.get_invalid_repos = AsyncMock(return_value=["repo_name"])
+
+    validation_result = await GitHubAdvancedRulesValidator(source).validate(
+        advanced_rules
+    )
+
+    assert validation_result == expected_validation_result
+
+
+@pytest.mark.parametrize(
+    "filtering, expected_response",
+    [
+        (
+            # Configured valid queries, without branch
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        "value": [
+                            {
+                                "repository": "demo_repo",
+                                "filter": {
+                                    "issue": "is:open",
+                                    "pr": "is:open",
+                                    "branch": "main",
+                                },
+                            },
+                        ]
+                    }
+                }
+            ),
+            [
+                REPOS,
+                MOCK_RESPONSE_PULL,
+                MOCK_RESPONSE_ISSUE,
+                MOCK_RESPONSE_ATTACHMENTS[0],
+            ],
+        ),
+        (
+            # Configured invalid queries, with branch
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        "value": [
+                            {
+                                "repository": "demo_repo",
+                                "filter": {
+                                    "issue": "is:pr is:open",
+                                    "pr": "is:issue is:open",
+                                    "branch": "main",
+                                },
+                            },
+                        ]
+                    }
+                }
+            ),
+            [REPOS, MOCK_RESPONSE_ATTACHMENTS[0]],
+        ),
+        (
+            # Configured only branch, without queries
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        "value": [
+                            {
+                                "repository": "demo_repo",
+                                "filter": {
+                                    "branch": "main",
+                                },
+                            },
+                        ]
+                    }
+                }
+            ),
+            [REPOS, MOCK_RESPONSE_ATTACHMENTS[0]],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules(filtering, expected_response):
+    actual_response = []
+    source = create_source(GitHubDataSource)
+    source._get_configured_repos = Mock(return_value=AsyncIterator([REPOS]))
+    source._fetch_issues = Mock(return_value=AsyncIterator([MOCK_RESPONSE_ISSUE]))
+    source._fetch_pull_requests = Mock(return_value=AsyncIterator([MOCK_RESPONSE_PULL]))
+    source._fetch_files = Mock(return_value=AsyncIterator([MOCK_RESPONSE_ATTACHMENTS]))
+    async for document, _ in source.get_docs(filtering=filtering):
+        actual_response.append(document)
+    assert expected_response == actual_response
+
+
+def test_is_previous_repo():
+    source = create_source(GitHubDataSource)
+    assert source.is_previous_repo("demo_user/demo_repo") is False
+    assert source.is_previous_repo("demo_user/demo_repo") is True
