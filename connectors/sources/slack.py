@@ -38,17 +38,11 @@ ENDPOINTS = {
 }
 
 # TODO list
-# Must haves:
-# - document required scopes
-# - set up vault creds for slack
 # Nice to haves:
 # - expand links
 #   - links:read scope needed?
 # - configure which channels to sync via deny list
-# - write unit tests
 # - write an ftest
-# - replace square brackest with get()
-# - better error handling/retrying
 
 
 def retryable_aiohttp_call(retries):  # TODO, make a base client class
