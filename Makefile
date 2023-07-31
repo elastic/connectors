@@ -11,6 +11,10 @@ bin/python:
 	$(PYTHON) -m venv .
 	bin/pip install --upgrade pip
 
+pre-install: bin/python
+	bin/pip install -r requirements/pre_install.txt
+	bin/python install.py develop
+
 install: bin/python bin/elastic-ingest
 
 dev: install
