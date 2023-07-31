@@ -6,9 +6,9 @@
 """Module to handle api calls received from connector."""
 
 import os
-import time
 import random
 import string
+import time
 
 from faker import Faker
 from flask import Flask, escape, request
@@ -622,7 +622,8 @@ data_storage.generate()
 
 @app.before_request
 def before_request():
-   time.sleep(PRE_REQUEST_SLEEP)
+    time.sleep(PRE_REQUEST_SLEEP)
+
 
 @app.route("/<string:tenant_id>/oauth2/v2.0/token", methods=["POST"])
 def get_graph_token(tenant_id):
