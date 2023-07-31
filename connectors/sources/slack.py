@@ -8,7 +8,7 @@ import re
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from functools import partial, wraps
+from functools import wraps
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
@@ -102,9 +102,9 @@ class SlackClient:
 
     async def list_channels(self, only_my_channels, cursor=None):
         conversation_batch_limit = 200
-        self._logger.debug(f"Iterating over all channels")
+        self._logger.debug("Iterating over all channels")
         if only_my_channels:
-            self._logger.debug(f"Will only yield channels the bot belongs to")
+            self._logger.debug("Will only yield channels the bot belongs to")
         while True:
             url = f"{BASE_URL}/{ENDPOINTS[LIST_CONVERSATIONS]}?limit={conversation_batch_limit}"
             if cursor:
@@ -310,6 +310,7 @@ class SlackDataSource(BaseDataSource):
             self._logger.info(f"Listed channel: '{channel['name']}'")
             yield self.adapt_channel(channel, usernames)
             channel_id = channel["id"]
+            join_response = {}
             if self.auto_join_channels:
                 join_response = await self.slack_client.join_channel(
                     channel_id
@@ -405,7 +406,7 @@ class SlackDataSource(BaseDataSource):
         user_id = message.get("user", message.get("bot_id"))
         message["author"] = usernames.get(user_id, user_id)
         message["text"] = re.sub(
-            r"<@([A-Z0-9]+)>", self.convert_usernames, message["text"]
+            r"<@([A-Z0-9]+)>", self.convert_usernames, message["text"]  # type: ignore
         )
         message["edited_ts"] = message.get("edited", {}).get("ts")
         message = self._dict_slice(
@@ -428,7 +429,7 @@ class SlackDataSource(BaseDataSource):
 
     def convert_usernames(self, match_obj):
         if match_obj.group(1) is not None:
-            return f"<@{self.usernames[match_obj.group(1)]}>"
+            return f"<@{self.usernames.get(match_obj.group(1), match_obj.group(1))}>"
 
     def _dict_slice(self, hsh, keys):
         return {k: hsh.get(k) for k in keys}

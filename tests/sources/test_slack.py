@@ -4,13 +4,9 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-import asyncio
-from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
+from unittest.mock import ANY, Mock, patch
 
-import aiohttp
 import pytest
-import pytest_asyncio
-from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.logger import logger
 from connectors.sources.slack import SlackClient, SlackDataSource
@@ -21,7 +17,7 @@ configuration = {
     "token": "fake_token",
     "auto_join_channels": False,
     "fetch_last_n_days": 180,
-    "sync_users": False,
+    "sync_users": True,
 }
 
 
@@ -29,14 +25,16 @@ configuration = {
 def slack_client():
     client = SlackClient(configuration)
     client.set_logger(logger)
-    return client
+    yield client
+    client.close()
 
 
 @pytest.fixture
 def slack_data_source():
     source = create_source(SlackDataSource, **configuration)
     source.set_logger(logger)
-    return source
+    yield source
+    source.close()
 
 
 # Tests for SlackClient
@@ -44,37 +42,76 @@ def slack_data_source():
 
 @pytest.mark.asyncio
 async def test_slack_client_list_channels(slack_client, mock_responses):
-    response_data = {"channels": [{"name": "channel1"}]}
+    page1 = {
+        "channels": [{"name": "channel1", "is_member": True}],
+        "response_metadata": {"next_cursor": "abc"},
+    }
     mock_responses.get(
         "https://slack.com/api/conversations.list?limit=200",
-        payload=response_data,
+        payload=page1,
+    )
+    page2 = {
+        "channels": [
+            {"name": "channel2", "id": "2", "is_member": False},
+            {"name": "channel3", "is_member": True},
+        ]
+    }
+    mock_responses.get(
+        "https://slack.com/api/conversations.list?limit=200&cursor=abc",
+        payload=page2,
     )
 
+    docs = []
     async for channel in slack_client.list_channels(True):
-        assert channel["name"] == "channel1"
+        docs.append(channel)
+    assert len(docs) == 2
+    assert docs[0]["name"] == "channel1"
+    assert docs[1]["name"] == "channel3"
 
 
 @pytest.mark.asyncio
 async def test_slack_client_list_messages(slack_client, mock_responses):
-    message1 = {"text": "message1", "type": "message"}
-    message2 = {"text": "message2", "type": "message"}
     timestamp1 = "1690674765"
-    timestamp2 = "1690761165"
-    response_data = {"messages": [message1, message2]}
+    timestamp2 = "1690665000"
+    timestamp3 = "1690761165"
+    message1 = {
+        "text": "message1",
+        "type": "message",
+        "reply_count": 1,
+        "ts": timestamp1,
+    }
+    message2 = {"text": "message2", "type": "message", "ts": timestamp2}
+    message3 = {"text": "message3", "type": "message", "ts": timestamp3}
+    reply = {"text": "reply", "type": "message"}
+
+    page1 = {"messages": [message1, message2], "has_more": True}
+    mock_responses.get(
+        f"https://slack.com/api/conversations.history?channel=channel_id&limit=200&oldest={timestamp1}&latest={timestamp3}",
+        payload=page1,
+    )
+    replies = {"messages": [message1, reply]}
+    mock_responses.get(
+        f"https://slack.com/api/conversations.replies?channel=channel_id&limit=200&ts={timestamp1}",
+        payload=replies,
+    )
+
+    page2 = {"messages": [message3]}
     mock_responses.get(
         f"https://slack.com/api/conversations.history?channel=channel_id&limit=200&oldest={timestamp1}&latest={timestamp2}",
-        payload=response_data,
+        payload=page2,
     )
 
     messages = []
     async for message in slack_client.list_messages(
-        "channel_id", timestamp1, timestamp2
+        "channel_id", timestamp1, timestamp3
     ):
         messages.append(message)
 
-    assert len(messages) == 2
+    assert len(messages) == 4
     assert messages[0]["text"] == "message1"
-    assert messages[1]["text"] == "message2"
+    assert messages[1]["text"] == "reply"
+    assert messages[2]["text"] == "message2"
+    assert messages[3]["text"] == "message3"
 
 
 @pytest.mark.asyncio
@@ -91,6 +128,30 @@ async def test_slack_client_list_users(slack_client, mock_responses):
 
     assert len(users) == 1
     assert users[0]["id"] == "user1"
+
+
+@pytest.mark.asyncio
+async def test_handle_throttled_error(slack_client, mock_responses):
+    error_response_data = {"error": "rate_limited"}
+    response_data = {"messages": [{"text": "message", "type": "message"}]}
+    mock_responses.get(
+        "https://slack.com/api/conversations.history?channel=channel_id&latest=456&limit=200&oldest=123",
+        status=429,
+        payload=error_response_data,
+    )
+    mock_responses.get(
+        "https://slack.com/api/conversations.history?channel=channel_id&latest=456&limit=200&oldest=123",
+        status=200,
+        payload=response_data,
+    )
+
+    docs = []
+    with patch.object(slack_client, "_sleeps") as mock_sleeps:
+        async for doc in slack_client.list_messages("channel_id", 123, 456):
+            docs.append(doc)
+        mock_sleeps.sleep.assert_called_once_with(ANY)  # Verify that sleep was called
+    assert len(docs) == 1
+    assert docs[0]["text"] == "message"
 
 
 # Tests for SlackDataSource
@@ -112,9 +173,18 @@ async def test_slack_data_source_get_docs(slack_data_source, mock_responses):
     async for doc, _ in slack_data_source.get_docs():
         docs.append(doc)
 
-    assert len(docs) == 2
-    assert docs[0]["type"] == "channel"
-    assert docs[1]["type"] == "message"
+    assert len(docs) == 3
+    assert docs[0]["type"] == "user"
+    assert docs[1]["type"] == "channel"
+    assert docs[2]["type"] == "message"
 
 
-# Add more test cases for different scenarios...
+@pytest.mark.asyncio
+async def test_slack_data_source_convert_usernames(slack_data_source):
+    usernames = {"USERID1": "user_one"}
+    message = {"text": "<@USERID1> Hello, <@USERID2>"}
+    channel = {"name": "channel"}
+    slack_data_source.usernames = usernames
+    adapted_message = slack_data_source.adapt_message(message, channel, usernames)
+
+    assert adapted_message["text"] == "<@user_one> Hello, <@USERID2>"
