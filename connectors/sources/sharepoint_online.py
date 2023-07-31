@@ -1660,7 +1660,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         list_item = self._decorate_with_access_control(
                             list_item, site_admin_access_control
                         )
-                        yield list_item, download_func
+                        yield list_item, download_func, OP_INDEX
 
                 # Sync site pages
                 async for site_page in self.site_pages(
@@ -1861,7 +1861,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                     list_item_attachment[
                         "_original_filename"
                     ] = list_item_attachment.get("FileName", "")
-                    list_item_attachment[ACCESS_CONTROL] = list_item[ACCESS_CONTROL]
+                    list_item_attachment[ACCESS_CONTROL] = list_item.get(
+                        ACCESS_CONTROL, []
+                    )
 
                     attachment_download_func = partial(
                         self.get_attachment_content, list_item_attachment
