@@ -677,7 +677,7 @@ class TestExtractionService:
             assert extraction_service._check_configured() is expected_result
 
     @pytest.mark.asyncio
-    async def test_extract_text(self, mock_responses):
+    async def test_extract_text(self, mock_responses, patch_logger):
         filepath = "tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/"
         payload = {"extracted_text": "I've been extracted!"}
@@ -695,9 +695,12 @@ class TestExtractionService:
             await extraction_service._end_session()
 
             assert response == "I've been extracted!"
+            patch_logger.assert_present(
+                "Text extraction is successful for 'notreal.txt'."
+            )
 
     @pytest.mark.asyncio
-    async def test_extract_text_with_file_pointer(self, mock_responses):
+    async def test_extract_text_with_file_pointer(self, mock_responses, patch_logger):
         filepath = "/tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/?local_file_path=/tmp/notreal.txt"
         payload = {"extracted_text": "I've been extracted from a local file!"}
@@ -719,6 +722,9 @@ class TestExtractionService:
             await extraction_service._end_session()
 
             assert response == "I've been extracted from a local file!"
+            patch_logger.assert_present(
+                "Text extraction is successful for 'notreal.txt'."
+            )
 
     @pytest.mark.asyncio
     async def test_extract_text_when_response_isnt_200_logs_warning(
