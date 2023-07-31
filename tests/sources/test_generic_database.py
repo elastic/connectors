@@ -51,6 +51,9 @@ class ConnectionSync:
         """This method returns dummy cursor"""
         return CursorSync(query_object=self.query_object, statement=statement)
 
+    def close(self):
+        pass
+
 
 class CursorSync:
     """This class contains methods which returns dummy response"""
