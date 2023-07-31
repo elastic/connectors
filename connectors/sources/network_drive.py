@@ -309,7 +309,13 @@ class NASDataSource(BaseDataSource):
 
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            matched_paths, _ = self.find_matching_paths(advanced_rules)
+            try:
+                matched_paths, _ = self.find_matching_paths(advanced_rules)
+            except Exception as exception:
+                self._logger.warning(
+                    f"Something went wrong while running advanced rules. Exception: {exception}"
+                )
+                raise
         else:
             matched_paths = (path for path, _, _ in self.get_directory_details)
 
