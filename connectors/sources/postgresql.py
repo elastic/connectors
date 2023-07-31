@@ -129,13 +129,13 @@ class PostgreSQLClient:
 
     async def ping(self):
         return await anext(
-            self.execute_query(
+            self._execute_query(
                 query=self.queries.ping(),
             )
         )
 
     async def get_all_schemas(self):
-        return await anext(self.execute_query(query=self.queries.all_schemas()))
+        return await anext(self._execute_query(query=self.queries.all_schemas()))
 
     async def get_tables_to_fetch(self, schema):
         tables = configured_tables(self.tables)
@@ -143,7 +143,7 @@ class PostgreSQLClient:
             map(
                 lambda table: table[0],  # type: ignore
                 await anext(
-                    self.execute_query(
+                    self._execute_query(
                         query=self.queries.all_tables(
                             database=self.database,
                             schema=schema,
@@ -157,7 +157,7 @@ class PostgreSQLClient:
 
     async def get_table_row_count(self, schema, table):
         [[row_count]] = await anext(
-            self.execute_query(
+            self._execute_query(
                 query=self.queries.table_data_count(
                     schema=schema,
                     table=table,
@@ -168,7 +168,7 @@ class PostgreSQLClient:
 
     async def get_table_primary_key(self, schema, table):
         return await anext(
-            self.execute_query(
+            self._execute_query(
                 query=self.queries.table_primary_key(
                     schema=schema,
                     table=table,
@@ -178,7 +178,7 @@ class PostgreSQLClient:
 
     async def get_table_last_update_time(self, schema, table):
         return await anext(
-            self.execute_query(
+            self._execute_query(
                 query=self.queries.table_last_update_time(
                     schema=schema,
                     table=table,
@@ -199,7 +199,7 @@ class PostgreSQLClient:
         Yields:
             list: It will first yield the column names, then data in each row
         """
-        async for data in self.execute_query(
+        async for data in self._execute_query(
             query=self.queries.table_data(
                 schema=schema,
                 table=table,
@@ -210,7 +210,7 @@ class PostgreSQLClient:
         ):
             yield data
 
-    async def execute_query(self, query, fetch_many=False, **kwargs):
+    async def _execute_query(self, query, fetch_many=False, **kwargs):
         """Executes a query and yield rows
 
         Args:
@@ -408,7 +408,9 @@ class PostgreSQLDataSource(BaseDataSource):
             await self.postgresql_client.ping()
             self._logger.info("Successfully connected to Postgresql.")
         except Exception as e:
-            raise Exception("Can't connect to Postgresql.") from e
+            raise Exception(
+                f"Can't connect to Postgresql on {self.postgresql_client.host}."
+            ) from e
 
     async def fetch_documents(self, table, schema):
         """Fetches all the table entries and format them in Elasticsearch documents
