@@ -1159,12 +1159,12 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "bool",
                 "value": True,
             },
-            "fetch_unique_list_items_permissions": {
+            "fetch_unique_list_item_permissions": {
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
-                "label": "Fetch unique list items permissions",
+                "label": "Fetch unique list item permissions",
                 "order": 11,
-                "tooltip": "Enable this option to fetch unique list items permissions. This setting can increase sync time. If this setting is disabled a list will inherit permissions from its parent site.",
+                "tooltip": "Enable this option to fetch unique list item permissions. This setting can increase sync time. If this setting is disabled a list will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
             },
@@ -1814,7 +1814,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             has_unique_role_assignments = False
 
-            if self.configuration["fetch_unique_list_items_permissions"]:
+            if self.configuration["fetch_unique_list_item_permissions"]:
                 has_unique_role_assignments = (
                     await self.client.site_list_item_has_unique_role_assignments(
                         site_web_url, site_list_name, list_item_natural_id
@@ -1822,9 +1822,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 )
 
                 if has_unique_role_assignments:
-                    self._logger.info(
-                        f'List item with unique role assignments! {list_item["_id"]}'
-                    )
                     self._logger.debug(
                         f"Fetching unique permissions for list item with id '{list_item_natural_id}'. Ignoring parent site permissions."
                     )
@@ -1889,9 +1886,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 )
 
                 if has_unique_role_assignments:
-                    self._logger.info(
-                        f'Site list with unique role assignments! {site_list["_id"]}'
-                    )
                     self._logger.debug(
                         f"Fetching unique list permissions for list with id '{site_list['_id']}'. Ignoring parent site permissions."
                     )
