@@ -307,9 +307,8 @@ class MSSQLDataSource(BaseDataSource):
                 self._logger.warning(
                     f"Something went wrong while removing temporary certificate file. Exception: {exception}"
                 )
-        if self.connection is None:
-            return
-        self.connection.close()
+        if self.connection is not None:
+            self.connection.close()
 
     def create_pem_file(self):
         """Create pem file for SSL Verification"""
@@ -472,8 +471,6 @@ class MSSQLDataSource(BaseDataSource):
                 await anext(
                     self.execute_query(
                         query=self.queries.all_tables(
-                            user=self.user.upper(),
-                            database=self.database,
                             schema=schema,
                         )
                     )
