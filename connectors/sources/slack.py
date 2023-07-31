@@ -7,6 +7,7 @@ import time
 from contextlib import asynccontextmanager
 from functools import partial, wraps
 from aiohttp.client_exceptions import ClientResponseError
+from connectors.utils import CancellableSleeps
 
 
 
@@ -20,23 +21,21 @@ DEFAULT_RETRY_SECONDS = 30
 LIST_CONVERSATIONS = "list_convos"
 JOIN_CONVERSATIONS = "join_convos"
 CONVERSATION_HISTORY = "convo_history"
+CONVERSATION_REPLIES = "threads"
 LIST_USERS = "list_users"
 
 ENDPOINTS = {
     LIST_CONVERSATIONS: "conversations.list",
     JOIN_CONVERSATIONS: "conversations.join",
     CONVERSATION_HISTORY: "conversations.history",
+    CONVERSATION_REPLIES: "conversations.replies",
     LIST_USERS: "users.list",
 }
 
 # TODO list
 # Must haves:
-# - configurable how far back to sync. Default 6 months.
 # - document required scopes
 # - set up vault creds for slack
-# To Verify:
-# - when messages were authored vs edited
-# - threads vs messages
 # Nice to haves:
 # - expand links
 #   - links:read scope needed?
@@ -82,6 +81,7 @@ class SlackClient:
             timeout=aiohttp.ClientTimeout(total=None),
             raise_for_status=True,
         )
+        self._sleeps = CancellableSleeps()
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -126,8 +126,27 @@ class SlackClient:
             for message in response['messages']:
                 latest = message['ts']
                 if message['type'] == 'message':
-                    yield message
+                    if message.get('reply_count', 0) > 0:
+                        async for thread_message in self.list_thread_messages(channel_id, message['ts']):
+                            yield thread_message
+                    else:
+                        yield message
             if not response['has_more']:
+                break
+
+    async def list_thread_messages(self, channel_id, parent_ts):
+        message_batch_limit = 200
+        cursor = None
+        while True:
+            url = f"{BASE_URL}/{ENDPOINTS[CONVERSATION_REPLIES]}?channel={channel_id}&ts={parent_ts}&limit={message_batch_limit}"
+            if cursor:
+                url = self._add_cursor(url, cursor)
+            resonse = await self._get_json(url)
+            for message in resonse['messages']:
+                if message['type'] == 'message':
+                    yield message
+            cursor = self._get_next_cursor(resonse)
+            if not cursor:
                 break
 
     async def list_users(self, cursor=None):
@@ -178,7 +197,7 @@ class SlackClient:
                 )
                 retry_seconds = DEFAULT_RETRY_SECONDS
             self._logger.debug(
-                f"Rate Limited by Slack: retry in {retry_seconds} seconds"
+                f"Rate Limited by Slack: waiting {retry_seconds} seconds before retry..."
             )
 
             await self._sleeps.sleep(retry_seconds)
@@ -338,7 +357,8 @@ class SlackDataSource(BaseDataSource):
         user_id = message.get('user', message.get('bot_id'))
         message['author'] = usernames.get(user_id, user_id)
         message['text'] = re.sub(r"<@([A-Z0-9]+)>", self.convert_usernames, message['text'])
-        message =  self._dict_slice(message, ('client_msg_id', 'text', 'author', 'ts', 'type', 'subtype'))
+        message['edited_ts'] = message.get('edited', {}).get('ts')
+        message =  self._dict_slice(message, ('client_msg_id', 'text', 'author', 'ts', 'edited_ts', 'type', 'subtype', 'reply_count', 'latest_reply', 'thread_ts'))
         message['_id'] = message['client_msg_id']
         return message | {"channel": channel['name']}
 
