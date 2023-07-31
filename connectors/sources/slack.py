@@ -1,15 +1,14 @@
-from connectors.source import BaseDataSource
-
-import aiohttp
 import re
-from datetime import datetime, timedelta
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from functools import partial, wraps
+
+import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
+
+from connectors.source import BaseDataSource
 from connectors.utils import CancellableSleeps
-
-
 
 BASE_URL = "https://slack.com/api"
 
@@ -46,7 +45,7 @@ ENDPOINTS = {
 # - better error handling/retrying
 
 
-def retryable_aiohttp_call(retries): # TODO, make a base client class
+def retryable_aiohttp_call(retries):  # TODO, make a base client class
     # TODO: improve utils.retryable to allow custom logic
     # that can help choose what to retry
     def wrapper(func):
@@ -68,14 +67,16 @@ def retryable_aiohttp_call(retries): # TODO, make a base client class
 
     return wrapper
 
+
 class ThrottledError(Exception):
     """Internal exception class to indicate that request was throttled by the API"""
 
     pass
 
+
 class SlackClient:
     def __init__(self, configuration):
-        self.token = configuration['token']
+        self.token = configuration["token"]
         self._http_session = aiohttp.ClientSession(
             headers=self._headers(),
             timeout=aiohttp.ClientTimeout(total=None),
@@ -85,13 +86,12 @@ class SlackClient:
 
     def set_logger(self, logger_):
         self._logger = logger_
+
     def ping(self):
         return
 
-
     def close(self):
         return
-
 
     async def list_channels(self, only_my_channels, cursor=None):
         conversation_batch_limit = 200
@@ -104,8 +104,8 @@ class SlackClient:
                 url = self._add_cursor(url, cursor)
             response = await self._get_json(url)
 
-            for channel in response['channels']:
-                if only_my_channels and not channel.get('is_member', False):
+            for channel in response["channels"]:
+                if only_my_channels and not channel.get("is_member", False):
                     continue
                 self._logger.debug(f"Yielding channel '{channel['name']}'")
                 yield channel
@@ -118,20 +118,24 @@ class SlackClient:
         return await self._get_json(url)
 
     async def list_messages(self, channel_id, oldest, latest):
-        self._logger.info(f"Fetching messages between {oldest} and {latest} from channel: '{channel_id}'")
+        self._logger.info(
+            f"Fetching messages between {oldest} and {latest} from channel: '{channel_id}'"
+        )
         message_batch_limit = 200
         while True:
             url = f"{BASE_URL}/{ENDPOINTS[CONVERSATION_HISTORY]}?channel={channel_id}&limit={message_batch_limit}&oldest={oldest}&latest={latest}"
             response = await self._get_json(url)
-            for message in response['messages']:
-                latest = message['ts']
-                if message['type'] == 'message':
-                    if message.get('reply_count', 0) > 0:
-                        async for thread_message in self.list_thread_messages(channel_id, message['ts']):
+            for message in response["messages"]:
+                latest = message["ts"]
+                if message["type"] == "message":
+                    if message.get("reply_count", 0) > 0:
+                        async for thread_message in self.list_thread_messages(
+                            channel_id, message["ts"]
+                        ):
                             yield thread_message
                     else:
                         yield message
-            if not response['has_more']:
+            if not response["has_more"]:
                 break
 
     async def list_thread_messages(self, channel_id, parent_ts):
@@ -142,8 +146,8 @@ class SlackClient:
             if cursor:
                 url = self._add_cursor(url, cursor)
             resonse = await self._get_json(url)
-            for message in resonse['messages']:
-                if message['type'] == 'message':
+            for message in resonse["messages"]:
+                if message["type"] == "message":
                     yield message
             cursor = self._get_next_cursor(resonse)
             if not cursor:
@@ -152,11 +156,11 @@ class SlackClient:
     async def list_users(self, cursor=None):
         user_batch_limit = 200
         while True:
-            url =f"{BASE_URL}/{ENDPOINTS[LIST_USERS]}?limit={user_batch_limit}"
+            url = f"{BASE_URL}/{ENDPOINTS[LIST_USERS]}?limit={user_batch_limit}"
             if cursor:
                 url = self._add_cursor(url, cursor)
             response = await self._get_json(url)
-            for member in response['members']:
+            for member in response["members"]:
                 yield member
             cursor = self._get_next_cursor(response)
             if not cursor:
@@ -201,7 +205,7 @@ class SlackClient:
             )
 
             await self._sleeps.sleep(retry_seconds)
-            raise ThrottledError from e # will get retried - important thing is that we just slept
+            raise ThrottledError from e  # will get retried - important thing is that we just slept
         else:
             raise
 
@@ -224,8 +228,8 @@ class SlackDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
         self.slack_client = SlackClient(configuration)
-        self.auto_join_channels = configuration['auto_join_channels']
-        self.n_days_to_fetch = configuration['fetch_last_n_days']
+        self.auto_join_channels = configuration["auto_join_channels"]
+        self.n_days_to_fetch = configuration["fetch_last_n_days"]
 
     def _set_internal_logger(self):
         self.slack_client.set_logger(self._logger)
@@ -266,7 +270,6 @@ class SlackDataSource(BaseDataSource):
                 "display": "toggle",
                 "value": True,
             }
-            # TODO, configure which channels?
         }
 
     async def ping(self):
@@ -279,12 +282,11 @@ class SlackDataSource(BaseDataSource):
         self._logger.info("Fetching all users")
         self.usernames = {}
         async for user in self.slack_client.list_users():
-            self.usernames[user['id']] = self.get_username(user)
-            if self.configuration['sync_users']:
+            self.usernames[user["id"]] = self.get_username(user)
+            if self.configuration["sync_users"]:
                 yield self.adapt_user(user), None
         async for message in self.channels_and_messages(self.usernames):
             yield message, None
-
 
     async def channels_and_messages(self, usernames):
         """
@@ -295,73 +297,127 @@ class SlackDataSource(BaseDataSource):
         delta = timedelta(days=self.n_days_to_fetch)
         past_unix_timestamp = time.mktime((datetime.utcnow() - delta).timetuple())
         current_unix_timestamp = time.mktime(datetime.utcnow().timetuple())
-        async for channel in self.slack_client.list_channels(not self.auto_join_channels):
+        async for channel in self.slack_client.list_channels(
+            not self.auto_join_channels
+        ):
             self._logger.info(f"Listed channel: '{channel['name']}'")
             yield self.adapt_channel(channel, usernames)
-            channel_id = channel['id']
+            channel_id = channel["id"]
             if self.auto_join_channels:
-                join_response = await self.slack_client.join_channel(channel_id) # can't get channel content if the bot is not in the channel
+                join_response = await self.slack_client.join_channel(
+                    channel_id
+                )  # can't get channel content if the bot is not in the channel
             if not self.auto_join_channels or join_response.get("ok"):
-                async for message in self.slack_client.list_messages(channel_id, past_unix_timestamp, current_unix_timestamp):
+                async for message in self.slack_client.list_messages(
+                    channel_id, past_unix_timestamp, current_unix_timestamp
+                ):
                     yield self.adapt_message(message, channel, usernames)
             else:
-                self._logger.warning(f"Not syncing channel: '{channel['name']}' because: {join_response.get('error')}")
-
-
+                self._logger.warning(
+                    f"Not syncing channel: '{channel['name']}' because: {join_response.get('error')}"
+                )
 
     def get_username(self, user):
-        user_profile = user.get('profile', {})
-        if user_profile.get('display_name_normalized'):
-            return user_profile['display_name_normalized']
-        elif user_profile.get('real_name_normalized'):
-            return user_profile['real_name_normalized']
-        elif user.get('real_name'):
-            return user['real_name']
-        elif user.get('name'):
-            return user['name']
+        user_profile = user.get("profile", {})
+        if user_profile.get("display_name_normalized"):
+            return user_profile["display_name_normalized"]
+        elif user_profile.get("real_name_normalized"):
+            return user_profile["real_name_normalized"]
+        elif user.get("real_name"):
+            return user["real_name"]
+        elif user.get("name"):
+            return user["name"]
         else:
-            return user['id']
-
+            return user["id"]
 
     def adapt_user(self, user):
-        user_profile = user.get('profile', {})
-        user['real_name_normalized'] = user_profile.get("real_name_normalized")
-        user['profile_real_name'] = user_profile.get("real_name")
-        user['display_name'] = user_profile.get("display_name")
-        user['display_name_normalized'] = user_profile.get("display_name_normalized")
-        user['first_name'] = user_profile.get("first_name")
-        user['last_name'] = user_profile.get("last_name")
-        user = self._dict_slice(user, ('id', 'name', 'deleted', 'real_name', 'real_name_normalized', 'profile_real_name', 'display_name', 'display_name_normalized', 'first_name', 'last_name', 'is_admin', 'is_owner', 'is_bot'))
-        user ['_id'] = user['id']
-        user ['type'] = 'user'
+        user_profile = user.get("profile", {})
+        user["real_name_normalized"] = user_profile.get("real_name_normalized")
+        user["profile_real_name"] = user_profile.get("real_name")
+        user["display_name"] = user_profile.get("display_name")
+        user["display_name_normalized"] = user_profile.get("display_name_normalized")
+        user["first_name"] = user_profile.get("first_name")
+        user["last_name"] = user_profile.get("last_name")
+        user = self._dict_slice(
+            user,
+            (
+                "id",
+                "name",
+                "deleted",
+                "real_name",
+                "real_name_normalized",
+                "profile_real_name",
+                "display_name",
+                "display_name_normalized",
+                "first_name",
+                "last_name",
+                "is_admin",
+                "is_owner",
+                "is_bot",
+            ),
+        )
+        user["_id"] = user["id"]
+        user["type"] = "user"
         return user
 
     def adapt_channel(self, channel, usernames):
-        topic = channel.get('topic', {})
-        topic_creator_id = topic.get('creator')
-        purpose = channel.get('purpose', {})
-        purpose_creator_id = purpose.get('creator')
-        channel['topic'] = topic.get('value')
-        channel['topic_author'] = usernames.get(topic_creator_id, topic_creator_id)
-        channel['topic_last_updated'] = topic.get('last_set')
-        channel['purpose'] = purpose.get('value')
-        channel['purpose_author'] = usernames.get(purpose_creator_id, purpose_creator_id)
-        channel['purpose_last_updated'] = purpose.get('last_set')
-        channel['last_updated'] = channel.get('updated')
-        channel = self._dict_slice(channel, ('id', 'name', 'name_normalized', 'topic', 'topic_author', 'topic_last_updated', 'purpose', 'purpose_author', 'purpose_last_updated', 'last_updated', 'created'))
-        channel['_id'] = channel['id']
-        channel['type'] = 'channel'
+        topic = channel.get("topic", {})
+        topic_creator_id = topic.get("creator")
+        purpose = channel.get("purpose", {})
+        purpose_creator_id = purpose.get("creator")
+        channel["topic"] = topic.get("value")
+        channel["topic_author"] = usernames.get(topic_creator_id, topic_creator_id)
+        channel["topic_last_updated"] = topic.get("last_set")
+        channel["purpose"] = purpose.get("value")
+        channel["purpose_author"] = usernames.get(
+            purpose_creator_id, purpose_creator_id
+        )
+        channel["purpose_last_updated"] = purpose.get("last_set")
+        channel["last_updated"] = channel.get("updated")
+        channel = self._dict_slice(
+            channel,
+            (
+                "id",
+                "name",
+                "name_normalized",
+                "topic",
+                "topic_author",
+                "topic_last_updated",
+                "purpose",
+                "purpose_author",
+                "purpose_last_updated",
+                "last_updated",
+                "created",
+            ),
+        )
+        channel["_id"] = channel["id"]
+        channel["type"] = "channel"
         return channel
 
     def adapt_message(self, message, channel, usernames):
-        user_id = message.get('user', message.get('bot_id'))
-        message['author'] = usernames.get(user_id, user_id)
-        message['text'] = re.sub(r"<@([A-Z0-9]+)>", self.convert_usernames, message['text'])
-        message['edited_ts'] = message.get('edited', {}).get('ts')
-        message =  self._dict_slice(message, ('client_msg_id', 'text', 'author', 'ts', 'edited_ts', 'type', 'subtype', 'reply_count', 'latest_reply', 'thread_ts'))
-        message['_id'] = message['client_msg_id']
-        return message | {"channel": channel['name']}
-
+        user_id = message.get("user", message.get("bot_id"))
+        message["author"] = usernames.get(user_id, user_id)
+        message["text"] = re.sub(
+            r"<@([A-Z0-9]+)>", self.convert_usernames, message["text"]
+        )
+        message["edited_ts"] = message.get("edited", {}).get("ts")
+        message = self._dict_slice(
+            message,
+            (
+                "client_msg_id",
+                "text",
+                "author",
+                "ts",
+                "edited_ts",
+                "type",
+                "subtype",
+                "reply_count",
+                "latest_reply",
+                "thread_ts",
+            ),
+        )
+        message["_id"] = message["client_msg_id"]
+        return message | {"channel": channel["name"]}
 
     def convert_usernames(self, match_obj):
         if match_obj.group(1) is not None:
@@ -369,5 +425,3 @@ class SlackDataSource(BaseDataSource):
 
     def _dict_slice(self, hsh, keys):
         return {k: hsh.get(k) for k in keys}
-
-
