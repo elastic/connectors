@@ -28,9 +28,8 @@ service:
 
 connectors:
   -
-    connector_id: 'sharepoint_online'
-    service_type: 'sharepoint_online'
+    connector_id: 'dropbox'
+    service_type: 'dropbox'
 
 sources:
-  sharepoint_online: connectors.sources.sharepoint_online:SharepointOnlineDataSource
-
+  dropbox: connectors.sources.dropbox:DropboxDataSource
