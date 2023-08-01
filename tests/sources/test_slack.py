@@ -133,7 +133,8 @@ async def test_slack_client_list_users(slack_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_handle_throttled_error(slack_client, mock_responses):
+@patch("connectors.utils.apply_retry_strategy")
+async def test_handle_throttled_error(mock_apply_retry_strategy, slack_client, mock_responses):
     error_response_data = {"error": "rate_limited"}
     response_data = {"messages": [{"text": "message", "type": "message"}]}
     mock_responses.get(
@@ -168,7 +169,8 @@ async def test_ping(slack_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_bad_ping(slack_client, mock_responses):
+@patch("connectors.utils.apply_retry_strategy")
+async def test_bad_ping(mock_apply_retry_strategy, slack_client, mock_responses):
     response_data = {"error": "not_authed"}
     mock_responses.get(
         "https://slack.com/api/auth.test",
