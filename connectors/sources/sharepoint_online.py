@@ -1211,7 +1211,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         self._logger.debug(f"Looking at site: {site['id']}")
         if not self._dls_enabled():
-            return list(), list()
+            return [], []
 
         def _is_site_admin(user):
             return user.get("IsSiteAdmin", False)
