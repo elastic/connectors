@@ -93,7 +93,7 @@ The connector syncs the following objects and entities:
 
 ## Advanced Sync Rules
 
-Advanced Sync Rules are now available in elastic 8.10 version.
+Advanced Sync Rules are available in 8.10+.
 
 - Users can add [Github queries](https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests) for syncing the source.
 - All the data returned by queries will be indexed.
