@@ -5,6 +5,7 @@
 - [Confluence](https://www.elastic.co/guide/en/enterprise-search/master/connectors-confluence.html)
 - [Dropbox](https://www.elastic.co/guide/en/enterprise-search/master/connectors-dropbox.html)
 - [Google Cloud Storage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-google-cloud.html)
+- [Google Drive](https://www.elastic.co/guide/en/enterprise-search/master/connectors-google-drive.html)
 - [Jira](https://www.elastic.co/guide/en/enterprise-search/master/connectors-jira.html)
 - [Microsoft SQL](https://www.elastic.co/guide/en/enterprise-search/master/connectors-ms-sql.html)
 - [MongoDB](https://www.elastic.co/guide/en/enterprise-search/master/connectors-mongodb.html)
