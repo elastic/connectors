@@ -403,6 +403,7 @@ def test_fetch_file_when_file_is_accessible(file_mock):
     assert response.read() == b"Mock...."
 
 
+@pytest.mark.asyncio
 async def test_close_without_session():
     source = create_source(NASDataSource)
 
