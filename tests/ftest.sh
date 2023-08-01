@@ -25,7 +25,7 @@ export DATA_SIZE="${DATA_SIZE:-medium}"
 export RUNNING_FTEST=True
 export VERSION='8.10.0-SNAPSHOT'
 
-if [ "$PERF8_TRACE" = true ]; then
+if [ "$PERF8_TRACE" == true ]; then
     echo 'Tracing is enabled, memray stats will be delivered'
     PLUGINS='--asyncstats --memray --psutil'
 else
