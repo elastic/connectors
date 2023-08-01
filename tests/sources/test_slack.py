@@ -7,6 +7,8 @@
 from unittest.mock import ANY, Mock, patch
 
 import pytest
+import pytest_asyncio
+from aiohttp.client_exceptions import ClientError
 
 from connectors.logger import logger
 from connectors.sources.slack import SlackClient, SlackDataSource
@@ -21,7 +23,7 @@ configuration = {
 }
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 def slack_client():
     client = SlackClient(configuration)
     client.set_logger(logger)
@@ -29,7 +31,7 @@ def slack_client():
     client.close()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 def slack_data_source():
     source = create_source(SlackDataSource, **configuration)
     source.set_logger(logger)
@@ -154,6 +156,29 @@ async def test_handle_throttled_error(slack_client, mock_responses):
     assert docs[0]["text"] == "message"
 
 
+@pytest.mark.asyncio
+async def test_ping(slack_client, mock_responses):
+    response_data = {"ok": True}
+    mock_responses.get(
+        "https://slack.com/api/auth.test",
+        status=200,
+        payload=response_data,
+    )
+    assert await slack_client.ping()
+
+
+@pytest.mark.asyncio
+async def test_bad_ping(slack_client, mock_responses):
+    response_data = {"error": "not_authed"}
+    mock_responses.get(
+        "https://slack.com/api/auth.test",
+        status=401,
+        payload=response_data,
+    )
+    with pytest.raises(ClientError):
+        await slack_client.ping()
+
+
 # Tests for SlackDataSource
 
 
@@ -161,7 +186,7 @@ async def test_handle_throttled_error(slack_client, mock_responses):
 async def test_slack_data_source_get_docs(slack_data_source, mock_responses):
     users_response = [{"id": "user1"}]
     channels_response = [{"id": "1", "name": "channel1"}]
-    messages_response = [{"text": "message1", "type": "message"}]
+    messages_response = [{"text": "message1", "type": "message", "client_msg_id": 1}]
 
     slack_client = Mock()
     slack_client.list_users = AsyncIterator(users_response)
@@ -182,9 +207,9 @@ async def test_slack_data_source_get_docs(slack_data_source, mock_responses):
 @pytest.mark.asyncio
 async def test_slack_data_source_convert_usernames(slack_data_source):
     usernames = {"USERID1": "user_one"}
-    message = {"text": "<@USERID1> Hello, <@USERID2>"}
+    message = {"text": "<@USERID1> Hello, <@USERID2>", "client_msg_id": 1}
     channel = {"name": "channel"}
     slack_data_source.usernames = usernames
-    adapted_message = slack_data_source.adapt_message(message, channel, usernames)
+    remapped_message = slack_data_source.remap_message(message, channel)
 
-    assert adapted_message["text"] == "<@user_one> Hello, <@USERID2>"
+    assert remapped_message["text"] == "<@user_one> Hello, <@USERID2>"
