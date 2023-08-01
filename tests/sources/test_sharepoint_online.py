@@ -1245,32 +1245,69 @@ class TestSharepointOnlineClient:
         assert len(role_assignments) == 0
 
     @pytest.mark.asyncio
-    async def test_site_list_item_role_assignments(self, client, patch_fetch):
+    async def test_site_list_item_has_unique_role_assignments(
+        self, client, patch_fetch
+    ):
         site_list_item_role_assignments_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
         list_title = "list_title"
         list_item_id = 1
 
-        role_assignments = {"value": ["role"]}
+        patch_fetch.return_value = {"value": True}
 
-        patch_fetch.return_value = role_assignments
-
-        actual_role_assignments = await client.site_list_item_role_assignments(
+        assert await client.site_list_item_has_unique_role_assignments(
             site_list_item_role_assignments_url, list_title, list_item_id
+        )
+
+    @pytest.mark.asyncio
+    async def test_site_list_item_has_unique_role_assignments_not_found(
+        self, client, patch_fetch
+    ):
+        site_list_item_role_assignments_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
+        list_title = "list_title"
+        list_item_id = 1
+
+        patch_fetch.side_effect = NotFound()
+
+        assert not await client.site_list_item_has_unique_role_assignments(
+            site_list_item_role_assignments_url, list_title, list_item_id
+        )
+
+    @pytest.mark.asyncio
+    async def test_site_list_item_role_assignments(self, client, patch_scroll):
+        site_list_item_role_assignments_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
+        list_title = "list_title"
+        list_item_id = 1
+
+        role_assignments = [{"value": ["role"]}]
+
+        actual_role_assignments = await self._execute_scrolling_method(
+            partial(
+                client.site_list_item_role_assignments,
+                site_list_item_role_assignments_url,
+                list_title,
+                list_item_id,
+            ),
+            patch_scroll,
+            role_assignments,
         )
 
         assert actual_role_assignments == role_assignments
 
     @pytest.mark.asyncio
-    async def test_site_list_item_role_assignments_not_found(self, client, patch_fetch):
+    async def test_site_list_item_role_assignments_not_found(
+        self, client, patch_scroll
+    ):
         site_list_item_role_assignments_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
         list_title = "list_title"
         list_item_id = 1
 
-        patch_fetch.side_effect = NotFound
+        patch_scroll.side_effect = NotFound
 
-        role_assignments = await client.site_list_item_role_assignments(
+        role_assignments = []
+        async for role_assignment in client.site_list_item_role_assignments(
             site_list_item_role_assignments_url, list_title, list_item_id
-        )
+        ):
+            role_assignments.append(role_assignment)
 
         assert len(role_assignments) == 0
 
@@ -1674,6 +1711,10 @@ class TestSharepointOnlineDataSource:
         return {"value": ["role"]}
 
     @property
+    def site_list_item_has_unique_role_assignments(self):
+        return True
+
+    @property
     def site_page_has_unique_role_assignments(self):
         return True
 
@@ -1810,8 +1851,11 @@ class TestSharepointOnlineDataSource:
             client.site_list_role_assignments = AsyncIterator(
                 [self.site_list_role_assignments]
             )
-            client.site_list_item_role_assignments = AsyncMock(
-                return_value=self.site_list_item_role_assignments
+            client.site_list_item_role_assignments = AsyncIterator(
+                [self.site_list_item_role_assignments]
+            )
+            client.site_list_item_has_unique_role_assignments = AsyncMock(
+                return_value=self.site_list_item_has_unique_role_assignments
             )
             client.site_page_has_unique_role_assignments = AsyncMock(
                 return_value=self.site_page_has_unique_role_assignments
