@@ -72,7 +72,7 @@ class SalesforceClient:
         self.token = resp_json["access_token"]
         self.token_issued_at = resp_json["issued_at"]
         self.token_refresh_enabled = enable_refresh
-        self._logger.debug(f"Salesforce token retrieved.")
+        self._logger.debug("Salesforce token retrieved.")
 
     @retryable(
         retries=RETRIES,
@@ -93,11 +93,13 @@ class SalesforceClient:
                     "Type",
                     "Website",
                     "Rating",
+                    "Department",
                 ]
             )
         )
-
         query = query_builder.build()
+
+        # TODO handle pagination
         resp = await self._yield_non_bulk_query_pages(query)
         resp_json = await resp.json()
         for record in resp_json.get("records", []):
