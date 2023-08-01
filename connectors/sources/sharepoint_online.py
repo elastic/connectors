@@ -1164,7 +1164,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Fetch unique list item permissions",
                 "order": 11,
-                "tooltip": "Enable this option to fetch unique list item permissions. This setting can increase sync time. If this setting is disabled a list will inherit permissions from its parent site.",
+                "tooltip": "Enable this option to fetch unique list item permissions. This setting can increase sync time. If this setting is disabled a list item will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
             },
