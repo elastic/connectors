@@ -14,7 +14,7 @@ from connectors.source import ConfigurableFieldValueError, DataSourceConfigurati
 from connectors.sources import github
 from connectors.sources.github import GitHubDataSource, UnauthorizedException
 from tests.commons import AsyncIterator
-from tests.sources.support import create_source
+from tests.sources.support import AsyncSourceContextManager, create_source
 
 MOCK_RESPONSE_REPO = {
     "_id": "625848393",
@@ -172,35 +172,34 @@ def test_get_default_configuration():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["repositories", "github_token"])
 async def test_validate_config_missing_fields_then_raise(field):
-    source = create_source(GitHubDataSource)
-    source.configuration.set_field(name=field, value="")
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        source.configuration.set_field(name=field, value="")
 
-    with pytest.raises(ConfigurableFieldValueError):
-        await source.validate_config()
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
 
 
 @pytest.mark.asyncio
 async def test_ping_with_successful_connection():
-    source = create_source(GitHubDataSource)
-    source.github_client._get_client.getitem = mock.AsyncMock(
-        return_value={"user": "username"}
-    )
-    await source.ping()
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        source.github_client._get_client.getitem = mock.AsyncMock(
+            return_value={"user": "username"}
+        )
+        await source.ping()
 
 
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_ping_with_unsuccessful_connection(mock_apply_retry_strategy):
-    source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    with mock.patch.object(
-        source.github_client,
-        "ping",
-        side_effect=Exception("Something went wrong"),
-    ):
-        with pytest.raises(Exception):
-            await source.ping()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        mock_apply_retry_strategy.return_value = mock.Mock()
+        with mock.patch.object(
+            source.github_client,
+            "ping",
+            side_effect=Exception("Something went wrong"),
+        ):
+            with pytest.raises(Exception):
+                await source.ping()
 
 
 @pytest.mark.asyncio
@@ -220,30 +219,28 @@ async def test_close_with_session():
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_validate_config_with_invalid_token_then_raise(mock_apply_retry_strategy):
-    source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    source.github_client._get_client._request = mock.AsyncMock(
-        return_value=(200, {"X-OAuth-Scopes": ""}, {"user": "username"})
-    )
-    with pytest.raises(
-        ConfigurableFieldValueError,
-        match="Configured token does not have required rights to fetch the content",
-    ):
-        await source.validate_config()
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        mock_apply_retry_strategy.return_value = mock.Mock()
+        source.github_client._get_client._request = mock.AsyncMock(
+            return_value=(200, {"X-OAuth-Scopes": ""}, {"user": "username"})
+        )
+        with pytest.raises(
+            ConfigurableFieldValueError,
+            match="Configured token does not have required rights to fetch the content",
+        ):
+            await source.validate_config()
 
 
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_validate_config_with_unauthorized_user(mock_apply_retry_strategy):
-    source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    source.github_client.get_response_headers = mock.AsyncMock(
-        return_value={"X-OAuth-Scopes": ""}
-    )
-    with pytest.raises(ConfigurableFieldValueError):
-        await source.validate_config()
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        mock_apply_retry_strategy.return_value = mock.Mock()
+        source.github_client.get_response_headers = mock.AsyncMock(
+            return_value={"X-OAuth-Scopes": ""}
+        )
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
 
 
 @pytest.mark.asyncio
@@ -251,92 +248,91 @@ async def test_validate_config_with_unauthorized_user(mock_apply_retry_strategy)
 async def test_validate_config_with_inaccessible_repositories_then_raise(
     mock_apply_retry_strategy,
 ):
-    source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    source.github_client.repos = ["repo1", "owner1/repo1", "repo2", "owner2/repo2"]
-    source.github_client.get_response_headers = mock.AsyncMock(
-        return_value={"X-OAuth-Scopes": "repo"}
-    )
-    source.get_invalid_repos = mock.AsyncMock(return_value=["repo2"])
-    with pytest.raises(ConfigurableFieldValueError):
-        await source.validate_config()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        mock_apply_retry_strategy.return_value = mock.Mock()
+        source.github_client.repos = ["repo1", "owner1/repo1", "repo2", "owner2/repo2"]
+        source.github_client.get_response_headers = mock.AsyncMock(
+            return_value={"X-OAuth-Scopes": "repo"}
+        )
+        source.get_invalid_repos = mock.AsyncMock(return_value=["repo2"])
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
 
 
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_get_invalid_repos_with_max_retries(mock_apply_retry_strategy):
-    source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    with pytest.raises(Exception):
-        source.github_client.get_paginated_response = Exception()
-        await source.get_invalid_repos()
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        mock_apply_retry_strategy.return_value = mock.Mock()
+        with pytest.raises(Exception):
+            source.github_client.get_paginated_response = Exception()
+            await source.get_invalid_repos()
 
 
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_get_response_headers_with_rate_limit_exceeded(mock_apply_retry_strategy):
-    source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    with mock.patch.object(
-        source.github_client._get_client,
-        "_request",
-        side_effect=[
-            (403, {"X-OAuth-Scopes": ""}, b'{"message": "API rate limit is exceeded"}'),
-            (200, {"X-OAuth-Scopes": ""}, {"user": "username"}),
-        ],
-    ):
-        source.github_client._get_retry_after = mock.AsyncMock(return_value=0)
-        await source.github_client.get_response_headers(
-            method="GET", url=github.ENDPOINTS["USER"]
-        )
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        mock_apply_retry_strategy.return_value = mock.Mock()
+        with mock.patch.object(
+            source.github_client._get_client,
+            "_request",
+            side_effect=[
+                (
+                    403,
+                    {"X-OAuth-Scopes": ""},
+                    b'{"message": "API rate limit is exceeded"}',
+                ),
+                (200, {"X-OAuth-Scopes": ""}, {"user": "username"}),
+            ],
+        ):
+            source.github_client._get_retry_after = mock.AsyncMock(return_value=0)
+            await source.github_client.get_response_headers(
+                method="GET", url=github.ENDPOINTS["USER"]
+            )
 
 
 @pytest.mark.asyncio
 async def test_get_retry_after():
-    source = create_source(GitHubDataSource)
-    source.github_client._get_client.getitem = mock.AsyncMock(
-        {"resource": {"code": {"reset": 1686563525}}}
-    )
-    await source.github_client._get_retry_after()
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        source.github_client._get_client.getitem = mock.AsyncMock(
+            {"resource": {"code": {"reset": 1686563525}}}
+        )
+        await source.github_client._get_retry_after()
 
 
 @pytest.mark.asyncio
 async def test_get_paginated_response():
     expected_response = {"name": "repo1"}
-    source = create_source(GitHubDataSource)
-    with mock.patch.object(
-        source.github_client, "get_response", side_effect=[[{"name": "repo1"}], []]
-    ):
-        async for data in source.github_client.get_paginated_response(
-            github.ENDPOINTS["ALL_REPOS"]
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        with mock.patch.object(
+            source.github_client, "get_response", side_effect=[[{"name": "repo1"}], []]
         ):
-            assert expected_response == data
-    await source.close()
+            async for data in source.github_client.get_paginated_response(
+                github.ENDPOINTS["ALL_REPOS"]
+            ):
+                assert expected_response == data
 
 
 @pytest.mark.asyncio
 async def test_get_invalid_repos():
     expected_response = ["owner1/repo2", "owner2/repo2"]
-    source = create_source(GitHubDataSource)
-    source.github_client.repos = ["repo1", "owner1/repo1", "repo2", "owner2/repo2"]
-    source.github_client.get_user_repos = mock.Mock(
-        return_value=AsyncIterator([{"full_name": "owner1/repo1"}])
-    )
-    with mock.patch.object(
-        source.github_client,
-        "get_response",
-        side_effect=[
-            {"login": "owner1"},
-            {"name": "repo1"},
-            BadRequest(status_code=HTTPStatus.NOT_FOUND),
-        ],
-    ):
-        invalid_repos = await source.get_invalid_repos()
-        assert expected_response == invalid_repos
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        source.github_client.repos = ["repo1", "owner1/repo1", "repo2", "owner2/repo2"]
+        source.github_client.get_user_repos = mock.Mock(
+            return_value=AsyncIterator([{"full_name": "owner1/repo1"}])
+        )
+        with mock.patch.object(
+            source.github_client,
+            "get_response",
+            side_effect=[
+                {"login": "owner1"},
+                {"name": "repo1"},
+                BadRequest(status_code=HTTPStatus.NOT_FOUND),
+            ],
+        ):
+            invalid_repos = await source.get_invalid_repos()
+            assert expected_response == invalid_repos
 
 
 @pytest.mark.asyncio
@@ -346,272 +342,266 @@ async def test_get_content_with_text_file():
         "_timestamp": "2023-04-17T12:55:01Z",
         "_attachment": "VGVzdCBGaWxlICEhISDwn5iCCg==",
     }
-    source = create_source(GitHubDataSource)
-    with mock.patch.object(
-        source.github_client,
-        "get_response",
-        side_effect=[MOCK_RESPONSE_ATTACHMENTS[1]],
-    ):
-        actual_response = await source.get_content(
-            attachment=MOCK_ATTACHMENT, doit=True
-        )
-        assert actual_response == expected_response
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        with mock.patch.object(
+            source.github_client,
+            "get_response",
+            side_effect=[MOCK_RESPONSE_ATTACHMENTS[1]],
+        ):
+            actual_response = await source.get_content(
+                attachment=MOCK_ATTACHMENT, doit=True
+            )
+            assert actual_response == expected_response
 
 
 @pytest.mark.asyncio
 async def test_get_content_with_file_size_zero():
-    source = create_source(GitHubDataSource)
-
-    attachment_with_size_zero = MOCK_ATTACHMENT.copy()
-    attachment_with_size_zero["size"] = 0
-    response = await source.get_content(attachment=attachment_with_size_zero, doit=True)
-    assert response is None
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        attachment_with_size_zero = MOCK_ATTACHMENT.copy()
+        attachment_with_size_zero["size"] = 0
+        response = await source.get_content(
+            attachment=attachment_with_size_zero, doit=True
+        )
+        assert response is None
 
 
 @pytest.mark.asyncio
 async def test_get_content_with_file_without_extension():
-    source = create_source(GitHubDataSource)
-
-    attachment_without_extension = MOCK_ATTACHMENT.copy()
-    attachment_without_extension["name"] = "demo"
-    attachment_without_extension["extension"] = ""
-    response = await source.get_content(
-        attachment=attachment_without_extension, doit=True
-    )
-    assert response is None
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        attachment_without_extension = MOCK_ATTACHMENT.copy()
+        attachment_without_extension["name"] = "demo"
+        attachment_without_extension["extension"] = ""
+        response = await source.get_content(
+            attachment=attachment_without_extension, doit=True
+        )
+        assert response is None
 
 
 @pytest.mark.asyncio
 async def test_get_content_with_large_file_size():
-    source = create_source(GitHubDataSource)
-
-    attachment_with_large_size = MOCK_ATTACHMENT.copy()
-    attachment_with_large_size["size"] = 23000000
-    response = await source.get_content(
-        attachment=attachment_with_large_size, doit=True
-    )
-    assert response is None
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        attachment_with_large_size = MOCK_ATTACHMENT.copy()
+        attachment_with_large_size["size"] = 23000000
+        response = await source.get_content(
+            attachment=attachment_with_large_size, doit=True
+        )
+        assert response is None
 
 
 @pytest.mark.asyncio
 async def test_get_content_with_unsupported_tika_file_type_then_skip():
-    source = create_source(GitHubDataSource)
-
-    attachment_with_unsupported_tika_extension = MOCK_ATTACHMENT.copy()
-    attachment_with_unsupported_tika_extension["name"] = "screenshot.png"
-    attachment_with_unsupported_tika_extension["extension"] = ".png"
-    response = await source.get_content(
-        attachment=attachment_with_unsupported_tika_extension, doit=True
-    )
-    assert response is None
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        attachment_with_unsupported_tika_extension = MOCK_ATTACHMENT.copy()
+        attachment_with_unsupported_tika_extension["name"] = "screenshot.png"
+        attachment_with_unsupported_tika_extension["extension"] = ".png"
+        response = await source.get_content(
+            attachment=attachment_with_unsupported_tika_extension, doit=True
+        )
+        assert response is None
 
 
 @pytest.mark.asyncio
 async def test_fetch_repos():
-    source = create_source(GitHubDataSource)
-    mock_repo = MOCK_RESPONSE_REPO.copy()
-    mock_repo["id"] = mock_repo.pop("_id")
-    mock_repo["updated_at"] = mock_repo.pop("_timestamp")
-    mock_repo["owner"] = {"login": "demo_user"}
-    mock_repo["default_branch"] = "main"
-    source.github_client.get_paginated_response = mock.Mock(
-        return_value=AsyncIterator([mock_repo])
-    )
-    async for repo in source.fetch_repos():
-        assert repo == MOCK_RESPONSE_REPO
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        mock_repo = MOCK_RESPONSE_REPO.copy()
+        mock_repo["id"] = mock_repo.pop("_id")
+        mock_repo["updated_at"] = mock_repo.pop("_timestamp")
+        mock_repo["owner"] = {"login": "demo_user"}
+        mock_repo["default_branch"] = "main"
+        source.github_client.get_paginated_response = mock.Mock(
+            return_value=AsyncIterator([mock_repo])
+        )
+        async for repo in source.fetch_repos():
+            assert repo == MOCK_RESPONSE_REPO
 
 
 @pytest.mark.asyncio
 async def test_fetch_repos_when_user_repos_is_available():
-    source = create_source(GitHubDataSource)
-    mock_repo = MOCK_RESPONSE_REPO.copy()
-    mock_repo["id"] = mock_repo.pop("_id")
-    mock_repo["updated_at"] = mock_repo.pop("_timestamp")
-    mock_repo["owner"] = {"login": "demo_user"}
-    mock_repo["default_branch"] = "main"
-    source.user_repos = {"demo_user/mock_repo": mock_repo}
-    async for repo in source.fetch_repos():
-        assert repo == MOCK_RESPONSE_REPO
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        mock_repo = MOCK_RESPONSE_REPO.copy()
+        mock_repo["id"] = mock_repo.pop("_id")
+        mock_repo["updated_at"] = mock_repo.pop("_timestamp")
+        mock_repo["owner"] = {"login": "demo_user"}
+        mock_repo["default_branch"] = "main"
+        source.user_repos = {"demo_user/mock_repo": mock_repo}
+        async for repo in source.fetch_repos():
+            assert repo == MOCK_RESPONSE_REPO
 
 
 @pytest.mark.asyncio
 async def test_fetch_repos_with_unauthorized_exception():
-    source = create_source(GitHubDataSource)
-    source.github_client.get_paginated_response = mock.Mock(
-        side_effect=UnauthorizedException()
-    )
-    with pytest.raises(UnauthorizedException):
-        async for _ in source.fetch_repos():
-            pass
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        source.github_client.get_paginated_response = mock.Mock(
+            side_effect=UnauthorizedException()
+        )
+        with pytest.raises(UnauthorizedException):
+            async for _ in source.fetch_repos():
+                pass
 
 
 @pytest.mark.asyncio
 async def test_fetch_repos_with_configured_repos():
     user = {"login": "demo_user"}
-    source = create_source(GitHubDataSource)
-    source.github_client.repos = ["demo_repo"]
-    source.user = None
-    mock_repo = MOCK_RESPONSE_REPO.copy()
-    mock_repo["id"] = mock_repo.pop("_id")
-    mock_repo["updated_at"] = mock_repo.pop("_timestamp")
-    mock_repo["owner"] = user
-    with mock.patch.object(
-        source.github_client,
-        "get_response",
-        side_effect=[user, mock_repo],
-    ):
-        async for repo in source.fetch_repos():
-            assert repo == MOCK_RESPONSE_REPO
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        source.github_client.repos = ["demo_repo"]
+        source.user = None
+        mock_repo = MOCK_RESPONSE_REPO.copy()
+        mock_repo["id"] = mock_repo.pop("_id")
+        mock_repo["updated_at"] = mock_repo.pop("_timestamp")
+        mock_repo["owner"] = user
+        with mock.patch.object(
+            source.github_client,
+            "get_response",
+            side_effect=[user, mock_repo],
+        ):
+            async for repo in source.fetch_repos():
+                assert repo == MOCK_RESPONSE_REPO
 
 
 @pytest.mark.asyncio
 async def test_fetch_repos_when_foreign_repo_is_available():
     user = {"login": "demo_user"}
-    source = create_source(GitHubDataSource)
-    source.github_client.repos = ["demo_user/demo_repo"]
-    source.user = "demo_user"
-    mock_repo = MOCK_RESPONSE_REPO.copy()
-    mock_repo["id"] = mock_repo.pop("_id")
-    mock_repo["updated_at"] = mock_repo.pop("_timestamp")
-    mock_repo["owner"] = user
-    source.foreign_repos = {"demo_user/demo_repo": mock_repo}
-    async for repo in source.fetch_repos():
-        assert repo == MOCK_RESPONSE_REPO
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        source.github_client.repos = ["demo_user/demo_repo"]
+        source.user = "demo_user"
+        mock_repo = MOCK_RESPONSE_REPO.copy()
+        mock_repo["id"] = mock_repo.pop("_id")
+        mock_repo["updated_at"] = mock_repo.pop("_timestamp")
+        mock_repo["owner"] = user
+        source.foreign_repos = {"demo_user/demo_repo": mock_repo}
+        async for repo in source.fetch_repos():
+            assert repo == MOCK_RESPONSE_REPO
 
 
 @pytest.mark.asyncio
 async def test_fetch_issues():
-    source = create_source(GitHubDataSource)
-    mock_issues = MOCK_RESPONSE_ISSUE.copy()
-    mock_issues.update(
-        {
-            "id": mock_issues.pop("_id"),
-            "updated_at": mock_issues.pop("_timestamp"),
-            "user": {"login": "demo_user"},
-            "assignees": [{"login": "demo_user"}],
-            "labels": [{"name": "bug"}],
-        }
-    )
-    with mock.patch.object(
-        source.github_client,
-        "get_paginated_response",
-        side_effect=[
-            AsyncIterator([mock_issues]),
-            AsyncIterator([{"user": {"login": "demo_user"}, "body": "demo comments"}]),
-        ],
-    ):
-        async for issue in source.fetch_issues("demo_repo"):
-            assert issue == MOCK_RESPONSE_ISSUE
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        mock_issues = MOCK_RESPONSE_ISSUE.copy()
+        mock_issues.update(
+            {
+                "id": mock_issues.pop("_id"),
+                "updated_at": mock_issues.pop("_timestamp"),
+                "user": {"login": "demo_user"},
+                "assignees": [{"login": "demo_user"}],
+                "labels": [{"name": "bug"}],
+            }
+        )
+        with mock.patch.object(
+            source.github_client,
+            "get_paginated_response",
+            side_effect=[
+                AsyncIterator([mock_issues]),
+                AsyncIterator(
+                    [{"user": {"login": "demo_user"}, "body": "demo comments"}]
+                ),
+            ],
+        ):
+            async for issue in source.fetch_issues("demo_repo"):
+                assert issue == MOCK_RESPONSE_ISSUE
 
 
 @pytest.mark.asyncio
 async def test_fetch_issues_with_unauthorized_exception():
-    source = create_source(GitHubDataSource)
-    source.github_client.get_paginated_response = mock.Mock(
-        side_effect=UnauthorizedException()
-    )
-    with pytest.raises(UnauthorizedException):
-        async for _ in source.fetch_issues("demo_repo"):
-            pass
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        source.github_client.get_paginated_response = mock.Mock(
+            side_effect=UnauthorizedException()
+        )
+        with pytest.raises(UnauthorizedException):
+            async for _ in source.fetch_issues("demo_repo"):
+                pass
 
 
 @pytest.mark.asyncio
 async def test_fetch_pull_requests():
-    source = create_source(GitHubDataSource)
-    mock_pull_request = MOCK_RESPONSE_PULL.copy()
-    mock_pull_request["id"] = mock_pull_request.pop("_id")
-    mock_pull_request.update(
-        {
-            "updated_at": mock_pull_request.pop("_timestamp"),
-            "user": {"login": "demo_user"},
-            "head": {"label": "branch1"},
-            "base": {"label": "main"},
-            "assignees": [{"login": "demo_user"}],
-            "requested_reviewers": [{"login": "test_user"}],
-            "requested_teams": [{"name": "team1"}],
-            "labels": [{"name": "V8.8"}],
-        }
-    )
-    with mock.patch.object(
-        source.github_client,
-        "get_paginated_response",
-        side_effect=[
-            AsyncIterator([mock_pull_request]),
-            AsyncIterator(
-                [{"user": {"login": "demo_user"}, "body": "review comments"}]
-            ),
-            AsyncIterator([{"user": {"login": "demo_user"}, "body": "issue comments"}]),
-            AsyncIterator(
-                [
-                    {
-                        "user": {"login": "demo_user"},
-                        "body": "demo comments",
-                        "state": "Commented",
-                    }
-                ]
-            ),
-        ],
-    ):
-        async for pull in source.fetch_pull_requests("demo_repo"):
-            assert pull == MOCK_RESPONSE_PULL
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        mock_pull_request = MOCK_RESPONSE_PULL.copy()
+        mock_pull_request["id"] = mock_pull_request.pop("_id")
+        mock_pull_request.update(
+            {
+                "updated_at": mock_pull_request.pop("_timestamp"),
+                "user": {"login": "demo_user"},
+                "head": {"label": "branch1"},
+                "base": {"label": "main"},
+                "assignees": [{"login": "demo_user"}],
+                "requested_reviewers": [{"login": "test_user"}],
+                "requested_teams": [{"name": "team1"}],
+                "labels": [{"name": "V8.8"}],
+            }
+        )
+        with mock.patch.object(
+            source.github_client,
+            "get_paginated_response",
+            side_effect=[
+                AsyncIterator([mock_pull_request]),
+                AsyncIterator(
+                    [{"user": {"login": "demo_user"}, "body": "review comments"}]
+                ),
+                AsyncIterator(
+                    [{"user": {"login": "demo_user"}, "body": "issue comments"}]
+                ),
+                AsyncIterator(
+                    [
+                        {
+                            "user": {"login": "demo_user"},
+                            "body": "demo comments",
+                            "state": "Commented",
+                        }
+                    ]
+                ),
+            ],
+        ):
+            async for pull in source.fetch_pull_requests("demo_repo"):
+                assert pull == MOCK_RESPONSE_PULL
 
 
 @pytest.mark.asyncio
 async def test_fetch_pull_requests_with_unauthorized_exception():
-    source = create_source(GitHubDataSource)
-    source.github_client.get_paginated_response = mock.Mock(
-        side_effect=UnauthorizedException()
-    )
-    with pytest.raises(UnauthorizedException):
-        async for _ in source.fetch_pull_requests("demo_repo"):
-            pass
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        source.github_client.get_paginated_response = mock.Mock(
+            side_effect=UnauthorizedException()
+        )
+        with pytest.raises(UnauthorizedException):
+            async for _ in source.fetch_pull_requests("demo_repo"):
+                pass
 
 
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_fetch_repos_with_max_retries(mock_apply_retry_strategy):
-    source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    source.github_client._get_client.getitem = mock.Mock(
-        side_effect=BadRequest(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
-    )
-    async for _ in source.fetch_repos():
-        pass
-    assert mock_apply_retry_strategy.call_count == 2
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        mock_apply_retry_strategy.return_value = mock.Mock()
+        source.github_client._get_client.getitem = mock.Mock(
+            side_effect=BadRequest(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
+        )
+        async for _ in source.fetch_repos():
+            pass
+        assert mock_apply_retry_strategy.call_count == 2
 
 
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_fetch_pull_requests_with_max_retries(mock_apply_retry_strategy):
-    source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    source.github_client._get_client.getitem = mock.Mock(
-        side_effect=BadRequest(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
-    )
-    async for _ in source.fetch_pull_requests("demo_repo"):
-        pass
-    assert mock_apply_retry_strategy.call_count == 2
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        mock_apply_retry_strategy.return_value = mock.Mock()
+        source.github_client._get_client.getitem = mock.Mock(
+            side_effect=BadRequest(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
+        )
+        async for _ in source.fetch_pull_requests("demo_repo"):
+            pass
+        assert mock_apply_retry_strategy.call_count == 2
 
 
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_fetch_issues_with_max_retries(mock_apply_retry_strategy):
-    source = create_source(GitHubDataSource)
-    mock_apply_retry_strategy.return_value = mock.Mock()
-    source.github_client._get_client.getitem = mock.Mock(
-        side_effect=BadRequest(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
-    )
-    async for _ in source.fetch_issues("demo_repo"):
-        pass
-    assert mock_apply_retry_strategy.call_count == 2
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        mock_apply_retry_strategy.return_value = mock.Mock()
+        source.github_client._get_client.getitem = mock.Mock(
+            side_effect=BadRequest(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
+        )
+        async for _ in source.fetch_issues("demo_repo"):
+            pass
+        assert mock_apply_retry_strategy.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -640,16 +630,14 @@ async def test_fetch_files():
             "extension": ".txt",
         },
     )
-    source = create_source(GitHubDataSource)
-
-    with mock.patch.object(
-        source.github_client,
-        "get_response",
-        side_effect=[MOCK_TREE, MOCK_COMMITS],
-    ):
-        async for document in source.fetch_files("demo_repo", "main"):
-            assert expected_response == document
-    await source.close()
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        with mock.patch.object(
+            source.github_client,
+            "get_response",
+            side_effect=[MOCK_TREE, MOCK_COMMITS],
+        ):
+            async for document in source.fetch_files("demo_repo", "main"):
+                assert expected_response == document
 
 
 @pytest.mark.asyncio
@@ -661,15 +649,17 @@ async def test_get_docs():
         MOCK_RESPONSE_ATTACHMENTS[0],
     ]
     actual_response = []
-    source = create_source(GitHubDataSource)
-    source.fetch_repos = mock.Mock(return_value=AsyncIterator([MOCK_RESPONSE_REPO]))
-    source.fetch_issues = mock.Mock(return_value=AsyncIterator([MOCK_RESPONSE_ISSUE]))
-    source.fetch_pull_requests = mock.Mock(
-        return_value=AsyncIterator([MOCK_RESPONSE_PULL])
-    )
-    source.fetch_files = mock.Mock(
-        return_value=AsyncIterator([MOCK_RESPONSE_ATTACHMENTS])
-    )
-    async for document, _ in source.get_docs():
-        actual_response.append(document)
-    assert expected_response == actual_response
+    async with AsyncSourceContextManager(GitHubDataSource) as source:
+        source.fetch_repos = mock.Mock(return_value=AsyncIterator([MOCK_RESPONSE_REPO]))
+        source.fetch_issues = mock.Mock(
+            return_value=AsyncIterator([MOCK_RESPONSE_ISSUE])
+        )
+        source.fetch_pull_requests = mock.Mock(
+            return_value=AsyncIterator([MOCK_RESPONSE_PULL])
+        )
+        source.fetch_files = mock.Mock(
+            return_value=AsyncIterator([MOCK_RESPONSE_ATTACHMENTS])
+        )
+        async for document, _ in source.get_docs():
+            actual_response.append(document)
+        assert expected_response == actual_response
