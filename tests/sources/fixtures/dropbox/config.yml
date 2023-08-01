@@ -28,8 +28,8 @@ service:
 
 connectors:
   -
-    connector_id: 'mongo_serverless'
-    service_type: 'mongodb'
+    connector_id: 'dropbox'
+    service_type: 'dropbox'
 
 sources:
-  mongodb: connectors.sources.mongo:MongoDataSource
+  dropbox: connectors.sources.dropbox:DropboxDataSource

@@ -136,6 +136,10 @@ def access_control_matches(actual, expected):
     return all([access_control in expected for access_control in actual])
 
 
+def access_control_is_equal(actual, expected):
+    return set(actual) == set(expected)
+
+
 class TestMicrosoftSecurityToken:
     class StubMicrosoftSecurityToken(MicrosoftSecurityToken):
         def __init__(self, bearer, expires_in):
@@ -1850,6 +1854,7 @@ class TestSharepointOnlineDataSource:
     async def test_get_docs_without_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
         source._dls_enabled = Mock(return_value=False)
+        source._site_access_control = AsyncMock(return_value=([], []))
 
         results = []
         downloads = []
@@ -1899,7 +1904,9 @@ class TestSharepointOnlineDataSource:
 
         source = create_source(SharepointOnlineDataSource)
         set_dls_enabled(source, True)
-        source._site_access_control = AsyncMock(return_value=expected_access_control)
+        source._site_access_control = AsyncMock(
+            return_value=(expected_access_control, [])
+        )
 
         results = []
         async for doc, _download_func in source.get_docs():
@@ -2017,6 +2024,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     async def test_get_docs_incrementally(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
+        source._site_access_control = AsyncMock(return_value=([], []))
 
         sync_cursor = {"site_drives": {}}
         for site_drive in self.site_drives:
@@ -2200,6 +2208,98 @@ class TestSharepointOnlineDataSource:
         assert not any(
             ACCESS_CONTROL in drive_item
             for drive_item in drive_items_without_permissions
+        )
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint_online.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    async def test_drive_items_permissions_when_fetch_drive_item_permissions_enabled(
+        self, patch_sharepoint_client
+    ):
+        group = _prefix_group("do-not-inherit-me")
+        email = _prefix_email("should-not@be-inherited.com")
+        user = _prefix_user("sorry-no-access-here")
+        site_access_controls = [group, email, user]
+
+        source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, True)
+        set_fetch_drive_item_permissions_enabled(source, True)
+        source._site_access_control = AsyncMock(return_value=(site_access_controls, []))
+
+        results = []
+        async for doc, _ in source.get_docs():
+            results.append(doc)
+
+        drive_items = [i for i in results if i["object_type"] == "drive_item"]
+
+        expected_drive_item_access_control = [
+            _prefix_user_id(USER_ONE_ID),
+            _prefix_site_group(SITE_GROUP_ONE_ID),
+            _prefix_site_user_id(SITE_USER_ONE_ID),
+            _prefix_group(GROUP_ONE_ID),
+        ]
+
+        drive_item_access_control_with_ac_inhertiance = [
+            *expected_drive_item_access_control,
+            *site_access_controls,
+        ]
+
+        assert all(
+            [
+                access_control_is_equal(
+                    drive_item[ALLOW_ACCESS_CONTROL_PATCHED],
+                    expected_drive_item_access_control,
+                )
+                for drive_item in drive_items
+            ]
+        )
+
+        assert all(
+            [
+                not access_control_is_equal(
+                    drive_item[ALLOW_ACCESS_CONTROL_PATCHED],
+                    drive_item_access_control_with_ac_inhertiance,
+                )
+                for drive_item in drive_items
+            ]
+        )
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint_online.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    async def test_site_page_permissions_when_fetch_drive_item_permissions_enabled(
+        self, patch_sharepoint_client
+    ):
+        admin_email = _prefix_email("hello@iam-admin.com")
+        admin_user = _prefix_user("admin-so-i-can-access-your-data")
+        admin_site_access_controls = [admin_email, admin_user]
+
+        source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, True)
+        set_fetch_drive_item_permissions_enabled(source, True)
+
+        source._site_access_control = AsyncMock(
+            return_value=([], admin_site_access_controls)
+        )
+
+        results = []
+        async for doc, _download_func in source.get_docs():
+            results.append(doc)
+
+        site_pages = [i for i in results if i["object_type"] == "site_page"]
+
+        assert all(
+            [
+                access_control_is_equal(
+                    site_page[ALLOW_ACCESS_CONTROL_PATCHED],
+                    admin_site_access_controls,
+                )
+                for site_page in site_pages
+            ]
         )
 
     @pytest.mark.asyncio
@@ -2535,7 +2635,7 @@ class TestSharepointOnlineDataSource:
 
         site = {"id": 1, "webUrl": "some url"}
 
-        access_control = await source._site_access_control(site)
+        access_control, _ = await source._site_access_control(site)
 
         two_other_users = 2
         two_groups = 2
