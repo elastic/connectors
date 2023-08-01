@@ -23,3 +23,24 @@ async def assert_basics(klass, field, value):
     source = create_source(klass)
     await source.ping()
     await source.changed()
+
+
+class AsyncSourceContextManager:
+    def __init__(self, klass, **extras):
+        self.klass = klass
+        self.extras = extras
+        self.source = None
+
+    async def __aenter__(self):
+        config = self.klass.get_default_configuration()
+        for k, v in self.extras.items():
+            if k in config:
+                config[k].update({"value": v})
+            else:
+                config[k] = DEFAULT_CONFIGURATION.copy() | {"value": v}
+
+        self.source = self.klass(configuration=DataSourceConfiguration(config))
+        return self.source
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        await self.source.close()

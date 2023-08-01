@@ -22,7 +22,7 @@ from freezegun import freeze_time
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.dropbox import DropboxDataSource
 from tests.commons import AsyncIterator
-from tests.sources.support import create_source
+from tests.sources.support import AsyncSourceContextManager, create_source
 
 PATH = "/"
 DUMMY_VALUES = "abc#123"
@@ -182,89 +182,90 @@ async def test_configuration():
     ["path", "app_key", "app_secret", "refresh_token"],
 )
 async def test_validate_configuration_with_empty_fields_then_raise_exception(field):
-    source = create_source(DropboxDataSource)
-    source.dropbox_client.configuration.set_field(name=field, value="")
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        source.dropbox_client.configuration.set_field(name=field, value="")
 
-    with pytest.raises(ConfigurableFieldValueError):
-        await source.validate_config()
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
 
 
 @pytest.mark.asyncio
 async def test_validate_configuration_for_valid_path():
-    source = create_source(DropboxDataSource)
-    source.dropbox_client.configuration.set_field(name="path", value="/shared")
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        source.dropbox_client.configuration.set_field(name="path", value="/shared")
 
-    with patch.object(
-        source.dropbox_client._connection,
-        "files_get_metadata",
-        return_value=AsyncMock(),
-    ):
-        await source.validate_config()
+        with patch.object(
+            source.dropbox_client._connection,
+            "files_get_metadata",
+            return_value=AsyncMock(),
+        ):
+            await source.validate_config()
 
 
 @pytest.mark.asyncio
 async def test_validate_configuration_with_invalid_path_then_raise_exception():
-    source = create_source(DropboxDataSource)
-    source.dropbox_client.path = "/abc"
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        source.dropbox_client.path = "/abc"
 
-    with patch.object(
-        source.dropbox_client._connection,
-        "files_get_metadata",
-        side_effect=ApiError(
-            request_id=1,
-            error=MockError(),
-            user_message_text="Api Error Occurred",
-            user_message_locale=None,
-        ),
-    ):
-        with pytest.raises(
-            ConfigurableFieldValueError, match="Configured Path: /abc is invalid"
+        with patch.object(
+            source.dropbox_client._connection,
+            "files_get_metadata",
+            side_effect=ApiError(
+                request_id=1,
+                error=MockError(),
+                user_message_text="Api Error Occurred",
+                user_message_locale=None,
+            ),
         ):
-            await source.validate_config()
+            with pytest.raises(
+                ConfigurableFieldValueError, match="Configured Path: /abc is invalid"
+            ):
+                await source.validate_config()
 
 
 @pytest.mark.asyncio
 async def test_validate_configuration_with_invalid_app_key_and_app_secret_then_raise_exception():
-    source = create_source(DropboxDataSource)
-    source.dropbox_client.path = "/abc"
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        source.dropbox_client.path = "/abc"
 
-    with patch.object(
-        source.dropbox_client._connection,
-        "files_get_metadata",
-        side_effect=BadInputError(request_id=2, message="Bad Input Error"),
-    ):
-        with pytest.raises(
-            ConfigurableFieldValueError,
-            match="Configured App Key or App Secret is invalid",
+        with patch.object(
+            source.dropbox_client._connection,
+            "files_get_metadata",
+            side_effect=BadInputError(request_id=2, message="Bad Input Error"),
         ):
-            await source.validate_config()
+            with pytest.raises(
+                ConfigurableFieldValueError,
+                match="Configured App Key or App Secret is invalid",
+            ):
+                await source.validate_config()
 
 
 @pytest.mark.asyncio
 async def test_validate_configuration_with_invalid_refresh_token_then_raise_exception():
-    source = create_source(DropboxDataSource)
-    source.dropbox_client.path = "/abc"
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        source.dropbox_client.path = "/abc"
 
-    with patch.object(
-        source.dropbox_client._connection,
-        "files_get_metadata",
-        side_effect=AuthError(request_id=3, error="Auth Error"),
-    ):
-        with pytest.raises(
-            ConfigurableFieldValueError, match="Configured Refresh Token is invalid"
+        with patch.object(
+            source.dropbox_client._connection,
+            "files_get_metadata",
+            side_effect=AuthError(request_id=3, error="Auth Error"),
         ):
-            await source.validate_config()
+            with pytest.raises(
+                ConfigurableFieldValueError, match="Configured Refresh Token is invalid"
+            ):
+                await source.validate_config()
 
 
 @pytest.mark.asyncio
 async def test_validate_config_with_invalid_concurrent_downloads():
-    source = create_source(DropboxDataSource, concurrent_downloads=1000)
-
-    with pytest.raises(
-        ConfigurableFieldValueError,
-        match="Field validation errors: 'Maximum concurrent downloads' value '1000' should be less than 101.",
-    ):
-        await source.validate_config()
+    async with AsyncSourceContextManager(
+        DropboxDataSource, concurrent_downloads=1000
+    ) as source:
+        with pytest.raises(
+            ConfigurableFieldValueError,
+            match="Field validation errors: 'Maximum concurrent downloads' value '1000' should be less than 101.",
+        ):
+            await source.validate_config()
 
 
 def test_tweak_bulk_options():
@@ -279,51 +280,51 @@ def test_tweak_bulk_options():
 
 @pytest.mark.asyncio
 async def test_ping():
-    source = create_source(DropboxDataSource)
-    with patch.object(
-        source.dropbox_client._connection,
-        "users_get_current_account",
-        return_value=AsyncMock(return_value="Mock..."),
-    ):
-        await source.ping()
-
-
-@pytest.mark.asyncio
-async def test_ping_for_failed_connection_exception_then_raise_exception():
-    source = create_source(DropboxDataSource)
-    with patch.object(
-        source.dropbox_client._connection,
-        "users_get_current_account",
-        side_effect=Exception("Something went wrong"),
-    ):
-        with pytest.raises(Exception):
-            await source.ping()
-
-
-@pytest.mark.asyncio
-async def test_ping_for_incorrect_app_key_and_app_secret_then_raise_exception():
-    source = create_source(DropboxDataSource)
-    with patch.object(
-        source.dropbox_client._connection,
-        "users_get_current_account",
-        side_effect=BadInputError(request_id=2, message="Bad Input Error"),
-    ):
-        with pytest.raises(
-            Exception, match="Configured App Key or App Secret is invalid"
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        with patch.object(
+            source.dropbox_client._connection,
+            "users_get_current_account",
+            return_value=AsyncMock(return_value="Mock..."),
         ):
             await source.ping()
 
 
 @pytest.mark.asyncio
+async def test_ping_for_failed_connection_exception_then_raise_exception():
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        with patch.object(
+            source.dropbox_client._connection,
+            "users_get_current_account",
+            side_effect=Exception("Something went wrong"),
+        ):
+            with pytest.raises(Exception):
+                await source.ping()
+
+
+@pytest.mark.asyncio
+async def test_ping_for_incorrect_app_key_and_app_secret_then_raise_exception():
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        with patch.object(
+            source.dropbox_client._connection,
+            "users_get_current_account",
+            side_effect=BadInputError(request_id=2, message="Bad Input Error"),
+        ):
+            with pytest.raises(
+                Exception, match="Configured App Key or App Secret is invalid"
+            ):
+                await source.ping()
+
+
+@pytest.mark.asyncio
 async def test_ping_for_incorrect_refresh_token_then_raise_exception():
-    source = create_source(DropboxDataSource)
-    with patch.object(
-        source.dropbox_client._connection,
-        "users_get_current_account",
-        side_effect=AuthError(request_id=3, error="Auth Error"),
-    ):
-        with pytest.raises(Exception, match="Configured Refresh Token is invalid"):
-            await source.ping()
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        with patch.object(
+            source.dropbox_client._connection,
+            "users_get_current_account",
+            side_effect=AuthError(request_id=3, error="Auth Error"),
+        ):
+            with pytest.raises(Exception, match="Configured Refresh Token is invalid"):
+                await source.ping()
 
 
 @pytest.mark.asyncio
@@ -346,147 +347,143 @@ async def test_close_without_client_session():
 @freeze_time("2023-01-01T06:06:06")
 @pytest.mark.asyncio
 async def test_fetch_files_folders():
-    source = create_source(DropboxDataSource)
-    source.dropbox_client.path = "/test"
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        source.dropbox_client.path = "/test"
 
-    mock_connection = Mock()
-    source.dropbox_client._connection = mock_connection
+        mock_connection = Mock()
+        source.dropbox_client._connection = mock_connection
 
-    source.dropbox_client._connection.files_list_folder = Mock(
-        return_value=MOCK_FILES_LIST_FOLDER
-    )
+        source.dropbox_client._connection.files_list_folder = Mock(
+            return_value=MOCK_FILES_LIST_FOLDER
+        )
 
-    source.dropbox_client._connection.files_list_folder_continue = Mock(
-        return_value=MOCK_FILES_LIST_FOLDER_CONTINUE
-    )
+        source.dropbox_client._connection.files_list_folder_continue = Mock(
+            return_value=MOCK_FILES_LIST_FOLDER_CONTINUE
+        )
 
-    expected_response = [EXPECTED_FILE, EXPECTED_FOLDER]
-    actual_response = []
-    async for _, result in source._fetch_files_folders():
-        actual_response.append(result)
+        expected_response = [EXPECTED_FILE, EXPECTED_FOLDER]
+        actual_response = []
+        async for _, result in source._fetch_files_folders():
+            actual_response.append(result)
 
-    assert actual_response == expected_response
+        assert actual_response == expected_response
 
 
 @pytest.mark.asyncio
 async def test_fetch_shared_files():
-    source = create_source(DropboxDataSource)
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        mock_connection = Mock()
+        source.dropbox_client._connection = mock_connection
 
-    mock_connection = Mock()
-    source.dropbox_client._connection = mock_connection
+        source.dropbox_client._connection.sharing_list_received_files = Mock(
+            return_value=MOCK_SHARING_LIST_RECEIVED_FILES
+        )
 
-    source.dropbox_client._connection.sharing_list_received_files = Mock(
-        return_value=MOCK_SHARING_LIST_RECEIVED_FILES
-    )
+        source.dropbox_client._connection.sharing_list_received_files_continue = Mock(
+            return_value=MOCK_SHARING_LIST_RECEIVED_FILES_CONTINUE
+        )
 
-    source.dropbox_client._connection.sharing_list_received_files_continue = Mock(
-        return_value=MOCK_SHARING_LIST_RECEIVED_FILES_CONTINUE
-    )
+        source.dropbox_client._connection.sharing_get_shared_link_file = Mock(
+            return_value=(FILE_LINK_METADATA, MockResponse())
+        )
 
-    source.dropbox_client._connection.sharing_get_shared_link_file = Mock(
-        return_value=(FILE_LINK_METADATA, MockResponse())
-    )
+        expected_response = [EXPECTED_SHARED_FILE_1, EXPECTED_SHARED_FILE_2]
+        actual_response = []
+        async for _, _, result in source._fetch_shared_files():
+            actual_response.append(result)
 
-    expected_response = [EXPECTED_SHARED_FILE_1, EXPECTED_SHARED_FILE_2]
-    actual_response = []
-    async for _, _, result in source._fetch_shared_files():
-        actual_response.append(result)
-
-    assert actual_response == expected_response
+        assert actual_response == expected_response
 
 
 @pytest.mark.asyncio
 async def test_get_content_with_text_file():
-    source = create_source(DropboxDataSource)
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        mock_connection = Mock()
+        source.dropbox_client._connection = mock_connection
 
-    mock_connection = Mock()
-    source.dropbox_client._connection = mock_connection
+        source.dropbox_client._connection.files_download.return_value = (
+            FileMetadata("/test/test_file.txt"),
+            MagicMock(content=b"This is a text content"),
+        )
 
-    source.dropbox_client._connection.files_download.return_value = (
-        FileMetadata("/test/test_file.txt"),
-        MagicMock(content=b"This is a text content"),
-    )
-
-    response = await source.get_content(attachment=MOCK_FILE_DATA, doit=True)
-    assert response == EXPECTED_CONTENT_FOR_TEXT_FILE
+        response = await source.get_content(attachment=MOCK_FILE_DATA, doit=True)
+        assert response == EXPECTED_CONTENT_FOR_TEXT_FILE
 
 
 @pytest.mark.asyncio
 async def test_get_content_with_paper_file():
-    source = create_source(DropboxDataSource)
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        mock_connection = Mock()
+        source.dropbox_client._connection = mock_connection
 
-    mock_connection = Mock()
-    source.dropbox_client._connection = mock_connection
+        source.dropbox_client._connection.files_export.return_value = (
+            FileMetadata("/test/dummy_file.paper"),
+            MagicMock(content=b"# This is a markdown content"),
+        )
 
-    source.dropbox_client._connection.files_export.return_value = (
-        FileMetadata("/test/dummy_file.paper"),
-        MagicMock(content=b"# This is a markdown content"),
-    )
-
-    response = await source.get_content(attachment=MOCK_PAPER_FILE_DATA, doit=True)
-    assert response == EXPECTED_CONTENT_FOR_PAPER_FILE
+        response = await source.get_content(attachment=MOCK_PAPER_FILE_DATA, doit=True)
+        assert response == EXPECTED_CONTENT_FOR_PAPER_FILE
 
 
 @pytest.mark.asyncio
 async def test_get_content_with_file_size_zero():
-    source = create_source(DropboxDataSource)
-
-    mock_file_with_size_zero = copy(MOCK_FILE_DATA)
-    mock_file_with_size_zero.size = 0
-    response = await source.get_content(attachment=mock_file_with_size_zero, doit=True)
-    assert response is None
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        mock_file_with_size_zero = copy(MOCK_FILE_DATA)
+        mock_file_with_size_zero.size = 0
+        response = await source.get_content(
+            attachment=mock_file_with_size_zero, doit=True
+        )
+        assert response is None
 
 
 @pytest.mark.asyncio
 async def test_get_content_with_large_file_size():
-    source = create_source(DropboxDataSource)
-
-    mock_file_with_large_size = copy(MOCK_FILE_DATA)
-    mock_file_with_large_size.size = 23000000
-    response = await source.get_content(attachment=mock_file_with_large_size, doit=True)
-    assert response is None
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        mock_file_with_large_size = copy(MOCK_FILE_DATA)
+        mock_file_with_large_size.size = 23000000
+        response = await source.get_content(
+            attachment=mock_file_with_large_size, doit=True
+        )
+        assert response is None
 
 
 @pytest.mark.asyncio
 async def test_get_content_with_unsupported_tika_file_type_then_skip():
-    source = create_source(DropboxDataSource)
-
-    mock_file_with_unsupported_tika_extension = copy(MOCK_FILE_DATA)
-    mock_file_with_unsupported_tika_extension.name = "screenshot.png"
-    response = await source.get_content(
-        attachment=mock_file_with_unsupported_tika_extension, doit=True
-    )
-    assert response is None
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        mock_file_with_unsupported_tika_extension = copy(MOCK_FILE_DATA)
+        mock_file_with_unsupported_tika_extension.name = "screenshot.png"
+        response = await source.get_content(
+            attachment=mock_file_with_unsupported_tika_extension, doit=True
+        )
+        assert response is None
 
 
 @pytest.mark.asyncio
 async def test_get_content_without_extension_then_skip():
-    source = create_source(DropboxDataSource)
-
-    mock_file_without_extension = copy(MOCK_FILE_DATA)
-    mock_file_without_extension.name = "ssh-new"
-    response = await source.get_content(
-        attachment=mock_file_without_extension, doit=True
-    )
-    assert response is None
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        mock_file_without_extension = copy(MOCK_FILE_DATA)
+        mock_file_without_extension.name = "ssh-new"
+        response = await source.get_content(
+            attachment=mock_file_without_extension, doit=True
+        )
+        assert response is None
 
 
 @pytest.mark.asyncio
 async def test_get_docs():
-    source = create_source(DropboxDataSource)
+    async with AsyncSourceContextManager(DropboxDataSource) as source:
+        source._fetch_files_folders = AsyncIterator(
+            [(MOCK_FILE_DATA, EXPECTED_FILE), (MOCK_FOLDER_DATA, EXPECTED_FOLDER)]
+        )
 
-    source._fetch_files_folders = AsyncIterator(
-        [(MOCK_FILE_DATA, EXPECTED_FILE), (MOCK_FOLDER_DATA, EXPECTED_FOLDER)]
-    )
+        source._fetch_shared_files = AsyncIterator(
+            [(FILE_LINK_METADATA, MockResponse(), EXPECTED_SHARED_FILE_1)]
+        )
 
-    source._fetch_shared_files = AsyncIterator(
-        [(FILE_LINK_METADATA, MockResponse(), EXPECTED_SHARED_FILE_1)]
-    )
+        source.get_content = AsyncMock(return_value=EXPECTED_CONTENT_FOR_TEXT_FILE)
 
-    source.get_content = AsyncMock(return_value=EXPECTED_CONTENT_FOR_TEXT_FILE)
+        response = []
+        async for document, _ in source.get_docs():
+            response.append(document)
 
-    response = []
-    async for document, _ in source.get_docs():
-        response.append(document)
-
-    assert response == [EXPECTED_FILE, EXPECTED_FOLDER, EXPECTED_SHARED_FILE_1]
+        assert response == [EXPECTED_FILE, EXPECTED_FOLDER, EXPECTED_SHARED_FILE_1]
