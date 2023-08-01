@@ -151,7 +151,7 @@ async def test_trace_async_gen():
     "log_level, color",
     [
         ("debug", ColorFormatter.GREY),
-        ("info", ColorFormatter.GREY),
+        ("info", ColorFormatter.GREEN),
         ("warning", ColorFormatter.YELLOW),
         ("error", ColorFormatter.RED),
         ("critical", ColorFormatter.BOLD_RED),

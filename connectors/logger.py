@@ -23,6 +23,7 @@ logger = None
 
 class ColorFormatter(logging.Formatter):
     GREY = "\x1b[38;20m"
+    GREEN = "\x1b[32;20m"
     YELLOW = "\x1b[33;20m"
     RED = "\x1b[31;20m"
     BOLD_RED = "\x1b[31;1m"
@@ -43,7 +44,7 @@ class ColorFormatter(logging.Formatter):
     @cached_property
     def info_formatter(self):
         return logging.Formatter(
-            fmt=self.GREY + self.custom_format + self.RESET, datefmt=self.DATE_FMT
+            fmt=self.GREEN + self.custom_format + self.RESET, datefmt=self.DATE_FMT
         )
 
     @cached_property
