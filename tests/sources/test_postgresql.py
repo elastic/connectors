@@ -126,7 +126,16 @@ def test_get_connect_args():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_postgresql():
+async def test_ping():
+    source = create_source(PostgreSQLDataSource)
+    with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+        await source.ping()
+
+    await source.close()
+
+
+@pytest.mark.asyncio
+async def test_get_docs():
     # Setup
     source = create_source(PostgreSQLDataSource)
     with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
@@ -159,3 +168,5 @@ async def test_get_docs_postgresql():
 
         # Assert
         assert actual_response == expected_response
+
+        await source.close()
