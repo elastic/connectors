@@ -1854,7 +1854,6 @@ class TestSharepointOnlineDataSource:
     async def test_get_docs_without_access_control(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
         source._dls_enabled = Mock(return_value=False)
-        source._site_access_control = AsyncMock(return_value=([], []))
 
         results = []
         downloads = []
