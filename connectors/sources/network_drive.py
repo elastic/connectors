@@ -34,6 +34,10 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 
 
+class InvalidRulesError(Exception):
+    pass
+
+
 class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
     RULES_OBJECT_SCHEMA_DEFINITION = {
         "type": "object",
@@ -309,13 +313,11 @@ class NASDataSource(BaseDataSource):
 
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            try:
-                matched_paths, _ = self.find_matching_paths(advanced_rules)
-            except Exception as exception:
-                self._logger.warning(
-                    f"Something went wrong while running advanced rules. Exception: {exception}"
+            matched_paths, invalid_rules = self.find_matching_paths(advanced_rules)
+            if len(invalid_rules) > 0:
+                raise InvalidRulesError(
+                    f"Following advanced rules are invalid: {invalid_rules}"
                 )
-                raise
         else:
             matched_paths = (path for path, _, _ in self.get_directory_details)
 
