@@ -105,38 +105,6 @@ class SalesforceClient:
         for record in resp_json.get("records", []):
             record["_id"] = record["Id"]
             yield record
-        self.token_refresh_enabled = enable_refresh
-        self._logger.debug(f"Salesforce token retrieved.")
-
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-    )
-    async def get_accounts(self):
-        # TODO prepare cache
-
-        query_builder = SalesforceSoqlBuilder("Account")
-        query_builder.with_id()
-        query_builder.with_default_metafields()
-        query_builder.with_fields(
-            self._select_queryable_fields(
-                [
-                    "Name",
-                    "Description",
-                    "BillingAddress",
-                    "Type",
-                    "Website",
-                    "Rating",
-                ]
-            )
-        )
-
-        query = query_builder.build()
-        resp = await self._yield_non_bulk_query_pages(query)
-        resp_json = await resp.json()
-        for record in resp_json.get("records", []):
-            record["_id"] = record["Id"]
-            yield record
 
     async def _yield_non_bulk_query_pages(self, soql_query):
         return await self._api_request(
@@ -158,34 +126,6 @@ class SalesforceClient:
     def _auth_headers(self):
         return {"authorization": f"Bearer {self.token}"}
 
-    async def _api_request(self, url, method, headers=None, data=None, params=None):
-        # TODO improve error handling
-        return await getattr(self.session, method)(
-            url=url, headers=headers, data=data, params=params
-        )
-
-
-class SalesforceSoqlBuilder:
-    def __init__(self, table):
-        self.table_name = table
-        self.fields = []
-
-    def with_id(self):
-        self.fields.append("Id")
-
-    def with_default_metafields(self):
-        self.fields.extend(["CreatedDate", "LastModifiedDate"])
-
-    def with_fields(self, fields):
-        self.fields.extend(fields)
-
-    def build(self):
-        select_columns = ",\n".join(set(self.fields))
-
-        query_lines = [f"SELECT {select_columns}", f"FROM {self.table_name}"]
-        # TODO expand functionality when needed (where, order_by, limit, etc)
-
-        return "\n".join(query_lines)
     async def _api_request(self, url, method, headers=None, data=None, params=None):
         # TODO improve error handling
         return await getattr(self.session, method)(
