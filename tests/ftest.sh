@@ -19,10 +19,18 @@ PLATFORM='unknown'
 MAX_RSS="200M"
 MAX_DURATION=600
 
+export PERF8_TRACE=${PERF8_TRACE:-False}
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
 export RUNNING_FTEST=True
 export VERSION='8.9.0-SNAPSHOT'
+
+if [ "$PERF8_TRACE" == true ]; then
+    echo 'Tracing is enabled, memray stats will be delivered'
+    PLUGINS='--asyncstats --memray --psutil'
+else
+    PLUGINS='--asyncstats --psutil'
+fi
 
 PERF8_BIN=${PERF8_BIN:-$ROOT_DIR/bin/perf8}
 PYTHON=${PYTHON:-$ROOT_DIR/bin/python}
@@ -58,9 +66,9 @@ then
     $PYTHON fixture.py --name $NAME --action description > description.txt
     if [[ $PLATFORM == "darwin" ]]
     then
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --max-duration $MAX_DURATION --description description.txt -c $ELASTIC_INGEST --config-file $NAME/config.yml --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME $PLUGINS --max-duration $MAX_DURATION --description description.txt -c $ELASTIC_INGEST --config-file $NAME/config.yml --debug & PID=$!
     else
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --max-duration $MAX_DURATION --description description.txt -c $ELASTIC_INGEST --config-file $NAME/config.yml --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME $PLUGINS --max-duration $MAX_DURATION --description description.txt -c $ELASTIC_INGEST --config-file $NAME/config.yml --debug & PID=$!
     fi
 else
     $ELASTIC_INGEST --config-file $NAME/config.yml --debug & PID=$!
