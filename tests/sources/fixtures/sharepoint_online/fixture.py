@@ -8,6 +8,7 @@
 import os
 import random
 import string
+import time
 
 from faker import Faker
 from flask import Flask, escape, request
@@ -18,6 +19,7 @@ from yattag import Doc
 app = Flask(__name__)
 
 THROTTLING = os.environ.get("THROTTLING", False)
+PRE_REQUEST_SLEEP = float(os.environ.get("PRE_REQUEST_SLEEP", "0.05"))
 
 if THROTTLING:
     limiter = Limiter(
@@ -616,6 +618,11 @@ class RandomDataStorage:
 
 data_storage = RandomDataStorage()
 data_storage.generate()
+
+
+@app.before_request
+def before_request():
+    time.sleep(PRE_REQUEST_SLEEP)
 
 
 @app.route("/<string:tenant_id>/oauth2/v2.0/token", methods=["POST"])
