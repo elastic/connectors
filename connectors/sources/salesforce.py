@@ -264,8 +264,9 @@ class SalesforceDocBuilder:
     def build_account(self, account):
         owner = account.get("Owner", {})
 
-        opportunities = account.get("Opportunities", {}).get("records", [])
-        opportunity = opportunities[0] if len(opportunities) > 0 else {}
+        opportunities = account.get("Opportunities")
+        opportunity_records = opportunities.get("records", []) if opportunities else []
+        opportunity = opportunity_records[0] if len(opportunity_records) > 0 else {}
         opportunity_url = (
             f"{self.base_url}/{opportunity.get('Id')}" if opportunity else ""
         )
@@ -283,7 +284,7 @@ class SalesforceDocBuilder:
             "open_activities_urls": "",  # TODO
             "opportunity_name": opportunity.get("Name"),
             "opportunity_status": opportunity_status,
-            "opportunity_url": opportunity_url or "",
+            "opportunity_url": opportunity_url,
             "owner": owner.get("Name"),
             "owner_email": owner.get("Email"),
             "rating": account.get("Rating"),
