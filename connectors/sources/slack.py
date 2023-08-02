@@ -370,8 +370,12 @@ class SlackDataSource(BaseDataSource):
             id_ = match_obj.group(1)
             return f"<@{self.usernames.get(id_, id_)}>"  # replace the ID with the mapped username, if there is one
 
+        # Message does not have id - `ts` is unique id of the message in the channel
+        # Full message unique id is workspace.id -> channel.id -> message.ts
+        message_id = f"{channel['id']}-{message['ts']}"
+
         return {
-            "_id": message["client_msg_id"],
+            "_id": message_id,
             "channel": channel["name"],
             "author": self.usernames.get(user_id, user_id),
             "text": re.sub(USER_ID_PATTERN, convert_usernames, message["text"]),
@@ -379,7 +383,6 @@ class SlackDataSource(BaseDataSource):
         } | dict_slice(
             message,
             (
-                "client_msg_id",
                 "ts",
                 "type",
                 "subtype",
