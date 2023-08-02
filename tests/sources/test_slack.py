@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-from unittest.mock import ANY, Mock, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 import pytest_asyncio
@@ -24,19 +24,19 @@ configuration = {
 
 
 @pytest_asyncio.fixture
-def slack_client():
+async def slack_client():
     client = SlackClient(configuration)
     client.set_logger(logger)
     yield client
-    client.close()
+    await client.close()
 
 
 @pytest_asyncio.fixture
-def slack_data_source():
+async def slack_data_source():
     source = create_source(SlackDataSource, **configuration)
     source.set_logger(logger)
     yield source
-    source.close()
+    await source.close()
 
 
 # Tests for SlackClient
@@ -73,9 +73,10 @@ async def test_slack_client_list_channels(slack_client, mock_responses):
 
 @pytest.mark.asyncio
 async def test_slack_client_list_messages(slack_client, mock_responses):
-    timestamp1 = "1690674765"
-    timestamp2 = "1690665000"
-    timestamp3 = "1690761165"
+    timestamp1 = 1690674765
+    timestamp2 = 1690665000
+    timestamp3 = 1690761165
+    channel = {"id": 1, "name": "test"}
     message1 = {
         "text": "message1",
         "type": "message",
@@ -88,25 +89,23 @@ async def test_slack_client_list_messages(slack_client, mock_responses):
 
     page1 = {"messages": [message1, message2], "has_more": True}
     mock_responses.get(
-        f"https://slack.com/api/conversations.history?channel=channel_id&limit=200&oldest={timestamp1}&latest={timestamp3}",
+        f"https://slack.com/api/conversations.history?channel=1&limit=200&oldest={timestamp1}&latest={timestamp3}",
         payload=page1,
     )
     replies = {"messages": [message1, reply]}
     mock_responses.get(
-        f"https://slack.com/api/conversations.replies?channel=channel_id&limit=200&ts={timestamp1}",
+        f"https://slack.com/api/conversations.replies?channel=1&limit=200&ts={timestamp1}",
         payload=replies,
     )
 
     page2 = {"messages": [message3]}
     mock_responses.get(
-        f"https://slack.com/api/conversations.history?channel=channel_id&limit=200&oldest={timestamp1}&latest={timestamp2}",
+        f"https://slack.com/api/conversations.history?channel=1&limit=200&oldest={timestamp1}&latest={timestamp2}",
         payload=page2,
     )
 
     messages = []
-    async for message in slack_client.list_messages(
-        "channel_id", timestamp1, timestamp3
-    ):
+    async for message in slack_client.list_messages(channel, timestamp1, timestamp3):
         messages.append(message)
 
     assert len(messages) == 4
@@ -137,22 +136,23 @@ async def test_slack_client_list_users(slack_client, mock_responses):
 async def test_handle_throttled_error(
     mock_apply_retry_strategy, slack_client, mock_responses
 ):
+    channel = {"id": 1, "name": "test"}
     error_response_data = {"error": "rate_limited"}
     response_data = {"messages": [{"text": "message", "type": "message"}]}
     mock_responses.get(
-        "https://slack.com/api/conversations.history?channel=channel_id&latest=456&limit=200&oldest=123",
+        "https://slack.com/api/conversations.history?channel=1&latest=456&limit=200&oldest=123",
         status=429,
         payload=error_response_data,
     )
     mock_responses.get(
-        "https://slack.com/api/conversations.history?channel=channel_id&latest=456&limit=200&oldest=123",
+        "https://slack.com/api/conversations.history?channel=1&latest=456&limit=200&oldest=123",
         status=200,
         payload=response_data,
     )
 
     docs = []
     with patch.object(slack_client, "_sleeps") as mock_sleeps:
-        async for doc in slack_client.list_messages("channel_id", 123, 456):
+        async for doc in slack_client.list_messages(channel, 123, 456):
             docs.append(doc)
         mock_sleeps.sleep.assert_called_once_with(ANY)  # Verify that sleep was called
     assert len(docs) == 1
@@ -190,12 +190,13 @@ async def test_bad_ping(mock_apply_retry_strategy, slack_client, mock_responses)
 async def test_slack_data_source_get_docs(slack_data_source, mock_responses):
     users_response = [{"id": "user1"}]
     channels_response = [{"id": "1", "name": "channel1"}]
-    messages_response = [{"text": "message1", "type": "message", "client_msg_id": 1}]
+    messages_response = [{"text": "message1", "type": "message", "ts": 123456}]
 
-    slack_client = Mock()
+    slack_client = AsyncMock()
     slack_client.list_users = AsyncIterator(users_response)
     slack_client.list_channels = AsyncIterator(channels_response)
     slack_client.list_messages = AsyncIterator(messages_response)
+    slack_client.close = AsyncMock()
     slack_data_source.slack_client = slack_client
 
     docs = []
@@ -211,8 +212,8 @@ async def test_slack_data_source_get_docs(slack_data_source, mock_responses):
 @pytest.mark.asyncio
 async def test_slack_data_source_convert_usernames(slack_data_source):
     usernames = {"USERID1": "user_one"}
-    message = {"text": "<@USERID1> Hello, <@USERID2>", "client_msg_id": 1}
-    channel = {"name": "channel"}
+    message = {"text": "<@USERID1> Hello, <@USERID2>", "ts": 1}
+    channel = {"id": 12345, "name": "channel"}
     slack_data_source.usernames = usernames
     remapped_message = slack_data_source.remap_message(message, channel)
 
