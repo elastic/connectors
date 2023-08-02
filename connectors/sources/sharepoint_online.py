@@ -1564,7 +1564,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 # Sync site pages
                 async for site_page in self.site_pages(
-                    site["webUrl"], site_access_control
+                    site, site_access_control
                 ):
                     # Always include site admins in site page access controls
                     site_page = self._decorate_with_access_control(
@@ -1664,7 +1664,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 # Sync site pages
                 async for site_page in self.site_pages(
-                    site["webUrl"], site_access_control
+                    site, site_access_control
                 ):
                     # Always include site admins in site page access controls
                     site_page = self._decorate_with_access_control(
@@ -1974,11 +1974,11 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return access_control
 
-    async def site_pages(self, url, site_access_control):
+    async def site_pages(self, site, site_access_control):
+        site_id = site["id"]
+        url = site["webUrl"]
         async for site_page in self.client.site_pages(url):
-            site_page["_id"] = site_page[
-                "odata.id"
-            ]  # Apparently site_page["GUID"] is not globally unique
+            site_page["_id"] = f"{site_id}-site_page-{site_page['Id']}"
             site_page["object_type"] = "site_page"
 
             has_unique_role_assignments = False
