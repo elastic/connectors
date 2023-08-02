@@ -11,7 +11,7 @@ from contextlib import contextmanager
 import pytest
 
 import connectors.logger
-from connectors.logger import logger, set_logger, tracer
+from connectors.logger import ColorFormatter, logger, set_logger, tracer
 
 
 @contextmanager
@@ -145,3 +145,50 @@ async def test_trace_async_gen():
         for i, log in enumerate(logs):
             data = json.loads(log)
             assert data["message"].startswith(f"[trace me] {i}-special took")
+
+
+@pytest.mark.parametrize(
+    "log_level, color",
+    [
+        ("debug", ColorFormatter.GREY),
+        ("info", ColorFormatter.GREEN),
+        ("warning", ColorFormatter.YELLOW),
+        ("error", ColorFormatter.RED),
+        ("critical", ColorFormatter.BOLD_RED),
+    ],
+)
+def test_colored_logging(log_level, color):
+    with unset_logger():
+        logger = set_logger(logging.DEBUG, filebeat=False)
+        logs = []
+
+        def _w(msg):
+            logs.append(msg)
+
+        logger.handlers[0].stream.write = _w
+
+        getattr(logger, log_level)("foobar")
+
+        assert len(logs) == 1
+        assert logs[0].startswith(color)
+
+
+def test_colored_logging_with_filebeat():
+    with unset_logger():
+        logger = set_logger(logging.DEBUG, filebeat=True)
+        logs = []
+
+        def _w(msg):
+            logs.append(msg)
+
+        logger.handlers[0].stream.write = _w
+
+        logger.debug("foobar")
+        logger.info("foobar")
+        logger.warning("foobar")
+        logger.error("foobar")
+        logger.critical("foobar")
+
+        assert len(logs) == 5
+        for log in logs:
+            assert not log.startswith("\x1b")
