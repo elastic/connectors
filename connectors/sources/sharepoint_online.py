@@ -1563,9 +1563,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         yield list_item, download_func
 
                 # Sync site pages
-                async for site_page in self.site_pages(
-                    site["webUrl"], site_access_control
-                ):
+                async for site_page in self.site_pages(site, site_access_control):
                     # Always include site admins in site page access controls
                     site_page = self._decorate_with_access_control(
                         site_page, site_admin_access_control
@@ -1663,9 +1661,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         yield list_item, download_func, OP_INDEX
 
                 # Sync site pages
-                async for site_page in self.site_pages(
-                    site["webUrl"], site_access_control
-                ):
+                async for site_page in self.site_pages(site, site_access_control):
                     # Always include site admins in site page access controls
                     site_page = self._decorate_with_access_control(
                         site_page, site_admin_access_control
@@ -1974,11 +1970,18 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return access_control
 
-    async def site_pages(self, url, site_access_control):
+    async def site_pages(self, site, site_access_control):
+        site_id = site["id"]
+        url = site["webUrl"]
         async for site_page in self.client.site_pages(url):
-            site_page["_id"] = site_page[
-                "odata.id"
-            ]  # Apparently site_page["GUID"] is not globally unique
+            # site page object has multiple ids:
+            # - Id - not globally unique, just an increment, e.g. 1, 2, 3, 4
+            # - GUID - not globally unique, though it's a real guid
+            # - odata.id - not even sure what this id is
+            # Therefore, we generate id combining unique site id with site page id that is unique within this site
+            # Careful with format - changing other ids can overlap with this one if they follow the format of:
+            # {site_id}-{some_name_or_string_id}-{autoincremented_id}
+            site_page["_id"] = f"{site_id}-site_page-{site_page['Id']}"
             site_page["object_type"] = "site_page"
 
             has_unique_role_assignments = False
