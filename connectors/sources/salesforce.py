@@ -150,9 +150,7 @@ class SalesforceSoqlBuilder:
     def build(self):
         select_columns = ",\n".join(set(self.fields))
 
-        query_lines = []
-        query_lines.append(f"SELECT {select_columns}")
-        query_lines.append(f"FROM {self.table_name}")
+        query_lines = [f"SELECT {select_columns}", f"FROM {self.table_name}"]
         # TODO expand functionality when needed (where, order_by, limit, etc)
 
         return "\n".join(query_lines)
