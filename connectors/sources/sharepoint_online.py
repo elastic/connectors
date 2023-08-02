@@ -1563,9 +1563,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         yield list_item, download_func
 
                 # Sync site pages
-                async for site_page in self.site_pages(
-                    site, site_access_control
-                ):
+                async for site_page in self.site_pages(site, site_access_control):
                     # Always include site admins in site page access controls
                     site_page = self._decorate_with_access_control(
                         site_page, site_admin_access_control
@@ -1663,9 +1661,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         yield list_item, download_func, OP_INDEX
 
                 # Sync site pages
-                async for site_page in self.site_pages(
-                    site, site_access_control
-                ):
+                async for site_page in self.site_pages(site, site_access_control):
                     # Always include site admins in site page access controls
                     site_page = self._decorate_with_access_control(
                         site_page, site_admin_access_control
