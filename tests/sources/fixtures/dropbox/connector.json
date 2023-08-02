@@ -1,0 +1,75 @@
+{
+    "name": "dropbox",
+    "service_type": "dropbox",
+    "index_name": "search-dropbox",
+    "sync_cursor": null,
+    "is_native": false,
+    "api_key_id": null,
+    "status": "configured",
+    "language": "en",
+    "last_access_control_sync_error": null,
+    "last_access_control_sync_status": null,
+    "last_sync_status": null,
+    "last_sync_error": null,
+    "last_synced": null,
+    "last_seen": null,
+    "created_at": null,
+    "updated_at": null,
+    "configuration": {
+        "path": {
+            "label": "Path to fetch files/folders",
+            "order": 1,
+            "required": false,
+            "type": "str",
+            "value": "/"
+        },
+        "app_key": {
+            "label": "Dropbox App Key",
+            "sensitive": true,
+            "order": 2,
+            "type": "str",
+            "value": "abc#123"
+        },
+        "app_secret": {
+            "label": "Dropbox App Secret",
+            "sensitive": true,
+            "order": 3,
+            "type": "str",
+            "value": "abc#123"
+        },
+        "refresh_token": {
+            "label": "Dropbox Refresh Token",
+            "sensitive": true,
+            "order": 4,
+            "type": "str",
+            "value": "abc#123"
+        },
+        "retry_count": {
+            "default_value": 3,
+            "display": "numeric",
+            "label": "Retries per request",
+            "order": 5,
+            "required": false,
+            "type": "int",
+            "ui_restrictions": ["advanced"],
+            "value": 3
+        },
+        "concurrent_downloads": {
+            "default_value": 100,
+            "display": "numeric",
+            "label": "Maximum concurrent downloads",
+            "order": 6,
+            "required": false,
+            "type": "int",
+            "ui_restrictions": ["advanced"],
+            "value": 100
+        }
+    },
+    "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
+    "pipeline": {
+        "extract_binary_content": true,
+        "name": "ent-search-generic-ingestion",
+        "reduce_whitespace": true,
+        "run_ml_inference": true
+    }
+}

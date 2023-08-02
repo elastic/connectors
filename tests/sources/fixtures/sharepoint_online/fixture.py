@@ -8,6 +8,7 @@
 import os
 import random
 import string
+import time
 
 from faker import Faker
 from flask import Flask, escape, request
@@ -18,6 +19,7 @@ from yattag import Doc
 app = Flask(__name__)
 
 THROTTLING = os.environ.get("THROTTLING", False)
+PRE_REQUEST_SLEEP = float(os.environ.get("PRE_REQUEST_SLEEP", "0.05"))
 
 if THROTTLING:
     limiter = Limiter(
@@ -84,7 +86,7 @@ match DATA_SIZE:
         NUMBER_OF_LIST_ITEM_ATTACHMENTS = 5
 
 
-fake_large_image = fake.pystr(min_chars=1 << 20, max_chars=1 << 20 + 1)
+fake_large_image = fake.pystr(min_chars=1 << 15, max_chars=1 << 15 + 1)
 
 
 def _generate_html(text, number_of_large_images):
@@ -97,9 +99,9 @@ def _generate_html(text, number_of_large_images):
     return large_html
 
 
-small_text = _generate_html(fake.text(max_nb_chars=5000), 0)
-medium_text = _generate_html(fake.text(max_nb_chars=20000), 1)
-large_text = _generate_html(fake.text(max_nb_chars=100000), 10)
+small_text = _generate_html(fake.text(max_nb_chars=500), 0)
+medium_text = _generate_html(fake.text(max_nb_chars=5000), 1)
+large_text = _generate_html(fake.text(max_nb_chars=10000), 5)
 
 small_text_bytesize = len(small_text.encode("utf-8"))
 medium_text_bytesize = len(medium_text.encode("utf-8"))
@@ -616,6 +618,11 @@ class RandomDataStorage:
 
 data_storage = RandomDataStorage()
 data_storage.generate()
+
+
+@app.before_request
+def before_request():
+    time.sleep(PRE_REQUEST_SLEEP)
 
 
 @app.route("/<string:tenant_id>/oauth2/v2.0/token", methods=["POST"])
