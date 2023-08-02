@@ -57,8 +57,8 @@ class SlackClient:
     def ping(self):
         return self.test_auth()
 
-    def close(self):
-        self._http_session.close()
+    async def close(self):
+        await self._http_session.close()
         self._sleeps.cancel()
 
     async def list_channels(self, only_my_channels):
@@ -245,11 +245,11 @@ class SlackDataSource(BaseDataSource):
         }
 
     async def ping(self):
-        if not self.slack_client.ping():
+        if not await self.slack_client.ping():
             raise Exception("Could not connect to Slack")
 
     async def close(self):
-        self.slack_client.close()
+        await self.slack_client.close()
 
     async def get_docs(self, filtering=None):
         self._logger.info("Fetching all users")
