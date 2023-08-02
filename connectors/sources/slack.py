@@ -85,9 +85,11 @@ class SlackClient:
         url = f"{BASE_URL}/conversations.join?channel={channel_id}"
         return await self._get_json(url)
 
-    async def list_messages(self, channel_id, oldest, latest):
+    async def list_messages(self, channel, oldest, latest):
+        channel_id = channel["id"]
+
         self._logger.info(
-            f"Fetching messages between {oldest} and {latest} from channel: '{channel_id}'"
+            f"Fetching messages between {datetime.utcfromtimestamp(oldest)} and {datetime.utcfromtimestamp(latest)} from channel: '{channel['name']}'"
         )
         while True:
             url = f"{BASE_URL}/conversations.history?channel={channel_id}&limit={PAGE_SIZE}&oldest={oldest}&latest={latest}"
@@ -257,6 +259,7 @@ class SlackDataSource(BaseDataSource):
             self.usernames[user["id"]] = self.get_username(user)
             if self.configuration["sync_users"]:
                 yield self.remap_user(user), None
+        self._logger.info("Fetching all channels and messages")
         async for message in self.channels_and_messages():
             yield message, None
 
@@ -277,7 +280,7 @@ class SlackDataSource(BaseDataSource):
                 )  # can't get channel content if the bot is not in the channel
             if not self.auto_join_channels or join_response.get("ok"):
                 async for message in self.slack_client.list_messages(
-                    channel_id, past_unix_timestamp, current_unix_timestamp
+                    channel, past_unix_timestamp, current_unix_timestamp
                 ):
                     yield self.remap_message(message, channel)
             else:
