@@ -1978,6 +1978,13 @@ class SharepointOnlineDataSource(BaseDataSource):
         site_id = site["id"]
         url = site["webUrl"]
         async for site_page in self.client.site_pages(url):
+            # site page object has multiple ids:
+            # - Id - not globally unique, just an increment, e.g. 1, 2, 3, 4
+            # - GUID - not globally unique, though it's a real guid
+            # - odata.id - not even sure what this id is
+            # Therefore, we generate id combining unique site id with site page id that is unique within this site
+            # Careful with format - changing other ids can overlap with this one if they follow the format of:
+            # {site_id}-{some_name_or_string_id}-{autoincremented_id}
             site_page["_id"] = f"{site_id}-site_page-{site_page['Id']}"
             site_page["object_type"] = "site_page"
 
