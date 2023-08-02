@@ -165,6 +165,26 @@
         "value": false,
         "order": 10,
         "ui_restrictions": []
+      },
+      "fetch_unique_list_item_permissions": {
+        "depends_on": [
+          {
+            "field": "use_document_level_security",
+            "value": true
+          }
+        ],
+        "display": "toggle",
+        "tooltip": "Enable this option to fetch unique list item permissions. This setting can increase sync time. If this setting is disabled a list item will inherit permissions from its parent site.",
+        "default_value": null,
+        "label": "Fetch unique list item permissions",
+        "sensitive": false,
+        "type": "bool",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": true,
+        "order": 11,
+        "ui_restrictions": []
       }
     },
     "custom_scheduling": {},
