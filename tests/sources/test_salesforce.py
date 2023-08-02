@@ -13,7 +13,6 @@ from aiohttp.client_exceptions import ClientConnectionError
 
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.salesforce import SalesforceDataSource, SalesforceSoqlBuilder
-from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
 TEST_DOMAIN = "fake"
@@ -263,7 +262,7 @@ async def test_get_queryable_fields(mock_responses):
 async def test_get_accounts_when_success(mock_responses):
     source = create_salesforce_source()
     expected_doc = {
-        "_id": f"salesforce_connector_account_id",
+        "_id": "salesforce_connector_account_id",
         "account_type": "Customer - Direct",
         "address": "The Burrow under the Hill, Bag End, Hobbiton, The Shire, Eriador, 111, Middle Earth",
         "body": "A fantastic opportunity!",
@@ -338,7 +337,7 @@ async def test_get_accounts_when_not_queryable_yields_nothing(mock_responses):
 
     source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
     async for account in source.salesforce_client.get_accounts():
-        assert account == None
+        assert account is None
 
     await source.close()
 
@@ -347,7 +346,7 @@ async def test_get_accounts_when_not_queryable_yields_nothing(mock_responses):
 async def test_get_opportunities_when_success(mock_responses):
     source = create_salesforce_source()
     expected_doc = {
-        "_id": f"salesforce_connector_opportunity_id",
+        "_id": "salesforce_connector_opportunity_id",
         "body": "An Opportunity!",
         "content_source_id": "opportunity_id",
         "created_at": "",
