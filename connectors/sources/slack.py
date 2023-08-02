@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
 
+from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import CancellableSleeps, dict_slice, retryable
 
@@ -21,6 +22,7 @@ CURSOR = "cursor"
 RESPONSE_METADATA = "response_metadata"
 NEXT_CURSOR = "next_cursor"
 DEFAULT_RETRY_SECONDS = 3
+DEFAULT_RETRY_SLEEP = 30
 PAGE_SIZE = 200
 USER_ID_PATTERN = re.compile(r"<@([A-Z0-9]+)>")
 
@@ -46,6 +48,7 @@ class SlackClient:
             timeout=aiohttp.ClientTimeout(total=None),
             raise_for_status=True,
         )
+        self._logger = logger
         self._sleeps = CancellableSleeps()
 
     def set_logger(self, logger_):
@@ -160,7 +163,9 @@ class SlackClient:
         if e.status == 429:
             response_headers = e.headers or {}
             if "Retry-After" in response_headers:
-                retry_seconds = int(response_headers["Retry-After"])
+                retry_seconds = int(
+                    response_headers.get("Retry-After", DEFAULT_RETRY_SECONDS)
+                )
             else:
                 self._logger.warning(
                     f"Response Code from Slack is {e.status} but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
@@ -196,6 +201,7 @@ class SlackDataSource(BaseDataSource):
         self.slack_client = SlackClient(configuration)
         self.auto_join_channels = configuration["auto_join_channels"]
         self.n_days_to_fetch = configuration["fetch_last_n_days"]
+        self.usernames = {}
 
     def _set_internal_logger(self):
         self.slack_client.set_logger(self._logger)
@@ -247,7 +253,6 @@ class SlackDataSource(BaseDataSource):
 
     async def get_docs(self, filtering=None):
         self._logger.info("Fetching all users")
-        self.usernames = {}
         async for user in self.slack_client.list_users():
             self.usernames[user["id"]] = self.get_username(user)
             if self.configuration["sync_users"]:
