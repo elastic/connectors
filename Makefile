@@ -13,14 +13,14 @@ bin/python:
 
 pre-install: bin/python
 	bin/pip install -r requirements/pre_install.txt
-	bin/python install.py develop
+	bin/python install.py
 
 install: bin/python bin/elastic-ingest
 
 dev: install
 	bin/pip install -r requirements/tests.txt
 
-bin/elastic-ingest: bin/python
+bin/elastic-ingest: bin/python pre-install
 	bin/pip install -r requirements/$(ARCH).txt
 	bin/python setup.py develop
 
@@ -36,7 +36,7 @@ bin/pytest: bin/python
 clean:
 	rm -rf bin lib include
 
-lint: bin/python bin/black bin/elastic-ingest
+lint: bin/python bin/elastic-ingest bin/black
 	bin/isort --check . --sp .isort.cfg
 	bin/black --check connectors
 	bin/black --check tests
@@ -49,20 +49,20 @@ lint: bin/python bin/black bin/elastic-ingest
 	bin/pyright connectors
 	bin/pyright tests
 
-autoformat: bin/python bin/black bin/elastic-ingest
+autoformat: bin/python bin/elastic-ingest bin/black
 	bin/isort . --sp .isort.cfg
 	bin/black connectors
 	bin/black tests
 	bin/black setup.py
 	bin/black scripts
 
-test:	bin/pytest bin/elastic-ingest
+test:	bin/elastic-ingest bin/pytest
 	bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
 release: install
 	bin/python setup.py sdist
 
-ftest: bin/pytest bin/elastic-ingest
+ftest: bin/elastic-ingest bin/pytest
 	tests/ftest.sh $(NAME) $(PERF8)
 
 run: install
