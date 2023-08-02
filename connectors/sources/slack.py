@@ -157,9 +157,9 @@ class SlackClient:
             ) as resp:
                 yield resp
         except ClientResponseError as e:
-            await self._handle_client_response_error(absolute_url, e)
+            await self._handle_client_response_error(e)
 
-    async def _handle_client_response_error(self, absolute_url, e):
+    async def _handle_client_response_error(self, e):
         if e.status == 429:
             response_headers = e.headers or {}
             if "Retry-After" in response_headers:
@@ -364,8 +364,8 @@ class SlackDataSource(BaseDataSource):
         def convert_usernames(
             match_obj,
         ):  # used below in an re.sub to map on matching messages
-            id = match_obj.group(1)
-            return f"<@{self.usernames.get(id, id)}>"  # replace the ID with the mapped username, if there is one
+            id_ = match_obj.group(1)
+            return f"<@{self.usernames.get(id_, id_)}>"  # replace the ID with the mapped username, if there is one
 
         return {
             "_id": message["client_msg_id"],
