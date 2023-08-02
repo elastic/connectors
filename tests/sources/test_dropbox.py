@@ -341,6 +341,7 @@ def get_stream_reader():
     async_mock.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
     return async_mock
 
+
 def setup_dropbox():
     # Set up default config with default values
     source = create_source(DropboxDataSource)
@@ -349,6 +350,7 @@ def setup_dropbox():
     source.configuration.set_field(name="refresh_token", value="abc#123")
     return source
 
+
 @pytest.mark.asyncio
 async def test_configuration():
     """Tests the get configurations method of the Dropbox source class."""
@@ -356,6 +358,7 @@ async def test_configuration():
         config=DropboxDataSource.get_default_configuration()
     )
     assert config["path"] == PATH
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(

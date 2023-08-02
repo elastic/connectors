@@ -24,6 +24,7 @@ from tests.sources.support import create_source
 SAMPLE_RESPONSE = b'{"batch_request_id":"1","serviced_requests":[{"id":"1", "body":"eyJyZXN1bHQiOlt7Im5hbWUiOiJzbl9zbV9qb3VybmFsMDAwMiIsImxhYmVsIjoiU2VjcmV0cyBNYW5hZ2VtZW50IEpvdXJuYWwifV19","status_code":200,"status_text":"OK","execution_time":19}],"unserviced_requests":[]}'
 ADVANCED_SNIPPET = "advanced_snippet"
 
+
 class MockResponse:
     """Mock response of aiohttp get method"""
 
@@ -62,6 +63,7 @@ class StreamerReader:
 def test_get_configuration():
     config = DataSourceConfiguration(ServiceNowDataSource.get_default_configuration())
     assert config["services"] == ["*"]
+
 
 def setup_servicenow():
     # Set up default config with default values
