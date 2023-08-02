@@ -1,262 +1,282 @@
 {
-    "api_key_id": "clvIfIgBFjJwEZQV7bda",
-    "configuration": {
-      "tenant_id": {
-        "depends_on": [],
-        "display": "text",
-        "tooltip": null,
-        "default_value": null,
-        "label": "Tenant Id",
-        "sensitive": false,
-        "type": "str",
-        "required": true,
-        "options": [],
-        "validations": [],
-        "value": "00000000-0000-0000-0000-000000000000",
-        "order": 1,
-        "ui_restrictions": []
-      },
-      "tenant_name": {
-        "depends_on": [],
-        "display": "text",
-        "tooltip": null,
-        "default_value": null,
-        "label": "Tenant Name",
-        "sensitive": false,
-        "type": "str",
-        "required": true,
-        "options": [],
-        "validations": [],
-        "value": "sharepoint-online-ftest",
-        "order": 2,
-        "ui_restrictions": []
-      },
-      "secret_value": {
-        "depends_on": [],
-        "display": "text",
-        "tooltip": null,
-        "default_value": null,
-        "label": "Secret Value",
-        "sensitive": true,
-        "type": "str",
-        "required": true,
-        "options": [],
-        "validations": [],
-        "value": "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ",
-        "order": 4,
-        "ui_restrictions": []
-      },
-      "client_id": {
-        "depends_on": [],
-        "display": "text",
-        "tooltip": null,
-        "default_value": null,
-        "label": "Client Id",
-        "sensitive": true,
-        "type": "str",
-        "required": true,
-        "options": [],
-        "validations": [],
-        "value": "00000000-0000-0000-0000-000000000000",
-        "order": 3,
-        "ui_restrictions": []
-      },
-      "site_collections": {
-        "depends_on": [],
-        "display": "textarea",
-        "tooltip": "Site names are expected in this field. Providing \"*\" will make the connector fetch all sites on the tenant.",
-        "default_value": null,
-        "label": "Comma-separated list of SharePoint site collections to index",
-        "sensitive": false,
-        "type": "list",
-        "required": true,
-        "options": [],
-        "validations": [],
-        "value": "*",
-        "order": 5,
-        "ui_restrictions": []
-      },
-      "use_text_extraction_service": {
-        "depends_on": [],
-        "display": "toggle",
-        "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
-        "default_value": null,
-        "label": "Use text extraction service",
-        "sensitive": false,
-        "type": "bool",
-        "required": true,
-        "options": [],
-        "validations": [],
-        "value": false,
-        "order": 6,
-        "ui_restrictions": []
-      },
-      "use_document_level_security": {
-        "depends_on": [],
-        "display": "toggle",
-        "tooltip": "Document level security ensures identities and permissions set in Sharepoint Online are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
-        "default_value": null,
-        "label": "Enable document level security",
-        "sensitive": false,
-        "type": "bool",
-        "required": true,
-        "options": [],
-        "validations": [],
-        "value": false,
-        "order": 7,
-        "ui_restrictions": []
-      },
-      "fetch_drive_item_permissions": {
-        "depends_on": [
-          {
-            "field": "use_document_level_security",
-            "value": true
-          }
-        ],
-        "display": "toggle",
-        "tooltip": "Enable this option to fetch drive item specific permissions. This setting can increase sync time.",
-        "default_value": true,
-        "label": "Fetch drive item permissions",
-        "sensitive": false,
-        "type": "bool",
-        "required": true,
-        "options": [],
-        "validations": [],
-        "value": false,
-        "order": 8,
-        "ui_restrictions": []
-      },
-      "fetch_unique_page_permissions": {
-        "depends_on": [
-          {
-            "field": "use_document_level_security",
-            "value": true
-          }
-        ],
-        "display": "toggle",
-        "tooltip": "Enable this option to fetch unique page permissions. This setting can increase sync time. If this setting is disabled a page will inherit permissions from its parent site.",
-        "default_value": true,
-        "label": "Fetch unique page permissions",
-        "sensitive": false,
-        "type": "bool",
-        "required": true,
-        "options": [],
-        "validations": [],
-        "value": false,
-        "order": 9,
-        "ui_restrictions": []
-      },
-      "fetch_unique_list_permissions": {
-        "depends_on": [
-          {
-            "field": "use_document_level_security",
-            "value": true
-          }
-        ],
-        "display": "toggle",
-        "tooltip": "Enable this option to fetch unique list permissions. This setting can increase sync time. If this setting is disabled a list will inherit permissions from its parent site.",
-        "default_value": true,
-        "label": "Fetch unique list permissions",
-        "sensitive": false,
-        "type": "bool",
-        "required": true,
-        "options": [],
-        "validations": [],
-        "value": false,
-        "order": 10,
-        "ui_restrictions": []
-      }
+  "api_key_id": "clvIfIgBFjJwEZQV7bda",
+  "configuration": {
+    "tenant_id": {
+      "depends_on": [],
+      "display": "text",
+      "tooltip": null,
+      "default_value": null,
+      "label": "Tenant Id",
+      "sensitive": false,
+      "type": "str",
+      "required": true,
+      "options": [],
+      "validations": [],
+      "value": "00000000-0000-0000-0000-000000000000",
+      "order": 1,
+      "ui_restrictions": []
     },
-    "custom_scheduling": {},
-    "description": null,
-    "error": "Cannot connect to host enterprisesearchasd.sharepoint.com:443 ssl:default [nodename nor servname provided, or not known]",
-    "features": {
-      "filtering_advanced_config": false,
-      "filtering_rules": false,
-      "sync_rules": {
-        "advanced": {
-          "enabled": true
+    "tenant_name": {
+      "depends_on": [],
+      "display": "text",
+      "tooltip": null,
+      "default_value": null,
+      "label": "Tenant Name",
+      "sensitive": false,
+      "type": "str",
+      "required": true,
+      "options": [],
+      "validations": [],
+      "value": "sharepoint-online-ftest",
+      "order": 2,
+      "ui_restrictions": []
+    },
+    "secret_value": {
+      "depends_on": [],
+      "display": "text",
+      "tooltip": null,
+      "default_value": null,
+      "label": "Secret Value",
+      "sensitive": true,
+      "type": "str",
+      "required": true,
+      "options": [],
+      "validations": [],
+      "value": "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ",
+      "order": 4,
+      "ui_restrictions": []
+    },
+    "client_id": {
+      "depends_on": [],
+      "display": "text",
+      "tooltip": null,
+      "default_value": null,
+      "label": "Client Id",
+      "sensitive": true,
+      "type": "str",
+      "required": true,
+      "options": [],
+      "validations": [],
+      "value": "00000000-0000-0000-0000-000000000000",
+      "order": 3,
+      "ui_restrictions": []
+    },
+    "site_collections": {
+      "depends_on": [],
+      "display": "textarea",
+      "tooltip": "Site names are expected in this field. Providing \"*\" will make the connector fetch all sites on the tenant.",
+      "default_value": null,
+      "label": "Comma-separated list of SharePoint site collections to index",
+      "sensitive": false,
+      "type": "list",
+      "required": true,
+      "options": [],
+      "validations": [],
+      "value": "*",
+      "order": 5,
+      "ui_restrictions": []
+    },
+    "use_text_extraction_service": {
+      "depends_on": [],
+      "display": "toggle",
+      "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+      "default_value": null,
+      "label": "Use text extraction service",
+      "sensitive": false,
+      "type": "bool",
+      "required": true,
+      "options": [],
+      "validations": [],
+      "value": false,
+      "order": 6,
+      "ui_restrictions": []
+    },
+    "use_document_level_security": {
+      "depends_on": [],
+      "display": "toggle",
+      "tooltip": "Document level security ensures identities and permissions set in Sharepoint Online are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+      "default_value": null,
+      "label": "Enable document level security",
+      "sensitive": false,
+      "type": "bool",
+      "required": true,
+      "options": [],
+      "validations": [],
+      "value": false,
+      "order": 7,
+      "ui_restrictions": []
+    },
+    "fetch_drive_item_permissions": {
+      "depends_on": [
+        {
+          "field": "use_document_level_security",
+          "value": true
+        }
+      ],
+      "display": "toggle",
+      "tooltip": "Enable this option to fetch drive item specific permissions. This setting can increase sync time.",
+      "default_value": true,
+      "label": "Fetch drive item permissions",
+      "sensitive": false,
+      "type": "bool",
+      "required": true,
+      "options": [],
+      "validations": [],
+      "value": false,
+      "order": 8,
+      "ui_restrictions": []
+    },
+    "fetch_unique_page_permissions": {
+      "depends_on": [
+        {
+          "field": "use_document_level_security",
+          "value": true
+        }
+      ],
+      "display": "toggle",
+      "tooltip": "Enable this option to fetch unique page permissions. This setting can increase sync time. If this setting is disabled a page will inherit permissions from its parent site.",
+      "default_value": true,
+      "label": "Fetch unique page permissions",
+      "sensitive": false,
+      "type": "bool",
+      "required": true,
+      "options": [],
+      "validations": [],
+      "value": false,
+      "order": 9,
+      "ui_restrictions": []
+    },
+    "fetch_unique_list_permissions": {
+      "depends_on": [
+        {
+          "field": "use_document_level_security",
+          "value": true
+        }
+      ],
+      "display": "toggle",
+      "tooltip": "Enable this option to fetch unique list permissions. This setting can increase sync time. If this setting is disabled a list will inherit permissions from its parent site.",
+      "default_value": true,
+      "label": "Fetch unique list permissions",
+      "sensitive": false,
+      "type": "bool",
+      "required": true,
+      "options": [],
+      "validations": [],
+      "value": false,
+      "order": 10,
+      "ui_restrictions": []
+    },
+    "fetch_unique_list_item_permissions": {
+      "depends_on": [
+        {
+          "field": "use_document_level_security",
+          "value": true
+        }
+      ],
+      "display": "toggle",
+      "tooltip": "Enable this option to fetch unique list item permissions. This setting can increase sync time. If this setting is disabled a list item will inherit permissions from its parent site.",
+      "default_value": null,
+      "label": "Fetch unique list item permissions",
+      "sensitive": false,
+      "type": "bool",
+      "required": true,
+      "options": [],
+      "validations": [],
+      "value": true,
+      "order": 11,
+      "ui_restrictions": []
+    }
+  },
+  "custom_scheduling": {},
+  "description": null,
+  "error": "Cannot connect to host enterprisesearchasd.sharepoint.com:443 ssl:default [nodename nor servname provided, or not known]",
+  "features": {
+    "filtering_advanced_config": false,
+    "filtering_rules": false,
+    "sync_rules": {
+      "advanced": {
+        "enabled": true
+      },
+      "basic": {
+        "enabled": true
+      }
+    }
+  },
+  "filtering": [
+    {
+      "domain": "DEFAULT",
+      "draft": {
+        "advanced_snippet": {
+          "updated_at": "2023-06-02T15:50:23.157Z",
+          "created_at": "2023-06-02T15:50:23.157Z",
+          "value": {}
         },
-        "basic": {
-          "enabled": true
+        "rules": [
+          {
+            "field": "_",
+            "updated_at": "2023-06-02T15:50:23.157Z",
+            "created_at": "2023-06-02T15:44:59.416Z",
+            "rule": "regex",
+            "id": "DEFAULT",
+            "value": ".*",
+            "order": 0,
+            "policy": "include"
+          }
+        ],
+        "validation": {
+          "state": "valid",
+          "errors": []
+        }
+      },
+      "active": {
+        "advanced_snippet": {
+          "updated_at": "2023-06-02T15:50:23.157Z",
+          "created_at": "2023-06-02T15:50:23.157Z",
+          "value": {}
+        },
+        "rules": [
+          {
+            "field": "_",
+            "updated_at": "2023-06-02T15:50:23.157Z",
+            "created_at": "2023-06-02T15:44:59.416Z",
+            "rule": "regex",
+            "id": "DEFAULT",
+            "value": ".*",
+            "order": 0,
+            "policy": "include"
+          }
+        ],
+        "validation": {
+          "state": "valid",
+          "errors": []
         }
       }
-    },
-    "filtering": [
-      {
-        "domain": "DEFAULT",
-        "draft": {
-          "advanced_snippet": {
-            "updated_at": "2023-06-02T15:50:23.157Z",
-            "created_at": "2023-06-02T15:50:23.157Z",
-            "value": {}
-          },
-          "rules": [
-            {
-              "field": "_",
-              "updated_at": "2023-06-02T15:50:23.157Z",
-              "created_at": "2023-06-02T15:44:59.416Z",
-              "rule": "regex",
-              "id": "DEFAULT",
-              "value": ".*",
-              "order": 0,
-              "policy": "include"
-            }
-          ],
-          "validation": {
-            "state": "valid",
-            "errors": []
-          }
-        },
-        "active": {
-          "advanced_snippet": {
-            "updated_at": "2023-06-02T15:50:23.157Z",
-            "created_at": "2023-06-02T15:50:23.157Z",
-            "value": {}
-          },
-          "rules": [
-            {
-              "field": "_",
-              "updated_at": "2023-06-02T15:50:23.157Z",
-              "created_at": "2023-06-02T15:44:59.416Z",
-              "rule": "regex",
-              "id": "DEFAULT",
-              "value": ".*",
-              "order": 0,
-              "policy": "include"
-            }
-          ],
-          "validation": {
-            "state": "valid",
-            "errors": []
-          }
-        }
-      }
-    ],
-    "index_name": "search-sharepoint_online",
-    "is_native": false,
-    "language": null,
-    "last_seen": "2023-06-02T16:05:43.247794+00:00",
-    "last_sync_error": "Cannot connect to host enterprisesearchasd.sharepoint.com:443 ssl:default [nodename nor servname provided, or not known]",
-    "last_sync_scheduled_at": null,
-    "last_sync_status": null,
-    "last_synced": "2023-06-02T16:08:30.745527+00:00",
-    "name": "sharepoint-online-adv",
-    "pipeline": {
-      "extract_binary_content": true,
-      "name": "ent-search-generic-ingestion",
-      "reduce_whitespace": true,
-      "run_ml_inference": true
-    },
-    "scheduling": {
-      "full": {
-        "enabled": true,
-        "interval": "0 * * * * ?"
-      }
-    },
-    "service_type": "sharepoint_online",
-    "status": "connected",
-    "id": "sharepoint_online",
-    "last_indexed_document_count": 0,
-    "last_deleted_document_count": 0
-  }
+    }
+  ],
+  "index_name": "search-sharepoint_online",
+  "is_native": false,
+  "language": null,
+  "last_seen": "2023-06-02T16:05:43.247794+00:00",
+  "last_sync_error": "Cannot connect to host enterprisesearchasd.sharepoint.com:443 ssl:default [nodename nor servname provided, or not known]",
+  "last_sync_scheduled_at": null,
+  "last_sync_status": null,
+  "last_synced": "2023-06-02T16:08:30.745527+00:00",
+  "name": "sharepoint-online-adv",
+  "pipeline": {
+    "extract_binary_content": true,
+    "name": "ent-search-generic-ingestion",
+    "reduce_whitespace": true,
+    "run_ml_inference": true
+  },
+  "scheduling": {
+    "full": {
+      "enabled": true,
+      "interval": "0 * * * * ?"
+    }
+  },
+  "service_type": "sharepoint_online",
+  "status": "connected",
+  "id": "sharepoint_online",
+  "last_indexed_document_count": 0,
+  "last_deleted_document_count": 0
+}
