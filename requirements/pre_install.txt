@@ -1,1 +1,1 @@
-pre_install.txt
+distro>=1.8.0
