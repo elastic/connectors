@@ -65,6 +65,9 @@ release: install
 ftest: bin/elastic-ingest bin/pytest
 	tests/ftest.sh $(NAME) $(PERF8)
 
+ftrace: bin/pytest bin/elastic-ingest
+	PERF8_TRACE=true tests/ftest.sh $(NAME) $(PERF8)
+
 run: install
 	bin/elastic-ingest
 
