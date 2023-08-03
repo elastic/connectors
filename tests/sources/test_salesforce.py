@@ -201,6 +201,10 @@ async def test_get_token_with_bad_domain_raises_error(
         ("ArghField", False),
     ],
 )
+@mock.patch(
+    "connectors.sources.salesforce.RELEVANT_SOBJECTS",
+    ["FooField", "BarField", "ArghField"],
+)
 async def test_get_queryable_sobjects(mock_responses, sobject, expected_result):
     source = create_salesforce_source()
     response_payload = {
@@ -222,7 +226,6 @@ async def test_get_queryable_sobjects(mock_responses, sobject, expected_result):
         payload=response_payload,
     )
 
-    await source.salesforce_client._cache_queryable_sobjects()
     queryable = await source.salesforce_client._is_queryable(sobject)
     assert queryable == expected_result
 
@@ -230,6 +233,11 @@ async def test_get_queryable_sobjects(mock_responses, sobject, expected_result):
 
 
 @pytest.mark.asyncio
+@mock.patch("connectors.sources.salesforce.RELEVANT_SOBJECTS", ["Account"])
+@mock.patch(
+    "connectors.sources.salesforce.RELEVANT_SOBJECT_FIELDS",
+    ["FooField", "BarField", "ArghField"],
+)
 async def test_get_queryable_fields(mock_responses):
     source = create_salesforce_source()
     expected_fields = [
@@ -262,7 +270,7 @@ async def test_get_queryable_fields(mock_responses):
 async def test_get_accounts_when_success(mock_responses):
     source = create_salesforce_source()
     expected_doc = {
-        "_id": "salesforce_connector_account_id",
+        "_id": "account_id",
         "account_type": "Customer - Direct",
         "address": "The Burrow under the Hill, Bag End, Hobbiton, The Shire, Eriador, 111, Middle Earth",
         "body": "A fantastic opportunity!",
@@ -346,7 +354,7 @@ async def test_get_accounts_when_not_queryable_yields_nothing(mock_responses):
 async def test_get_opportunities_when_success(mock_responses):
     source = create_salesforce_source()
     expected_doc = {
-        "_id": "salesforce_connector_opportunity_id",
+        "_id": "opportunity_id",
         "body": "An Opportunity!",
         "content_source_id": "opportunity_id",
         "created_at": "",

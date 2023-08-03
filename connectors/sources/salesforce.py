@@ -22,6 +22,18 @@ QUERY_ENDPOINT = f"/services/data/{API_VERSION}/query"
 DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 DESCRIBE_SOBJECT_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/<sobject>/describe"
 
+RELEVANT_SOBJECTS = ["Account", "Opportunity"]
+RELEVANT_SOBJECT_FIELDS = [
+    "Name",
+    "Description",
+    "BillingAddress",
+    "Type",
+    "Website",
+    "Rating",
+    "Department",
+    "StageName",
+]
+
 
 class SalesforceClient:
     def __init__(self, configuration):
@@ -30,7 +42,8 @@ class SalesforceClient:
         self.token = None
         self.token_issued_at = None
         self.token_refresh_enabled = False
-        self.queryable_sobjects = []
+        self._queryable_sobjects = None
+        self._queryable_sobject_fields = None
 
         self.base_url = BASE_URL.replace("<domain>", configuration["domain"])
         self.client_id = configuration["client_id"]
@@ -41,7 +54,7 @@ class SalesforceClient:
             "client_secret": self.client_secret,
         }
 
-        self.doc_builder = SalesforceDocMapper(self.base_url)
+        self.doc_mapper = SalesforceDocMapper(self.base_url)
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -55,7 +68,7 @@ class SalesforceClient:
 
     async def ping(self):
         # TODO ping something of value (this could be config check instead)
-        await self._api_request(self.base_url, "head")
+        await self.session.head(self.base_url)
 
     async def close(self):
         self._token_cleanup()
@@ -70,8 +83,8 @@ class SalesforceClient:
     async def get_token(self, enable_refresh=True):
         # TODO add refresh method
         self._logger.debug("Fetching Salesforce token...")
-        resp = await self._api_request(
-            f"{self.base_url}{TOKEN_ENDPOINT}", "post", data=self.token_payload
+        resp = await self.session.post(
+            f"{self.base_url}{TOKEN_ENDPOINT}", data=self.token_payload
         )
         resp_json = await resp.json()
         self.token = resp_json["access_token"]
@@ -89,10 +102,10 @@ class SalesforceClient:
 
         # TODO handle pagination
         query = await self._accounts_query()
-        resp = await self._yield_non_bulk_query_pages(query)
+        resp = await self._get_non_bulk_query_pages(query)
         resp_json = await resp.json()
         for record in resp_json.get("records", []):
-            yield self.doc_builder.build_account(record)
+            yield self.doc_mapper.map_account(record)
 
     @retryable(
         retries=RETRIES,
@@ -104,43 +117,61 @@ class SalesforceClient:
 
         # TODO handle pagination
         query = await self._opportunities_query()
-        resp = await self._yield_non_bulk_query_pages(query)
+        resp = await self._get_non_bulk_query_pages(query)
         resp_json = await resp.json()
         for record in resp_json.get("records", []):
-            yield self.doc_builder.build_oppoortunity(record)
+            yield self.doc_mapper.map_oppoortunity(record)
 
-    async def prepare_caches(self):
-        await self._cache_queryable_sobjects()
+    async def queryable_sobjects(self):
+        """Cached async property"""
+        if self._queryable_sobjects is not None:
+            return self._queryable_sobjects
 
-    async def _cache_queryable_sobjects(self):
-        resp = await self._api_request(
-            f"{self.base_url}{DESCRIBE_ENDPOINT}", "get", headers=self._auth_headers()
-        )
+        resp = await self.get_request(DESCRIBE_ENDPOINT)
         resp_json = await resp.json()
-        self.queryable_sobjects = [
-            x["name"].lower() for x in resp_json["sobjects"] if x["queryable"] is True
-        ]
+        self._queryable_sobjects = []
+
+        for sobject in resp_json["sobjects"]:
+            if sobject["queryable"] is True and sobject["name"] in RELEVANT_SOBJECTS:
+                self._queryable_sobjects.append(sobject["name"].lower())
+
+        return self._queryable_sobjects
+
+    async def queryable_sobject_fields(self):
+        """Cached async property"""
+        if self._queryable_sobject_fields is not None:
+            return self._queryable_sobject_fields
+
+        self._queryable_sobject_fields = {}
+
+        for sobject in RELEVANT_SOBJECTS:
+            endpoint = DESCRIBE_SOBJECT_ENDPOINT.replace("<sobject>", sobject)
+            resp = await self.get_request(endpoint)
+            resp_json = await resp.json()
+
+            queryable_fields = [
+                f["name"].lower()
+                for f in resp_json["fields"]
+                if f["name"] in RELEVANT_SOBJECT_FIELDS
+            ]
+            self._queryable_sobject_fields[sobject] = queryable_fields
+
+        return self._queryable_sobject_fields
 
     async def _is_queryable(self, sobject):
-        return sobject.lower() in self.queryable_sobjects
+        return sobject.lower() in await self.queryable_sobjects()
 
     async def _select_queryable_fields(self, sobject, fields):
         """User settings can cause fields to be non-queryable
         This causes
         """
-        endpoint = DESCRIBE_SOBJECT_ENDPOINT.replace("<sobject>", sobject)
-        resp = await self._api_request(
-            f"{self.base_url}{endpoint}", "get", headers=self._auth_headers()
-        )
-        resp_json = await resp.json()
-        queryable_fields = [f["name"] for f in resp_json["fields"]]
-        return [f for f in fields if f in queryable_fields]
+        sobject_fields = await self.queryable_sobject_fields()
+        queryable_fields = sobject_fields.get(sobject, [])
+        return [f for f in fields if f.lower() in queryable_fields]
 
-    async def _yield_non_bulk_query_pages(self, soql_query):
-        return await self._api_request(
-            f"{self.base_url}{QUERY_ENDPOINT}",
-            "get",
-            headers=self._auth_headers(),
+    async def _get_non_bulk_query_pages(self, soql_query):
+        return await self.get_request(
+            QUERY_ENDPOINT,
             params={"q": soql_query},
         )
 
@@ -152,10 +183,10 @@ class SalesforceClient:
     def _auth_headers(self):
         return {"authorization": f"Bearer {self.token}"}
 
-    async def _api_request(self, url, method, headers=None, data=None, params=None):
+    async def get_request(self, endpoint, params=None):
         # TODO improve error handling
-        return await getattr(self.session, method)(
-            url=url, headers=headers, data=data, params=params
+        return await self.session.get(
+            f"{self.base_url}{endpoint}", headers=self._auth_headers(), params=params
         )
 
     async def _accounts_query(self):
@@ -261,7 +292,7 @@ class SalesforceDocMapper:
     def __init__(self, base_url):
         self.base_url = base_url
 
-    def build_account(self, account):
+    def map_account(self, account):
         owner = account.get("Owner", {})
 
         opportunities = account.get("Opportunities")
@@ -273,7 +304,7 @@ class SalesforceDocMapper:
         opportunity_status = opportunity.get("StageName", "")
 
         return {
-            "_id": f"salesforce_connector_{account.get('Id')}",
+            "_id": account.get("Id"),
             "account_type": account.get("Type"),
             "address": self._format_address(account.get("BillingAddress")),
             "body": account.get("Description"),
@@ -296,11 +327,11 @@ class SalesforceDocMapper:
             "website_url": account.get("Website"),
         }
 
-    def build_oppoortunity(self, opportunity):
+    def map_oppoortunity(self, opportunity):
         owner = opportunity.get("Owner", {})
 
         return {
-            "_id": f"salesforce_connector_{opportunity.get('Id')}",
+            "_id": opportunity.get("Id"),
             "body": opportunity.get("Description"),
             "content_source_id": opportunity.get("Id"),
             "created_at": opportunity.get("CreatedDate"),
@@ -382,7 +413,6 @@ class SalesforceDataSource(BaseDataSource):
 
     async def get_docs(self, filtering=None):
         await self.salesforce_client.get_token()
-        await self.salesforce_client.prepare_caches()
 
         # TODO filtering
         async for account in self.salesforce_client.get_accounts():
