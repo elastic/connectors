@@ -41,7 +41,7 @@ class SalesforceClient:
             "client_secret": self.client_secret,
         }
 
-        self.doc_builder = SalesforceDocBuilder(self.base_url)
+        self.doc_builder = SalesforceDocMapper(self.base_url)
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -257,7 +257,7 @@ class SalesforceSoqlBuilder:
         return "\n".join([line for line in query_lines if line != ""])
 
 
-class SalesforceDocBuilder:
+class SalesforceDocMapper:
     def __init__(self, base_url):
         self.base_url = base_url
 
