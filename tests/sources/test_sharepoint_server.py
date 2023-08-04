@@ -84,6 +84,7 @@ async def test_ping_for_successful_connection():
 
     # Setup
     async with create_source(SharepointServerDataSource) as source:
+        source._logger = logger
         source.sharepoint_client._api_call = Mock(
             return_value=async_native_coroutine_generator(200)
         )
@@ -670,10 +671,10 @@ async def test_get_docs_when_no_site_available():
     async with create_source(SharepointServerDataSource) as source:
         actual_response = []
         source.sharepoint_client._fetch_data_with_query = Mock(
-            return_value=AsyncIter([])
+            return_value=AsyncIterator([])
         )
         source.sharepoint_client._fetch_data_with_next_url = Mock(
-            return_value=AsyncIter([])
+            return_value=AsyncIterator([])
         )
         # Execute
         async for document, _ in source.get_docs():
