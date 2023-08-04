@@ -19,6 +19,7 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 from fastjsonschema import JsonSchemaValueException
 
+
 from connectors.es.sink import OP_DELETE, OP_INDEX
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
