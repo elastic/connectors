@@ -11,7 +11,7 @@ import inspect
 import logging
 import time
 from datetime import datetime
-from functools import wraps
+from functools import cached_property, wraps
 from typing import AsyncGenerator
 
 import ecs_logging
@@ -21,11 +21,53 @@ from connectors import __version__
 logger = None
 
 
-def _formatter(prefix):
-    return logging.Formatter(
-        fmt="[" + prefix + "][%(asctime)s][%(levelname)s] %(message)s",
-        datefmt="%H:%M:%S",
-    )
+class ColorFormatter(logging.Formatter):
+    GREY = "\x1b[38;20m"
+    GREEN = "\x1b[32;20m"
+    YELLOW = "\x1b[33;20m"
+    RED = "\x1b[31;20m"
+    BOLD_RED = "\x1b[31;1m"
+    RESET = "\x1b[0m"
+
+    DATE_FMT = "%H:%M:%S"
+
+    def __init__(self, prefix):
+        self.custom_format = "[" + prefix + "][%(asctime)s][%(levelname)s] %(message)s"
+        super().__init__()
+
+    @cached_property
+    def debug_formatter(self):
+        return logging.Formatter(
+            fmt=self.GREY + self.custom_format + self.RESET, datefmt=self.DATE_FMT
+        )
+
+    @cached_property
+    def info_formatter(self):
+        return logging.Formatter(
+            fmt=self.GREEN + self.custom_format + self.RESET, datefmt=self.DATE_FMT
+        )
+
+    @cached_property
+    def warning_formatter(self):
+        return logging.Formatter(
+            fmt=self.YELLOW + self.custom_format + self.RESET, datefmt=self.DATE_FMT
+        )
+
+    @cached_property
+    def error_formatter(self):
+        return logging.Formatter(
+            fmt=self.RED + self.custom_format + self.RESET, datefmt=self.DATE_FMT
+        )
+
+    @cached_property
+    def critical_formatter(self):
+        return logging.Formatter(
+            fmt=self.BOLD_RED + self.custom_format + self.RESET, datefmt=self.DATE_FMT
+        )
+
+    def format(self, record):
+        formatter = getattr(self, f"{record.levelname.lower()}_formatter")
+        return formatter.format(record)
 
 
 class ExtraLogger(logging.Logger):
@@ -53,7 +95,7 @@ def set_logger(log_level=logging.INFO, filebeat=False):
     if filebeat:
         formatter = ecs_logging.StdlibFormatter()
     else:
-        formatter = _formatter("FMWK")
+        formatter = ColorFormatter("FMWK")
 
     if logger is None:
         logging.setLoggerClass(ExtraLogger)
@@ -77,7 +119,7 @@ def set_extra_logger(logger, log_level=logging.INFO, prefix="BYOC", filebeat=Fal
     if filebeat:
         handler.setFormatter(ecs_logging.StdlibFormatter())
     else:
-        formatter = _formatter(prefix)
+        formatter = ColorFormatter(prefix)
         handler.setFormatter(formatter)
     handler.setLevel(log_level)
     logger.addHandler(handler)

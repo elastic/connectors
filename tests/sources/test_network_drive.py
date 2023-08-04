@@ -9,17 +9,25 @@ import asyncio
 import datetime
 from io import BytesIO
 from unittest import mock
+from unittest.mock import ANY
 
 import pytest
 import smbclient
 from smbprotocol.exceptions import LogonFailure, SMBOSError
 
+from connectors.filtering.validation import SyncRuleValidationResult
+from connectors.protocol import Filter
 from connectors.source import DataSourceConfiguration
-from connectors.sources.network_drive import NASDataSource
+from connectors.sources.network_drive import (
+    NASDataSource,
+    NetworkDriveAdvancedRulesValidator,
+)
+from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
 READ_COUNT = 0
 MAX_CHUNK_SIZE = 65536
+ADVANCED_SNIPPET = "advanced_snippet"
 
 
 def mock_file(name):
@@ -408,4 +416,182 @@ async def test_close_without_session():
     async with create_source(NASDataSource) as source:
         await source.close()
 
-        assert source.session is None
+    assert source.session is None
+
+
+@pytest.mark.parametrize(
+    "advanced_rules, expected_validation_result",
+    [
+        (
+            # valid: empty array should be valid
+            [],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: empty object should also be valid -> default value in Kibana
+            {},
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: one custom pattern
+            [{"pattern": "a/b"}],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: two custom patterns
+            [{"pattern": "a/b/*"}, {"pattern": "a/*"}],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # invalid: pattern empty
+            [{"pattern": "a/**/c"}, {"pattern": ""}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: unallowed key
+            [{"pattern": "a/b/*"}, {"queries": "a/d"}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: list of strings -> wrong type
+            {"pattern": ["a/b/*"]},
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: array of arrays -> wrong type
+            {"path": ["a/b/c", ""]},
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+    mock_data = [
+        ("\\1.2.3.4/a", ["d.txt"], ["b"]),
+        ("\\1.2.3.4/a/b", ["c.txt"], ["e"]),
+        ("\\1.2.3.4/a/b/e", [], []),
+    ]
+    async with create_source(NASDataSource) as source:
+        with mock.patch.object(smbclient, "register_session"):
+            with mock.patch.object(
+                smbclient, "walk", side_effect=[iter(mock_data), iter(mock_data)]
+            ):
+                validation_result = await NetworkDriveAdvancedRulesValidator(
+                    source
+                ).validate(advanced_rules)
+
+                assert validation_result == expected_validation_result
+
+
+@pytest.mark.parametrize(
+    "filtering",
+    [
+        Filter(
+            {
+                ADVANCED_SNIPPET: {
+                    "value": [
+                        {"pattern": "training/python/async"},
+                        {"pattern": "training/**/examples"},
+                    ]
+                }
+            }
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules(filtering):
+    async with create_source(NASDataSource) as source:
+        response_list = []
+        mock_data = [
+            ("\\1.2.3.4/training", ["d.txt", "a.txt"], ["java", "python"]),
+            ("\\1.2.3.4/training/python", ["c.txt"], ["basics", "async"]),
+            ("\\1.2.3.4/training/python/async", ["coroutines.py"], []),
+            ("\\1.2.3.4/training/python/basics", [], ["examples"]),
+            ("\\1.2.3.4/training/python/basics/examples", ["lecture.py"], []),
+            (
+                "\\1.2.3.4/training/java",
+                ["hello.java", "inheritance.java", "collections.java"],
+                [],
+            ),
+        ]
+        with mock.patch.object(
+            smbclient, "walk", side_effect=[iter(mock_data), iter(mock_data)]
+        ):
+            with mock.patch.object(
+                NASDataSource,
+                "get_files",
+                side_effect=[
+                    AsyncIterator(
+                        [
+                            {
+                                "path": "\\1.2.3.4/training/python/basics/examples/lecture.py",
+                                "size": "2700",
+                                "_id": "1233",
+                                "created_at": "1111-11-11T11:11:11",
+                                "type": "file",
+                                "title": "lecture.py",
+                                "_timestamp": "1212-12-12T12:12:12",
+                            },
+                        ]
+                    ),
+                    AsyncIterator(
+                        [
+                            {
+                                "path": "\\1.2.3.4/training/python/async/coroutines.py",
+                                "size": "30000",
+                                "_id": "987",
+                                "created_at": "1111-11-11T11:11:11",
+                                "type": "file",
+                                "title": "coroutines.py",
+                                "_timestamp": "1212-12-12T12:12:12",
+                            },
+                        ]
+                    ),
+                ],
+            ):
+                async for response in source.get_docs(filtering):
+                    response_list.append(response[0])
+        assert [
+            {
+                "path": "\\1.2.3.4/training/python/basics/examples/lecture.py",
+                "size": "2700",
+                "_id": "1233",
+                "created_at": "1111-11-11T11:11:11",
+                "type": "file",
+                "title": "lecture.py",
+                "_timestamp": "1212-12-12T12:12:12",
+            },
+            {
+                "path": "\\1.2.3.4/training/python/async/coroutines.py",
+                "size": "30000",
+                "_id": "987",
+                "created_at": "1111-11-11T11:11:11",
+                "type": "file",
+                "title": "coroutines.py",
+                "_timestamp": "1212-12-12T12:12:12",
+            },
+        ] == response_list
