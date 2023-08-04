@@ -43,8 +43,8 @@ class RateLimitedException(Exception):
     pass
 
 
-class RequestRefusedException(Exception):
-    """Notifies that a request to Saleforce was rejected"""
+class InvalidQueryException(Exception):
+    """Notifies that a query was malformed or otherwise incorrect"""
 
     pass
 
@@ -57,6 +57,12 @@ class InvalidCredentialsException(Exception):
 
 class TokenFetchException(Exception):
     """Notifies that an unexpected error occurred when fetching a Salesforce token"""
+
+    pass
+
+
+class RequestError(Exception):
+    """Notifies that a general uncaught 400 error occurred during a request"""
 
     pass
 
@@ -109,23 +115,26 @@ class SalesforceClient:
             return
 
         self._fetching_token = True
+        response_body = None
         try:
-            resp = await self._post(
+            response = await self._post(
                 f"{self.base_url}{TOKEN_ENDPOINT}", data=self.token_payload
             )
-            resp_json = await resp.json()
-            resp.raise_for_status()
-            self.token = resp_json["access_token"]
+            response_body = await response.json()
+            response.raise_for_status()
+            self.token = response_body["access_token"]
         except ClientResponseError as e:
             if 400 <= e.status < 500:
-                # 400s have error details in body
-                if resp_json.get("error") == "invalid_client":
+                # 400s have detailed error messages in body
+                error_resp = self._handle_token_response_body_error(response_body)
+
+                if error_resp == "invalid_client":
                     raise InvalidCredentialsException(
-                        f"The `client_id` and `client_secret` provided could not be used to generate a token. Status: {e.status}, message: {e.message}, details: {resp_json.get('error_description')}"
+                        f"The `client_id` and `client_secret` provided could not be used to generate a token. Status: {e.status}, message: {e.message}, details: {error_resp}"
                     ) from e
                 else:
                     raise TokenFetchException(
-                        f"Could not fetch token from Salesforce: Status: {e.status}, message: {e.message}, details: {resp_json.get('error_description')}"
+                        f"Could not fetch token from Salesforce: Status: {e.status}, message: {e.message}, details: {error_resp}"
                     ) from e
             else:
                 raise TokenFetchException(
@@ -160,7 +169,7 @@ class SalesforceClient:
         response = await self._get_json(f"{self.base_url}{DESCRIBE_ENDPOINT}")
         self._queryable_sobjects = []
 
-        for sobject in response["sobjects"]:
+        for sobject in response.get("sobjects", []):
             if sobject["queryable"] is True and sobject["name"] in RELEVANT_SOBJECTS:
                 self._queryable_sobjects.append(sobject["name"].lower())
 
@@ -179,7 +188,7 @@ class SalesforceClient:
 
             queryable_fields = [
                 f["name"].lower()
-                for f in response["fields"]
+                for f in response.get("fields", [])
                 if f["name"] in RELEVANT_SOBJECT_FIELDS
             ]
             self._queryable_sobject_fields[sobject] = queryable_fields
@@ -203,20 +212,23 @@ class SalesforceClient:
             f"{self.base_url}{QUERY_ENDPOINT}",
             params={"q": soql_query},
         )
-        yield response["records"]
+        yield response.get("records")
 
-        if response["done"] is False:
+        if response.get("done") is False:
             page_count = 1
-            next_url = response["nextRecordsUrl"]
+            next_url = response.get("nextRecordsUrl")
             while True:
                 next_page = await self._get_json(next_url)
-                yield next_page["records"]
+                yield next_page.get("records")
 
                 page_count += 1
-                if next_page["done"] is True or page_count >= QUERY_PAGINATION_LIMIT:
+                if (
+                    next_page.get("done") is True
+                    or page_count >= QUERY_PAGINATION_LIMIT
+                ):
                     break
                 else:
-                    next_url = next_page["nextRecordsUrl"]
+                    next_url = next_page.get("nextRecordsUrl")
 
     def _token_cleanup(self):
         self.token = None
@@ -229,14 +241,16 @@ class SalesforceClient:
         interval=RETRY_INTERVAL,
     )
     async def _get_json(self, url, params=None):
+        response_body = None
+
         try:
-            resp = await self._get(url, params=params)
-            resp_json = await resp.json()
+            response = await self._get(url, params=params)
+            response_body = await response.json()
             # We get the response body before raising for status as it contains vital error information
-            resp.raise_for_status()
-            return resp_json
+            response.raise_for_status()
+            return response_body
         except ClientResponseError as e:
-            await self._handle_client_response_error(resp_json, e)
+            await self._handle_client_response_error(response_body, e)
         except Exception as e:
             raise e
 
@@ -250,32 +264,59 @@ class SalesforceClient:
     async def _post(self, url, data=None):
         return await self.session.post(url, data=data)
 
-    async def _handle_client_response_error(self, resp_json, e):
-        match e.status:
-            case 401:
-                self._logger.warning(
-                    f"Token expired, attemping to fetch new token. Status: {e.status}, message: {e.message}"
+    async def _handle_client_response_error(self, response_body, e):
+        exception_details = f"status: {e.status}, message: {e.message}"
+
+        if e.status == 401:
+            self._logger.warning(
+                f"Token expired, attemping to fetch new token. Status: {e.status}, message: {e.message}"
+            )
+            # The user can alter the lifetime of issued tokens, so we don't know when they expire
+            # Therefore we fetch the token when we encounter an error rather than when it expires
+            await self.get_token()
+            # raise to continue with retry strategy
+            raise e
+        elif 400 <= e.status < 500:
+            errors = self._handle_response_body_error(response_body)
+            # errorCode and message are generally identical, except if the query is invalid
+            error_codes = [x["errorCode"] for x in errors]
+
+            if "REQUEST_LIMIT_EXCEEDED" in error_codes:
+                raise RateLimitedException(
+                    f"Salesforce is rate limiting this account. {exception_details}, details: {', '.join(error_codes)}"
+                ) from e
+            elif (
+                any(
+                    error in error_codes
+                    for error in [
+                        "INVALID_FIELD",
+                        "INVALID_TERM",
+                        "MALFORMED_QUERY",
+                    ]
                 )
-                # The user can alter the lifetime of issued tokens, so we don't know when they expire
-                # Therefore we fetch the token when we encounter an error rather than when it expires
-                await self.get_token()
-                # raise to continue with retry strategy
-                raise e
-            case 403:
-                # The response error format is an array for some reason.
-                # I couldn't find an example of multiple error codes,
-                # but just to be safe we concatenate them in the error message
-                error_codes = [x["errorCode"] for x in resp_json]
-                if "REQUEST_LIMIT_EXCEEDED" in error_codes:
-                    raise RateLimitedException(
-                        f"Salesforce is rate limiting this account. ErrorCode(s): {', '.join(error_codes)}"
-                    ) from e
-                else:
-                    raise RequestRefusedException(
-                        f"Salesforce rejected the request. This can be caused by incorrect permissions. ErrorCode(s): {', '.join(error_codes)}"
-                    ) from e
-            case _:
-                raise e
+                in error_codes
+            ):
+                raise InvalidQueryException(
+                    f"The query was rejected by Salesforce. {exception_details}, details: {', '.join(error_codes)}, query: {', '.join([x['message'] for x in errors])}"
+                ) from e
+            else:
+                raise RequestError(
+                    f"The request to Salesforce failed. {exception_details}, details: {', '.join(error_codes)}"
+                ) from e
+        else:
+            raise e
+
+    def _handle_token_response_body_error(self, error_body):
+        if error_body is None:
+            return ""
+
+        return error_body.get("error")
+
+    def _handle_response_body_error(self, error_list):
+        if error_list is None or len(error_list) < 1:
+            return [{"errorCode": "unknown"}]
+
+        return error_list
 
     async def _accounts_query(self):
         queryable_fields = await self._select_queryable_fields(
