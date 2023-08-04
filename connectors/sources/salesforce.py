@@ -17,7 +17,6 @@ from connectors.utils import CancellableSleeps, retryable
 
 RETRIES = 3
 RETRY_INTERVAL = 1
-QUERY_PAGINATION_LIMIT = 100  # TODO: maybe make the limit configurable
 
 BASE_URL = "https://<domain>.my.salesforce.com"
 API_VERSION = "v58.0"
@@ -40,13 +39,13 @@ RELEVANT_SOBJECT_FIELDS = [
 
 
 class RateLimitedException(Exception):
-    """Notifies that Salesforce has begun rate limiting the current account"""
+    """Notifies that Salesforce has begun rate limiting the current accound"""
 
     pass
 
 
-class InvalidQueryException(Exception):
-    """Notifies that a query was malformed or otherwise incorrect"""
+class RequestRefusedException(Exception):
+    """Notifies that a request to Saleforce was rejected"""
 
     pass
 
