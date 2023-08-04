@@ -15,3 +15,190 @@ steps:
     command: "make ftest NAME=dir DATA_SIZE=small"
     agents:
       machineType: "n1-standard-8"
+
+  - label: ":sweating: Checking for changes in connectors"
+    plugins:
+      chronotc/monorepo-diff#v2.4.0:
+        diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
+        wait: true
+        watch:
+          - path: 
+            - "connectors/sources/mysql.py"
+            - "tests/sources/fixtures/mysql/**"
+            config:
+              label: "🔨 MySQL"
+              command:
+                - ".buildkite/run_nigthly.sh mysql small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/network_drive.py"
+            - "tests/sources/fixtures/network_drive/**"
+            config:
+              label: "🔨 Network Drive"
+              command:
+                - ".buildkite/run_nigthly.sh network_drive small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/s3.py"
+            - "tests/sources/fixtures/s3/**"
+            config:
+              label: "🔨 Amazon S3"
+              command:
+                - ".buildkite/run_nigthly.sh s3 small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/google_cloud_storage.py"
+            - "tests/sources/fixtures/google_cloud_storage/**"
+            config:
+              label: "🔨 Google Cloud Storage"
+              command:
+                - ".buildkite/run_nigthly.sh google_cloud_storage small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+          - path: 
+            - "connectors/sources/azure_blob_storage.py"
+            - "tests/sources/fixtures/azure_blob_storage/**"
+            config:
+              label: "🔨 Azure Blob Storage"
+              command:
+                - ".buildkite/run_nigthly.sh azure_blob_storage small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/postgresql.py"
+            - "tests/sources/fixtures/postgresql/**"
+            config:
+              label: "🔨 Postgresql"
+              command:
+                - ".buildkite/run_nigthly.sh postgresql small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/directory.py"
+            - "tests/sources/fixtures/dir/**"
+            config:
+            - label: "🔨 System Directory"
+              command:
+                - ".buildkite/run_nigthly.sh dir small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/oracle.py"
+            - "tests/sources/fixtures/oracle/**"
+            config:
+              label: "🔨 Oracle Database"
+              command:
+                - ".buildkite/run_nigthly.sh oracle small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/sharepoint_server.py"
+            - "tests/sources/fixtures/sharepoint_server/**"
+            config:
+              label: "🔨 Sharepoint Server"
+              command:
+                - ".buildkite/run_nigthly.sh sharepoint_server extra_small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/sharepoint_online.py"
+            - "tests/sources/fixtures/sharepoint_online/**"
+            config:
+              label: "🔨 Sharepoint Online"
+              command:
+                - ".buildkite/run_nigthly.sh sharepoint_online small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/mssql.py"
+            - "tests/sources/fixtures/mssql/**"
+            config:
+              label: "🔨 Microsoft SQL"
+              command:
+                - ".buildkite/run_nigthly.sh mssql small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/jira.py"
+            - "connectors/sources/atlassian.py"
+            - "tests/sources/fixtures/jira/**"
+            config:
+              label: "🔨 Jira"
+              command:
+                - ".buildkite/run_nigthly.sh jira small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/confluence.py"
+            - "connectors/sources/atlassian.py"
+            - "tests/sources/fixtures/confluence/**"
+            config:
+              label: "🔨 Confluence"
+              command:
+                - ".buildkite/run_nigthly.sh confluence small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/servicenow.py"
+            - "tests/sources/fixtures/servicenow/**"
+            config:
+              label: "🔨 ServiceNow"
+              command:
+                - ".buildkite/run_nigthly.sh servicenow small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/mongo.py"
+            - "tests/sources/fixtures/mongodb/**"
+            config:
+              label: "🔨 MongoDB"
+              command:
+                - ".buildkite/run_nigthly.sh mongodb small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/github.py"
+            - "tests/sources/fixtures/github/**"
+            config:
+              label: "🔨 GitHub"
+              command:
+                - ".buildkite/run_nigthly.sh github small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/google_drive.py"
+            - "tests/sources/fixtures/google_drive/**"
+            config:
+              label: "🔨 Google Drive"
+              command:
+                - ".buildkite/run_nigthly.sh google_drive small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/dropbox.py"
+            - "tests/sources/fixtures/dropbox/**"
+            config:
+              label: "🔨 Dropbox"
+              command:
+                - ".buildkite/run_nigthly.sh dropbox small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
