@@ -605,7 +605,7 @@ class SharepointOnlineClient:
         select = "createdDateTime,description,id,lastModifiedDateTime,name,webUrl,driveType,createdBy,lastModifiedBy,owner"
 
         async for page in self._graph_api_client.scroll(
-            f"{GRAPH_API_URL}/sites12345/{site_id}/drives?$select={select}"
+            f"{GRAPH_API_URL}/sites/{site_id}/drives?$select={select}"
         ):
             for site_drive in page:
                 yield site_drive
