@@ -20,7 +20,7 @@ steps:
     plugins:
       chronotc/monorepo-diff#v2.4.0:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
-        wait: true
+        wait: false
         watch:
           - path: 
             - "connectors/sources/mysql.py"
