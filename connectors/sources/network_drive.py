@@ -7,17 +7,90 @@
 """
 import asyncio
 import os
-from functools import partial
+from functools import cached_property, partial
 from io import BytesIO
 
+import fastjsonschema
 import smbclient
 from smbprotocol.exceptions import SMBException, SMBOSError
+from wcmatch import glob
 
+from connectors.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value, iso_utc
+from connectors.utils import (
+    TIKA_SUPPORTED_FILETYPES,
+    RetryStrategy,
+    get_base64_value,
+    iso_utc,
+    retryable,
+)
 
 MAX_CHUNK_SIZE = 65536
 DEFAULT_FILE_SIZE_LIMIT = 10485760
+RETRIES = 3
+RETRY_INTERVAL = 2
+
+
+class InvalidRulesError(Exception):
+    pass
+
+
+class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
+    RULES_OBJECT_SCHEMA_DEFINITION = {
+        "type": "object",
+        "properties": {
+            "pattern": {"type": "string", "minLength": 1},
+        },
+        "required": ["pattern"],
+        "additionalProperties": False,
+    }
+
+    SCHEMA_DEFINITION = {"type": "array", "items": RULES_OBJECT_SCHEMA_DEFINITION}
+    SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
+
+    def __init__(self, source):
+        self.source = source
+
+    async def validate(self, advanced_rules):
+        if len(advanced_rules) == 0:
+            return SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            )
+
+        return await self._remote_validation(advanced_rules)
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def _remote_validation(self, advanced_rules):
+        try:
+            NetworkDriveAdvancedRulesValidator.SCHEMA(advanced_rules)
+        except fastjsonschema.JsonSchemaValueException as e:
+            return SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=e.message,
+            )
+
+        self.source.create_connection()
+
+        _, invalid_rules = self.source.find_matching_paths(advanced_rules)
+
+        if len(invalid_rules) > 0:
+            return SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=f"Following patterns do not match any path'{', '.join(invalid_rules)}'",
+            )
+
+        return SyncRuleValidationResult.valid_result(
+            SyncRuleValidationResult.ADVANCED_RULES
+        )
 
 
 class NASDataSource(BaseDataSource):
@@ -25,6 +98,7 @@ class NASDataSource(BaseDataSource):
 
     name = "Network Drive"
     service_type = "network_drive"
+    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         """Set up the connection to the Network Drive
@@ -39,6 +113,9 @@ class NASDataSource(BaseDataSource):
         self.port = self.configuration["server_port"]
         self.drive_path = self.configuration["drive_path"]
         self.session = None
+
+    def advanced_rules_validators(self):
+        return [NetworkDriveAdvancedRulesValidator(self)]
 
     @classmethod
     def get_default_configuration(cls):
@@ -90,6 +167,39 @@ class NASDataSource(BaseDataSource):
             password=self.password,
             port=self.port,
         )
+
+    @cached_property
+    def get_directory_details(self):
+        return list(smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}"))
+
+    def find_matching_paths(self, advanced_rules):
+        """
+        Find matching paths based on advanced rules.
+
+        Args:
+            advanced_rules (list): List of advanced rules configured
+
+        Returns:
+            matched_paths (set): Set of paths that match the advanced rules.
+            invalid_rules (list): List of advanced rules that have no matching paths.
+        """
+        invalid_rules = []
+        matched_paths = set()
+        for rule in advanced_rules:
+            rule_valid = False
+            glob_pattern = rule["pattern"].replace("\\", "/")
+            for path, _, _ in self.get_directory_details:
+                normalized_path = path.split("/", 1)[1].replace("\\", "/")
+                is_match = glob.globmatch(
+                    normalized_path, glob_pattern, flags=glob.GLOBSTAR
+                )
+
+                if is_match:
+                    rule_valid = True
+                    matched_paths.add(path)
+            if not rule_valid:
+                invalid_rules.append(rule["pattern"])
+        return matched_paths, invalid_rules
 
     async def ping(self):
         """Verify the connection with Network Drive"""
@@ -200,9 +310,18 @@ class NASDataSource(BaseDataSource):
         Yields:
             dictionary: Dictionary containing the Network Drive files and folders as documents
         """
-        directory_details = smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}")
 
-        for path, _, _ in directory_details:
+        if filtering and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
+            matched_paths, invalid_rules = self.find_matching_paths(advanced_rules)
+            if len(invalid_rules) > 0:
+                raise InvalidRulesError(
+                    f"Following advanced rules are invalid: {invalid_rules}"
+                )
+        else:
+            matched_paths = (path for path, _, _ in self.get_directory_details)
+
+        for path in matched_paths:
             async for file in self.get_files(path=path):
                 if file["type"] == "folder":
                     yield file, None
