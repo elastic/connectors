@@ -7,6 +7,7 @@
 from functools import cached_property
 
 import aiohttp
+from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
@@ -14,6 +15,7 @@ from connectors.utils import retryable
 
 RETRIES = 3
 RETRY_INTERVAL = 1
+QUERY_PAGINATION_LIMIT = 100  # TODO: maybe make the limit configurable
 
 BASE_URL = "https://<domain>.my.salesforce.com"
 API_VERSION = "v58.0"
@@ -35,13 +37,36 @@ RELEVANT_SOBJECT_FIELDS = [
 ]
 
 
+class RateLimitedException(Exception):
+    """Notifies that Salesforce has begun rate limiting the current accound"""
+
+    pass
+
+
+class RequestRefusedException(Exception):
+    """Notifies that a request to Saleforce was rejected"""
+
+    pass
+
+
+class InvalidCredentialsException(Exception):
+    """Notifies that credentials are invalid for fetching a Salesforce token"""
+
+    pass
+
+
+class TokenFetchException(Exception):
+    """Notifies that an unexpected error occurred when fetching a Salesforce token"""
+
+    pass
+
+
 class SalesforceClient:
     def __init__(self, configuration):
         self._logger = logger
 
         self.token = None
-        self.token_issued_at = None
-        self.token_refresh_enabled = False
+        self._fetching_token = False
         self._queryable_sobjects = None
         self._queryable_sobject_fields = None
 
@@ -63,7 +88,6 @@ class SalesforceClient:
     def session(self):
         return aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=None),
-            raise_for_status=True,
         )
 
     async def ping(self):
@@ -80,58 +104,63 @@ class SalesforceClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
     )
-    async def get_token(self, enable_refresh=True):
-        # TODO add refresh method
-        self._logger.debug("Fetching Salesforce token...")
-        resp = await self.session.post(
-            f"{self.base_url}{TOKEN_ENDPOINT}", data=self.token_payload
-        )
-        resp_json = await resp.json()
-        self.token = resp_json["access_token"]
-        self.token_issued_at = resp_json["issued_at"]
-        self.token_refresh_enabled = enable_refresh
-        self._logger.debug("Salesforce token retrieved.")
+    async def get_token(self):
+        if self._fetching_token is True:
+            return
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-    )
+        self._fetching_token = True
+        try:
+            resp = await self._post(
+                f"{self.base_url}{TOKEN_ENDPOINT}", data=self.token_payload
+            )
+            resp_json = await resp.json()
+            resp.raise_for_status()
+            self.token = resp_json["access_token"]
+        except ClientResponseError as e:
+            if 400 <= e.status < 500:
+                # 400s have error details in body
+                if resp_json.get("error") == "invalid_client":
+                    raise InvalidCredentialsException(
+                        f"The `client_id` and `client_secret` provided could not be used to generate a token. Status: {e.status}, message: {e.message}, details: {resp_json.get('error_description')}"
+                    ) from e
+                else:
+                    raise TokenFetchException(
+                        f"Could not fetch token from Salesforce: Status: {e.status}, message: {e.message}, details: {resp_json.get('error_description')}"
+                    ) from e
+            else:
+                raise TokenFetchException(
+                    f"Unexpected error while fetching Salesforce token. Status: {e.status}, message: {e.message}"
+                ) from e
+        finally:
+            self._fetching_token = False
+
     async def get_accounts(self):
         if not await self._is_queryable("Account"):
             return
 
-        # TODO handle pagination
         query = await self._accounts_query()
-        resp = await self._get_non_bulk_query_pages(query)
-        resp_json = await resp.json()
-        for record in resp_json.get("records", []):
-            yield self.doc_mapper.map_account(record)
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield self.doc_mapper.map_account(record)
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-    )
     async def get_opportunities(self):
         if not await self._is_queryable("Opportunity"):
             return
 
-        # TODO handle pagination
         query = await self._opportunities_query()
-        resp = await self._get_non_bulk_query_pages(query)
-        resp_json = await resp.json()
-        for record in resp_json.get("records", []):
-            yield self.doc_mapper.map_oppoortunity(record)
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield self.doc_mapper.map_opportunity(record)
 
     async def queryable_sobjects(self):
         """Cached async property"""
         if self._queryable_sobjects is not None:
             return self._queryable_sobjects
 
-        resp = await self.get_request(DESCRIBE_ENDPOINT)
-        resp_json = await resp.json()
+        response = await self._get_json(f"{self.base_url}{DESCRIBE_ENDPOINT}")
         self._queryable_sobjects = []
 
-        for sobject in resp_json["sobjects"]:
+        for sobject in response["sobjects"]:
             if sobject["queryable"] is True and sobject["name"] in RELEVANT_SOBJECTS:
                 self._queryable_sobjects.append(sobject["name"].lower())
 
@@ -146,12 +175,11 @@ class SalesforceClient:
 
         for sobject in RELEVANT_SOBJECTS:
             endpoint = DESCRIBE_SOBJECT_ENDPOINT.replace("<sobject>", sobject)
-            resp = await self.get_request(endpoint)
-            resp_json = await resp.json()
+            response = await self._get_json(f"{self.base_url}{endpoint}")
 
             queryable_fields = [
                 f["name"].lower()
-                for f in resp_json["fields"]
+                for f in response["fields"]
                 if f["name"] in RELEVANT_SOBJECT_FIELDS
             ]
             self._queryable_sobject_fields[sobject] = queryable_fields
@@ -169,25 +197,85 @@ class SalesforceClient:
         queryable_fields = sobject_fields.get(sobject, [])
         return [f for f in fields if f.lower() in queryable_fields]
 
-    async def _get_non_bulk_query_pages(self, soql_query):
-        return await self.get_request(
-            QUERY_ENDPOINT,
+    async def _yield_non_bulk_query_pages(self, soql_query):
+        """loops through query response pages and yields lists of records"""
+        response = await self._get_json(
+            f"{self.base_url}{QUERY_ENDPOINT}",
             params={"q": soql_query},
         )
+        yield response["records"]
+
+        if response["done"] is False:
+            page_count = 1
+            next_url = response["nextRecordsUrl"]
+            while True:
+                next_page = await self._get_json(next_url)
+                yield next_page["records"]
+
+                page_count += 1
+                if next_page["done"] is True or page_count >= QUERY_PAGINATION_LIMIT:
+                    break
+                else:
+                    next_url = next_page["nextRecordsUrl"]
 
     def _token_cleanup(self):
         self.token = None
-        self.token_issued_at = None
-        self.token_refresh_enabled = False
 
     def _auth_headers(self):
         return {"authorization": f"Bearer {self.token}"}
 
-    async def get_request(self, endpoint, params=None):
-        # TODO improve error handling
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+    )
+    async def _get_json(self, url, params=None):
+        try:
+            resp = await self._get(url, params=params)
+            resp_json = await resp.json()
+            # We get the response body before raising for status as it contains vital error information
+            resp.raise_for_status()
+            return resp_json
+        except ClientResponseError as e:
+            await self._handle_client_response_error(resp_json, e)
+        except Exception as e:
+            raise e
+
+    async def _get(self, url, params=None):
         return await self.session.get(
-            f"{self.base_url}{endpoint}", headers=self._auth_headers(), params=params
+            url,
+            headers=self._auth_headers(),
+            params=params,
         )
+
+    async def _post(self, url, data=None):
+        return await self.session.post(url, data=data)
+
+    async def _handle_client_response_error(self, resp_json, e):
+        match e.status:
+            case 401:
+                self._logger.warning(
+                    f"Token expired, attemping to fetch new token. Status: {e.status}, message: {e.message}"
+                )
+                # The user can alter the lifetime of issued tokens, so we don't know when they expire
+                # Therefore we fetch the token when we encounter an error rather than when it expires
+                await self.get_token()
+                # raise to continue with retry strategy
+                raise e
+            case 403:
+                # The response error format is an array for some reason.
+                # I couldn't find an example of multiple error codes,
+                # but just to be safe we concatenate them in the error message
+                error_codes = [x["errorCode"] for x in resp_json]
+                if "REQUEST_LIMIT_EXCEEDED" in error_codes:
+                    raise RateLimitedException(
+                        f"Salesforce is rate limiting this account. ErrorCode(s): {', '.join(error_codes)}"
+                    ) from e
+                else:
+                    raise RequestRefusedException(
+                        f"Salesforce rejected the request. This can be caused by incorrect permissions. ErrorCode(s): {', '.join(error_codes)}"
+                    ) from e
+            case _:
+                raise e
 
     async def _accounts_query(self):
         queryable_fields = await self._select_queryable_fields(
@@ -327,7 +415,7 @@ class SalesforceDocMapper:
             "website_url": account.get("Website"),
         }
 
-    def map_oppoortunity(self, opportunity):
+    def map_opportunity(self, opportunity):
         owner = opportunity.get("Owner", {})
 
         return {
