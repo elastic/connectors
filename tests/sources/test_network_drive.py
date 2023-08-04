@@ -112,9 +112,8 @@ async def test_ping_for_successful_connection():
 
     # Execute
     with mock.patch.object(smbclient, "register_session", return_value=response):
-        source = create_source(NASDataSource)
-
-        await source.ping()
+        async with create_source(NASDataSource) as source:
+            await source.ping()
 
 
 @pytest.mark.asyncio
@@ -129,27 +128,27 @@ async def test_ping_for_failed_connection(session_mock):
     response = asyncio.Future()
     response.set_result(None)
     session_mock.side_effect = ValueError
-    source = create_source(NASDataSource)
+    async with create_source(NASDataSource) as source:
+        # Execute
+        with pytest.raises(Exception):
+            await source.ping()
 
-    # Execute
-    with pytest.raises(Exception):
-        await source.ping()
 
-
+@pytest.mark.asyncio
 @mock.patch("smbclient.register_session")
-def test_create_connection_with_invalid_credentials(session_mock):
+async def test_create_connection_with_invalid_credentials(session_mock):
     """Tests the create_connection fails with invalid credentials
 
     Args:
         session_mock (patch): The patch of register_session method
     """
     # Setup
-    source = create_source(NASDataSource)
-    session_mock.side_effect = LogonFailure
+    async with create_source(NASDataSource) as source:
+        session_mock.side_effect = LogonFailure
 
-    # Execute
-    with pytest.raises(LogonFailure):
-        source.create_connection()
+        # Execute
+        with pytest.raises(LogonFailure):
+            source.create_connection()
 
 
 @mock.patch("smbclient.scandir")
@@ -161,13 +160,13 @@ async def test_get_files_with_invalid_path(dir_mock):
         dir_mock (patch): The patch of scandir method
     """
     # Setup
-    source = create_source(NASDataSource)
-    path = "unknown_path"
-    dir_mock.side_effect = SMBOSError(ntstatus=3221225487, filename="unknown_path")
+    async with create_source(NASDataSource) as source:
+        path = "unknown_path"
+        dir_mock.side_effect = SMBOSError(ntstatus=3221225487, filename="unknown_path")
 
-    # Execute
-    async for file in source.get_files(path=path):
-        assert file == []
+        # Execute
+        async for file in source.get_files(path=path):
+            assert file == []
 
 
 @pytest.mark.asyncio
@@ -179,56 +178,57 @@ async def test_get_files(dir_mock):
         dir_mock (patch): The patch of scandir method
     """
     # Setup
-    source = create_source(NASDataSource)
-    path = "\\1.2.3.4/dummy_path"
-    dir_mock.return_value = [mock_file(name="a1.md"), mock_folder(name="A")]
-    expected_output = [
-        {
-            "_id": "1",
-            "_timestamp": "2022-04-21T12:12:30",
-            "path": "\\1.2.3.4/dummy_path/a1.md",
-            "title": "a1.md",
-            "created_at": "2022-01-11T12:12:30",
-            "size": "30",
-            "type": "file",
-        },
-        {
-            "_id": "122",
-            "_timestamp": "2022-05-21T12:12:30",
-            "path": "\\1.2.3.4/dummy_path/A",
-            "title": "A",
-            "created_at": "2022-02-11T12:12:30",
-            "size": "200",
-            "type": "folder",
-        },
-    ]
+    async with create_source(NASDataSource) as source:
+        path = "\\1.2.3.4/dummy_path"
+        dir_mock.return_value = [mock_file(name="a1.md"), mock_folder(name="A")]
+        expected_output = [
+            {
+                "_id": "1",
+                "_timestamp": "2022-04-21T12:12:30",
+                "path": "\\1.2.3.4/dummy_path/a1.md",
+                "title": "a1.md",
+                "created_at": "2022-01-11T12:12:30",
+                "size": "30",
+                "type": "file",
+            },
+            {
+                "_id": "122",
+                "_timestamp": "2022-05-21T12:12:30",
+                "path": "\\1.2.3.4/dummy_path/A",
+                "title": "A",
+                "created_at": "2022-02-11T12:12:30",
+                "size": "200",
+                "type": "folder",
+            },
+        ]
 
-    # Execute
-    response = []
-    async for file in source.get_files(path=path):
-        response.append(file)
+        # Execute
+        response = []
+        async for file in source.get_files(path=path):
+            response.append(file)
 
-    # Assert
-    assert response == expected_output
+        # Assert
+        assert response == expected_output
 
 
+@pytest.mark.asyncio
 @mock.patch("smbclient.open_file")
-def test_fetch_file_when_file_is_inaccessible(file_mock):
+async def test_fetch_file_when_file_is_inaccessible(file_mock):
     """Tests the open_file method of smbclient throws error when file cannot be accessed
 
     Args:
         file_mock (patch): The patch of open_file method
     """
     # Setup
-    source = create_source(NASDataSource)
-    path = "\\1.2.3.4/Users/file1.txt"
-    file_mock.side_effect = SMBOSError(ntstatus=0xC0000043, filename="file1.txt")
+    async with create_source(NASDataSource) as source:
+        path = "\\1.2.3.4/Users/file1.txt"
+        file_mock.side_effect = SMBOSError(ntstatus=0xC0000043, filename="file1.txt")
 
-    # Execute
-    response = source.fetch_file_content(path=path)
+        # Execute
+        response = source.fetch_file_content(path=path)
 
-    # Assert
-    assert response is None
+        # Assert
+        assert response is None
 
 
 @pytest.mark.asyncio
@@ -240,33 +240,33 @@ async def test_get_content(file_mock):
         file_mock (patch): The patch of open_file method
     """
     # Setup
-    source = create_source(NASDataSource)
-    file_mock.return_value.__enter__.return_value.read.return_value = bytes(
-        "Mock....", "utf-8"
-    )
+    async with create_source(NASDataSource) as source:
+        file_mock.return_value.__enter__.return_value.read.return_value = bytes(
+            "Mock....", "utf-8"
+        )
 
-    mock_response = {
-        "id": "1",
-        "_timestamp": "2022-04-21T12:12:30",
-        "title": "file1.txt",
-        "path": "\\1.2.3.4/Users/folder1/file1.txt",
-        "size": "50",
-    }
+        mock_response = {
+            "id": "1",
+            "_timestamp": "2022-04-21T12:12:30",
+            "title": "file1.txt",
+            "path": "\\1.2.3.4/Users/folder1/file1.txt",
+            "size": "50",
+        }
 
-    mocked_content_response = BytesIO(b"Mock....")
+        mocked_content_response = BytesIO(b"Mock....")
 
-    expected_output = {
-        "_id": "1",
-        "_timestamp": "2022-04-21T12:12:30",
-        "_attachment": "TW9jay4uLi4=",
-    }
+        expected_output = {
+            "_id": "1",
+            "_timestamp": "2022-04-21T12:12:30",
+            "_attachment": "TW9jay4uLi4=",
+        }
 
-    # Execute
-    source.fetch_file_content = mock.MagicMock(return_value=mocked_content_response)
-    actual_response = await source.get_content(mock_response, doit=True)
+        # Execute
+        source.fetch_file_content = mock.MagicMock(return_value=mocked_content_response)
+        actual_response = await source.get_content(mock_response, doit=True)
 
-    # Assert
-    assert actual_response == expected_output
+        # Assert
+        assert actual_response == expected_output
 
 
 @pytest.mark.asyncio
@@ -278,88 +278,88 @@ async def test_get_content_with_upper_extension(file_mock):
         file_mock (patch): The patch of open_file method
     """
     # Setup
-    source = create_source(NASDataSource)
-    file_mock.return_value.__enter__.return_value.read.return_value = bytes(
-        "Mock....", "utf-8"
-    )
+    async with create_source(NASDataSource) as source:
+        file_mock.return_value.__enter__.return_value.read.return_value = bytes(
+            "Mock....", "utf-8"
+        )
 
-    mock_response = {
-        "id": "1",
-        "_timestamp": "2022-04-21T12:12:30",
-        "title": "file1.TXT",
-        "path": "\\1.2.3.4/Users/folder1/file1.txt",
-        "size": "50",
-    }
+        mock_response = {
+            "id": "1",
+            "_timestamp": "2022-04-21T12:12:30",
+            "title": "file1.TXT",
+            "path": "\\1.2.3.4/Users/folder1/file1.txt",
+            "size": "50",
+        }
 
-    mocked_content_response = BytesIO(b"Mock....")
+        mocked_content_response = BytesIO(b"Mock....")
 
-    expected_output = {
-        "_id": "1",
-        "_timestamp": "2022-04-21T12:12:30",
-        "_attachment": "TW9jay4uLi4=",
-    }
+        expected_output = {
+            "_id": "1",
+            "_timestamp": "2022-04-21T12:12:30",
+            "_attachment": "TW9jay4uLi4=",
+        }
 
-    # Execute
-    source.fetch_file_content = mock.MagicMock(return_value=mocked_content_response)
-    actual_response = await source.get_content(mock_response, doit=True)
+        # Execute
+        source.fetch_file_content = mock.MagicMock(return_value=mocked_content_response)
+        actual_response = await source.get_content(mock_response, doit=True)
 
-    # Assert
-    assert actual_response == expected_output
+        # Assert
+        assert actual_response == expected_output
 
 
 @pytest.mark.asyncio
 async def test_get_content_when_doit_false():
     """Test get_content method when doit is false."""
     # Setup
-    source = create_source(NASDataSource)
-    mock_response = {
-        "id": "1",
-        "_timestamp": "2022-04-21T12:12:30",
-        "title": "file1.txt",
-    }
+    async with create_source(NASDataSource) as source:
+        mock_response = {
+            "id": "1",
+            "_timestamp": "2022-04-21T12:12:30",
+            "title": "file1.txt",
+        }
 
-    # Execute
-    actual_response = await source.get_content(mock_response)
+        # Execute
+        actual_response = await source.get_content(mock_response)
 
-    # Assert
-    assert actual_response is None
+        # Assert
+        assert actual_response is None
 
 
 @pytest.mark.asyncio
 async def test_get_content_when_file_size_is_large():
     """Test the module responsible for fetching the content of the file if it is not extractable"""
     # Setup
-    source = create_source(NASDataSource)
-    mock_response = {
-        "id": "1",
-        "_timestamp": "2022-04-21T12:12:30",
-        "title": "file1.txt",
-        "size": "20000000000",
-    }
+    async with create_source(NASDataSource) as source:
+        mock_response = {
+            "id": "1",
+            "_timestamp": "2022-04-21T12:12:30",
+            "title": "file1.txt",
+            "size": "20000000000",
+        }
 
-    # Execute
-    actual_response = await source.get_content(mock_response, doit=True)
+        # Execute
+        actual_response = await source.get_content(mock_response, doit=True)
 
-    # Assert
-    assert actual_response is None
+        # Assert
+        assert actual_response is None
 
 
 @pytest.mark.asyncio
 async def test_get_content_when_file_type_not_supported():
     """Test get_content method when the file content type is not supported"""
     # Setup
-    source = create_source(NASDataSource)
-    mock_response = {
-        "id": "1",
-        "_timestamp": "2022-04-21T12:12:30",
-        "title": "file2.dmg",
-    }
+    async with create_source(NASDataSource) as source:
+        mock_response = {
+            "id": "1",
+            "_timestamp": "2022-04-21T12:12:30",
+            "title": "file2.dmg",
+        }
 
-    # Execute
-    actual_response = await source.get_content(mock_response, doit=True)
+        # Execute
+        actual_response = await source.get_content(mock_response, doit=True)
 
-    # Assert
-    assert actual_response is None
+        # Assert
+        assert actual_response is None
 
 
 @pytest.mark.asyncio
@@ -373,40 +373,39 @@ async def test_get_doc(mock_get_files, mock_walk):
         mock_walk (patch): The patch of walk method of smbclient
     """
     # Setup
-    source = create_source(NASDataSource)
+    async with create_source(NASDataSource) as source:
+        # Execute
+        async for _, _ in source.get_docs():
+            # Assert
+            mock_get_files.assert_awaited()
 
-    # Execute
-    async for _, _ in source.get_docs():
-        # Assert
-        mock_get_files.assert_awaited()
 
-
+@pytest.mark.asyncio
 @mock.patch("smbclient.open_file")
-def test_fetch_file_when_file_is_accessible(file_mock):
+async def test_fetch_file_when_file_is_accessible(file_mock):
     """Tests the open_file method of smbclient when file can be accessed
 
     Args:
         file_mock (patch): The patch of open_file method
     """
     # Setup
-    source = create_source(NASDataSource)
-    path = "\\1.2.3.4/Users/file1.txt"
+    async with create_source(NASDataSource) as source:
+        path = "\\1.2.3.4/Users/file1.txt"
 
-    file_mock.return_value.__enter__.return_value.read = mock.MagicMock(
-        side_effect=side_effect_function
-    )
+        file_mock.return_value.__enter__.return_value.read = mock.MagicMock(
+            side_effect=side_effect_function
+        )
 
-    # Execute
-    response = source.fetch_file_content(path=path)
+        # Execute
+        response = source.fetch_file_content(path=path)
 
-    # Assert
-    assert response.read() == b"Mock...."
+        # Assert
+        assert response.read() == b"Mock...."
 
 
 @pytest.mark.asyncio
 async def test_close_without_session():
-    source = create_source(NASDataSource)
+    async with create_source(NASDataSource) as source:
+        await source.close()
 
-    await source.close()
-
-    assert source.session is None
+        assert source.session is None

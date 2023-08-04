@@ -114,48 +114,51 @@ class CursorAsync:
         pass
 
 
-def test_get_connect_argss():
+@pytest.mark.asyncio
+async def test_get_connect_argss():
     """This function test get_connect_args with dummy certificate"""
     # Setup
-    source = create_source(PostgreSQLDataSource)
-    source.ssl_ca = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
+    async with create_source(PostgreSQLDataSource) as source:
+        source.ssl_ca = (
+            "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
+        )
 
-    # Execute
-    with patch.object(ssl, "create_default_context", return_value=MockSsl()):
-        source.get_connect_args()
+        # Execute
+        with patch.object(ssl, "create_default_context", return_value=MockSsl()):
+            source.get_connect_args()
 
 
 @pytest.mark.asyncio
 async def test_get_docs_postgresql():
     # Setup
-    source = create_source(PostgreSQLDataSource)
-    with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
-        source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
-        actual_response = []
-        expected_response = [
-            {
-                "public_emp_table_ids": 1,
-                "public_emp_table_names": "abcd",
-                "_id": "xe_public_emp_table_1_",
-                "_timestamp": "2023-02-21T08:37:15+00:00",
-                "Database": "xe",
-                "Table": "emp_table",
-                "schema": "public",
-            },
-            {
-                "public_emp_table_ids": 1,
-                "public_emp_table_names": "xyz",
-                "_id": "xe_public_emp_table_1_",
-                "_timestamp": "2023-02-21T08:37:15+00:00",
-                "Database": "xe",
-                "Table": "emp_table",
-                "schema": "public",
-            },
-        ]
+    async with create_source(PostgreSQLDataSource) as source:
+        with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+            source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
+            actual_response = []
+            expected_response = [
+                {
+                    "public_emp_table_ids": 1,
+                    "public_emp_table_names": "abcd",
+                    "_id": "xe_public_emp_table_1_",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "Database": "xe",
+                    "Table": "emp_table",
+                    "schema": "public",
+                },
+                {
+                    "public_emp_table_ids": 1,
+                    "public_emp_table_names": "xyz",
+                    "_id": "xe_public_emp_table_1_",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "Database": "xe",
+                    "Table": "emp_table",
+                    "schema": "public",
+                },
+            ]
 
-        # Execute
-        async for doc in source.get_docs():
-            actual_response.append(doc[0])
+            # Execute
+            async for doc in source.get_docs():
+                actual_response.append(doc[0])
 
-        # Assert
-        assert actual_response == expected_response
+            # Assert
+            assert actual_response == expected_response
