@@ -37,7 +37,9 @@ async def test_create_engine_in_thick_mode(mock_fun):
 @pytest.mark.asyncio
 async def test_ping():
     async with create_source(OracleDataSource) as source:
-        with patch.object(Engine, "connect", return_value=ConnectionSync(OracleQueries())):
+        with patch.object(
+            Engine, "connect", return_value=ConnectionSync(OracleQueries())
+        ):
             await source.ping()
 
 
