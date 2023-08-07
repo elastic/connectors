@@ -605,7 +605,7 @@ class TestMicrosoftAPISession:
         assert e is not None
 
     @pytest.mark.asyncio
-    async def test_call_api_with_404(
+    async def test_call_api_with_404_with_retry_after_header(
         self,
         microsoft_api_session,
         mock_responses,
@@ -1896,43 +1896,43 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_get_docs_without_access_control(self, patch_sharepoint_client):
-        source = create_source(SharepointOnlineDataSource)
-        source._dls_enabled = Mock(return_value=False)
+        async with create_source(SharepointOnlineDataSource) as source:
+            source._dls_enabled = Mock(return_value=False)
 
-        results = []
-        downloads = []
-        async for doc, download_func in source.get_docs():
-            results.append(doc)
+            results = []
+            downloads = []
+            async for doc, download_func in source.get_docs():
+                results.append(doc)
 
-            if download_func:
-                downloads.append(download_func)
+                if download_func:
+                    downloads.append(download_func)
 
-        assert len(results) == 11
-        assert len(
-            [i for i in results if i["object_type"] == "site_collection"]
-        ) == len(self.site_collections)
-        assert len([i for i in results if i["object_type"] == "site"]) == len(
-            self.sites
-        )
-        assert len([i for i in results if i["object_type"] == "site_drive"]) == len(
-            self.site_drives
-        )
-        assert len([i for i in results if i["object_type"] == "drive_item"]) == sum(
-            [len(j) for j in self.drive_items]
-        )
-        assert len([i for i in results if i["object_type"] == "site_list"]) == len(
-            self.site_lists
-        )
-        assert (
-            len([i for i in results if i["object_type"] == "list_item"])
-            == len(self.site_list_items) - 1
-        )  # -1 because one of them is ignored!
-        assert len(
-            [i for i in results if i["object_type"] == "list_item_attachment"]
-        ) == len(self.site_list_item_attachments)
-        assert len([i for i in results if i["object_type"] == "site_page"]) == len(
-            self.site_pages
-        )
+            assert len(results) == 11
+            assert len(
+                [i for i in results if i["object_type"] == "site_collection"]
+            ) == len(self.site_collections)
+            assert len([i for i in results if i["object_type"] == "site"]) == len(
+                self.sites
+            )
+            assert len([i for i in results if i["object_type"] == "site_drive"]) == len(
+                self.site_drives
+            )
+            assert len([i for i in results if i["object_type"] == "drive_item"]) == sum(
+                [len(j) for j in self.drive_items]
+            )
+            assert len([i for i in results if i["object_type"] == "site_list"]) == len(
+                self.site_lists
+            )
+            assert (
+                len([i for i in results if i["object_type"] == "list_item"])
+                == len(self.site_list_items) - 1
+            )  # -1 because one of them is ignored!
+            assert len(
+                [i for i in results if i["object_type"] == "list_item_attachment"]
+            ) == len(self.site_list_item_attachments)
+            assert len([i for i in results if i["object_type"] == "site_page"]) == len(
+                self.site_pages
+            )
 
     @pytest.mark.asyncio
     @patch(
@@ -1945,129 +1945,131 @@ class TestSharepointOnlineDataSource:
         user = "user"
         expected_access_control = [group, email, user]
 
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
-        source._site_access_control = AsyncMock(
-            return_value=(expected_access_control, [])
-        )
+        async with create_source(SharepointOnlineDataSource) as source:
+            set_dls_enabled(source, True)
+            source._site_access_control = AsyncMock(
+                return_value=(expected_access_control, [])
+            )
 
-        results = []
-        async for doc, _download_func in source.get_docs():
-            results.append(doc)
+            results = []
+            async for doc, _download_func in source.get_docs():
+                results.append(doc)
 
-        site_collections = [i for i in results if i["object_type"] == "site_collection"]
-        sites = [i for i in results if i["object_type"] == "site"]
-        site_drives = [i for i in results if i["object_type"] == "site_drive"]
-        drive_items = [i for i in results if i["object_type"] == "drive_item"]
-        site_lists = [i for i in results if i["object_type"] == "site_list"]
-        list_items = [i for i in results if i["object_type"] == "list_item"]
-        list_item_attachments = [
-            i for i in results if i["object_type"] == "list_item_attachment"
-        ]
-        site_pages = [i for i in results if i["object_type"] == "site_page"]
-
-        assert len(results) == 11
-
-        assert len(site_collections) == len(self.site_collections)
-        assert len(sites) == len(self.sites)
-        assert all(
-            [
-                access_control_matches(
-                    site[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
-                )
-                for site in sites
+            site_collections = [
+                i for i in results if i["object_type"] == "site_collection"
             ]
-        )
-
-        assert len(site_drives) == len(self.site_drives)
-        assert all(
-            [
-                access_control_matches(
-                    site_drive[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
-                )
-                for site_drive in site_drives
+            sites = [i for i in results if i["object_type"] == "site"]
+            site_drives = [i for i in results if i["object_type"] == "site_drive"]
+            drive_items = [i for i in results if i["object_type"] == "drive_item"]
+            site_lists = [i for i in results if i["object_type"] == "site_list"]
+            list_items = [i for i in results if i["object_type"] == "list_item"]
+            list_item_attachments = [
+                i for i in results if i["object_type"] == "list_item_attachment"
             ]
-        )
+            site_pages = [i for i in results if i["object_type"] == "site_page"]
 
-        assert len(drive_items) == sum([len(j) for j in self.drive_items])
+            assert len(results) == 11
 
-        expected_drive_item_access_control = [
-            _prefix_user_id(USER_ONE_ID),
-            _prefix_site_group(SITE_GROUP_ONE_ID),
-            _prefix_site_user_id(SITE_USER_ONE_ID),
-            _prefix_group(GROUP_ONE_ID),
-            *expected_access_control,
-        ]
-        assert all(
-            [
-                access_control_matches(
-                    drive_item[ALLOW_ACCESS_CONTROL_PATCHED],
-                    expected_drive_item_access_control,
-                )
-                for drive_item in drive_items
+            assert len(site_collections) == len(self.site_collections)
+            assert len(sites) == len(self.sites)
+            assert all(
+                [
+                    access_control_matches(
+                        site[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                    )
+                    for site in sites
+                ]
+            )
+
+            assert len(site_drives) == len(self.site_drives)
+            assert all(
+                [
+                    access_control_matches(
+                        site_drive[ALLOW_ACCESS_CONTROL_PATCHED],
+                        expected_access_control,
+                    )
+                    for site_drive in site_drives
+                ]
+            )
+
+            assert len(drive_items) == sum([len(j) for j in self.drive_items])
+
+            expected_drive_item_access_control = [
+                _prefix_user_id(USER_ONE_ID),
+                _prefix_site_group(SITE_GROUP_ONE_ID),
+                _prefix_site_user_id(SITE_USER_ONE_ID),
+                _prefix_group(GROUP_ONE_ID),
+                *expected_access_control,
             ]
-        )
+            assert all(
+                [
+                    access_control_matches(
+                        drive_item[ALLOW_ACCESS_CONTROL_PATCHED],
+                        expected_drive_item_access_control,
+                    )
+                    for drive_item in drive_items
+                ]
+            )
 
-        assert len(site_lists) == len(self.site_lists)
-        assert all(
-            [
-                access_control_matches(
-                    site_list[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
-                )
-                for site_list in site_lists
-            ]
-        )
+            assert len(site_lists) == len(self.site_lists)
+            assert all(
+                [
+                    access_control_matches(
+                        site_list[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                    )
+                    for site_list in site_lists
+                ]
+            )
 
-        assert (
-            len(list_items) == len(self.site_list_items) - 1
-        )  # -1 because one of them is ignored!
-        assert all(
-            [
-                access_control_matches(
-                    list_item[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
-                )
-                for list_item in list_items
-            ]
-        )
+            assert (
+                len(list_items) == len(self.site_list_items) - 1
+            )  # -1 because one of them is ignored!
+            assert all(
+                [
+                    access_control_matches(
+                        list_item[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                    )
+                    for list_item in list_items
+                ]
+            )
 
-        assert len(list_item_attachments) == len(self.site_list_item_attachments)
-        assert all(
-            [
-                access_control_matches(
-                    list_item_attachment[ALLOW_ACCESS_CONTROL_PATCHED],
-                    expected_access_control,
-                )
-                for list_item_attachment in list_item_attachments
-            ]
-        )
+            assert len(list_item_attachments) == len(self.site_list_item_attachments)
+            assert all(
+                [
+                    access_control_matches(
+                        list_item_attachment[ALLOW_ACCESS_CONTROL_PATCHED],
+                        expected_access_control,
+                    )
+                    for list_item_attachment in list_item_attachments
+                ]
+            )
 
-        assert len(site_pages) == len(self.site_pages)
-        assert all(
-            [
-                access_control_matches(
-                    site_page[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
-                )
-                for site_page in site_pages
-            ]
-        )
+            assert len(site_pages) == len(self.site_pages)
+            assert all(
+                [
+                    access_control_matches(
+                        site_page[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                    )
+                    for site_page in site_pages
+                ]
+            )
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("sync_cursor", [None, {}])
     async def test_get_docs_incrementally_with_empty_cursor(
         self, patch_sharepoint_client, sync_cursor
     ):
-        source = create_source(SharepointOnlineDataSource)
-
-        with pytest.raises(SyncCursorEmpty):
-            async for _doc, _download_func, _operation in source.get_docs_incrementally(
-                sync_cursor=sync_cursor
-            ):
-                pass
+        async with create_source(SharepointOnlineDataSource) as source:
+            with pytest.raises(SyncCursorEmpty):
+                async for _doc, _download_func, _operation in source.get_docs_incrementally(
+                    sync_cursor=sync_cursor
+                ):
+                    pass
 
     @pytest.mark.asyncio
     async def test_get_docs_incrementally(self, patch_sharepoint_client):
-        source = create_source(SharepointOnlineDataSource)
-        source._site_access_control = AsyncMock(return_value=([], []))
+        async with create_source(SharepointOnlineDataSource) as source:
+            source._site_access_control = AsyncMock(return_value=([], []))
 
         sync_cursor = {"site_drives": {}}
         for site_drive in self.site_drives:
@@ -2109,149 +2111,163 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_site_lists(self, patch_sharepoint_client):
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
-        set_fetch_unique_list_permissions_enabled(source, False)
+        async with create_source(SharepointOnlineDataSource) as source:
+            set_dls_enabled(source, True)
+            set_fetch_unique_list_permissions_enabled(source, False)
 
-        site = {"id": "1", "webUrl": "some url"}
-        site_access_control = ["some site specific access control"]
-        site_lists = []
+            site = {"id": "1", "webUrl": "some url"}
+            site_access_control = ["some site specific access control"]
+            site_lists = []
 
-        async for site_list in source.site_lists(site, site_access_control):
-            site_lists.append(site_list)
+            async for site_list in source.site_lists(site, site_access_control):
+                site_lists.append(site_list)
 
-        assert len(site_lists) == len(self.site_lists)
-        assert all(
-            access_control_matches(site_list[ACCESS_CONTROL], site_access_control)
-            for site_list in site_lists
-        )
-        assert patch_sharepoint_client.site_list_role_assignments.assert_not_called()
+            assert len(site_lists) == len(self.site_lists)
+            assert all(
+                access_control_matches(site_list[ACCESS_CONTROL], site_access_control)
+                for site_list in site_lists
+            )
+            assert (
+                patch_sharepoint_client.site_list_role_assignments.assert_not_called()
+            )
 
     @pytest.mark.asyncio
     async def test_site_lists_with_unique_role_assignments(
         self, patch_sharepoint_client
     ):
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
-        set_fetch_unique_list_permissions_enabled(source, True)
+        async with create_source(SharepointOnlineDataSource) as source:
+            set_dls_enabled(source, True)
+            set_fetch_unique_list_permissions_enabled(source, True)
 
-        site = {"id": "1", "webUrl": "some url"}
-        site_access_control = ["some site specific access control"]
-        site_list_access_control = [
-            {
-                "Member": {
-                    "odata.type": "SP.User",
-                    "UserPrincipalName": USER_TWO_NAME,
-                },
-            }
-        ]
-        expected_access_control = _prefix_user(USER_TWO_NAME)
+            site = {"id": "1", "webUrl": "some url"}
+            site_access_control = ["some site specific access control"]
+            site_list_access_control = [
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_TWO_NAME,
+                    },
+                }
+            ]
+            expected_access_control = _prefix_user(USER_TWO_NAME)
 
-        patch_sharepoint_client.site_list_role_assignments = AsyncIterator(
-            site_list_access_control
-        )
-        patch_sharepoint_client.has_unique_role_assignments.return_value = True
+            patch_sharepoint_client.site_list_role_assignments = AsyncIterator(
+                site_list_access_control
+            )
+            patch_sharepoint_client.has_unique_role_assignments.return_value = True
 
-        actual_site_lists = []
+            actual_site_lists = []
 
-        async for site_list in source.site_lists(site, site_access_control):
-            actual_site_lists.append(site_list)
+            async for site_list in source.site_lists(site, site_access_control):
+                actual_site_lists.append(site_list)
 
-        assert len(actual_site_lists) == len(self.site_lists)
-        assert all(
-            access_control_matches(site_list[ACCESS_CONTROL], expected_access_control)
-            for site_list in actual_site_lists
-        )
-        assert patch_sharepoint_client.site_list_role_assignments.assert_called_once()
+            assert len(actual_site_lists) == len(self.site_lists)
+            assert all(
+                access_control_matches(
+                    site_list[ACCESS_CONTROL], expected_access_control
+                )
+                for site_list in actual_site_lists
+            )
+            assert (
+                patch_sharepoint_client.site_list_role_assignments.assert_called_once()
+            )
 
     @pytest.mark.asyncio
     async def test_download_function_for_folder(self):
-        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
-        drive_item = {
-            "name": "folder",
-            "folder": {},
-        }
+        async with create_source(
+            SharepointOnlineDataSource, site_collections=WILDCARD
+        ) as source:
+            drive_item = {
+                "name": "folder",
+                "folder": {},
+            }
 
-        download_result = source.download_function(drive_item, None)
+            download_result = source.download_function(drive_item, None)
 
-        assert download_result is None
+            assert download_result is None
 
-    def test_with_drive_item_permissions(self, patch_sharepoint_client):
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
-        drive_item = {"id": 2}
-        patch_sharepoint_client.drive_item_permissions = AsyncIterator(
-            self.drive_item_permissions
-        )
+    @pytest.mark.asyncio
+    async def test_with_drive_item_permissions(self, patch_sharepoint_client):
+        async with create_source(SharepointOnlineDataSource) as source:
+            set_dls_enabled(source, True)
+            drive_item = {"id": 2}
+            patch_sharepoint_client.drive_item_permissions = AsyncIterator(
+                self.drive_item_permissions
+            )
 
-        drive_item_with_access_control = source._with_drive_item_permissions(
-            drive_item, self.drive_item_permissions
-        )
-        drive_item_access_control = drive_item_with_access_control[ACCESS_CONTROL]
+            drive_item_with_access_control = source._with_drive_item_permissions(
+                drive_item, self.drive_item_permissions
+            )
+            drive_item_access_control = drive_item_with_access_control[ACCESS_CONTROL]
 
-        assert len(drive_item_access_control) == 4
-        assert _prefix_user_id(USER_ONE_ID) in drive_item_access_control
-        assert _prefix_group(GROUP_ONE_ID) in drive_item_access_control
-        assert _prefix_site_user_id(SITE_USER_ONE_ID) in drive_item_access_control
-        assert _prefix_site_group(SITE_GROUP_ONE_ID) in drive_item_access_control
+            assert len(drive_item_access_control) == 4
+            assert _prefix_user_id(USER_ONE_ID) in drive_item_access_control
+            assert _prefix_group(GROUP_ONE_ID) in drive_item_access_control
+            assert _prefix_site_user_id(SITE_USER_ONE_ID) in drive_item_access_control
+            assert _prefix_site_group(SITE_GROUP_ONE_ID) in drive_item_access_control
 
     @pytest.mark.asyncio
     async def test_drive_items_batch_with_permissions_when_fetch_drive_item_permissions_enabled(
         self, patch_sharepoint_client
     ):
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
+        async with create_source(SharepointOnlineDataSource) as source:
+            set_dls_enabled(source, True)
 
-        drive_id = 1
-        drive_item_ids = ["1", "2"]
-        drive_items_batch = [{"id": drive_item_id} for drive_item_id in drive_item_ids]
+            drive_id = 1
+            drive_item_ids = ["1", "2"]
+            drive_items_batch = [
+                {"id": drive_item_id} for drive_item_id in drive_item_ids
+            ]
 
-        permissions_responses = [
-            {
-                "id": drive_item_id,
-                "body": {"value": [{"grantedToV2": {"user": {"id": "some user id"}}}]},
-            }
-            for drive_item_id in drive_item_ids
-        ]
+            permissions_responses = [
+                {
+                    "id": drive_item_id,
+                    "body": {
+                        "value": [{"grantedToV2": {"user": {"id": "some user id"}}}]
+                    },
+                }
+                for drive_item_id in drive_item_ids
+            ]
 
-        patch_sharepoint_client.drive_items_permissions_batch = AsyncIterator(
-            permissions_responses
-        )
+            patch_sharepoint_client.drive_items_permissions_batch = AsyncIterator(
+                permissions_responses
+            )
 
-        drive_items_with_permissions = []
+            drive_items_with_permissions = []
 
-        async for drive_item_with_permission in source._drive_items_batch_with_permissions(
-            drive_id, drive_items_batch
-        ):
-            drive_items_with_permissions.append(drive_item_with_permission)
+            async for drive_item_with_permission in source._drive_items_batch_with_permissions(
+                drive_id, drive_items_batch
+            ):
+                drive_items_with_permissions.append(drive_item_with_permission)
 
-        assert len(drive_items_with_permissions) == len(drive_item_ids)
-        assert all(
-            ACCESS_CONTROL in drive_item for drive_item in drive_items_with_permissions
-        )
+            assert len(drive_items_with_permissions) == len(drive_item_ids)
+            assert all(
+                ACCESS_CONTROL in drive_item
+                for drive_item in drive_items_with_permissions
+            )
 
     @pytest.mark.asyncio
     async def test_drive_items_batch_with_permissions_when_fetch_drive_item_permissions_disabled(
         self,
     ):
-        source = create_source(SharepointOnlineDataSource)
-        set_fetch_drive_item_permissions_enabled(source, False)
+        async with create_source(SharepointOnlineDataSource) as source:
+            set_fetch_drive_item_permissions_enabled(source, False)
 
-        drive_id = 1
-        drive_items_batch = [{"id": "1"}, {"id": "2"}]
+            drive_id = 1
+            drive_items_batch = [{"id": "1"}, {"id": "2"}]
 
-        drive_items_without_permissions = []
+            drive_items_without_permissions = []
 
-        async for drive_item_without_permissions in source._drive_items_batch_with_permissions(
-            drive_id, drive_items_batch
-        ):
-            drive_items_without_permissions.append(drive_item_without_permissions)
+            async for drive_item_without_permissions in source._drive_items_batch_with_permissions(
+                drive_id, drive_items_batch
+            ):
+                drive_items_without_permissions.append(drive_item_without_permissions)
 
-        assert len(drive_items_without_permissions) == len(drive_items_batch)
-        assert not any(
-            ACCESS_CONTROL in drive_item
-            for drive_item in drive_items_without_permissions
-        )
+            assert len(drive_items_without_permissions) == len(drive_items_batch)
+            assert not any(
+                ACCESS_CONTROL in drive_item
+                for drive_item in drive_items_without_permissions
+            )
 
     @pytest.mark.asyncio
     @patch(
@@ -2266,48 +2282,50 @@ class TestSharepointOnlineDataSource:
         user = _prefix_user("sorry-no-access-here")
         site_access_controls = [group, email, user]
 
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
-        set_fetch_drive_item_permissions_enabled(source, True)
-        source._site_access_control = AsyncMock(return_value=(site_access_controls, []))
+        async with create_source(SharepointOnlineDataSource) as source:
+            set_dls_enabled(source, True)
+            set_fetch_drive_item_permissions_enabled(source, True)
+            source._site_access_control = AsyncMock(
+                return_value=(site_access_controls, [])
+            )
 
-        results = []
-        async for doc, _ in source.get_docs():
-            results.append(doc)
+            results = []
+            async for doc, _ in source.get_docs():
+                results.append(doc)
 
-        drive_items = [i for i in results if i["object_type"] == "drive_item"]
+            drive_items = [i for i in results if i["object_type"] == "drive_item"]
 
-        expected_drive_item_access_control = [
-            _prefix_user_id(USER_ONE_ID),
-            _prefix_site_group(SITE_GROUP_ONE_ID),
-            _prefix_site_user_id(SITE_USER_ONE_ID),
-            _prefix_group(GROUP_ONE_ID),
-        ]
-
-        drive_item_access_control_with_ac_inhertiance = [
-            *expected_drive_item_access_control,
-            *site_access_controls,
-        ]
-
-        assert all(
-            [
-                access_control_is_equal(
-                    drive_item[ALLOW_ACCESS_CONTROL_PATCHED],
-                    expected_drive_item_access_control,
-                )
-                for drive_item in drive_items
+            expected_drive_item_access_control = [
+                _prefix_user_id(USER_ONE_ID),
+                _prefix_site_group(SITE_GROUP_ONE_ID),
+                _prefix_site_user_id(SITE_USER_ONE_ID),
+                _prefix_group(GROUP_ONE_ID),
             ]
-        )
 
-        assert all(
-            [
-                not access_control_is_equal(
-                    drive_item[ALLOW_ACCESS_CONTROL_PATCHED],
-                    drive_item_access_control_with_ac_inhertiance,
-                )
-                for drive_item in drive_items
+            drive_item_access_control_with_ac_inhertiance = [
+                *expected_drive_item_access_control,
+                *site_access_controls,
             ]
-        )
+
+            assert all(
+                [
+                    access_control_is_equal(
+                        drive_item[ALLOW_ACCESS_CONTROL_PATCHED],
+                        expected_drive_item_access_control,
+                    )
+                    for drive_item in drive_items
+                ]
+            )
+
+            assert all(
+                [
+                    not access_control_is_equal(
+                        drive_item[ALLOW_ACCESS_CONTROL_PATCHED],
+                        drive_item_access_control_with_ac_inhertiance,
+                    )
+                    for drive_item in drive_items
+                ]
+            )
 
     @pytest.mark.asyncio
     @patch(
@@ -2321,69 +2339,75 @@ class TestSharepointOnlineDataSource:
         admin_user = _prefix_user("admin-so-i-can-access-your-data")
         admin_site_access_controls = [admin_email, admin_user]
 
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
-        set_fetch_drive_item_permissions_enabled(source, True)
+        async with create_source(SharepointOnlineDataSource) as source:
+            set_dls_enabled(source, True)
+            set_fetch_drive_item_permissions_enabled(source, True)
 
-        source._site_access_control = AsyncMock(
-            return_value=([], admin_site_access_controls)
-        )
+            source._site_access_control = AsyncMock(
+                return_value=([], admin_site_access_controls)
+            )
 
-        results = []
-        async for doc, _download_func in source.get_docs():
-            results.append(doc)
+            results = []
+            async for doc, _download_func in source.get_docs():
+                results.append(doc)
 
-        site_pages = [i for i in results if i["object_type"] == "site_page"]
+            site_pages = [i for i in results if i["object_type"] == "site_page"]
 
-        assert all(
-            [
-                access_control_is_equal(
-                    site_page[ALLOW_ACCESS_CONTROL_PATCHED],
-                    admin_site_access_controls,
-                )
-                for site_page in site_pages
-            ]
-        )
+            assert all(
+                [
+                    access_control_is_equal(
+                        site_page[ALLOW_ACCESS_CONTROL_PATCHED],
+                        admin_site_access_controls,
+                    )
+                    for site_page in site_pages
+                ]
+            )
 
     @pytest.mark.asyncio
     async def test_download_function_for_deleted_item(self):
-        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
-        # deleted items don't have `name` property
-        drive_item = {"id": "testid", "deleted": {"state": "deleted"}}
+        async with create_source(
+            SharepointOnlineDataSource, site_collections=WILDCARD
+        ) as source:
+            # deleted items don't have `name` property
+            drive_item = {"id": "testid", "deleted": {"state": "deleted"}}
 
-        download_result = source.download_function(drive_item, None)
+            download_result = source.download_function(drive_item, None)
 
-        assert download_result is None
+            assert download_result is None
 
     @pytest.mark.asyncio
     async def test_download_function_for_unsupported_file(self):
-        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
-        drive_item = {
-            "id": "testid",
-            "name": "filename.randomextention",
-            "@microsoft.graph.downloadUrl": "http://localhost/filename",
-            "lastModifiedDateTime": "2023-07-10T22:12:56Z",
-            "size": 10,
-        }
+        async with create_source(
+            SharepointOnlineDataSource, site_collections=WILDCARD
+        ) as source:
+            drive_item = {
+                "id": "testid",
+                "name": "filename.randomextention",
+                "@microsoft.graph.downloadUrl": "http://localhost/filename",
+                "lastModifiedDateTime": "2023-07-10T22:12:56Z",
+                "size": 10,
+            }
 
-        download_result = source.download_function(drive_item, None)
+            download_result = source.download_function(drive_item, None)
 
-        assert download_result is None
+            assert download_result is None
 
     @pytest.mark.asyncio
     async def test_download_function_with_filtering_rule(self):
-        source = create_source(SharepointOnlineDataSource, site_collections=WILDCARD)
-        max_drive_item_age = 15
-        drive_item = {
-            "name": "test",
-            "lastModifiedDateTime": str(
-                datetime.utcnow() - timedelta(days=max_drive_item_age + 1)
-            ),
-        }
+        async with create_source(
+            SharepointOnlineDataSource, site_collections=WILDCARD
+        ) as source:
+            max_drive_item_age = 15
+            drive_item = {
+                "name": "test",
+                "lastModifiedDateTime": str(
+                    datetime.utcnow() - timedelta(days=max_drive_item_age + 1)
+                ),
+            }
 
-        download_result = source.download_function(drive_item, max_drive_item_age)
+            download_result = source.download_function(drive_item, max_drive_item_age)
 
-        assert download_result is None
+            assert download_result is None
 
     def test_get_default_configuration(self):
         config = SharepointOnlineDataSource.get_default_configuration()
@@ -2392,58 +2416,55 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_validate_config_empty_config(self, patch_sharepoint_client):
-        source = create_source(
-            SharepointOnlineDataSource,
-            site_collections=WILDCARD,
-        )
+        async with create_source(
+            SharepointOnlineDataSource, site_collections=WILDCARD
+        ) as source:
+            with pytest.raises(ConfigurableFieldValueError) as e:
+                await source.validate_config()
 
-        with pytest.raises(ConfigurableFieldValueError) as e:
-            await source.validate_config()
-
-        assert e.match("Tenant ID")
-        assert e.match("Tenant name")
-        assert e.match("Client ID")
-        assert e.match("Secret value")
+            assert e.match("Tenant ID")
+            assert e.match("Tenant name")
+            assert e.match("Client ID")
+            assert e.match("Secret value")
 
     @pytest.mark.asyncio
     async def test_validate_config(self, patch_sharepoint_client):
-        source = create_source(
+        async with create_source(
             SharepointOnlineDataSource,
             tenant_id="1",
             tenant_name="test",
             client_id="2",
             secret_value="3",
             site_collections=WILDCARD,
-        )
+        ) as source:
+            await source.validate_config()
 
-        await source.validate_config()
-
-        # Assert that tokens are awaited
-        # They raise human-readable errors if something goes wrong
-        # Therefore it's important
-        patch_sharepoint_client.graph_api_token.get.assert_awaited()
-        patch_sharepoint_client.rest_api_token.get.assert_awaited()
+            # Assert that tokens are awaited
+            # They raise human-readable errors if something goes wrong
+            # Therefore it's important
+            patch_sharepoint_client.graph_api_token.get.assert_awaited()
+            patch_sharepoint_client.rest_api_token.get.assert_awaited()
 
     @pytest.mark.asyncio
     async def test_validate_config_when_invalid_tenant(self, patch_sharepoint_client):
         invalid_tenant_name = "wat"
 
-        source = create_source(
+        async with create_source(
             SharepointOnlineDataSource,
             tenant_id="1",
             tenant_name=invalid_tenant_name,
             client_id="2",
             secret_value="3",
             site_collections=WILDCARD,
-        )
-        patch_sharepoint_client.tenant_details.return_value = {
-            "NameSpaceType": "Unknown"
-        }
+        ) as source:
+            patch_sharepoint_client.tenant_details.return_value = {
+                "NameSpaceType": "Unknown"
+            }
 
-        with pytest.raises(Exception) as e:
-            await source.validate_config()
+            with pytest.raises(Exception) as e:
+                await source.validate_config()
 
-        assert e.match(invalid_tenant_name)
+            assert e.match(invalid_tenant_name)
 
     @pytest.mark.asyncio
     async def test_validate_config_non_existing_collection(
@@ -2452,21 +2473,20 @@ class TestSharepointOnlineDataSource:
         non_existing_site = "something"
         another_non_existing_site = "something-something"
 
-        source = create_source(
+        async with create_source(
             SharepointOnlineDataSource,
             tenant_id="1",
             tenant_name="test",
             client_id="2",
             secret_value="3",
             site_collections=[non_existing_site, another_non_existing_site],
-        )
+        ) as source:
+            with pytest.raises(Exception) as e:
+                await source.validate_config()
 
-        with pytest.raises(Exception) as e:
-            await source.validate_config()
-
-        # Says which site does not exist
-        assert e.match(non_existing_site)
-        assert e.match(another_non_existing_site)
+            # Says which site does not exist
+            assert e.match(non_existing_site)
+            assert e.match(another_non_existing_site)
 
     @pytest.mark.asyncio
     async def test_get_attachment_content(self, patch_sharepoint_client):
@@ -2477,12 +2497,11 @@ class TestSharepointOnlineDataSource:
             await async_buffer.write(message)
 
         patch_sharepoint_client.download_attachment = download_func
-        source = create_source(SharepointOnlineDataSource)
+        async with create_source(SharepointOnlineDataSource) as source:
+            download_result = await source.get_attachment_content(attachment, doit=True)
 
-        download_result = await source.get_attachment_content(attachment, doit=True)
-
-        assert download_result["_attachment"] == base64.b64encode(message).decode()
-        assert "body" not in download_result
+            assert download_result["_attachment"] == base64.b64encode(message).decode()
+            assert "body" not in download_result
 
     @pytest.mark.asyncio
     async def test_get_attachment_content_unsupported_file_type(
@@ -2499,15 +2518,16 @@ class TestSharepointOnlineDataSource:
             await async_buffer.write(message)
 
         patch_sharepoint_client.download_attachment = download_func
-        source = create_source(SharepointOnlineDataSource)
+        async with create_source(SharepointOnlineDataSource) as source:
+            with patch.object(source._logger, "debug") as mock_method:
+                download_result = await source.get_attachment_content(
+                    attachment, doit=True
+                )
 
-        with patch.object(source._logger, "debug") as mock_method:
-            download_result = await source.get_attachment_content(attachment, doit=True)
-
-        assert download_result is None
-        mock_method.assert_called_once_with(
-            f"Not downloading attachment {filename}: file type is not supported"
-        )
+            assert download_result is None
+            mock_method.assert_called_once_with(
+                f"Not downloading attachment {filename}: file type is not supported"
+            )
 
     @pytest.mark.asyncio
     @patch("connectors.utils.ExtractionService._check_configured", lambda *_: True)
@@ -2528,15 +2548,16 @@ class TestSharepointOnlineDataSource:
                 await async_buffer.write(bytes(message, "utf-8"))
 
             patch_sharepoint_client.download_attachment = download_func
-            source = create_source(
+            async with create_source(
                 SharepointOnlineDataSource, use_text_extraction_service=True
-            )
+            ) as source:
+                download_result = await source.get_attachment_content(
+                    attachment, doit=True
+                )
 
-            download_result = await source.get_attachment_content(attachment, doit=True)
-
-            extraction_service_mock.assert_called_once()
-            assert download_result["body"] == message
-            assert "_attachment" not in download_result
+                extraction_service_mock.assert_called_once()
+                assert download_result["body"] == message
+                assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
     @patch("connectors.utils.ExtractionService._check_configured", lambda *_: False)
@@ -2557,15 +2578,16 @@ class TestSharepointOnlineDataSource:
                 await async_buffer.write(bytes(message, "utf-8"))
 
             patch_sharepoint_client.download_attachment = download_func
-            source = create_source(
+            async with create_source(
                 SharepointOnlineDataSource, use_text_extraction_service=True
-            )
+            ) as source:
+                download_result = await source.get_attachment_content(
+                    attachment, doit=True
+                )
 
-            download_result = await source.get_attachment_content(attachment, doit=True)
-
-            extraction_service_mock.assert_not_called()
-            assert download_result["body"] == ""
-            assert "_attachment" not in download_result
+                extraction_service_mock.assert_not_called()
+                assert download_result["body"] == ""
+                assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -2588,15 +2610,16 @@ class TestSharepointOnlineDataSource:
             await async_buffer.write(message)
 
         patch_sharepoint_client.download_drive_item = download_func
-        source = create_source(SharepointOnlineDataSource)
+        async with create_source(SharepointOnlineDataSource) as source:
+            download_result = await source.get_drive_item_content(drive_item, doit=True)
 
-        download_result = await source.get_drive_item_content(drive_item, doit=True)
-
-        if expect_download:
-            assert download_result["_attachment"] == base64.b64encode(message).decode()
-            assert "body" not in download_result
-        else:
-            assert download_result is None
+            if expect_download:
+                assert (
+                    download_result["_attachment"] == base64.b64encode(message).decode()
+                )
+                assert "body" not in download_result
+            else:
+                assert download_result is None
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("filesize", [(15), (10485761)])
@@ -2624,15 +2647,16 @@ class TestSharepointOnlineDataSource:
                 await async_buffer.write(bytes(message, "utf-8"))
 
             patch_sharepoint_client.download_drive_item = download_func
-            source = create_source(
+            async with create_source(
                 SharepointOnlineDataSource, use_text_extraction_service=True
-            )
+            ) as source:
+                download_result = await source.get_drive_item_content(
+                    drive_item, doit=True
+                )
 
-            download_result = await source.get_drive_item_content(drive_item, doit=True)
-
-            extraction_service_mock.assert_called_once()
-            assert download_result["body"] == message
-            assert "_attachment" not in download_result
+                extraction_service_mock.assert_called_once()
+                assert download_result["body"] == message
+                assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("filesize", [(15), (10485761)])
@@ -2660,37 +2684,39 @@ class TestSharepointOnlineDataSource:
                 await async_buffer.write(bytes(message, "utf-8"))
 
             patch_sharepoint_client.download_drive_item = download_func
-            source = create_source(
+            async with create_source(
                 SharepointOnlineDataSource, use_text_extraction_service=True
-            )
+            ) as source:
+                download_result = await source.get_drive_item_content(
+                    drive_item, doit=True
+                )
 
-            download_result = await source.get_drive_item_content(drive_item, doit=True)
-
-            extraction_service_mock.assert_not_called()
-            assert download_result["body"] == ""
-            assert "_attachment" not in download_result
+                extraction_service_mock.assert_not_called()
+                assert download_result["body"] == ""
+                assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
     async def test_site_access_control(self, patch_sharepoint_client):
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
-        patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
+        async with create_source(SharepointOnlineDataSource) as source:
+            set_dls_enabled(source, True)
+            patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
 
-        site = {"id": 1, "webUrl": "some url"}
+            site = {"id": 1, "webUrl": "some url"}
 
-        access_control, _ = await source._site_access_control(site)
+            access_control, _ = await source._site_access_control(site)
 
-        two_other_users = 2
-        two_groups = 2
+            two_other_users = 2
+            two_groups = 2
 
-        assert len(access_control) == two_groups + two_other_users
+            assert len(access_control) == two_groups + two_other_users
 
-        assert _prefix_group(GROUP_ONE) in access_control
-        assert _prefix_group(GROUP_TWO) in access_control
+            assert _prefix_group(GROUP_ONE) in access_control
+            assert _prefix_group(GROUP_TWO) in access_control
 
-        assert _prefix_user(USER_ONE_EMAIL) in access_control
-        assert _prefix_email(USER_TWO_EMAIL) in access_control
+            assert _prefix_user(USER_ONE_EMAIL) in access_control
+            assert _prefix_email(USER_TWO_EMAIL) in access_control
 
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "_dls_enabled, document, access_control, expected_decorated_document",
         [
@@ -2744,19 +2770,21 @@ class TestSharepointOnlineDataSource:
     @patch(
         "connectors.sources.sharepoint_online.DEFAULT_GROUPS", DEFAULT_GROUPS_PATCHED
     )
-    def test_decorate_with_access_control(
+    async def test_decorate_with_access_control(
         self, _dls_enabled, document, access_control, expected_decorated_document
     ):
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, _dls_enabled)
-        decorated_document = source._decorate_with_access_control(
-            document, access_control
-        )
+        async with create_source(SharepointOnlineDataSource) as source:
+            set_dls_enabled(source, _dls_enabled)
+            decorated_document = source._decorate_with_access_control(
+                document, access_control
+            )
 
-        assert (
-            decorated_document.get(ALLOW_ACCESS_CONTROL_PATCHED, []).sort()
-            == expected_decorated_document.get(ALLOW_ACCESS_CONTROL_PATCHED, []).sort()
-        )
+            assert (
+                decorated_document.get(ALLOW_ACCESS_CONTROL_PATCHED, []).sort()
+                == expected_decorated_document.get(
+                    ALLOW_ACCESS_CONTROL_PATCHED, []
+                ).sort()
+            )
 
     @pytest.mark.parametrize(
         "dls_feature_flag, dls_config_value, expected_dls_enabled",
@@ -2783,59 +2811,61 @@ class TestSharepointOnlineDataSource:
             ),
         ],
     )
-    def test_dls_enabled(
+    @pytest.mark.asyncio
+    async def test_dls_enabled(
         self, dls_feature_flag, dls_config_value, expected_dls_enabled
     ):
-        source = create_source(SharepointOnlineDataSource)
-        source._features = Mock()
-        source._features.document_level_security_enabled = Mock(
-            return_value=dls_feature_flag
-        )
-        source.configuration.set_field(
-            "use_document_level_security", value=dls_config_value
-        )
+        async with create_source(SharepointOnlineDataSource) as source:
+            source._features = Mock()
+            source._features.document_level_security_enabled = Mock(
+                return_value=dls_feature_flag
+            )
+            source.configuration.set_field(
+                "use_document_level_security", value=dls_config_value
+            )
 
-        assert source._dls_enabled() == expected_dls_enabled
+            assert source._dls_enabled() == expected_dls_enabled
 
-    def test_dls_disabled_with_features_missing(self):
-        source = create_source(SharepointOnlineDataSource)
-        source._features = None
+    @pytest.mark.asyncio
+    async def test_dls_disabled_with_features_missing(self):
+        async with create_source(SharepointOnlineDataSource) as source:
+            source._features = None
 
-        assert not source._dls_enabled()
+            assert not source._dls_enabled()
 
-    def test_access_control_query(self):
-        source = create_source(SharepointOnlineDataSource)
+    @pytest.mark.asyncio
+    async def test_access_control_query(self):
+        async with create_source(SharepointOnlineDataSource) as source:
+            access_control = ["user_1"]
+            access_control_query = source.access_control_query(access_control)
 
-        access_control = ["user_1"]
-        access_control_query = source.access_control_query(access_control)
-
-        assert access_control_query == {
-            "query": {
-                "template": {"params": {"access_control": access_control}},
-                "source": {
-                    "bool": {
-                        "filter": {
-                            "bool": {
-                                "should": [
-                                    {
-                                        "bool": {
-                                            "must_not": {
-                                                "exists": {"field": ACCESS_CONTROL}
+            assert access_control_query == {
+                "query": {
+                    "template": {"params": {"access_control": access_control}},
+                    "source": {
+                        "bool": {
+                            "filter": {
+                                "bool": {
+                                    "should": [
+                                        {
+                                            "bool": {
+                                                "must_not": {
+                                                    "exists": {"field": ACCESS_CONTROL}
+                                                }
                                             }
-                                        }
-                                    },
-                                    {
-                                        "terms": {
-                                            f"{ACCESS_CONTROL}.enum": access_control
-                                        }
-                                    },
-                                ]
+                                        },
+                                        {
+                                            "terms": {
+                                                f"{ACCESS_CONTROL}.enum": access_control
+                                            }
+                                        },
+                                    ]
+                                }
                             }
                         }
-                    }
-                },
+                    },
+                }
             }
-        }
 
     @pytest.mark.asyncio
     @patch(
@@ -2843,100 +2873,102 @@ class TestSharepointOnlineDataSource:
         TIMESTAMP_FORMAT_PATCHED,
     )
     async def test_user_access_control_doc(self, patch_sharepoint_client):
-        source = create_source(SharepointOnlineDataSource)
-        created_at = "2023-05-25T13:30:54Z"
-        group_one = {"id": "group-one-id"}
-        group_two = {"id": "group-two-id"}
-        groups = [group_one, group_two]
-        patch_sharepoint_client.groups_user_transitive_member_of = AsyncIterator(groups)
+        async with create_source(SharepointOnlineDataSource) as source:
+            created_at = "2023-05-25T13:30:54Z"
+            group_one = {"id": "group-one-id"}
+            group_two = {"id": "group-two-id"}
+            groups = [group_one, group_two]
+            patch_sharepoint_client.groups_user_transitive_member_of = AsyncIterator(
+                groups
+            )
 
-        user_id = "1"
-        username = "user"
-        email = "user@spo.com"
-        user = {
-            "id": user_id,
-            "UserName": username,
-            "EMail": email,
-            "createdDateTime": created_at,
-        }
+            user_id = "1"
+            username = "user"
+            email = "user@spo.com"
+            user = {
+                "id": user_id,
+                "UserName": username,
+                "EMail": email,
+                "createdDateTime": created_at,
+            }
 
-        expected_email = f"email:{email}"
-        expected_user = f"user:{username}"
-        expected_user_id = f"user_id:{user_id}"
-        expected_groups = list(map(lambda group: f"group:{group}", groups))
+            expected_email = f"email:{email}"
+            expected_user = f"user:{username}"
+            expected_user_id = f"user_id:{user_id}"
+            expected_groups = list(map(lambda group: f"group:{group}", groups))
 
-        user_doc = await source._user_access_control_doc(user)
-        access_control = user_doc["query"]["template"]["params"]["access_control"]
+            user_doc = await source._user_access_control_doc(user)
+            access_control = user_doc["query"]["template"]["params"]["access_control"]
 
-        assert user_doc["_id"] == email
-        assert user_doc["created_at"] == datetime.strptime(
-            user["createdDateTime"], TIMESTAMP_FORMAT_PATCHED
-        )
-        assert user_doc["identity"]["email"] == expected_email
-        assert user_doc["identity"]["username"] == expected_user
-        assert user_doc["identity"]["user_id"] == expected_user_id
-        assert expected_email in access_control
-        assert expected_user in access_control
-        all([group in access_control for group in expected_groups])
+            assert user_doc["_id"] == email
+            assert user_doc["created_at"] == datetime.strptime(
+                user["createdDateTime"], TIMESTAMP_FORMAT_PATCHED
+            )
+            assert user_doc["identity"]["email"] == expected_email
+            assert user_doc["identity"]["username"] == expected_user
+            assert user_doc["identity"]["user_id"] == expected_user_id
+            assert expected_email in access_control
+            assert expected_user in access_control
+            all([group in access_control for group in expected_groups])
 
     @pytest.mark.asyncio
     async def test_get_access_control_with_dls_disabled(self, patch_sharepoint_client):
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, False)
+        async with create_source(SharepointOnlineDataSource) as source:
+            set_dls_enabled(source, False)
 
-        patch_sharepoint_client.site_collections = AsyncIterator(
-            [{"siteCollection": {"hostname": "localhost"}}]
-        )
-        patch_sharepoint_client.sites = AsyncIterator([{"webUrl": "some url"}])
-        patch_sharepoint_client.site_users = AsyncMock(
-            return_value={"value": [{"Id": 1}]}
-        )
-        patch_sharepoint_client.group_for_user = AsyncMock(return_value=["group_1"])
+            patch_sharepoint_client.site_collections = AsyncIterator(
+                [{"siteCollection": {"hostname": "localhost"}}]
+            )
+            patch_sharepoint_client.sites = AsyncIterator([{"webUrl": "some url"}])
+            patch_sharepoint_client.site_users = AsyncMock(
+                return_value={"value": [{"Id": 1}]}
+            )
+            patch_sharepoint_client.group_for_user = AsyncMock(return_value=["group_1"])
 
-        access_control = []
+            access_control = []
 
-        async for doc in source.get_access_control():
-            access_control.append(doc)
+            async for doc in source.get_access_control():
+                access_control.append(doc)
 
-        assert len(access_control) == 0
+            assert len(access_control) == 0
 
     @pytest.mark.asyncio
     async def test_get_access_control_with_dls_enabled_and_fetch_all_users(
         self, patch_sharepoint_client
     ):
-        source = create_source(SharepointOnlineDataSource)
-        set_dls_enabled(source, True)
+        async with create_source(SharepointOnlineDataSource) as source:
+            set_dls_enabled(source, True)
 
-        group = {"@odata.type": "#microsoft.graph.group", "id": "doop"}
-        member_email = "member@acme.co"
-        member = {
-            "userPrincipalName": "some member",
-            "EMail": member_email,
-            "transitiveMemberOf": group,
-        }
-        owner_email = "owner@acme.co"
-        owner = {
-            "UserName": "some owner",
-            "mail": owner_email,
-            "transitiveMemberOf": group,
-        }
+            group = {"@odata.type": "#microsoft.graph.group", "id": "doop"}
+            member_email = "member@acme.co"
+            member = {
+                "userPrincipalName": "some member",
+                "EMail": member_email,
+                "transitiveMemberOf": group,
+            }
+            owner_email = "owner@acme.co"
+            owner = {
+                "UserName": "some owner",
+                "mail": owner_email,
+                "transitiveMemberOf": group,
+            }
 
-        user_doc_one = {"_id": member_email}
-        user_doc_two = {"_id": owner_email}
+            user_doc_one = {"_id": member_email}
+            user_doc_two = {"_id": owner_email}
 
-        patch_sharepoint_client.active_users_with_groups = AsyncIterator(
-            [member, owner]
-        )
-        source._user_access_control_doc = AsyncMock(
-            side_effect=[user_doc_one, user_doc_two]
-        )
+            patch_sharepoint_client.active_users_with_groups = AsyncIterator(
+                [member, owner]
+            )
+            source._user_access_control_doc = AsyncMock(
+                side_effect=[user_doc_one, user_doc_two]
+            )
 
-        user_access_control_docs = []
+            user_access_control_docs = []
 
-        async for doc in source.get_access_control():
-            user_access_control_docs.append(doc)
+            async for doc in source.get_access_control():
+                user_access_control_docs.append(doc)
 
-        assert len(user_access_control_docs) == 2
+            assert len(user_access_control_docs) == 2
 
     @pytest.mark.parametrize(
         "user_info_name, expected_domain_group_id",
@@ -3136,14 +3168,15 @@ class TestSharepointOnlineDataSource:
     async def test_get_access_control_from_role_assignment(
         self, role_assignment, expected_access_control
     ):
-        source = create_source(SharepointOnlineDataSource)
+        async with create_source(SharepointOnlineDataSource) as source:
+            access_control = await source._get_access_control_from_role_assignment(
+                role_assignment
+            )
 
-        access_control = await source._get_access_control_from_role_assignment(
-            role_assignment
-        )
-
-        assert len(access_control) == len(expected_access_control)
-        assert all(identity in access_control for identity in expected_access_control)
+            assert len(access_control) == len(expected_access_control)
+            assert all(
+                identity in access_control for identity in expected_access_control
+            )
 
     @pytest.mark.parametrize(
         "raw_login_name, expected_login_name",

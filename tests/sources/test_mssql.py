@@ -34,85 +34,80 @@ class MockEngine:
 @pytest.mark.asyncio
 async def test_create_engine(mock_create_url, mock_create_engine):
     # Setup
-    source = create_source(MSSQLDataSource)
-    mock_create_engine.return_value = "Mock engine"
-    mock_create_url.return_value = MSSQL_CONNECTION_STRING
+    async with create_source(MSSQLDataSource) as source:
+        mock_create_engine.return_value = "Mock engine"
+        mock_create_url.return_value = MSSQL_CONNECTION_STRING
 
-    # Execute
-    source._create_engine()
+        # Execute
+        source._create_engine()
 
-    # Assert
-    mock_create_engine.assert_called_with(MSSQL_CONNECTION_STRING, connect_args={})
+        # Assert
+        mock_create_engine.assert_called_with(MSSQL_CONNECTION_STRING, connect_args={})
 
-    # Setup
-    source.ssl_enabled = True
-    source.ssl_ca = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
+        # Setup
+        source.ssl_enabled = True
+        source.ssl_ca = (
+            "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
+        )
 
-    # Execute
-    source._create_engine()
+        # Execute
+        source._create_engine()
 
-    # Assert
-    mock_create_engine.assert_called_with(
-        MSSQL_CONNECTION_STRING,
-        connect_args={
-            "cafile": source.certfile,
-            "validate_host": False,
-        },
-    )
-
-    # Cleanup
-    await source.close()
+        # Assert
+        mock_create_engine.assert_called_with(
+            MSSQL_CONNECTION_STRING,
+            connect_args={
+                "cafile": source.certfile,
+                "validate_host": False,
+            },
+        )
 
 
 @pytest.mark.asyncio
 async def test_ping():
-    source = create_source(MSSQLDataSource)
-    source.engine = MockEngine()
+    async with create_source(MSSQLDataSource) as source:
+        source.engine = MockEngine()
 
-    await source.ping()
-
-    await source.close()
+        await source.ping()
 
 
 @pytest.mark.asyncio
 async def test_get_docs():
     # Setup
-    source = create_source(MSSQLDataSource)
-    source.engine = MockEngine()
-    actual_response = []
-    expected_response = [
-        {
-            "dbo_emp_table_ids": 1,
-            "dbo_emp_table_names": "abcd",
-            "_id": "xe_dbo_emp_table_1_",
-            "_timestamp": "2023-02-21T08:37:15+00:00",
-            "Database": "xe",
-            "Table": "emp_table",
-            "schema": "dbo",
-        },
-        {
-            "dbo_emp_table_ids": 2,
-            "dbo_emp_table_names": "xyz",
-            "_id": "xe_dbo_emp_table_2_",
-            "_timestamp": "2023-02-21T08:37:15+00:00",
-            "Database": "xe",
-            "Table": "emp_table",
-            "schema": "dbo",
-        },
-    ]
+    async with create_source(MSSQLDataSource) as source:
+        source.engine = MockEngine()
+        actual_response = []
+        expected_response = [
+            {
+                "dbo_emp_table_ids": 1,
+                "dbo_emp_table_names": "abcd",
+                "_id": "xe_dbo_emp_table_1_",
+                "_timestamp": "2023-02-21T08:37:15+00:00",
+                "Database": "xe",
+                "Table": "emp_table",
+                "schema": "dbo",
+            },
+            {
+                "dbo_emp_table_ids": 2,
+                "dbo_emp_table_names": "xyz",
+                "_id": "xe_dbo_emp_table_2_",
+                "_timestamp": "2023-02-21T08:37:15+00:00",
+                "Database": "xe",
+                "Table": "emp_table",
+                "schema": "dbo",
+            },
+        ]
 
-    # Execute
-    async for doc in source.get_docs():
-        actual_response.append(doc[0])
+        # Execute
+        async for doc in source.get_docs():
+            actual_response.append(doc[0])
 
-    # Assert
-    assert actual_response == expected_response
-
-    await source.close()
+        # Assert
+        assert actual_response == expected_response
 
 
 @pytest.mark.asyncio
 async def test_close():
-    source = create_source(MSSQLDataSource)
-    source.create_pem_file()
-    await source.close()
+    async with create_source(MSSQLDataSource) as source:
+        source.create_pem_file()
+        await source.close()
