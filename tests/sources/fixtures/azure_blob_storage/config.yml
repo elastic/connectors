@@ -26,8 +26,10 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'abs'
-service_type: 'azure_blob_storage'
+connectors:
+  -
+    connector_id: 'abs'
+    service_type: 'azure_blob_storage'
 
 sources:
   azure_blob_storage: connectors.sources.azure_blob_storage:AzureBlobStorageDataSource
