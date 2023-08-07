@@ -900,10 +900,6 @@ class DriveItemsPage(Iterable, Sized):
 
 
 class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
-    """
-    Validate advanced rules for MongoDB, so that they're adhering to the motor asyncio API (see: https://motor.readthedocs.io/en/stable/api-asyncio/asyncio_motor_collection.html)
-    """
-
     SCHEMA_DEFINITION = {
         "type": "object",
         "properties": {
@@ -1732,7 +1728,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         A drive item can have six different identities assigned to it: "application", "device", "group", "user", "siteGroup" and "siteUser".
         In this context we'll only fetch "group", "user", "siteGroup" and "siteUser" and prefix them with different strings to make them distinguishable from each other.
 
-        Note: A "siteUser" can be related to a "user", but not neccessarily (same for "group" and "siteGroup").
+        Note: A "siteUser" can be related to a "user", but not necessarily (same for "group" and "siteGroup").
         """
         if not self.configuration["fetch_drive_item_permissions"]:
             return drive_item
