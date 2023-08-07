@@ -412,17 +412,33 @@ class UnknownRetryStrategyError(Exception):
     pass
 
 
-def retryable(retries=3, interval=1.0, strategy=RetryStrategy.LINEAR_BACKOFF):
+def retryable(
+    retries=3,
+    interval=1.0,
+    strategy=RetryStrategy.LINEAR_BACKOFF,
+    skipped_exceptions=None,
+):
     def wrapper(func):
-        if inspect.isasyncgenfunction(func):
-            return retryable_async_generator(func, retries, interval, strategy)
+        if skipped_exceptions is None:
+            processed_skipped_exceptions = []
+        elif not isinstance(skipped_exceptions, list):
+            processed_skipped_exceptions = [skipped_exceptions]
         else:
-            return retryable_async_function(func, retries, interval, strategy)
+            processed_skipped_exceptions = skipped_exceptions
+
+        if inspect.isasyncgenfunction(func):
+            return retryable_async_generator(
+                func, retries, interval, strategy, processed_skipped_exceptions
+            )
+        else:
+            return retryable_async_function(
+                func, retries, interval, strategy, processed_skipped_exceptions
+            )
 
     return wrapper
 
 
-def retryable_async_function(func, retries, interval, strategy):
+def retryable_async_function(func, retries, interval, strategy, skipped_exceptions):
     @functools.wraps(func)
     async def wrapped(*args, **kwargs):
         retry = 1
@@ -430,7 +446,7 @@ def retryable_async_function(func, retries, interval, strategy):
             try:
                 return await func(*args, **kwargs)
             except Exception as e:
-                if retry >= retries:
+                if retry >= retries or e.__class__ in skipped_exceptions:
                     raise e
 
                 await apply_retry_strategy(strategy, interval, retry)
@@ -439,7 +455,7 @@ def retryable_async_function(func, retries, interval, strategy):
     return wrapped
 
 
-def retryable_async_generator(func, retries, interval, strategy):
+def retryable_async_generator(func, retries, interval, strategy, skipped_exceptions):
     @functools.wraps(func)
     async def wrapped(*args, **kwargs):
         retry = 1
@@ -449,7 +465,7 @@ def retryable_async_generator(func, retries, interval, strategy):
                     yield item
                 break
             except Exception as e:
-                if retry >= retries:
+                if retry >= retries or e.__class__ in skipped_exceptions:
                     raise e
 
                 await apply_retry_strategy(strategy, interval, retry)
