@@ -659,7 +659,7 @@ def setup_available_docs(advanced_snippet):
 @pytest.mark.asyncio
 async def test_get_docs_with_advanced_rules(filtering, expected_docs):
     async with create_source(MySqlDataSource) as source:
-        client = await setup_mysql_source(source)
+        await setup_mysql_source(source)
         docs_in_db = setup_available_docs(filtering.get_advanced_rules())
         source.fetch_documents = AsyncIterator(docs_in_db)
 
