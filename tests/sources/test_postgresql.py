@@ -11,7 +11,11 @@ import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
-from connectors.sources.postgresql import PostgreSQLDataSource, PostgreSQLQueries
+from connectors.sources.postgresql import (
+    PostgreSQLClient,
+    PostgreSQLDataSource,
+    PostgreSQLQueries,
+)
 from tests.sources.support import create_source
 
 POSTGRESQL_CONNECTION_STRING = (
@@ -108,25 +112,55 @@ class CursorAsync:
             schema=SCHEMA, table=TABLE
         ):
             return [("2023-02-21T08:37:15+00:00",)]
+        elif self.query == query_object.ping():
+            return [(2,)]
 
     async def __aexit__(self, exception_type, exception_value, exception_traceback):
         """Make sure the dummy database connection gets closed"""
         pass
 
 
-def test_get_connect_argss():
-    """This function test get_connect_args with dummy certificate"""
+def test_get_connect_args():
+    """This function test _get_connect_args with dummy certificate"""
     # Setup
-    source = create_source(PostgreSQLDataSource)
-    source.ssl_ca = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
+    client = PostgreSQLClient(
+        host="",
+        port="",
+        user="",
+        password="",
+        database="",
+        tables="*",
+        ssl_enabled=True,
+        ssl_ca="-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----",
+        logger_=None,
+    )
 
     # Execute
     with patch.object(ssl, "create_default_context", return_value=MockSsl()):
-        source.get_connect_args()
+        client._get_connect_args()
 
 
 @pytest.mark.asyncio
-async def test_get_docs_postgresql():
+async def test_postgresql_ping():
+    # Setup
+    source = create_source(PostgreSQLDataSource)
+    with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+        await source.ping()
+
+    await source.close()
+
+
+@pytest.mark.asyncio
+async def test_ping():
+    source = create_source(PostgreSQLDataSource)
+    with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+        await source.ping()
+
+    await source.close()
+
+
+@pytest.mark.asyncio
+async def test_get_docs():
     # Setup
     source = create_source(PostgreSQLDataSource)
     with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
@@ -159,3 +193,5 @@ async def test_get_docs_postgresql():
 
         # Assert
         assert actual_response == expected_response
+
+        await source.close()

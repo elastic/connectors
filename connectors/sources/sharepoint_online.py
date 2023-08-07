@@ -699,6 +699,35 @@ class SharepointOnlineClient:
         except NotFound:
             return
 
+    async def site_list_item_has_unique_role_assignments(
+        self, site_web_url, site_list_name, list_item_id
+    ):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/HasUniqueRoleAssignments"
+
+        try:
+            response = await self._rest_api_client.fetch(url)
+            return response.get("value", False)
+        except NotFound:
+            return False
+
+    async def site_list_item_role_assignments(
+        self, site_web_url, site_list_name, list_item_id
+    ):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        expand = "Member/users,RoleDefinitionBindings"
+
+        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/roleassignments?$expand={expand}"
+
+        try:
+            async for page in self._rest_api_client.scroll(url):
+                for role_assignment in page:
+                    yield role_assignment
+        except NotFound:
+            return
+
     async def site_list_items(self, site_id, list_id):
         select = "createdDateTime,id,lastModifiedDateTime,weburl,createdBy,lastModifiedBy,contentType"
         expand = "fields($select=Title,Link,Attachments,LinkTitle,LinkFilename,Description,Conversation)"
@@ -708,18 +737,6 @@ class SharepointOnlineClient:
         ):
             for site_list in page:
                 yield site_list
-
-    async def site_list_item_role_assignments(
-        self, site_web_url, list_title, list_item_id
-    ):
-        self._validate_sharepoint_rest_url(site_web_url)
-
-        url = f"{site_web_url}/_api/lists/GetByTitle('{list_title}')/items({list_item_id})/roleassignments"
-
-        try:
-            return await self._rest_api_client.fetch(url)
-        except NotFound:
-            return {}
 
     async def site_list_item_attachments(self, site_web_url, list_title, list_item_id):
         self._validate_sharepoint_rest_url(site_web_url)
@@ -1142,6 +1159,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "bool",
                 "value": True,
             },
+            "fetch_unique_list_item_permissions": {
+                "depends_on": [{"field": "use_document_level_security", "value": True}],
+                "display": "toggle",
+                "label": "Fetch unique list item permissions",
+                "order": 11,
+                "tooltip": "Enable this option to fetch unique list item permissions. This setting can increase sync time. If this setting is disabled a list item will inherit permissions from its parent site.",
+                "type": "bool",
+                "value": True,
+            },
         }
 
     async def validate_config(self):
@@ -1211,7 +1237,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         self._logger.debug(f"Looking at site: {site['id']}")
         if not self._dls_enabled():
-            return []
+            return [], []
 
         def _is_site_admin(user):
             return user.get("IsSiteAdmin", False)
@@ -1517,6 +1543,10 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 # Sync site list and site list items
                 async for site_list in self.site_lists(site, site_access_control):
+                    # Always include site admins in site list access controls
+                    site_list = self._decorate_with_access_control(
+                        site_list, site_admin_access_control
+                    )
                     yield site_list, None
 
                     async for list_item, download_func in self.site_list_items(
@@ -1524,15 +1554,16 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_list_id=site_list["id"],
                         site_web_url=site["webUrl"],
                         site_list_name=site_list["name"],
+                        site_access_control=site_access_control,
                     ):
-                        yield self._decorate_with_access_control(
-                            list_item, site_access_control
-                        ), download_func
+                        # Always include site admins in list item access controls
+                        list_item = self._decorate_with_access_control(
+                            list_item, site_admin_access_control
+                        )
+                        yield list_item, download_func
 
                 # Sync site pages
-                async for site_page in self.site_pages(
-                    site["webUrl"], site_access_control
-                ):
+                async for site_page in self.site_pages(site, site_access_control):
                     # Always include site admins in site page access controls
                     site_page = self._decorate_with_access_control(
                         site_page, site_admin_access_control
@@ -1610,6 +1641,10 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 # Sync site list and site list items
                 async for site_list in self.site_lists(site, site_access_control):
+                    # Always include site admins in site list access controls
+                    site_list = self._decorate_with_access_control(
+                        site_list, site_admin_access_control
+                    )
                     yield site_list, None, OP_INDEX
 
                     async for list_item, download_func in self.site_list_items(
@@ -1617,15 +1652,16 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_list_id=site_list["id"],
                         site_web_url=site["webUrl"],
                         site_list_name=site_list["name"],
+                        site_access_control=site_access_control,
                     ):
-                        yield self._decorate_with_access_control(
-                            list_item, site_access_control
-                        ), download_func, OP_INDEX
+                        # Always include site admins in list item access controls
+                        list_item = self._decorate_with_access_control(
+                            list_item, site_admin_access_control
+                        )
+                        yield list_item, download_func, OP_INDEX
 
                 # Sync site pages
-                async for site_page in self.site_pages(
-                    site["webUrl"], site_access_control
-                ):
+                async for site_page in self.site_pages(site, site_access_control):
                     # Always include site admins in site page access controls
                     site_page = self._decorate_with_access_control(
                         site_page, site_admin_access_control
@@ -1752,7 +1788,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 yield drive_item, self.download_function(drive_item, max_drive_item_age)
 
     async def site_list_items(
-        self, site_id, site_list_id, site_web_url, site_list_name
+        self, site_id, site_list_id, site_web_url, site_list_name, site_access_control
     ):
         async for list_item in self.client.site_list_items(site_id, site_list_id):
             # List Item IDs are unique within list.
@@ -1772,6 +1808,40 @@ class SharepointOnlineDataSource(BaseDataSource):
             ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
                 continue
 
+            has_unique_role_assignments = False
+
+            if self.configuration["fetch_unique_list_item_permissions"]:
+                has_unique_role_assignments = (
+                    await self.client.site_list_item_has_unique_role_assignments(
+                        site_web_url, site_list_name, list_item_natural_id
+                    )
+                )
+
+                if has_unique_role_assignments:
+                    self._logger.debug(
+                        f"Fetching unique permissions for list item with id '{list_item_natural_id}'. Ignoring parent site permissions."
+                    )
+
+                    list_item_access_control = []
+
+                    async for role_assignment in self.client.site_list_item_role_assignments(
+                        site_web_url, site_list_name, list_item_natural_id
+                    ):
+                        list_item_access_control.extend(
+                            await self._get_access_control_from_role_assignment(
+                                role_assignment
+                            )
+                        )
+
+                    list_item = self._decorate_with_access_control(
+                        list_item, list_item_access_control
+                    )
+
+            if not has_unique_role_assignments:
+                list_item = self._decorate_with_access_control(
+                    list_item, site_access_control
+                )
+
             if "Attachments" in list_item["fields"]:
                 async for list_item_attachment in self.client.site_list_item_attachments(
                     site_web_url, site_list_name, list_item_natural_id
@@ -1784,6 +1854,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                     list_item_attachment[
                         "_original_filename"
                     ] = list_item_attachment.get("FileName", "")
+                    list_item_attachment[ACCESS_CONTROL] = list_item.get(
+                        ACCESS_CONTROL, []
+                    )
 
                     attachment_download_func = partial(
                         self.get_attachment_content, list_item_attachment
@@ -1897,11 +1970,18 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return access_control
 
-    async def site_pages(self, url, site_access_control):
+    async def site_pages(self, site, site_access_control):
+        site_id = site["id"]
+        url = site["webUrl"]
         async for site_page in self.client.site_pages(url):
-            site_page["_id"] = site_page[
-                "odata.id"
-            ]  # Apparently site_page["GUID"] is not globally unique
+            # site page object has multiple ids:
+            # - Id - not globally unique, just an increment, e.g. 1, 2, 3, 4
+            # - GUID - not globally unique, though it's a real guid
+            # - odata.id - not even sure what this id is
+            # Therefore, we generate id combining unique site id with site page id that is unique within this site
+            # Careful with format - changing other ids can overlap with this one if they follow the format of:
+            # {site_id}-{some_name_or_string_id}-{autoincremented_id}
+            site_page["_id"] = f"{site_id}-site_page-{site_page['Id']}"
             site_page["object_type"] = "site_page"
 
             has_unique_role_assignments = False
