@@ -6,33 +6,38 @@
 """Google Cloud Storage module responsible to generate blob(s) on the fake Google Cloud Storage server.
 """
 import os
-import random
+from random import choices
 import string
 
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import storage
+from tests.commons import FakeProvider
 
 client_connection = None
 NUMBER_OF_BLOBS_TO_BE_DELETED = 10
 HERE = os.path.dirname(__file__)
 HOSTS = "/etc/hosts"
 
+fake_provider = FakeProvider()
+
 DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
 
 match DATA_SIZE:
-    case "extra_small":
-        NUMBER_OF_SMALL_FILES = 50
-        NUMBER_OF_LARGE_FILES = 5
     case "small":
-        NUMBER_OF_SMALL_FILES = 1000
-        NUMBER_OF_LARGE_FILES = 10
+        FIRST_BUCKET_FILE_COUNT = 500
+        SECOND_BUCKET_FILE_COUNT = 1500
     case "medium":
-        NUMBER_OF_SMALL_FILES = 5000
-        NUMBER_OF_LARGE_FILES = 50
+        FIRST_BUCKET_FILE_COUNT = 1000
+        SECOND_BUCKET_FILE_COUNT = 2500
     case "large":
-        NUMBER_OF_SMALL_FILES = 9500
-        NUMBER_OF_LARGE_FILES = 500
+        FIRST_BUCKET_FILE_COUNT = 3000
+        SECOND_BUCKET_FILE_COUNT = 7500
 
+population = [fake_provider.small_html(), fake_provider.medium_html(), fake_provider.large_html(), fake_provider.extra_large_html()]
+weights = [0.58, 0.3, 0.1, 0.02]
+
+def get_file():
+    return choices(population, weights)[0]
 
 class PrerequisiteException(Exception):
     """This class is used to generate the custom error exception when prerequisites are not satisfied."""
@@ -45,7 +50,7 @@ class PrerequisiteException(Exception):
 
 
 def get_num_docs():
-    print(NUMBER_OF_LARGE_FILES + NUMBER_OF_SMALL_FILES - NUMBER_OF_BLOBS_TO_BE_DELETED)
+    print(FIRST_BUCKET_FILE_COUNT + SECOND_BUCKET_FILE_COUNT - NUMBER_OF_BLOBS_TO_BE_DELETED)
 
 
 def verify():
@@ -74,76 +79,29 @@ def create_connection():
         raise
 
 
-def create_buckets():
-    """Method for generating buckets on the fake Google Cloud Storage server"""
-    try:
-        print("Started loading 2 buckets on the fake Google Cloud Storage server....")
+def generate_files(bucket_name, number_of_files):
+    """Method for generating files on the fake Google Cloud Storage server"""
+    print("Started loading files on the fake Google Cloud Storage server....")
+    client_connection.create_bucket(bucket_name)
+    bucket = client_connection.bucket(bucket_name)
 
-        client_connection.create_bucket("sample-small-files-bucket")
-        client_connection.create_bucket("sample-large-files-bucket")
+    for number in range(number_of_files):
+        blob = bucket.blob(f"sample_file{number}.html")
+        blob.upload_from_string(get_file())
 
-        print("Loaded total 2 buckets on the fake Google Cloud Storage server....")
-    except Exception as error:
-        print(
-            f"Error occurred while creating buckets on the fake Google Cloud Storage server. Error: {error}"
-        )
-
-
-def generate_small_files(start_number_of_small_files, end_number_of_small_files):
-    """Method for generating small files on the fake Google Cloud Storage server"""
-    try:
-        print("Started loading small files on the fake Google Cloud Storage server....")
-        bucket = client_connection.bucket("sample-small-files-bucket")
-
-        for number in range(start_number_of_small_files, end_number_of_small_files):
-            blob = bucket.blob(f"sample_small_file{number}.random")
-            blob.upload_from_string("")
-
-        print(
-            f"Loaded {end_number_of_small_files-start_number_of_small_files} small files on the fake Google Cloud Storage server...."
-        )
-    except Exception as error:
-        print(
-            f"Error occurred while generating small files on the fake Google Cloud Storage server. Error: {error}"
-        )
-        raise
-
-
-def generate_large_files(start_number_of_large_files, end_number_of_large_files):
-    """Method for generating large files on the fake Google Cloud Storage server"""
-    try:
-        size_of_file = 2097152  # 2 Mb of text
-        large_data = "".join(
-            [random.choice(string.ascii_letters) for i in range(size_of_file)]
-        )
-
-        print("Started loading large files on the fake Google Cloud Storage server....")
-
-        bucket = client_connection.bucket("sample-large-files-bucket")
-
-        for number in range(start_number_of_large_files, end_number_of_large_files):
-            blob = bucket.blob(f"sample_large_file{number}.txt")
-            blob.upload_from_string(large_data)
-
-        print(
-            f"Loaded {end_number_of_large_files-start_number_of_large_files} large files on the fake Google Cloud Storage server...."
-        )
-    except Exception as error:
-        print(
-            f"Error occurred while generating large files on the fake Google Cloud Storage server. Error: {error}"
-        )
-        raise
+    print(
+        f"Loaded {number_of_files} files on the fake Google Cloud Storage server into bucket {bucket_name}...."
+    )
 
 
 def load():
     create_connection()
-    create_buckets()
-    if NUMBER_OF_LARGE_FILES:
-        generate_large_files(0, NUMBER_OF_LARGE_FILES)
-    if NUMBER_OF_SMALL_FILES:
-        generate_small_files(0, NUMBER_OF_SMALL_FILES)
+    if FIRST_BUCKET_FILE_COUNT:
+        generate_files("first-bucket", FIRST_BUCKET_FILE_COUNT)
+    if SECOND_BUCKET_FILE_COUNT:
+        generate_files("second-bucket", SECOND_BUCKET_FILE_COUNT)
     print(
-        f"Loaded 2 buckets with {NUMBER_OF_LARGE_FILES} large files and {NUMBER_OF_SMALL_FILES} small files on the fake Google Cloud Storage server."
+        f"Loaded 2 buckets with {FIRST_BUCKET_FILE_COUNT} files and {SECOND_BUCKET_FILE_COUNT} files on the fake Google Cloud Storage server."
     )
 
 
@@ -155,9 +113,9 @@ def remove():
             "Started removing random blobs from the fake Google Cloud Storage server...."
         )
 
-        bucket = client_connection.bucket("sample-small-files-bucket")
-        for number in range(0, NUMBER_OF_BLOBS_TO_BE_DELETED):
-            blob = bucket.blob(f"sample_small_file{number}.random")
+        bucket = client_connection.bucket("first-bucket")
+        for number in range(NUMBER_OF_BLOBS_TO_BE_DELETED):
+            blob = bucket.blob(f"sample_file{number}.html")
             blob.delete()
 
         print(
