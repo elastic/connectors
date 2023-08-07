@@ -1777,10 +1777,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 drive_item["object_type"] = "drive_item"
                 drive_item["_timestamp"] = drive_item["lastModifiedDateTime"]
 
-                drive_item = await self._with_drive_item_permissions(
-                    site_drive["id"], drive_item
-                )
-
                 yield drive_item, self.download_function(drive_item, max_drive_item_age)
 
     async def site_list_items(
