@@ -81,6 +81,8 @@ services:
     volumes:
       - .:/python-flask
     restart: always  
+    environment:
+      - DATA_SIZE=${DATA_SIZE}
 
 networks:
   esnet:
