@@ -168,6 +168,19 @@ def test_parse_connectors_with_duplicate_connectors():
     assert service.connectors["foo"]["service_type"] == "baz"
 
 
+def test_parse_connectors_with_incomplete_connector():
+    local_config = deepcopy(config)
+    local_config["connectors"] = [
+        {"connector_id": "foo", "service_type": "bar"},
+        {"service_type": "qux"},
+    ]
+
+    service = BaseService(local_config)
+    assert len(service.connectors) == 1
+    assert service.connectors["foo"]["connector_id"] == "foo"
+    assert service.connectors["foo"]["service_type"] == "bar"
+
+
 def test_parse_connectors_with_deprecated_config_and_new_config():
     local_config = deepcopy(config)
     local_config["connectors"] = [{"connector_id": "foo", "service_type": "bar"}]
