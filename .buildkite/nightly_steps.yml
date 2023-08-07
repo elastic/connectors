@@ -17,8 +17,6 @@ steps:
   - label: "🔨 Google Cloud Storage"
     command:
       - ".buildkite/run_nigthly.sh google_cloud_storage"
-    env:
-      SKIP_AARCH64: "true"
     artifact_paths:
       - "perf8-report-*/**/*"
   - label: "🔨 Azure Blob Storage"
