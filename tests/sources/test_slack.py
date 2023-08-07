@@ -33,10 +33,10 @@ async def slack_client():
 
 @pytest_asyncio.fixture
 async def slack_data_source():
-    source = create_source(SlackDataSource, **configuration)
-    source.set_logger(logger)
-    yield source
-    await source.close()
+    async with create_source(SlackDataSource, **configuration) as source:
+        source.set_logger(logger)
+        yield source
+        await source.close()
 
 
 # Tests for SlackClient
