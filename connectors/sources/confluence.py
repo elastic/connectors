@@ -192,6 +192,7 @@ class ConfluenceDataSource(BaseDataSource):
 
     name = "Confluence"
     service_type = "confluence"
+    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to Confluence
@@ -525,7 +526,7 @@ class ConfluenceDataSource(BaseDataSource):
             return
         attachment_name = attachment["title"]
         file_extension = os.path.splitext(attachment_name)[-1]
-        if file_extension not in TIKA_SUPPORTED_FILETYPES:
+        if file_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
             self._logger.warning(f"{attachment_name} can't be extracted")
             return
 

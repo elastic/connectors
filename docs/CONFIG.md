@@ -4,9 +4,9 @@ Configuration lives in [config.yml](../config.yml).
 
 - `elasticsearch`: Elasticsearch connection configurations.
   - `host`: The host of the Elasticsearch deployment.
-  - `username`: The username for the Elasticsearch connection.
-  - `password`: The password for the Elasticsearch connection.
-  - `api_key`: The API key for Elasticsearch connection. You can't set `api_key` when basic auth is used.
+  - `api_key`: The API key for Elasticsearch connection. Using `api_key` is recommended instead of `username`/`password`.
+  - `username`: The username for the Elasticsearch connection. Using `username` requires `password` to also be configured. However, `api_key` is the recommended configuration choice.
+  - `password`: The password for the Elasticsearch connection. Using `password` requires `username` to also be configured. However, `api_key` is the recommended configuration choice.
   - `ssl`: Whether SSL is used for the Elasticsearch connection.
   - `ca_certs`: Path to a CA bundle.
   - `bulk`: Options for the Bulk API calls behavior - all options can be
@@ -38,34 +38,35 @@ Configuration lives in [config.yml](../config.yml).
   - `max_concurrent_access_control_syncs`: The maximum number of concurrent access control syncs. Defaults to 1.
   - `job_cleanup_interval`: The interval (in seconds) to run job cleanup task.
   - `log_level`: Connector service log level. Defaults to `INFO`.
-- `native_service_types`: An array of supported native connectors (in service type).
-- `connector_id`: The ID of the custom connector.
-- `service_type` The service type of the custom connector.
+- `extraction_service`: Local extraction service-related configurations. These configurations are optional and are not included by default. The presence of these configurations enables [local content extraction](https://www.elastic.co/guide/en/enterprise-search/current/connectors-content-extraction.html#connectors-content-extraction-local).
+  - `host`: The host of the local extraction service.
+  - `timeout`: Request timeout for local extraction service requests, in seconds. Defaults to 30.
+  - `use_file_pointers`: Whether or not to use file pointers for local extraction. Defaults to `false`.
+  - `stream_chunk_size`: The size that files are chunked to for streaming when sending a file to the local extraction service, in bytes. Only applicable if `use_file_pointers` is `false`. Defaults to 65536 (64KB).
+  - `shared_volume_dir`: The location for files to be extracted from. Only applicable if `use_file_pointers` is `true`. Defaults to `/app/files`. 
+- `connector_id`: The ID of the connector.
+- `service_type` The service type of the connector.
 - `sources`: A mapping/dictionary between service type and [Fully Qualified Name
 (FQN)](https://en.wikipedia.org/wiki/Fully_qualified_name). E.g. `mongodb: connectors.sources.mongo:MongoDataSource`.
 
 ## Run the connector service on Elastic Cloud
 
-When you have an Enterprise Search deployment on Elastic Cloud post 8.5.0, the connector service is automatically deployed. The connector service can only run in native mode on Elastic Cloud (i.e. it will only sync data for connectors with service type listed in `native_service_types`), and the Elasticsearch connection configurations (i.e. `host`, `username`, `password`) will be overridden, and a special Cloud user `cloud-internal-enterprise_search-server` will be used for Elasticsearch connection, which will have proper privilege on the connector index (`.elastic-connectors`), the connector job index (`.elastic-connectors-sync-jobs`) and the connector content indices (`search-*`).
+When you have an Enterprise Search deployment on Elastic Cloud post 8.5.0, the connector service is automatically deployed.
+The connector service runs in native mode on Elastic Cloud, and the Elasticsearch connection configurations (i.e. `host`, `username`, `password`) are automatically configured.
+A special Cloud user (`cloud-internal-enterprise_search-server`) is used for the Elasticsearch connection.
+This user has proper privileges on the connector index (`.elastic-connectors`), the connector job index (`.elastic-connectors-sync-jobs`) and the connector content indices (`search-*`).
+
+If you wish to connect more connector types than are natively available on Elastic Cloud, you will need to run the connector service on-prem, as described below.
 
 ## Run the connector service on-prem
 
-### Run the connector service in native mode
+Any converted native connector, net-new connector, or customized/modified connector must be run as a connector client, on premises.  
 
-1. Make sure the service types of supported native connectors are configured in `native_service_types`.
-2. Configure the Elasticsearch connection, with basic auth (`username` and `password`), or with API key (generated via _Stack Management_ > _Security_ > _API keys_ > _Create API key_). Make sure the user or the API key has at least the privileges to `manage`, `read` and `write` the connector index (`.elastic-connectors`), the connector job index (`.elastic-connectors-sync-jobs`) and the connector content indices (`search-*`).
-3. Run the connector service with
-    ```shell
-    make run
-    ```
-
-### Run the connector service for a custom connector
-
-1. Go to Kibana, _Enterprise Search_ > _Create an Elasticsearch index_. Use the `Build a connector` option for an ingestion method to create an index.
+1. Go to Kibana, _Enterprise Search_ > _Create an Elasticsearch index_. Select the service type of connector you wish to use.
 2. Create an API key to work with the connector. It should be done using the `Generate API key` button under `Configuration` tab.
 3. Configure your connector service application. You need to configure the following fields, and leave the rest as default.
    1. `elasticsearch.host`: Configure this to the Elasticsearch endpoint.
-   2. `elasticsearch.api_key`: Configure the API key generated in step 2. Make sure `elasticsearch.username` is not configured.
+   2. `elasticsearch.api_key`: Configure the API key generated in step 2. This is recommended over utilizing `elasticsearch.username/password` so that access can be automatically and narrowly scoped.
    3. `connector_id`: You can find the `connector_id` in step 3 `Deploy a connector` under `Configuration` tab in Kibana.
    4. `service_type`: Configure it to the service type of your new connector.
 4. Run the connector service application with

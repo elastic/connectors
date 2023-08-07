@@ -75,14 +75,44 @@
         "value": "*",
         "order": 5,
         "ui_restrictions": []
+      },
+      "use_text_extraction_service": {
+        "depends_on": [],
+        "display": "toggle",
+        "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+        "default_value": null,
+        "label": "Use text extraction service",
+        "sensitive": false,
+        "type": "bool",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": false,
+        "order": 6,
+        "ui_restrictions": []
+      },
+      "use_document_level_security": {
+        "depends_on": [],
+        "display": "toggle",
+        "tooltip": "Document level security ensures identities and permissions set in Sharepoint Online are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+        "default_value": null,
+        "label": "Enable document level security",
+        "sensitive": false,
+        "type": "bool",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": false,
+        "order": 7,
+        "ui_restrictions": []
       }
     },
     "custom_scheduling": {},
     "description": null,
     "error": "Cannot connect to host enterprisesearchasd.sharepoint.com:443 ssl:default [nodename nor servname provided, or not known]",
     "features": {
-      "filtering_advanced_config": true,
-      "filtering_rules": true,
+      "filtering_advanced_config": false,
+      "filtering_rules": false,
       "sync_rules": {
         "advanced": {
           "enabled": true
@@ -122,9 +152,7 @@
           "advanced_snippet": {
             "updated_at": "2023-06-02T15:50:23.157Z",
             "created_at": "2023-06-02T15:50:23.157Z",
-            "value": {
-              "maxDataAge": 15
-            }
+            "value": {}
           },
           "rules": [
             {
@@ -146,12 +174,12 @@
       }
     ],
     "index_name": "search-sharepoint_online",
-    "is_native": true,
+    "is_native": false,
     "language": null,
     "last_seen": "2023-06-02T16:05:43.247794+00:00",
     "last_sync_error": "Cannot connect to host enterprisesearchasd.sharepoint.com:443 ssl:default [nodename nor servname provided, or not known]",
     "last_sync_scheduled_at": null,
-    "last_sync_status": "error",
+    "last_sync_status": null,
     "last_synced": "2023-06-02T16:08:30.745527+00:00",
     "name": "sharepoint-online-adv",
     "pipeline": {
@@ -163,12 +191,12 @@
     "scheduling": {
       "full": {
         "enabled": true,
-        "interval": "0 0 0 * * ?"
+        "interval": "0 * * * * ?"
       }
     },
     "service_type": "sharepoint_online",
-    "status": "error",
-    "id": "cVvIfIgBFjJwEZQVkrcy",
+    "status": "connected",
+    "id": "sharepoint_online",
     "last_indexed_document_count": 0,
     "last_deleted_document_count": 0
   }

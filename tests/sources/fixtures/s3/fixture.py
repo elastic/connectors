@@ -7,6 +7,8 @@ REGION_NAME = "us-west-2"
 AWS_ENDPOINT_URL = "http://127.0.0.1"
 AWS_PORT = int(os.environ.get("AWS_PORT", "5001"))
 DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
+AWS_SECRET_KEY = "dummy_secret_key"
+AWS_ACCESS_KEY_ID = "dummy_access_key"
 
 if DATA_SIZE == "small":
     FOLDER_COUNT = 400
@@ -31,22 +33,8 @@ def random_text(k=0):
 
 BIG_TEXT = random_text(k=1024 * 20)
 
-AWS_CONFIG = """\
-[default]
-aws_access_key_id = YOUR_ACCESS_KEY
-aws_secret_access_key = YOUR_SECRET_KEY
-"""
-
 
 def setup():
-    aws_config = os.path.expanduser(os.path.join("~", ".aws"))
-    creds = os.path.join(aws_config, "credentials")
-
-    if not os.path.exists(creds):
-        os.makedirs(aws_config, exist_ok=True)
-        with open(creds, "w") as f:
-            f.write(AWS_CONFIG)
-
     os.environ["AWS_ENDPOINT_URL"] = AWS_ENDPOINT_URL
     os.environ["AWS_PORT"] = str(AWS_PORT)
 
@@ -57,7 +45,11 @@ def load():
 
     try:
         s3_client = boto3.client(
-            "s3", endpoint_url=f"{AWS_ENDPOINT_URL}:{AWS_PORT}", region_name=REGION_NAME
+            "s3",
+            endpoint_url=f"{AWS_ENDPOINT_URL}:{AWS_PORT}",
+            region_name=REGION_NAME,
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_KEY,
         )
         s3_client.create_bucket(
             Bucket=BUCKET_NAME,
@@ -99,7 +91,11 @@ def remove():
 
     try:
         s3_client = boto3.client(
-            "s3", endpoint_url=f"{AWS_ENDPOINT_URL}:{AWS_PORT}", region_name=REGION_NAME
+            "s3",
+            endpoint_url=f"{AWS_ENDPOINT_URL}:{AWS_PORT}",
+            region_name=REGION_NAME,
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_KEY,
         )
         print("Removing data from aws-moto server.")
         for object_id in range(0, OBJECT_COUNT):

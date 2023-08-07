@@ -3,7 +3,6 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import os
 from datetime import datetime
 from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -16,14 +15,6 @@ from botocore.exceptions import ClientError, HTTPClientError
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.s3 import S3DataSource
 from tests.sources.support import assert_basics, create_source
-
-
-@pytest.fixture(scope="session", autouse=True)
-def execute_before_all_tests():
-    """This method execute at the start, once"""
-    if "AWS_ACCESS_KEY_ID" not in os.environ:
-        os.environ["AWS_ACCESS_KEY_ID"] = "access_key"
-        os.environ["AWS_SECRET_ACCESS_KEY"] = "secret_key"
 
 
 @pytest.mark.asyncio
@@ -225,6 +216,41 @@ async def test_get_content(s3_client):
     document = {
         "id": "123",
         "filename": "test.pdf",
+        "bucket": "test-bucket",
+        "_timestamp": "2022-01-01T00:00:00.000Z",
+        "size_in_bytes": 1024,
+    }
+    s3_client = MagicMock()
+    s3_client.download_fileobj = AsyncMock()
+    async_response = AsyncMock()
+    async_response.__aenter__ = AsyncMock(return_value=ReadAsyncMock)
+
+    with patch("aiofiles.os.remove"):
+        with patch("connectors.utils.convert_to_b64"):
+            with patch.object(aiofiles, "open", return_value=async_response):
+                # Execute
+                result = await source.s3_client.get_content(
+                    document, s3_client, timestamp=None, doit=True
+                )
+
+                # Assert
+                assert result == {
+                    "_id": "123",
+                    "_timestamp": "2022-01-01T00:00:00.000Z",
+                    "_attachment": b"test content",
+                }
+
+
+@mock.patch("aiobotocore.client.AioBaseClient")
+@pytest.mark.asyncio
+async def test_get_content_with_upper_extension(s3_client):
+    """Test get_content method of S3Client"""
+
+    # Setup
+    source = create_source(S3DataSource)
+    document = {
+        "id": "123",
+        "filename": "test.TXT",
         "bucket": "test-bucket",
         "_timestamp": "2022-01-01T00:00:00.000Z",
         "size_in_bytes": 1024,

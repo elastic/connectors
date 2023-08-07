@@ -270,6 +270,44 @@ async def test_get_content(file_mock):
 
 
 @pytest.mark.asyncio
+@mock.patch("smbclient.open_file")
+async def test_get_content_with_upper_extension(file_mock):
+    """Test get_content method of Network Drive
+
+    Args:
+        file_mock (patch): The patch of open_file method
+    """
+    # Setup
+    source = create_source(NASDataSource)
+    file_mock.return_value.__enter__.return_value.read.return_value = bytes(
+        "Mock....", "utf-8"
+    )
+
+    mock_response = {
+        "id": "1",
+        "_timestamp": "2022-04-21T12:12:30",
+        "title": "file1.TXT",
+        "path": "\\1.2.3.4/Users/folder1/file1.txt",
+        "size": "50",
+    }
+
+    mocked_content_response = BytesIO(b"Mock....")
+
+    expected_output = {
+        "_id": "1",
+        "_timestamp": "2022-04-21T12:12:30",
+        "_attachment": "TW9jay4uLi4=",
+    }
+
+    # Execute
+    source.fetch_file_content = mock.MagicMock(return_value=mocked_content_response)
+    actual_response = await source.get_content(mock_response, doit=True)
+
+    # Assert
+    assert actual_response == expected_output
+
+
+@pytest.mark.asyncio
 async def test_get_content_when_doit_false():
     """Test get_content method when doit is false."""
     # Setup
@@ -363,3 +401,11 @@ def test_fetch_file_when_file_is_accessible(file_mock):
 
     # Assert
     assert response.read() == b"Mock...."
+
+
+async def test_close_without_session():
+    source = create_source(NASDataSource)
+
+    await source.close()
+
+    assert source.session is None

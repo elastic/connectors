@@ -17,7 +17,7 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -295,26 +295,6 @@ class SharepointServerClient:
             "_attachment": await self.convert_file_to_b64(source_file_name),
         }
 
-    def _get_retry_after(self, retry, exception):
-        """verify retry for SharePoint Server
-        Args:
-            retry (int): Number of retry count.
-            exception(Exception/ServerDisconnectedError): Exception instance
-        Raises:
-            Exception: An instance of an Exception class.
-        Returns:
-            retry: Retry count
-            retry_seconds: Retry seconds
-        """
-        if retry > self.retry_count:
-            raise exception
-        self._logger.warning(
-            f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
-        )
-        retry += 1
-        retry_seconds = RETRY_INTERVAL**retry
-        return retry, retry_seconds
-
     async def _api_call(self, url_name, url="", **url_kwargs):
         """Make an API call to the SharePoint Server
 
@@ -353,11 +333,14 @@ class SharepointServerClient:
                     ServerDisconnectedError,
                 ):
                     await self.close_session()
-                retry, retry_seconds = self._get_retry_after(
-                    retry=retry, exception=exception
+                if retry > self.retry_count:
+                    break
+                logger.warning(
+                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
                 )
-                self._logger.debug(f"Will retry in {retry_seconds} seconds")
-                await self._sleeps.sleep(retry_seconds)
+                retry += 1
+
+                await self._sleeps.sleep(RETRY_INTERVAL**retry)
 
     async def _fetch_data_with_next_url(
         self, site_url, list_id, param_name, selected_field=""
@@ -375,28 +358,25 @@ class SharepointServerClient:
         next_url = ""
         while True:
             if next_url != "":
-                response = await anext(
-                    self._api_call(
-                        url_name=param_name,
-                        url=next_url,
-                        selected_field=selected_field,
-                    )
-                )
-            else:
-                response = await anext(
-                    self._api_call(
-                        url_name=param_name,
-                        parent_site_url=site_url,
-                        list_id=list_id,
-                        top=TOP,
-                        host_url=self.host_url,
-                        selected_field=selected_field,
-                    )
-                )
-            response_result = response.get("value", [])  # pyright: ignore
-            yield response_result
+                async for response in self._api_call(
+                    url_name=param_name,
+                    url=next_url,
+                ):
+                    yield response.get("value", [])  # pyright: ignore
 
-            next_url = response.get("odata.nextLink", "")  # pyright: ignore
+                    next_url = response.get("odata.nextLink", "")
+            else:
+                async for response in self._api_call(
+                    url_name=param_name,
+                    parent_site_url=site_url,
+                    list_id=list_id,
+                    top=TOP,
+                    host_url=self.host_url,
+                    selected_field=selected_field,
+                ):
+                    yield response.get("value", [])  # pyright: ignore
+
+                    next_url = response.get("odata.nextLink", "")
             if next_url == "":
                 break
 
@@ -410,20 +390,19 @@ class SharepointServerClient:
             Response of the GET call.
         """
         skip = 0
+        response_result = []
         while True:
-            response = await anext(
-                self._api_call(
-                    url_name=param_name,
-                    parent_site_url=site_url,
-                    skip=skip,
-                    top=TOP,
-                    host_url=self.host_url,
-                )
-            )
-            response_result = response.get("value", [])  # pyright: ignore
-            yield response_result
+            async for response in self._api_call(
+                url_name=param_name,
+                parent_site_url=site_url,
+                skip=skip,
+                top=TOP,
+                host_url=self.host_url,
+            ):
+                response_result = response.get("value", [])  # pyright: ignore
+                yield response_result
 
-            skip += TOP
+                skip += TOP
             if len(response_result) < TOP:
                 break
 
@@ -600,6 +579,7 @@ class SharepointServerDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
         self.sharepoint_client = SharepointServerClient(configuration=configuration)
+        self.invalid_collections = []
 
     def _set_internal_logger(self):
         self.sharepoint_client.set_logger(self._logger)
@@ -667,6 +647,33 @@ class SharepointServerDataSource(BaseDataSource):
     async def close(self):
         """Closes unclosed client session"""
         await self.sharepoint_client.close_session()
+
+    async def _remote_validation(self):
+        """Validate configured collections
+        Raises:
+            ConfigurableFieldValueError: Unavailable services error.
+        """
+
+        for collection in self.sharepoint_client.site_collections:
+            is_invalid = True
+            async for _ in self.sharepoint_client._api_call(
+                url_name=PING,
+                site_collections=collection,
+                host_url=self.sharepoint_client.host_url,
+            ):
+                is_invalid = False
+            if is_invalid:
+                self.invalid_collections.append(collection)
+        if self.invalid_collections:
+            raise ConfigurableFieldValueError(
+                f"Collections {', '.join(self.invalid_collections)} are not available."
+            )
+
+    async def validate_config(self):
+        """Validates whether user input is empty or not for configuration fields
+        Also validate, if user configured collections are available in SharePoint."""
+        self.configuration.check_valid()
+        await self._remote_validation()
 
     async def ping(self):
         """Verify the connection with SharePoint"""

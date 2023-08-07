@@ -73,16 +73,14 @@ services:
     networks:
       - esnet
 
-  sharepoint_online:
+  github:
     build: .
     command: python fixture.py
     ports:
-      - 10337:10337
+      - "9091:9091"
     volumes:
       - .:/python-flask
     restart: always
-    environment:
-      - DATA_SIZE=${DATA_SIZE}
 
 volumes:
   esdata:

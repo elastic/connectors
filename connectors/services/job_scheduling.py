@@ -89,9 +89,12 @@ class JobSchedulingService(BaseService):
 
         source_klass = get_source_klass(self.source_list[connector.service_type])
         if connector.features.sync_rules_enabled():
-            validator = source_klass(connector.configuration)
-            validator.set_logger(connector.logger)
-            await connector.validate_filtering(validator=validator)
+            data_source = source_klass(connector.configuration)
+            data_source.set_logger(connector.logger)
+            try:
+                await connector.validate_filtering(validator=data_source)
+            finally:
+                await data_source.close()
 
         if connector.features.document_level_security_enabled():
             (
@@ -110,7 +113,7 @@ class JobSchedulingService(BaseService):
 
         if (
             connector.features.incremental_sync_enabled()
-            and source_klass.support_incremental_sync
+            and source_klass.incremental_sync_enabled
         ):
             await self._scheduled_sync(connector, JobType.INCREMENTAL)
 
@@ -141,7 +144,9 @@ class JobSchedulingService(BaseService):
         try:
             while self.running:
                 try:
-                    logger.debug(f"Polling every {self.idling} seconds")
+                    logger.debug(
+                        f"Polling every {self.idling} seconds for Job Scheduling Service"
+                    )
                     async for connector in self.connector_index.supported_connectors(
                         native_service_types=native_service_types,
                         connector_ids=connector_ids,
