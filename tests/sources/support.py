@@ -18,8 +18,10 @@ async def create_source(klass, **extras):
             config[k] = DEFAULT_CONFIGURATION.copy() | {"value": v}
 
     source = klass(configuration=DataSourceConfiguration(config))
-    yield source
-    await source.close()
+    try:
+        yield source
+    finally:
+        await source.close()
 
 
 async def assert_basics(klass, field, value):
