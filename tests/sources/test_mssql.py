@@ -64,7 +64,17 @@ async def test_create_engine(mock_create_url, mock_create_engine):
 
 
 @pytest.mark.asyncio
-async def test_get_docs_mssql():
+async def test_ping():
+    source = create_source(MSSQLDataSource)
+    source.engine = MockEngine()
+
+    await source.ping()
+
+    await source.close()
+
+
+@pytest.mark.asyncio
+async def test_get_docs():
     # Setup
     async with create_source(MSSQLDataSource) as source:
         source.engine = MockEngine()
@@ -96,6 +106,8 @@ async def test_get_docs_mssql():
 
         # Assert
         assert actual_response == expected_response
+
+    await source.close()
 
 
 @pytest.mark.asyncio
