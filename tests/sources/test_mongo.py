@@ -19,20 +19,6 @@ from tests.sources.support import create_source
 
 
 @pytest.mark.asyncio
-async def create_connector():
-    async with create_source(
-        MongoDataSource,
-        host="mongodb://127.0.0.1:27021",
-        database="db",
-        collection="col",
-        direct_connection=True,
-        user="foo",
-        password="password",
-    ) as source:
-        return source
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "advanced_rules, is_valid",
     [
@@ -150,13 +136,21 @@ def build_resp():
     "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
 )
 async def test_get_docs(*args):
-    source = await create_connector()
-    num = 0
-    async for (doc, _) in source.get_docs():
-        assert doc["id"] in ("one", "two")
-        num += 1
+    async with create_source(
+        MongoDataSource,
+        host="mongodb://127.0.0.1:27021",
+        database="db",
+        collection="col",
+        direct_connection=True,
+        user="foo",
+        password="password",
+    ) as source:
+        num = 0
+        async for (doc, _) in source.get_docs():
+            assert doc["id"] in ("one", "two")
+            num += 1
 
-    assert num == 2
+        assert num == 2
 
 
 @pytest.mark.asyncio
@@ -169,79 +163,103 @@ async def test_get_docs(*args):
 )
 @pytest.mark.asyncio
 async def test_ping_when_called_then_does_not_raise(*args):
-    source = await create_connector()
-
-    await source.ping()
+    async with create_source(
+        MongoDataSource,
+        host="mongodb://127.0.0.1:27021",
+        database="db",
+        collection="col",
+        direct_connection=True,
+        user="foo",
+        password="password",
+    ) as source:
+        await source.ping()
 
 
 @pytest.mark.asyncio
 async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
-    source = await create_connector()
-    collection_mock = Mock()
-    collection_mock.find = AsyncIterator(items=[{"_id": 1}])
-    source.collection = collection_mock
+    async with create_source(
+        MongoDataSource,
+        host="mongodb://127.0.0.1:27021",
+        database="db",
+        collection="col",
+        direct_connection=True,
+        user="foo",
+        password="password",
+    ) as source:
+        collection_mock = Mock()
+        collection_mock.find = AsyncIterator(items=[{"_id": 1}])
+        source.collection = collection_mock
 
-    filtering = Filter(
-        {
-            "advanced_snippet": {
-                "value": {
-                    "find": {
-                        "filter": {"key": "value"},
-                        "projection": ["field"],
-                        "skip": 1,
-                        "limit": 10,
-                        "no_cursor_timeout": True,
-                        "allow_partial_results": True,
-                        "batch_size": 5,
-                        "return_key": True,
-                        "show_record_id": False,
-                        "max_time_ms": 10,
-                        "allow_disk_use": True,
+        filtering = Filter(
+            {
+                "advanced_snippet": {
+                    "value": {
+                        "find": {
+                            "filter": {"key": "value"},
+                            "projection": ["field"],
+                            "skip": 1,
+                            "limit": 10,
+                            "no_cursor_timeout": True,
+                            "allow_partial_results": True,
+                            "batch_size": 5,
+                            "return_key": True,
+                            "show_record_id": False,
+                            "max_time_ms": 10,
+                            "allow_disk_use": True,
+                        }
                     }
                 }
             }
-        }
-    )
+        )
 
-    async for _ in source.get_docs(filtering):
-        pass
+        async for _ in source.get_docs(filtering):
+            pass
 
-    find_call_kwargs = collection_mock.find.call_kwargs
-    assert find_call_kwargs[0] == filtering.get_advanced_rules().get("find")
+        find_call_kwargs = collection_mock.find.call_kwargs
+        assert find_call_kwargs[0] == filtering.get_advanced_rules().get("find")
 
 
 @pytest.mark.asyncio
 async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present():
-    source = await create_connector()
+    async with create_source(
+        MongoDataSource,
+        host="mongodb://127.0.0.1:27021",
+        database="db",
+        collection="col",
+        direct_connection=True,
+        user="foo",
+        password="password",
+    ) as source:
+        collection_mock = Mock()
+        collection_mock.aggregate = AsyncIterator(items=[{"_id": 1}])
+        source.collection = collection_mock
 
-    collection_mock = Mock()
-    collection_mock.aggregate = AsyncIterator(items=[{"_id": 1}])
-    source.collection = collection_mock
-
-    filtering = Filter(
-        {
-            "advanced_snippet": {
-                "value": {
-                    "aggregate": {
-                        "allowDiskUse": True,
-                        "maxTimeMS": 10,
-                        "batchSize": 1,
-                        "let": {"key": "value"},
-                        "pipeline": [
-                            {"$match": {"field1": "value1"}},
-                            {"$group": {"_id": "$field2", "count": {"$sum": 1}}},
-                        ],
+        filtering = Filter(
+            {
+                "advanced_snippet": {
+                    "value": {
+                        "aggregate": {
+                            "allowDiskUse": True,
+                            "maxTimeMS": 10,
+                            "batchSize": 1,
+                            "let": {"key": "value"},
+                            "pipeline": [
+                                {"$match": {"field1": "value1"}},
+                                {"$group": {"_id": "$field2", "count": {"$sum": 1}}},
+                            ],
+                        }
                     }
                 }
             }
-        }
-    )
+        )
 
-    async for _ in source.get_docs(filtering):
-        pass
+        async for _ in source.get_docs(filtering):
+            pass
 
-    aggregate_call_kwargs = collection_mock.aggregate.call_kwargs
-    assert aggregate_call_kwargs[0] == filtering.get_advanced_rules().get("aggregate")
+        aggregate_call_kwargs = collection_mock.aggregate.call_kwargs
+        assert aggregate_call_kwargs[0] == filtering.get_advanced_rules().get(
+            "aggregate"
+        )
 
 
 def future_with_result(result):

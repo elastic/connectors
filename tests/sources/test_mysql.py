@@ -441,10 +441,7 @@ async def test_fetch_documents(patch_connection_pool):
     document = ["table1"]
 
     async with create_source(MySqlDataSource) as source:
-        source.configuration.set_field(
-            name="database", label="Database", value=DATABASE, type="str"
-        )
-        source.database = DATABASE
+        await setup_mysql_source(source, DATABASE)
         source.mysql_client = as_async_context_manager_mock(
             mocked_mysql_client(
                 pk_cols=[primary_key_col],
@@ -479,10 +476,7 @@ async def test_fetch_documents_when_used_custom_query_then_sort_pk_cols(
     patch_row2doc.return_value = document
 
     async with create_source(MySqlDataSource) as source:
-        source.configuration.set_field(
-            name="database", label="Database", value=DATABASE, type="str"
-        )
-        source.database = DATABASE
+        await setup_mysql_source(source, DATABASE)
         source.mysql_client = as_async_context_manager_mock(
             mocked_mysql_client(
                 pk_cols=[primary_key_col],
@@ -533,10 +527,7 @@ async def test_fetch_documents_when_custom_query_used_and_update_time_none(
     patch_row2doc.return_value = document
 
     async with create_source(MySqlDataSource) as source:
-        source.configuration.set_field(
-            name="database", label="Database", value=DATABASE, type="str"
-        )
-        source.database = DATABASE
+        await setup_mysql_source(source, DATABASE)
         source.mysql_client = as_async_context_manager_mock(
             mocked_mysql_client(
                 pk_cols=[primary_key_col],
@@ -572,10 +563,7 @@ async def test_fetch_documents_when_custom_query_used_and_update_time_none(
 @pytest.mark.asyncio
 async def test_get_docs(patch_connection_pool):
     async with create_source(MySqlDataSource) as source:
-        source.configuration.set_field(
-            name="database", label="Database", value=DATABASE, type="str"
-        )
-        source.database = DATABASE
+        await setup_mysql_source(source, DATABASE)
         source.mysql_client = MagicMock()
 
         source.get_tables_to_fetch = AsyncMock(return_value=["table"])
@@ -597,6 +585,20 @@ async def setup_mysql_client():
     )
 
     return client
+
+
+async def setup_mysql_source(source, database="", client=None):
+    if client is None:
+        client = MagicMock()
+
+    source.configuration.set_field(
+        name="database", label="Database", value=database, type="str"
+    )
+
+    source.database = database
+    source.mysql_client = client
+
+    return source
 
 
 def setup_available_docs(advanced_snippet):
@@ -657,11 +659,7 @@ def setup_available_docs(advanced_snippet):
 @pytest.mark.asyncio
 async def test_get_docs_with_advanced_rules(filtering, expected_docs):
     async with create_source(MySqlDataSource) as source:
-        source.configuration.set_field(
-            name="database", label="Database", value="", type="str"
-        )
-        source.database = ""
-        source.mysql_client = MagicMock()
+        client = await setup_mysql_source(source)
         docs_in_db = setup_available_docs(filtering.get_advanced_rules())
         source.fetch_documents = AsyncIterator(docs_in_db)
 
@@ -803,12 +801,7 @@ async def test_advanced_rules_validation(
     patch_ping,
 ):
     async with create_source(MySqlDataSource) as source:
-        source.configuration.set_field(
-            name="database", label="Database", value="", type="str"
-        )
-        source.database = ""
-
-        client = MagicMock()
+        client = await setup_mysql_source(source, DATABASE)
         client.get_all_table_names = AsyncMock(return_value=tables_present_in_source)
 
         source.mysql_client = as_async_context_manager_mock(client)
