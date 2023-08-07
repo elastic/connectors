@@ -194,7 +194,7 @@ class SlackDataSource(BaseDataSource):
     service_type = "slack"
 
     def __init__(self, configuration):
-        """Set up the connection to the Amazon S3.
+        """Set up the connection to the Slack.
 
         Args:
             configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
@@ -274,19 +274,19 @@ class SlackDataSource(BaseDataSource):
             yield self.remap_channel(channel)
             channel_id = channel["id"]
             join_response = {}
-            if self.auto_join_channels:
+            if self.auto_join_channels and not channel.get("is_member", False):
                 join_response = await self.slack_client.join_channel(
                     channel_id
                 )  # can't get channel content if the bot is not in the channel
-            if not self.auto_join_channels or join_response.get("ok"):
-                async for message in self.slack_client.list_messages(
-                    channel, past_unix_timestamp, current_unix_timestamp
-                ):
-                    yield self.remap_message(message, channel)
-            else:
-                self._logger.warning(
-                    f"Not syncing channel: '{channel['name']}' because: {join_response.get('error')}"
-                )
+                if not join_response.get("ok"):
+                    self._logger.warning(
+                        f"Not syncing channel: '{channel['name']}' because: {join_response.get('error', 'channel join failed')}"
+                    )
+                    continue
+            async for message in self.slack_client.list_messages(
+                channel, past_unix_timestamp, current_unix_timestamp
+            ):
+                yield self.remap_message(message, channel)
 
     def get_username(self, user):
         """

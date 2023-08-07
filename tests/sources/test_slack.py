@@ -189,7 +189,7 @@ async def test_bad_ping(mock_apply_retry_strategy, slack_client, mock_responses)
 @pytest.mark.asyncio
 async def test_slack_data_source_get_docs(slack_data_source, mock_responses):
     users_response = [{"id": "user1"}]
-    channels_response = [{"id": "1", "name": "channel1"}]
+    channels_response = [{"id": "1", "name": "channel1", "is_member": True}]
     messages_response = [{"text": "message1", "type": "message", "ts": 123456}]
 
     slack_client = AsyncMock()
