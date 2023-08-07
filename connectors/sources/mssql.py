@@ -213,16 +213,10 @@ class MSSQLDataSource(BaseDataSource):
                 if fetch_many:
                     # sending back column names only once
                     if yield_once:
-                        if kwargs["schema"] is not None:
-                            yield [
-                                f"{kwargs['schema']}_{kwargs['table']}_{column}".lower()
-                                for column in cursor.keys()  # pyright: ignore
-                            ]
-                        else:
-                            yield [
-                                f"{kwargs['table']}_{column}".lower()
-                                for column in cursor.keys()  # pyright: ignore
-                            ]
+                        yield [
+                            f"{kwargs['schema']}_{kwargs['table']}_{column}".lower()
+                            for column in cursor.keys()  # pyright: ignore
+                        ]
                         yield_once = False
 
                     while True:
@@ -333,12 +327,12 @@ class MSSQLDataSource(BaseDataSource):
         except Exception as e:
             raise Exception(f"Can't connect to Microsoft SQL on {self.host}") from e
 
-    async def fetch_documents(self, table, schema=None):
+    async def fetch_documents(self, table, schema):
         """Fetches all the table entries and format them in Elasticsearch documents
 
         Args:
             table (str): Name of table
-            schema (str): Name of schema. Defaults to None.
+            schema (str): Name of schema
 
         Yields:
             Dict: Document to be indexed
@@ -362,18 +356,11 @@ class MSSQLDataSource(BaseDataSource):
                         ),
                     )
                 )
-                if schema:
-                    keys = [
-                        f"{schema}_{table}_{column_name}"
-                        for [column_name] in columns
-                        if column_name
-                    ]
-                else:
-                    keys = [
-                        f"{table}_{column_name}"
-                        for [column_name] in columns
-                        if column_name
-                    ]
+                keys = [
+                    f"{schema}_{table}_{column_name}"
+                    for [column_name] in columns
+                    if column_name
+                ]
                 if keys:
                     try:
                         last_update_time = await anext(
@@ -411,16 +398,13 @@ class MSSQLDataSource(BaseDataSource):
                             )
                         row.update(
                             {
-                                "_id": f"{self.database}_{schema}_{table}_{keys_value}"
-                                if schema
-                                else f"{self.database}_{table}_{keys_value}",
+                                "_id": f"{self.database}_{schema}_{table}_{keys_value}",
                                 "_timestamp": last_update_time or iso_utc(),
                                 "Database": self.database,
                                 "Table": table,
+                                "schema": schema,
                             }
                         )
-                        if schema:
-                            row["schema"] = schema
                         yield self.serialize(doc=row)
                 else:
                     self._logger.warning(
@@ -433,11 +417,11 @@ class MSSQLDataSource(BaseDataSource):
                 f"Something went wrong while fetching document for table {table}. Error: {exception}"
             )
 
-    async def fetch_rows(self, schema=None):
+    async def fetch_rows(self, schema):
         """Fetches all the rows from all the tables of the database.
 
         Args:
-            schema (str): Name of schema. Defaults to None.
+            schema (str): Name of schema
 
         Yields:
             Dict: Row document to index
@@ -454,14 +438,9 @@ class MSSQLDataSource(BaseDataSource):
             ):
                 yield row
         if len(tables_to_fetch) < 1:
-            if schema:
-                self._logger.warning(
-                    f"Fetched 0 tables for schema: {schema} and database: {self.database}"
-                )
-            else:
-                self._logger.warning(
-                    f"Fetched 0 tables for the database: {self.database}"
-                )
+            self._logger.warning(
+                f"Fetched 0 tables for schema: {schema} and database: {self.database}"
+            )
 
     async def get_tables_to_fetch(self, schema):
         tables = configured_tables(self.tables)

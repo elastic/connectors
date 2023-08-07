@@ -215,16 +215,10 @@ class OracleDataSource(BaseDataSource):
                 if fetch_many:
                     # sending back column names only once
                     if yield_once:
-                        if kwargs["schema"] is not None:
-                            yield [
-                                f"{kwargs['schema']}_{kwargs['table']}_{column}".lower()
-                                for column in cursor.keys()  # pyright: ignore
-                            ]
-                        else:
-                            yield [
-                                f"{kwargs['table']}_{column}".lower()
-                                for column in cursor.keys()  # pyright: ignore
-                            ]
+                        yield [
+                            f"{kwargs['table']}_{column}".lower()
+                            for column in cursor.keys()  # pyright: ignore
+                        ]
                         yield_once = False
 
                     while True:
@@ -313,12 +307,11 @@ class OracleDataSource(BaseDataSource):
         except Exception as e:
             raise Exception(f"Can't connect to Oracle on {self.host}") from e
 
-    async def fetch_documents(self, table, schema=None):
+    async def fetch_documents(self, table):
         """Fetches all the table entries and format them in Elasticsearch documents
 
         Args:
             table (str): Name of table
-            schema (str): Name of schema. Defaults to None.
 
         Yields:
             Dict: Document to be indexed
@@ -341,18 +334,9 @@ class OracleDataSource(BaseDataSource):
                         ),
                     )
                 )
-                if schema:
-                    keys = [
-                        f"{schema}_{table}_{column_name}"
-                        for [column_name] in columns
-                        if column_name
-                    ]
-                else:
-                    keys = [
-                        f"{table}_{column_name}"
-                        for [column_name] in columns
-                        if column_name
-                    ]
+                keys = [
+                    f"{table}_{column_name}" for [column_name] in columns if column_name
+                ]
                 if keys:
                     try:
                         last_update_time = await anext(
@@ -373,7 +357,6 @@ class OracleDataSource(BaseDataSource):
                             table=table,
                         ),
                         fetch_many=True,
-                        schema=schema,
                         table=table,
                     )
                     column_names = await anext(streamer)
@@ -388,16 +371,12 @@ class OracleDataSource(BaseDataSource):
                             )
                         row.update(
                             {
-                                "_id": f"{self.database}_{schema}_{table}_{keys_value}"
-                                if schema
-                                else f"{self.database}_{table}_{keys_value}",
+                                "_id": f"{self.database}_{table}_{keys_value}",
                                 "_timestamp": last_update_time or iso_utc(),
                                 "Database": self.database,
                                 "Table": table,
                             }
                         )
-                        if schema:
-                            row["schema"] = schema
                         yield self.serialize(doc=row)
                 else:
                     self._logger.warning(
@@ -410,34 +389,21 @@ class OracleDataSource(BaseDataSource):
                 f"Something went wrong while fetching document for table {table}. Error: {exception}"
             )
 
-    async def fetch_rows(self, schema=None):
+    async def fetch_rows(self):
         """Fetches all the rows from all the tables of the database.
-
-        Args:
-            schema (str): Name of schema. Defaults to None.
 
         Yields:
             Dict: Row document to index
         """
-        tables_to_fetch = await self.get_tables_to_fetch(schema)
+        tables_to_fetch = await self.get_tables_to_fetch()
         for table in tables_to_fetch:
             self._logger.debug(f"Found table: {table} in database: {self.database}.")
-            async for row in self.fetch_documents(
-                table=table,
-                schema=schema,
-            ):
+            async for row in self.fetch_documents(table=table):
                 yield row
         if len(tables_to_fetch) < 1:
-            if schema:
-                self._logger.warning(
-                    f"Fetched 0 tables for schema: {schema} and database: {self.database}"
-                )
-            else:
-                self._logger.warning(
-                    f"Fetched 0 tables for the database: {self.database}"
-                )
+            self._logger.warning(f"Fetched 0 tables for the database: {self.database}")
 
-    async def get_tables_to_fetch(self, schema):
+    async def get_tables_to_fetch(self):
         tables = configured_tables(self.tables)
         return list(
             map(

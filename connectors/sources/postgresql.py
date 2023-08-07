@@ -234,16 +234,10 @@ class PostgreSQLClient:
                 if fetch_many:
                     # sending back column names only once
                     if yield_once:
-                        if kwargs["schema"] is not None:
-                            yield [
-                                f"{kwargs['schema']}_{kwargs['table']}_{column}".lower()
-                                for column in cursor.keys()  # pyright: ignore
-                            ]
-                        else:
-                            yield [
-                                f"{kwargs['table']}_{column}".lower()
-                                for column in cursor.keys()  # pyright: ignore
-                            ]
+                        yield [
+                            f"{kwargs['schema']}_{kwargs['table']}_{column}".lower()
+                            for column in cursor.keys()  # pyright: ignore
+                        ]
                         yield_once = False
 
                     while True:
@@ -417,7 +411,7 @@ class PostgreSQLDataSource(BaseDataSource):
 
         Args:
             table (str): Name of table
-            schema (str): Name of schema.
+            schema (str): Name of schema
 
         Yields:
             Dict: Document to be indexed
@@ -468,9 +462,9 @@ class PostgreSQLDataSource(BaseDataSource):
                                 "_timestamp": last_update_time or iso_utc(),
                                 "Database": self.database,
                                 "Table": table,
+                                "schema": schema,
                             }
                         )
-                        row["schema"] = schema
                         yield self.serialize(doc=row)
                 else:
                     self._logger.warning(
@@ -505,11 +499,6 @@ class PostgreSQLDataSource(BaseDataSource):
                     ):
                         yield row, None
                 if len(tables_to_fetch) < 1:
-                    if schema:
-                        self._logger.warning(
-                            f"Fetched 0 tables for schema: {schema} and database: {self.database}"
-                        )
-                    else:
-                        self._logger.warning(
-                            f"Fetched 0 tables for the database: {self.database}"
-                        )
+                    self._logger.warning(
+                        f"Fetched 0 tables for schema: {schema} and database: {self.database}"
+                    )
