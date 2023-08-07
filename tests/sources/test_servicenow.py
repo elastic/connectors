@@ -78,6 +78,8 @@ async def test_validate_config_missing_fields_then_raise(field):
 @pytest.mark.asyncio
 async def test_validate_configuration_with_invalid_service_then_raise():
     async with create_source(ServiceNowDataSource) as source:
+        source.configuration.set_field(name="username", value="admin")
+        source.configuration.set_field(name="password", value="changeme")
         source.servicenow_client.services = ["label_1", "label_3"]
 
         source.servicenow_client.get_table_length = mock.AsyncMock(return_value=2)
