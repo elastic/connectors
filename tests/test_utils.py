@@ -424,6 +424,55 @@ async def test_exponential_backoff_retry():
     await does_not_raise()
 
 
+@pytest.mark.parametrize(
+    "skipped_exceptions",
+    [CustomGeneratorException, [CustomGeneratorException, RuntimeError]],
+)
+@pytest.mark.asyncio
+async def test_skipped_exceptions_retry_async_generator(skipped_exceptions):
+    mock_gen = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        skipped_exceptions=skipped_exceptions,
+    )
+    async def raises_async_generator():
+        for _ in range(3):
+            mock_gen()
+            raise CustomGeneratorException()
+            yield 1
+
+    with pytest.raises(CustomGeneratorException):
+        async for _ in raises_async_generator():
+            pass
+
+    assert mock_gen.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "skipped_exceptions", [CustomException, [CustomException, RuntimeError]]
+)
+@pytest.mark.asyncio
+async def test_skipped_exceptions_retry(skipped_exceptions):
+    mock_func = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        skipped_exceptions=skipped_exceptions,
+    )
+    async def raises():
+        mock_func()
+        raise CustomException()
+
+    with pytest.raises(CustomException):
+        await raises()
+
+        # retried 10 times
+        assert mock_func.call_count == 1
+
+
 class MockSSL:
     """This class contains methods which returns dummy ssl context"""
 
