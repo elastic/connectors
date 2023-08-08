@@ -5,7 +5,7 @@
 #
 """Postgresql source module is responsible to fetch documents from PostgreSQL."""
 import ssl
-from functools import cached_property
+from functools import cached_property, partial
 from urllib.parse import quote
 
 from asyncpg.exceptions._base import InternalClientError
@@ -17,13 +17,14 @@ from connectors.source import BaseDataSource
 from connectors.sources.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
-    DEFAULT_WAIT_MULTIPLIER,
     WILDCARD,
     Queries,
     configured_tables,
+    fetch,
+    fetch_all,
     is_wildcard,
 )
-from connectors.utils import CancellableSleeps, get_pem_format, iso_utc
+from connectors.utils import get_pem_format, iso_utc
 
 # Below schemas are system schemas and the tables of the systems schema's will not get indexed
 SYSTEM_SCHEMA = ["pg_toast", "pg_catalog", "information_schema"]
@@ -92,13 +93,9 @@ class PostgreSQLClient:
         self.connection_pool = None
         self.connection = None
         self._logger = logger_
-        self._sleeps = CancellableSleeps()
 
     def set_logger(self, logger_):
         self._logger = logger_
-
-    def close(self):
-        self._sleeps.cancel()
 
     @cached_property
     def engine(self):
@@ -129,13 +126,19 @@ class PostgreSQLClient:
 
     async def ping(self):
         return await anext(
-            self._execute_query(
-                query=self.queries.ping(),
+            fetch_all(
+                cursor_func=partial(self.get_cursor, self.queries.ping()),
+                retry_count=self.retry_count,
             )
         )
 
     async def get_all_schemas(self):
-        return await anext(self._execute_query(query=self.queries.all_schemas()))
+        return await anext(
+            fetch_all(
+                cursor_func=partial(self.get_cursor, self.queries.all_schemas()),
+                retry_count=self.retry_count,
+            )
+        )
 
     async def get_tables_to_fetch(self, schema):
         tables = configured_tables(self.tables)
@@ -143,11 +146,15 @@ class PostgreSQLClient:
             map(
                 lambda table: table[0],  # type: ignore
                 await anext(
-                    self._execute_query(
-                        query=self.queries.all_tables(
-                            database=self.database,
-                            schema=schema,
-                        )
+                    fetch_all(
+                        cursor_func=partial(
+                            self.get_cursor,
+                            self.queries.all_tables(
+                                database=self.database,
+                                schema=schema,
+                            ),
+                        ),
+                        retry_count=self.retry_count,
                     )
                 ),
             )
@@ -157,32 +164,44 @@ class PostgreSQLClient:
 
     async def get_table_row_count(self, schema, table):
         [[row_count]] = await anext(
-            self._execute_query(
-                query=self.queries.table_data_count(
-                    schema=schema,
-                    table=table,
+            fetch_all(
+                cursor_func=partial(
+                    self.get_cursor,
+                    self.queries.table_data_count(
+                        schema=schema,
+                        table=table,
+                    ),
                 ),
+                retry_count=self.retry_count,
             )
         )
         return row_count
 
     async def get_table_primary_key(self, schema, table):
         return await anext(
-            self._execute_query(
-                query=self.queries.table_primary_key(
-                    schema=schema,
-                    table=table,
+            fetch_all(
+                cursor_func=partial(
+                    self.get_cursor,
+                    self.queries.table_primary_key(
+                        schema=schema,
+                        table=table,
+                    ),
                 ),
+                retry_count=self.retry_count,
             )
         )
 
     async def get_table_last_update_time(self, schema, table):
         return await anext(
-            self._execute_query(
-                query=self.queries.table_last_update_time(
-                    schema=schema,
-                    table=table,
+            fetch_all(
+                cursor_func=partial(
+                    self.get_cursor,
+                    self.queries.table_last_update_time(
+                        schema=schema,
+                        table=table,
+                    ),
                 ),
+                retry_count=self.retry_count,
             )
         )
 
@@ -199,72 +218,20 @@ class PostgreSQLClient:
         Yields:
             list: It will first yield the column names, then data in each row
         """
-        async for data in self._execute_query(
-            query=self.queries.table_data(
-                schema=schema,
-                table=table,
+        async for data in fetch(
+            cursor_func=partial(
+                self.get_cursor,
+                self.queries.table_data(
+                    schema=schema,
+                    table=table,
+                ),
             ),
-            fetch_many=True,
-            schema=schema,
+            fetch_size=self.fetch_size,
+            retry_count=self.retry_count,
             table=table,
+            schema=schema,
         ):
             yield data
-
-    async def _execute_query(self, query, fetch_many=False, **kwargs):
-        """Executes a query and yield rows
-
-        Args:
-            query (str): Query.
-            fetch_many (bool): Flag to use fetchmany method. Defaults to False.
-
-        Raises:
-            exception: Raise an exception after retrieving
-
-        Yields:
-            list: Column names and query response
-        """
-        retry = 1
-        yield_once = True
-
-        rows_fetched = 0
-
-        while retry <= self.retry_count:
-            try:
-                cursor = await self.get_cursor(query=query)
-                if fetch_many:
-                    # sending back column names only once
-                    if yield_once:
-                        yield [
-                            f"{kwargs['schema']}_{kwargs['table']}_{column}".lower()
-                            for column in cursor.keys()  # pyright: ignore
-                        ]
-                        yield_once = False
-
-                    while True:
-                        rows = cursor.fetchmany(size=self.fetch_size)  # pyright: ignore
-                        rows_length = len(rows)
-
-                        if not rows_length:
-                            break
-
-                        for row in rows:
-                            yield row
-
-                        rows_fetched += rows_length
-                        await self._sleeps.sleep(0)
-                else:
-                    yield cursor.fetchall()  # pyright: ignore
-                break
-            except (InternalClientError, ProgrammingError):
-                raise
-            except Exception as exception:
-                self._logger.warning(
-                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
-                )
-                if retry == self.retry_count:
-                    raise exception
-                await self._sleeps.sleep(DEFAULT_WAIT_MULTIPLIER**retry)
-                retry += 1
 
     def _get_connect_args(self):
         """Convert string to pem format and create an SSL context
@@ -391,9 +358,6 @@ class PostgreSQLDataSource(BaseDataSource):
                 "value": DEFAULT_SSL_CA,
             },
         }
-
-    async def close(self):
-        self.postgresql_client.close()
 
     async def ping(self):
         """Verify the connection with the database-server configured by user"""

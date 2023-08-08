@@ -3,7 +3,13 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import asyncio
 from abc import ABC, abstractmethod
+
+from asyncpg.exceptions._base import InternalClientError
+from sqlalchemy.exc import ProgrammingError
+
+from connectors.utils import RetryStrategy, iso_utc, retryable
 
 WILDCARD = "*"
 
@@ -39,6 +45,61 @@ def configured_tables(tables):
 
 def is_wildcard(tables):
     return tables in (WILDCARD, [WILDCARD])
+
+
+async def fetch_all(cursor_func, retry_count):
+    @retryable(
+        retries=retry_count,
+        interval=DEFAULT_WAIT_MULTIPLIER,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[InternalClientError, ProgrammingError],
+    )
+    async def _execute():
+        cursor = await cursor_func()
+        yield cursor.fetchall()
+
+    async for result in _execute():
+        yield result
+
+
+async def fetch(
+    cursor_func, fetch_size, retry_count, table, fetch_columns=True, schema=None
+):
+    @retryable(
+        retries=retry_count,
+        interval=DEFAULT_WAIT_MULTIPLIER,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[InternalClientError, ProgrammingError],
+    )
+    async def _execute():
+        cursor = await cursor_func()
+        # sending back column names if required
+        if fetch_columns:
+            if schema:
+                yield [
+                    f"{schema}_{table}_{column}".lower()
+                    for column in cursor.keys()  # pyright: ignore
+                ]
+            else:
+                yield [
+                    f"{table}_{column}".lower()
+                    for column in cursor.keys()  # pyright: ignore
+                ]
+
+        while True:
+            rows = cursor.fetchmany(size=fetch_size)  # pyright: ignore
+            rows_length = len(rows)
+
+            if not rows_length:
+                break
+
+            for row in rows:
+                yield row
+
+            await asyncio.sleep(0)
+
+    async for result in _execute():
+        yield result
 
 
 class Queries(ABC):

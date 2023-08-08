@@ -4,9 +4,17 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Generic Database source class methods"""
+from functools import partial
+
 import pytest
 
-from connectors.sources.generic_database import configured_tables, is_wildcard
+from connectors.sources.generic_database import (
+    configured_tables,
+    fetch,
+    fetch_all,
+    is_wildcard,
+)
+from connectors.sources.mssql import MSSQLQueries
 
 SCHEMA = "dbo"
 TABLE = "emp_table"
@@ -120,3 +128,46 @@ def test_configured_tables(tables, expected_tables):
 @pytest.mark.parametrize("tables", ["*", ["*"]])
 def test_is_wildcard(tables):
     assert is_wildcard(tables)
+
+
+async def get_cursor(query_object, query):
+    return CursorSync(query_object=query_object, statement=query)
+
+
+@pytest.mark.asyncio
+async def test_fetch_all():
+    query_object = MSSQLQueries()
+
+    rows = None
+    async for result in fetch_all(
+        cursor_func=partial(
+            get_cursor, query_object, query_object.all_tables(schema=SCHEMA)
+        ),
+        retry_count=3,
+    ):
+        rows = result
+
+    assert len(rows) == 1
+    assert rows[0][0] == TABLE
+
+
+@pytest.mark.asyncio
+async def test_fetch():
+    query_object = MSSQLQueries()
+
+    rows = []
+    async for row in fetch(
+        cursor_func=partial(get_cursor, query_object, None),
+        fetch_size=10,
+        retry_count=3,
+        table="foo",
+    ):
+        rows.append(row)
+
+    assert len(rows) == 3
+    assert rows[0][0] == "foo_ids"
+    assert rows[0][1] == "foo_names"
+    assert rows[1][0] == 1
+    assert rows[1][1] == "abcd"
+    assert rows[2][0] == 2
+    assert rows[2][1] == "xyz"
