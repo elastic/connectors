@@ -447,9 +447,10 @@ class GenericBaseDataSource(BaseDataSource):
         """
         tables_to_fetch = await self.get_tables_to_fetch(schema)
         if self.database in self.tables_to_skip.keys():
-            tables_to_fetch = [
-                *(set(tables_to_fetch) - set(self.tables_to_skip[self.database]))
-            ]
+            tables_to_fetch = set(tables_to_fetch) - set(
+                self.tables_to_skip[self.database]
+            )
+        tables_to_fetch = list(tables_to_fetch)
         for table in tables_to_fetch:
             self._logger.debug(f"Found table: {table} in database: {self.database}.")
             async for row in self.fetch_documents(
@@ -457,7 +458,7 @@ class GenericBaseDataSource(BaseDataSource):
                 schema=schema,
             ):
                 yield row
-        else:
+        if len(tables_to_fetch) < 1:
             if schema:
                 self._logger.warning(
                     f"Fetched 0 tables for schema: {schema} and database: {self.database}"

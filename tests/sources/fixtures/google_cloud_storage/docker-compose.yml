@@ -24,23 +24,13 @@ services:
     networks:
       - esnet
 
-  mockserver:
-    image: mockserver/mockserver:5.13.2
-    user: root
-    command: -serverPort 443
+  gcs-mocker:
+    build: .
+    command: python mocker.py
     ports:
-      - 443:443
-    environment:
-      MOCKSERVER_WATCH_INITIALIZATION_JSON: "true"
-      MOCKSERVER_PROPERTY_FILE: /google_cloud_storage/mockserver.properties
-      MOCKSERVER_INITIALIZATION_JSON_PATH: /google_cloud_storage/mocked_http_responses.json
-      MOCKSERVER_LOG_LEVEL: "ERROR"
-      MOCKSERVER_MAX_EXPECTATIONS: 2000
-      MOCKSERVER_MAX_LOG_ENTRIES: 2000
+      - "4444:4444"
     volumes:
-      - type: bind
-        source: .
-        target: /google_cloud_storage
+      - .:/python-flask
     restart: always
 
   google_cloud_storage:

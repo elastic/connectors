@@ -1080,7 +1080,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         self._logger.debug(f"Looking at site: {site['id']}")
         if not self._dls_enabled():
-            return []
+            return [], []
 
         access_control = set()
 
@@ -1344,7 +1344,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ), download_func
 
                 # Sync site pages
-                async for site_page in self.site_pages(site["webUrl"]):
+                async for site_page in self.site_pages(site):
                     yield self._decorate_with_access_control(
                         site_page, access_control
                     ), None
@@ -1423,7 +1423,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ), download_func, OP_INDEX
 
                 # Sync site pages
-                async for site_page in self.site_pages(site["webUrl"]):
+                async for site_page in self.site_pages(site):
                     yield self._decorate_with_access_control(
                         site_page, access_control
                     ), None, OP_INDEX
@@ -1509,11 +1509,18 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             yield site_list
 
-    async def site_pages(self, url):
+    async def site_pages(self, site):
+        site_id = site["id"]
+        url = site["webUrl"]
         async for site_page in self.client.site_pages(url):
-            site_page["_id"] = site_page[
-                "odata.id"
-            ]  # Apparently site_page["GUID"] is not globally unique
+            # site page object has multiple ids:
+            # - Id - not globally unique, just an increment, e.g. 1, 2, 3, 4
+            # - GUID - not globally unique, though it's a real guid
+            # - odata.id - not even sure what this id is
+            # Therefore, we generate id combining unique site id with site page id that is unique within this site
+            # Careful with format - changing other ids can overlap with this one if they follow the format of:
+            # {site_id}-{some_name_or_string_id}-{autoincremented_id}
+            site_page["_id"] = f"{site_id}-site_page-{site_page['Id']}"
             site_page["object_type"] = "site_page"
 
             for html_field in ["LayoutWebpartsContent", "CanvasContent1", "WikiField"]:
