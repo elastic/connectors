@@ -62,12 +62,12 @@ class FakeProvider:
         return self.generate_text(1 * 1024)
 
     def medium_text(self):
-        # Up to 1MB of text
-        return self.generate_text(1024 * 1024)
+        # Up to 256KB of text
+        return self.generate_text(256 * 1024)
 
     def large_text(self):
-        # Up to 4MB of text
-        return self.generate_text(4 * 1024 * 1024)
+        # Up to 1MB of text
+        return self.generate_text(1024 * 1024)
 
     def extra_large_text(self):
         return self.generate_text(20 * 1024 * 1024)

@@ -5,33 +5,52 @@
 #
 import os
 import random
+from random import choices
 import string
 
+from tests.commons import FakeProvider
 from mysql.connector import connect
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
 DATABASE_NAME = "customerinfo"
-_SIZES = {"small": 5, "medium": 10, "large": 30}
-NUM_TABLES = _SIZES[DATA_SIZE]
+BATCH_SIZE = 100
+
+fake_provider = FakeProvider()
+
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
+
+match DATA_SIZE:
+    case "small":
+        NUM_TABLES = 1
+        RECORD_COUNT = 500
+    case "medium":
+        NUM_TABLES = 3
+        RECORD_COUNT = 3000
+    case "large":
+        NUM_TABLES = 5
+        RECORD_COUNT = 7000
+
+population = [fake_provider.small_text(), fake_provider.medium_text(), fake_provider.large_text()]
+weights = [0.65, 0.3, 0.05]
+
+def get_text():
+    return choices(population, weights)[0]
 
 
-def random_text(k=1024 * 20):
-    return "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
-
-
-BIG_TEXT = random_text()
-
-
-def inject_lines(table, cursor, start, lines):
-    raws = []
-    for raw_id in range(lines):
-        raw_id += start
-        raws.append((f"user_{raw_id}", raw_id, BIG_TEXT))
-    sql_query = (
-        f"INSERT INTO customers_{table}"
-        + "(name, age, description) VALUES (%s, %s, %s)"
-    )
-    cursor.executemany(sql_query, raws)
+def inject_lines(table, cursor, lines):
+    batch_count = int(lines / BATCH_SIZE)
+    inserted = 0
+    print(f"Inserting {lines} lines")
+    for batch in range(batch_count):
+        rows = []
+        batch_size = min(BATCH_SIZE, lines - inserted)
+        for row_id in range(batch_size):
+            rows.append((fake_provider.fake.name(), row_id, get_text()))
+        sql_query = (
+            f"INSERT INTO customers_{table} (name, age, description) VALUES (%s, %s, %s)"
+        )
+        cursor.executemany(sql_query, rows)
+        inserted += batch_size
+        print(f"Inserting batch #{batch} of {batch_size} documents.")
 
 
 def load():
@@ -43,10 +62,9 @@ def load():
     cursor.execute(f"USE {DATABASE_NAME}")
     for table in range(NUM_TABLES):
         print(f"Adding data from table #{table}...")
-        sql_query = f"CREATE TABLE IF NOT EXISTS customers_{table} (name VARCHAR(255), age int, description LONGTEXT, PRIMARY KEY (name))"
+        sql_query = f"CREATE TABLE IF NOT EXISTS customers_{table} (id INT AUTO_INCREMENT, name VARCHAR(255), age int, description LONGTEXT, PRIMARY KEY (id))"
         cursor.execute(sql_query)
-        for i in range(10):
-            inject_lines(table, cursor, i * 1000, 1000)
+        inject_lines(table, cursor, RECORD_COUNT)
 
     database.commit()
 

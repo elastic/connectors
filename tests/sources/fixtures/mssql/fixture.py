@@ -5,7 +5,6 @@
 #
 import os
 import random
-from itertools import islice
 from random import choices
 import string
 
@@ -41,11 +40,6 @@ weights = [0.65, 0.3, 0.05]
 def get_text():
     return choices(population, weights)[0]
 
-def batched(iterable, n):
-    "Batch data into tuples of length n. The last batch may be shorter."
-    while batch := tuple(islice(iter(iterable), n)):
-        yield batch
-
 
 def inject_lines(table, cursor, lines):
     """Ingest rows in table
@@ -69,7 +63,7 @@ def inject_lines(table, cursor, lines):
         )
         cursor.executemany(sql_query, rows)
         inserted += batch_size
-        print(f"Inserting batch of {inserted} documents.")
+        print(f"Inserting batch #{batch} of {batch_size} documents.")
 
 
 def load():
