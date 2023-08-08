@@ -7,40 +7,97 @@
 
 import io
 import os
-import random
+import time
+from random import choices
+from faker import Faker
+from functools import cached_property
 import string
 
 from flask import Flask, request
 
-DOCS_COUNT = {"small": 750, "medium": 1500, "large": 3000}
+# TODO: make used generally
+class FakeProvider:
+    def __init__(self, seed=None):
+        self.seed = seed
+        self.fake = Faker()
+        if seed:
+            self.fake.seed_instance(seed)
 
-DATA_SIZE = os.environ.get("DATA_SIZE")
+    @cached_property
+    def _cached_random_str(self):
+        return self.fake.pystr(min_chars=100 * 1024, max_chars=100 * 1024 + 1)
 
+    def small_text(self):
+        # Up to 1KB of text
+        return self.generate_text(1 * 1024)
 
-def generate_random_string(length):
-    """Function that generates random string with fixed lenght.
+    def medium_text(self):
+        # Up to 1MB of text
+        return self.generate_text(1024 * 1024)
 
-    Args:
-        length (int): Length of generated string
+    def large_text(self):
+        # Up to 4MB of text
+        return self.generate_text(4 * 1024 * 1024)
 
-    Returns:
-        str: Random string
-    """
-    return "".join([random.choice(string.ascii_letters) for _ in range(length)])
+    def extra_large_text(self):
+        return self.generate_text(20 * 1024 * 1024)
 
+    def small_html(self):
+        # Around 100KB
+        return self.generate_html(1)
 
-def generate_document_data():
-    """Function to generate random data content.
+    def medium_html(self):
+        # Around 1MB
+        return self.generate_html(1 * 10)
 
-    Returns:
-        io.BytesIO: Dummy attachment content
-    """
-    # 1KB text file
-    file_content = generate_random_string(1000)
-    return io.BytesIO(bytes(file_content, encoding="utf-8"))
+    def large_html(self):
+        # Around 8MB
+        return self.generate_html(8 * 10)
+
+    def extra_large_html(self):
+        # Around 25MB
+        return self.generate_html(25 * 10)
+
+    def generate_text(self, max_size):
+        return self.fake.text(max_nb_chars=max_size)
+
+    def generate_html(self, images_of_100kb):
+        img = self._cached_random_str  # 100kb
+        text = self.small_text()
+
+        images = []
+        for _ in range(images_of_100kb):
+            images.append(f"<img src='{img}'/>")
+
+        return f"<html><head></head><body><div>{text}</div><div>{'<br/>'.join(images)}</div></body></html>"
+
+fake_provider = FakeProvider()
+
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
+
+match DATA_SIZE:
+    case "small":
+        DOCS_COUNT = 250
+    case "medium":
+        DOCS_COUNT = 1000
+    case "large":
+        DOCS_COUNT = 5000
+
+population = [fake_provider.small_html(), fake_provider.medium_html(), fake_provider.large_html(), fake_provider.extra_large_html()]
+weights = [0.58, 0.3, 0.1, 0.02]
+
+def get_file():
+    return choices(population, weights)[0]
 
 
 app = Flask(__name__)
+
+
+PRE_REQUEST_SLEEP = float(os.environ.get("PRE_REQUEST_SLEEP", "0.05"))
+
+@app.before_request
+def before_request():
+    time.sleep(PRE_REQUEST_SLEEP)
 
 
 @app.route("/drive/v3/about", methods=["GET"])
@@ -66,16 +123,16 @@ def files_list():
         {
             "kind": "drive#file",
             "mimeType": "text/plain",
-            "id": generate_random_string(length=16),
+            "id": fake_provider.fake.sha1(),
             "name": f"file_name_{id}",
             "fileExtension": "txt",
             "size": 12345,
             "modifiedTime": 1687860674,
             "parents": [],
         }
-        for id in range(DOCS_COUNT.get(DATA_SIZE, "small"))
+        for id in range(DOCS_COUNT)
     ]
-    return {"nextPageToken": "dummyToken", "files": files_list}
+    return {"nextPageToken": None, "files": files_list}
 
 
 @app.route("/drive/v3/files/<string:file_id>", methods=["GET"])
@@ -84,7 +141,7 @@ def files_get(file_id):
 
     # response includes the file contents in the response body
     if req_params.get("alt", None) == "media":
-        return generate_document_data()
+        return io.BytesIO(bytes(get_file(), encoding="utf-8"))
     # response includes file metadata
     else:
         return {
