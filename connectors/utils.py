@@ -448,7 +448,9 @@ def retryable_async_function(func, retries, interval, strategy, skipped_exceptio
             except Exception as e:
                 if retry >= retries or e.__class__ in skipped_exceptions:
                     raise e
-
+                logger.debug(
+                    f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
+                )
                 await apply_retry_strategy(strategy, interval, retry)
                 retry += 1
 
@@ -468,6 +470,9 @@ def retryable_async_generator(func, retries, interval, strategy, skipped_excepti
                 if retry >= retries or e.__class__ in skipped_exceptions:
                     raise e
 
+                logger.debug(
+                    f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
+                )
                 await apply_retry_strategy(strategy, interval, retry)
                 retry += 1
 
@@ -725,6 +730,16 @@ def iterable_batches_generator(iterable, batch_size):
     num_items = len(iterable)
     for idx in range(0, num_items, batch_size):
         yield iterable[idx : min(idx + batch_size, num_items)]
+
+
+def dict_slice(hsh, keys, default=None):
+    """
+    Slice a dict by a subset of its keys.
+    :param hsh: The input dictionary to slice
+    :param keys: The desired keys from that dictionary. If any key is not present in hsh, the default value will be stored in the result.
+    :return: A new dict with only the subset of keys
+    """
+    return {k: hsh.get(k, default) for k in keys}
 
 
 class ExtractionService:

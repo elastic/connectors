@@ -143,55 +143,51 @@ def test_get_connect_args():
 @pytest.mark.asyncio
 async def test_postgresql_ping():
     # Setup
-    source = create_source(PostgreSQLDataSource)
-    with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
-        await source.ping()
+    async with create_source(PostgreSQLDataSource) as source:
+        with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+            await source.ping()
 
-    await source.close()
+        await source.close()
 
 
 @pytest.mark.asyncio
 async def test_ping():
-    source = create_source(PostgreSQLDataSource)
-    with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
-        await source.ping()
-
-    await source.close()
+    async with create_source(PostgreSQLDataSource) as source:
+        with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+            await source.ping()
 
 
 @pytest.mark.asyncio
 async def test_get_docs():
     # Setup
-    source = create_source(PostgreSQLDataSource)
-    with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
-        source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
-        actual_response = []
-        expected_response = [
-            {
-                "public_emp_table_ids": 1,
-                "public_emp_table_names": "abcd",
-                "_id": "xe_public_emp_table_1_",
-                "_timestamp": "2023-02-21T08:37:15+00:00",
-                "Database": "xe",
-                "Table": "emp_table",
-                "schema": "public",
-            },
-            {
-                "public_emp_table_ids": 1,
-                "public_emp_table_names": "xyz",
-                "_id": "xe_public_emp_table_1_",
-                "_timestamp": "2023-02-21T08:37:15+00:00",
-                "Database": "xe",
-                "Table": "emp_table",
-                "schema": "public",
-            },
-        ]
+    async with create_source(PostgreSQLDataSource) as source:
+        with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+            source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
+            actual_response = []
+            expected_response = [
+                {
+                    "public_emp_table_ids": 1,
+                    "public_emp_table_names": "abcd",
+                    "_id": "xe_public_emp_table_1_",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "Database": "xe",
+                    "Table": "emp_table",
+                    "schema": "public",
+                },
+                {
+                    "public_emp_table_ids": 1,
+                    "public_emp_table_names": "xyz",
+                    "_id": "xe_public_emp_table_1_",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "Database": "xe",
+                    "Table": "emp_table",
+                    "schema": "public",
+                },
+            ]
 
-        # Execute
-        async for doc in source.get_docs():
-            actual_response.append(doc[0])
+            # Execute
+            async for doc in source.get_docs():
+                actual_response.append(doc[0])
 
-        # Assert
-        assert actual_response == expected_response
-
-        await source.close()
+            # Assert
+            assert actual_response == expected_response
