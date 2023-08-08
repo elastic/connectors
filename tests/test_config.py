@@ -29,7 +29,7 @@ def test_bad_config_file():
 
 def test_config(set_env):
     config = load_config(CONFIG_FILE)
-    assert isinstance(config, EnvYAML)
+    assert isinstance(config, dict)
 
 
 def test_config_with_ent_search(set_env):
