@@ -49,10 +49,10 @@ ISSUE_DATA = "issue_data"
 ATTACHMENT_CLOUD = "attachment_cloud"
 ATTACHMENT_SERVER = "attachment_server"
 USERS = "users"
-PROJECT_PERMISSIONS = "project_permissions"
+PROJECT_PERMISSIONS_BY_KEY = "project_permissions_by_key"
 ISSUE_SECURITY_LEVEL = "issue_security_level"
 SECURITY_LEVEL_MEMBERS = "issue_security_members"
-PROJECT_ROLE_MEMBERS = "project_role_members"
+PROJECT_ROLE_MEMBERS_BY_ROLE_ID = "project_role_members_by_role_id"
 URLS = {
     PING: "/rest/api/2/myself",
     PROJECT: "/rest/api/2/project?expand=description,lead,url",
@@ -62,8 +62,8 @@ URLS = {
     ATTACHMENT_CLOUD: "/rest/api/2/attachment/content/{attachment_id}",
     ATTACHMENT_SERVER: "/secure/attachment/{attachment_id}/{attachment_name}",
     USERS: "/rest/api/3/users/search",
-    PROJECT_PERMISSIONS: "/rest/api/2/user/permission/search?projectKey={project_key}&permissions=BROWSE_PROJECTS",
-    PROJECT_ROLE_MEMBERS: "/rest/api/3/project/{project_key}/role/{role_id}",
+    PROJECT_PERMISSIONS_BY_KEY: "/rest/api/2/user/permission/search?projectKey={project_key}&permissions=BROWSE_PROJECTS",
+    PROJECT_ROLE_MEMBERS_BY_ROLE_ID: "/rest/api/3/project/{project_key}/role/{role_id}",
     ISSUE_SECURITY_LEVEL: "/rest/api/2/issue/{issue_key}?fields=security",
     SECURITY_LEVEL_MEMBERS: "/rest/api/3/issuesecurityschemes/level/member?maxResults={max_results}&startAt={start_at}&levelId={level_id}&expand=user,group,projectRole",
 }
@@ -435,21 +435,22 @@ class JiraDataSource(BaseDataSource):
 
     def _is_active_atlassian_user(self, user_info):
         user_url = user_info.get("self")
+        user_name = user_info.get("displayName", "user")
         if not user_url:
             self._logger.debug(
-                f"Skipping user: {user_info.get('displayName', 'user')} due to the absence of a personal URL."
+                f"Skipping user: {user_name} due to the absence of a personal URL."
             )
             return False
 
         if not user_info.get("active"):
             self._logger.debug(
-                f"Skipping user: {user_info.get('displayName', 'user')} as it is inactive or deleted."
+                f"Skipping user: {user_name} as it is inactive or deleted."
             )
             return False
 
         if user_info.get("accountType") != ATLASSIAN:
             self._logger.debug(
-                f"Skipping user: {user_info.get('displayName', 'user')} because the account type is {user_info.get('accountType')}. Only 'atlassian' account type is supported."
+                f"Skipping user: {user_name} because the account type is {user_info.get('accountType')}. Only 'atlassian' account type is supported."
             )
             return False
 
@@ -465,7 +466,7 @@ class JiraDataSource(BaseDataSource):
 
     async def _user_information_list(self, project):
         async for response in self.jira_client.api_call(
-            url_name=PROJECT_PERMISSIONS, project_key=project["key"]
+            url_name=PROJECT_PERMISSIONS_BY_KEY, project_key=project["key"]
         ):
             yield await response.json()
 
@@ -497,7 +498,7 @@ class JiraDataSource(BaseDataSource):
 
     async def _project_role_members(self, project, role_id, access_control):
         async for actor_response in self.jira_client.api_call(
-            url_name=PROJECT_ROLE_MEMBERS,
+            url_name=PROJECT_ROLE_MEMBERS_BY_ROLE_ID,
             project_key=project["key"],
             role_id=role_id,
         ):
@@ -530,7 +531,8 @@ class JiraDataSource(BaseDataSource):
                     level_id=level_id
                 ):
                     for actor in members["values"]:
-                        if actor.get("holder", {}).get("type") == "user":
+                        actor_type = actor.get("holder", {}).get("type")
+                        if actor_type == "user":
                             user = actor.get("holder", {}).get("user", {})
                             if self._is_active_atlassian_user(user_info=user):
                                 access_control.add(
@@ -539,27 +541,27 @@ class JiraDataSource(BaseDataSource):
                                 access_control.add(
                                     _prefix_username(user=user.get("displayName"))
                                 )
-                        elif actor.get("holder", {}).get("type") == "group":
+                        elif actor_type == "group":
                             group_id = (
                                 actor.get("holder", {}).get("group", {}).get("groupId")
                             )
                             access_control.add(_prefix_group_id(group_id=group_id))
-                        elif actor.get("holder", {}).get("type") == "projectRole":
+                        elif actor_type == "projectRole":
                             if (
                                 role_id := actor.get("holder", {})
                                 .get("projectRole", {})
                                 .get("id")
                             ):
                                 # Project Role - `atlassian-addons-project-access` with id 10003 is not needed for DLS
-                                if role_id == 10003:
-                                    continue
-                                access_control = await anext(
-                                    self._project_role_members(
-                                        project=project,
-                                        role_id=role_id,
-                                        access_control=access_control,
+                                is_addons_projects_access = role_id == 10003
+                                if not is_addons_projects_access:
+                                    access_control = await anext(
+                                        self._project_role_members(
+                                            project=project,
+                                            role_id=role_id,
+                                            access_control=access_control,
+                                        )
                                     )
-                                )
             else:
                 self._logger.debug(
                     f"Issue security level is not set for an issue: {issue_key}. Hence, Assigning project permissions"
@@ -581,16 +583,15 @@ class JiraDataSource(BaseDataSource):
             {
                 "_id": "some.user@spo.com",
                 "identity": {
-                    "email": "email:some.user@spo.com",
-                    "username": "user:some.user",
-                    "user_id": "user_id:some user id"
+                    "username": "username:some.user",
+                    "account_id": "account_id:some user id"
                 },
                 "created_at": "2023-06-30 12:00:00",
                 "query": {
                     "template": {
                         "params": {
                             "access_control": [
-                                "user:some.user",
+                                "username:some.user",
                                 "group:1234-abcd-id"
                             ]
                         }
@@ -617,7 +618,7 @@ class JiraDataSource(BaseDataSource):
             "_id": account_id,
             "identity": {
                 "account_id": _prefixed_account_id,
-                "display_name": _prefixed_user_name,
+                "username": _prefixed_user_name,
             },
             "created_at": iso_utc(),
         }

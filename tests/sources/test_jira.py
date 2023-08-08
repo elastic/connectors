@@ -260,7 +260,7 @@ MOCK_PROJECT_ROLE_MEMBERS = {
 ACCESS_CONTROL = "_allow_access_control"
 
 
-class mock_ssl:
+class MockSsl:
     """This class contains methods which returns dummy ssl context"""
 
     def load_verify_locations(self, cadata):
@@ -439,7 +439,7 @@ async def test_ping_with_ssl(
         )
 
         # Execute
-        with patch.object(ssl, "create_default_context", return_value=mock_ssl()):
+        with patch.object(ssl, "create_default_context", return_value=MockSsl()):
             source.jira_client.ssl_ctx = ssl_context(
                 certificate=source.jira_client.certificate
             )
@@ -918,7 +918,7 @@ async def test_get_access_control_dls_enabled():
         "_id": "607194d6bc3c3f006f4c35d6",
         "identity": {
             "account_id": "account_id:607194d6bc3c3f006f4c35d6",
-            "display_name": "username:user1",
+            "username": "username:user1",
         },
         "created_at": "2023-01-24T04:07:19+00:00",
         "query": {
