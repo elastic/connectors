@@ -480,21 +480,18 @@ class ConfluenceDataSource(BaseDataSource):
 
     def _is_active_atlassian_user(self, user_info):
         user_url = user_info.get("self")
+        user_name = user_info.get("displayName", "user")
         if not user_url:
-            self._logger.debug(
-                f"Skipping {user_info.get('displayName', 'user')} as profile URL is not present."
-            )
+            self._logger.debug(f"Skipping {user_name} as profile URL is not present.")
             return False
 
         if not user_info.get("active"):
-            self._logger.debug(
-                f"Skipping {user_info.get('displayName', 'user')} as it is inactive or deleted."
-            )
+            self._logger.debug(f"Skipping {user_name} as it is inactive or deleted.")
             return False
 
         if user_info.get("accountType") != "atlassian":
             self._logger.debug(
-                f"Skipping {user_info.get('displayName', 'user')} because the account type is {user_info.get('accountType')}. Only 'atlassian' account type is supported."
+                f"Skipping {user_name} because the account type is {user_info.get('accountType')}. Only 'atlassian' account type is supported."
             )
             return False
 
@@ -558,9 +555,10 @@ class ConfluenceDataSource(BaseDataSource):
         group_results = response.get("group", {}).get("results", [])
 
         for item in user_results + group_results:
-            if item.get("type") == "known" and item.get("accountType") == "atlassian":
+            item_type = item.get("type")
+            if item_type == "known" and item.get("accountType") == "atlassian":
                 identities.add(_prefix_account_id(account_id=item.get("accountId", "")))
-            elif item.get("type") == "group":
+            elif item_type == "group":
                 identities.add(_prefix_group_id(group_id=item.get("id", "")))
 
         return identities
