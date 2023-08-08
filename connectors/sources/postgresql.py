@@ -146,7 +146,7 @@ class PostgreSQLClient:
             map(
                 lambda table: table[0],  # type: ignore
                 await anext(
-                    fetch_all(
+                    fetch_all(  # type: ignore
                         cursor_func=partial(
                             self.get_cursor,
                             self.queries.all_tables(
