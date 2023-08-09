@@ -59,7 +59,7 @@ def inject_lines(table, cursor, lines):
         sql_query = f"INSERT into customers_{table}(name, age, description) VALUES (:1, :2, :3)"
         cursor.executemany(sql_query, rows)
         inserted += batch_size
-        print(f"Inserting batch #{batch} of {batch_size} documents.")
+        print(f"Inserted batch #{batch} of {batch_size} documents.")
 
 def load():
     """Generate tables and loads table data in the oracle server."""
