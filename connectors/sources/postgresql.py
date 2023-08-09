@@ -401,7 +401,7 @@ class PostgreSQLDataSource(BaseDataSource):
                                 schema=schema, table=table
                             )
                         )
-                    except Exception as e:
+                    except Exception:
                         self._logger.warning(
                             f"Unable to fetch last_updated_time for {table}"
                         )
