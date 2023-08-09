@@ -13,7 +13,7 @@ from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import CancellableSleeps
+from connectors.utils import CancellableSleeps, retryable
 
 RETRIES = 3
 RETRY_INTERVAL = 1
@@ -101,8 +101,12 @@ class SalesforceClient:
             timeout=aiohttp.ClientTimeout(total=None),
         )
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        skipped_exceptions=[InvalidCredentialsException],
+    )
     async def get_token(self):
-        retry = 1
         while True:
             try:
                 await self.api_token.generate()
@@ -110,13 +114,8 @@ class SalesforceClient:
             except LockedException:
                 self._logger.debug("Token generation is already in process.")
                 break
-            except InvalidCredentialsException as e:
-                raise e
             except Exception as e:
-                if retry >= RETRIES:
-                    raise e
-                await self._sleeps.sleep(RETRY_INTERVAL**retry)
-                retry += 1
+                raise e
 
     async def ping(self):
         # TODO ping something of value (this could be config check instead)
