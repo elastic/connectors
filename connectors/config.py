@@ -13,7 +13,7 @@ from connectors.logger import logger
 
 def load_config(config_file):
     logger.info(f"Loading config from {config_file}")
-    configuration = dict(_merge_dicts(_default_config(),  EnvYAML(config_file).export()))
+    configuration = dict(_merge_dicts(_default_config(), EnvYAML(config_file).export()))
     _ent_search_config(configuration)
     return configuration
 
@@ -38,6 +38,7 @@ log_level_mappings = {
     "fatal": "CRITICAL",
     "unknown": "NOTSET",
 }
+
 
 def _default_config():
     return {
@@ -67,7 +68,7 @@ def _default_config():
             "max_concurrent_content_syncs": 1,
             "max_concurrent_access_control_syncs": 1,
             "job_cleanup_interval": 300,
-            "log_level": "INFO"
+            "log_level": "INFO",
         },
         "sources": {
             "mongodb": "connectors.sources.mongo:MongoDataSource",
@@ -89,8 +90,9 @@ def _default_config():
             "sharepoint_online": "connectors.sources.sharepoint_online:SharepointOnlineDataSource",
             "github": "connectors.sources.github:GitHubDataSource",
             "slack": "connectors.sources.slack:SlackDataSource",
-        }
+        },
     }
+
 
 def _ent_search_config(configuration):
     if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
@@ -141,10 +143,13 @@ def _update_config_field(configuration, field, value):
 
     current_leaf[subfields[-1]] = value
 
+
 def _merge_dicts(hsh1, hsh2):
     for k in set(hsh1.keys()).union(hsh2.keys()):
         if k in hsh1 and k in hsh2:
-            if isinstance(hsh1[k], dict) and isinstance(hsh2[k], dict): # only merge objects
+            if isinstance(hsh1[k], dict) and isinstance(
+                hsh2[k], dict
+            ):  # only merge objects
                 yield (k, dict(_merge_dicts(hsh1[k], hsh2[k])))
             else:
                 yield (k, hsh2[k])

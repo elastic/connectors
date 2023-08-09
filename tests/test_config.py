@@ -8,7 +8,6 @@ import os
 from unittest import mock
 
 import pytest
-from envyaml import EnvYAML
 
 from connectors.config import _update_config_field, load_config
 
