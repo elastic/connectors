@@ -485,6 +485,7 @@ class MSSQLDataSource(BaseDataSource):
                 and table in TABLES_TO_SKIP[self.database]
             ):
                 self._logger.debug(f"Skip table: {table} in database: {self.database}")
+                continue
 
             self._logger.debug(f"Found table: {table} in database: {self.database}.")
             table_count += 1
