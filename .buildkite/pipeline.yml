@@ -85,7 +85,7 @@ steps:
             - "connectors/sources/directory.py"
             - "tests/sources/fixtures/dir/**"
             config:
-            - label: "🔨 System Directory"
+              label: "🔨 System Directory"
               command:
                 - ".buildkite/run_nigthly.sh dir small"
               artifact_paths:
