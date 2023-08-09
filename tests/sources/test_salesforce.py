@@ -9,7 +9,6 @@ from contextlib import asynccontextmanager
 from unittest import TestCase, mock
 
 import pytest
-import pytest_asyncio
 from aiohttp.client_exceptions import ClientConnectionError
 
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
