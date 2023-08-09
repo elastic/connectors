@@ -18,11 +18,12 @@ from connectors.source import BaseDataSource
 from connectors.sources.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
-    DEFAULT_WAIT_MULTIPLIER,
     WILDCARD,
     Queries,
     configured_tables,
+    fetch,
     is_wildcard,
+    map_column_names,
 )
 from connectors.utils import get_pem_format, iso_utc
 
@@ -166,59 +167,80 @@ class MSSQLClient:
 
     async def ping(self):
         return await anext(
-            self._execute_query(
-                query=self.queries.ping(),
+            fetch(
+                cursor_func=partial(self.get_cursor, self.queries.ping()),
+                fetch_size=1,
+                retry_count=self.retry_count,
             )
         )
 
     async def get_tables_to_fetch(self):
         tables = configured_tables(self.tables)
-        return list(
-            map(
-                lambda table: table[0],  # type: ignore
-                await anext(
-                    self._execute_query(
-                        query=self.queries.all_tables(
-                            database=self.database,
-                            schema=self.schema,
-                        )
-                    )
+        if is_wildcard(tables):
+            async for row in fetch(
+                cursor_func=partial(
+                    self.get_cursor,
+                    self.queries.all_tables(
+                        database=self.database,
+                        schema=self.schema,
+                    ),
                 ),
-            )
-            if is_wildcard(tables)
-            else tables
-        )
+                fetch_size=self.fetch_size,
+                retry_count=self.retry_count,
+            ):
+                yield row[0]
+        else:
+            for table in tables:
+                yield table
 
     async def get_table_row_count(self, table):
-        [[row_count]] = await anext(
-            self._execute_query(
-                query=self.queries.table_data_count(
-                    schema=self.schema,
-                    table=table,
+        [row_count] = await anext(
+            fetch(
+                cursor_func=partial(
+                    self.get_cursor,
+                    self.queries.table_data_count(
+                        schema=self.schema,
+                        table=table,
+                    ),
                 ),
+                fetch_size=1,
+                retry_count=self.retry_count,
             )
         )
         return row_count
 
     async def get_table_primary_key(self, table):
-        return await anext(
-            self._execute_query(
-                query=self.queries.table_primary_key(
-                    schema=self.schema,
-                    table=table,
+        primary_keys = [
+            key
+            async for [key] in fetch(
+                cursor_func=partial(
+                    self.get_cursor,
+                    self.queries.table_primary_key(
+                        schema=self.schema,
+                        table=table,
+                    ),
                 ),
+                fetch_size=self.fetch_size,
+                retry_count=self.retry_count,
             )
-        )
+        ]
+        return primary_keys
 
     async def get_table_last_update_time(self, table):
-        return await anext(
-            self._execute_query(
-                query=self.queries.table_last_update_time(
-                    schema=self.schema,
-                    table=table,
+        [last_update_time] = await anext(
+            fetch(
+                cursor_func=partial(
+                    self.get_cursor,
+                    self.queries.table_last_update_time(
+                        schema=self.schema,
+                        table=table,
+                    ),
                 ),
+                fetch_size=1,
+                retry_count=self.retry_count,
             )
         )
+        return last_update_time
 
     async def data_streamer(self, table):
         """Streaming data from a table
@@ -232,72 +254,19 @@ class MSSQLClient:
         Yields:
             list: It will first yield the column names, then data in each row
         """
-        async for data in self._execute_query(
-            query=self.queries.table_data(
-                schema=self.schema,
-                table=table,
+        async for data in fetch(
+            cursor_func=partial(
+                self.get_cursor,
+                self.queries.table_data(
+                    schema=self.schema,
+                    table=table,
+                ),
             ),
-            fetch_many=True,
-            schema=self.schema,
-            table=table,
+            fetch_columns=True,
+            fetch_size=self.fetch_size,
+            retry_count=self.retry_count,
         ):
             yield data
-
-    async def _execute_query(self, query, fetch_many=False, **kwargs):
-        """Executes a query and yield rows
-
-        Args:
-            query (str): Query.
-            fetch_many (bool): Flag to use fetchmany method. Defaults to False.
-
-        Raises:
-            exception: Raise an exception after retrieving
-
-        Yields:
-            list: Column names and query response
-        """
-        retry = 1
-        yield_once = True
-
-        rows_fetched = 0
-
-        while retry <= self.retry_count:
-            try:
-                cursor = await self.get_cursor(query=query)
-                if fetch_many:
-                    # sending back column names only once
-                    if yield_once:
-                        yield [
-                            f"{kwargs['schema']}_{kwargs['table']}_{column}".lower()
-                            for column in cursor.keys()  # pyright: ignore
-                        ]
-                        yield_once = False
-
-                    while True:
-                        rows = cursor.fetchmany(size=self.fetch_size)  # pyright: ignore
-                        rows_length = len(rows)
-
-                        if not rows_length:
-                            break
-
-                        for row in rows:
-                            yield row
-
-                        rows_fetched += rows_length
-                        await asyncio.sleep(0)
-                else:
-                    yield cursor.fetchall()  # pyright: ignore
-                break
-            except (InternalClientError, ProgrammingError):
-                raise
-            except Exception as exception:
-                self._logger.warning(
-                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
-                )
-                if retry == self.retry_count:
-                    raise exception
-                await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry)
-                retry += 1
 
 
 class MSSQLDataSource(BaseDataSource):
@@ -453,12 +422,10 @@ class MSSQLDataSource(BaseDataSource):
             row_count = await self.mssql_client.get_table_row_count(table=table)
             if row_count > 0:
                 # Query to get the table's primary key
-                columns = await self.mssql_client.get_table_primary_key(table=table)
-                keys = [
-                    f"{self.schema}_{table}_{column_name}"
-                    for [column_name] in columns
-                    if column_name
-                ]
+                keys = await self.mssql_client.get_table_primary_key(table=table)
+                keys = map_column_names(
+                    column_names=keys, schema=self.schema, table=table
+                )
                 if keys:
                     try:
                         last_update_time = (
@@ -466,7 +433,6 @@ class MSSQLDataSource(BaseDataSource):
                                 table=table
                             )
                         )
-                        last_update_time = last_update_time[0][0]
                     except Exception:
                         self._logger.warning(
                             f"Unable to fetch last_updated_time for {table}"
@@ -474,15 +440,14 @@ class MSSQLDataSource(BaseDataSource):
                         last_update_time = None
                     streamer = self.mssql_client.data_streamer(table=table)
                     column_names = await anext(streamer)
+                    column_names = map_column_names(
+                        column_names=column_names, schema=self.schema, table=table
+                    )
                     async for row in streamer:
                         row = dict(zip(column_names, row, strict=True))
                         keys_value = ""
                         for key in keys:
-                            keys_value += (
-                                f"{row.get(key.lower())}_"
-                                if row.get(key.lower())
-                                else ""
-                            )
+                            keys_value += f"{row.get(key)}_" if row.get(key) else ""
                         row.update(
                             {
                                 "_id": f"{self.database}_{self.schema}_{table}_{keys_value}",
@@ -513,15 +478,19 @@ class MSSQLDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        tables_to_fetch = await self.mssql_client.get_tables_to_fetch()
-        if self.database in TABLES_TO_SKIP.keys():
-            tables_to_fetch = set(tables_to_fetch) - set(TABLES_TO_SKIP[self.database])
-        tables_to_fetch = list(tables_to_fetch)
-        for table in tables_to_fetch:
+        table_count = 0
+        async for table in self.mssql_client.get_tables_to_fetch():
+            if (
+                self.database in TABLES_TO_SKIP.keys()
+                and table in TABLES_TO_SKIP[self.database]
+            ):
+                self._logger.debug(f"Skip table: {table} in database: {self.database}")
+
             self._logger.debug(f"Found table: {table} in database: {self.database}.")
+            table_count += 1
             async for row in self.fetch_documents(table=table):
                 yield row, None
-        if len(tables_to_fetch) < 1:
+        if table_count < 1:
             self._logger.warning(
                 f"Fetched 0 tables for schema: {self.schema} and database: {self.database}"
             )
