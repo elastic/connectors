@@ -5,7 +5,6 @@
 #
 """Tests the Salesforce source class methods"""
 import re
-import time
 from contextlib import asynccontextmanager
 from unittest import TestCase, mock
 
@@ -13,14 +12,18 @@ import pytest
 from aiohttp.client_exceptions import ClientConnectionError
 
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
-from connectors.sources.salesforce import SalesforceDataSource, SalesforceSoqlBuilder
+from connectors.sources.salesforce import (
+    InvalidCredentialsException,
+    SalesforceDataSource,
+    SalesforceSoqlBuilder,
+    TokenFetchException,
+)
 from tests.sources.support import create_source
 
 TEST_DOMAIN = "fake"
 TEST_BASE_URL = f"https://{TEST_DOMAIN}.my.salesforce.com"
 TEST_CLIENT_ID = "1234"
 TEST_CLIENT_SECRET = "9876"
-SECONDS_SINCE_EPOCH = int(time.time())
 
 ACCOUNT_RESPONSE_PAYLOAD = {
     "totalSize": 1,
@@ -114,9 +117,30 @@ async def create_salesforce_source():
         yield source
 
 
-async def create_fake_coroutine(data):
-    """create a method for returning fake coroutine value"""
-    return data
+def generate_account_doc(identifier):
+    return {
+        "_id": identifier,
+        "account_type": "An account type",
+        "address": "Somewhere, Someplace, 1234",
+        "body": "A body",
+        "content_source_id": identifier,
+        "created_at": "",
+        "last_updated": "",
+        "owner": "Owner's Name",
+        "owner_email": "email@fake.com",
+        "open_activities": "",
+        "open_activities_urls": "",
+        "opportunity_name": "An opportunity name",
+        "opportunity_status": "An opportunity status",
+        "opportunity_url": f"{TEST_BASE_URL}/{identifier}",
+        "rating": "Cold",
+        "source": "salesforce",
+        "tags": ["A tag"],
+        "title": {identifier},
+        "type": "account",
+        "url": f"{TEST_BASE_URL}/{identifier}",
+        "website_url": "www.fake.com",
+    }
 
 
 def test_get_default_configuration():
@@ -157,7 +181,7 @@ async def test_ping_with_successful_connection(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_token_with_successful_connection(mock_responses):
+async def test_generate_token_with_successful_connection(mock_responses):
     async with create_salesforce_source() as source:
         response_payload = {
             "access_token": "foo",
@@ -165,7 +189,6 @@ async def test_get_token_with_successful_connection(mock_responses):
             "instance_url": "https://fake.my.salesforce.com",
             "id": "https://login.salesforce.com/id/1234",
             "token_type": "Bearer",
-            "issued_at": SECONDS_SINCE_EPOCH,
         }
 
         mock_responses.post(
@@ -175,34 +198,64 @@ async def test_get_token_with_successful_connection(mock_responses):
         )
         await source.salesforce_client.get_token()
 
-        assert source.salesforce_client.token == "foo"
-        assert source.salesforce_client.token_issued_at == SECONDS_SINCE_EPOCH
+        assert source.salesforce_client.api_token.token() == "foo"
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_get_token_with_bad_domain_raises_error(
-    apply_retry_strategy, mock_responses
+async def test_generate_token_with_bad_domain_raises_error(
+    patch_sleep, mock_responses, patch_cancellable_sleeps
 ):
     async with create_salesforce_source() as source:
-        apply_retry_strategy.return_value = mock.Mock()
+        mock_responses.post(
+            f"{TEST_BASE_URL}/services/oauth2/token", status=500, repeat=True
+        )
+        with pytest.raises(TokenFetchException):
+            await source.salesforce_client.get_token()
 
+
+@pytest.mark.asyncio
+async def test_generate_token_with_bad_credentials_raises_error(
+    patch_sleep, mock_responses, patch_cancellable_sleeps
+):
+    async with create_salesforce_source() as source:
+        mock_responses.post(
+            f"{TEST_BASE_URL}/services/oauth2/token",
+            status=400,
+            payload={
+                "error": "invalid_client",
+                "error_description": "Invalid client credentials",
+            },
+        )
+        with pytest.raises(InvalidCredentialsException):
+            await source.salesforce_client.get_token()
+
+
+@pytest.mark.asyncio
+async def test_generate_token_with_unexpected_error_retries(
+    patch_sleep, mock_responses, patch_cancellable_sleeps
+):
+    async with create_salesforce_source() as source:
         response_payload = {
             "access_token": "foo",
             "signature": "bar",
             "instance_url": "https://fake.my.salesforce.com",
             "id": "https://login.salesforce.com/id/1234",
             "token_type": "Bearer",
-            "issued_at": SECONDS_SINCE_EPOCH,
         }
 
         mock_responses.post(
             f"{TEST_BASE_URL}/services/oauth2/token",
-            status=400,
+            status=500,
+        )
+        mock_responses.post(
+            f"{TEST_BASE_URL}/services/oauth2/token",
+            status=200,
             payload=response_payload,
         )
-        with pytest.raises(ClientConnectionError):
-            await source.salesforce_client.get_token()
+
+        await source.salesforce_client.get_token()
+
+        assert source.salesforce_client.api_token.token() == "foo"
 
 
 @pytest.mark.asyncio
@@ -326,8 +379,48 @@ async def test_get_accounts_when_success(mock_responses):
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_get_accounts_when_invalid_request(apply_retry_strategy, mock_responses):
+async def test_get_accounts_when_paginated_yields_all_pages(mock_responses):
+    async with create_salesforce_source() as source:
+        response_page_1 = {
+            "done": False,
+            "nextRecordsUrl": f"{TEST_BASE_URL}/barbar",
+            "records": [
+                {
+                    "Id": 1234,
+                }
+            ],
+        }
+        response_page_2 = {
+            "done": True,
+            "records": [
+                {
+                    "Id": 5678,
+                }
+            ],
+        }
+
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=200,
+            payload=response_page_1,
+        )
+        mock_responses.get(
+            f"{TEST_BASE_URL}/barbar",
+            status=200,
+            payload=response_page_2,
+        )
+
+        yielded_account_ids = []
+        async for account in source.salesforce_client.get_accounts():
+            yielded_account_ids.append(account["_id"])
+
+        assert sorted(yielded_account_ids) == [1234, 5678]
+
+
+@pytest.mark.asyncio
+async def test_get_accounts_when_invalid_request(patch_sleep, mock_responses):
     async with create_salesforce_source() as source:
         response_payload = [
             {"message": "Unable to process query.", "errorCode": "INVALID_FIELD"}
@@ -387,6 +480,69 @@ async def test_get_opportunities_when_success(mock_responses):
         )
         async for account in source.salesforce_client.get_opportunities():
             assert account == expected_doc
+
+
+@pytest.mark.asyncio
+async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_responses):
+    async with create_salesforce_source() as source:
+        expected_doc = {
+            "_id": "account_id",
+            "account_type": "Customer - Direct",
+            "address": "The Burrow under the Hill, Bag End, Hobbiton, The Shire, Eriador, 111, Middle Earth",
+            "body": "A fantastic opportunity!",
+            "content_source_id": "account_id",
+            "created_at": "",
+            "last_updated": "",
+            "owner": "Owner's Name",
+            "owner_email": "email@fake.com",
+            "open_activities": "",
+            "open_activities_urls": "",
+            "opportunity_name": "Opportunity Generator",
+            "opportunity_status": "Closed Won",
+            "opportunity_url": f"{TEST_BASE_URL}/opportunity_id",
+            "rating": "Cold",
+            "source": "salesforce",
+            "tags": ["Customer - Direct"],
+            "title": "Salesforce Account 1",
+            "type": "account",
+            "url": f"{TEST_BASE_URL}/account_id",
+            "website_url": "www.fake.com",
+        }
+
+        invalid_token_payload = [
+            {
+                "message": "Session expired or invalid",
+                "errorCode": "INVALID_SESSION_ID",
+            }
+        ]
+        token_response_payload = {"access_token": "foo"}
+        mock_responses.post(
+            f"{TEST_BASE_URL}/services/oauth2/token",
+            status=200,
+            payload=token_response_payload,
+        )
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
+
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=401,
+            payload=invalid_token_payload,
+        )
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=200,
+            payload=ACCOUNT_RESPONSE_PAYLOAD,
+        )
+
+        with mock.patch.object(
+            source.salesforce_client.api_token,
+            "generate",
+            wraps=source.salesforce_client.api_token.generate,
+        ) as mock_get_token:
+            async for account in source.salesforce_client.get_accounts():
+                assert account == expected_doc
+                mock_get_token.assert_called_once()
 
 
 @pytest.mark.asyncio
