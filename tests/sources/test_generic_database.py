@@ -4,9 +4,17 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Generic Database source class methods"""
+from functools import partial
+
 import pytest
 
-from connectors.sources.generic_database import configured_tables, is_wildcard
+from connectors.sources.generic_database import (
+    configured_tables,
+    fetch,
+    is_wildcard,
+    map_column_names,
+)
+from connectors.sources.mssql import MSSQLQueries
 
 SCHEMA = "dbo"
 TABLE = "emp_table"
@@ -120,3 +128,51 @@ def test_configured_tables(tables, expected_tables):
 @pytest.mark.parametrize("tables", ["*", ["*"]])
 def test_is_wildcard(tables):
     assert is_wildcard(tables)
+
+
+COLUMN_NAMES = ["Column_1", "Column_2"]
+
+
+@pytest.mark.parametrize(
+    "schema, table, prefix",
+    [
+        (None, None, ""),
+        ("Schema", None, "schema_"),
+        ("Schema", " ", "schema_"),
+        (None, "Table", "table_"),
+        (" ", "Table", "table_"),
+        ("Schema", "Table", "schema_table_"),
+    ],
+)
+def test_map_column_names(schema, table, prefix):
+    mapped_column_names = map_column_names(COLUMN_NAMES, schema, table)
+    for column_name, mapped_column_name in zip(
+        COLUMN_NAMES, mapped_column_names, strict=True
+    ):
+        assert f"{prefix}{column_name}".lower() == mapped_column_name
+
+
+async def get_cursor(query_object, query):
+    return CursorSync(query_object=query_object, statement=query)
+
+
+@pytest.mark.asyncio
+async def test_fetch():
+    query_object = MSSQLQueries()
+
+    rows = []
+    async for row in fetch(
+        cursor_func=partial(get_cursor, query_object, None),
+        fetch_columns=True,
+        fetch_size=10,
+        retry_count=3,
+    ):
+        rows.append(row)
+
+    assert len(rows) == 3
+    assert rows[0][0] == "ids"
+    assert rows[0][1] == "names"
+    assert rows[1][0] == 1
+    assert rows[1][1] == "abcd"
+    assert rows[2][0] == 2
+    assert rows[2][1] == "xyz"
