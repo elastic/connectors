@@ -7,7 +7,7 @@ Configuration lives in [config.yml](../config.yml).
     Default is `"http://localhost:9200"`.
   - `api_key`: The API key for Elasticsearch connection.
     Using `api_key` is recommended instead of `username`/`password`.
-    Default is null.
+    No default.
   - `username`: The username for the Elasticsearch connection.
     Using `username` requires `password` to also be configured.
     However, `api_key` is the recommended configuration choice.
@@ -45,7 +45,7 @@ Configuration lives in [config.yml](../config.yml).
   - `max_wait_duration`: The maximum wait duration (in seconds) for the Elasticsearch connection.
     Default is `60`.
   - `initial_backoff_duration`: The initial backoff duration (in seconds).
-    Defaults is `5`.
+    Defaults is `1`.
   - `backoff_multiplier`: The backoff multiplier.
     Default is `2`.
   - `log_level`: Elasticsearch log level.

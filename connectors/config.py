@@ -44,6 +44,8 @@ def _default_config():
     return {
         "elasticsearch": {
             "host": "http://localhost:9200",
+            "username": "elastic",
+            "password": "changeme",
             "ssl": True,
             "bulk": {
                 "queue_max_size": 1024,
@@ -54,6 +56,7 @@ def _default_config():
                 "chunk_max_mem_size": 5,
                 "concurrent_downloads": 10,
             },
+            "retry_on_timeout": True,
             "request_timeout": 120,
             "max_wait_duration": 120,
             "initial_backoff_duration": 1,
@@ -63,6 +66,8 @@ def _default_config():
         "service": {
             "idling": 30,
             "heartbeat": 300,
+            "preflight_max_attempts": 10,
+            "preflight_idle": 30,
             "max_errors": 20,
             "max_errors_span": 600,
             "max_concurrent_content_syncs": 1,
