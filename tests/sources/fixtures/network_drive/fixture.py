@@ -62,7 +62,7 @@ def generate_files():
 
         for number in range(FILE_COUNT):
             with smbclient.open_file(
-                rf"\\{SERVER}/Folder1/Large-Data-Folder/large_size_file{number}.txt",
+                rf"\\{SERVER}/Folder1/file{number}.txt",
                 mode="w",
             ) as fd:
                 fd.write(get_file())
