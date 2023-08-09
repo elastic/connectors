@@ -7,8 +7,8 @@ import asyncio
 import os
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
-import yaml
 from elasticsearch import AsyncElasticsearch
+
 from connectors.config import load_config
 
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
