@@ -10,15 +10,89 @@ import io
 import os
 import random
 import string
+from random import choices
+from faker import Faker
+from functools import cached_property
 from urllib.parse import parse_qs, urlparse
 
 from flask import Flask, make_response, request
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
-_SIZES = {"small": 500000, "medium": 1000000, "large": 3000000}
-FILE_SIZE = _SIZES[DATA_SIZE]
-LARGE_DATA = "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
 TABLE_FETCH_SIZE = 50
+
+class FakeProvider:
+    def __init__(self, seed=None):
+        self.seed = seed
+        self.fake = Faker()
+        if seed:
+            self.fake.seed_instance(seed)
+
+    @cached_property
+    def _cached_random_str(self):
+        return self.fake.pystr(min_chars=100 * 1024, max_chars=100 * 1024 + 1)
+
+    def small_text(self):
+        # Up to 1KB of text
+        return self.generate_text(1 * 1024)
+
+    def medium_text(self):
+        # Up to 1MB of text
+        return self.generate_text(1024 * 1024)
+
+    def large_text(self):
+        # Up to 4MB of text
+        return self.generate_text(4 * 1024 * 1024)
+
+    def extra_large_text(self):
+        return self.generate_text(20 * 1024 * 1024)
+
+    def small_html(self):
+        # Around 100KB
+        return self.generate_html(1)
+
+    def medium_html(self):
+        # Around 1MB
+        return self.generate_html(1 * 10)
+
+    def large_html(self):
+        # Around 8MB
+        return self.generate_html(8 * 10)
+
+    def extra_large_html(self):
+        # Around 25MB
+        return self.generate_html(25 * 10)
+
+    def generate_text(self, max_size):
+        return self.fake.text(max_nb_chars=max_size)
+
+    def generate_html(self, images_of_100kb):
+        img = self._cached_random_str  # 100kb
+        text = self.small_text()
+
+        images = []
+        for _ in range(images_of_100kb):
+            images.append(f"<img src='{img}'/>")
+
+        return f"<html><head></head><body><div>{text}</div><div>{'<br/>'.join(images)}</div></body></html>"
+
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
+
+# TODO: change number of files based on DATA_SIZE
+match DATA_SIZE:
+    case "small":
+        pass
+    case "medium":
+        pass
+    case "large":
+        pass
+
+fake_provider = FakeProvider()
+
+population = [fake_provider.small_html(), fake_provider.medium_html(), fake_provider.large_html(), fake_provider.extra_large_html()]
+weights = [0.58, 0.3, 0.1, 0.02]
+
+
+def get_file():
+    return choices(population, weights)[0]
 
 
 class ServiceNowAPI:
@@ -26,6 +100,8 @@ class ServiceNowAPI:
         self.app = Flask(__name__)
         self.table_length = 500
         self.get_table_length_call = 6
+        self.files = {}
+        self
         self.app.route("/api/now/table/<string:table>", methods=["GET"])(
             self.get_table_length
         )
@@ -34,15 +110,19 @@ class ServiceNowAPI:
         )
         self.app.route("/api/now/v1/batch", methods=["POST"])(self.get_batch_data)
 
+
     def get_servicenow_formatted_data(self, response_key, response_data):
         return bytes(str({response_key: response_data}).replace("'", '"'), "utf-8")
+
 
     def get_url_data(self, url):
         parsed_url = urlparse(url)
         return parsed_url.path, parse_qs(parsed_url.query)
 
+
     def decode_response(self, response):
         return base64.b64encode(response).decode()
+
 
     def get_batch_data(self):
         batch_data = request.get_json()
@@ -106,12 +186,15 @@ class ServiceNowAPI:
         )
 
     def get_attachment_data(self, table_sys_id):
+        file = get_file()
+        attachment_id = f"attachment-{table_sys_id}"
+        self.files[attachment_id] = file
         record = [
             {
-                "sys_id": f"attachment-{table_sys_id}",
-                "sys_updated_on": "1212-12-12",
-                "size_bytes": FILE_SIZE,
-                "file_name": f"{table_sys_id}.txt",
+                "sys_id": attachment_id,
+                "sys_updated_on": "2012-12-12",
+                "size_bytes": len(file.encode("utf-8")),
+                "file_name": f"{table_sys_id}.html",
             }
         ]
         return self.get_servicenow_formatted_data(
@@ -119,7 +202,8 @@ class ServiceNowAPI:
         )
 
     def get_attachment_content(self, sys_id):
-        return io.BytesIO(bytes(LARGE_DATA, encoding="utf-8"))
+        file = self.files[sys_id]
+        return io.BytesIO(bytes(file, encoding="utf-8"))
 
 
 if __name__ == "__main__":
