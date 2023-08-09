@@ -1,6 +1,9 @@
 import os
 import random
+from random import choices
 import string
+from tests.commons import FakeProvider
+import boto3
 
 BUCKET_NAME = "ent-search-ingest-dev"
 REGION_NAME = "us-west-2"
@@ -11,27 +14,29 @@ AWS_SECRET_KEY = "dummy_secret_key"
 AWS_ACCESS_KEY_ID = "dummy_access_key"
 
 if DATA_SIZE == "small":
-    FOLDER_COUNT = 400
-    SMALL_TEXT_COUNT = 500
-    BIG_TEXT_COUNT = 100
-    OBJECT_COUNT = 5
+    FOLDER_COUNT = 50
+    FILE_COUNT = 250
+    OBJECT_TO_DELETE_COUNT = 5
 elif DATA_SIZE == "medium":
-    FOLDER_COUNT = 2000
-    SMALL_TEXT_COUNT = 2500
-    BIG_TEXT_COUNT = 500
-    OBJECT_COUNT = 10
+    FOLDER_COUNT = 150
+    FILE_COUNT = 1000
+    OBJECT_TO_DELETE_COUNT = 10
 else:
-    FOLDER_COUNT = 4000
-    SMALL_TEXT_COUNT = 5000
-    BIG_TEXT_COUNT = 1000
-    OBJECT_COUNT = 15
+    FOLDER_COUNT = 300
+    FILE_COUNT = 3000
+    OBJECT_TO_DELETE_COUNT = 15
+
+fake_provider = FakeProvider()
+
+population = [fake_provider.small_html(), fake_provider.medium_html(), fake_provider.large_html(), fake_provider.extra_large_html()]
+weights = [0.58, 0.3, 0.1, 0.02]
 
 
-def random_text(k=0):
-    return "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
+def get_file():
+    return choices(population, weights)[0]
 
-
-BIG_TEXT = random_text(k=1024 * 20)
+def get_num_docs():
+    print(FOLDER_COUNT + FILE_COUNT - OBJECT_TO_DELETE_COUNT)
 
 
 def setup():
@@ -41,66 +46,52 @@ def setup():
 
 def load():
     """Method for generating 10k document for aws s3 emulator"""
-    import boto3
-
-    try:
-        s3_client = boto3.client(
-            "s3",
-            endpoint_url=f"{AWS_ENDPOINT_URL}:{AWS_PORT}",
-            region_name=REGION_NAME,
-            aws_access_key_id=AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=AWS_SECRET_KEY,
-        )
-        s3_client.create_bucket(
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url=f"{AWS_ENDPOINT_URL}:{AWS_PORT}",
+        region_name=REGION_NAME,
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_KEY,
+    )
+    s3_client.create_bucket(
+        Bucket=BUCKET_NAME,
+        CreateBucketConfiguration={
+            "LocationConstraint": REGION_NAME,
+        },
+    )
+    print("Creating objects on the aws-moto server")
+    # add folders to the bucket
+    for object_id in range(FOLDER_COUNT):
+        if object_id % 100 == 0:
+            print(f"Inserted [{object_id}/{FOLDER_COUNT}] folders")
+        s3_client.put_object(
+            Key=f"{BUCKET_NAME}/{object_id}/",
             Bucket=BUCKET_NAME,
-            CreateBucketConfiguration={
-                "LocationConstraint": REGION_NAME,
-            },
+            StorageClass="STANDARD",
         )
-        print("Creating objects on the aws-moto server")
-        # add folders to the bucket
-        for object_id in range(0, FOLDER_COUNT):
-            s3_client.put_object(
-                Key=f"{BUCKET_NAME}/{object_id}/",
-                Bucket=BUCKET_NAME,
-                StorageClass="STANDARD",
-            )
-        # add small text files to the bucket
-        for object_id in range(0, SMALL_TEXT_COUNT):
-            s3_client.put_object(
-                Key=f"{BUCKET_NAME}/small_file_{object_id}.txt",
-                Bucket=BUCKET_NAME,
-                Body=f"Testing object{object_id} document for bucket: {BUCKET_NAME}",
-                StorageClass="STANDARD",
-            )
-        # add big text files to the bucket
-        for object_id in range(0, BIG_TEXT_COUNT):
-            s3_client.put_object(
-                Key=f"{BUCKET_NAME}/big_file_{object_id}.txt",
-                Bucket=BUCKET_NAME,
-                Body=BIG_TEXT,
-                StorageClass="STANDARD",
-            )
-    except Exception:
-        raise
+    # add small text files to the bucket
+    for object_id in range(FILE_COUNT):
+        if object_id % 100 == 0:
+            print(f"Inserted [{object_id}/{FILE_COUNT}] objects")
+        s3_client.put_object(
+            Key=f"{BUCKET_NAME}/small_file_{object_id}.txt",
+            Bucket=BUCKET_NAME,
+            Body=get_file(),
+            StorageClass="STANDARD",
+        )
 
 
 def remove():
     """Method for removing 15 random document from aws s3 emulator"""
-    import boto3
-
-    try:
-        s3_client = boto3.client(
-            "s3",
-            endpoint_url=f"{AWS_ENDPOINT_URL}:{AWS_PORT}",
-            region_name=REGION_NAME,
-            aws_access_key_id=AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=AWS_SECRET_KEY,
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url=f"{AWS_ENDPOINT_URL}:{AWS_PORT}",
+        region_name=REGION_NAME,
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_KEY,
+    )
+    print("Removing data from aws-moto server.")
+    for object_id in range(OBJECT_TO_DELETE_COUNT):
+        s3_client.delete_object(
+            Bucket=BUCKET_NAME, Key=f"{BUCKET_NAME}/{object_id}/"
         )
-        print("Removing data from aws-moto server.")
-        for object_id in range(0, OBJECT_COUNT):
-            s3_client.delete_object(
-                Bucket=BUCKET_NAME, Key=f"{BUCKET_NAME}/{object_id}/"
-            )
-    except Exception:
-        raise
