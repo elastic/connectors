@@ -168,8 +168,6 @@ async def test_validate_config_missing_fields_then_raise(
         client_id=client_id,
         client_secret=client_secret,
     ) as source:
-        # source.configuration.set_field(name=field, value="")
-
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
 
