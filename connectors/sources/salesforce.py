@@ -29,13 +29,11 @@ RELEVANT_SOBJECTS = ["Account", "Contact", "Lead", "Opportunity", "User"]
 RELEVANT_SOBJECT_FIELDS = [
     "AccountId",
     "BillingAddress",
-    "City",
     "Company",
     "ConvertedAccountId",
     "ConvertedContactId",
     "ConvertedDate",
     "ConvertedOpportunityId",
-    "Country",
     "Department",
     "Description",
     "Email",
@@ -44,12 +42,9 @@ RELEVANT_SOBJECT_FIELDS = [
     "OwnerId",
     "Phone",
     "PhotoUrl",
-    "PostalCode",
     "Rating",
     "StageName",
-    "State",
     "Status",
-    "Street",
     "Title",
     "Type",
     "Website",
@@ -57,7 +52,7 @@ RELEVANT_SOBJECT_FIELDS = [
 
 
 class RateLimitedException(Exception):
-    """Notifies that Salesforce has begun rate limiting the current accound"""
+    """Notifies that Salesforce has begun rate limiting the current account"""
 
     pass
 
@@ -69,7 +64,7 @@ class RequestRefusedException(Exception):
 
 
 class InvalidQueryException(Exception):
-    """Notifies that a query was invalid"""
+    """Notifies that a query was malformed or otherwise incorrect"""
 
     pass
 
