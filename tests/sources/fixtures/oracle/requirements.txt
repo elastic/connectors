@@ -1,1 +1,2 @@
 oracledb==1.2.2
+faker
