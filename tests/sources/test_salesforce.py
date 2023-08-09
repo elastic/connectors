@@ -174,7 +174,7 @@ async def test_ping_with_successful_connection(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_token_with_successful_connection(mock_responses):
+async def test_generate_token_with_successful_connection(mock_responses):
     source = create_salesforce_source()
     response_payload = {
         "access_token": "foo",
@@ -189,15 +189,16 @@ async def test_get_token_with_successful_connection(mock_responses):
     )
     await source.salesforce_client.get_token()
 
-    assert source.salesforce_client.token == "foo"
+    assert source.salesforce_client.api_token.token() == "foo"
 
     await source.close()
 
 
 @pytest.mark.asyncio
-async def test_get_token_with_bad_domain_raises_error(patch_sleep, mock_responses):
+async def test_generate_token_with_bad_domain_raises_error(
+    patch_sleep, mock_responses, patch_cancellable_sleeps
+):
     source = create_salesforce_source()
-
     mock_responses.post(
         f"{TEST_BASE_URL}/services/oauth2/token", status=500, repeat=True
     )
@@ -207,9 +208,10 @@ async def test_get_token_with_bad_domain_raises_error(patch_sleep, mock_response
 
 
 @pytest.mark.asyncio
-async def test_get_token_with_bad_credentials_raises_error(patch_sleep, mock_responses):
+async def test_generate_token_with_bad_credentials_raises_error(
+    patch_sleep, mock_responses, patch_cancellable_sleeps
+):
     source = create_salesforce_source()
-
     mock_responses.post(
         f"{TEST_BASE_URL}/services/oauth2/token",
         status=400,
@@ -217,10 +219,37 @@ async def test_get_token_with_bad_credentials_raises_error(patch_sleep, mock_res
             "error": "invalid_client",
             "error_description": "Invalid client credentials",
         },
-        repeat=True,
     )
     with pytest.raises(InvalidCredentialsException):
         await source.salesforce_client.get_token()
+    await source.close()
+
+
+@pytest.mark.asyncio
+async def test_generate_token_with_unexpected_error_retries(
+    patch_sleep, mock_responses, patch_cancellable_sleeps
+):
+    source = create_salesforce_source()
+    response_payload = {
+        "access_token": "foo",
+        "signature": "bar",
+        "instance_url": "https://fake.my.salesforce.com",
+        "id": "https://login.salesforce.com/id/1234",
+        "token_type": "Bearer",
+    }
+
+    mock_responses.post(
+        f"{TEST_BASE_URL}/services/oauth2/token",
+        status=500,
+    )
+    mock_responses.post(
+        f"{TEST_BASE_URL}/services/oauth2/token", status=200, payload=response_payload
+    )
+
+    await source.salesforce_client.get_token()
+
+    assert source.salesforce_client.api_token.token() == "foo"
+
     await source.close()
 
 
@@ -523,7 +552,9 @@ async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_resp
     )
 
     with mock.patch.object(
-        source.salesforce_client, "get_token", wraps=source.salesforce_client.get_token
+        source.salesforce_client.api_token,
+        "generate",
+        wraps=source.salesforce_client.api_token.generate,
     ) as mock_get_token:
         async for account in source.salesforce_client.get_accounts():
             assert account == expected_doc

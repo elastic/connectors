@@ -4,14 +4,16 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Salesforce source module responsible to fetch documents from Salesforce."""
+from contextlib import contextmanager
 from functools import cached_property
+from threading import Lock
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import retryable
+from connectors.utils import CancellableSleeps
 
 RETRIES = 3
 RETRY_INTERVAL = 1
@@ -38,7 +40,7 @@ RELEVANT_SOBJECT_FIELDS = [
 
 
 class RateLimitedException(Exception):
-    """Notifies that Salesforce has begun rate limiting the current accound"""
+    """Notifies that Salesforce has begun rate limiting the current account"""
 
     pass
 
@@ -67,24 +69,27 @@ class RequestError(Exception):
     pass
 
 
+class LockedException(Exception):
+    """Notifies that the current process is locked, only for token generation"""
+
+    pass
+
+
 class SalesforceClient:
     def __init__(self, configuration):
         self._logger = logger
+        self._sleeps = CancellableSleeps()
 
-        self.token = None
-        self._fetching_token = False
         self._queryable_sobjects = None
         self._queryable_sobject_fields = None
 
         self.base_url = BASE_URL.replace("<domain>", configuration["domain"])
-        self.client_id = configuration["client_id"]
-        self.client_secret = configuration["client_secret"]
-        self.token_payload = {
-            "grant_type": "client_credentials",
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-        }
-
+        self.api_token = SalesforceAPIToken(
+            self.session,
+            self.base_url,
+            configuration["client_id"],
+            configuration["client_secret"],
+        )
         self.doc_mapper = SalesforceDocMapper(self.base_url)
 
     def set_logger(self, logger_):
@@ -96,52 +101,32 @@ class SalesforceClient:
             timeout=aiohttp.ClientTimeout(total=None),
         )
 
+    async def get_token(self):
+        retry = 1
+        while True:
+            try:
+                await self.api_token.generate()
+                break
+            except LockedException:
+                self._logger.debug("Token generation is already in process.")
+                break
+            except InvalidCredentialsException as e:
+                raise e
+            except Exception as e:
+                if retry >= RETRIES:
+                    raise e
+                await self._sleeps.sleep(RETRY_INTERVAL**retry)
+                retry += 1
+
     async def ping(self):
         # TODO ping something of value (this could be config check instead)
         await self.session.head(self.base_url)
 
     async def close(self):
-        self._token_cleanup()
+        self.api_token.clear()
         if self.session is not None:
             await self.session.close()
             del self.session
-
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-    )
-    async def get_token(self):
-        if self._fetching_token is True:
-            return
-
-        self._fetching_token = True
-        response_body = None
-        try:
-            response = await self._post(
-                f"{self.base_url}{TOKEN_ENDPOINT}", data=self.token_payload
-            )
-            response_body = await response.json()
-            response.raise_for_status()
-            self.token = response_body["access_token"]
-        except ClientResponseError as e:
-            if 400 <= e.status < 500:
-                # 400s have detailed error messages in body
-                error_resp = self._handle_token_response_body_error(response_body)
-
-                if error_resp == "invalid_client":
-                    raise InvalidCredentialsException(
-                        f"The `client_id` and `client_secret` provided could not be used to generate a token. Status: {e.status}, message: {e.message}, details: {error_resp}"
-                    ) from e
-                else:
-                    raise TokenFetchException(
-                        f"Could not fetch token from Salesforce: Status: {e.status}, message: {e.message}, details: {error_resp}"
-                    ) from e
-            else:
-                raise TokenFetchException(
-                    f"Unexpected error while fetching Salesforce token. Status: {e.status}, message: {e.message}"
-                ) from e
-        finally:
-            self._fetching_token = False
 
     async def get_accounts(self):
         if not await self._is_queryable("Account"):
@@ -208,51 +193,51 @@ class SalesforceClient:
 
     async def _yield_non_bulk_query_pages(self, soql_query):
         """loops through query response pages and yields lists of records"""
-        response = await self._get_json(
-            f"{self.base_url}{QUERY_ENDPOINT}",
-            params={"q": soql_query},
-        )
-        yield response.get("records")
 
-        if response.get("done") is False:
-            page_count = 1
-            next_url = response.get("nextRecordsUrl")
-            while True:
-                next_page = await self._get_json(next_url)
-                yield next_page.get("records")
+        url = f"{self.base_url}{QUERY_ENDPOINT}"
+        params = {"q": soql_query}
 
-                page_count += 1
-                if (
-                    next_page.get("done") is True
-                    or page_count >= QUERY_PAGINATION_LIMIT
-                ):
-                    break
-                else:
-                    next_url = next_page.get("nextRecordsUrl")
+        while True:
+            response = await self._get_json(
+                url,
+                params=params,
+            )
+            yield response.get("records")
+            if response.get("done", True) is True:
+                break
 
-    def _token_cleanup(self):
-        self.token = None
+            url = response.get("nextRecordsUrl")
+            params = None
 
     def _auth_headers(self):
-        return {"authorization": f"Bearer {self.token}"}
+        return {"authorization": f"Bearer {self.api_token.token}"}
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-    )
     async def _get_json(self, url, params=None):
+        retry = 1
         response_body = None
 
-        try:
-            response = await self._get(url, params=params)
-            response_body = await response.json()
-            # We get the response body before raising for status as it contains vital error information
-            response.raise_for_status()
-            return response_body
-        except ClientResponseError as e:
-            await self._handle_client_response_error(response_body, e)
-        except Exception as e:
-            raise e
+        while True:
+            try:
+                response = await self._get(url, params=params)
+                response_body = await response.json()
+                # We get the response body before raising for status as it contains vital error information
+                response.raise_for_status()
+                return response_body
+            except ClientResponseError as e:
+                try:
+                    await self._handle_client_response_error(response_body, e)
+                except (RateLimitedException, InvalidQueryException):
+                    raise e
+                except Exception as e:
+                    if retry >= RETRIES:
+                        raise e
+                    await self._sleeps.sleep(RETRY_INTERVAL**retry)
+                    retry += 1
+            except Exception as e:
+                if retry >= RETRIES:
+                    raise e
+                await self._sleeps.sleep(RETRY_INTERVAL**retry)
+                retry += 1
 
     async def _get(self, url, params=None):
         return await self.session.get(
@@ -260,9 +245,6 @@ class SalesforceClient:
             headers=self._auth_headers(),
             params=params,
         )
-
-    async def _post(self, url, data=None):
-        return await self.session.post(url, data=data)
 
     async def _handle_client_response_error(self, response_body, e):
         exception_details = f"status: {e.status}, message: {e.message}"
@@ -273,11 +255,13 @@ class SalesforceClient:
             )
             # The user can alter the lifetime of issued tokens, so we don't know when they expire
             # Therefore we fetch the token when we encounter an error rather than when it expires
+            self.api_token.clear()
             await self.get_token()
             # raise to continue with retry strategy
             raise e
         elif 400 <= e.status < 500:
             errors = self._handle_response_body_error(response_body)
+            # response format is an array for some reason so we check all of the error codes
             # errorCode and message are generally identical, except if the query is invalid
             error_codes = [x["errorCode"] for x in errors]
 
@@ -305,12 +289,6 @@ class SalesforceClient:
                 ) from e
         else:
             raise e
-
-    def _handle_token_response_body_error(self, error_body):
-        if error_body is None:
-            return ""
-
-        return error_body.get("error")
 
     def _handle_response_body_error(self, error_list):
         if error_list is None or len(error_list) < 1:
@@ -373,6 +351,61 @@ class SalesforceClient:
         query_builder.with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
 
         return query_builder.build()
+
+
+class SalesforceAPIToken:
+    def __init__(self, session, base_url, client_id, client_secret):
+        self.lock = Lock()
+        self._token = None
+        self.session = session
+        self.url = f"{base_url}{TOKEN_ENDPOINT}"
+        self.token_payload = {
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+        }
+
+    def token(self):
+        return self._token
+
+    async def generate(self):
+        with self._non_blocking_lock():
+            response_body = {}
+            try:
+                response = await self.session.post(self.url, data=self.token_payload)
+                response_body = await response.json()
+                response.raise_for_status()
+                self._token = response_body["access_token"]
+            except ClientResponseError as e:
+                if 400 <= e.status < 500:
+                    # 400s have detailed error messages in body
+                    error_message = response_body.get(
+                        "error", "No error dscription found."
+                    )
+                    if error_message == "invalid_client":
+                        raise InvalidCredentialsException(
+                            f"The `client_id` and `client_secret` provided could not be used to generate a token. Status: {e.status}, message: {e.message}, details: {error_message}"
+                        ) from e
+                    else:
+                        raise TokenFetchException(
+                            f"Could not fetch token from Salesforce: Status: {e.status}, message: {e.message}, details: {error_message}"
+                        ) from e
+                else:
+                    raise TokenFetchException(
+                        f"Unexpected error while fetching Salesforce token. Status: {e.status}, message: {e.message}"
+                    ) from e
+
+    def clear(self):
+        self._token = None
+
+    @contextmanager
+    def _non_blocking_lock(self):
+        if not self.lock.acquire(blocking=False):
+            raise LockedException("Token generation is already running.")
+        try:
+            yield self.lock
+        finally:
+            self.lock.release()
 
 
 class SalesforceSoqlBuilder:
