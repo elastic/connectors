@@ -168,7 +168,7 @@ class SalesforceClient:
     async def get_opportunities(self):
         if not await self._is_queryable("Opportunity"):
             self._logger.info(
-                "ObjectOpportunity is not queryable, so they won't be ingested."
+                "Object Opportunity is not queryable, so they won't be ingested."
             )
             return
 
@@ -180,7 +180,7 @@ class SalesforceClient:
     async def get_contacts(self):
         if not await self._is_queryable("Contact"):
             self._logger.info(
-                "ObjectContact is not queryable, so they won't be ingested."
+                "Object Contact is not queryable, so they won't be ingested."
             )
             return
 
