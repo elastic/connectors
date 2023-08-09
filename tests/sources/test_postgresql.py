@@ -80,40 +80,39 @@ class CursorAsync:
         """
         if self.first_call:
             self.first_call = False
-            return [
-                (
-                    1,
-                    "abcd",
-                ),
-                (
-                    1,
-                    "xyz",
-                ),
-            ]
+
+            self.query = str(self.query)
+            query_object = PostgreSQLQueries()
+            if self.query == query_object.all_schemas():
+                return [(SCHEMA,)]
+            elif self.query == query_object.all_tables(database="xe", schema=SCHEMA):
+                return [(TABLE,)]
+            elif self.query == query_object.table_data_count(
+                schema=SCHEMA, table=TABLE
+            ):
+                return [(10,)]
+            elif self.query == query_object.table_primary_key(
+                schema=SCHEMA, table=TABLE
+            ):
+                return [("ids",)]
+            elif self.query == query_object.table_last_update_time(
+                schema=SCHEMA, table=TABLE
+            ):
+                return [("2023-02-21T08:37:15+00:00",)]
+            elif self.query == query_object.ping():
+                return [(2,)]
+            else:
+                return [
+                    (
+                        1,
+                        "abcd",
+                    ),
+                    (
+                        1,
+                        "xyz",
+                    ),
+                ]
         return []
-
-    def fetchall(self):
-        """This method returns results of query
-
-        Returns:
-            list: List of rows
-        """
-        self.query = str(self.query)
-        query_object = PostgreSQLQueries()
-        if self.query == query_object.all_schemas():
-            return [(SCHEMA,)]
-        elif self.query == query_object.all_tables(database="xe", schema=SCHEMA):
-            return [(TABLE,)]
-        elif self.query == query_object.table_data_count(schema=SCHEMA, table=TABLE):
-            return [(10,)]
-        elif self.query == query_object.table_primary_key(schema=SCHEMA, table=TABLE):
-            return [("ids",)]
-        elif self.query == query_object.table_last_update_time(
-            schema=SCHEMA, table=TABLE
-        ):
-            return [("2023-02-21T08:37:15+00:00",)]
-        elif self.query == query_object.ping():
-            return [(2,)]
 
     async def __aexit__(self, exception_type, exception_value, exception_traceback):
         """Make sure the dummy database connection gets closed"""

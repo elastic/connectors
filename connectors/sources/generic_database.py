@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from asyncpg.exceptions._base import InternalClientError
 from sqlalchemy.exc import ProgrammingError
 
-from connectors.utils import RetryStrategy, iso_utc, retryable
+from connectors.utils import RetryStrategy, retryable
 
 WILDCARD = "*"
 
@@ -47,23 +47,20 @@ def is_wildcard(tables):
     return tables in (WILDCARD, [WILDCARD])
 
 
-async def fetch_all(cursor_func, retry_count):
-    @retryable(
-        retries=retry_count,
-        interval=DEFAULT_WAIT_MULTIPLIER,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=[InternalClientError, ProgrammingError],
-    )
-    async def _execute():
-        cursor = await cursor_func()
-        yield cursor.fetchall()
-
-    async for result in _execute():
-        yield result
+def map_column_names(column_names, schema=None, table=None):
+    prefix = ""
+    if schema and len(schema.strip()) > 0:
+        prefix += schema.strip() + "_"
+    if table and len(table.strip()) > 0:
+        prefix += table.strip() + "_"
+    return [f"{prefix}{column}".lower() for column in column_names]
 
 
 async def fetch(
-    cursor_func, fetch_size, retry_count, table, fetch_columns=True, schema=None
+    cursor_func,
+    fetch_columns=False,
+    fetch_size=DEFAULT_FETCH_SIZE,
+    retry_count=DEFAULT_RETRY_COUNT,
 ):
     @retryable(
         retries=retry_count,
@@ -75,16 +72,7 @@ async def fetch(
         cursor = await cursor_func()
         # sending back column names if required
         if fetch_columns:
-            if schema:
-                yield [
-                    f"{schema}_{table}_{column}".lower()
-                    for column in cursor.keys()  # pyright: ignore
-                ]
-            else:
-                yield [
-                    f"{table}_{column}".lower()
-                    for column in cursor.keys()  # pyright: ignore
-                ]
+            yield cursor.keys()
 
         while True:
             rows = cursor.fetchmany(size=fetch_size)  # pyright: ignore
@@ -95,6 +83,9 @@ async def fetch(
 
             for row in rows:
                 yield row
+
+            if rows_length < fetch_size:
+                break
 
             await asyncio.sleep(0)
 

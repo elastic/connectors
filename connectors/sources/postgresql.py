@@ -21,8 +21,8 @@ from connectors.sources.generic_database import (
     Queries,
     configured_tables,
     fetch,
-    fetch_all,
     is_wildcard,
+    map_column_names,
 )
 from connectors.utils import get_pem_format, iso_utc
 
@@ -120,51 +120,49 @@ class PostgreSQLClient:
                 return cursor
         except Exception as exception:
             self._logger.warning(
-                f"Something went wrong while executing query. Exception: {exception}"
+                f"Something went wrong while getting cursor. Exception: {exception}"
             )
             raise
 
     async def ping(self):
         return await anext(
-            fetch_all(
+            fetch(
                 cursor_func=partial(self.get_cursor, self.queries.ping()),
+                fetch_size=1,
                 retry_count=self.retry_count,
             )
         )
 
     async def get_all_schemas(self):
-        return await anext(
-            fetch_all(
-                cursor_func=partial(self.get_cursor, self.queries.all_schemas()),
-                retry_count=self.retry_count,
-            )
-        )
+        async for row in fetch(
+            cursor_func=partial(self.get_cursor, self.queries.all_schemas()),
+            fetch_size=self.fetch_size,
+            retry_count=self.retry_count,
+        ):
+            yield row[0]
 
     async def get_tables_to_fetch(self, schema):
         tables = configured_tables(self.tables)
-        return list(
-            map(
-                lambda table: table[0],  # type: ignore
-                await anext(
-                    fetch_all(  # type: ignore
-                        cursor_func=partial(
-                            self.get_cursor,
-                            self.queries.all_tables(
-                                database=self.database,
-                                schema=schema,
-                            ),
-                        ),
-                        retry_count=self.retry_count,
-                    )
+        if is_wildcard(tables):
+            async for row in fetch(
+                cursor_func=partial(
+                    self.get_cursor,
+                    self.queries.all_tables(
+                        database=self.database,
+                        schema=schema,
+                    ),
                 ),
-            )
-            if is_wildcard(tables)
-            else tables
-        )
+                fetch_size=self.fetch_size,
+                retry_count=self.retry_count,
+            ):
+                yield row[0]
+        else:
+            for table in tables:
+                yield table
 
     async def get_table_row_count(self, schema, table):
-        [[row_count]] = await anext(
-            fetch_all(
+        [row_count] = await anext(
+            fetch(
                 cursor_func=partial(
                     self.get_cursor,
                     self.queries.table_data_count(
@@ -172,14 +170,16 @@ class PostgreSQLClient:
                         table=table,
                     ),
                 ),
+                fetch_size=1,
                 retry_count=self.retry_count,
             )
         )
         return row_count
 
     async def get_table_primary_key(self, schema, table):
-        return await anext(
-            fetch_all(
+        primary_keys = [
+            key
+            async for [key] in fetch(
                 cursor_func=partial(
                     self.get_cursor,
                     self.queries.table_primary_key(
@@ -187,13 +187,16 @@ class PostgreSQLClient:
                         table=table,
                     ),
                 ),
+                fetch_size=self.fetch_size,
                 retry_count=self.retry_count,
             )
-        )
+        ]
+
+        return primary_keys
 
     async def get_table_last_update_time(self, schema, table):
-        return await anext(
-            fetch_all(
+        [last_update_time] = await anext(
+            fetch(
                 cursor_func=partial(
                     self.get_cursor,
                     self.queries.table_last_update_time(
@@ -201,9 +204,11 @@ class PostgreSQLClient:
                         table=table,
                     ),
                 ),
+                fetch_size=1,
                 retry_count=self.retry_count,
             )
         )
+        return last_update_time
 
     async def data_streamer(self, schema, table):
         """Streaming data from a table
@@ -226,10 +231,9 @@ class PostgreSQLClient:
                     table=table,
                 ),
             ),
+            fetch_columns=True,
             fetch_size=self.fetch_size,
             retry_count=self.retry_count,
-            table=table,
-            schema=schema,
         ):
             yield data
 
@@ -386,14 +390,10 @@ class PostgreSQLDataSource(BaseDataSource):
             )
             if row_count > 0:
                 # Query to get the table's primary key
-                columns = await self.postgresql_client.get_table_primary_key(
+                keys = await self.postgresql_client.get_table_primary_key(
                     schema=schema, table=table
                 )
-                keys = [
-                    f"{schema}_{table}_{column_name}"
-                    for [column_name] in columns
-                    if column_name
-                ]
+                keys = map_column_names(column_names=keys, schema=schema, table=table)
                 if keys:
                     try:
                         last_update_time = (
@@ -401,8 +401,7 @@ class PostgreSQLDataSource(BaseDataSource):
                                 schema=schema, table=table
                             )
                         )
-                        last_update_time = last_update_time[0][0]
-                    except Exception:
+                    except Exception as e:
                         self._logger.warning(
                             f"Unable to fetch last_updated_time for {table}"
                         )
@@ -411,15 +410,14 @@ class PostgreSQLDataSource(BaseDataSource):
                         schema=schema, table=table
                     )
                     column_names = await anext(streamer)
+                    column_names = map_column_names(
+                        column_names=column_names, schema=schema, table=table
+                    )
                     async for row in streamer:
                         row = dict(zip(column_names, row, strict=True))
                         keys_value = ""
                         for key in keys:
-                            keys_value += (
-                                f"{row.get(key.lower())}_"
-                                if row.get(key.lower())
-                                else ""
-                            )
+                            keys_value += f"{row.get(key)}_" if row.get(key) else ""
                         row.update(
                             {
                                 "_id": f"{self.database}_{schema}_{table}_{keys_value}",
@@ -447,22 +445,20 @@ class PostgreSQLDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        schema_list = await self.postgresql_client.get_all_schemas()
-        for [schema] in schema_list:
+        async for schema in self.postgresql_client.get_all_schemas():
             if schema not in SYSTEM_SCHEMA:
-                tables_to_fetch = await self.postgresql_client.get_tables_to_fetch(
-                    schema
-                )
-                for table in tables_to_fetch:
+                table_count = 0
+                async for table in self.postgresql_client.get_tables_to_fetch(schema):
                     self._logger.debug(
                         f"Found table: {table} in database: {self.database}."
                     )
+                    table_count += 1
                     async for row in self.fetch_documents(
                         table=table,
                         schema=schema,
                     ):
                         yield row, None
-                if len(tables_to_fetch) < 1:
+                if table_count < 1:
                     self._logger.warning(
                         f"Fetched 0 tables for schema: {schema} and database: {self.database}"
                     )

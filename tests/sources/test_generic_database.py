@@ -11,8 +11,8 @@ import pytest
 from connectors.sources.generic_database import (
     configured_tables,
     fetch,
-    fetch_all,
     is_wildcard,
+    map_column_names,
 )
 from connectors.sources.mssql import MSSQLQueries
 
@@ -130,25 +130,28 @@ def test_is_wildcard(tables):
     assert is_wildcard(tables)
 
 
+COLUMN_NAMES = ["Column_1", "Column_2"]
+
+
+@pytest.mark.parametrize(
+    "schema, table, prefix",
+    [
+        (None, None, ""),
+        ("Schema", None, "schema_"),
+        ("Schema", " ", "schema_"),
+        (None, "Table", "table_"),
+        (" ", "Table", "table_"),
+        ("Schema", "Table", "schema_table_"),
+    ],
+)
+def test_map_column_names(schema, table, prefix):
+    mapped_column_names = map_column_names(COLUMN_NAMES, schema, table)
+    for column_name, mapped_column_name in zip(COLUMN_NAMES, mapped_column_names):
+        assert f"{prefix}{column_name}".lower() == mapped_column_name
+
+
 async def get_cursor(query_object, query):
     return CursorSync(query_object=query_object, statement=query)
-
-
-@pytest.mark.asyncio
-async def test_fetch_all():
-    query_object = MSSQLQueries()
-
-    rows = None
-    async for result in fetch_all(
-        cursor_func=partial(
-            get_cursor, query_object, query_object.all_tables(schema=SCHEMA)
-        ),
-        retry_count=3,
-    ):
-        rows = result
-
-    assert len(rows) == 1
-    assert rows[0][0] == TABLE
 
 
 @pytest.mark.asyncio
@@ -158,15 +161,15 @@ async def test_fetch():
     rows = []
     async for row in fetch(
         cursor_func=partial(get_cursor, query_object, None),
+        fetch_columns=True,
         fetch_size=10,
         retry_count=3,
-        table="foo",
     ):
         rows.append(row)
 
     assert len(rows) == 3
-    assert rows[0][0] == "foo_ids"
-    assert rows[0][1] == "foo_names"
+    assert rows[0][0] == "ids"
+    assert rows[0][1] == "names"
     assert rows[1][0] == 1
     assert rows[1][1] == "abcd"
     assert rows[2][0] == 2
