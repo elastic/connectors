@@ -76,16 +76,35 @@ class CursorSync:
         """
         if self.first_call:
             self.first_call = False
-            return [
-                (
-                    1,
-                    "abcd",
-                ),
-                (
-                    2,
-                    "xyz",
-                ),
-            ]
+
+            self.query = str(self.query)
+            if self.query == self.query_object.all_schemas():
+                return [(SCHEMA,)]
+            elif self.query == self.query_object.all_tables(schema=SCHEMA, user=USER):
+                return [(TABLE,)]
+            elif self.query == self.query_object.table_data_count(
+                schema=SCHEMA, table=TABLE
+            ):
+                return [(10,)]
+            elif self.query == self.query_object.table_primary_key(
+                schema=SCHEMA, table=TABLE, user=USER
+            ):
+                return [("ids",)]
+            elif self.query == self.query_object.table_last_update_time(
+                schema=SCHEMA, table=TABLE
+            ):
+                return [("2023-02-21T08:37:15+00:00",)]
+            else:
+                return [
+                    (
+                        1,
+                        "abcd",
+                    ),
+                    (
+                        2,
+                        "xyz",
+                    ),
+                ]
         return []
 
     def fetchall(self):
