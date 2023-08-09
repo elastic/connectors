@@ -5,8 +5,11 @@
 #
 """Network Drive module responsible to generate file/folder(s) on Network Drive server.
 """
+import os
 import random
+from random import choices
 import string
+from tests.commons import FakeProvider
 
 import smbclient
 
@@ -17,27 +20,23 @@ NUMBER_OF_FILES_TO_BE_DELETED = 10
 USERNAME = "admin"
 PASSWORD = "abc@123"
 
+fake_provider = FakeProvider()
 
-def generate_small_files():
-    """Method for generating small files on Network Drive server"""
-    try:
-        smbclient.register_session(server=SERVER, username=USERNAME, password=PASSWORD)
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
 
-        print("Started loading small files on network drive server....")
+match DATA_SIZE:
+    case "small":
+        FILE_COUNT = 1000
+    case "medium":
+        FILE_COUNT = 5000
+    case "large":
+        FILE_COUNT = 25000
 
-        for number in range(0, NUMBER_OF_SMALL_FILES):
-            with smbclient.open_file(
-                rf"\\{SERVER}/Folder1/file{number}.txt", mode="w"
-            ) as fd:
-                fd.write(f"File {number} dummy content....")
+population = [fake_provider.small_html(), fake_provider.medium_html(), fake_provider.large_html(), fake_provider.extra_large_html()]
+weights = [0.58, 0.3, 0.1, 0.02]
 
-        print(f"Loaded {NUMBER_OF_SMALL_FILES} small files on network drive server....")
-    except Exception as error:
-        print(
-            f"Error occurred while generating small files on Network Drive server. Error: {error}"
-        )
-        raise
-
+def get_file():
+    return choices(population, weights)[0]
 
 def generate_folder():
     """Method for generating folder on Network Drive server"""
@@ -54,42 +53,31 @@ def generate_folder():
         )
 
 
-def generate_large_files():
-    """Method for generating large files on Network Drive server"""
+def generate_files():
+    """Method for generating files on Network Drive server"""
     try:
-        size_of_file = 1024**2  # 1 Mb of text
-        large_data = "".join(
-            [random.choice(string.ascii_letters) for i in range(size_of_file)]
-        )
-
         smbclient.register_session(server=SERVER, username=USERNAME, password=PASSWORD)
 
-        print("Started loading large files on network drive server....")
+        print("Started loading files on network drive server....")
 
-        for number in range(0, NUMBER_OF_LARGE_FILES):
+        for number in range(FILE_COUNT):
             with smbclient.open_file(
                 rf"\\{SERVER}/Folder1/Large-Data-Folder/large_size_file{number}.txt",
                 mode="w",
             ) as fd:
-                fd.write(large_data)
+                fd.write(get_file())
 
-        print(f"Loaded {NUMBER_OF_LARGE_FILES} large files on network drive server....")
+        print(f"Loaded {FILE_COUNT} files on network drive server....")
     except Exception as error:
         print(
-            f"Error occurred while generating large files on Network Drive server. Error: {error}"
+            f"Error occurred while generating files on Network Drive server. Error: {error}"
         )
         raise
 
 
 def load():
-    if NUMBER_OF_SMALL_FILES:
-        generate_small_files()
     generate_folder()
-    if NUMBER_OF_LARGE_FILES:
-        generate_large_files()
-    print(
-        f"Loaded {NUMBER_OF_LARGE_FILES} large files, {NUMBER_OF_SMALL_FILES} small files, and 1 folder on network drive server."
-    )
+    generate_files()
 
 
 def remove():
