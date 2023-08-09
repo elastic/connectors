@@ -53,3 +53,4 @@ sources:
   sharepoint_online: connectors.sources.sharepoint_online:SharepointOnlineDataSource
   github: connectors.sources.github:GitHubDataSource
   salesforce: connectors.sources.salesforce:SalesforceDataSource
+  slack: connectors.sources.slack:SlackDataSource
