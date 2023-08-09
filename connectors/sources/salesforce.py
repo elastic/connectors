@@ -57,12 +57,6 @@ class RateLimitedException(Exception):
     pass
 
 
-class RequestRefusedException(Exception):
-    """Notifies that a request to Saleforce was rejected"""
-
-    pass
-
-
 class InvalidQueryException(Exception):
     """Notifies that a query was malformed or otherwise incorrect"""
 
