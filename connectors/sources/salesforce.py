@@ -211,8 +211,12 @@ class SalesforceClient:
     def _auth_headers(self):
         return {"authorization": f"Bearer {self.api_token.token}"}
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        skipped_exceptions=[RateLimitedException, InvalidQueryException],
+    )
     async def _get_json(self, url, params=None):
-        retry = 1
         response_body = None
 
         while True:
@@ -223,20 +227,9 @@ class SalesforceClient:
                 response.raise_for_status()
                 return response_body
             except ClientResponseError as e:
-                try:
-                    await self._handle_client_response_error(response_body, e)
-                except (RateLimitedException, InvalidQueryException):
-                    raise e
-                except Exception as e:
-                    if retry >= RETRIES:
-                        raise e
-                    await self._sleeps.sleep(RETRY_INTERVAL**retry)
-                    retry += 1
+                await self._handle_client_response_error(response_body, e)
             except Exception as e:
-                if retry >= RETRIES:
-                    raise e
-                await self._sleeps.sleep(RETRY_INTERVAL**retry)
-                retry += 1
+                raise e
 
     async def _get(self, url, params=None):
         return await self.session.get(
