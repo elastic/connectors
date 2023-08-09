@@ -146,7 +146,9 @@ COLUMN_NAMES = ["Column_1", "Column_2"]
 )
 def test_map_column_names(schema, table, prefix):
     mapped_column_names = map_column_names(COLUMN_NAMES, schema, table)
-    for column_name, mapped_column_name in zip(COLUMN_NAMES, mapped_column_names):
+    for column_name, mapped_column_name in zip(
+        COLUMN_NAMES, mapped_column_names, strict=True
+    ):
         assert f"{prefix}{column_name}".lower() == mapped_column_name
 
 
