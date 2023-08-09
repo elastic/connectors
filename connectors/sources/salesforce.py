@@ -68,6 +68,12 @@ class RequestRefusedException(Exception):
     pass
 
 
+class InvalidQueryException(Exception):
+    """Notifies that a query was invalid"""
+
+    pass
+
+
 class InvalidCredentialsException(Exception):
     """Notifies that credentials are invalid for fetching a Salesforce token"""
 
@@ -355,7 +361,7 @@ class SalesforceClient:
                 raise e
 
     async def _get(self, url, params=None):
-        self._logger.warning(f"Sending request. Url: {url}, params: {params}")
+        self._logger.debug(f"Sending request. Url: {url}, params: {params}")
         return await self.session.get(
             url,
             headers=self._auth_headers(),
