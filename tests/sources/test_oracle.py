@@ -24,11 +24,11 @@ async def test_create_engine_in_thick_mode(mock_fun):
     # Setup
     async with create_source(OracleDataSource) as source:
         config_file_path = {"lib_dir": "/home/devuser/lib", "config_dir": ""}
-        source.oracle_home = "/home/devuser"
+        source.oracle_client.oracle_home = "/home/devuser"
         mock_fun.return_value = "Mock Response"
 
         # Execute
-        source._create_engine()
+        source.oracle_client.engine
 
         # Assert
         mock_fun.assert_called_with(DSN, thick_mode=config_file_path)
@@ -50,7 +50,7 @@ async def test_create_engine_in_thin_mode(mock_fun):
     # Setup
     async with create_source(OracleDataSource) as source:
         # Execute
-        source._create_engine()
+        source.oracle_client.engine
 
         # Assert
         mock_fun.assert_called_with(DSN)

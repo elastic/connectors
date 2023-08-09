@@ -6,7 +6,7 @@
 """Oracle source module is responsible to fetch documents from Oracle."""
 import asyncio
 import os
-from functools import partial
+from functools import cached_property, partial
 from urllib.parse import quote
 
 from asyncpg.exceptions._base import InternalClientError
@@ -17,11 +17,12 @@ from connectors.source import BaseDataSource
 from connectors.sources.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
-    DEFAULT_WAIT_MULTIPLIER,
     WILDCARD,
     Queries,
     configured_tables,
+    fetch,
     is_wildcard,
+    map_column_names,
 )
 from connectors.utils import iso_utc
 
@@ -61,6 +62,190 @@ class OracleQueries(Queries):
         pass  # Multiple schemas not supported in Oracle
 
 
+class OracleClient:
+    def __init__(
+        self,
+        host,
+        port,
+        user,
+        password,
+        database,
+        tables,
+        protocol,
+        oracle_home,
+        wallet_config,
+        logger_,
+        retry_count=DEFAULT_RETRY_COUNT,
+        fetch_size=DEFAULT_FETCH_SIZE,
+    ):
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.database = database
+        self.tables = tables
+        self.protocol = protocol
+        self.oracle_home = oracle_home
+        self.wallet_config = wallet_config
+        self.retry_count = retry_count
+        self.fetch_size = fetch_size
+
+        self.connection = None
+        self.queries = OracleQueries()
+        self._logger = logger_
+
+    def set_logger(self, logger_):
+        self._logger = logger_
+
+    def close(self):
+        if self.connection is not None:
+            self.connection.close()
+
+    @cached_property
+    def engine(self):
+        """Create sync engine for oracle"""
+        dsn = f"(DESCRIPTION=(ADDRESS=(PROTOCOL={self.protocol})(HOST={self.host})(PORT={self.port}))(CONNECT_DATA=(SID={self.database})))"
+        connection_string = (
+            f"oracle+oracledb://{self.user}:{quote(self.password)}@{dsn}"
+        )
+        if self.oracle_home != "":
+            os.environ["ORACLE_HOME"] = self.oracle_home
+            return create_engine(
+                connection_string,
+                thick_mode={
+                    "lib_dir": f"{self.oracle_home}/lib",
+                    "config_dir": self.wallet_config,
+                },
+            )
+        else:
+            return create_engine(connection_string)
+
+    async def get_cursor(self, query):
+        """Executes the passed query on the Non-Async supported Database server and return cursor.
+
+        Args:
+            query (str): Database query to be executed.
+
+        Returns:
+            cursor: Synchronous cursor
+        """
+        try:
+            loop = asyncio.get_running_loop()
+            if self.connection is None:
+                self.connection = await loop.run_in_executor(
+                    executor=None, func=self.engine.connect  # pyright: ignore
+                )
+            cursor = await loop.run_in_executor(
+                executor=None,
+                func=partial(self.connection.execute, statement=text(query)),
+            )
+            return cursor
+        except Exception as exception:
+            self._logger.warning(
+                f"Something went wrong while getting cursor. Exception: {exception}"
+            )
+            raise
+
+    async def ping(self):
+        return await anext(
+            fetch(
+                cursor_func=partial(self.get_cursor, self.queries.ping()),
+                fetch_size=1,
+                retry_count=self.retry_count,
+            )
+        )
+
+    async def get_tables_to_fetch(self):
+        tables = configured_tables(self.tables)
+        if is_wildcard(tables):
+            async for row in fetch(
+                cursor_func=partial(
+                    self.get_cursor,
+                    self.queries.all_tables(
+                        user=self.user,
+                    ),
+                ),
+                fetch_size=self.fetch_size,
+                retry_count=self.retry_count,
+            ):
+                yield row[0]
+        else:
+            for table in tables:
+                yield table
+
+    async def get_table_row_count(self, table):
+        [row_count] = await anext(
+            fetch(
+                cursor_func=partial(
+                    self.get_cursor,
+                    self.queries.table_data_count(
+                        table=table,
+                    ),
+                ),
+                fetch_size=1,
+                retry_count=self.retry_count,
+            )
+        )
+        return row_count
+
+    async def get_table_primary_key(self, table):
+        primary_keys = [
+            key
+            async for [key] in fetch(
+                cursor_func=partial(
+                    self.get_cursor,
+                    self.queries.table_primary_key(
+                        user=self.user,
+                        table=table,
+                    ),
+                ),
+                fetch_size=self.fetch_size,
+                retry_count=self.retry_count,
+            )
+        ]
+        return primary_keys
+
+    async def get_table_last_update_time(self, table):
+        [last_update_time] = await anext(
+            fetch(
+                cursor_func=partial(
+                    self.get_cursor,
+                    self.queries.table_last_update_time(
+                        table=table,
+                    ),
+                ),
+                fetch_size=1,
+                retry_count=self.retry_count,
+            )
+        )
+        return last_update_time
+
+    async def data_streamer(self, table):
+        """Streaming data from a table
+
+        Args:
+            table (str): Table.
+
+        Raises:
+            exception: Raise an exception after retrieving
+
+        Yields:
+            list: It will first yield the column names, then data in each row
+        """
+        async for data in fetch(
+            cursor_func=partial(
+                self.get_cursor,
+                self.queries.table_data(
+                    table=table,
+                ),
+            ),
+            fetch_columns=True,
+            fetch_size=self.fetch_size,
+            retry_count=self.retry_count,
+        ):
+            yield data
+
+
 class OracleDataSource(BaseDataSource):
     """Oracle Database"""
 
@@ -74,28 +259,24 @@ class OracleDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        # Connector configurations
-        self.retry_count = self.configuration["retry_count"]
-
-        # Connection related configurations
-        self.user = self.configuration["username"]
-        self.password = self.configuration["password"]
-        self.host = self.configuration["host"]
-        self.port = self.configuration["port"]
         self.database = self.configuration["database"]
-        self.tables = self.configuration["tables"]
-        self.engine = None
-        self.connection = None
-
-        self.oracle_home = self.configuration["oracle_home"]
-        self.wallet_config = self.configuration["wallet_configuration_path"]
-        self.protocol = self.configuration["oracle_protocol"]
-        self.dsn = f"(DESCRIPTION=(ADDRESS=(PROTOCOL={self.protocol})(HOST={self.host})(PORT={self.port}))(CONNECT_DATA=(SID={self.database})))"
-        self.connection_string = (
-            f"oracle+oracledb://{self.user}:{quote(self.password)}@{self.dsn}"
+        self.oracle_client = OracleClient(
+            host=self.configuration["host"],
+            port=self.configuration["port"],
+            user=self.configuration["username"],
+            password=self.configuration["password"],
+            database=self.configuration["database"],
+            tables=self.configuration["tables"],
+            protocol=self.configuration["oracle_protocol"],
+            oracle_home=self.configuration["oracle_home"],
+            wallet_config=self.configuration["wallet_configuration_path"],
+            retry_count=self.configuration["retry_count"],
+            fetch_size=self.configuration["fetch_size"],
+            logger_=self._logger,
         )
-        self.queries = OracleQueries()
-        self.dialect = "Oracle"
+
+    def _set_internal_logger(self):
+        self.oracle_client.set_logger(self._logger)
 
     @classmethod
     def get_default_configuration(cls):
@@ -189,120 +370,14 @@ class OracleDataSource(BaseDataSource):
             },
         }
 
-    async def execute_query(self, query, fetch_many=False, **kwargs):
-        """Executes a query and yield rows
-
-        Args:
-            query (str): Query.
-            fetch_many (bool): Flag to use fetchmany method. Defaults to False.
-
-        Raises:
-            exception: Raise an exception after retrieving
-
-        Yields:
-            list: Column names and query response
-        """
-        size = self.configuration["fetch_size"]
-
-        retry = 1
-        yield_once = True
-
-        rows_fetched = 0
-
-        while retry <= self.retry_count:
-            try:
-                cursor = await self._sync_connect(query=query)
-                if fetch_many:
-                    # sending back column names only once
-                    if yield_once:
-                        yield [
-                            f"{kwargs['table']}_{column}".lower()
-                            for column in cursor.keys()  # pyright: ignore
-                        ]
-                        yield_once = False
-
-                    while True:
-                        rows = cursor.fetchmany(size=size)  # pyright: ignore
-                        rows_length = len(rows)
-
-                        if not rows_length:
-                            break
-
-                        for row in rows:
-                            yield row
-
-                        rows_fetched += rows_length
-                        await asyncio.sleep(0)
-                else:
-                    yield cursor.fetchall()  # pyright: ignore
-                break
-            except (InternalClientError, ProgrammingError):
-                raise
-            except Exception as exception:
-                self._logger.warning(
-                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
-                )
-                if retry == self.retry_count:
-                    raise exception
-                await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry)
-                retry += 1
-
     async def close(self):
-        """Close the connection to the database server."""
-        if self.connection is not None:
-            self.connection.close()
-
-    async def _sync_connect(self, query):
-        """Executes the passed query on the Non-Async supported Database server and return cursor.
-
-        Args:
-            query (str): Database query to be executed.
-
-        Returns:
-            cursor: Synchronous cursor
-        """
-        try:
-            if self.engine is None:
-                self._create_engine()
-            loop = asyncio.get_running_loop()
-            if self.connection is None:
-                self.connection = await loop.run_in_executor(
-                    executor=None, func=self.engine.connect  # pyright: ignore
-                )
-            cursor = await loop.run_in_executor(
-                executor=None,
-                func=partial(self.connection.execute, statement=text(query)),
-            )
-            return cursor
-        except Exception as exception:
-            self._logger.warning(
-                f"Something went wrong while executing query. Exception: {exception}"
-            )
-            raise
-
-    def _create_engine(self):
-        """Create sync engine for oracle"""
-        if self.oracle_home != "":
-            os.environ["ORACLE_HOME"] = self.oracle_home
-            self.engine = create_engine(
-                self.connection_string,
-                thick_mode={
-                    "lib_dir": f"{self.oracle_home}/lib",
-                    "config_dir": self.wallet_config,
-                },
-            )
-        else:
-            self.engine = create_engine(self.connection_string)
+        self.oracle_client.close()
 
     async def ping(self):
         """Verify the connection with the database-server configured by user"""
         self._logger.info("Validating the Connector Configuration...")
         try:
-            await anext(
-                self.execute_query(
-                    query=self.queries.ping(),
-                )
-            )
+            await self.oracle_client.ping()
             self._logger.info("Successfully connected to Oracle.")
         except Exception as e:
             raise Exception(f"Can't connect to Oracle on {self.host}") from e
@@ -317,58 +392,34 @@ class OracleDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
         try:
-            [[row_count]] = await anext(
-                self.execute_query(
-                    query=self.queries.table_data_count(
-                        table=table,
-                    ),
-                )
-            )
+            row_count = await self.oracle_client.get_table_row_count(table=table)
             if row_count > 0:
                 # Query to get the table's primary key
-                columns = await anext(
-                    self.execute_query(
-                        query=self.queries.table_primary_key(
-                            user=self.user.upper(),
-                            table=table,
-                        ),
-                    )
-                )
-                keys = [
-                    f"{table}_{column_name}" for [column_name] in columns if column_name
-                ]
+
+                keys = await self.oracle_client.get_table_primary_key(table=table)
+                keys = map_column_names(column_names=keys, table=table)
                 if keys:
                     try:
-                        last_update_time = await anext(
-                            self.execute_query(
-                                query=self.queries.table_last_update_time(
-                                    table=table,
-                                ),
+                        last_update_time = (
+                            await self.oracle_client.get_table_last_update_time(
+                                table=table
                             )
                         )
-                        last_update_time = last_update_time[0][0]
                     except Exception:
                         self._logger.warning(
                             f"Unable to fetch last_updated_time for {table}"
                         )
                         last_update_time = None
-                    streamer = self.execute_query(
-                        query=self.queries.table_data(
-                            table=table,
-                        ),
-                        fetch_many=True,
-                        table=table,
-                    )
+                    streamer = self.oracle_client.data_streamer(table=table)
                     column_names = await anext(streamer)
+                    column_names = map_column_names(
+                        column_names=column_names, table=table
+                    )
                     async for row in streamer:
                         row = dict(zip(column_names, row, strict=True))
                         keys_value = ""
                         for key in keys:
-                            keys_value += (
-                                f"{row.get(key.lower())}_"
-                                if row.get(key.lower())
-                                else ""
-                            )
+                            keys_value += f"{row.get(key)}_" if row.get(key) else ""
                         row.update(
                             {
                                 "_id": f"{self.database}_{table}_{keys_value}",
@@ -389,42 +440,17 @@ class OracleDataSource(BaseDataSource):
                 f"Something went wrong while fetching document for table {table}. Error: {exception}"
             )
 
-    async def fetch_rows(self):
-        """Fetches all the rows from all the tables of the database.
-
-        Yields:
-            Dict: Row document to index
-        """
-        tables_to_fetch = await self.get_tables_to_fetch()
-        for table in tables_to_fetch:
-            self._logger.debug(f"Found table: {table} in database: {self.database}.")
-            async for row in self.fetch_documents(table=table):
-                yield row
-        if len(tables_to_fetch) < 1:
-            self._logger.warning(f"Fetched 0 tables for the database: {self.database}")
-
-    async def get_tables_to_fetch(self):
-        tables = configured_tables(self.tables)
-        return list(
-            map(
-                lambda table: table[0],  # type: ignore
-                await anext(
-                    self.execute_query(
-                        query=self.queries.all_tables(
-                            user=self.user.upper(),
-                        )
-                    )
-                ),
-            )
-            if is_wildcard(tables)
-            else tables
-        )
-
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch databases, tables and rows in async manner.
 
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        async for row in self.fetch_rows():
-            yield row, None
+        table_count = 0
+        async for table in self.oracle_client.get_tables_to_fetch():
+            self._logger.debug(f"Found table: {table} in database: {self.database}.")
+            table_count += 1
+            async for row in self.fetch_documents(table=table):
+                yield row, None
+        if table_count < 1:
+            self._logger.warning(f"Fetched 0 tables for the database: {self.database}")
