@@ -13,8 +13,12 @@ from aiohttp.client_exceptions import ClientConnectionError
 
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.salesforce import (
+    ConnectorRequestError,
     InvalidCredentialsException,
+    InvalidQueryException,
+    RateLimitedException,
     SalesforceDataSource,
+    SalesforceServerError,
     SalesforceSoqlBuilder,
     TokenFetchException,
 )
@@ -41,12 +45,12 @@ ACCOUNT_RESPONSE_PAYLOAD = {
                     "url": "/services/data/v58.0/sobjects/User/user_id",
                 },
                 "Id": "user_id",
-                "Name": "Owner's Name",
-                "Email": "email@fake.com",
+                "Name": "Frodo",
+                "Email": "frodo@tlotr.com",
             },
             "Id": "account_id",
-            "Rating": "Cold",
-            "Website": "www.fake.com",
+            "Rating": "Hot",
+            "Website": "www.tlotr.com",
             "LastModifiedDate": "",
             "CreatedDate": "",
             "Opportunities": {
@@ -59,12 +63,12 @@ ACCOUNT_RESPONSE_PAYLOAD = {
                             "url": "/services/data/v58.0/sobjects/Opportunity/opportunity_id",
                         },
                         "Id": "opportunity_id",
-                        "Name": "Opportunity Generator",
+                        "Name": "The Fellowship",
                         "StageName": "Closed Won",
                     }
                 ],
             },
-            "Name": "Salesforce Account 1",
+            "Name": "TLOTR",
             "BillingAddress": {
                 "city": "The Shire",
                 "country": "Middle Earth",
@@ -72,7 +76,7 @@ ACCOUNT_RESPONSE_PAYLOAD = {
                 "state": "Eriador",
                 "street": "The Burrow under the Hill, Bag End, Hobbiton",
             },
-            "Description": "A fantastic opportunity!",
+            "Description": "A story about the One Ring.",
         }
     ],
 }
@@ -86,23 +90,86 @@ OPPORTUNITY_RESPONSE_PAYLOAD = {
                 "type": "Opportunity",
                 "url": "/services/data/v58.0/sobjects/Opportunity/opportunity_id",
             },
-            "Description": "An Opportunity!",
+            "Description": "A fellowship of the races of Middle Earth",
             "Owner": {
                 "attributes": {
                     "type": "User",
                     "url": "/services/data/v58.0/sobjects/User/user_id",
                 },
                 "Id": "user_id",
-                "Email": "email@fake.com",
-                "Name": "User's Name",
+                "Email": "frodo@tlotr.com",
+                "Name": "Frodo",
             },
             "LastModifiedDate": "",
-            "Name": "Another Opportunity Generator",
-            "StageName": "Qualification",
+            "Name": "The Fellowship",
+            "StageName": "Closed Won",
             "CreatedDate": "",
             "Id": "opportunity_id",
         },
     ],
+}
+
+CONTACT_RESPONSE_PAYLOAD = {
+    "records": [
+        {
+            "attributes": {
+                "type": "Contact",
+                "url": "/services/data/v58.0/sobjects/Contact/contact_id",
+            },
+            "OwnerId": "user_id",
+            "Phone": "12345678",
+            "Name": "Gandalf",
+            "AccountId": "account_id",
+            "LastModifiedDate": "",
+            "Description": "The White",
+            "Title": "Wizard",
+            "CreatedDate": "",
+            "LeadSource": "Partner Referral",
+            "PhotoUrl": "/services/images/photo/photo_id",
+            "Id": "contact_id",
+            "Email": "gandalf@tlotr.com",
+        },
+    ],
+}
+
+LEAD_PAYLOAD = {
+    "records": [
+        {
+            "attributes": {
+                "type": "Lead",
+                "url": "/services/data/v58.0/sobjects/Lead/lead_id",
+            },
+            "Name": "Sauron",
+            "Status": "Working - Contacted",
+            "Company": "Mordor Inc.",
+            "Description": "Forger of the One Ring",
+            "Email": "sauron@tlotr.com",
+            "Phone": "09876543",
+            "Title": "Dark Lord",
+            "PhotoUrl": "/services/images/photo/photo_id",
+            "Rating": "Hot",
+            "LastModifiedDate": "",
+            "LeadSource": "Partner Referral",
+            "OwnerId": "user_id",
+            "ConvertedAccountId": None,
+            "ConvertedContactId": None,
+            "ConvertedOpportunityId": None,
+            "ConvertedDate": None,
+            "Id": "lead_id",
+        }
+    ]
+}
+
+CACHED_SOBJECTS = {
+    "Account": {"account_id": {"Name": "TLOTR"}},
+    "User": {
+        "user_id": {
+            "Name": "Frodo",
+            "Email": "frodo@tlotr.com",
+        }
+    },
+    "Opportunity": {},
+    "Contact": {},
 }
 
 
@@ -126,20 +193,20 @@ def generate_account_doc(identifier):
         "content_source_id": identifier,
         "created_at": "",
         "last_updated": "",
-        "owner": "Owner's Name",
-        "owner_email": "email@fake.com",
+        "owner": "Frodo",
+        "owner_email": "frodo@tlotr.com",
         "open_activities": "",
         "open_activities_urls": "",
         "opportunity_name": "An opportunity name",
         "opportunity_status": "An opportunity status",
         "opportunity_url": f"{TEST_BASE_URL}/{identifier}",
-        "rating": "Cold",
+        "rating": "Hot",
         "source": "salesforce",
         "tags": ["A tag"],
         "title": {identifier},
         "type": "account",
         "url": f"{TEST_BASE_URL}/{identifier}",
-        "website_url": "www.fake.com",
+        "website_url": "www.tlotr.com",
     }
 
 
@@ -337,24 +404,24 @@ async def test_get_accounts_when_success(mock_responses):
             "_id": "account_id",
             "account_type": "Customer - Direct",
             "address": "The Burrow under the Hill, Bag End, Hobbiton, The Shire, Eriador, 111, Middle Earth",
-            "body": "A fantastic opportunity!",
+            "body": "A story about the One Ring.",
             "content_source_id": "account_id",
             "created_at": "",
             "last_updated": "",
-            "owner": "Owner's Name",
-            "owner_email": "email@fake.com",
+            "owner": "Frodo",
+            "owner_email": "frodo@tlotr.com",
             "open_activities": "",
             "open_activities_urls": "",
-            "opportunity_name": "Opportunity Generator",
+            "opportunity_name": "The Fellowship",
             "opportunity_status": "Closed Won",
             "opportunity_url": f"{TEST_BASE_URL}/opportunity_id",
-            "rating": "Cold",
+            "rating": "Hot",
             "source": "salesforce",
             "tags": ["Customer - Direct"],
-            "title": "Salesforce Account 1",
+            "title": "TLOTR",
             "type": "account",
             "url": f"{TEST_BASE_URL}/account_id",
-            "website_url": "www.fake.com",
+            "website_url": "www.tlotr.com",
         }
 
         source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
@@ -429,7 +496,7 @@ async def test_get_accounts_when_invalid_request(patch_sleep, mock_responses):
         source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
         mock_responses.get(
             re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
-            status=400,
+            status=405,
             payload=response_payload,
         )
         with pytest.raises(ClientConnectionError):
@@ -451,16 +518,16 @@ async def test_get_opportunities_when_success(mock_responses):
     async with create_salesforce_source() as source:
         expected_doc = {
             "_id": "opportunity_id",
-            "body": "An Opportunity!",
+            "body": "A fellowship of the races of Middle Earth",
             "content_source_id": "opportunity_id",
             "created_at": "",
             "last_updated": "",
             "next_step": None,
-            "owner": "User's Name",
-            "owner_email": "email@fake.com",
+            "owner": "Frodo",
+            "owner_email": "frodo@tlotr.com",
             "source": "salesforce",
-            "status": "Qualification",
-            "title": "Another Opportunity Generator",
+            "status": "Closed Won",
+            "title": "The Fellowship",
             "type": "opportunity",
             "url": f"{TEST_BASE_URL}/opportunity_id",
         }
@@ -483,30 +550,163 @@ async def test_get_opportunities_when_success(mock_responses):
 
 
 @pytest.mark.asyncio
+async def test_get_contacts_when_success(mock_responses):
+    async with create_salesforce_source() as source:
+        expected_doc = {
+            "_id": "contact_id",
+            "account": "TLOTR",
+            "account_url": f"{TEST_BASE_URL}/account_id",
+            "body": "The White",
+            "email": "gandalf@tlotr.com",
+            "job_title": "Wizard",
+            "last_updated": "",
+            "lead_source": "Partner Referral",
+            "owner": "Frodo",
+            "owner_url": f"{TEST_BASE_URL}/user_id",
+            "phone": "12345678",
+            "source": "salesforce",
+            "thumbnail": f"{TEST_BASE_URL}/services/images/photo/photo_id",
+            "title": "Gandalf",
+            "type": "contact",
+            "url": f"{TEST_BASE_URL}/contact_id",
+        }
+
+        source.salesforce_client.sobjects_cache_by_type = mock.AsyncMock(
+            return_value=CACHED_SOBJECTS
+        )
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+        source.salesforce_client._select_queryable_fields = mock.AsyncMock(
+            return_value=[
+                "Name",
+                "Description",
+                "Email",
+                "Phone",
+                "Title",
+                "PhotoUrl",
+                "LastModifiedDate" "LeadSource",
+                "AccountId",
+                "OwnerId",
+            ]
+        )
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=200,
+            payload=CONTACT_RESPONSE_PAYLOAD,
+        )
+        async for account in source.salesforce_client.get_contacts():
+            assert account == expected_doc
+
+
+@pytest.mark.asyncio
+async def test_get_leads_when_success(mock_responses):
+    async with create_salesforce_source() as source:
+        expected_doc = {
+            "_id": "lead_id",
+            "body": "Forger of the One Ring",
+            "company": "Mordor Inc.",
+            "converted_account": None,
+            "converted_account_url": None,
+            "converted_at": None,
+            "converted_contact": None,
+            "converted_contact_url": None,
+            "converted_opportunity": None,
+            "converted_opportunity_url": None,
+            "email": "sauron@tlotr.com",
+            "job_title": "Dark Lord",
+            "last_updated": "",
+            "lead_source": "Partner Referral",
+            "owner": "Frodo",
+            "owner_url": f"{TEST_BASE_URL}/user_id",
+            "phone": "09876543",
+            "rating": "Hot",
+            "source": "salesforce",
+            "status": "Working - Contacted",
+            "title": "Sauron",
+            "thumbnail": f"{TEST_BASE_URL}/services/images/photo/photo_id",
+            "type": "lead",
+            "url": f"{TEST_BASE_URL}/lead_id",
+        }
+
+        source.salesforce_client.sobjects_cache_by_type = mock.AsyncMock(
+            return_value=CACHED_SOBJECTS
+        )
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+        source.salesforce_client._select_queryable_fields = mock.AsyncMock(
+            return_value=[
+                "Company",
+                "ConvertedAccountId",
+                "ConvertedContactId",
+                "ConvertedDate",
+                "ConvertedOpportunityId",
+                "Description",
+                "Email",
+                "LeadSource",
+                "Name",
+                "OwnerId",
+                "Phone",
+                "PhotoUrl",
+                "Rating",
+                "Status",
+                "Title",
+            ]
+        )
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=200,
+            payload=LEAD_PAYLOAD,
+        )
+        async for account in source.salesforce_client.get_leads():
+            assert account == expected_doc
+
+
+@pytest.mark.asyncio
+async def test_prepare_sobject_cache(mock_responses):
+    async with create_salesforce_source() as source:
+        sobjects = {
+            "records": [
+                {"Id": "id_1", "Name": "Foo", "Type": "Account"},
+                {"Id": "id_2", "Name": "Bar", "Type": "Account"},
+            ]
+        }
+        expected = {
+            "id_1": {"Id": "id_1", "Name": "Foo", "Type": "Account"},
+            "id_2": {"Id": "id_2", "Name": "Bar", "Type": "Account"},
+        }
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=200,
+            payload=sobjects,
+        )
+        sobjects = await source.salesforce_client._prepare_sobject_cache("Account")
+        assert sobjects == expected
+
+
+@pytest.mark.asyncio
 async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_responses):
     async with create_salesforce_source() as source:
         expected_doc = {
             "_id": "account_id",
             "account_type": "Customer - Direct",
             "address": "The Burrow under the Hill, Bag End, Hobbiton, The Shire, Eriador, 111, Middle Earth",
-            "body": "A fantastic opportunity!",
+            "body": "A story about the One Ring.",
             "content_source_id": "account_id",
             "created_at": "",
             "last_updated": "",
-            "owner": "Owner's Name",
-            "owner_email": "email@fake.com",
+            "owner": "Frodo",
+            "owner_email": "frodo@tlotr.com",
             "open_activities": "",
             "open_activities_urls": "",
-            "opportunity_name": "Opportunity Generator",
+            "opportunity_name": "The Fellowship",
             "opportunity_status": "Closed Won",
             "opportunity_url": f"{TEST_BASE_URL}/opportunity_id",
-            "rating": "Cold",
+            "rating": "Hot",
             "source": "salesforce",
             "tags": ["Customer - Direct"],
-            "title": "Salesforce Account 1",
+            "title": "TLOTR",
             "type": "account",
             "url": f"{TEST_BASE_URL}/account_id",
-            "website_url": "www.fake.com",
+            "website_url": "www.tlotr.com",
         }
 
         invalid_token_payload = [
@@ -546,6 +746,96 @@ async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_resp
 
 
 @pytest.mark.asyncio
+async def test_request_when_rate_limited_raises_error_no_retries(mock_responses):
+    async with create_salesforce_source() as source:
+        response_payload = [
+            {
+                "message": "Request limit has been exceeded.",
+                "errorCode": "REQUEST_LIMIT_EXCEEDED",
+            }
+        ]
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=403,
+            payload=response_payload,
+        )
+
+        with pytest.raises(RateLimitedException):
+            async for _ in source.salesforce_client.get_accounts():
+                pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error_code",
+    [
+        "INVALID_FIELD",
+        "INVALID_TERM",
+        "MALFORMED_QUERY",
+    ],
+)
+async def test_request_when_invalid_query_raises_error_no_retries(
+    mock_responses, error_code
+):
+    async with create_salesforce_source() as source:
+        response_payload = [
+            {
+                "message": "Invalid query.",
+                "errorCode": error_code,
+            }
+        ]
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=400,
+            payload=response_payload,
+        )
+
+        with pytest.raises(InvalidQueryException):
+            async for _ in source.salesforce_client.get_accounts():
+                pass
+
+
+@pytest.mark.asyncio
+async def test_request_when_generic_400_raises_error_with_retries(
+    patch_sleep, mock_responses
+):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=400,
+            repeat=True,
+        )
+
+        with pytest.raises(ConnectorRequestError):
+            async for _ in source.salesforce_client.get_accounts():
+                pass
+
+
+@pytest.mark.asyncio
+async def test_request_when_generic_500_raises_error_with_retries(
+    patch_sleep, mock_responses
+):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=500,
+            repeat=True,
+        )
+
+        with pytest.raises(SalesforceServerError):
+            async for _ in source.salesforce_client.get_accounts():
+                pass
+
+
+@pytest.mark.asyncio
 async def test_build_soql_query_with_fields():
     expected_columns = [
         "Id",
@@ -559,8 +849,27 @@ async def test_build_soql_query_with_fields():
     builder.with_id()
     builder.with_default_metafields()
     builder.with_fields(["FooField", "BarField"])
+    builder.with_where("FooField = 'FOO'")
+    builder.with_order_by("CreatedDate DESC")
+    builder.with_limit(2)
+    # builder.with_join()
     query = builder.build()
 
+    # SELECT Id,
+    # CreatedDate,
+    # LastModifiedDate,
+    # FooField,
+    # BarField,
+    # FROM Test
+    # WHERE FooField = 'FOO'
+    # ORDER BY CreatedDate DESC
+    # LIMIT 2
+
+    query_columns_str = re.search("SELECT (.*)\nFROM", query, re.DOTALL).group(1)
+    query_columns = query_columns_str.split(",\n")
+
+    TestCase().assertCountEqual(query_columns, expected_columns)
     assert query.startswith("SELECT ")
-    assert all(col in query for col in expected_columns)
-    assert query.endswith("FROM Test")
+    assert query.endswith(
+        "FROM Test\nWHERE FooField = 'FOO'\nORDER BY CreatedDate DESC\nLIMIT 2"
+    )
