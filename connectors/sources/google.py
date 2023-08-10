@@ -81,7 +81,6 @@ class Scope(Enum):
     GMAIL_READONLY = "https://www.googleapis.com/auth/gmail.readonly"
 
 
-# TODO: this can be moved to a common google.py module as it's generic
 class GoogleServiceAccountClient:
     """A Google client to handle api calls made to the Google Workspace APIs using a service account."""
 

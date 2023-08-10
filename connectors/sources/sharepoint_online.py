@@ -18,7 +18,6 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 from fastjsonschema import JsonSchemaValueException
 
-from connectors.access_control import ACCESS_CONTROL, _decorate_with_access_control
 from connectors.es.sink import OP_DELETE, OP_INDEX
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -38,6 +37,8 @@ from connectors.utils import (
 )
 
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
+ACCESS_CONTROL = "_allow_access_control"
 
 DEFAULT_GROUPS = ["Visitors", "Owners", "Members"]
 
@@ -982,6 +983,14 @@ class SharepointOnlineDataSource(BaseDataSource):
                 f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(remote_sites[:5])}]."
             )
 
+    def _decorate_with_access_control(self, document, access_control):
+        if self._dls_enabled():
+            document[ACCESS_CONTROL] = list(
+                set(document.get(ACCESS_CONTROL, []) + access_control)
+            )
+
+        return document
+
     async def _site_access_control(self, site):
         """Fetches all permissions for all owners, members and visitors of a given site.
         All groups and/or persons, which have permissions for a given site are returned with their given identity prefix ("user", "group" or "email").
@@ -1254,13 +1263,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                 self.configuration["site_collections"],
             ):
                 access_control = await self._site_access_control(site)
-                yield _decorate_with_access_control(
-                    self._dls_enabled(), site, access_control
-                ), None
+                yield _decorate_with_access_control(site, access_control), None
 
                 async for site_drive in self.site_drives(site):
                     yield _decorate_with_access_control(
-                        self._dls_enabled(), site_drive, access_control
+                        site_drive, access_control
                     ), None
 
                     async for page in self.client.drive_items(site_drive["id"]):
@@ -1272,7 +1279,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             ]
 
                             drive_item = _decorate_with_access_control(
-                                self._dls_enabled(), drive_item, access_control
+                                drive_item, access_control
                             )
 
                             yield drive_item, self.download_function(
@@ -1285,9 +1292,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 # Sync site list and site list items
                 async for site_list in self.site_lists(site):
-                    yield _decorate_with_access_control(
-                        self._dls_enabled(), site_list, access_control
-                    ), None
+                    yield _decorate_with_access_control(site_list, access_control), None
 
                     async for list_item, download_func in self.site_list_items(
                         site_id=site["id"],
@@ -1296,14 +1301,12 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_list_name=site_list["name"],
                     ):
                         yield _decorate_with_access_control(
-                            self._dls_enabled(), list_item, access_control
+                            list_item, access_control
                         ), download_func
 
                 # Sync site pages
                 async for site_page in self.site_pages(site["webUrl"]):
-                    yield _decorate_with_access_control(
-                        self._dls_enabled(), site_page, access_control
-                    ), None
+                    yield _decorate_with_access_control(site_page, access_control), None
 
     async def get_docs_incrementally(self, sync_cursor, filtering=None):
         self._sync_cursor = sync_cursor
@@ -1328,12 +1331,12 @@ class SharepointOnlineDataSource(BaseDataSource):
             ):
                 access_control = await self._site_access_control(site)
                 yield _decorate_with_access_control(
-                    self._dls_enabled(), site, access_control
+                    site, access_control
                 ), None, OP_INDEX
 
                 async for site_drive in self.site_drives(site):
                     yield _decorate_with_access_control(
-                        self._dls_enabled(), site_drive, access_control
+                        site_drive, access_control
                     ), None, OP_INDEX
 
                     delta_link = self.get_drive_delta_link(site_drive["id"])
@@ -1351,7 +1354,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             )
 
                             drive_item = _decorate_with_access_control(
-                                self._dls_enabled(), drive_item, access_control
+                                drive_item, access_control
                             )
 
                             yield drive_item, self.download_function(
@@ -1365,7 +1368,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 # Sync site list and site list items
                 async for site_list in self.site_lists(site):
                     yield _decorate_with_access_control(
-                        self._dls_enabled(), site_list, access_control
+                        site_list, access_control
                     ), None, OP_INDEX
 
                     async for list_item, download_func in self.site_list_items(
@@ -1375,13 +1378,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_list_name=site_list["name"],
                     ):
                         yield _decorate_with_access_control(
-                            self._dls_enabled(), list_item, access_control
+                            list_item, access_control
                         ), download_func, OP_INDEX
 
                 # Sync site pages
                 async for site_page in self.site_pages(site["webUrl"]):
                     yield _decorate_with_access_control(
-                        self._dls_enabled(), site_page, access_control
+                        site_page, access_control
                     ), None, OP_INDEX
 
     async def site_collections(self):

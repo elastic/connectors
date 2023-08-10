@@ -2043,6 +2043,73 @@ class TestSharepointOnlineDataSource:
         assert _prefix_email(USER_TWO_EMAIL) in access_control
 
     @pytest.mark.parametrize(
+        "_dls_enabled, document, access_control, expected_decorated_document",
+        [
+            (
+                False,
+                {},
+                [USER_ONE_EMAIL],
+                {},
+            ),
+            (
+                True,
+                {},
+                [USER_ONE_EMAIL],
+                {
+                    ALLOW_ACCESS_CONTROL_PATCHED: [
+                        USER_ONE_EMAIL,
+                        *DEFAULT_GROUPS_PATCHED,
+                    ]
+                },
+            ),
+            (True, {}, [], {ALLOW_ACCESS_CONTROL_PATCHED: DEFAULT_GROUPS_PATCHED}),
+            (
+                True,
+                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_ONE_EMAIL]},
+                [USER_TWO_EMAIL],
+                {
+                    ALLOW_ACCESS_CONTROL_PATCHED: [
+                        USER_ONE_EMAIL,
+                        USER_TWO_EMAIL,
+                        *DEFAULT_GROUPS_PATCHED,
+                    ]
+                },
+            ),
+            (
+                True,
+                {ALLOW_ACCESS_CONTROL_PATCHED: [USER_ONE_EMAIL]},
+                [],
+                {
+                    ALLOW_ACCESS_CONTROL_PATCHED: [
+                        USER_ONE_EMAIL,
+                        *DEFAULT_GROUPS_PATCHED,
+                    ]
+                },
+            ),
+        ],
+    )
+    @patch(
+        "connectors.sources.sharepoint_online.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    @patch(
+        "connectors.sources.sharepoint_online.DEFAULT_GROUPS", DEFAULT_GROUPS_PATCHED
+    )
+    def test_decorate_with_access_control(
+        self, _dls_enabled, document, access_control, expected_decorated_document
+    ):
+        source = create_source(SharepointOnlineDataSource)
+        set_dls_enabled(source, _dls_enabled)
+        decorated_document = source._decorate_with_access_control(
+            document, access_control
+        )
+
+        assert (
+            decorated_document.get(ALLOW_ACCESS_CONTROL_PATCHED, []).sort()
+            == expected_decorated_document.get(ALLOW_ACCESS_CONTROL_PATCHED, []).sort()
+        )
+
+    @pytest.mark.parametrize(
         "dls_feature_flag, dls_config_value, expected_dls_enabled",
         [
             (
@@ -2086,6 +2153,40 @@ class TestSharepointOnlineDataSource:
         source._features = None
 
         assert not source._dls_enabled()
+
+    def test_access_control_query(self):
+        source = create_source(SharepointOnlineDataSource)
+
+        access_control = ["user_1"]
+        access_control_query = source.access_control_query(access_control)
+
+        assert access_control_query == {
+            "query": {
+                "template": {"params": {"access_control": access_control}},
+                "source": {
+                    "bool": {
+                        "filter": {
+                            "bool": {
+                                "should": [
+                                    {
+                                        "bool": {
+                                            "must_not": {
+                                                "exists": {"field": ACCESS_CONTROL}
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "terms": {
+                                            f"{ACCESS_CONTROL}.enum": access_control
+                                        }
+                                    },
+                                ]
+                            }
+                        }
+                    }
+                },
+            }
+        }
 
     @pytest.mark.asyncio
     @patch(

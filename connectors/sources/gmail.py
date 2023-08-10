@@ -9,10 +9,6 @@ from functools import cached_property
 import fastjsonschema
 from fastjsonschema import JsonSchemaValueException
 
-from connectors.access_control import (
-    _decorate_with_access_control,
-    access_control_query,
-)
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
@@ -25,6 +21,8 @@ from connectors.sources.google import (
     UserFields,
 )
 from connectors.utils import base64url_to_base64, iso_utc
+
+ACCESS_CONTROL = "_allow_access_control"
 
 GMAIL_API_TIMEOUT = GOOGLE_DIRECTORY_TIMEOUT = 1 * 60  # 1 min
 
@@ -216,7 +214,41 @@ class GMailDataSource(BaseDataSource):
         return self._features.document_level_security_enabled()
 
     def access_control_query(self, access_control):
-        return access_control_query(access_control)
+        # filter out 'None' values
+        filtered_access_control = list(
+            filter(
+                lambda access_control_entity: access_control_entity is not None,
+                access_control,
+            )
+        )
+
+        return {
+            "query": {
+                "template": {"params": {"access_control": filtered_access_control}},
+                "source": {
+                    "bool": {
+                        "filter": {
+                            "bool": {
+                                "should": [
+                                    {
+                                        "bool": {
+                                            "must_not": {
+                                                "exists": {"field": ACCESS_CONTROL}
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "terms": {
+                                            f"{ACCESS_CONTROL}.enum": filtered_access_control
+                                        }
+                                    },
+                                ]
+                            }
+                        }
+                    }
+                },
+            }
+        }
 
     def _user_access_control_doc(self, user, access_control):
         email = user.get(UserFields.EMAIL.value)
@@ -230,6 +262,14 @@ class GMailDataSource(BaseDataSource):
             "identity": {"email": email},
             "created_at": created_at,
         } | self.access_control_query(access_control)
+
+    def _decorate_with_access_control(self, document, access_control):
+        if self._dls_enabled():
+            document[ACCESS_CONTROL] = list(
+                set(document.get(ACCESS_CONTROL, []) + access_control)
+            )
+
+        return document
 
     async def get_access_control(self):
         if not self._dls_enabled():
@@ -252,8 +292,8 @@ class GMailDataSource(BaseDataSource):
         message_content["id"] = message_id
 
         message_doc = _message_doc(message_content)
-        message_doc_with_access_control = _decorate_with_access_control(
-            self._dls_enabled(), message_doc, access_control
+        message_doc_with_access_control = self._decorate_with_access_control(
+            message_doc, access_control
         )
         return message_doc_with_access_control
 
