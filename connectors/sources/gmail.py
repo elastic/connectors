@@ -124,6 +124,7 @@ class GMailDataSource(BaseDataSource):
                 "value": "",
                 "required": True,
             },
+            # TODO: add subject explicitly
             "customer_id": {
                 "display": "text",
                 "label": "Google customer id",
