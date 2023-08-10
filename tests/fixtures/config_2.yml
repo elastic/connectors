@@ -14,7 +14,9 @@ service:
   max_errors: 20
   max_errors_span: 600
 
-connector_id: 'blah'
+connectors:
+  -
+    connector_id: 'blah'
 
 sources:
   fake: fake_sources:FakeSource

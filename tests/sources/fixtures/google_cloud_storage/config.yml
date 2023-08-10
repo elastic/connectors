@@ -26,8 +26,10 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'gcs'
-service_type: 'google_cloud_storage'
+connectors:
+  -
+    connector_id: 'gcs'
+    service_type: 'google_cloud_storage'
 
 sources:
   google_cloud_storage: connectors.sources.google_cloud_storage:GoogleCloudStorageDataSource

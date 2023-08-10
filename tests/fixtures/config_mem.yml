@@ -16,7 +16,9 @@ service:
   max_errors_span: 600
   trace_mem: true
 
-connector_id: '1'
+connectors:
+  -
+    connector_id: '1'
 
 sources:
   fake: fake_sources:FakeSource

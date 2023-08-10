@@ -424,6 +424,55 @@ async def test_exponential_backoff_retry():
     await does_not_raise()
 
 
+@pytest.mark.parametrize(
+    "skipped_exceptions",
+    [CustomGeneratorException, [CustomGeneratorException, RuntimeError]],
+)
+@pytest.mark.asyncio
+async def test_skipped_exceptions_retry_async_generator(skipped_exceptions):
+    mock_gen = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        skipped_exceptions=skipped_exceptions,
+    )
+    async def raises_async_generator():
+        for _ in range(3):
+            mock_gen()
+            raise CustomGeneratorException()
+            yield 1
+
+    with pytest.raises(CustomGeneratorException):
+        async for _ in raises_async_generator():
+            pass
+
+    assert mock_gen.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "skipped_exceptions", [CustomException, [CustomException, RuntimeError]]
+)
+@pytest.mark.asyncio
+async def test_skipped_exceptions_retry(skipped_exceptions):
+    mock_func = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        skipped_exceptions=skipped_exceptions,
+    )
+    async def raises():
+        mock_func()
+        raise CustomException()
+
+    with pytest.raises(CustomException):
+        await raises()
+
+        # retried 10 times
+        assert mock_func.call_count == 1
+
+
 class MockSSL:
     """This class contains methods which returns dummy ssl context"""
 
@@ -677,7 +726,7 @@ class TestExtractionService:
             assert extraction_service._check_configured() is expected_result
 
     @pytest.mark.asyncio
-    async def test_extract_text(self, mock_responses):
+    async def test_extract_text(self, mock_responses, patch_logger):
         filepath = "tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/"
         payload = {"extracted_text": "I've been extracted!"}
@@ -695,9 +744,12 @@ class TestExtractionService:
             await extraction_service._end_session()
 
             assert response == "I've been extracted!"
+            patch_logger.assert_present(
+                "Text extraction is successful for 'notreal.txt'."
+            )
 
     @pytest.mark.asyncio
-    async def test_extract_text_with_file_pointer(self, mock_responses):
+    async def test_extract_text_with_file_pointer(self, mock_responses, patch_logger):
         filepath = "/tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/?local_file_path=/tmp/notreal.txt"
         payload = {"extracted_text": "I've been extracted from a local file!"}
@@ -719,6 +771,9 @@ class TestExtractionService:
             await extraction_service._end_session()
 
             assert response == "I've been extracted from a local file!"
+            patch_logger.assert_present(
+                "Text extraction is successful for 'notreal.txt'."
+            )
 
     @pytest.mark.asyncio
     async def test_extract_text_when_response_isnt_200_logs_warning(

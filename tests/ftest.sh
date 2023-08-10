@@ -19,10 +19,18 @@ PLATFORM='unknown'
 MAX_RSS="200M"
 MAX_DURATION=600
 
+export PERF8_TRACE=${PERF8_TRACE:-False}
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
 export RUNNING_FTEST=True
 export VERSION='8.10.0-SNAPSHOT'
+
+if [ "$PERF8_TRACE" == true ]; then
+    echo 'Tracing is enabled, memray stats will be delivered'
+    PLUGINS='--asyncstats --memray --psutil'
+else
+    PLUGINS='--asyncstats --psutil'
+fi
 
 PERF8_BIN=${PERF8_BIN:-$ROOT_DIR/bin/perf8}
 PYTHON=${PYTHON:-$ROOT_DIR/bin/python}
@@ -58,9 +66,9 @@ then
     $PYTHON fixture.py --name $NAME --action description > description.txt
     if [[ $PLATFORM == "darwin" ]]
     then
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --max-duration $MAX_DURATION --description description.txt -c $ELASTIC_INGEST --config-file $NAME/config.yml --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME $PLUGINS --max-duration $MAX_DURATION --description description.txt -c $ELASTIC_INGEST --config-file $NAME/config.yml --debug & PID=$!
     else
-      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME --asyncstats --memray --psutil --max-duration $MAX_DURATION --description description.txt -c $ELASTIC_INGEST --config-file $NAME/config.yml --debug & PID=$!
+      $PERF8_BIN --refresh-rate $REFRESH_RATE -t $ROOT_DIR/perf8-report-$NAME $PLUGINS --max-duration $MAX_DURATION --description description.txt -c $ELASTIC_INGEST --config-file $NAME/config.yml --debug & PID=$!
     fi
 else
     $ELASTIC_INGEST --config-file $NAME/config.yml --debug & PID=$!
@@ -103,18 +111,26 @@ if [[ $PERF8 == "yes" ]]; then
 fi
 
 # make sure the ingest processes are terminated
+set +e # if the PID disappears right before the kill, that's not an error
 if ps -p $PID > /dev/null
 then
   echo 'Killing the ingest process'
   kill -TERM $PID
   sleep 5
-  kill -KILL $PID
+  if ps -p $PID > /dev/null
+  then
+    kill -KILL $PID
+  fi
 fi
 
 if ps -p $PID_2 > /dev/null
 then
-  echo 'Killing the ingest process'
+  echo 'Killing the second ingest process'
   kill -TERM $PID_2
   sleep 5
-  kill -KILL $PID_2
+  if ps -p $PID_2 > /dev/null
+  then
+    kill -KILL $PID_2
+  fi
 fi
+set -e
