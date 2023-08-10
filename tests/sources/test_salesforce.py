@@ -13,8 +13,12 @@ from aiohttp.client_exceptions import ClientConnectionError
 
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.salesforce import (
+    ConnectorRequestError,
     InvalidCredentialsException,
+    InvalidQueryException,
+    RateLimitedException,
     SalesforceDataSource,
+    SalesforceServerError,
     SalesforceSoqlBuilder,
     TokenFetchException,
 )
@@ -492,7 +496,7 @@ async def test_get_accounts_when_invalid_request(patch_sleep, mock_responses):
         source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
         mock_responses.get(
             re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
-            status=400,
+            status=405,
             payload=response_payload,
         )
         with pytest.raises(ClientConnectionError):
@@ -742,6 +746,96 @@ async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_resp
 
 
 @pytest.mark.asyncio
+async def test_request_when_rate_limited_raises_error_no_retries(mock_responses):
+    async with create_salesforce_source() as source:
+        response_payload = [
+            {
+                "message": "Request limit has been exceeded.",
+                "errorCode": "REQUEST_LIMIT_EXCEEDED",
+            }
+        ]
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=403,
+            payload=response_payload,
+        )
+
+        with pytest.raises(RateLimitedException):
+            async for _ in source.salesforce_client.get_accounts():
+                pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error_code",
+    [
+        "INVALID_FIELD",
+        "INVALID_TERM",
+        "MALFORMED_QUERY",
+    ],
+)
+async def test_request_when_invalid_query_raises_error_no_retries(
+    mock_responses, error_code
+):
+    async with create_salesforce_source() as source:
+        response_payload = [
+            {
+                "message": "Invalid query.",
+                "errorCode": error_code,
+            }
+        ]
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=400,
+            payload=response_payload,
+        )
+
+        with pytest.raises(InvalidQueryException):
+            async for _ in source.salesforce_client.get_accounts():
+                pass
+
+
+@pytest.mark.asyncio
+async def test_request_when_generic_400_raises_error_with_retries(
+    patch_sleep, mock_responses
+):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=400,
+            repeat=True,
+        )
+
+        with pytest.raises(ConnectorRequestError):
+            async for _ in source.salesforce_client.get_accounts():
+                pass
+
+
+@pytest.mark.asyncio
+async def test_request_when_generic_500_raises_error_with_retries(
+    patch_sleep, mock_responses
+):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=500,
+            repeat=True,
+        )
+
+        with pytest.raises(SalesforceServerError):
+            async for _ in source.salesforce_client.get_accounts():
+                pass
+
+
+@pytest.mark.asyncio
 async def test_build_soql_query_with_fields():
     expected_columns = [
         "Id",
@@ -755,8 +849,25 @@ async def test_build_soql_query_with_fields():
     builder.with_id()
     builder.with_default_metafields()
     builder.with_fields(["FooField", "BarField"])
+    builder.with_where(f"FooField = 'FOO'")
+    builder.with_order_by("CreatedDate DESC")
+    builder.with_limit(2)
+    # builder.with_join()
     query = builder.build()
 
+    # SELECT Id,
+    # CreatedDate,
+    # LastModifiedDate,
+    # FooField,
+    # BarField,
+    # FROM Test
+    # WHERE FooField = 'FOO'
+    # ORDER BY CreatedDate DESC
+    # LIMIT 2
+
+    query_columns_str = re.search('SELECT (.*)\nFROM', query, re.DOTALL).group(1)
+    query_columns = query_columns_str.split(",\n")
+
+    TestCase().assertCountEqual(query_columns, expected_columns)
     assert query.startswith("SELECT ")
-    assert all(col in query for col in expected_columns)
-    assert query.endswith("FROM Test")
+    assert query.endswith("FROM Test\nWHERE FooField = 'FOO'\nORDER BY CreatedDate DESC\nLIMIT 2")

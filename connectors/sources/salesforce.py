@@ -75,8 +75,14 @@ class TokenFetchException(Exception):
     pass
 
 
-class RequestError(Exception):
-    """Notifies that a general uncaught 400 error occurred during a request"""
+class ConnectorRequestError(Exception):
+    """Notifies that a general uncaught 400 error occurred during a request, usually this is caused by the connector"""
+
+    pass
+
+
+class SalesforceServerError(Exception):
+    """Notifies that an internal server error occurred in Salesforce"""
 
     pass
 
@@ -380,26 +386,25 @@ class SalesforceClient:
                 raise RateLimitedException(
                     f"Salesforce is rate limiting this account. {exception_details}, details: {', '.join(error_codes)}"
                 ) from e
-            elif (
-                any(
-                    error in error_codes
-                    for error in [
-                        "INVALID_FIELD",
-                        "INVALID_TERM",
-                        "MALFORMED_QUERY",
-                    ]
-                )
-                in error_codes
+            elif any(
+                error in error_codes
+                for error in [
+                    "INVALID_FIELD",
+                    "INVALID_TERM",
+                    "MALFORMED_QUERY",
+                ]
             ):
                 raise InvalidQueryException(
                     f"The query was rejected by Salesforce. {exception_details}, details: {', '.join(error_codes)}, query: {', '.join([x['message'] for x in errors])}"
                 ) from e
             else:
-                raise RequestError(
+                raise ConnectorRequestError(
                     f"The request to Salesforce failed. {exception_details}, details: {', '.join(error_codes)}"
                 ) from e
         else:
-            raise e
+            raise SalesforceServerError(
+                f"Salesforce experienced an internal server error. {exception_details}."
+            )
 
     def _handle_response_body_error(self, error_list):
         if error_list is None or len(error_list) < 1:
