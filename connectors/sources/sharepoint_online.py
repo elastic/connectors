@@ -1333,7 +1333,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
             ):
-                access_control = await self._site_access_control(site)
+                access_control = self._site_access_control(site)
                 yield self._decorate_with_access_control(
                     site, access_control
                 ), None, OP_INDEX
