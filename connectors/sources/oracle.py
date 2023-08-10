@@ -399,10 +399,8 @@ class OracleDataSource(BaseDataSource):
             row_count = await self.oracle_client.get_table_row_count(table=table)
             if row_count > 0:
                 # Query to get the table's primary key
-                self._logger.info(f"Found {row_count} rows for table {table}")
                 keys = await self.oracle_client.get_table_primary_key(table=table)
                 keys = map_column_names(column_names=keys, table=table)
-                self._logger.info(f"Found keys for table {table}: {keys}")
                 if keys:
                     try:
                         last_update_time = (
@@ -415,26 +413,16 @@ class OracleDataSource(BaseDataSource):
                             f"Unable to fetch last_updated_time for {table}"
                         )
                         last_update_time = None
-                    self._logger.info(
-                        f"Found last_update_time for table {table}: {last_update_time}"
-                    )
                     streamer = self.oracle_client.data_streamer(table=table)
                     column_names = await anext(streamer)
                     column_names = map_column_names(
                         column_names=column_names, table=table
                     )
-                    self._logger.info(
-                        f"Found column_names for table {table}: {column_names}"
-                    )
                     async for row in streamer:
-                        self._logger.info(f"Found row for table {table}: {row}")
                         row = dict(zip(column_names, row, strict=True))
                         keys_value = ""
                         for key in keys:
                             keys_value += f"{row.get(key)}_" if row.get(key) else ""
-                        self._logger.info(
-                            f"Found keys_value for table {table} row: {keys_value}"
-                        )
                         row.update(
                             {
                                 "_id": f"{self.database}_{table}_{keys_value}",
