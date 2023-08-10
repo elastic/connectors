@@ -1,9 +1,4 @@
-
-
 connectors:
   -
     connector_id: 'jira'
     service_type: 'jira'
-
-sources:
-  jira: connectors.sources.jira:JiraDataSource
