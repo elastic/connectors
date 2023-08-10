@@ -849,7 +849,7 @@ async def test_build_soql_query_with_fields():
     builder.with_id()
     builder.with_default_metafields()
     builder.with_fields(["FooField", "BarField"])
-    builder.with_where(f"FooField = 'FOO'")
+    builder.with_where("FooField = 'FOO'")
     builder.with_order_by("CreatedDate DESC")
     builder.with_limit(2)
     # builder.with_join()
@@ -865,9 +865,11 @@ async def test_build_soql_query_with_fields():
     # ORDER BY CreatedDate DESC
     # LIMIT 2
 
-    query_columns_str = re.search('SELECT (.*)\nFROM', query, re.DOTALL).group(1)
+    query_columns_str = re.search("SELECT (.*)\nFROM", query, re.DOTALL).group(1)
     query_columns = query_columns_str.split(",\n")
 
     TestCase().assertCountEqual(query_columns, expected_columns)
     assert query.startswith("SELECT ")
-    assert query.endswith("FROM Test\nWHERE FooField = 'FOO'\nORDER BY CreatedDate DESC\nLIMIT 2")
+    assert query.endswith(
+        "FROM Test\nWHERE FooField = 'FOO'\nORDER BY CreatedDate DESC\nLIMIT 2"
+    )
