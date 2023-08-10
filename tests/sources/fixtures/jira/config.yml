@@ -26,8 +26,10 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'jira'
-service_type: 'jira'
+connectors:
+  -
+    connector_id: 'jira'
+    service_type: 'jira'
 
 sources:
   jira: connectors.sources.jira:JiraDataSource

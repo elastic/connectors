@@ -341,7 +341,7 @@ class ServiceNowClient:
                 f"Files without extension are not supported by TIKA, skipping {attachment_name}."
             )
             return
-        elif attachment_extension not in TIKA_SUPPORTED_FILETYPES:
+        elif attachment_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
             self._logger.warning(
                 f"Files with the extension {attachment_extension} are not supported by TIKA, skipping {attachment_name}."
             )
@@ -508,20 +508,20 @@ class ServiceNowDataSource(BaseDataSource):
                 "label": "Username",
                 "order": 2,
                 "type": "str",
-                "value": "admin",
+                "value": "",
             },
             "password": {
                 "label": "Password",
                 "order": 3,
                 "sensitive": True,
                 "type": "str",
-                "value": "changeme",
+                "value": "",
             },
             "services": {
                 "display": "textarea",
                 "label": "Comma-separated list of services",
                 "order": 4,
-                "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
+                "tooltip": "List of services is ignored when Advanced Sync Rules are used.",
                 "type": "list",
                 "value": "*",
             },

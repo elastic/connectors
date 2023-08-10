@@ -44,6 +44,7 @@ from connectors.utils import (
     hash_id,
     html_to_text,
     is_expired,
+    iterable_batches_generator,
     next_run,
     retryable,
     ssl_context,
@@ -424,6 +425,55 @@ async def test_exponential_backoff_retry():
     await does_not_raise()
 
 
+@pytest.mark.parametrize(
+    "skipped_exceptions",
+    [CustomGeneratorException, [CustomGeneratorException, RuntimeError]],
+)
+@pytest.mark.asyncio
+async def test_skipped_exceptions_retry_async_generator(skipped_exceptions):
+    mock_gen = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        skipped_exceptions=skipped_exceptions,
+    )
+    async def raises_async_generator():
+        for _ in range(3):
+            mock_gen()
+            raise CustomGeneratorException()
+            yield 1
+
+    with pytest.raises(CustomGeneratorException):
+        async for _ in raises_async_generator():
+            pass
+
+    assert mock_gen.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "skipped_exceptions", [CustomException, [CustomException, RuntimeError]]
+)
+@pytest.mark.asyncio
+async def test_skipped_exceptions_retry(skipped_exceptions):
+    mock_func = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        skipped_exceptions=skipped_exceptions,
+    )
+    async def raises():
+        mock_func()
+        raise CustomException()
+
+    with pytest.raises(CustomException):
+        await raises()
+
+        # retried 10 times
+        assert mock_func.call_count == 1
+
+
 class MockSSL:
     """This class contains methods which returns dummy ssl context"""
 
@@ -481,7 +531,9 @@ PrivateKey
     private_key = "-----BEGIN PRIVATE KEY----- PrivateKey -----END PRIVATE KEY-----"
 
     # Execute
-    formated_privat_key = get_pem_format(key=private_key, max_split=2)
+    formated_privat_key = get_pem_format(
+        key=private_key, postfix="-----END PRIVATE KEY-----"
+    )
     assert formated_privat_key == expected_formated_pem_key
 
     # Setup
@@ -492,8 +544,22 @@ Certificate2
     certificate = "-----BEGIN CERTIFICATE----- Certificate1 Certificate2 -----END CERTIFICATE-----"
 
     # Execute
-    formated_certificate = get_pem_format(key=certificate, max_split=1)
+    formated_certificate = get_pem_format(key=certificate)
     assert formated_certificate == expected_formated_certificate
+
+    # Setup
+    expected_formated_multi_certificate = """-----BEGIN CERTIFICATE-----
+Certificate1
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+Certificate2
+-----END CERTIFICATE-----
+"""
+    multi_certificate = "-----BEGIN CERTIFICATE----- Certificate1 -----END CERTIFICATE----- -----BEGIN CERTIFICATE----- Certificate2 -----END CERTIFICATE-----"
+
+    # Execute
+    formated_multi_certificate = get_pem_format(key=multi_certificate)
+    assert formated_multi_certificate == expected_formated_multi_certificate
 
 
 def test_hash_id():
@@ -596,6 +662,41 @@ def test_html_to_text_with_weird_html():
     assert html_to_text(invalid_html) == "just\n text"
 
 
+def batch_size(value):
+    """Used for readability purposes in parametrized tests."""
+    return value
+
+
+@pytest.mark.parametrize(
+    "iterable, batch_size_, expected_batches",
+    [
+        ([1, 2, 3], batch_size(1), [[1], [2], [3]]),
+        ([1, 2, 3], batch_size(2), [[1, 2], [3]]),
+        (
+            [1, 2, 3],
+            batch_size(3),
+            [
+                [1, 2, 3],
+            ],
+        ),
+        (
+            [1, 2, 3],
+            batch_size(1000),
+            [
+                [1, 2, 3],
+            ],
+        ),
+    ],
+)
+def test_iterable_batches_generator(iterable, batch_size_, expected_batches):
+    actual_batches = []
+
+    for batch in iterable_batches_generator(iterable, batch_size_):
+        actual_batches.append(batch)
+
+    assert actual_batches == expected_batches
+
+
 class TestExtractionService:
     @pytest_asyncio.fixture
     async def mock_responses(self):
@@ -618,97 +719,121 @@ class TestExtractionService:
         ],
     )
     def test_check_configured(self, mock_config, expected_result):
-        with patch("yaml.safe_load") as mock_safe_load:
-            mock_safe_load.return_value = mock_config
+        with patch(
+            "connectors.utils.ExtractionService.get_extraction_config",
+            return_value=mock_config.get("extraction_service", None),
+        ):
             extraction_service = ExtractionService()
             assert extraction_service._check_configured() is expected_result
 
     @pytest.mark.asyncio
-    async def test_extract_text(self, mock_responses):
-        mock_config = {
-            "extraction_service": {
-                "host": "http://localhost:8090",
-            }
-        }
-
+    async def test_extract_text(self, mock_responses, patch_logger):
         filepath = "tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/"
         payload = {"extracted_text": "I've been extracted!"}
 
-        with patch("yaml.safe_load") as mock_safe_load:
-            mock_safe_load.return_value = mock_config
+        with patch("builtins.open", mock_open(read_data=b"data")), patch(
+            "connectors.utils.ExtractionService.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ):
+            mock_responses.put(url, status=200, payload=payload)
 
-            with patch("builtins.open", mock_open(read_data=b"data")):
-                mock_responses.post(url, status=200, payload=payload)
+            extraction_service = ExtractionService()
+            extraction_service._begin_session()
 
-                extraction_service = ExtractionService()
-                extraction_service._begin_session()
+            response = await extraction_service.extract_text(filepath, "notreal.txt")
+            await extraction_service._end_session()
 
-                response = await extraction_service.extract_text(
-                    filepath, "notreal.txt"
-                )
-                await extraction_service._end_session()
+            assert response == "I've been extracted!"
+            patch_logger.assert_present(
+                "Text extraction is successful for 'notreal.txt'."
+            )
 
-                assert response == "I've been extracted!"
+    @pytest.mark.asyncio
+    async def test_extract_text_with_file_pointer(self, mock_responses, patch_logger):
+        filepath = "/tmp/notreal.txt"
+        url = "http://localhost:8090/extract_text/?local_file_path=/tmp/notreal.txt"
+        payload = {"extracted_text": "I've been extracted from a local file!"}
+
+        with patch("builtins.open", mock_open(read_data=b"data")), patch(
+            "connectors.utils.ExtractionService.get_extraction_config",
+            return_value={
+                "host": "http://localhost:8090",
+                "use_file_pointers": True,
+                "shared_volume_dir": "/tmp",
+            },
+        ):
+            mock_responses.put(url, status=200, payload=payload)
+
+            extraction_service = ExtractionService()
+            extraction_service._begin_session()
+
+            response = await extraction_service.extract_text(filepath, "notreal.txt")
+            await extraction_service._end_session()
+
+            assert response == "I've been extracted from a local file!"
+            patch_logger.assert_present(
+                "Text extraction is successful for 'notreal.txt'."
+            )
 
     @pytest.mark.asyncio
     async def test_extract_text_when_response_isnt_200_logs_warning(
         self, mock_responses, patch_logger
     ):
-        mock_config = {"extraction_service": {"host": "http://localhost:8090"}}
-
         filepath = "tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/"
 
-        with patch("yaml.safe_load") as mock_safe_load:
-            mock_safe_load.return_value = mock_config
+        with patch("builtins.open", mock_open(read_data=b"data")), patch(
+            "connectors.utils.ExtractionService.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ):
+            mock_responses.put(
+                url,
+                status=422,
+                payload={
+                    "error": "Unprocessable Entity",
+                    "message": "Could not process file.",
+                },
+            )
 
-            with patch("builtins.open", mock_open(read_data=b"data")):
-                mock_responses.post(url, status=400, payload={})
+            extraction_service = ExtractionService()
+            extraction_service._begin_session()
 
-                extraction_service = ExtractionService()
-                extraction_service._begin_session()
+            response = await extraction_service.extract_text(filepath, "notreal.txt")
+            await extraction_service._end_session()
+            assert response == ""
 
-                response = await extraction_service.extract_text(
-                    filepath, "notreal.txt"
-                )
-                await extraction_service._end_session()
-                assert response == ""
-
-                patch_logger.assert_present(
-                    "Extraction service could not parse `notreal.txt'. Status: [400]."
-                )
+            patch_logger.assert_present(
+                "Extraction service could not parse `notreal.txt'. Status: [422]; Unprocessable Entity: Could not process file."
+            )
 
     @pytest.mark.asyncio
     async def test_extract_text_when_response_is_200_with_error_logs_warning(
         self, mock_responses, patch_logger
     ):
-        mock_config = {"extraction_service": {"host": "http://localhost:8090"}}
         filepath = "tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/"
 
-        with patch("yaml.safe_load") as mock_safe_load:
-            mock_safe_load.return_value = mock_config
+        with patch("builtins.open", mock_open(read_data=b"data")), patch(
+            "connectors.utils.ExtractionService.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ):
+            mock_responses.put(
+                url,
+                status=200,
+                payload={"error": "oh no!", "message": "I'm all messed up..."},
+            )
 
-            with patch("builtins.open", mock_open(read_data=b"data")):
-                mock_responses.post(
-                    url,
-                    status=200,
-                    payload={"error": "oh no!", "message": "I'm all messed up..."},
-                )
+            extraction_service = ExtractionService()
+            extraction_service._begin_session()
 
-                extraction_service = ExtractionService()
-                extraction_service._begin_session()
+            response = await extraction_service.extract_text(filepath, "notreal.txt")
+            await extraction_service._end_session()
+            assert response == ""
 
-                response = await extraction_service.extract_text(
-                    filepath, "notreal.txt"
-                )
-                await extraction_service._end_session()
-                assert response == ""
-
-                patch_logger.assert_present(
-                    "Extraction service could not parse `notreal.txt'; oh no!: I'm all messed up..."
-                )
+            patch_logger.assert_present(
+                "Extraction service could not parse `notreal.txt'. Status: [200]; oh no!: I'm all messed up..."
+            )
 
 
 @pytest.mark.parametrize(

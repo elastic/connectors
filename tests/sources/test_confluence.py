@@ -256,11 +256,10 @@ async def test_validate_configuration_with_invalid_concurrent_downloads():
     """Test validate configuration method of BaseDataSource class with invalid concurrent downloads"""
 
     # Setup
-    source = create_source(ConfluenceDataSource, concurrent_downloads=1000)
-
-    # Execute
-    with pytest.raises(ConfigurableFieldValueError):
-        await source.validate_config()
+    async with create_source(ConfluenceDataSource, concurrent_downloads=1000) as source:
+        # Execute
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
 
 
 @pytest.mark.asyncio
@@ -293,11 +292,10 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
     extras,
 ):
     # Setup
-    source = create_source(ConfluenceDataSource, **extras)
-
-    # Execute
-    with pytest.raises(ConfigurableFieldValueError):
-        await source.validate_config()
+    async with create_source(ConfluenceDataSource, **extras) as source:
+        # Execute
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
 
 
 @pytest.mark.asyncio
@@ -333,9 +331,8 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
 async def test_validate_config_with_valid_dependency_fields_does_not_raise_error(
     extras,
 ):
-    source = create_source(ConfluenceDataSource, **extras)
-
-    await source.validate_config()
+    async with create_source(ConfluenceDataSource, **extras) as source:
+        await source.validate_config()
 
 
 @pytest.mark.asyncio
@@ -344,26 +341,27 @@ async def test_validate_config_when_ssl_enabled_and_ssl_ca_not_empty_does_not_ra
     mock_get,
 ):
     with patch.object(ssl, "create_default_context", return_value=MockSSL()):
-        source = create_source(
+        async with create_source(
             ConfluenceDataSource,
             ssl_enabled=True,
             ssl_ca="-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----",
-        )
-        await source.validate_config()
+        ) as source:
+            await source.validate_config()
 
 
-def test_tweak_bulk_options():
+@pytest.mark.asyncio
+async def test_tweak_bulk_options():
     """Test tweak_bulk_options method of BaseDataSource class"""
 
     # Setup
-    source = create_source(ConfluenceDataSource)
-    source.concurrent_downloads = 10
-    options = {"concurrent_downloads": 5}
+    async with create_source(ConfluenceDataSource) as source:
+        source.concurrent_downloads = 10
+        options = {"concurrent_downloads": 5}
 
-    # Execute
-    source.tweak_bulk_options(options)
+        # Execute
+        source.tweak_bulk_options(options)
 
-    assert options["concurrent_downloads"] == 10
+        assert options["concurrent_downloads"] == 10
 
 
 @pytest.mark.asyncio
@@ -371,55 +369,54 @@ async def test_close_with_client_session():
     """Test close method for closing the existing session"""
 
     # Setup
-    source = create_source(ConfluenceDataSource)
-    source.confluence_client._get_session()
+    async with create_source(ConfluenceDataSource) as source:
+        source.confluence_client._get_session()
 
-    # Execute
-    await source.close()
+        # Execute
+        await source.close()
 
-    assert source.confluence_client.session is None
+        assert source.confluence_client.session is None
 
 
 @pytest.mark.asyncio
 async def test_close_without_client_session():
     """Test close method when the session does not exist"""
     # Setup
-    source = create_source(ConfluenceDataSource)
+    async with create_source(ConfluenceDataSource) as source:
+        # Execute
+        await source.close()
 
-    # Execute
-    await source.close()
-
-    assert source.confluence_client.session is None
+        assert source.confluence_client.session is None
 
 
 @pytest.mark.asyncio
 async def test_remote_validation_when_space_keys_are_valid():
-    source = create_source(ConfluenceDataSource)
-    source.spaces = ["DM", "ES"]
-    async_response = AsyncMock()
-    async_response.__aenter__ = AsyncMock(
-        return_value=JSONAsyncMock(RESPONSE_SPACE_KEYS)
-    )
+    async with create_source(ConfluenceDataSource) as source:
+        source.spaces = ["DM", "ES"]
+        async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(
+            return_value=JSONAsyncMock(RESPONSE_SPACE_KEYS)
+        )
 
-    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-        await source._remote_validation()
+        with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+            await source._remote_validation()
 
 
 @pytest.mark.asyncio
 async def test_remote_validation_when_space_keys_are_unavailable_then_raise_exception():
-    source = create_source(ConfluenceDataSource)
-    source.spaces = ["ES", "CS"]
-    async_response = AsyncMock()
-    async_response.__aenter__ = AsyncMock(
-        return_value=JSONAsyncMock(RESPONSE_SPACE_KEYS)
-    )
+    async with create_source(ConfluenceDataSource) as source:
+        source.spaces = ["ES", "CS"]
+        async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(
+            return_value=JSONAsyncMock(RESPONSE_SPACE_KEYS)
+        )
 
-    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-        with pytest.raises(
-            ConfigurableFieldValueError,
-            match="Spaces 'CS' are not available. Available spaces are: 'DM, ES'",
-        ):
-            await source._remote_validation()
+        with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+            with pytest.raises(
+                ConfigurableFieldValueError,
+                match="Spaces 'CS' are not available. Available spaces are: 'DM, ES'",
+            ):
+                await source._remote_validation()
 
 
 class MockSSL:
@@ -453,13 +450,13 @@ async def test_configuration():
 )
 @pytest.mark.asyncio
 async def test_validate_configuration_for_empty_fields(field, is_cloud):
-    source = create_source(ConfluenceDataSource)
-    source.confluence_client.is_cloud = is_cloud
-    source.confluence_client.configuration.set_field(name=field, value="")
+    async with create_source(ConfluenceDataSource) as source:
+        source.confluence_client.is_cloud = is_cloud
+        source.confluence_client.configuration.set_field(name=field, value="")
 
-    # Execute
-    with pytest.raises(Exception):
-        await source.validate_config()
+        # Execute
+        with pytest.raises(Exception):
+            await source.validate_config()
 
 
 @pytest.mark.asyncio
@@ -469,19 +466,18 @@ async def test_ping_with_ssl(mock_get):
 
     # Execute
     mock_get.return_value.__aenter__.return_value.status = 200
-    source = create_source(ConfluenceDataSource)
-
-    source.confluence_client.ssl_enabled = True
-    source.confluence_client.certificate = (
-        "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
-    )
-
-    # Execute
-    with patch.object(ssl, "create_default_context", return_value=MockSSL()):
-        source.confluence_client.ssl_ctx = ssl_context(
-            certificate=source.confluence_client.certificate
+    async with create_source(ConfluenceDataSource) as source:
+        source.confluence_client.ssl_enabled = True
+        source.confluence_client.certificate = (
+            "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
         )
-        await source.ping()
+
+        # Execute
+        with patch.object(ssl, "create_default_context", return_value=MockSSL()):
+            source.confluence_client.ssl_ctx = ssl_context(
+                certificate=source.confluence_client.certificate
+            )
+            await source.ping()
 
 
 @pytest.mark.asyncio
@@ -490,21 +486,21 @@ async def test_ping_for_failed_connection_exception(mock_get):
     """Tests the ping functionality when connection can not be established to Confluence."""
 
     # Setup
-    source = create_source(ConfluenceDataSource)
+    async with create_source(ConfluenceDataSource) as source:
+        # Execute
+        with patch.object(
+            ConfluenceClient, "api_call", side_effect=Exception("Something went wrong")
+        ):
+            with pytest.raises(Exception):
+                await source.ping()
 
-    # Execute
-    with patch.object(
-        ConfluenceClient, "api_call", side_effect=Exception("Something went wrong")
-    ):
-        with pytest.raises(Exception):
-            await source.ping()
 
-
-def test_validate_configuration_for_ssl_enabled():
+@pytest.mark.asyncio
+async def test_validate_configuration_for_ssl_enabled():
     """This function tests _validate_configuration when certification is empty and ssl is enabled"""
     # Setup
-    source = create_source(ConfluenceDataSource)
-    source.ssl_enabled = True
+    async with create_source(ConfluenceDataSource) as source:
+        source.ssl_enabled = True
 
     # Execute
     with pytest.raises(Exception):
@@ -515,138 +511,160 @@ def test_validate_configuration_for_ssl_enabled():
 @pytest.mark.asyncio
 async def test_fetch_spaces():
     # Setup
-    source = create_source(ConfluenceDataSource)
+    async with create_source(ConfluenceDataSource) as source:
+        async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(
+            return_value=JSONAsyncMock(RESPONSE_SPACE)
+        )
 
-    async_response = AsyncMock()
-    async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(RESPONSE_SPACE))
-
-    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-        async for response in source.fetch_spaces():
-            assert response == EXPECTED_SPACE
+        with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+            async for response in source.fetch_spaces():
+                assert response == EXPECTED_SPACE
 
 
 @pytest.mark.asyncio
 async def test_fetch_documents():
     # Setup
-    source = create_source(ConfluenceDataSource)
-    async_response = AsyncMock()
-    async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(RESPONSE_PAGE))
+    async with create_source(ConfluenceDataSource) as source:
+        async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(RESPONSE_PAGE))
 
-    # Execute
-    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-        async for response, _ in source.fetch_documents(api_query=""):
-            assert response == EXPECTED_PAGE
+        # Execute
+        with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+            async for response, _ in source.fetch_documents(api_query=""):
+                assert response == EXPECTED_PAGE
 
 
 @pytest.mark.asyncio
 async def test_fetch_attachments():
     # Setup
-    source = create_source(ConfluenceDataSource)
-    async_response = AsyncMock()
-    async_response.__aenter__ = AsyncMock(
-        return_value=JSONAsyncMock(RESPONSE_ATTACHMENT)
-    )
+    async with create_source(ConfluenceDataSource) as source:
+        async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(
+            return_value=JSONAsyncMock(RESPONSE_ATTACHMENT)
+        )
 
-    # Execute
-    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-        async for response, _ in source.fetch_attachments(
-            content_id=1113,
-            parent_name="ES-scrum",
-            parent_space="DEMO",
-            parent_type="page",
-        ):
-            assert response == EXPECTED_ATTACHMENT
+        # Execute
+        with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+            async for response, _ in source.fetch_attachments(
+                content_id=1113,
+                parent_name="ES-scrum",
+                parent_space="DEMO",
+                parent_type="page",
+            ):
+                assert response == EXPECTED_ATTACHMENT
 
 
 @pytest.mark.asyncio
 async def test_search_by_query():
-    source = create_source(ConfluenceDataSource)
-    async_response = AsyncMock()
-    async_response.__aenter__ = AsyncMock(
-        return_value=JSONAsyncMock(RESPONSE_SEARCH_RESULT)
-    )
-    documents = []
-    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-        async for response, _ in source.search_by_query(
-            query="type in ('space', 'page', 'attachment') AND space.key ='SD'"
-        ):
-            documents.append(response)
-    assert documents == EXPECTED_SEARCH_RESULT
+    async with create_source(ConfluenceDataSource) as source:
+        async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(
+            return_value=JSONAsyncMock(RESPONSE_SEARCH_RESULT)
+        )
+        documents = []
+        with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+            async for response, _ in source.search_by_query(
+                query="type in ('space', 'page', 'attachment') AND space.key ='SD'"
+            ):
+                documents.append(response)
+        assert documents == EXPECTED_SEARCH_RESULT
 
 
 @pytest.mark.asyncio
 async def test_download_attachment():
     # Setup
-    source = create_source(ConfluenceDataSource)
+    async with create_source(ConfluenceDataSource) as source:
+        async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
 
-    async_response = AsyncMock()
-    async_response.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
+        # Execute
+        with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+            with mock.patch(
+                "aiohttp.StreamReader.iter_chunked",
+                return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
+            ):
+                response = await source.download_attachment(
+                    url="download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
+                    attachment=EXPECTED_ATTACHMENT,
+                    doit=True,
+                )
+                assert response == EXPECTED_CONTENT
 
-    # Execute
-    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-        with mock.patch(
-            "aiohttp.StreamReader.iter_chunked",
-            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
-        ):
-            response = await source.download_attachment(
-                url="download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
-                attachment=EXPECTED_ATTACHMENT,
-                doit=True,
-            )
-            assert response == EXPECTED_CONTENT
+
+@pytest.mark.asyncio
+async def test_download_attachment_with_upper_extension():
+    # Setup
+    async with create_source(ConfluenceDataSource) as source:
+        async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
+
+        # Execute
+        with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+            with mock.patch(
+                "aiohttp.StreamReader.iter_chunked",
+                return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
+            ):
+                attachment = copy(EXPECTED_ATTACHMENT)
+                attachment["title"] = "batch.TXT"
+
+                response = await source.download_attachment(
+                    url="download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
+                    attachment=EXPECTED_ATTACHMENT,
+                    doit=True,
+                )
+                assert response == EXPECTED_CONTENT
 
 
 @pytest.mark.asyncio
 async def test_download_attachment_when_filesize_is_large_then_download_skips():
     """Tests the download attachments method for file size greater than max limit."""
     # Setup
-    source = create_source(ConfluenceDataSource)
+    async with create_source(ConfluenceDataSource) as source:
+        async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
 
-    async_response = AsyncMock()
-    async_response.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
+        # Execute
 
-    # Execute
+        with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+            with mock.patch(
+                "aiohttp.StreamReader.iter_chunked",
+                return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
+            ):
+                attachment = copy(EXPECTED_ATTACHMENT)
+                attachment["size"] = 23000000
 
-    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-        with mock.patch(
-            "aiohttp.StreamReader.iter_chunked",
-            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
-        ):
-            attachment = copy(EXPECTED_ATTACHMENT)
-            attachment["size"] = 23000000
-
-            response = await source.download_attachment(
-                url="download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
-                attachment=attachment,
-                doit=True,
-            )
-            assert response is None
+                response = await source.download_attachment(
+                    url="download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
+                    attachment=attachment,
+                    doit=True,
+                )
+                assert response is None
 
 
 @pytest.mark.asyncio
 async def test_download_attachment_when_unsupported_filetype_used_then_fail_download_skips():
     """Tests the download attachments method for file type is not supported"""
     # Setup
-    source = create_source(ConfluenceDataSource)
+    async with create_source(ConfluenceDataSource) as source:
+        async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
 
-    async_response = AsyncMock()
-    async_response.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
+        with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+            with mock.patch(
+                "aiohttp.StreamReader.iter_chunked",
+                return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
+            ):
+                attachment = copy(EXPECTED_ATTACHMENT)
 
-    with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-        with mock.patch(
-            "aiohttp.StreamReader.iter_chunked",
-            return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
-        ):
-            attachment = copy(EXPECTED_ATTACHMENT)
+                attachment["title"] = "batch.mysy"
 
-            attachment["title"] = "batch.mysy"
-
-            response = await source.download_attachment(
-                url="download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
-                attachment=attachment,
-                doit=True,
-            )
-            assert response is None
+                response = await source.download_attachment(
+                    url="download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
+                    attachment=attachment,
+                    doit=True,
+                )
+                assert response is None
 
 
 @pytest.mark.asyncio
@@ -678,26 +696,27 @@ async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_pat
     """Tests the get_docs method"""
 
     # Setup
-    source = create_source(ConfluenceDataSource)
-    expected_responses = [
-        EXPECTED_SPACE,
-        EXPECTED_PAGE,
-        EXPECTED_BLOG,
-        EXPECTED_ATTACHMENT,
-        EXPECTED_BLOG_ATTACHMENT,
-    ]
+    async with create_source(ConfluenceDataSource) as source:
+        expected_responses = [
+            EXPECTED_SPACE,
+            EXPECTED_PAGE,
+            EXPECTED_BLOG,
+            EXPECTED_ATTACHMENT,
+            EXPECTED_BLOG_ATTACHMENT,
+        ]
 
-    # Execute
-    documents = []
-    async for item, _ in source.get_docs():
-        documents.append(item)
+        # Execute
+        documents = []
+        async for item, _ in source.get_docs():
+            documents.append(item)
 
-    assert documents == expected_responses
+        assert documents == expected_responses
 
 
-def test_get_session():
+@pytest.mark.asyncio
+async def test_get_session():
     """Test that the instance of session returned is always the same for the datasource class."""
-    source = create_source(ConfluenceDataSource)
-    first_instance = source.confluence_client._get_session()
-    second_instance = source.confluence_client._get_session()
-    assert first_instance is second_instance
+    async with create_source(ConfluenceDataSource) as source:
+        first_instance = source.confluence_client._get_session()
+        second_instance = source.confluence_client._get_session()
+        assert first_instance is second_instance

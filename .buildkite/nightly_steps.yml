@@ -46,6 +46,11 @@ steps:
       - ".buildkite/run_nigthly.sh sharepoint_server extra_small"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Sharepoint Online"
+    command:
+      - ".buildkite/run_nigthly.sh sharepoint_online medium"
+    artifact_paths:
+      - "perf8-report-*/**/*"
   - label: "🔨 Microsoft SQL"
     command:
       - ".buildkite/run_nigthly.sh mssql"
@@ -71,13 +76,23 @@ steps:
       - ".buildkite/run_nigthly.sh mongodb"
     artifact_paths:
       - "perf8-report-*/**/*"
-  - label: "🔨 MongoDB Serverless"
-    command:
-      - ".buildkite/run_nigthly.sh mongodb_serverless"
-    artifact_paths:
-      - "perf8-report-*/**/*"
+#   - label: "🔨 MongoDB Serverless"
+#     command:
+#       - ".buildkite/run_nigthly.sh mongodb_serverless"
+#     artifact_paths:
+#       - "perf8-report-*/**/*"
   - label: "🔨 GitHub"
     command:
       - ".buildkite/run_nigthly.sh github"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Google Drive"
+    command:
+      - ".buildkite/run_nigthly.sh google_drive"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Dropbox"
+    command:
+      - ".buildkite/run_nigthly.sh dropbox"
     artifact_paths:
       - "perf8-report-*/**/*"

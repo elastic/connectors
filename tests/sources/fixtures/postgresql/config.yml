@@ -26,8 +26,10 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'postgres'
-service_type: 'postgresql'
+connectors:
+  -
+    connector_id: 'postgres'
+    service_type: 'postgresql'
 
 sources:
   postgresql: connectors.sources.postgresql:PostgreSQLDataSource
