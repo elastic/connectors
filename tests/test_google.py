@@ -58,6 +58,34 @@ class TestGoogleServiceAccountClient:
             yield aiogoogle_client
 
     @pytest.mark.asyncio
+    async def test_api_call_paged(self, patch_service_account_creds, patch_aiogoogle):
+        items = ["a", "b", "c"]
+        first_page_mock = AsyncIterator(items)
+        first_page_mock.content = items
+
+        google_service_account_client = setup_google_service_account_client()
+        patch_aiogoogle.as_service_account = AsyncMock(return_value=first_page_mock)
+        workspace_client_mock = MagicMock()
+
+        resource = "resource"
+        method = "method"
+        resource_object = Mock()
+        method_object = Mock()
+        setattr(resource_object, method, method_object)
+        setattr(workspace_client_mock, resource, resource_object)
+
+        patch_aiogoogle.discover = AsyncMock(return_value=workspace_client_mock)
+
+        actual_items = []
+
+        async for item in google_service_account_client.api_call_paged(
+            resource, method
+        ):
+            actual_items.append(item)
+
+        assert actual_items == items
+
+    @pytest.mark.asyncio
     async def test_execute_api_call(self, patch_service_account_creds, patch_aiogoogle):
         items = ["a", "b", "c"]
 
