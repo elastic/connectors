@@ -1630,6 +1630,10 @@ class TestSharepointOnlineDataSource:
         )
 
     @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint_online.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
     async def test_get_docs_with_access_control(self, patch_sharepoint_client):
         def _access_control_matches(actual, expected):
             return all([access_control in expected for access_control in actual])
@@ -1664,7 +1668,9 @@ class TestSharepointOnlineDataSource:
         assert len(sites) == len(self.sites)
         assert all(
             [
-                _access_control_matches(site[ACCESS_CONTROL], expected_access_control)
+                _access_control_matches(
+                    site[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                )
                 for site in sites
             ]
         )
@@ -1673,7 +1679,7 @@ class TestSharepointOnlineDataSource:
         assert all(
             [
                 _access_control_matches(
-                    site_drive[ACCESS_CONTROL], expected_access_control
+                    site_drive[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
                 )
                 for site_drive in site_drives
             ]
@@ -1684,7 +1690,7 @@ class TestSharepointOnlineDataSource:
         assert all(
             [
                 _access_control_matches(
-                    drive_item[ACCESS_CONTROL], expected_access_control
+                    drive_item[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
                 )
                 for drive_item in drive_items
             ]
@@ -1694,7 +1700,7 @@ class TestSharepointOnlineDataSource:
         assert all(
             [
                 _access_control_matches(
-                    site_list[ACCESS_CONTROL], expected_access_control
+                    site_list[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
                 )
                 for site_list in site_lists
             ]
@@ -1706,7 +1712,7 @@ class TestSharepointOnlineDataSource:
         assert all(
             [
                 _access_control_matches(
-                    list_item[ACCESS_CONTROL], expected_access_control
+                    list_item[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
                 )
                 for list_item in list_items
             ]
@@ -1716,7 +1722,7 @@ class TestSharepointOnlineDataSource:
         assert all(
             [
                 _access_control_matches(
-                    list_item_attachment[ACCESS_CONTROL],
+                    list_item_attachment[ALLOW_ACCESS_CONTROL_PATCHED],
                     expected_access_control,
                 )
                 for list_item_attachment in list_item_attachments
@@ -1727,7 +1733,7 @@ class TestSharepointOnlineDataSource:
         assert all(
             [
                 _access_control_matches(
-                    site_page[ACCESS_CONTROL], expected_access_control
+                    site_page[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
                 )
                 for site_page in site_pages
             ]
