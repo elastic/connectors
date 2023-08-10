@@ -1,1 +1,2 @@
 python-tds==1.12.0
+faker
