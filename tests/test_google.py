@@ -9,7 +9,11 @@ import pytest
 import pytest_asyncio
 from asynctest import patch
 
-from connectors.sources.google import GMailClient, GoogleDirectoryClient
+from connectors.sources.google import (
+    GMailClient,
+    GoogleDirectoryClient,
+    remove_universe_domain,
+)
 from tests.commons import AsyncIterator
 
 JSON_CREDENTIALS = {"key": "value"}
@@ -22,6 +26,14 @@ def setup_gmail_client():
 
 def setup_google_directory_client():
     return GoogleDirectoryClient(JSON_CREDENTIALS, CUSTOMER_ID)
+
+
+def test_remove_universe_domain():
+    universe_domain = "universe_domain"
+    json_credentials = {universe_domain: "some_value", "key": "value"}
+    remove_universe_domain(json_credentials)
+
+    assert universe_domain not in json_credentials
 
 
 class TestGoogleDirectoryClient:
@@ -131,3 +143,14 @@ class TestGMailClient:
             actual_messages.append(message)
 
         assert actual_messages == messages[0]["messages"]
+
+    @pytest.mark.asyncio
+    async def test_message(self, patch_google_service_account_client):
+        gmail_client = setup_gmail_client()
+
+        message = {"raw": "some content", "internalDate": "some date"}
+        patch_google_service_account_client.api_call = AsyncMock(return_value=message)
+
+        actual_message = await gmail_client.message("1")
+
+        assert actual_message == message
