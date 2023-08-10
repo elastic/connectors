@@ -605,7 +605,7 @@ class TestMicrosoftAPISession:
         assert e is not None
 
     @pytest.mark.asyncio
-    async def test_call_api_with_404_with_retry_after_header(
+    async def test_call_api_with_404_without_retry_after_header(
         self,
         microsoft_api_session,
         mock_responses,
