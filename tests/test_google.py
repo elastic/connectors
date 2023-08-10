@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 import pytest_asyncio
@@ -11,6 +11,7 @@ import pytest_asyncio
 from connectors.sources.google import (
     GMailClient,
     GoogleDirectoryClient,
+    GoogleServiceAccountClient,
     remove_universe_domain,
 )
 from tests.commons import AsyncIterator
@@ -27,12 +28,83 @@ def setup_google_directory_client():
     return GoogleDirectoryClient(JSON_CREDENTIALS, CUSTOMER_ID)
 
 
+def setup_google_service_account_client():
+    return GoogleServiceAccountClient(JSON_CREDENTIALS, "some api", "v1", [], 60)
+
+
 def test_remove_universe_domain():
     universe_domain = "universe_domain"
     json_credentials = {universe_domain: "some_value", "key": "value"}
     remove_universe_domain(json_credentials)
 
     assert universe_domain not in json_credentials
+
+
+class TestGoogleServiceAccountClient:
+    @pytest_asyncio.fixture(autouse=True)
+    async def patch_service_account_creds(self):
+        with patch(
+            "connectors.sources.google.ServiceAccountCreds", return_value=Mock()
+        ) as class_mock:
+            yield class_mock
+
+    @pytest_asyncio.fixture
+    async def patch_aiogoogle(self):
+        with patch(
+            "connectors.sources.google.Aiogoogle", return_value=MagicMock()
+        ) as mock:
+            aiogoogle_client = AsyncMock()
+            mock.return_value.__aenter__.return_value = aiogoogle_client
+            yield aiogoogle_client
+
+    @pytest.mark.asyncio
+    async def test_execute_api_call(self, patch_service_account_creds, patch_aiogoogle):
+        items = ["a", "b", "c"]
+
+        async def _call_api_func(*args):
+            for item in items:
+                yield item
+
+        google_service_account_client = setup_google_service_account_client()
+        workspace_client_mock = MagicMock()
+
+        resource = "resource"
+        method = "method"
+        resource_object = Mock()
+        method_object = Mock()
+        setattr(resource_object, method, method_object)
+        setattr(workspace_client_mock, resource, resource_object)
+
+        patch_aiogoogle.discover = AsyncMock(return_value=workspace_client_mock)
+
+        actual_items = []
+
+        async for item in google_service_account_client._execute_api_call(
+            resource, method, _call_api_func, ""
+        ):
+            actual_items.append(item)
+
+        assert actual_items == items
+
+    @pytest.mark.asyncio
+    async def test_api_call(self, patch_service_account_creds, patch_aiogoogle):
+        item = "a"
+
+        google_service_account_client = setup_google_service_account_client()
+        patch_aiogoogle.as_service_account = AsyncMock(return_value=item)
+        workspace_client_mock = MagicMock()
+
+        resource = "resource"
+        method = "method"
+        resource_object = Mock()
+        method_object = Mock()
+        setattr(resource_object, method, method_object)
+        setattr(workspace_client_mock, resource, resource_object)
+
+        patch_aiogoogle.discover = AsyncMock(return_value=workspace_client_mock)
+        actual_item = await google_service_account_client.api_call(resource, method)
+
+        assert actual_item == item
 
 
 class TestGoogleDirectoryClient:
