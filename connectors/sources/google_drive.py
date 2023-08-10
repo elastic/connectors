@@ -504,11 +504,20 @@ class GoogleDriveDataSource(BaseDataSource):
                 "type": "str",
                 "value": "admin@your-organization.com",
             },
+            "google_workspace_user_email": {
+                    "depends_on": [{"field": "use_document_level_security", "value": True}],
+                    "display": "text",
+                    "label": "Google Workspace admin email",
+                    "order": 4,
+                    "tooltip": "In order to use Document Level Security you need to enable Google Workspace domain-wide delegation of authority for your service account. A service account with delegated authority can impersonate admin user with sufficient permissions to fetch all users and their corresponding permissions.",
+                    "type": "str",
+                    "value": "user@your-organization.com",
+                },
             "max_concurrency": {
                 "default_value": GOOGLE_API_MAX_CONCURRENCY,
                 "display": "numeric",
                 "label": "Maximum concurrent HTTP requests",
-                "order": 4,
+                "order": 5,
                 "required": False,
                 "tooltip": "This setting determines the maximum number of concurrent HTTP requests sent to the Google API to fetch data. Increasing this value can improve data retrieval speed, but it may also place higher demands on system resources and network bandwidth.",
                 "type": "int",
@@ -528,8 +537,8 @@ class GoogleDriveDataSource(BaseDataSource):
         self._validate_service_account_json()
 
         json_credentials = json.loads(self.configuration["service_account_credentials"])
-
-        return GoogleDriveClient(json_credentials=json_credentials, subject=self.configuration["google_workspace_admin_email"],)
+        print("workspace subject: " + self.configuration["google_workspace_user_email"] + "\n")
+        return GoogleDriveClient(json_credentials=json_credentials, subject=self.configuration["google_workspace_user_email"],)
 
     @cached_property
     def google_admin_directory_client(self):
@@ -688,8 +697,9 @@ class GoogleDriveDataSource(BaseDataSource):
         async for groups_page in self.google_admin_directory_client.list_groups_for_user(
             user_id
         ):
-            for group in groups_page.get("groups", []):
-                user_groups.append(group.get("email"))
+            if groups_page:
+                for group in groups_page.get("groups", []):
+                    user_groups.append(group.get("email"))
 
         user_access_control = [
             _prefix_user(user_email),
