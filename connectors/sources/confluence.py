@@ -874,8 +874,10 @@ class ConfluenceDataSource(BaseDataSource):
         async for document, attachment_count, permissions, restrictions in self.fetch_documents(
             api_query
         ):
+            # Pages/Bolgpost are open to viewing or editing by default, but you can restrict either viewing or editing to certain users or groups.
             access_control = list(self._extract_identities(response=restrictions))
             if len(access_control) == 0:
+                # Every space has its own independent set of permissions, managed by the space admin(s), which determine the access settings for different users and groups.
                 access_control = list(
                     self._get_access_control_from_permission(
                         permissions=permissions, target_type=target_type
