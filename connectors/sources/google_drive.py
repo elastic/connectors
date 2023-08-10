@@ -228,7 +228,7 @@ class GoogleAPIClient:
 class GoogleDriveClient(GoogleAPIClient):
     """A google drive client to handle api calls made to Google Drive API."""
 
-    def __init__(self, json_credentials):
+    def __init__(self, json_credentials, subject):
         """Initialize the GoogleApiClient superclass.
 
         Args:
@@ -239,6 +239,7 @@ class GoogleDriveClient(GoogleAPIClient):
             api_name="drive",
             api_version="v3",
             scopes=["https://www.googleapis.com/auth/drive.readonly"],
+            subject=subject
         )
 
     async def ping(self):
@@ -528,7 +529,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         json_credentials = json.loads(self.configuration["service_account_credentials"])
 
-        return GoogleDriveClient(json_credentials=json_credentials)
+        return GoogleDriveClient(json_credentials=json_credentials, subject=self.configuration["google_workspace_admin_email"],)
 
     @cached_property
     def google_admin_directory_client(self):
