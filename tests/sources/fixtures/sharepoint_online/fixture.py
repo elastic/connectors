@@ -7,6 +7,7 @@
 
 import os
 import random
+from random import choices
 import string
 import time
 
@@ -14,6 +15,7 @@ from faker import Faker
 from flask import Flask, escape, request
 from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
+from functools import cached_property
 from yattag import Doc
 
 app = Flask(__name__)
@@ -39,7 +41,7 @@ if THROTTLING:
         },
     )
 
-seed = 1597463007
+run_seed = 1597463007
 
 TOKEN_EXPIRATION_TIMEOUT = 3699  # seconds
 
@@ -49,20 +51,11 @@ ROOT = os.environ.get(
 
 TENANT = "functionaltest.sharepoint.fake"
 
-random.seed(seed)
-fake = Faker()
-fake.seed_instance(seed)
+random.seed(run_seed)
 
 DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
 
 match DATA_SIZE:
-    case "extra_small":
-        NUMBER_OF_SITES = 1
-        NUMBER_OF_DRIVE_ITEMS = 10
-        NUMBER_OF_PAGES = 1
-        NUMBER_OF_LISTS = 1
-        NUMBER_OF_LIST_ITEMS = 5
-        NUMBER_OF_LIST_ITEM_ATTACHMENTS = 1
     case "small":
         NUMBER_OF_SITES = 5
         NUMBER_OF_DRIVE_ITEMS = 100
@@ -86,28 +79,71 @@ match DATA_SIZE:
         NUMBER_OF_LIST_ITEM_ATTACHMENTS = 5
 
 
-fake_large_image = fake.pystr(min_chars=1 << 15, max_chars=1 << 15 + 1)
+class FakeProvider:
+    def __init__(self, seed=None):
+        self.seed = seed
+        self.fake = Faker()
+        if seed:
+            self.fake.seed_instance(seed)
+
+    @cached_property
+    def _cached_random_str(self):
+        return self.fake.pystr(min_chars=100 * 1024, max_chars=100 * 1024 + 1)
+
+    def small_text(self):
+        # Up to 1KB of text
+        return self.generate_text(1 * 1024)
+
+    def medium_text(self):
+        # Up to 1MB of text
+        return self.generate_text(1024 * 1024)
+
+    def large_text(self):
+        # Up to 4MB of text
+        return self.generate_text(4 * 1024 * 1024)
+
+    def extra_large_text(self):
+        return self.generate_text(20 * 1024 * 1024)
+
+    def small_html(self):
+        # Around 100KB
+        return self.generate_html(1)
+
+    def medium_html(self):
+        # Around 1MB
+        return self.generate_html(1 * 10)
+
+    def large_html(self):
+        # Around 8MB
+        return self.generate_html(8 * 10)
+
+    def extra_large_html(self):
+        # Around 25MB
+        return self.generate_html(25 * 10)
+
+    def generate_text(self, max_size):
+        return self.fake.text(max_nb_chars=max_size)
+
+    def generate_html(self, images_of_100kb):
+        img = self._cached_random_str  # 100kb
+        text = self.small_text()
+
+        images = []
+        for _ in range(images_of_100kb):
+            images.append(f"<img src='{img}'/>")
+
+        return f"<html><head></head><body><div>{text}</div><div>{'<br/>'.join(images)}</div></body></html>"
 
 
-def _generate_html(text, number_of_large_images):
-    images = []
-    for _ in range(number_of_large_images):
-        images.append(f"<img src='{fake_large_image}'/>")
+fake_provider = FakeProvider(run_seed)
+fake = fake_provider.fake
 
-    large_html = f"<html><head></head><body><div>{text}</div><div>{'<br/>'.join(images)}</div></body></html>"
-
-    return large_html
+population = [fake_provider.small_html(), fake_provider.medium_html(), fake_provider.large_html(), fake_provider.extra_large_html()]
+weights = [0.58, 0.3, 0.1, 0.02]
 
 
-small_text = _generate_html(fake.text(max_nb_chars=500), 0)
-medium_text = _generate_html(fake.text(max_nb_chars=5000), 1)
-large_text = _generate_html(fake.text(max_nb_chars=10000), 5)
-
-small_text_bytesize = len(small_text.encode("utf-8"))
-medium_text_bytesize = len(medium_text.encode("utf-8"))
-large_text_bytesize = len(large_text.encode("utf-8"))
-
-fake_binary_image = fake.pystr(min_chars=65536, max_chars=65536 << 1)
+def get_file():
+    return choices(population, weights)[0]
 
 TOTAL_RECORD_COUNT = NUMBER_OF_SITES * (
     1 * NUMBER_OF_DRIVE_ITEMS
@@ -200,47 +236,19 @@ class RandomDataStorage:
                     drive_item["folder"] = False
                     drive_item["name"] = fake.file_name(extension="html")
 
-                    if j % 5 == 0:  # Every 5th is medium
-                        self.drive_item_content[drive_item["id"]] = medium_text
-                        drive_item["size"] = medium_text_bytesize
-                    elif j % 17 == 0:  # Every 17th is large
-                        self.drive_item_content[drive_item["id"]] = large_text
-                        drive_item["size"] = large_text_bytesize
-                    else:  # Every other is small
-                        self.drive_item_content[drive_item["id"]] = small_text
-                        drive_item["size"] = small_text_bytesize
+                    file = get_file()
+                    self.drive_item_content[drive_item["id"]] = file
+                    drive_item["size"] = len(file.encode("utf-8"))
 
                 self.drive_items[drive["id"]].append(drive_item)
 
             # Generate Site Pages
             for _ in range(NUMBER_OF_PAGES):
-                doc, tag, text = Doc().tagtext()
-
-                with tag("html"):
-                    with tag("body", id="hello"):
-                        with tag("h1"):
-                            text(fake.word())
-                        with tag("p"):
-                            text(fake.paragraph())
-                        with tag("p"):
-                            text(fake.paragraph())
-                        with tag("ul"):
-                            with tag("li"):
-                                text(fake.word())
-                            with tag("li"):
-                                text(fake.word())
-                            with tag("li"):
-                                text(fake.word())
-                            doc.stag(
-                                "img",
-                                src=fake_binary_image,
-                            )  # just fake invalid image as if it was base64-encoded png, purely to fill-in some data
-
                 page = {
                     "id": str(self.autoinc.get()),
                     "odata.id": str(fake.uuid4()),
                     "guid": str(fake.uuid4()),
-                    "content": doc.getvalue(),
+                    "content": get_file(),
                 }
 
                 self.site_pages[site["id"]].append(page)
@@ -281,17 +289,9 @@ class RandomDataStorage:
                         list_item["attachments"].append(list_item_attachment)
 
                         # Generate Attachment Content
-                        generated_content = None
-                        if m % 5 == 0:  # Every 5th item
-                            generated_content = medium_text
-                        elif m % 9 == 0:  # Every 9th item
-                            generated_content = large_text
-                        else:
-                            generated_content = small_text
-
                         self.list_item_attachment_content[site_list["id"]][
                             list_item["id"]
-                        ][list_item_attachment["title"]] = generated_content
+                        ][list_item_attachment["title"]] = get_file()
 
                     self.site_list_items[site_list["id"]].append(list_item)
 
