@@ -67,7 +67,7 @@ class TestGoogleServiceAccountClient:
         patch_aiogoogle.as_service_account = AsyncMock(return_value=first_page_mock)
         workspace_client_mock = MagicMock()
 
-        resource = "resourcet"
+        resource = "resource"
         method = "method"
         resource_object = Mock()
         method_object = Mock()
