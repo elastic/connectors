@@ -131,56 +131,60 @@ class TestGMailDataSource:
     async def test_ping_successful(
         self, patch_gmail_client, patch_google_directory_client
     ):
-        source = setup_source()
-        patch_gmail_client.ping = AsyncMock()
-        patch_google_directory_client.ping = AsyncMock()
+        async with setup_source() as source:
+            patch_gmail_client.ping = AsyncMock()
+            patch_google_directory_client.ping = AsyncMock()
 
-        try:
-            await source.ping()
-        except Exception:
-            raise AssertionError("Ping should've been successful") from None
+            try:
+                await source.ping()
+            except Exception as e:
+                raise AssertionError("Ping should've been successful") from e
 
     @pytest.mark.asyncio
     async def test_ping_gmail_client_fails(
         self, patch_gmail_client, patch_google_directory_client
     ):
-        source = setup_source()
-        patch_gmail_client.ping = AsyncMock(side_effect=Exception)
-        patch_google_directory_client.ping = AsyncMock()
+        async with setup_source() as source:
+            patch_gmail_client.ping = AsyncMock(
+                side_effect=Exception("Something went wrong")
+            )
+            patch_google_directory_client.ping = AsyncMock()
 
-        with pytest.raises(Exception):
-            await source.ping()
+            with pytest.raises(Exception):
+                await source.ping()
 
     @pytest.mark.asyncio
     async def test_ping_google_directory_client_fails(
         self, patch_gmail_client, patch_google_directory_client
     ):
-        source = setup_source()
-        patch_gmail_client.ping = AsyncMock()
-        patch_google_directory_client.ping = AsyncMock(side_effect=Exception)
+        async with setup_source() as source:
+            patch_gmail_client.ping = AsyncMock()
+            patch_google_directory_client.ping = AsyncMock(side_effect=Exception)
 
-        with pytest.raises(Exception):
-            await source.ping()
+            with pytest.raises(Exception):
+                await source.ping()
 
     @pytest.mark.asyncio
     async def test_validate_config_valid(self):
         valid_json = '{"key": "value"}'
 
-        source = setup_source()
-        source.configuration.set_field("service_account_credentials", value=valid_json)
-        source.configuration.set_field("customer_id", value=CUSTOMER_ID)
+        async with setup_source() as source:
+            source.configuration.set_field(
+                "service_account_credentials", value=valid_json
+            )
+            source.configuration.set_field("customer_id", value=CUSTOMER_ID)
 
-        try:
-            await source.validate_config()
-        except ConfigurableFieldValueError:
-            raise AssertionError("Should've been a valid config") from None
+            try:
+                await source.validate_config()
+            except ConfigurableFieldValueError:
+                raise AssertionError("Should've been a valid config") from None
 
     @pytest.mark.asyncio
     async def test_validate_config_invalid(self):
-        source = setup_source()
-        source.configuration.set_field(
-            "service_account_credentials", value="invalid json"
-        )
+        async with setup_source() as source:
+            source.configuration.set_field(
+                "service_account_credentials", value="invalid json"
+            )
 
-        with pytest.raises(ConfigurableFieldValueError):
-            await source.validate_config()
+            with pytest.raises(ConfigurableFieldValueError):
+                await source.validate_config()
