@@ -40,7 +40,7 @@ class AsyncIterator:
     def assert_not_called(self):
         if self.call_count != 0:
             raise AssertionError(
-                f"Expected zero calls. Actual number of calls: {self.call_count}"
+                f"Expected zero calls. Actual number of calls: {self.call_count}."
             )
 
     def assert_called_once(self):
