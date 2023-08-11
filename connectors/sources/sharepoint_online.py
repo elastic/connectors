@@ -180,7 +180,7 @@ class MicrosoftSecurityToken:
         Returns:
             str: bearer token for one of Microsoft services"""
 
-        cached_value = self._token_cache.get()
+        cached_value = self._token_cache.get_value()
 
         if cached_value:
             return cached_value
@@ -206,7 +206,7 @@ class MicrosoftSecurityToken:
                         f"Failed to authorize to Sharepoint REST API. Response Status: {e.status}, Message: {e.message}"
                     ) from e
 
-        self._token_cache.set(access_token, now + timedelta(seconds=expires_in))
+        self._token_cache.set_value(access_token, now + timedelta(seconds=expires_in))
 
         return access_token
 
@@ -542,9 +542,9 @@ class SharepointOnlineClient:
     async def active_users_with_groups(self):
         expand = "transitiveMemberOf($select=id)"
         top = 999  # this is accepted, but does not get taken literally. Response size seems to max out at 100
-        filter = "accountEnabled eq true"
+        filter_ = "accountEnabled eq true"
         select = "UserName,userPrincipalName,Email,mail,transitiveMemberOf,id,createdDateTime"
-        url = f"{GRAPH_API_URL}/users?$expand={expand}&$top={top}&$filter={filter}&$select={select}"
+        url = f"{GRAPH_API_URL}/users?$expand={expand}&$top={top}&$filter={filter_}&$select={select}"
 
         try:
             async for page in self._graph_api_client.scroll(url):
@@ -1412,18 +1412,18 @@ class SharepointOnlineDataSource(BaseDataSource):
         already_seen_ids = set()
 
         def _already_seen(*ids):
-            for id in ids:
-                if id in already_seen_ids:
-                    self._logger.debug(f"We've already seen {id}")
+            for id_ in ids:
+                if id_ in already_seen_ids:
+                    self._logger.debug(f"We've already seen {id_}")
                     return True
 
             return False
 
         def update_already_seen(*ids):
-            for id in ids:
+            for id_ in ids:
                 # We want to make sure to not add 'None' to the already seen sets
-                if id:
-                    already_seen_ids.add(id)
+                if id_:
+                    already_seen_ids.add(id_)
 
         async def process_user(user):
             email = user.get("EMail", user.get("mail", None))

@@ -90,8 +90,8 @@ def get_all_issues():
     return all_issues
 
 
-@app.route("/rest/api/2/issue/<string:id>", methods=["GET"])
-def get_issue(id):
+@app.route("/rest/api/2/issue/<string:issue_id>", methods=["GET"])
+def get_issue(issue_id):
     """Function to handle get issue calls with the id passed as argument
     Args:
         id (str): Issue id
@@ -99,8 +99,8 @@ def get_issue(id):
         issue (dictionary): dictionary of issue data.
     """
     issue = {
-        "id": id,
-        "key": f"DP-{id}",
+        "id": issue_id,
+        "key": f"DP-{issue_id}",
         "fields": {
             "issuetype": {"name": "Task"},
             "project": {"key": "DP", "name": "Demo Project"},
