@@ -304,7 +304,7 @@ class SalesforceClient:
 
     async def get_case_feeds(self, case_ids):
         query = await self._case_feeds_query(case_ids)
-        return await self._get_non_bulk_query(query)
+        return await self._execute_non_paginated_query(query)
 
     async def queryable_sobjects(self):
         """Cached async property"""
@@ -1076,12 +1076,6 @@ class SalesforceDocMapper:
         ]
         return ", ".join([a for a in address_fields if a])
 
-    def _format_time_for_sort(self, time_body_pair):
-        if time_body_pair[0] is None:
-            return ""
-
-        return time_body_pair[0]
-
     def _format_case_body(self, case):
         time_body_pairs = []
         time_body_pairs.append([case.get("CreatedDate"), case.get("Description")])
@@ -1112,12 +1106,16 @@ class SalesforceDocMapper:
                     [comment.get("CreatedDate"), comment.get("CommentBody")]
                 )
 
-        time_body_pairs = sorted(time_body_pairs, key=self._format_time_for_sort)
-        return "\n\n".join(
-            filter(
-                None, [str(x[-1]).strip() for x in time_body_pairs if x[-1] is not None]
-            )
+        # sort the body values by their associated timestamp
+        time_body_pairs = sorted(
+            time_body_pairs, key=lambda x: "" if x[0] is None else x[0]
         )
+
+        # ensure string, remove Nones, and remove whitespace
+        bodies = [str(x[-1]).strip() for x in time_body_pairs if x[-1] is not None]
+
+        # finally filter out any empty strings, join and return
+        return "\n\n".join(filter(None, bodies))
 
     def _collect_case_participant_ids_emails_and_names(self, case):
         ids = []
