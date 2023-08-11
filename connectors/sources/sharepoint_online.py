@@ -1641,9 +1641,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                     yield site_list, None, OP_INDEX
 
                     async for list_item, download_func in self.site_list_items(
-                        site_id=site["id"],
+                        site=site,
                         site_list_id=site_list["id"],
-                        site_web_url=site["webUrl"],
                         site_list_name=site_list["name"],
                         site_access_control=site_access_control,
                     ):
