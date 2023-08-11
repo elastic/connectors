@@ -168,4 +168,4 @@ class ConfluenceAPI:
 
 
 if __name__ == "__main__":
-    ConfluenceAPI().app.run(host="0.0.0.0")
+    ConfluenceAPI().app.run(host="0.0.0.0", port="9696")

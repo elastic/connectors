@@ -26,8 +26,10 @@ service:
   job_cleanup_interval: 300
   log_level: INFO
 
-connector_id: 'oracle'
-service_type: 'oracle'
+connectors:
+  -
+    connector_id: 'oracle'
+    service_type: 'oracle'
 
 sources:
   oracle: connectors.sources.oracle:OracleDataSource

@@ -48,6 +48,11 @@ ISSUES = "all_issues"
 ISSUE_DATA = "issue_data"
 ATTACHMENT_CLOUD = "attachment_cloud"
 ATTACHMENT_SERVER = "attachment_server"
+USERS = "users"
+PROJECT_PERMISSIONS_BY_KEY = "project_permissions_by_key"
+ISSUE_SECURITY_LEVEL = "issue_security_level"
+SECURITY_LEVEL_MEMBERS = "issue_security_members"
+PROJECT_ROLE_MEMBERS_BY_ROLE_ID = "project_role_members_by_role_id"
 URLS = {
     PING: "/rest/api/2/myself",
     PROJECT: "/rest/api/2/project?expand=description,lead,url",
@@ -56,10 +61,42 @@ URLS = {
     ISSUE_DATA: "/rest/api/2/issue/{id}",
     ATTACHMENT_CLOUD: "/rest/api/2/attachment/content/{attachment_id}",
     ATTACHMENT_SERVER: "/secure/attachment/{attachment_id}/{attachment_name}",
+    USERS: "/rest/api/3/users/search",
+    PROJECT_PERMISSIONS_BY_KEY: "/rest/api/2/user/permission/search?projectKey={project_key}&permissions=BROWSE_PROJECTS",
+    PROJECT_ROLE_MEMBERS_BY_ROLE_ID: "/rest/api/3/project/{project_key}/role/{role_id}",
+    ISSUE_SECURITY_LEVEL: "/rest/api/2/issue/{issue_key}?fields=security",
+    SECURITY_LEVEL_MEMBERS: "/rest/api/3/issuesecurityschemes/level/member?maxResults={max_results}&startAt={start_at}&levelId={level_id}&expand=user,group,projectRole",
 }
 
 JIRA_CLOUD = "jira_cloud"
 JIRA_SERVER = "jira_server"
+
+ACCESS_CONTROL = "_allow_access_control"
+ATLASSIAN = "atlassian"
+USER_QUERY = "expand=groups,applicationRoles"
+
+
+def _prefix_identity(prefix, identity):
+    if prefix is None or identity is None:
+        return None
+
+    return f"{prefix}:{identity}"
+
+
+def _prefix_username(user):
+    return _prefix_identity("username", user)
+
+
+def _prefix_account_id(user_id):
+    return _prefix_identity("account_id", user_id)
+
+
+def _prefix_group_id(group_id):
+    return _prefix_identity("group", group_id)
+
+
+def _prefix_role_key(role_key):
+    return _prefix_identity("application_role", role_key)
 
 
 class JiraClient:
@@ -125,7 +162,7 @@ class JiraClient:
         await self.session.close()
         self.session = None
 
-    async def api_call(self, url_name, **url_kwargs):
+    async def api_call(self, url_name=None, **url_kwargs):
         """Make a GET call for Atlassian API using the passed url_name with retry for the failed API calls.
 
         Args:
@@ -139,7 +176,9 @@ class JiraClient:
             response: Return api response.
         """
         retry = 0
-        url = parse.urljoin(self.host_url, URLS[url_name].format(**url_kwargs))
+        url = url_kwargs.get("url") or parse.urljoin(
+            self.host_url, URLS[url_name].format(**url_kwargs)  # pyright: ignore
+        )
         while True:
             try:
                 async with self._get_session().get(  # pyright: ignore
@@ -162,7 +201,7 @@ class JiraClient:
                 )
                 await self._sleeps.sleep(RETRY_INTERVAL**retry)
 
-    async def paginated_api_call(self, url_name, jql=None):
+    async def paginated_api_call(self, url_name, jql=None, **kwargs):
         """Make a paginated API call for Jira objects using the passed url_name with retry for the failed API calls.
 
         Args:
@@ -176,11 +215,22 @@ class JiraClient:
 
         while True:
             try:
+                url = None
+                if kwargs.get("level_id"):
+                    url = parse.urljoin(
+                        self.host_url,
+                        URLS[url_name].format(
+                            max_results=FETCH_SIZE,
+                            start_at=start_at,
+                            level_id=kwargs.get("level_id"),
+                        ),  # pyright: ignore
+                    )
                 async for response in self.api_call(
                     url_name=url_name,
                     start_at=start_at,
                     max_results=FETCH_SIZE,
                     jql=jql,
+                    url=url,
                 ):
                     response_json = await response.json()
                     total = response_json["total"]
@@ -201,6 +251,7 @@ class JiraDataSource(BaseDataSource):
     name = "Jira"
     service_type = "jira"
     advanced_rules_enabled = True
+    dls_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the Jira
@@ -320,7 +371,310 @@ class JiraDataSource(BaseDataSource):
                 ],
                 "value": MAX_CONCURRENT_DOWNLOADS,
             },
+            "use_document_level_security": {
+                "display": "toggle",
+                "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
+                "label": "Enable document level security",
+                "order": 12,
+                "tooltip": "Document level security ensures identities and permissions set in Jira are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "type": "bool",
+                "value": False,
+            },
         }
+
+    def _dls_enabled(self):
+        """Check if document level security is enabled. This method checks whether document level security (DLS) is enabled based on the provided configuration.
+
+        Returns:
+            bool: True if document level security is enabled, False otherwise.
+        """
+        if self._features is None:
+            return False
+
+        if not self._features.document_level_security_enabled():
+            return False
+
+        return self.configuration["use_document_level_security"]
+
+    def access_control_query(self, access_control):
+        # filter out 'None' values
+        filtered_access_control = list(
+            filter(
+                lambda access_control_entity: access_control_entity is not None,
+                access_control,
+            )
+        )
+
+        return {
+            "query": {
+                "template": {"params": {"access_control": filtered_access_control}},
+                "source": {
+                    "bool": {
+                        "filter": {
+                            "bool": {
+                                "should": [
+                                    {
+                                        "bool": {
+                                            "must_not": {
+                                                "exists": {"field": ACCESS_CONTROL}
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "terms": {
+                                            f"{ACCESS_CONTROL}.enum": filtered_access_control
+                                        }
+                                    },
+                                ]
+                            }
+                        }
+                    }
+                },
+            }
+        }
+
+    def _is_active_atlassian_user(self, user_info):
+        user_url = user_info.get("self")
+        user_name = user_info.get("displayName", "user")
+        if not user_url:
+            self._logger.debug(
+                f"Skipping user: {user_name} due to the absence of a personal URL."
+            )
+            return False
+
+        if not user_info.get("active"):
+            self._logger.debug(
+                f"Skipping user: {user_name} as it is inactive or deleted."
+            )
+            return False
+
+        if user_info.get("accountType") != ATLASSIAN:
+            self._logger.debug(
+                f"Skipping user: {user_name} because the account type is {user_info.get('accountType')}. Only 'atlassian' account type is supported."
+            )
+            return False
+
+        return True
+
+    def _decorate_with_access_control(self, document, access_control):
+        if self._dls_enabled():
+            document[ACCESS_CONTROL] = list(
+                set(document.get(ACCESS_CONTROL, []) + access_control)
+            )
+
+        return document
+
+    async def _user_information_list(self, project):
+        async for response in self.jira_client.api_call(
+            url_name=PROJECT_PERMISSIONS_BY_KEY, project_key=project["key"]
+        ):
+            yield await response.json()
+
+    async def _project_access_control(self, project):
+        if not self._dls_enabled():
+            return []
+
+        access_control = set()
+        async for actors in self._user_information_list(project=project):
+            for actor in actors:
+                if actor["accountType"] == ATLASSIAN:
+                    access_control.add(
+                        _prefix_account_id(user_id=actor.get("accountId"))
+                    )
+                    access_control.add(_prefix_username(user=actor.get("displayName")))
+        return list(access_control)
+
+    async def _issue_security_level(self, issue_key):
+        async for response in self.jira_client.api_call(
+            url_name=ISSUE_SECURITY_LEVEL, issue_key=issue_key
+        ):
+            yield await response.json()
+
+    async def _issue_security_level_members(self, level_id):
+        async for response in self.jira_client.paginated_api_call(
+            url_name=SECURITY_LEVEL_MEMBERS, level_id=level_id
+        ):
+            yield response
+
+    async def _project_role_members(self, project, role_id, access_control):
+        async for actor_response in self.jira_client.api_call(
+            url_name=PROJECT_ROLE_MEMBERS_BY_ROLE_ID,
+            project_key=project["key"],
+            role_id=role_id,
+        ):
+            actors = await actor_response.json()
+            for actor in actors.get("actors", []):
+                if actor.get("actorUser"):
+                    access_control.add(
+                        _prefix_account_id(
+                            user_id=actor.get("actorUser").get("accountId")
+                        )
+                    )
+                    access_control.add(_prefix_username(user=actor.get("displayName")))
+                elif actor.get("actorGroup"):
+                    access_control.add(
+                        _prefix_group_id(
+                            group_id=actor.get("actorGroup").get("groupId")
+                        )
+                    )
+            yield access_control
+
+    async def _issue_access_control(self, issue_key, project):
+        if not self._dls_enabled():
+            return []
+
+        access_control = set()
+        async for response in self._issue_security_level(issue_key=issue_key):
+            if security := response.get("fields", {}).get("security"):
+                level_id = security.get("id")
+                async for members in self._issue_security_level_members(
+                    level_id=level_id
+                ):
+                    for actor in members["values"]:
+                        actor_type = actor.get("holder", {}).get("type")
+                        if actor_type == "user":
+                            user = actor.get("holder", {}).get("user", {})
+                            if self._is_active_atlassian_user(user_info=user):
+                                access_control.add(
+                                    _prefix_account_id(user_id=user.get("accountId"))
+                                )
+                                access_control.add(
+                                    _prefix_username(user=user.get("displayName"))
+                                )
+                        elif actor_type == "group":
+                            group_id = (
+                                actor.get("holder", {}).get("group", {}).get("groupId")
+                            )
+                            access_control.add(_prefix_group_id(group_id=group_id))
+                        elif actor_type == "projectRole":
+                            if (
+                                role_id := actor.get("holder", {})
+                                .get("projectRole", {})
+                                .get("id")
+                            ):
+                                # Project Role - `atlassian-addons-project-access` with id 10003 is not needed for DLS
+                                is_addons_projects_access = role_id == 10003
+                                if not is_addons_projects_access:
+                                    access_control = await anext(
+                                        self._project_role_members(
+                                            project=project,
+                                            role_id=role_id,
+                                            access_control=access_control,
+                                        )
+                                    )
+            else:
+                self._logger.debug(
+                    f"Issue security level is not set for an issue: {issue_key}. Hence, Assigning project permissions"
+                )
+                project_access_controls = await self._project_access_control(
+                    project=project
+                )
+                return project_access_controls
+        return list(access_control)
+
+    async def _user_access_control_doc(self, user):
+        """Constructs a user access control document, which will be synced to the corresponding access control index.
+        The `_id` of the user access control document will either be the username (can also be the email sometimes) or the email itself.
+        Note: the `_id` field won't be prefixed with the corresponding identity prefix ("user" or "email").
+        The document contains all groups of a user and his email and/or username under `query.template.params.access_control`.
+
+        Returns:
+            dict: dictionary representing an user access control document
+            {
+                "_id": "some.user@spo.com",
+                "identity": {
+                    "username": "username:some.user",
+                    "account_id": "account_id:some user id"
+                },
+                "created_at": "2023-06-30 12:00:00",
+                "query": {
+                    "template": {
+                        "params": {
+                            "access_control": [
+                                "username:some.user",
+                                "group:1234-abcd-id"
+                            ]
+                        }
+                    }
+                }
+            }
+        """
+        account_id = user.get("accountId")
+        account_name = user.get("displayName")
+
+        _prefixed_account_id = _prefix_account_id(user_id=account_id)
+        _prefixed_user_name = _prefix_username(user=account_name)
+
+        _prefixed_group_ids = {
+            _prefix_group_id(group_id=group.get("groupId", ""))
+            for group in user.get("groups", {}).get("items", [])
+        }
+        _prefixed_role_keys = {
+            _prefix_role_key(role_key=role.get("key", ""))
+            for role in user.get("applicationRoles", {}).get("items", [])
+        }
+
+        user_document = {
+            "_id": account_id,
+            "identity": {
+                "account_id": _prefixed_account_id,
+                "username": _prefixed_user_name,
+            },
+            "created_at": iso_utc(),
+        }
+
+        access_control = (
+            [_prefixed_account_id]
+            + list(_prefixed_group_ids)
+            + list(_prefixed_role_keys)
+        )
+
+        return user_document | self.access_control_query(access_control=access_control)
+
+    async def _fetch_all_users(self):
+        async for users in self.jira_client.api_call(url_name=USERS):
+            yield await users.json()
+
+    async def _fetch_user(self, user_url):
+        async for user in self.jira_client.api_call(url=f"{user_url}&{USER_QUERY}"):
+            yield await user.json()
+
+    async def get_access_control(self):
+        """Get access control documents for active Atlassian users.
+
+        This method fetches access control documents for active Atlassian users when document level security (DLS)
+        is enabled. It starts by checking if DLS is enabled, and if not, it logs a warning message and skips further processing.
+        If DLS is enabled, the method fetches all users from the Jira API, filters out active Atlassian users,
+        and fetches additional information for each active user using the _fetch_user method. After gathering the user information,
+        it generates an access control document for each user using the _user_access_control_doc method and yields the results.
+
+        Yields:
+            dict: An access control document for each active Atlassian user. The access control document has the following structure:
+            {
+                "_id": <account_id>,
+                "identity": {
+                    "account_id": <_prefixed_account_id>,
+                    "display_name": <_prefixed_account_name>
+                },
+                "created_at": <iso_utc_timestamp>,
+                ACCESS_CONTROL: [<_prefixed_account_id>, <_prefixed_group_ids>, <_prefixed_role_keys>]
+            }
+        """
+        if not self._dls_enabled():
+            self._logger.warning("DLS is not enabled. Skipping")
+            return
+
+        users = await anext(self._fetch_all_users())
+        active_atlassian_users = filter(self._is_active_atlassian_user, users)
+
+        tasks = [
+            anext(self._fetch_user(user_url=user_info.get("self")))
+            for user_info in active_atlassian_users
+        ]
+        user_results = await asyncio.gather(*tasks)
+
+        for user in user_results:
+            yield await self._user_access_control_doc(user=user)
 
     def advanced_rules_validators(self):
         return [AtlassianAdvancedRulesValidator(self)]
@@ -453,7 +807,11 @@ class JiraDataSource(BaseDataSource):
             "Type": "Project",
             "Project": project,
         }
-        await self.queue.put((document, None))  # pyright: ignore
+        project_access_control = await self._project_access_control(project=project)
+        document_with_access_control = self._decorate_with_access_control(
+            document=document, access_control=project_access_control
+        )
+        await self.queue.put((document_with_access_control, None))  # pyright: ignore
 
     async def _get_projects(self):
         """Get projects with the help of REST APIs
@@ -503,11 +861,21 @@ class JiraDataSource(BaseDataSource):
                     "Type": response_fields["issuetype"]["name"],
                     "Issue": response_fields,
                 }
-                await self.queue.put((document, None))  # pyright: ignore
+                issue_access_control = await self._issue_access_control(
+                    issue_key=issue["key"], project=response_fields["project"]
+                )
+                document_with_access_control = self._decorate_with_access_control(
+                    document=document, access_control=issue_access_control
+                )
+                await self.queue.put(
+                    (document_with_access_control, None)
+                )  # pyright: ignore
                 attachments = issue["fields"]["attachment"]
                 if len(attachments) > 0:
                     await self._put_attachment(
-                        attachments=attachments, issue_key=issue["key"]
+                        attachments=attachments,
+                        issue_key=issue["key"],
+                        access_control=issue_access_control,
                     )
             await self.queue.put("FINISHED")  # pyright: ignore
         except Exception as exception:
@@ -537,7 +905,7 @@ class JiraDataSource(BaseDataSource):
                 self.tasks += 1
         await self.queue.put("FINISHED")  # pyright: ignore
 
-    async def _put_attachment(self, attachments, issue_key):
+    async def _put_attachment(self, attachments, issue_key, access_control):
         """Put attachments of a specific issue in a queue
 
         Args:
@@ -553,9 +921,12 @@ class JiraDataSource(BaseDataSource):
                 "_timestamp": attachment["created"],
                 "size": attachment["size"],
             }
+            document_with_access_control = self._decorate_with_access_control(
+                document=document, access_control=access_control
+            )
             await self.queue.put(
                 (  # pyright: ignore
-                    document,
+                    document_with_access_control,
                     partial(
                         self.get_content,
                         issue_key=issue_key,

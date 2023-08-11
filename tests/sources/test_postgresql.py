@@ -11,7 +11,11 @@ import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
-from connectors.sources.postgresql import PostgreSQLDataSource, PostgreSQLQueries
+from connectors.sources.postgresql import (
+    PostgreSQLClient,
+    PostgreSQLDataSource,
+    PostgreSQLQueries,
+)
 from tests.sources.support import create_source
 
 POSTGRESQL_CONNECTION_STRING = (
@@ -76,86 +80,113 @@ class CursorAsync:
         """
         if self.first_call:
             self.first_call = False
-            return [
-                (
-                    1,
-                    "abcd",
-                ),
-                (
-                    1,
-                    "xyz",
-                ),
-            ]
+
+            self.query = str(self.query)
+            query_object = PostgreSQLQueries()
+            if self.query == query_object.all_schemas():
+                return [(SCHEMA,)]
+            elif self.query == query_object.all_tables(database="xe", schema=SCHEMA):
+                return [(TABLE,)]
+            elif self.query == query_object.table_data_count(
+                schema=SCHEMA, table=TABLE
+            ):
+                return [(10,)]
+            elif self.query == query_object.table_primary_key(
+                schema=SCHEMA, table=TABLE
+            ):
+                return [("ids",)]
+            elif self.query == query_object.table_last_update_time(
+                schema=SCHEMA, table=TABLE
+            ):
+                return [("2023-02-21T08:37:15+00:00",)]
+            elif self.query == query_object.ping():
+                return [(2,)]
+            else:
+                return [
+                    (
+                        1,
+                        "abcd",
+                    ),
+                    (
+                        1,
+                        "xyz",
+                    ),
+                ]
         return []
-
-    def fetchall(self):
-        """This method returns results of query
-
-        Returns:
-            list: List of rows
-        """
-        self.query = str(self.query)
-        query_object = PostgreSQLQueries()
-        if self.query == query_object.all_schemas():
-            return [(SCHEMA,)]
-        elif self.query == query_object.all_tables(database="xe", schema=SCHEMA):
-            return [(TABLE,)]
-        elif self.query == query_object.table_data_count(schema=SCHEMA, table=TABLE):
-            return [(10,)]
-        elif self.query == query_object.table_primary_key(schema=SCHEMA, table=TABLE):
-            return [("ids",)]
-        elif self.query == query_object.table_last_update_time(
-            schema=SCHEMA, table=TABLE
-        ):
-            return [("2023-02-21T08:37:15+00:00",)]
 
     async def __aexit__(self, exception_type, exception_value, exception_traceback):
         """Make sure the dummy database connection gets closed"""
         pass
 
 
-def test_get_connect_argss():
-    """This function test get_connect_args with dummy certificate"""
+def test_get_connect_args():
+    """This function test _get_connect_args with dummy certificate"""
     # Setup
-    source = create_source(PostgreSQLDataSource)
-    source.ssl_ca = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
+    client = PostgreSQLClient(
+        host="",
+        port="",
+        user="",
+        password="",
+        database="",
+        tables="*",
+        ssl_enabled=True,
+        ssl_ca="-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----",
+        logger_=None,
+    )
 
     # Execute
     with patch.object(ssl, "create_default_context", return_value=MockSsl()):
-        source.get_connect_args()
+        client._get_connect_args()
 
 
 @pytest.mark.asyncio
-async def test_get_docs_postgresql():
+async def test_postgresql_ping():
     # Setup
-    source = create_source(PostgreSQLDataSource)
-    with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
-        source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
-        actual_response = []
-        expected_response = [
-            {
-                "public_emp_table_ids": 1,
-                "public_emp_table_names": "abcd",
-                "_id": "xe_public_emp_table_1_",
-                "_timestamp": "2023-02-21T08:37:15+00:00",
-                "Database": "xe",
-                "Table": "emp_table",
-                "schema": "public",
-            },
-            {
-                "public_emp_table_ids": 1,
-                "public_emp_table_names": "xyz",
-                "_id": "xe_public_emp_table_1_",
-                "_timestamp": "2023-02-21T08:37:15+00:00",
-                "Database": "xe",
-                "Table": "emp_table",
-                "schema": "public",
-            },
-        ]
+    async with create_source(PostgreSQLDataSource) as source:
+        with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+            await source.ping()
 
-        # Execute
-        async for doc in source.get_docs():
-            actual_response.append(doc[0])
+        await source.close()
 
-        # Assert
-        assert actual_response == expected_response
+
+@pytest.mark.asyncio
+async def test_ping():
+    async with create_source(PostgreSQLDataSource) as source:
+        with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+            await source.ping()
+
+
+@pytest.mark.asyncio
+async def test_get_docs():
+    # Setup
+    async with create_source(PostgreSQLDataSource) as source:
+        with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+            source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
+            actual_response = []
+            expected_response = [
+                {
+                    "public_emp_table_ids": 1,
+                    "public_emp_table_names": "abcd",
+                    "_id": "xe_public_emp_table_1_",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "Database": "xe",
+                    "Table": "emp_table",
+                    "schema": "public",
+                },
+                {
+                    "public_emp_table_ids": 1,
+                    "public_emp_table_names": "xyz",
+                    "_id": "xe_public_emp_table_1_",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "Database": "xe",
+                    "Table": "emp_table",
+                    "schema": "public",
+                },
+            ]
+
+            # Execute
+            async for doc in source.get_docs():
+                actual_response.append(doc[0])
+
+            # Assert
+            assert actual_response == expected_response
