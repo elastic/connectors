@@ -764,27 +764,25 @@ class SharepointOnlineClient:
         self._validate_sharepoint_rest_url(site_web_url)
 
         # select = "Id,Title,LayoutWebpartsContent,CanvasContent1,Description,Created,AuthorId,Modified,EditorId"
-        select = ""  # ^ is what we want, but site pages don't have consistent schemas, and this causes errors. Better to fetch all and slice
+        select = "*,EncodedAbsUrl"  # ^ is what we want, but site pages don't have consistent schemas, and this causes errors. Better to fetch all and slice
         url = f"{site_web_url}/_api/web/lists/GetByTitle('Site%20Pages')/items?$select={select}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
                 for site_page in page:
                     yield {
-                        k: site_page.get(k, None)
-                        for k in (
-                            "Id",
-                            "Title",
-                            "LayoutWebpartsContent",
-                            "CanvasContent1",
-                            "WikiField",
-                            "Description",
-                            "Created",
-                            "AuthorId",
-                            "Modified",
-                            "EditorId",
-                            "odata.id",
-                        )
+                        "Id": site_page.get("Id"),
+                        "Title": site_page.get("Title"),
+                        "webUrl": site_page.get("EncodedAbsUrl"),
+                        "LayoutWebpartsContent": site_page.get("LayoutWebpartsContent"),
+                        "CanvasContent1": site_page.get("CanvasContent1"),
+                        "WikiField": site_page.get("WikiField"),
+                        "Description": site_page.get("Description"),
+                        "Created": site_page.get("Created"),
+                        "AuthorId": site_page.get("AuthorId"),
+                        "Modified": site_page.get("Modified"),
+                        "EditorId": site_page.get("EditorId"),
+                        "odata.id": site_page.get("odata.id"),
                     }
         except NotFound:
             # I'm not sure if site can have no pages, but given how weird API is I put this here
@@ -1546,9 +1544,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                     yield site_list, None
 
                     async for list_item, download_func in self.site_list_items(
-                        site_id=site["id"],
+                        site=site,
                         site_list_id=site_list["id"],
-                        site_web_url=site["webUrl"],
                         site_list_name=site_list["name"],
                         site_access_control=site_access_control,
                     ):
@@ -1780,8 +1777,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                 yield drive_item, self.download_function(drive_item, max_drive_item_age)
 
     async def site_list_items(
-        self, site_id, site_list_id, site_web_url, site_list_name, site_access_control
+        self, site, site_list_id, site_list_name, site_access_control
     ):
+        site_id = site["id"]
+        site_web_url = site["webUrl"]
+        site_collection = site["siteCollection"]["hostname"]
         async for list_item in self.client.site_list_items(site_id, site_list_id):
             # List Item IDs are unique within list.
             # Therefore we mix in site_list id to it to make sure they are
@@ -1846,6 +1846,18 @@ class SharepointOnlineDataSource(BaseDataSource):
                     list_item_attachment[
                         "_original_filename"
                     ] = list_item_attachment.get("FileName", "")
+                    if (
+                        "ServerRelativePath" in list_item_attachment
+                        and "DecodedUrl" in list_item_attachment["ServerRelativePath"]
+                    ):
+                        list_item_attachment[
+                            "webUrl"
+                        ] = f"https://{site_collection}{list_item_attachment['ServerRelativePath']['DecodedUrl']}"
+                    else:
+                        self._logger.debug(
+                            f"Unable to populate webUrl for list item attachment {list_item_attachment['_id']}"
+                        )
+
                     list_item_attachment[ACCESS_CONTROL] = list_item.get(
                         ACCESS_CONTROL, []
                     )
