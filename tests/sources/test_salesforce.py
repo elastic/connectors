@@ -350,9 +350,10 @@ CASE_FEED_PAYLOAD = {
 }
 
 CACHED_SOBJECTS = {
-    "Account": {"account_id": {"Name": "TLOTR"}},
+    "Account": {"account_id": {"Id": "account_id", "Name": "TLOTR"}},
     "User": {
         "user_id": {
+            "Id": "user_id",
             "Name": "Frodo",
             "Email": "frodo@tlotr.com",
         }
@@ -746,6 +747,7 @@ async def test_get_contacts_when_success(mock_responses):
             "account": "TLOTR",
             "account_url": f"{TEST_BASE_URL}/account_id",
             "body": "The White",
+            "created_at": "",
             "email": "gandalf@tlotr.com",
             "job_title": "Wizard",
             "last_updated": "",
@@ -800,6 +802,7 @@ async def test_get_leads_when_success(mock_responses):
             "converted_contact_url": None,
             "converted_opportunity": None,
             "converted_opportunity_url": None,
+            "created_at": None,
             "email": "sauron@tlotr.com",
             "job_title": "Dark Lord",
             "last_updated": "",
@@ -855,11 +858,14 @@ async def test_get_campaigns_when_success(mock_responses):
             "_id": "campaign_id",
             "body": "Orcs are raiding the Gap of Rohan",
             "campaign_type": "War",
+            "created_at": None,
             "end_date": "",
+            "last_updated": None,
             "owner": "Saruman",
             "owner_email": "saruman@tlotr.com",
             "parent": "Théoden",
             "parent_url": f"{TEST_BASE_URL}/user_id",
+            "source": "salesforce",
             "start_date": "",
             "status": "planned",
             "state": "active",
