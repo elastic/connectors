@@ -1574,7 +1574,7 @@ class TestSharepointOnlineDataSource:
                 "id": "1",
                 "webUrl": "https://test.sharepoint.com/site-1",
                 "name": "site-1",
-                "siteCollection": self.site_collections[0]["siteCollection"]
+                "siteCollection": self.site_collections[0]["siteCollection"],
             }
         ]
 
