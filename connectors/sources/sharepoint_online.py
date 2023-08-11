@@ -1778,9 +1778,9 @@ class SharepointOnlineDataSource(BaseDataSource):
     async def site_list_items(
         self, site, site_list_id, site_list_name, site_access_control
     ):
-        site_id = site["id"]
-        site_web_url = site["webUrl"]
-        site_collection = site["siteCollection"]["hostname"]
+        site_id = site.get("id")
+        site_web_url = site.get("webUrl")
+        site_collection = site.get("siteCollection", {}).get("hostname")
         async for list_item in self.client.site_list_items(site_id, site_list_id):
             # List Item IDs are unique within list.
             # Therefore we mix in site_list id to it to make sure they are
