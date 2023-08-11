@@ -22,18 +22,15 @@ app = Flask(__name__)
 DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
 
 match DATA_SIZE:
-    case "extra_small":
-        TOTAL_USERS = 50
-        FILE_COUNT_PER_USER = 100
     case "small":
-        TOTAL_USERS = 100
-        FILE_COUNT_PER_USER = 200
+        TOTAL_USERS = 50
+        FILE_COUNT_PER_USER = 50
     case "medium":
-        TOTAL_USERS = 150
-        FILE_COUNT_PER_USER = 500
+        TOTAL_USERS = 70
+        FILE_COUNT_PER_USER = 100
     case "large":
-        TOTAL_USERS = 200
-        FILE_COUNT_PER_USER = 800
+        TOTAL_USERS = 90
+        FILE_COUNT_PER_USER = 150
 
 
 THROTTLING = os.environ.get("THROTTLING", False)
@@ -59,10 +56,9 @@ if THROTTLING:
 
     limiter.init_app(app)
 
-EXTRA_SMALL = 10000
-SMALL = 50000
-MEDIUM = 100000
-LARGE = 150000
+SMALL = 100000
+MEDIUM = 500000
+LARGE = 1000000
 
 
 def _create_data(size):
@@ -70,7 +66,6 @@ def _create_data(size):
 
 
 FILE_DATA = {
-    EXTRA_SMALL: _create_data(size=EXTRA_SMALL),
     SMALL: _create_data(size=SMALL),
     MEDIUM: _create_data(size=MEDIUM),
     LARGE: _create_data(size=LARGE),
@@ -119,17 +114,14 @@ class DataGenerator:
                     }
                     item["name"] = fake.file_name(extension="txt")
 
-                    if file_id % 7 == 0:  # Every 7th is a large file
+                    if file_id % 5 == 0:  # Every 5th is a large file
                         item["size"] = LARGE
 
-                    elif file_id % 5 == 0:  # Every 5th is a medium file
+                    elif file_id % 3 == 0:  # Every 3rd is a medium file
                         item["size"] = MEDIUM
 
-                    elif file_id % 3 == 0:  # Every 3rd is a small file
+                    else:  # Rest are small files
                         item["size"] = SMALL
-
-                    else:  # Rest are extra_small files
-                        item["size"] = EXTRA_SMALL
 
                 self.files_per_user[user["id"]].append(item)
 
