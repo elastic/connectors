@@ -324,6 +324,9 @@ class RandomDataStorage:
                     "webUrl": f"{ROOT}/sites/{site['name']}",
                     "createdDateTime": "2023-05-31T16:08:46Z",
                     "lastModifiedDateTime": "2023-05-31T16:08:48Z",
+                    "siteCollection": {
+                        "hostname": ROOT
+                    }
                 }
             )
 
