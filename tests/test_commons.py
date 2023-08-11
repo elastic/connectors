@@ -219,9 +219,11 @@ async def test_assert_called_once_with_one_kwarg_and_two_calls():
 
     async_iterator = AsyncIterator(items)
 
+    # first call
     async for _ in async_iterator(argument=argument):
         pass
 
+    # second call
     async for _ in async_iterator(argument=argument):
         pass
 
