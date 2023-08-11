@@ -13,6 +13,7 @@ from aiohttp.client_exceptions import ClientConnectionError
 
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.salesforce import (
+    RELEVANT_SOBJECT_FIELDS,
     ConnectorRequestError,
     InvalidCredentialsException,
     InvalidQueryException,
@@ -160,10 +161,199 @@ LEAD_PAYLOAD = {
     ]
 }
 
+CAMPAIGN_PAYLOAD = {
+    "records": [
+        {
+            "attributes": {
+                "type": "Campaign",
+                "url": "/services/data/v58.0/sobjects/Campaign/campaign_id",
+            },
+            "Name": "Defend the Gap",
+            "IsActive": True,
+            "Type": "War",
+            "Description": "Orcs are raiding the Gap of Rohan",
+            "Status": "planned",
+            "Id": "campaign_id",
+            "Parent": {
+                "attributes": {
+                    "type": "User",
+                    "url": "/services/data/v58.0/sobjects/User/user_id",
+                },
+                "Id": "user_id",
+                "Name": "Théoden",
+            },
+            "Owner": {
+                "attributes": {
+                    "type": "User",
+                    "url": "/services/data/v58.0/sobjects/User/user_id",
+                },
+                "Id": "user_id",
+                "Name": "Saruman",
+                "Email": "saruman@tlotr.com",
+            },
+            "StartDate": "",
+            "EndDate": "",
+        }
+    ]
+}
+
+CASE_PAYLOAD = {
+    "records": [
+        {
+            "attributes": {
+                "type": "Case",
+                "url": "/services/data/v58.0/sobjects/Case/case_id",
+            },
+            "Status": "New",
+            "AccountId": "account_id",
+            "Description": "The One Ring",
+            "Subject": "It needs to be destroyed",
+            "Owner": {
+                "attributes": {
+                    "type": "Name",
+                    "url": "/services/data/v58.0/sobjects/User/user_id",
+                },
+                "Email": "frodo@tlotr.com",
+                "Name": "Frodo",
+                "Id": "user_id",
+            },
+            "CreatedBy": {
+                "attributes": {
+                    "type": "User",
+                    "url": "/services/data/v58.0/sobjects/User/user_id_2",
+                },
+                "Id": "user_id_2",
+                "Email": "gandalf@tlotr.com",
+                "Name": "Gandalf",
+            },
+            "Id": "case_id",
+            "EmailMessages": {
+                "records": [
+                    {
+                        "attributes": {
+                            "type": "EmailMessage",
+                            "url": "/services/data/v58.0/sobjects/EmailMessage/email_message_id",
+                        },
+                        "CreatedDate": "2023-08-11T00:00:00.000+0000",
+                        "LastModifiedById": "user_id",
+                        "ParentId": "case_id",
+                        "MessageDate": "2023-08-01T00:00:00.000+0000",
+                        "TextBody": "Maybe I should do something?",
+                        "Subject": "Ring?!",
+                        "FromName": "Frodo",
+                        "FromAddress": "frodo@tlotr.com",
+                        "ToAddress": "gandalf@tlotr.com",
+                        "CcAddress": "elrond@tlotr.com",
+                        "BccAddress": "samwise@tlotr.com",
+                        "Status": "",
+                        "IsDeleted": False,
+                        "FirstOpenedDate": "2023-08-02T00:00:00.000+0000",
+                        "CreatedBy": {
+                            "attributes": {
+                                "type": "Name",
+                                "url": "/services/data/v58.0/sobjects/User/user_id",
+                            },
+                            "Name": "Frodo",
+                            "Id": "user_id",
+                            "Email": "frodo@tlotr.com",
+                        },
+                    }
+                ]
+            },
+            "CaseComments": {
+                "records": [
+                    {
+                        "attributes": {
+                            "type": "CaseComment",
+                            "url": "/services/data/v58.0/sobjects/CaseComment/case_comment_id",
+                        },
+                        "CreatedDate": "2023-08-03T00:00:00.000+0000",
+                        "LastModifiedById": "user_id_3",
+                        "CommentBody": "You have my axe",
+                        "LastModifiedDate": "2023-08-03T00:00:00.000+0000",
+                        "CreatedBy": {
+                            "attributes": {
+                                "type": "Name",
+                                "url": "/services/data/v58.0/sobjects/User/user_id_3",
+                            },
+                            "Name": "Gimli",
+                            "Id": "user_id_3",
+                            "Email": "gimli@tlotr.com",
+                        },
+                        "ParentId": "case_id",
+                        "Id": "case_comment_id",
+                    }
+                ]
+            },
+            "CaseNumber": "00001234",
+            "ParentId": "",
+            "CreatedDate": "2023-08-01T00:00:00.000+0000",
+            "IsDeleted": False,
+            "IsClosed": False,
+            "LastModifiedDate": "2023-08-11T00:00:00.000+0000",
+        }
+    ]
+}
+
+CASE_FEED_PAYLOAD = {
+    "records": [
+        {
+            "attributes": {
+                "type": "CaseFeed",
+                "url": "/services/data/v58.0/sobjects/CaseFeed/case_feed_id",
+            },
+            "CreatedBy": {
+                "attributes": {
+                    "type": "Name",
+                    "url": "/services/data/v58.0/sobjects/User/user_id_4",
+                },
+                "Id": "user_id_4",
+                "Email": "galadriel@tlotr.com",
+                "Name": "Galadriel",
+            },
+            "CommentCount": 2,
+            "LastModifiedDate": "2023-08-09T00:00:00.000+0000",
+            "Type": "TextPost",
+            "Title": None,
+            "IsDeleted": False,
+            "LinkUrl": f"{TEST_BASE_URL}/case_feed_id",
+            "CreatedDate": "2023-08-08T00:00:00.000+0000",
+            "Id": "case_feed_id",
+            "FeedComments": {
+                "records": [
+                    {
+                        "attributes": {
+                            "type": "FeedComment",
+                            "url": "/services/data/v58.0/sobjects/FeedComment/feed_comment_id",
+                        },
+                        "CreatedBy": {
+                            "attributes": {
+                                "type": "Name",
+                                "url": "/services/data/v58.0/sobjects/User/user_id_4",
+                            },
+                            "Id": "user_id_4",
+                            "Email": "galadriel@tlotr.com",
+                            "Name": "Galadriel",
+                        },
+                        "IsDeleted": False,
+                        "Id": "feed_comment_id",
+                        "ParentId": "case_feed_id",
+                        "LastEditById": "user_id_4",
+                        "LastEditDate": "2023-08-08T00:00:00.000+0000",
+                        "CommentBody": "I know what it is you saw",
+                    }
+                ]
+            },
+            "ParentId": "case_id",
+        }
+    ]
+}
+
 CACHED_SOBJECTS = {
-    "Account": {"account_id": {"Name": "TLOTR"}},
+    "Account": {"account_id": {"Id": "account_id", "Name": "TLOTR"}},
     "User": {
         "user_id": {
+            "Id": "user_id",
             "Name": "Frodo",
             "Email": "frodo@tlotr.com",
         }
@@ -557,6 +747,7 @@ async def test_get_contacts_when_success(mock_responses):
             "account": "TLOTR",
             "account_url": f"{TEST_BASE_URL}/account_id",
             "body": "The White",
+            "created_at": "",
             "email": "gandalf@tlotr.com",
             "job_title": "Wizard",
             "last_updated": "",
@@ -611,6 +802,7 @@ async def test_get_leads_when_success(mock_responses):
             "converted_contact_url": None,
             "converted_opportunity": None,
             "converted_opportunity_url": None,
+            "created_at": None,
             "email": "sauron@tlotr.com",
             "job_title": "Dark Lord",
             "last_updated": "",
@@ -656,6 +848,106 @@ async def test_get_leads_when_success(mock_responses):
             payload=LEAD_PAYLOAD,
         )
         async for account in source.salesforce_client.get_leads():
+            assert account == expected_doc
+
+
+@pytest.mark.asyncio
+async def test_get_campaigns_when_success(mock_responses):
+    async with create_salesforce_source() as source:
+        expected_doc = {
+            "_id": "campaign_id",
+            "body": "Orcs are raiding the Gap of Rohan",
+            "campaign_type": "War",
+            "created_at": None,
+            "end_date": "",
+            "last_updated": None,
+            "owner": "Saruman",
+            "owner_email": "saruman@tlotr.com",
+            "parent": "Théoden",
+            "parent_url": f"{TEST_BASE_URL}/user_id",
+            "source": "salesforce",
+            "start_date": "",
+            "status": "planned",
+            "state": "active",
+            "title": "Defend the Gap",
+            "type": "campaign",
+            "url": f"{TEST_BASE_URL}/campaign_id",
+        }
+
+        source.salesforce_client.sobjects_cache_by_type = mock.AsyncMock(
+            return_value=CACHED_SOBJECTS
+        )
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+        source.salesforce_client._select_queryable_fields = mock.AsyncMock(
+            return_value=[
+                "Name",
+                "IsActive",
+                "Type",
+                "Description",
+                "Status",
+                "StartDate",
+                "EndDate",
+            ]
+        )
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=200,
+            payload=CAMPAIGN_PAYLOAD,
+        )
+        async for account in source.salesforce_client.get_campaigns():
+            assert account == expected_doc
+
+
+@pytest.mark.asyncio
+async def test_get_casess_when_success(mock_responses):
+    async with create_salesforce_source() as source:
+        expected_doc = {
+            "_id": "case_id",
+            "account_id": "account_id",
+            "body": "I know what it is you saw\n\nThe One Ring\n\nRing?!\nMaybe I should do something?\n\nYou have my axe",
+            "created_at": "2023-08-01T00:00:00.000+0000",
+            "created_by": "Gandalf",
+            "created_by_email": "gandalf@tlotr.com",
+            "case_number": "00001234",
+            "is_closed": False,
+            "last_updated": "2023-08-11T00:00:00.000+0000",
+            "owner": "Frodo",
+            "owner_email": "frodo@tlotr.com",
+            "participant_emails": [
+                "elrond@tlotr.com",
+                "frodo@tlotr.com",
+                "galadriel@tlotr.com",
+                "gandalf@tlotr.com",
+                "gimli@tlotr.com",
+                "samwise@tlotr.com",
+            ],
+            "participant_ids": ["user_id", "user_id_2", "user_id_3", "user_id_4"],
+            "participants": ["Frodo", "Galadriel", "Gandalf", "Gimli"],
+            "source": "salesforce",
+            "status": "New",
+            "title": "It needs to be destroyed",
+            "type": "case",
+            "url": f"{TEST_BASE_URL}/case_id",
+        }
+
+        source.salesforce_client.sobjects_cache_by_type = mock.AsyncMock(
+            return_value=CACHED_SOBJECTS
+        )
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+        source.salesforce_client._select_queryable_fields = mock.AsyncMock(
+            return_value=RELEVANT_SOBJECT_FIELDS
+        )
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=200,
+            payload=CASE_PAYLOAD,
+        )
+        mock_responses.get(
+            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            status=200,
+            payload=CASE_FEED_PAYLOAD,
+        )
+        async for account in source.salesforce_client.get_cases():
             assert account == expected_doc
 
 

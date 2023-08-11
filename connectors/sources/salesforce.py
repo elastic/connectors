@@ -6,6 +6,7 @@
 """Salesforce source module responsible to fetch documents from Salesforce."""
 from contextlib import contextmanager
 from functools import cached_property
+from itertools import groupby
 from threading import Lock
 
 import aiohttp
@@ -25,10 +26,27 @@ QUERY_ENDPOINT = f"/services/data/{API_VERSION}/query"
 DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 DESCRIBE_SOBJECT_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/<sobject>/describe"
 
-RELEVANT_SOBJECTS = ["Account", "Contact", "Lead", "Opportunity", "User"]
+RELEVANT_SOBJECTS = [
+    "Account",
+    "Campaign",
+    "Case",
+    "CaseComment",
+    "CaseFeed",
+    "Contact",
+    "EmailMessage",
+    "FeedComment",
+    "Lead",
+    "Opportunity",
+    "User",
+]
 RELEVANT_SOBJECT_FIELDS = [
     "AccountId",
+    "BccAddress",
     "BillingAddress",
+    "CaseNumber",
+    "CcAddress",
+    "CommentBody",
+    "CommentCount",
     "Company",
     "ConvertedAccountId",
     "ConvertedContactId",
@@ -37,15 +55,33 @@ RELEVANT_SOBJECT_FIELDS = [
     "Department",
     "Description",
     "Email",
+    "EndDate",
+    "FirstOpenedDate",
+    "FromAddress",
+    "FromName",
+    "IsActive",
+    "IsClosed",
+    "IsDeleted",
+    "LastEditById",
+    "LastEditDate",
+    "LastModifiedById",
     "LeadSource",
+    "LinkUrl",
+    "MessageDate",
     "Name",
     "OwnerId",
+    "ParentId",
     "Phone",
     "PhotoUrl",
     "Rating",
     "StageName",
+    "StartDate",
     "Status",
+    "StatusParentId",
+    "Subject",
+    "TextBody",
     "Title",
+    "ToAddress",
     "Type",
     "Website",
 ]
@@ -159,6 +195,12 @@ class SalesforceClient:
         async for lead in self.get_leads():
             yield lead, None
 
+        async for campaign in self.get_campaigns():
+            yield campaign, None
+
+        async for case in self.get_cases():
+            yield case, None
+
     async def get_accounts(self):
         if not await self._is_queryable("Account"):
             self._logger.info(
@@ -222,6 +264,47 @@ class SalesforceClient:
                     record.get("ConvertedOpportunityId"), {}
                 )
                 yield self.doc_mapper.map_lead(record)
+
+    async def get_campaigns(self):
+        if not await self._is_queryable("Campaign"):
+            self._logger.info(
+                "Object Campaign is not queryable, so they won't be ingested."
+            )
+            return
+
+        query = await self._campaigns_query()
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield self.doc_mapper.map_campaign(record)
+
+    async def get_cases(self):
+        if not await self._is_queryable("Case"):
+            self._logger.info(
+                "Object Case is not queryable, so they won't be ingested."
+            )
+            return
+
+        query = await self._cases_query()
+        async for records in self._yield_non_bulk_query_pages(query):
+            case_feeds_by_case_id = {}
+            if self._is_queryable("CaseFeed") and records:
+                case_ids = [x.get("Id") for x in records]
+                case_feeds = await self.get_case_feeds(case_ids)
+
+                # groupby requires pre-sorting apparently
+                case_feeds.sort(key=lambda x: x["ParentId"])
+                case_feeds_by_case_id = {
+                    k: list(feeds)
+                    for k, feeds in groupby(case_feeds, key=lambda x: x["ParentId"])
+                }
+
+            for record in records:
+                record["Feeds"] = case_feeds_by_case_id.get(record.get("Id"))
+                yield self.doc_mapper.map_case(record)
+
+    async def get_case_feeds(self, case_ids):
+        query = await self._case_feeds_query(case_ids)
+        return await self._execute_non_paginated_query(query)
 
     async def queryable_sobjects(self):
         """Cached async property"""
@@ -331,6 +414,16 @@ class SalesforceClient:
 
             url = response.get("nextRecordsUrl")
             params = None
+
+    async def _execute_non_paginated_query(self, soql_query):
+        """For quick queries, ignores pagination"""
+        url = f"{self.base_url}{QUERY_ENDPOINT}"
+        params = {"q": soql_query}
+        response = await self._get_json(
+            url,
+            params=params,
+        )
+        return response.get("records")
 
     def _auth_headers(self):
         return {"authorization": f"Bearer {self.api_token.token()}"}
@@ -518,6 +611,149 @@ class SalesforceClient:
         # TODO add uncommon_object_remote_fields
         return query_builder.build()
 
+    async def _campaigns_query(self):
+        queryable_fields = await self._select_queryable_fields(
+            "Campaign",
+            [
+                "Name",
+                "IsActive",
+                "Type",
+                "Description",
+                "Status",
+                "StartDate",
+                "EndDate",
+            ],
+        )
+        query_builder = SalesforceSoqlBuilder("Campaign")
+        query_builder.with_id()
+        query_builder.with_default_metafields()
+        query_builder.with_fields(queryable_fields)
+        # TODO add uncommon_object_remote_fields
+        query_builder.with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
+        query_builder.with_fields(["Parent.Id", "Parent.Name"])
+        return query_builder.build()
+
+    async def _cases_query(self):
+        queryable_fields = await self._select_queryable_fields(
+            "Case",
+            [
+                "Subject",
+                "Description",
+                "CaseNumber",
+                "Status",
+                "AccountId",
+                "ParentId",
+                "IsClosed",
+                "IsDeleted",
+            ],
+        )
+        query_builder = SalesforceSoqlBuilder("Case")
+        query_builder.with_id()
+        query_builder.with_default_metafields()
+        query_builder.with_fields(queryable_fields)
+        # TODO add uncommon_object_remote_fields
+        query_builder.with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
+        query_builder.with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
+
+        email_mesasges_join = await self._email_messages_join_query()
+        case_comments_join = await self._case_comments_join_query()
+        query_builder.with_join(email_mesasges_join)
+        query_builder.with_join(case_comments_join)
+        return query_builder.build()
+
+    async def _email_messages_join_query(self):
+        """For join with Case"""
+        queryable_fields = await self._select_queryable_fields(
+            "EmailMessage",
+            [
+                "ParentId",
+                "MessageDate",
+                "LastModifiedById",
+                "TextBody",
+                "Subject",
+                "FromName",
+                "FromAddress",
+                "ToAddress",
+                "CcAddress",
+                "BccAddress",
+                "Status",
+                "IsDeleted",
+                "FirstOpenedDate",
+            ],
+        )
+
+        query_builder = SalesforceSoqlBuilder("EmailMessages")
+        query_builder.with_id()
+        query_builder.with_fields(queryable_fields)
+        query_builder.with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
+        query_builder.with_limit(500)
+        return query_builder.build()
+
+    async def _case_comments_join_query(self):
+        """For join with Case"""
+        queryable_fields = await self._select_queryable_fields(
+            "CaseComment",
+            [
+                "ParentId",
+                "CommentBody",
+                "LastModifiedById",
+            ],
+        )
+
+        query_builder = SalesforceSoqlBuilder("CaseComments")
+        query_builder.with_id()
+        query_builder.with_default_metafields()
+        query_builder.with_fields(queryable_fields)
+        query_builder.with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
+        query_builder.with_limit(500)
+        return query_builder.build()
+
+    async def _case_feeds_query(self, case_ids):
+        queryable_fields = await self._select_queryable_fields(
+            "CaseFeed",
+            [
+                "ParentId",
+                "Type",
+                "IsDeleted",
+                "CommentCount",
+                "Title",
+                "Body",
+                "LinkUrl",
+            ],
+        )
+        where_in_clause = ",".join(f"'{x}'" for x in case_ids)
+        join_clause = await self._case_feed_comments_join()
+
+        query_builder = SalesforceSoqlBuilder("CaseFeed")
+        query_builder.with_id()
+        query_builder.with_default_metafields()
+        query_builder.with_fields(queryable_fields)
+        query_builder.with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
+        query_builder.with_join(join_clause)
+        query_builder.with_where(f"ParentId IN ({where_in_clause})")
+
+        return query_builder.build()
+
+    async def _case_feed_comments_join(self):
+        queryable_fields = await self._select_queryable_fields(
+            "FeedComment",
+            [
+                "ParentId",
+                "CreatedDate",
+                "LastEditById",
+                "LastEditDate",
+                "CommentBody",
+                "IsDeleted",
+                "StatusParentId",
+            ],
+        )
+        query_builder = SalesforceSoqlBuilder("FeedComments")
+        query_builder.with_id()
+        query_builder.with_fields(queryable_fields)
+        query_builder.with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
+        query_builder.with_limit(500)
+        return query_builder.build()
+
 
 class SalesforceAPIToken:
     def __init__(self, session, base_url, client_id, client_secret):
@@ -621,15 +857,15 @@ class SalesforceDocMapper:
         self.base_url = base_url
 
     def map_account(self, account):
-        owner = account.get("Owner", {})
+        owner = account.get("Owner", {}) or {}
 
-        opportunities = account.get("Opportunities")
+        opportunities = account.get("Opportunities", {}) or {}
         opportunity_records = opportunities.get("records", []) if opportunities else []
         opportunity = opportunity_records[0] if len(opportunity_records) > 0 else {}
         opportunity_url = (
-            f"{self.base_url}/{opportunity.get('Id')}" if opportunity else ""
+            f"{self.base_url}/{opportunity.get('Id')}" if opportunity else None
         )
-        opportunity_status = opportunity.get("StageName", "")
+        opportunity_status = opportunity.get("StageName", None)
 
         return {
             "_id": account.get("Id"),
@@ -656,7 +892,7 @@ class SalesforceDocMapper:
         }
 
     def map_opportunity(self, opportunity):
-        owner = opportunity.get("Owner", {})
+        owner = opportunity.get("Owner", {}) or {}
 
         return {
             "_id": opportunity.get("Id"),
@@ -675,22 +911,23 @@ class SalesforceDocMapper:
         }
 
     def map_contact(self, contact):
-        account = contact.get("Account", {})
-        account_id = contact.get("AccountId", "")
-        account_url = f"{self.base_url}/{account_id}" if account_id else ""
+        account = contact.get("Account", {}) or {}
+        account_id = account.get("Id")
+        account_url = f"{self.base_url}/{account_id}" if account_id else None
 
-        owner = contact.get("Owner", {})
-        owner_id = contact.get("OwnerId", "")
-        owner_url = f"{self.base_url}/{owner_id}" if owner_id else ""
+        owner = contact.get("Owner", {}) or {}
+        owner_id = owner.get("Id")
+        owner_url = f"{self.base_url}/{owner_id}" if owner_id else None
 
         photo_url = contact.get("PhotoUrl")
-        thumbnail = f"{self.base_url}{photo_url}" if photo_url else ""
+        thumbnail = f"{self.base_url}{photo_url}" if photo_url else None
 
         return {
             "_id": contact.get("Id"),
             "account": account.get("Name"),
             "account_url": account_url,
             "body": contact.get("Description"),
+            "created_at": contact.get("CreatedDate"),
             "email": contact.get("Email"),
             "job_title": contact.get("Title"),
             "last_updated": contact.get("LastModifiedDate"),
@@ -706,23 +943,23 @@ class SalesforceDocMapper:
         }
 
     def map_lead(self, lead):
-        owner = lead.get("Owner", {})
-        owner_id = lead.get("OwnerId", "")
+        owner = lead.get("Owner", {}) or {}
+        owner_id = owner.get("Id")
         owner_url = f"{self.base_url}/{owner_id}" if owner_id else ""
 
-        converted_account = lead.get("ConvertedAccount", {})
+        converted_account = lead.get("ConvertedAccount", {}) or {}
         converted_account_id = converted_account.get("Id")
         converted_account_url = (
             f"{self.base_url}/{converted_account_id}" if converted_account_id else None
         )
 
-        converted_contact = lead.get("ConvertedContact", {})
+        converted_contact = lead.get("ConvertedContact", {}) or {}
         converted_contact_id = converted_account.get("Id")
         converted_contact_url = (
             f"{self.base_url}/{converted_contact_id}" if converted_contact_id else None
         )
 
-        converted_opportunity = lead.get("ConvertedOpportunity", {})
+        converted_opportunity = lead.get("ConvertedOpportunity", {}) or {}
         converted_opportunity_id = converted_opportunity.get("Id")
         converted_opportunity_url = (
             f"{self.base_url}/{converted_opportunity_id}"
@@ -744,6 +981,7 @@ class SalesforceDocMapper:
             "converted_contact_url": converted_contact_url,
             "converted_opportunity": converted_opportunity.get("Name"),
             "converted_opportunity_url": converted_opportunity_url,
+            "created_at": lead.get("CreatedDate"),
             "email": lead.get("Email"),
             "job_title": lead.get("Title"),
             "last_updated": lead.get("LastModifiedDate"),
@@ -760,9 +998,74 @@ class SalesforceDocMapper:
             "url": f"{self.base_url}/{lead.get('Id')}",
         }
 
+    def map_campaign(self, campaign):
+        owner = campaign.get("Owner", {})
+
+        parent = campaign.get("Parent", {}) or {}
+        parent_id = parent.get("Id")
+        parent_url = f"{self.base_url}/{parent_id}" if parent_id else None
+
+        is_active = campaign.get("IsActive")
+        state = (
+            ("active" if is_active else "archived") if is_active is not None else None
+        )
+
+        return {
+            "_id": campaign.get("Id"),
+            "body": campaign.get("Description"),
+            "campaign_type": campaign.get("Type"),
+            "created_at": campaign.get("CreatedDate"),
+            "end_date": campaign.get("EndDate"),
+            "last_updated": campaign.get("LastModifiedDate"),
+            "owner": owner.get("Name"),
+            "owner_email": owner.get("Email"),
+            "parent": parent.get("Name"),
+            "parent_url": parent_url,
+            "source": "salesforce",
+            "start_date": campaign.get("StartDate"),
+            "status": campaign.get("Status"),
+            "state": state,
+            "title": campaign.get("Name"),
+            "type": "campaign",
+            "url": f"{self.base_url}/{campaign.get('Id')}",
+        }
+
+    def map_case(self, case):
+        owner = case.get("Owner", {})
+
+        created_by = case.get("CreatedBy", {}) or {}
+
+        (
+            participant_ids,
+            participant_emails,
+            participant_names,
+        ) = self._collect_case_participant_ids_emails_and_names(case)
+
+        return {
+            "_id": case.get("Id"),
+            "account_id": case.get("AccountId"),
+            "created_at": case.get("CreatedDate"),
+            "created_by": created_by.get("Name"),
+            "created_by_email": created_by.get("Email"),
+            "body": self._format_case_body(case),
+            "case_number": case.get("CaseNumber"),
+            "is_closed": case.get("IsClosed"),
+            "last_updated": case.get("LastModifiedDate"),
+            "owner": owner.get("Name"),
+            "owner_email": owner.get("Email"),
+            "participant_emails": participant_emails,
+            "participant_ids": participant_ids,
+            "participants": participant_names,
+            "source": "salesforce",
+            "status": case.get("Status"),
+            "title": case.get("Subject"),
+            "type": "case",
+            "url": f"{self.base_url}/{case.get('Id')}",
+        }
+
     def _format_address(self, address):
         if not address:
-            return ""
+            return None
 
         address_fields = [
             address.get("street"),
@@ -772,6 +1075,102 @@ class SalesforceDocMapper:
             address.get("country"),
         ]
         return ", ".join([a for a in address_fields if a])
+
+    def _format_case_body(self, case):
+        time_body_pairs = []
+        time_body_pairs.append([case.get("CreatedDate"), case.get("Description")])
+
+        case_comments = case.get("CaseComments", {}) or {}
+        for comment in case_comments.get("records", []):
+            time_body_pairs.append(
+                [comment.get("CreatedDate"), comment.get("CommentBody")]
+            )
+
+        email_messages = case.get("EmailMessages", {}) or {}
+        for email in email_messages.get("records", []):
+            subject = email.get("Subject", "") or ""
+            text_body = email.get("TextBody", "") or ""
+            time_body_pairs.append(
+                [email.get("MessageDate"), f"{subject}\n{text_body}"]
+            )
+
+        case_feeds = case.get("Feeds", []) or []
+        for feed in case_feeds:
+            title = feed.get("Title", "") or ""
+            body = feed.get("Body", "") or ""
+            time_body_pairs.append([feed.get("CreatedDate"), f"{title}\n{body}"])
+
+            feed_comments = feed.get("FeedComments", {}) or {}
+            for comment in feed_comments.get("records", []):
+                time_body_pairs.append(
+                    [comment.get("CreatedDate"), comment.get("CommentBody")]
+                )
+
+        # sort the body values by their associated timestamp
+        time_body_pairs = sorted(
+            time_body_pairs, key=lambda x: "" if x[0] is None else x[0]
+        )
+
+        # ensure string, remove Nones, and remove whitespace
+        bodies = [str(x[-1]).strip() for x in time_body_pairs if x[-1] is not None]
+
+        # finally filter out any empty strings, join and return
+        return "\n\n".join(filter(None, bodies))
+
+    def _collect_case_participant_ids_emails_and_names(self, case):
+        ids = []
+        emails = []
+        names = []
+
+        participants = [
+            case.get("Owner", {}) or {},
+            case.get("CreatedBy", {}) or {},
+        ]
+
+        case_comments = case.get("CaseComments", {}) or {}
+        participants.extend(self._collect_created_by(case_comments))
+
+        email_messages = case.get("EmailMessages", {}) or {}
+        participants.extend(self._collect_created_by(email_messages))
+
+        for email in email_messages.get("records", []):
+            names.append(email.get("FromName"))
+            emails.append(email.get("FromAddress"))
+            emails.extend(str(email.get("ToAddress", "")).split(";"))
+            emails.extend(str(email.get("CcAddress", "")).split(";"))
+            emails.extend(str(email.get("BccAddress", "")).split(";"))
+
+        feeds = case.get("Feeds", []) or []
+        for feed in feeds:
+            participants.append(feed.get("CreatedBy", {}))
+
+            feed_comments = feed.get("FeedComments", {}) or {}
+            participants.extend(self._collect_created_by(feed_comments))
+
+        for participant in participants:
+            ids.append(participant.get("Id"))
+            emails.append(participant.get("Email"))
+            names.append(participant.get("Name"))
+
+        ids = self._format_list(ids)
+        emails = self._format_list(emails)
+        names = self._format_list(names)
+
+        return ids, emails, names
+
+    def _collect_created_by(self, sobject):
+        created_by_list = []
+
+        records = sobject.get("records", [])
+        for record in records:
+            created_by_list.append(record.get("CreatedBy"))
+
+        return created_by_list
+
+    def _format_list(self, list):
+        return sorted(
+            set(filter(None, [str(x).strip() for x in list if x is not None]))
+        )
 
 
 class SalesforceDataSource(BaseDataSource):
