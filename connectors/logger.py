@@ -65,7 +65,7 @@ class ColorFormatter(logging.Formatter):
             fmt=self.BOLD_RED + self.custom_format + self.RESET, datefmt=self.DATE_FMT
         )
 
-    def format(self, record):
+    def format(self, record):  # noqa: A003
         formatter = getattr(self, f"{record.levelname.lower()}_formatter")
         return formatter.format(record)
 
