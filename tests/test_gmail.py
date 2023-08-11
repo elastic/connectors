@@ -9,13 +9,20 @@ import pytest
 import pytest_asyncio
 from freezegun import freeze_time
 
+from connectors.protocol import Features, Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.gmail import (
+    ACCESS_CONTROL,
     GMailAdvancedRulesValidator,
     GMailDataSource,
     _message_doc,
 )
+from connectors.sources.google import MessageFields, UserFields
+from connectors.utils import iso_utc
+from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+
+TIME = "2023-01-24T04:07:19"
 
 CUSTOMER_ID = "customer_id"
 
@@ -67,13 +74,6 @@ class TestGMailAdvancedRulesValidator:
         assert validation_result.is_valid == is_valid
 
 
-def setup_source():
-    source = create_source(GMailDataSource)
-    source._service_account_credentials = MagicMock()
-
-    return source
-
-
 MESSAGE_ID = 1
 FULL_MESSAGE = "some message"
 CREATION_DATE = "2023-01-01T13:37:00"
@@ -108,6 +108,18 @@ CREATION_DATE = "2023-01-01T13:37:00"
 @freeze_time(DATE)
 def test_message_doc(message, expected_doc):
     assert _message_doc(message) == expected_doc
+
+
+def setup_source():
+    source = create_source(GMailDataSource)
+    source._service_account_credentials = MagicMock()
+
+    return source
+
+
+def set_dls_enabled(source, dls_enabled):
+    source.set_features(Features({"document_level_security": {"enabled": dls_enabled}}))
+    source.configuration.set_field("use_document_level_security", value=dls_enabled)
 
 
 class TestGMailDataSource:
@@ -188,3 +200,107 @@ class TestGMailDataSource:
 
             with pytest.raises(ConfigurableFieldValueError):
                 await source.validate_config()
+
+    @freeze_time(TIME)
+    @pytest.mark.asyncio
+    async def test_get_docs_without_dls_without_filtering(
+        self, patch_gmail_client, patch_google_directory_client
+    ):
+        users = [{UserFields.EMAIL.value: "user@google.com"}]
+        message = {
+            MessageFields.ID.value: "1",
+            MessageFields.FULL_MESSAGE.value: "abcd",
+            MessageFields.CREATION_DATE.value: iso_utc(),
+        }
+        messages = [message]
+
+        patch_google_directory_client.users = AsyncIterator(users)
+        patch_gmail_client.messages = AsyncIterator(messages)
+        patch_gmail_client.message = AsyncMock(side_effect=messages)
+
+        async with setup_source() as source:
+            set_dls_enabled(source, False)
+
+            actual_messages = []
+
+            async for doc in source.get_docs(filtering=None):
+                actual_messages.append(doc)
+
+            actual_message = actual_messages[0][0]
+
+            assert len(actual_messages) == 1
+            assert actual_message["_id"] == message[MessageFields.ID.value]
+            assert len(actual_message["_attachment"]) > 0
+            assert actual_message["_timestamp"] == "2023-01-24T04:07:19+00:00"
+            assert ACCESS_CONTROL not in actual_message
+
+    @freeze_time(TIME)
+    @pytest.mark.asyncio
+    async def test_get_docs_without_dls_with_filtering(
+        self, patch_gmail_client, patch_google_directory_client
+    ):
+        users = [{UserFields.EMAIL.value: "user@google.com"}]
+        message = {
+            MessageFields.ID.value: "1",
+            MessageFields.FULL_MESSAGE.value: "abcd",
+            MessageFields.CREATION_DATE.value: iso_utc(),
+        }
+        messages = [message]
+
+        patch_google_directory_client.users = AsyncIterator(users)
+        patch_gmail_client.messages = AsyncIterator(messages)
+        patch_gmail_client.message = AsyncMock(side_effect=messages)
+
+        async with setup_source() as source:
+            set_dls_enabled(source, False)
+            actual_messages = []
+            message_query = "some query"
+            filter_ = Filter(
+                {"advanced_snippet": {"value": {"messages": [message_query]}}}
+            )
+
+            async for doc in source.get_docs(filtering=filter_):
+                actual_messages.append(doc)
+
+            actual_message = actual_messages[0][0]
+
+            assert len(actual_messages) == 1
+            assert actual_message["_id"] == message[MessageFields.ID.value]
+            assert len(actual_message["_attachment"]) > 0
+            assert actual_message["_timestamp"] == "2023-01-24T04:07:19+00:00"
+            assert ACCESS_CONTROL not in actual_message
+
+    @freeze_time(TIME)
+    @pytest.mark.asyncio
+    async def test_get_docs_with_dls_without_filtering(
+        self, patch_gmail_client, patch_google_directory_client
+    ):
+        email = "user@google.com"
+        users = [{UserFields.EMAIL.value: email}]
+        message = {
+            MessageFields.ID.value: "1",
+            MessageFields.FULL_MESSAGE.value: "abcd",
+            MessageFields.CREATION_DATE.value: iso_utc(),
+        }
+        messages = [message]
+
+        patch_google_directory_client.users = AsyncIterator(users)
+        patch_gmail_client.messages = AsyncIterator(messages)
+        patch_gmail_client.message = AsyncMock(side_effect=messages)
+
+        async with setup_source() as source:
+            set_dls_enabled(source, True)
+
+            actual_messages = []
+
+            async for doc in source.get_docs(filtering=None):
+                actual_messages.append(doc)
+
+            actual_message = actual_messages[0][0]
+
+            assert len(actual_messages) == 1
+            assert actual_message["_id"] == message[MessageFields.ID.value]
+            assert len(actual_message["_attachment"]) > 0
+            assert actual_message["_timestamp"] == "2023-01-24T04:07:19+00:00"
+            assert ACCESS_CONTROL in actual_message
+            assert email in actual_message[ACCESS_CONTROL]
