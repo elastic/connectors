@@ -192,12 +192,17 @@ async def test_slack_data_source_get_docs(slack_data_source, mock_responses):
     channels_response = [{"id": "1", "name": "channel1", "is_member": True}]
     messages_response = [{"text": "message1", "type": "message", "ts": 123456}]
 
-    slack_client = AsyncMock()
-    slack_client.list_users = AsyncIterator(users_response)
-    slack_client.list_channels = AsyncIterator(channels_response)
-    slack_client.list_messages = AsyncIterator(messages_response)
-    slack_client.close = AsyncMock()
-    slack_data_source.slack_client = slack_client
+    # A bit weird, but Slack connector actually inits client in its __init__
+    # So we need to close it before redefining
+    original_client = slack_data_source.slack_client
+    await original_client.close()
+
+    mock_client = AsyncMock()
+    mock_client.list_users = AsyncIterator(users_response)
+    mock_client.list_channels = AsyncIterator(channels_response)
+    mock_client.list_messages = AsyncIterator(messages_response)
+    mock_client.close = AsyncMock()
+    slack_data_source.slack_client = mock_client
 
     docs = []
     async for doc, _ in slack_data_source.get_docs():
