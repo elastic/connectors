@@ -94,7 +94,20 @@ async def test_assert_not_called():
     items = []
 
     async_generator = AsyncIterator(items)
-    assert async_generator.assert_not_called()
+    async_generator.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_assert_not_called_with_one_call():
+    items = []
+
+    async_generator = AsyncIterator(items)
+
+    async for _ in async_generator():
+        pass
+
+    with pytest.raises(AssertionError):
+        async_generator.assert_not_called()
 
 
 @pytest.mark.asyncio
