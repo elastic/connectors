@@ -298,15 +298,12 @@ class SalesforceClient:
                     for k, feeds in groupby(case_feeds, key=lambda x: x["ParentId"])
                 }
 
-            self._logger.info(case_feeds_by_case_id)
-
             for record in records:
                 record["Feeds"] = case_feeds_by_case_id.get(record.get("Id"))
                 yield self.doc_mapper.map_case(record)
 
     async def get_case_feeds(self, case_ids):
         query = await self._case_feeds_query(case_ids)
-        self._logger.info(query)
         return await self._get_non_bulk_query(query)
 
     async def queryable_sobjects(self):
