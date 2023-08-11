@@ -41,4 +41,20 @@ class AsyncIterator:
         return self.call_count == 0
 
     def assert_called_once(self):
-        return self.call_count == 1
+        if self.call_count != 1:
+            raise AssertionError(
+                f"Expected one call. Actual number of calls: {self.call_count}."
+            )
+
+    def assert_called_once_with(self, *args, **kwargs):
+        self.assert_called_once()
+
+        if len(self.call_args) > 0 and self.call_args[0] != args:
+            raise AssertionError(
+                f"Expected args: {args}. Actual args: {self.call_args[0]}."
+            )
+
+        if len(self.call_kwargs) > 0 and self.call_kwargs[0] != kwargs:
+            raise AssertionError(
+                f"Expected kwargs: {kwargs}. Actual kwargs: {self.call_kwargs[0]}."
+            )
