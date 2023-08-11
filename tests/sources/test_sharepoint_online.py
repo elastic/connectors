@@ -2168,9 +2168,7 @@ class TestSharepointOnlineDataSource:
                 )
                 for site_list in actual_site_lists
             )
-            assert (
-                patch_sharepoint_client.site_list_role_assignments.assert_called_once()
-            )
+            patch_sharepoint_client.site_list_role_assignments.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_download_function_for_folder(self):
