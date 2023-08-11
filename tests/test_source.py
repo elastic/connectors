@@ -71,15 +71,15 @@ def test_field():
     # stupid holder
     f = Field("name")
     assert f.label == "name"
-    assert f.type == "str"
+    assert f.field_type == "str"
 
 
 def test_field_convert():
-    assert Field("name", value="1", type="int").value == 1
-    assert Field("name", value="1.2", type="float").value == 1.2
-    assert Field("name", value="YeS", type="bool").value
-    assert Field("name", value="1,2,3", type="list").value == ["1", "2", "3"]
-    assert not Field("name", value="false", type="bool").value
+    assert Field("name", value="1", field_type="int").value == 1
+    assert Field("name", value="1.2", field_type="float").value == 1.2
+    assert Field("name", value="YeS", field_type="bool").value
+    assert Field("name", value="1,2,3", field_type="list").value == ["1", "2", "3"]
+    assert not Field("name", value="false", field_type="bool").value
 
 
 def test_data_source_configuration():
@@ -98,7 +98,7 @@ def test_default():
 
 
 @pytest.mark.parametrize(
-    "type, required, default_value, value, expected_value",
+    "field_type, required, default_value, value, expected_value",
     [
         # these include examples that would not normally validate
         # that is because `.value` does care about validation, it only returns a value
@@ -133,12 +133,12 @@ def test_default():
     ],
 )
 def test_value_returns_correct_value(
-    type, required, default_value, value, expected_value
+    field_type, required, default_value, value, expected_value
 ):
     assert (
         Field(
             "name",
-            type=type,
+            field_type=field_type,
             required=required,
             default_value=default_value,
             value=value,
@@ -148,7 +148,7 @@ def test_value_returns_correct_value(
 
 
 class MyConnector:
-    id = "1"
+    id = "1"  # noqa A003
     service_type = "yea"
 
     def __init__(self, *args):
