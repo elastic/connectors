@@ -7,7 +7,7 @@
 import ssl
 from copy import copy
 from unittest import mock
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from aiohttp import StreamReader
@@ -24,7 +24,7 @@ from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
-HOST_URL = "http://127.0.0.1:5000"
+HOST_URL = "http://127.0.0.1:9696"
 CONTENT_QUERY = "limit=1&expand=children.attachment,history.lastUpdated,body.storage"
 RESPONSE_SPACE = {
     "results": [
@@ -234,6 +234,81 @@ EXPECTED_SEARCH_RESULT = [
         "url": f"{HOST_URL}/spaces/SD",
     },
 ]
+
+SPACE_PERMISSION_RESPONSE = [
+    {
+        "id": 1,
+        "subjects": {
+            "group": {
+                "results": [
+                    {
+                        "type": "group",
+                        "name": "group1",
+                        "id": "group_id_1",
+                    }
+                ],
+                "size": 1,
+            },
+        },
+        "operation": {"operation": "read", "targetType": "space"},
+    },
+]
+PAGE_PERMISSION_RESPONSE = [
+    {
+        "id": 1,
+        "subjects": {
+            "group": {
+                "results": [
+                    {
+                        "type": "group",
+                        "name": "group2",
+                        "id": "group_id_2",
+                    }
+                ],
+                "size": 1,
+            },
+        },
+        "operation": {"operation": "read", "targetType": "page"},
+    },
+]
+BLOG_POST_PERMISSION_RESPONSE = [
+    {
+        "id": 1,
+        "subjects": {
+            "group": {
+                "results": [
+                    {
+                        "type": "group",
+                        "name": "group2",
+                        "id": "group_id_2",
+                    }
+                ],
+                "size": 1,
+            },
+        },
+        "operation": {"operation": "read", "targetType": "blogpost"},
+    },
+]
+PAGE_RESTRICTION_RESPONSE = {
+    "user": {
+        "results": [
+            {
+                "type": "known",
+                "accountId": "user_id_4",
+                "accountType": "atlassian",
+                "displayName": "user_4",
+            },
+            {
+                "type": "known",
+                "accountId": "user_id_5",
+                "accountType": "atlassian",
+                "displayName": "user_5",
+            },
+        ],
+        "size": 2,
+    },
+    "group": {"results": [], "size": 0},
+}
 
 
 class JSONAsyncMock(AsyncMock):
@@ -502,9 +577,9 @@ async def test_validate_configuration_for_ssl_enabled():
     async with create_source(ConfluenceDataSource) as source:
         source.ssl_enabled = True
 
-    # Execute
-    with pytest.raises(Exception):
-        source._validate_configuration()
+        # Execute
+        with pytest.raises(Exception):
+            source._validate_configuration()
 
 
 @freeze_time("2023-01-24T04:07:19")
@@ -518,7 +593,7 @@ async def test_fetch_spaces():
         )
 
         with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-            async for response in source.fetch_spaces():
+            async for response, _ in source.fetch_spaces():
                 assert response == EXPECTED_SPACE
 
 
@@ -531,7 +606,7 @@ async def test_fetch_documents():
 
         # Execute
         with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-            async for response, _ in source.fetch_documents(api_query=""):
+            async for response, _, _, _ in source.fetch_documents(api_query=""):
                 assert response == EXPECTED_PAGE
 
 
@@ -669,28 +744,30 @@ async def test_download_attachment_when_unsupported_filetype_used_then_fail_down
 
 @pytest.mark.asyncio
 @mock.patch.object(
-    ConfluenceDataSource, "fetch_spaces", return_value=AsyncIterator([EXPECTED_SPACE])
+    ConfluenceDataSource,
+    "fetch_spaces",
+    return_value=AsyncIterator([[copy(EXPECTED_SPACE), []]]),
 )
 @mock.patch.object(
     ConfluenceDataSource,
     "fetch_documents",
     side_effect=[
-        (AsyncIterator([[EXPECTED_PAGE, 1]])),
-        (AsyncIterator([[EXPECTED_BLOG, 1]])),
+        (AsyncIterator([[copy(EXPECTED_PAGE), 1, [], {}]])),
+        (AsyncIterator([[copy(EXPECTED_BLOG), 1, [], {}]])),
     ],
 )
 @mock.patch.object(
     ConfluenceDataSource,
     "fetch_attachments",
     side_effect=[
-        (AsyncIterator([[EXPECTED_ATTACHMENT, "download-url"]])),
-        (AsyncIterator([[EXPECTED_BLOG_ATTACHMENT, "download-url"]])),
+        (AsyncIterator([[copy(EXPECTED_ATTACHMENT), "download-url"]])),
+        (AsyncIterator([[copy(EXPECTED_BLOG_ATTACHMENT), "download-url"]])),
     ],
 )
 @mock.patch.object(
     ConfluenceDataSource,
     "download_attachment",
-    return_value=AsyncIterator([[EXPECTED_CONTENT]]),
+    return_value=AsyncIterator([[copy(EXPECTED_CONTENT)]]),
 )
 async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_patch):
     """Tests the get_docs method"""
@@ -720,3 +797,225 @@ async def test_get_session():
         first_instance = source.confluence_client._get_session()
         second_instance = source.confluence_client._get_session()
         assert first_instance is second_instance
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_dls_disabled():
+    async with create_source(ConfluenceDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=False)
+
+        acl = []
+        async for access_control in source.get_access_control():
+            acl.append(access_control)
+
+        assert len(acl) == 0
+
+
+@pytest.mark.asyncio
+@freeze_time("2023-01-24T04:07:19")
+async def test_get_access_control_dls_enabled():
+    mock_users = [
+        {
+            # Indexable: The user is active and atlassian user.
+            "self": "url1",
+            "accountId": "607194d6bc3c3f006f4c35d6",
+            "accountType": "atlassian",
+            "displayName": "user1",
+            "active": True,
+        },
+        {
+            # Non-Indexable: The user is no longer active.
+            "self": "url2",
+            "accountId": "607194d6bc3c3f006f4c35d7",
+            "accountType": "atlassian",
+            "displayName": "user2",
+            "active": False,
+        },
+        {
+            # Non-Indexable: User account type is app; it must be atlassian.
+            "self": "url2",
+            "accountId": "607194d6bc3c3f006f4c35d7",
+            "accountType": "app",
+            "displayName": "user2",
+            "active": False,
+        },
+        {
+            # Non-Indexable: Personal information about user is missing.
+            "accountId": "607194d6bc3c3f006f4c35d7",
+            "accountType": "app",
+            "displayName": "user2",
+            "active": False,
+        },
+    ]
+
+    mock_user1 = {
+        "self": "url1",
+        "accountId": "607194d6bc3c3f006f4c35d6",
+        "accountType": "atlassian",
+        "displayName": "user1",
+        "active": True,
+        "groups": {
+            "size": 1,
+            "items": [
+                {
+                    "name": "group1",
+                    "groupId": "607194d6bc3c3f006f4c35d8",
+                }
+            ],
+        },
+        "applicationRoles": {
+            "size": 0,
+            "items": [
+                {
+                    "name": "role1",
+                    "key": "607194d6bc3c3f006f4c35d9",
+                }
+            ],
+        },
+    }
+
+    expected_user_doc = {
+        "_id": "607194d6bc3c3f006f4c35d6",
+        "identity": {
+            "account_id": "account_id:607194d6bc3c3f006f4c35d6",
+            "display_name": "name:user1",
+        },
+        "created_at": "2023-01-24T04:07:19+00:00",
+        "query": {
+            "template": {
+                "params": {
+                    "access_control": [
+                        "account_id:607194d6bc3c3f006f4c35d6",
+                        "group_id:607194d6bc3c3f006f4c35d8",
+                        "role_key:607194d6bc3c3f006f4c35d9",
+                    ]
+                }
+            },
+            "source": {
+                "bool": {
+                    "filter": {
+                        "bool": {
+                            "should": [
+                                {
+                                    "bool": {
+                                        "must_not": {
+                                            "exists": {"field": "_allow_access_control"}
+                                        }
+                                    }
+                                },
+                                {
+                                    "terms": {
+                                        "_allow_access_control.enum": [
+                                            "account_id:607194d6bc3c3f006f4c35d6",
+                                            "group_id:607194d6bc3c3f006f4c35d8",
+                                            "role_key:607194d6bc3c3f006f4c35d9",
+                                        ]
+                                    }
+                                },
+                            ]
+                        }
+                    }
+                }
+            },
+        },
+    }
+
+    async with create_source(ConfluenceDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+
+        source.fetch_all_users = AsyncIterator([mock_users])
+        source.fetch_user = AsyncIterator([mock_user1])
+
+        user_documents = []
+        async for user_doc in source.get_access_control():
+            user_documents.append(user_doc)
+
+        assert expected_user_doc in user_documents
+
+
+@pytest.mark.asyncio
+@mock.patch.object(
+    ConfluenceDataSource,
+    "fetch_spaces",
+    return_value=AsyncIterator([[copy(EXPECTED_SPACE), SPACE_PERMISSION_RESPONSE]]),
+)
+@mock.patch.object(
+    ConfluenceDataSource,
+    "fetch_documents",
+    side_effect=[
+        (AsyncIterator([[copy(EXPECTED_BLOG), 1, BLOG_POST_PERMISSION_RESPONSE, {}]])),
+        (
+            AsyncIterator(
+                [
+                    [
+                        copy(EXPECTED_PAGE),
+                        1,
+                        PAGE_PERMISSION_RESPONSE,
+                        PAGE_RESTRICTION_RESPONSE,
+                    ]
+                ]
+            )
+        ),
+    ],
+)
+@mock.patch.object(
+    ConfluenceDataSource,
+    "fetch_attachments",
+    side_effect=[
+        (
+            AsyncIterator(
+                [
+                    [
+                        copy(EXPECTED_BLOG_ATTACHMENT),
+                        "download-url",
+                    ]
+                ]
+            )
+        ),
+        (
+            AsyncIterator(
+                [
+                    [
+                        copy(EXPECTED_ATTACHMENT),
+                        "download-url",
+                    ]
+                ]
+            )
+        ),
+    ],
+)
+@mock.patch.object(
+    ConfluenceDataSource,
+    "download_attachment",
+    return_value=AsyncIterator([[copy(EXPECTED_CONTENT)]]),
+)
+async def test_get_docs_dls_enabled(
+    spaces_patch, pages_patch, attachment_patch, content_patch
+):
+    async with create_source(ConfluenceDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+
+        expected_responses = [
+            copy(EXPECTED_SPACE) | {"_allow_access_control": ["group_id:group_id_1"]},
+            copy(EXPECTED_BLOG) | {"_allow_access_control": ["group_id:group_id_2"]},
+            copy(EXPECTED_PAGE)
+            | {
+                "_allow_access_control": [
+                    "account_id:user_id_4",
+                    "account_id:user_id_5",
+                ]
+            },
+            copy(EXPECTED_ATTACHMENT)
+            | {
+                "_allow_access_control": [
+                    "account_id:user_id_4",
+                    "account_id:user_id_5",
+                ]
+            },
+            copy(EXPECTED_BLOG_ATTACHMENT)
+            | {"_allow_access_control": ["group_id:group_id_2"]},
+        ]
+
+        async for item, _ in source.get_docs():
+            item.get("_allow_access_control", []).sort()
+            assert item in expected_responses
