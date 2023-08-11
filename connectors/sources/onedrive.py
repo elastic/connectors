@@ -196,6 +196,7 @@ class OneDriveClient:
                 yield response
         except ServerConnectionError:
             await self.close_session()
+            raise
         except ClientResponseError as e:
             if e.status == 429 or e.status == 503:
                 response_headers = e.headers or {}
@@ -250,10 +251,10 @@ class OneDriveClient:
                 )
                 break
 
-    async def get_user_ids(self):
+    async def list_users(self):
         async for response in self.paginated_api_call(url_name=USERS):
             for user_detail in response:
-                yield user_detail["id"]
+                yield user_detail
 
     async def get_owned_files(self, user_id):
         async for response in self.paginated_api_call(url_name=DELTA, user_id=user_id):
@@ -296,20 +297,20 @@ class OneDriveDataSource(BaseDataSource):
                 "label": "Azure application Client ID",
                 "order": 1,
                 "type": "str",
-                "value": "client#123",
+                "value": "",
             },
             "client_secret": {
                 "label": "Azure application Client Secret",
                 "order": 2,
                 "sensitive": True,
                 "type": "str",
-                "value": "secret#123",
+                "value": "",
             },
             "tenant_id": {
                 "label": "Azure application Tenant ID",
                 "order": 3,
                 "type": "str",
-                "value": "tenant-123",
+                "value": "",
             },
             "retry_count": {
                 "default_value": 3,
@@ -341,13 +342,13 @@ class OneDriveDataSource(BaseDataSource):
         self, attachment_extension, attachment_name, attachment_size
     ):
         if attachment_extension == "":
-            self._logger.debug(
+            self._logger.warning(
                 f"Files without extension are not supported, skipping {attachment_name}."
             )
             return False
 
         if attachment_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.debug(
+            self._logger.warning(
                 f"Files with the extension {attachment_extension} are not supported, skipping {attachment_name}."
             )
             return False
@@ -458,7 +459,9 @@ class OneDriveDataSource(BaseDataSource):
             dictionary: dictionary containing meta-data of the files.
         """
 
-        async for user_id in self.client.get_user_ids():
+        async for user in self.client.list_users():
+            user_id = user.get("id")
+
             async for entity in self.client.get_owned_files(user_id):
                 entity = self.prepare_doc(entity)
                 if entity["type"] == FILE:

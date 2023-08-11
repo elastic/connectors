@@ -23,8 +23,24 @@ from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
 EXPECTED_USERS = [
-    "3fada5d6-125c-4aaa-bc23-09b5d301b2a7",
-    "8e083933-1720-4d2f-80d0-3976669b40ee",
+    {
+        "displayName": "Adele Vance",
+        "givenName": "Adele",
+        "jobTitle": "Retail Manager",
+        "mail": "AdeleV@w076v.onmicrosoft.com",
+        "officeLocation": "18/2111",
+        "preferredLanguage": "en-US",
+        "id": "3fada5d6-125c-4aaa-bc23-09b5d301b2a7",
+    },
+    {
+        "displayName": "Alex Wilber",
+        "givenName": "Alex",
+        "jobTitle": "Marketing Assistant",
+        "mail": "AlexW@w076v.onmicrosoft.com",
+        "officeLocation": "131/1104",
+        "preferredLanguage": "en-US",
+        "id": "8e083933-1720-4d2f-80d0-3976669b40ee",
+    },
 ]
 RESPONSE_USERS = {
     "value": [
@@ -284,7 +300,7 @@ def test_get_configuration():
         config=OneDriveDataSource.get_default_configuration()
     )
 
-    assert config["client_id"] == "client#123"
+    assert config["client_id"] == ""
 
 
 @pytest.mark.asyncio
@@ -512,17 +528,17 @@ async def test_get_owned_files():
             with patch("aiohttp.ClientSession.get", return_value=async_response):
                 with patch.object(
                     OneDriveClient,
-                    "get_user_ids",
+                    "list_users",
                     return_value=AsyncIterator([EXPECTED_USERS]),
-                ) as user_id:
-                    async for file in source.client.get_owned_files(user_id):
+                ) as user:
+                    async for file in source.client.get_owned_files(user["id"]):
                         response.append(file)
 
         assert response == EXPECTED_FILES
 
 
 @pytest.mark.asyncio
-async def test_get_user_ids():
+async def test_list_users():
     async with create_source(OneDriveDataSource) as source:
         response = []
         async_response = AsyncMock()
@@ -531,8 +547,8 @@ async def test_get_user_ids():
         )
         with patch.object(AccessToken, "get", return_value="abc"):
             with patch("aiohttp.ClientSession.get", return_value=async_response):
-                async for user_id in source.client.get_user_ids():
-                    response.append(user_id)
+                async for user in source.client.list_users():
+                    response.append(user)
 
             assert response == EXPECTED_USERS
 
@@ -565,9 +581,7 @@ async def test_get_content_when_is_downloadable_is_true(
                     assert response == expected_content
 
 
-@patch.object(
-    OneDriveClient, "get_user_ids", return_value=AsyncIterator(EXPECTED_USERS)
-)
+@patch.object(OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS))
 @patch.object(
     OneDriveClient,
     "get_owned_files",
