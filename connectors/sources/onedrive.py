@@ -7,6 +7,7 @@
 """
 import asyncio
 import os
+from copy import copy
 from datetime import datetime, timedelta
 from functools import cached_property, partial
 from urllib import parse
@@ -165,7 +166,7 @@ class OneDriveClient:
         self._logger = logger_
 
     @cached_property
-    def _get_session(self):
+    def session(self):
         """Generate base client session with configuration fields
         Returns:
             ClientSession: Base client session
@@ -178,8 +179,8 @@ class OneDriveClient:
 
     async def close_session(self):
         self._sleeps.cancel()
-        await self._get_session.close()
-        del self._get_session
+        await self.session.close()
+        del self.session
 
     @retryable(
         retries=RETRIES,
@@ -191,8 +192,10 @@ class OneDriveClient:
         access_token = await self.token.get()
         headers = {"authorization": f"Bearer {access_token}"}
         try:
-            async with self._get_session.get(url=url, headers=headers) as response:
+            async with self.session.get(url=url, headers=headers) as response:
                 yield response
+        except ServerConnectionError:
+            await self.close_session()
         except ClientResponseError as e:
             if e.status == 429 or e.status == 503:
                 response_headers = e.headers or {}
@@ -201,7 +204,7 @@ class OneDriveClient:
                     try:
                         retry_seconds = int(response_headers["Retry-After"])
                     except (TypeError, ValueError) as exception:
-                        self._logger.debug(
+                        self._logger.error(
                             f"Error while reading value of retry-after header {exception}. Using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
                         )
                 else:
@@ -241,35 +244,22 @@ class OneDriveClient:
                     url = response_json.get("@odata.nextLink")
                     if not url:
                         return
-            except ServerConnectionError:
-                await self.close_session()
             except Exception as exception:
                 self._logger.warning(
                     f"Skipping data for type {url_name} from {url}. Exception: {exception}."
                 )
                 break
 
-    async def get_user_id(self):
+    async def get_user_ids(self):
         async for response in self.paginated_api_call(url_name=USERS):
             for user_detail in response:
                 yield user_detail["id"]
-
-    def prepare_doc(self, file):
-        return {
-            "type": FILE if file.get(FILE) else FOLDER,
-            "title": file.get("name"),
-            "_id": file.get("id"),
-            "_timestamp": file.get("lastModifiedDateTime"),
-            "created_at": file.get("createdDateTime"),
-            "size": file.get("size"),
-            "url": file.get("webUrl"),
-        }
 
     async def get_owned_files(self, user_id):
         async for response in self.paginated_api_call(url_name=DELTA, user_id=user_id):
             for file in response:
                 if file.get("name", "") != "root":
-                    yield self.prepare_doc(file)
+                    yield file
 
 
 class OneDriveDataSource(BaseDataSource):
@@ -288,11 +278,11 @@ class OneDriveDataSource(BaseDataSource):
         self.configuration = configuration
 
     @cached_property
-    def get_client(self):
+    def client(self):
         return OneDriveClient(self.configuration)
 
     def _set_internal_logger(self):
-        self.get_client.set_logger(self._logger)
+        self.client.set_logger(self._logger)
 
     @classmethod
     def get_default_configuration(cls):
@@ -335,13 +325,13 @@ class OneDriveDataSource(BaseDataSource):
 
     async def close(self):
         """Closes unclosed client session"""
-        await self.get_client.close_session()
+        await self.client.close_session()
 
     async def ping(self):
         """Verify the connection with OneDrive"""
         try:
             url = parse.urljoin(BASE_URL, ENDPOINTS[PING])
-            await anext(self.get_client.get(url=url))
+            await anext(self.client.get(url=url))
             self._logger.info("Successfully connected to OneDrive")
         except Exception:
             self._logger.exception("Error while connecting to OneDrive")
@@ -354,13 +344,13 @@ class OneDriveDataSource(BaseDataSource):
             self._logger.debug(
                 f"Files without extension are not supported, skipping {attachment_name}."
             )
-            return
+            return False
 
-        elif attachment_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
+        if attachment_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
             self._logger.debug(
                 f"Files with the extension {attachment_extension} are not supported, skipping {attachment_name}."
             )
-            return
+            return False
 
         if attachment_size > FILE_SIZE_LIMIT:
             self._logger.warning(
@@ -370,16 +360,16 @@ class OneDriveDataSource(BaseDataSource):
         return True
 
     async def _get_document_with_content(
-        self, attachment, attachment_name, document, user_id
+        self, file, attachment_name, document, user_id
     ):
         temp_filename = ""
 
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
             url = parse.urljoin(
                 BASE_URL,
-                ENDPOINTS[CONTENT].format(user_id=user_id, item_id=attachment["id"]),
+                ENDPOINTS[CONTENT].format(user_id=user_id, item_id=file["_id"]),
             )
-            async for response in self.get_client.get(url=url):
+            async for response in self.client.get(url=url):
                 async for data in response.content.iter_chunked(n=CHUNK_SIZE):
                     await async_buffer.write(data)
             temp_filename = str(async_buffer.name)
@@ -402,23 +392,23 @@ class OneDriveDataSource(BaseDataSource):
             )
         return document
 
-    async def get_content(self, attachment, user_id, timestamp=None, doit=False):
+    async def get_content(self, file, user_id, timestamp=None, doit=False):
         """Extracts the content for allowed file types.
 
         Args:
-            attachment (object): Attachment object
+            file (dict): File metadata
             user_id (str): User ID of OneDrive user
-            timestamp (timestamp, optional): Timestamp of attachment last modified. Defaults to None.
+            timestamp (timestamp, optional): Timestamp of file last modified. Defaults to None.
             doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
 
         Returns:
-            dictionary: Content document with _id, _timestamp and attachment content
+            dictionary: Content document with _id, _timestamp and file content
         """
-        attachment_size = int(attachment["size"])
+        attachment_size = int(file["size"])
         if not (doit and attachment_size > 0):
             return
 
-        attachment_name = attachment["title"]
+        attachment_name = file["title"]
 
         attachment_extension = (
             attachment_name[attachment_name.rfind(".") :]  # noqa
@@ -436,16 +426,27 @@ class OneDriveDataSource(BaseDataSource):
         self._logger.debug(f"Downloading {attachment_name}")
 
         document = {
-            "_id": attachment["id"],
-            "_timestamp": attachment["_timestamp"],
+            "_id": file["_id"],
+            "_timestamp": file["_timestamp"],
         }
 
         return await self._get_document_with_content(
-            attachment=attachment,
+            file=file,
             attachment_name=attachment_name,
             document=document,
             user_id=user_id,
         )
+
+    def prepare_doc(self, file):
+        return {
+            "type": FILE if file.get(FILE) else FOLDER,
+            "title": file.get("name"),
+            "_id": file.get("id"),
+            "_timestamp": file.get("lastModifiedDateTime"),
+            "created_at": file.get("createdDateTime"),
+            "size": file.get("size"),
+            "url": file.get("webUrl"),
+        }
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch OneDrive objects in async manner
@@ -457,9 +458,10 @@ class OneDriveDataSource(BaseDataSource):
             dictionary: dictionary containing meta-data of the files.
         """
 
-        async for user_id in self.get_client.get_user_id():
-            async for entity in self.get_client.get_owned_files(user_id):
+        async for user_id in self.client.get_user_ids():
+            async for entity in self.client.get_owned_files(user_id):
+                entity = self.prepare_doc(entity)
                 if entity["type"] == FILE:
-                    yield entity, partial(self.get_content, entity, user_id)
+                    yield entity, partial(self.get_content, copy(entity), user_id)
                 else:
                     yield entity, None

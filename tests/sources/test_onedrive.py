@@ -13,6 +13,8 @@ from aiohttp.client_exceptions import ClientResponseError
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.onedrive import (
     AccessToken,
+    InternalServerError,
+    NotFound,
     OneDriveClient,
     OneDriveDataSource,
     TokenRetrievalError,
@@ -85,22 +87,51 @@ RESPONSE_FILES = {
 
 EXPECTED_FILES = [
     {
-        "created_at": "2023-05-01T09:09:19Z",
-        "_id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
-        "_timestamp": "2023-05-01T09:09:19Z",
-        "title": "folder1",
-        "type": "folder",
-        "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder1",
+        "createdDateTime": "2023-05-01T09:09:19Z",
+        "eTag": '"{FF3F899A-2CBB-4D06-AE16-BBBBF5C35C4E},1"',
+        "id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
+        "lastModifiedDateTime": "2023-05-01T09:09:19Z",
+        "name": "folder1",
+        "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder1",
+        "cTag": '"c:{FF3F899A-2CBB-4D06-AE16-BBBBF5C35C4E},0"',
         "size": 10484,
     },
     {
-        "created_at": "2023-05-01T09:09:31Z",
-        "_id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
-        "_timestamp": "2023-05-01T09:10:21Z",
-        "title": "Document.docx",
-        "type": "file",
-        "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/Doc.aspx?sourcedoc=34680133F84%7&file=Document.docx&action=default&mobileredirect=true",
+        "createdDateTime": "2023-05-01T09:09:31Z",
+        "eTag": '"{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
+        "id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
+        "lastModifiedDateTime": "2023-05-01T09:10:21Z",
+        "name": "Document.docx",
+        "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/Doc.aspx?sourcedoc=34680133F84%7&file=Document.docx&action=default&mobileredirect=true",
+        "cTag": '"c:{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
         "size": 10484,
+        "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        },
+    },
+]
+
+RESPONSE_USER1_FILES = [
+    {
+        "createdDateTime": "2023-05-01T09:09:19Z",
+        "id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
+        "lastModifiedDateTime": "2023-05-01T09:09:19Z",
+        "name": "folder3",
+        "eTag": '"{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
+        "cTag": '"c:{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
+        "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder1",
+        "size": 10484,
+    },
+    {
+        "createdDateTime": "2023-05-01T09:09:31Z",
+        "id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
+        "lastModifiedDateTime": "2023-05-01T09:10:21Z",
+        "name": "doit.py",
+        "eTag": '"{2E301580-9Y39-4D32-A6D4-E34680133WE8},3"',
+        "cTag": '"c:{2E301580-9Y39-4D32-A6D4-E34680133WE8},3"',
+        "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/Doc.aspx?sourcedoc=34680133F84%7&file=doit.py&action=default&mobileredirect=true",
+        "size": 10484,
+        "file": {"mimeType": "application/python"},
     },
 ]
 
@@ -125,6 +156,30 @@ EXPECTED_USER1_FILES = [
     },
 ]
 
+RESPONSE_USER2_FILES = [
+    {
+        "createdDateTime": "2023-05-01T09:09:19Z",
+        "id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
+        "lastModifiedDateTime": "2023-05-01T09:09:19Z",
+        "name": "folder4",
+        "eTag": '"{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
+        "cTag": '"c:{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
+        "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder4",
+        "size": 10484,
+    },
+    {
+        "createdDateTime": "2023-05-01T09:09:31Z",
+        "id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
+        "lastModifiedDateTime": "2023-05-01T09:10:21Z",
+        "name": "mac.txt",
+        "eTag": '"{2E301580-9Y39-4D32-A6D4-E34680133WE8},3"',
+        "cTag": '"c:{2E301580-9Y39-4D32-A6D4-E34680133WE8},3"',
+        "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/mac.txt?sourcedoc=34680133F84%7&file=mac.txt&action=default&mobileredirect=true",
+        "size": 10484,
+        "file": {"mimeType": "plain/text"},
+    },
+]
+
 EXPECTED_USER2_FILES = [
     {
         "created_at": "2023-05-01T09:09:19Z",
@@ -132,7 +187,7 @@ EXPECTED_USER2_FILES = [
         "_timestamp": "2023-05-01T09:09:19Z",
         "title": "folder4",
         "type": "folder",
-        "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder1",
+        "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder4",
         "size": 10484,
     },
     {
@@ -141,14 +196,14 @@ EXPECTED_USER2_FILES = [
         "_timestamp": "2023-05-01T09:10:21Z",
         "title": "mac.txt",
         "type": "file",
-        "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/Doc.aspx?sourcedoc=34680133F84%7&file=mac.txt&action=default&mobileredirect=true",
+        "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/mac.txt?sourcedoc=34680133F84%7&file=mac.txt&action=default&mobileredirect=true",
         "size": 10484,
     },
 ]
 
 MOCK_ATTACHMENT = {
     "created_at": "2023-05-01T09:09:31Z",
-    "id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
+    "_id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
     "_timestamp": "2023-05-01T09:10:21Z",
     "title": "Document.docx",
     "type": "file",
@@ -158,7 +213,7 @@ MOCK_ATTACHMENT = {
 
 MOCK_ATTACHMENT_WITHOUT_EXTENSION = {
     "created_at": "2023-05-01T09:09:31Z",
-    "id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
+    "_id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
     "_timestamp": "2023-05-01T09:10:21Z",
     "title": "Document",
     "type": "file",
@@ -168,7 +223,7 @@ MOCK_ATTACHMENT_WITHOUT_EXTENSION = {
 
 MOCK_ATTACHMENT_WITH_LARGE_DATA = {
     "created_at": "2023-05-01T09:09:31Z",
-    "id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
+    "_id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
     "_timestamp": "2023-05-01T09:10:21Z",
     "title": "Document.docx",
     "type": "file",
@@ -178,7 +233,7 @@ MOCK_ATTACHMENT_WITH_LARGE_DATA = {
 
 MOCK_ATTACHMENT_WITH_UNSUPPORTED_EXTENSION = {
     "created_at": "2023-05-01T09:09:31Z",
-    "id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
+    "_id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
     "_timestamp": "2023-05-01T09:10:21Z",
     "title": "Document.xyz",
     "type": "file",
@@ -256,11 +311,11 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
 @pytest.mark.asyncio
 async def test_close_with_client_session():
     async with create_source(OneDriveDataSource) as source:
-        source.get_client.access_token = "dummy"
+        source.client.access_token = "dummy"
 
         await source.close()
 
-        assert not hasattr(source.get_client.__dict__, "_get_session")
+        assert not hasattr(source.client.__dict__, "session")
 
 
 @pytest.mark.asyncio
@@ -273,16 +328,16 @@ async def test_set_access_token():
         )
 
         with patch("aiohttp.request", return_value=async_response):
-            await source.get_client.token._set_access_token()
+            await source.client.token._set_access_token()
 
-            assert source.get_client.token.access_token == "msgraphtoken"
+            assert source.client.token.access_token == "msgraphtoken"
 
 
 @pytest.mark.asyncio
 async def test_ping_for_successful_connection():
     async with create_source(OneDriveDataSource) as source:
         DUMMY_RESPONSE = {}
-        source.get_client.get = AsyncIterator([[DUMMY_RESPONSE]])
+        source.client.get = AsyncIterator([[DUMMY_RESPONSE]])
 
         await source.ping()
 
@@ -374,7 +429,7 @@ async def test_get_with_429_status():
                 "aiohttp.ClientSession.get",
                 side_effect=[initial_response, retried_response],
             ):
-                async for response in source.get_client.get(
+                async for response in source.client.get(
                     url="http://localhost:1000/sample"
                 ):
                     result = await response.json()
@@ -400,12 +455,49 @@ async def test_get_with_429_status_without_retry_after_header():
                     "aiohttp.ClientSession.get",
                     side_effect=[initial_response, retried_response],
                 ):
-                    async for response in source.get_client.get(
+                    async for response in source.client.get(
                         url="http://localhost:1000/sample"
                     ):
                         result = await response.json()
 
         assert result == payload
+
+
+@pytest.mark.asyncio
+async def test_get_with_404_status():
+    error = ClientResponseError(None, None)
+    error.status = 404
+
+    async with create_source(OneDriveDataSource) as source:
+        with patch.object(AccessToken, "get", return_value="abc"):
+            with patch(
+                "aiohttp.ClientSession.get",
+                side_effect=error,
+            ):
+                with pytest.raises(NotFound):
+                    async for response in source.client.get(
+                        url="http://localhost:1000/err"
+                    ):
+                        await response.json()
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.apply_retry_strategy", AsyncMock())
+async def test_get_with_500_status():
+    error = ClientResponseError(None, None)
+    error.status = 500
+
+    async with create_source(OneDriveDataSource) as source:
+        with patch.object(AccessToken, "get", return_value="abc"):
+            with patch(
+                "aiohttp.ClientSession.get",
+                side_effect=error,
+            ):
+                with pytest.raises(InternalServerError):
+                    async for response in source.client.get(
+                        url="http://localhost:1000/err"
+                    ):
+                        await response.json()
 
 
 @pytest.mark.asyncio
@@ -420,17 +512,17 @@ async def test_get_owned_files():
             with patch("aiohttp.ClientSession.get", return_value=async_response):
                 with patch.object(
                     OneDriveClient,
-                    "get_user_id",
+                    "get_user_ids",
                     return_value=AsyncIterator([EXPECTED_USERS]),
                 ) as user_id:
-                    async for file in source.get_client.get_owned_files(user_id):
+                    async for file in source.client.get_owned_files(user_id):
                         response.append(file)
 
         assert response == EXPECTED_FILES
 
 
 @pytest.mark.asyncio
-async def test_get_user_id():
+async def test_get_user_ids():
     async with create_source(OneDriveDataSource) as source:
         response = []
         async_response = AsyncMock()
@@ -439,7 +531,7 @@ async def test_get_user_id():
         )
         with patch.object(AccessToken, "get", return_value="abc"):
             with patch("aiohttp.ClientSession.get", return_value=async_response):
-                async for user_id in source.get_client.get_user_id():
+                async for user_id in source.client.get_user_ids():
                     response.append(user_id)
 
             assert response == EXPECTED_USERS
@@ -447,7 +539,7 @@ async def test_get_user_id():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "attachment, user_id, expected_content",
+    "file, user_id, expected_content",
     [
         (MOCK_ATTACHMENT, "123", EXPECTED_CONTENT),
         (MOCK_ATTACHMENT_WITHOUT_EXTENSION, "123", None),
@@ -456,7 +548,7 @@ async def test_get_user_id():
     ],
 )
 async def test_get_content_when_is_downloadable_is_true(
-    attachment, user_id, expected_content
+    file, user_id, expected_content
 ):
     async with create_source(OneDriveDataSource) as source:
         with patch.object(AccessToken, "get", return_value="abc"):
@@ -466,20 +558,22 @@ async def test_get_content_when_is_downloadable_is_true(
                     return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
                 ):
                     response = await source.get_content(
-                        attachment=attachment,
+                        file=file,
                         user_id=user_id,
                         doit=True,
                     )
                     assert response == expected_content
 
 
-@patch.object(OneDriveClient, "get_user_id", return_value=AsyncIterator(EXPECTED_USERS))
+@patch.object(
+    OneDriveClient, "get_user_ids", return_value=AsyncIterator(EXPECTED_USERS)
+)
 @patch.object(
     OneDriveClient,
     "get_owned_files",
     side_effect=[
-        (AsyncIterator(EXPECTED_USER1_FILES)),
-        (AsyncIterator(EXPECTED_USER2_FILES)),
+        (AsyncIterator(RESPONSE_USER1_FILES)),
+        (AsyncIterator(RESPONSE_USER2_FILES)),
     ],
 )
 @pytest.mark.asyncio
