@@ -415,7 +415,7 @@ class SalesforceClient:
             url = response.get("nextRecordsUrl")
             params = None
 
-    async def _get_non_bulk_query(self, soql_query):
+    async def _execute_non_paginated_query(self, soql_query):
         """For quick queries, ignores pagination"""
         url = f"{self.base_url}{QUERY_ENDPOINT}"
         params = {"q": soql_query}
