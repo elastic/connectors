@@ -565,8 +565,8 @@ async def test_get_retry_after():
                 }
             }
         )
-        await source.github_client._get_retry_after(type="core")
-        await source.github_client._get_retry_after(type="graphql")
+        await source.github_client._get_retry_after(resource_type="core")
+        await source.github_client._get_retry_after(resource_type="graphql")
 
 
 @pytest.mark.asyncio

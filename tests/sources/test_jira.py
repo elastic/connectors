@@ -7,7 +7,7 @@
 import ssl
 from copy import copy
 from unittest import mock
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
 import pytest
@@ -16,7 +16,7 @@ from freezegun import freeze_time
 
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
-from connectors.sources.jira import JiraClient, JiraDataSource
+from connectors.sources.jira import JiraClient, JiraDataSource, _prefix_identity
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -38,14 +38,14 @@ MOCK_PROJECT = [
 EXPECTED_PROJECT = [
     {
         "_id": "project-1",
-        "Type": "Project",
         "_timestamp": "2023-01-24T09:37:19+05:30",
+        "Type": "Project",
         "Project": {"id": "1", "name": "dummy_project", "key": "DP"},
     },
     {
         "_id": "project-2",
-        "Type": "Project",
         "_timestamp": "2023-01-24T09:37:19+05:30",
+        "Type": "Project",
         "Project": {"id": "2", "name": "test_project", "key": "TP"},
     },
 ]
@@ -54,7 +54,7 @@ MOCK_ISSUE = {
     "id": "1234",
     "key": "TP-1",
     "fields": {
-        "project": {"name": "test_project"},
+        "project": {"name": "test_project", "key": "TP"},
         "updated": "2023-02-01T01:02:20",
         "issuetype": {"name": "Task"},
         "attachment": [
@@ -72,7 +72,7 @@ EXPECTED_ISSUE = {
     "_timestamp": "2023-02-01T01:02:20",
     "Type": "Task",
     "Issue": {
-        "project": {"name": "test_project"},
+        "project": {"name": "test_project", "key": "TP"},
         "updated": "2023-02-01T01:02:20",
         "issuetype": {"name": "Task"},
         "attachment": [
@@ -155,8 +155,112 @@ EXPECTED_CONTENT = {
     "_attachment": "IyBUaGlzIGlzIHRoZSBkdW1teSBmaWxl",
 }
 
+MOCK_USER = (
+    {
+        "self": "url1",
+        "accountId": "607194d6bc3c3f006f4c35d6",
+        "accountType": "atlassian",
+        "displayName": "user1",
+        "active": True,
+    },
+)
 
-class mock_ssl:
+MOCK_SECURITY_LEVEL = {
+    "id": "10000",
+    "key": "TP-1",
+    "fields": {"security": {"id": "level-1", "name": "issue-level"}},
+}
+
+MOCK_SECURITY_LEVEL_MEMBERS = {
+    "maxResults": 50,
+    "startAt": 0,
+    "total": 2,
+    "isLast": True,
+    "values": [
+        {
+            "id": "level-1",
+            "issueSecurityLevelId": "10000",
+            "issueSecuritySchemeId": "10002",
+            "holder": {
+                "type": "user",
+                "parameter": "user-1",
+                "value": "user-1",
+                "user": {
+                    "self": "url",
+                    "accountId": "user-1",
+                    "emailAddress": "test.user@gmail.com",
+                    "displayName": "Test User",
+                    "active": True,
+                    "timeZone": "Asia/Calcutta",
+                    "accountType": "atlassian",
+                },
+                "expand": "user",
+            },
+        },
+        {
+            "id": "level-2",
+            "issueSecurityLevelId": "10000",
+            "issueSecuritySchemeId": "10002",
+            "holder": {
+                "type": "group",
+                "parameter": "Project-admins",
+                "value": "d614bbb8-703d-4d41-a51a-0c3cfcef9318",
+                "group": {
+                    "name": "Project-admins",
+                    "groupId": "d614bbb8-703d-4d41-a51a-0c3cfcef9318",
+                    "self": "self",
+                },
+                "expand": "group",
+            },
+        },
+        {
+            "id": "level-3",
+            "issueSecurityLevelId": "10000",
+            "issueSecuritySchemeId": "10002",
+            "holder": {
+                "type": "projectRole",
+                "parameter": "10002",
+                "value": "10002",
+                "projectRole": {
+                    "self": "self",
+                    "name": "Administrator",
+                    "id": 10002,
+                },
+                "expand": "projectRole",
+            },
+        },
+    ],
+}
+
+MOCK_PROJECT_ROLE_MEMBERS = {
+    "self": "self",
+    "name": "Administrators",
+    "id": 10002,
+    "actors": [
+        {
+            "id": 11542,
+            "displayName": "Test User",
+            "type": "atlassian-user-role-actor",
+            "actorUser": {"accountId": "5ff5815e34847e0069fedee3"},
+        },
+        {
+            "id": 11543,
+            "displayName": "Project-admins",
+            "type": "atlassian-group-role-actor",
+            "name": "Project-admins",
+            "actorGroup": {
+                "name": "Project-admins",
+                "displayName": "Project-admins",
+                "groupId": "d614bbb8-703d-4d41-a51a-0c3cfcef9318",
+            },
+        },
+    ],
+}
+
+ACCESS_CONTROL = "_allow_access_control"
+
+
+class MockSsl:
     """This class contains methods which returns dummy ssl context"""
 
     def load_verify_locations(self, cadata):
@@ -216,6 +320,25 @@ def side_effect_function(url, ssl):
     elif url == f"{HOST_URL}/rest/api/2/search?jql=type=task&maxResults=100&startAt=0":
         mocked_issue_data_task = {"issues": [MOCK_ISSUE], "total": 1}
         return get_json_mock(mock_response=mocked_issue_data_task)
+    elif (
+        url
+        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=DP&permissions=BROWSE_PROJECTS"
+    ):
+        return get_json_mock(mock_response=MOCK_USER)
+    elif (
+        url
+        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=TP&permissions=BROWSE_PROJECTS"
+    ):
+        return get_json_mock(mock_response=MOCK_USER)
+    elif url == f"{HOST_URL}/rest/api/2/issue/TP-1?fields=security":
+        return get_json_mock(mock_response=MOCK_SECURITY_LEVEL)
+    elif (
+        url
+        == f"{HOST_URL}/rest/api/3/issuesecurityschemes/level/member?maxResults=100&startAt=0&levelId=level-1&expand=user,group,projectRole"
+    ):
+        return get_json_mock(mock_response=MOCK_SECURITY_LEVEL_MEMBERS)
+    elif url == f"{HOST_URL}/rest/api/3/project/TP/role/10002":
+        return get_json_mock(mock_response=MOCK_PROJECT_ROLE_MEMBERS)
 
 
 @pytest.mark.asyncio
@@ -251,6 +374,12 @@ async def test_validate_configuration_for_empty_fields(field, is_cloud):
         # Execute
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
+
+
+def test_prefix_identity():
+    prefix = "username"
+    identity = "Test User"
+    assert "username:Test User" == _prefix_identity(prefix=prefix, identity=identity)
 
 
 @pytest.mark.asyncio
@@ -310,7 +439,7 @@ async def test_ping_with_ssl(
         )
 
         # Execute
-        with patch.object(ssl, "create_default_context", return_value=mock_ssl()):
+        with patch.object(ssl, "create_default_context", return_value=MockSsl()):
             source.jira_client.ssl_ctx = ssl_context(
                 certificate=source.jira_client.certificate
             )
@@ -502,7 +631,11 @@ async def test_put_attachment_positive():
                 "_attachment": "IyBUaGlzIGlzIHRoZSBkdW1teSBmaWxl",
             }
         )
-        await source._put_attachment(attachments=MOCK_ATTACHMENT, issue_key="TP-1")
+        await source._put_attachment(
+            attachments=MOCK_ATTACHMENT,
+            issue_key="TP-1",
+            access_control="access_control",
+        )
         assert source.queue.qsize() == 1
 
 
@@ -661,5 +794,229 @@ async def test_get_docs_with_advanced_rules(filtering, expected_docs):
         ):
             async for item, _ in source.get_docs(filtering):
                 yielded_docs.append(item)
-
         assert yielded_docs == expected_docs
+
+
+@pytest.mark.parametrize(
+    "user_info, result",
+    [
+        (
+            {
+                "self": "url1",
+                "accountId": "607194d6bc3c3f006f4c35d6",
+                "accountType": "atlassian",
+                "displayName": "user1",
+                "active": True,
+            },
+            True,
+        ),
+        (
+            {
+                "self": "url1",
+                "accountId": "607194d6bc3c3f006f4c35d6",
+                "accountType": "app",
+                "displayName": "user1",
+                "active": True,
+            },
+            False,
+        ),
+        (
+            {
+                "self": "url1",
+                "accountId": "607194d6bc3c3f006f4c35d6",
+                "accountType": "atlassian",
+                "displayName": "user1",
+                "active": False,
+            },
+            False,
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_active_atlassian_user(user_info, result):
+    async with create_source(JiraDataSource) as source:
+        actual_result = source._is_active_atlassian_user(user_info=user_info)
+        assert actual_result == result
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_dls_disabled():
+    async with create_source(JiraDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=False)
+
+        access_control_list = []
+        async for access_control in source.get_access_control():
+            access_control_list.append(access_control)
+
+        assert len(access_control_list) == 0
+
+
+@pytest.mark.asyncio
+@freeze_time("2023-01-24T04:07:19")
+async def test_get_access_control_dls_enabled():
+    mock_users = [
+        {
+            # Indexable: The user is active and atlassian user.
+            "self": "url1",
+            "accountId": "607194d6bc3c3f006f4c35d6",
+            "accountType": "atlassian",
+            "displayName": "user1",
+            "active": True,
+        },
+        {
+            # Non-Indexable: The user is no longer active.
+            "self": "url2",
+            "accountId": "607194d6bc3c3f006f4c35d7",
+            "accountType": "atlassian",
+            "displayName": "user2",
+            "active": False,
+        },
+        {
+            # Non-Indexable: User account type is app; it must be atlassian.
+            "self": "url2",
+            "accountId": "607194d6bc3c3f006f4c35d7",
+            "accountType": "app",
+            "displayName": "user2",
+            "active": False,
+        },
+        {
+            # Non-Indexable: Personal information about user is missing.
+            "accountId": "607194d6bc3c3f006f4c35d7",
+            "accountType": "app",
+            "displayName": "user2",
+            "active": False,
+        },
+    ]
+
+    mock_user1 = {
+        "self": "url1",
+        "accountId": "607194d6bc3c3f006f4c35d6",
+        "accountType": "atlassian",
+        "displayName": "user1",
+        "active": True,
+        "groups": {
+            "size": 1,
+            "items": [
+                {
+                    "name": "group1",
+                    "groupId": "607194d6bc3c3f006f4c35d8",
+                }
+            ],
+        },
+        "applicationRoles": {
+            "size": 0,
+            "items": [
+                {
+                    "name": "role1",
+                    "key": "607194d6bc3c3f006f4c35d9",
+                }
+            ],
+        },
+    }
+
+    expected_user_doc = {
+        "_id": "607194d6bc3c3f006f4c35d6",
+        "identity": {
+            "account_id": "account_id:607194d6bc3c3f006f4c35d6",
+            "username": "username:user1",
+        },
+        "created_at": "2023-01-24T04:07:19+00:00",
+        "query": {
+            "template": {
+                "params": {
+                    "access_control": [
+                        "account_id:607194d6bc3c3f006f4c35d6",
+                        "group:607194d6bc3c3f006f4c35d8",
+                        "application_role:607194d6bc3c3f006f4c35d9",
+                    ]
+                }
+            },
+            "source": {
+                "bool": {
+                    "filter": {
+                        "bool": {
+                            "should": [
+                                {
+                                    "bool": {
+                                        "must_not": {
+                                            "exists": {"field": "_allow_access_control"}
+                                        }
+                                    }
+                                },
+                                {
+                                    "terms": {
+                                        "_allow_access_control.enum": [
+                                            "account_id:607194d6bc3c3f006f4c35d6",
+                                            "group:607194d6bc3c3f006f4c35d8",
+                                            "application_role:607194d6bc3c3f006f4c35d9",
+                                        ]
+                                    }
+                                },
+                            ]
+                        }
+                    }
+                }
+            },
+        },
+    }
+
+    async with create_source(JiraDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+
+        source._fetch_all_users = AsyncIterator([mock_users])
+        source._fetch_user = AsyncIterator([mock_user1])
+
+        user_documents = []
+        async for user_doc in source.get_access_control():
+            user_documents.append(user_doc)
+
+        assert expected_user_doc in user_documents
+
+
+@freeze_time("2023-01-24T04:07:19")
+@pytest.mark.asyncio
+async def test_get_docs_with_dls_enabled():
+    expected_projects_with_access_controls = [
+        project
+        | {
+            "_allow_access_control": [
+                "account_id:607194d6bc3c3f006f4c35d6",
+                "username:user1",
+            ]
+        }
+        for project in copy(EXPECTED_PROJECT)
+    ]
+
+    EXPECTED_RESPONSES = [
+        copy(EXPECTED_ISSUE)
+        | {
+            "_allow_access_control": [
+                "account_id:5ff5815e34847e0069fedee3",
+                "account_id:user-1",
+                "group:d614bbb8-703d-4d41-a51a-0c3cfcef9318",
+                "username:Test User",
+            ]
+        },
+        copy(EXPECTED_ATTACHMENT)
+        | {
+            "_allow_access_control": [
+                "account_id:5ff5815e34847e0069fedee3",
+                "account_id:user-1",
+                "group:d614bbb8-703d-4d41-a51a-0c3cfcef9318",
+                "username:Test User",
+            ]
+        },
+        *expected_projects_with_access_controls,
+    ]
+
+    async with create_source(JiraDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        source.jira_client.projects = ["*"]
+        source.get_content = Mock(return_value=EXPECTED_CONTENT)
+
+        with mock.patch.object(
+            source.jira_client._get_session(), "get", side_effect=side_effect_function
+        ):
+            async for item, _ in source.get_docs():
+                item.get(ACCESS_CONTROL, []).sort()
+                assert item in EXPECTED_RESPONSES

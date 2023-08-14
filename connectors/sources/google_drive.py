@@ -747,8 +747,8 @@ class GoogleDriveDataSource(BaseDataSource):
         drives = await self.google_drive_client.get_all_drives()
 
         # for paths let's treat drives as top level folders
-        for id, drive_name in drives.items():
-            folders[id] = {"name": drive_name, "parents": []}
+        for id_, drive_name in drives.items():
+            folders[id_] = {"name": drive_name, "parents": []}
 
         self._logger.info(f"Resolving folder paths for {len(folders)} folders")
 

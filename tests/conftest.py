@@ -28,12 +28,6 @@ class Logger:
         if exc_info:
             self.logs.append(traceback.format_exc())
 
-    def assert_check(self, callable):
-        for log in self.logs:
-            if callable(log):
-                return
-        raise AssertionError(f"{callable} returned False for {self.logs}")
-
     def assert_instance(self, instance):
         for log in self.logs:
             if isinstance(log, instance):
