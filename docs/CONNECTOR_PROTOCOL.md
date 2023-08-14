@@ -23,11 +23,11 @@ At this stage, our assumption is that one connector will manage one index, and o
 
 Data from remote sources are synced via [sync jobs](DEVELOPING.md#syncing), which means there can be data discrepancy between the remote source and Elasticsearch until the next sync job runs.
 
-There are some data sources with streaming option, which allows external systems to capture changes in real-time. This option has been evaluated, and will not in our roadmap in the near future.
+There are some data sources with streaming option (E.g. [Change Streams](https://www.mongodb.com/docs/manual/changeStreams) for MongoDB, [Change notifications](https://learn.microsoft.com/en-us/graph/webhooks) for Sharepoint and OneDrive), which allows external systems to capture changes in real-time. This option has been evaluated, and will not in our roadmap in the near future.
 
-If (near) real-time data availability is required, the only option is to [implement incremental sync](DEVELOPING.md#how-an-incremental-sync-works) for the data source, and make it run as frequently a possible.
+In order to maintain (near) real-time data availability, [implement incremental sync](DEVELOPING.md#how-an-incremental-sync-works) for the data source, with a frequency that matches your needs.
 
-Kibana won't allow you to configure a schedule more frequently than every hour, but you can do so via Kibana DevTools:
+Kibana won't allow you to configure a schedule more frequently than every hour, but you can do so via the Elasticsearch API (through Kibana Dev Tools, or cURL, etc):
 
 ```
 # Update to every 5 seconds
