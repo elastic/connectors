@@ -169,13 +169,13 @@ class InvalidRuleError(ValueError):
 
 
 class Rule(Enum):
-    EQUALS = 1
-    STARTS_WITH = 2
-    ENDS_WITH = 3
-    CONTAINS = 4
-    REGEX = 5
-    GREATER_THAN = 6
-    LESS_THAN = 7
+    EQUALS = "equals"
+    STARTS_WITH = "starts_with"
+    ENDS_WITH = "ends_with"
+    CONTAINS = "contains"
+    REGEX = "regex"
+    GREATER_THAN = "greater_than"
+    LESS_THAN = "less_than"
 
     RULES = [EQUALS, STARTS_WITH, ENDS_WITH, CONTAINS, REGEX, GREATER_THAN, LESS_THAN]
 
@@ -215,8 +215,8 @@ class InvalidPolicyError(ValueError):
 
 
 class Policy(Enum):
-    INCLUDE = 1
-    EXCLUDE = 2
+    INCLUDE = "include"
+    EXCLUDE = "exclude"
 
     POLICIES = [INCLUDE, EXCLUDE]
 
@@ -353,3 +353,14 @@ class BasicRule:
                 f"Failed to coerce value '{self.value}' ({type(self.value)}) based on document value '{doc_value}' ({type(doc_value)}) due to error: {type(e)}: {e}"
             )
             return str(self.value)
+
+    def __str__(self):
+        def _format_field(key, value):
+            if isinstance(value, Enum):
+                return f"{key}: {value.value}"
+            return f"{key}: {value}"
+
+        formatted_fields = [
+            _format_field(key, value) for key, value in self.__dict__.items()
+        ]
+        return "Basic rule: " + ", ".join(formatted_fields)

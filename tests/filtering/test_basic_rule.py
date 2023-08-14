@@ -1450,3 +1450,19 @@ def test_is_not_include_for_exclude_policy():
     )
 
     assert not basic_rule.is_include()
+
+
+def test_basic_rule_str():
+    basic_rule = BasicRule(
+        id_=1,
+        order=1,
+        policy=Policy.EXCLUDE,
+        field=DESCRIPTION_KEY,
+        rule=Rule.LESS_THAN,
+        value="something",
+    )
+
+    assert (
+        str(basic_rule)
+        == f"Basic rule: id_: 1, order: 1, policy: exclude, field: {DESCRIPTION_KEY}, rule: less_than, value: something"
+    )
