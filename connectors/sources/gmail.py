@@ -315,6 +315,7 @@ class GMailDataSource(BaseDataSource):
         message_doc_with_access_control = self._decorate_with_access_control(
             message_doc, access_control
         )
+
         return message_doc_with_access_control
 
     async def get_docs(self, filtering=None):

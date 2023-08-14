@@ -201,6 +201,54 @@ class TestGMailDataSource:
             with pytest.raises(ConfigurableFieldValueError):
                 await source.validate_config()
 
+    @pytest.mark.asyncio
+    async def test_get_access_control_with_dls_disabled(
+        self, patch_google_directory_client
+    ):
+        users = [{UserFields.EMAIL.value: "user@google.com"}]
+        patch_google_directory_client.users = AsyncIterator(users)
+
+        async with setup_source() as source:
+            set_dls_enabled(source, False)
+            actual_users = []
+
+            async for user in source.get_access_control():
+                actual_users.append(user)
+
+            assert len(actual_users) == 0
+            patch_google_directory_client.users.assert_not_called()
+
+    @freeze_time(TIME)
+    @pytest.mark.asyncio
+    async def test_get_access_control_with_dls_enabled(
+        self, patch_google_directory_client
+    ):
+        email = "user@google.com"
+        creation_date = iso_utc()
+        users = [
+            {
+                UserFields.EMAIL.value: email,
+                UserFields.CREATION_DATE.value: creation_date,
+            }
+        ]
+        patch_google_directory_client.users = AsyncIterator(users)
+
+        async with setup_source() as source:
+            set_dls_enabled(source, True)
+            actual_users = []
+
+            async for user in source.get_access_control():
+                actual_users.append(user)
+
+            actual_user = actual_users[0]
+
+            assert len(actual_users) == len(users)
+            assert actual_user["_id"] == email
+            assert actual_user["identity"]["email"] == email
+            assert actual_user["created_at"] == creation_date
+
+            patch_google_directory_client.users.assert_called_once()
+
     @freeze_time(TIME)
     @pytest.mark.asyncio
     async def test_get_docs_without_dls_without_filtering(
@@ -270,6 +318,8 @@ class TestGMailDataSource:
             assert actual_message["_timestamp"] == "2023-01-24T04:07:19+00:00"
             assert ACCESS_CONTROL not in actual_message
 
+            patch_gmail_client.messages.assert_called_once_with(query=message_query)
+
     @freeze_time(TIME)
     @pytest.mark.asyncio
     async def test_get_docs_with_dls_without_filtering(
@@ -304,3 +354,48 @@ class TestGMailDataSource:
             assert actual_message["_timestamp"] == "2023-01-24T04:07:19+00:00"
             assert ACCESS_CONTROL in actual_message
             assert email in actual_message[ACCESS_CONTROL]
+
+            patch_gmail_client.messages.assert_called_once()
+
+    @freeze_time(TIME)
+    @pytest.mark.asyncio
+    async def test_get_docs_with_dls_with_filtering(
+        self, patch_gmail_client, patch_google_directory_client
+    ):
+        email = "user@google.com"
+        users = [{UserFields.EMAIL.value: email}]
+        message = {
+            MessageFields.ID.value: "1",
+            MessageFields.FULL_MESSAGE.value: "abcd",
+            MessageFields.CREATION_DATE.value: iso_utc(),
+        }
+        messages = [message]
+
+        patch_google_directory_client.users = AsyncIterator(users)
+        patch_gmail_client.messages = AsyncIterator(messages)
+        patch_gmail_client.message = AsyncMock(side_effect=messages)
+
+        async with setup_source() as source:
+            set_dls_enabled(source, True)
+            actual_messages = []
+            message_query = "some query"
+            filter_ = Filter(
+                {"advanced_snippet": {"value": {"messages": [message_query]}}}
+            )
+
+            async for doc in source.get_docs(filtering=filter_):
+                actual_messages.append(doc)
+
+            async for doc in source.get_docs(filtering=None):
+                actual_messages.append(doc)
+
+            actual_message = actual_messages[0][0]
+
+            assert len(actual_messages) == 1
+            assert actual_message["_id"] == message[MessageFields.ID.value]
+            assert len(actual_message["_attachment"]) > 0
+            assert actual_message["_timestamp"] == "2023-01-24T04:07:19+00:00"
+            assert ACCESS_CONTROL in actual_message
+            assert email in actual_message[ACCESS_CONTROL]
+
+            patch_gmail_client.messages.assert_called_once_with(query=message_query)
