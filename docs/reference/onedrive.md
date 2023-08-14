@@ -70,7 +70,7 @@ It is a unique identifier of your Azure Active Directory instance. Example:
 
 - `123a1b23-12a3-45b6-7c8d-fc931cfb448d`
 
-#### `retry_count`
+#### `Maximum retries per request`
 
 The number of retry attempts after failed request to OneDrive. Default value is `3`.
 
@@ -95,7 +95,7 @@ The connector syncs the following objects and entities:
 
 ## Advanced Sync Rules
 
-Advanced Sync Rules will be available in 8.11+.
+Advanced sync rules are not available for this connector in the present version.
 
 ## Connector Client operations
 
