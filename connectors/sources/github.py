@@ -560,15 +560,19 @@ class GitHubClient:
     def get_rate_limit_encountered(self, status_code, message):
         return status_code == FORBIDDEN and "rate limit" in str(message).lower()
 
-    async def _get_retry_after(self, type):
+    async def _get_retry_after(self, resource_type):
         current_time = time.time()
         response = await self._get_client.getitem("/rate_limit")
-        reset = response.get("resources", {}).get(type, {}).get("reset", current_time)
+        reset = (
+            response.get("resources", {})
+            .get(resource_type, {})
+            .get("reset", current_time)
+        )
         # Adding a 5 second delay to account for server delays
         return (reset - current_time) + 5
 
-    async def _put_to_sleep(self, type):
-        retry_after = await self._get_retry_after(type=type)
+    async def _put_to_sleep(self, resource_type):
+        retry_after = await self._get_retry_after(resource_type=resource_type)
         self._logger.debug(
             f"Connector will attempt to retry after {retry_after} seconds."
         )
@@ -634,7 +638,7 @@ class GitHubClient:
                         error.get("type") == "RATE_LIMITED"
                         and "api rate limit exceeded" in error.get("message").lower()
                     ):
-                        await self._put_to_sleep(type="graphql")
+                        await self._put_to_sleep(resource_type="graphql")
                 raise Exception(
                     f"Error while executing query. Exception: {json_response['errors']}"
                 )

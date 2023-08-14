@@ -228,8 +228,8 @@ class ServiceNowClient:
             {"name": "Accept", "value": "application/json"},
         ]
         apis = []
-        for id in ids:
-            params = {"table_sys_id": id}
+        for id_ in ids:
+            params = {"table_sys_id": id_}
             apis.append(
                 {
                     "id": str(uuid.uuid4()),

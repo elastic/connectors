@@ -180,7 +180,7 @@ class MicrosoftSecurityToken:
         Returns:
             str: bearer token for one of Microsoft services"""
 
-        cached_value = self._token_cache.get()
+        cached_value = self._token_cache.get_value()
 
         if cached_value:
             return cached_value
@@ -206,7 +206,7 @@ class MicrosoftSecurityToken:
                         f"Failed to authorize to Sharepoint REST API. Response Status: {e.status}, Message: {e.message}"
                     ) from e
 
-        self._token_cache.set(access_token, now + timedelta(seconds=expires_in))
+        self._token_cache.set_value(access_token, now + timedelta(seconds=expires_in))
 
         return access_token
 
