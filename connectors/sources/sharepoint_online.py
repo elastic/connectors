@@ -1849,9 +1849,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                     list_item_attachment[
                         "_original_filename"
                     ] = list_item_attachment.get("FileName", "")
-                    list_item_attachment[ACCESS_CONTROL] = list_item.get(
-                        ACCESS_CONTROL, []
-                    )
+
+                    if self._dls_enabled():
+                        list_item_attachment[ACCESS_CONTROL] = list_item.get(
+                            ACCESS_CONTROL, []
+                        )
 
                     attachment_download_func = partial(
                         self.get_attachment_content, list_item_attachment
