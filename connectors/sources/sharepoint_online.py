@@ -1847,7 +1847,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                     ] = list_item_attachment.get("FileName", "")
                     if (
                         "ServerRelativePath" in list_item_attachment
-                        and "DecodedUrl" in list_item_attachment.get("ServerRelativePath", "")
+                        and "DecodedUrl" in list_item_attachment.get("ServerRelativePath", {})
                     ):
                         list_item_attachment[
                             "webUrl"
