@@ -1934,8 +1934,8 @@ class TestSharepointOnlineDataSource:
             self.site_pages
         )
 
-            for item in results:
-                assert ACCESS_CONTROL not in item
+        for item in results:
+            assert ACCESS_CONTROL not in item
 
     @pytest.mark.asyncio
     @patch(
