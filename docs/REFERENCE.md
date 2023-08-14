@@ -18,3 +18,4 @@
 - [SharePoint Online](https://www.elastic.co/guide/en/enterprise-search/master/connectors-sharepoint-online.html)
 - [SharePoint Server](https://www.elastic.co/guide/en/enterprise-search/master/connectors-sharepoint.html)
 - [GitHub](./reference/github.md)
+- [OneDrive](./reference/onedrive.md)
