@@ -58,7 +58,7 @@ class Field:
         depends_on=None,
         label=None,
         required=True,
-        type="str",
+        field_type="str",
         validations=None,
         value=None,
     ):
@@ -69,23 +69,23 @@ class Field:
         if validations is None:
             validations = []
 
-        self.default_value = self._convert(default_value, type)
+        self.default_value = self._convert(default_value, field_type)
         self.depends_on = depends_on
         self.label = label
         self.name = name
         self.required = required
-        self._type = type
+        self._field_type = field_type
         self.validations = validations
-        self._value = self._convert(value, type)
+        self._value = self._convert(value, field_type)
 
     @property
-    def type(self):
-        return self._type
+    def field_type(self):
+        return self._field_type
 
-    @type.setter
-    def type(self, value):
-        self._type = value
-        self.value = self._convert(self.value, self._type)
+    @field_type.setter
+    def field_type(self, value):
+        self._field_type = value
+        self.value = self._convert(self.value, self.field_type)
 
     @property
     def value(self):
@@ -105,18 +105,18 @@ class Field:
     def value(self, value):
         self._value = value
 
-    def _convert(self, value, type_):
+    def _convert(self, value, field_type):
         if not isinstance(value, str):
             # we won't convert the value if it's not a str
             return value
 
-        if type_ == "int":
+        if field_type == "int":
             return int(value)
-        elif type_ == "float":
+        elif field_type == "float":
             return float(value)
-        elif type_ == "bool":
+        elif field_type == "bool":
             return value.lower() in ("y", "yes", "true", "1")
-        elif type_ == "list":
+        elif field_type == "list":
             return [item.strip() for item in value.split(",")]
         return value
 
@@ -241,7 +241,7 @@ class DataSourceConfiguration:
         for name, item in default_config.items():
             self._defaults[name] = item["value"]
             if name in self._config:
-                self._config[name].type = item["type"]
+                self._config[name].field_type = item["type"]
 
     def __getitem__(self, key):
         if key not in self._config and key in self._defaults:
@@ -263,12 +263,19 @@ class DataSourceConfiguration:
         depends_on=None,
         label=None,
         required=True,
-        type="str",
+        field_type="str",
         validations=None,
         value=None,
     ):
         self._config[name] = Field(
-            name, default_value, depends_on, label, required, type, validations, value
+            name,
+            default_value,
+            depends_on,
+            label,
+            required,
+            field_type,
+            validations,
+            value,
         )
 
     def get_field(self, name):

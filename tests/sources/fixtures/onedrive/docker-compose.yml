@@ -1,4 +1,4 @@
-version: '3.9'
+version: "3.9"
 
 services:
   elasticsearch:
@@ -72,20 +72,22 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - esnet
-  
-  confluence:
+
+  onedrive:
     build: .
     command: python fixture.py
     ports:
-      - "9696:9696"
+      - 10972:10972
     volumes:
       - .:/python-flask
-    restart: always  
-
-networks:
-  esnet:
-    driver: bridge
+    restart: always
+    environment:
+      - DATA_SIZE=${DATA_SIZE}
 
 volumes:
   esdata:
     driver: local
+
+networks:
+  esnet:
+    driver: bridge

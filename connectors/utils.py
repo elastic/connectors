@@ -662,7 +662,7 @@ class CacheWithTimeout:
     Example of usage:
 
     cache = CacheWithTimeout()
-    cache.set(50, datetime.datetime.now() + datetime.timedelta(5)
+    cache.set_value(50, datetime.datetime.now() + datetime.timedelta(5)
     value = cache.get() # 50
     sleep(5)
     value = cache.get() # None
@@ -672,7 +672,7 @@ class CacheWithTimeout:
         self._value = None
         self._expiration_date = None
 
-    def get(self):
+    def get_value(self):
         """Get the value that's stored inside if it hasn't expired.
 
         If the expiration_date is past due, None is returned instead.
@@ -685,7 +685,7 @@ class CacheWithTimeout:
 
         return None
 
-    def set(self, value, expiration_date):
+    def set_value(self, value, expiration_date):
         """Set the value in the cache with expiration date.
 
         Once expiration_date is past due, the value will be lost.

@@ -91,18 +91,18 @@ def generate_attachment_data():
     return io.BytesIO(bytes(GENERATED_DATA["extra_small"], encoding="utf-8"))
 
 
-def adjust_document_id_size(id):
+def adjust_document_id_size(document_id):
     """
     This methods make sure that all the documemts ids are min 36 bytes like in Sharepoint
     """
 
-    bytesize = len(id)
+    bytesize = len(document_id)
 
     if bytesize >= DOC_ID_SIZE:
-        return id
+        return document_id
 
     addition = "".join(["0" for _ in range(DOC_ID_SIZE - bytesize - 1)])
-    return f"{id}-{addition}"
+    return f"{document_id}-{addition}"
 
 
 @app.route("/sites/<string:site_collections>/_api/web/webs", methods=["GET"])

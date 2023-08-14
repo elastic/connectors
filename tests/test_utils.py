@@ -522,44 +522,41 @@ def test_evaluate_timedelta():
     assert expected_response == "2023-02-19T14:25:05.158843"
 
 
-def test_get_pem_format():
-    """This function tests prepare private key and certificate with dummy values"""
-    # Setup
-    expected_formated_pem_key = """-----BEGIN PRIVATE KEY-----
+def test_get_pem_format_with_postfix():
+    expected_formatted_pem_key = """-----BEGIN PRIVATE KEY-----
 PrivateKey
 -----END PRIVATE KEY-----"""
     private_key = "-----BEGIN PRIVATE KEY----- PrivateKey -----END PRIVATE KEY-----"
 
-    # Execute
-    formated_privat_key = get_pem_format(
+    formatted_private_key = get_pem_format(
         key=private_key, postfix="-----END PRIVATE KEY-----"
     )
-    assert formated_privat_key == expected_formated_pem_key
+    assert formatted_private_key == expected_formatted_pem_key
 
-    # Setup
-    expected_formated_certificate = """-----BEGIN CERTIFICATE-----
+
+def test_get_pem_format_multiline():
+    expected_formatted_certificate = """-----BEGIN CERTIFICATE-----
 Certificate1
 Certificate2
 -----END CERTIFICATE-----"""
     certificate = "-----BEGIN CERTIFICATE----- Certificate1 Certificate2 -----END CERTIFICATE-----"
 
-    # Execute
-    formated_certificate = get_pem_format(key=certificate)
-    assert formated_certificate == expected_formated_certificate
+    formatted_certificate = get_pem_format(key=certificate)
+    assert formatted_certificate == expected_formatted_certificate
 
-    # Setup
-    expected_formated_multi_certificate = """-----BEGIN CERTIFICATE-----
+
+def test_get_pem_format_multiple_certificates():
+    expected_formatted_multiple_certificates = """-----BEGIN CERTIFICATE-----
 Certificate1
 -----END CERTIFICATE-----
 -----BEGIN CERTIFICATE-----
 Certificate2
 -----END CERTIFICATE-----
 """
-    multi_certificate = "-----BEGIN CERTIFICATE----- Certificate1 -----END CERTIFICATE----- -----BEGIN CERTIFICATE----- Certificate2 -----END CERTIFICATE-----"
+    multiple_certificates = "-----BEGIN CERTIFICATE----- Certificate1 -----END CERTIFICATE----- -----BEGIN CERTIFICATE----- Certificate2 -----END CERTIFICATE-----"
 
-    # Execute
-    formated_multi_certificate = get_pem_format(key=multi_certificate)
-    assert formated_multi_certificate == expected_formated_multi_certificate
+    formatted_multi_certificate = get_pem_format(key=multiple_certificates)
+    assert formatted_multi_certificate == expected_formatted_multiple_certificates
 
 
 def test_hash_id():
