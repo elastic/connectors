@@ -26,12 +26,6 @@ ACCESS_CONTROL = "_allow_access_control"
 
 GMAIL_API_TIMEOUT = GOOGLE_DIRECTORY_TIMEOUT = 1 * 60  # 1 min
 
-# TODO: FTEST
-
-# TODO: 429 error
-
-# TODO: 403 error
-
 
 class GMailAdvancedRulesValidator(AdvancedRulesValidator):
     MESSAGES_SCHEMA_DEFINITION = {
@@ -51,8 +45,6 @@ class GMailAdvancedRulesValidator(AdvancedRulesValidator):
     )
 
     async def validate(self, advanced_rules):
-        # TODO: valid example
-
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -73,8 +65,6 @@ class GMailAdvancedRulesValidator(AdvancedRulesValidator):
 
 
 def _message_doc(message):
-    # TODO: sample input/output
-
     timestamp_field = "_timestamp"
 
     # We're using the `_attachment` field here so the attachment processor on the ES side decodes the base64 value
@@ -176,8 +166,6 @@ class GMailDataSource(BaseDataSource):
             raise ConfigurableFieldValueError(
                 f"Google Drive service account is not a valid JSON. Exception: {e}"
             ) from e
-
-        # TODO: validate customer id
 
     def advanced_rules_validators(self):
         return [GMailAdvancedRulesValidator()]
