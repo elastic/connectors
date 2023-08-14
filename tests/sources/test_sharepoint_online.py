@@ -2127,9 +2127,7 @@ class TestSharepointOnlineDataSource:
                 access_control_matches(site_list[ACCESS_CONTROL], site_access_control)
                 for site_list in site_lists
             )
-            assert (
-                patch_sharepoint_client.site_list_role_assignments.assert_not_called()
-            )
+            patch_sharepoint_client.site_list_role_assignments.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_site_lists_with_unique_role_assignments(
@@ -2168,9 +2166,7 @@ class TestSharepointOnlineDataSource:
                 )
                 for site_list in actual_site_lists
             )
-            assert (
-                patch_sharepoint_client.site_list_role_assignments.assert_called_once()
-            )
+            patch_sharepoint_client.site_list_role_assignments.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_download_function_for_folder(self):
