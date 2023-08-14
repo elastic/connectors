@@ -1802,7 +1802,10 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             has_unique_role_assignments = False
 
-            if self.configuration["fetch_unique_list_item_permissions"]:
+            if (
+                self._dls_enabled()
+                and self.configuration["fetch_unique_list_item_permissions"]
+            ):
                 has_unique_role_assignments = (
                     await self.client.site_list_item_has_unique_role_assignments(
                         site_web_url, site_list_name, list_item_natural_id
@@ -1846,9 +1849,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                     list_item_attachment[
                         "_original_filename"
                     ] = list_item_attachment.get("FileName", "")
-                    list_item_attachment[ACCESS_CONTROL] = list_item.get(
-                        ACCESS_CONTROL, []
-                    )
+
+                    if self._dls_enabled():
+                        list_item_attachment[ACCESS_CONTROL] = list_item.get(
+                            ACCESS_CONTROL, []
+                        )
 
                     attachment_download_func = partial(
                         self.get_attachment_content, list_item_attachment
@@ -1866,7 +1871,10 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             has_unique_role_assignments = False
 
-            if self.configuration["fetch_unique_list_permissions"]:
+            if (
+                self._dls_enabled()
+                and self.configuration["fetch_unique_list_permissions"]
+            ):
                 has_unique_role_assignments = (
                     await self.client.site_list_has_unique_role_assignments(
                         site_url, site_list_name
@@ -1979,7 +1987,10 @@ class SharepointOnlineDataSource(BaseDataSource):
             has_unique_role_assignments = False
 
             # ignore parent site permissions and use unique per page permissions ("unique permissions" means breaking the inheritance to the parent site)
-            if self.configuration["fetch_unique_page_permissions"]:
+            if (
+                self._dls_enabled()
+                and self.configuration["fetch_unique_page_permissions"]
+            ):
                 has_unique_role_assignments = (
                     await self.client.site_page_has_unique_role_assignments(
                         url, site_page["Id"]

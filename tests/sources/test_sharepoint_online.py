@@ -1934,6 +1934,9 @@ class TestSharepointOnlineDataSource:
                 self.site_pages
             )
 
+            for item in results:
+                assert ACCESS_CONTROL not in item
+
     @pytest.mark.asyncio
     @patch(
         "connectors.sources.sharepoint_online.ACCESS_CONTROL",
