@@ -262,13 +262,10 @@ class GMailDataSource(BaseDataSource):
         email = user.get(UserFields.EMAIL.value)
         created_at = user.get(UserFields.CREATION_DATE.value)
 
-        if not created_at:
-            created_at = iso_utc()
-
         return {
             "_id": email,
             "identity": {"email": email},
-            "created_at": created_at,
+            "created_at": created_at or iso_utc(),
         } | self.access_control_query(access_control)
 
     def _decorate_with_access_control(self, document, access_control):
