@@ -178,7 +178,7 @@ class FilteringValidator:
                     filtering_validation_result += result
 
                     logger.debug(
-                        f"Basic rules set: '{basic_rules_ids}' validation result (Validator: {validator.__class__.__name__}): {_is_valid_str(result)}"
+                        f"Basic rules set: '{basic_rules_ids}' validation result (Validator: {validator.__name__}): {_is_valid_str(result)}"
                     )
 
             if issubclass(validator, BasicRuleValidator):
@@ -188,7 +188,7 @@ class FilteringValidator:
                     filtering_validation_result += validator_result
 
                     logger.debug(
-                        f"{str(basic_rule)} validation result (Validator: {validator.__class__.__name__}): {_is_valid_str(result)}"
+                        f"{str(basic_rule)} validation result (Validator: {validator.__name__}): {_is_valid_str(result)}"
                     )
 
         if filtering.has_advanced_rules():
