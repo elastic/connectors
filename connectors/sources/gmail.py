@@ -330,8 +330,7 @@ class GMailDataSource(BaseDataSource):
                             )
                         )
 
-                        if message_doc_with_access_control:
-                            yield message_doc_with_access_control, None
+                        yield message_doc_with_access_control, None
         else:
             async for user in self._google_directory_client.users():
                 email = user.get(UserFields.EMAIL.value)
@@ -350,5 +349,4 @@ class GMailDataSource(BaseDataSource):
                         )
                     )
 
-                    if message_doc_with_access_control:
-                        yield message_doc_with_access_control, None
+                    yield message_doc_with_access_control, None
