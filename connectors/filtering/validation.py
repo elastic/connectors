@@ -188,7 +188,7 @@ class FilteringValidator:
                     filtering_validation_result += validator_result
 
                     logger.debug(
-                        f"{str(basic_rule)} validation result (Validator: {validator.__name__}): {_is_valid_str(result)}"
+                        f"{str(basic_rule)} validation result (Validator: {validator.__name__}): {_is_valid_str(validator_result)}"
                     )
 
         if filtering.has_advanced_rules():
