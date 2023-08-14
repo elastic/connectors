@@ -15,7 +15,7 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 FILE_SIZE_LIMIT = 10485760  # ~ 10 Megabytes
 DEFAULT_TIMEOUT = 1 * 60  # 1 min
-ONE_HUNDRED_ITEMS = 100
+DEFAULT_PAGE_SIZE = 100
 
 
 class UserFields(Enum):
@@ -191,7 +191,7 @@ class GoogleDirectoryClient:
             resource="users",
             method="list",
             fields=f"nextPageToken,users({users_fields})",
-            pageSize=ONE_HUNDRED_ITEMS,
+            pageSize=DEFAULT_PAGE_SIZE,
             customer=self._customer_id,
         ):
             for user in page.get("users", []):
@@ -225,7 +225,7 @@ class GMailClient:
         except Exception:
             raise
 
-    async def messages(self, query=None, pageSize=ONE_HUNDRED_ITEMS):
+    async def messages(self, query=None, pageSize=DEFAULT_PAGE_SIZE):
         fields = "id"
 
         async for page in self._client.api_call_paged(
