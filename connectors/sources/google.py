@@ -18,51 +18,6 @@ DEFAULT_TIMEOUT = 1 * 60  # 1 min
 ONE_HUNDRED_ITEMS = 100
 
 
-class API(Enum):
-    GMAIL = "gmail"
-    DIRECTORY = "admin"
-
-
-class APIVersion(Enum):
-    V3 = "v3"
-    V1 = {API.DIRECTORY: "directory_v1", API.GMAIL: "v1"}
-
-
-class Resource(Enum):
-    USER = "users"
-    ABOUT = "about"
-    USERS = "users"
-    MESSAGES = "messages"
-
-
-class Method(Enum):
-    LIST = "list"
-    GET = "get"
-    GET_PROFILE = "getProfile"
-
-
-VERSION = "api_version"
-IDENTIFIER = "api_identifier"
-RESOURCES = "resources"
-
-APIS = {
-    API.GMAIL: {
-        IDENTIFIER: API.GMAIL.value,
-        VERSION: APIVersion.V1.value[API.GMAIL],
-        RESOURCES: {
-            Resource.USERS: {
-                Resource.MESSAGES: [Resource.USERS.value, Resource.MESSAGES.value]
-            }
-        },
-    },
-    API.DIRECTORY: {
-        IDENTIFIER: API.DIRECTORY.value,
-        VERSION: APIVersion.V1.value[API.DIRECTORY],
-        RESOURCES: {Resource.USER: {Method.LIST: Method.LIST.value}},
-    },
-}
-
-
 class UserFields(Enum):
     EMAIL = "primaryEmail"
     CREATION_DATE = "creationTime"
@@ -72,13 +27,6 @@ class MessageFields(Enum):
     ID = "id"
     CREATION_DATE = "internalDate"
     FULL_MESSAGE = "raw"
-
-
-class Scope(Enum):
-    ADMIN_DIRECTORY_USER_READONLY = (
-        "https://www.googleapis.com/auth/admin.directory.user.readonly"
-    )
-    GMAIL_READONLY = "https://www.googleapis.com/auth/gmail.readonly"
 
 
 class GoogleServiceAccountClient:
@@ -216,9 +164,9 @@ class GoogleDirectoryClient:
         self._customer_id = customer_id
         self._client = GoogleServiceAccountClient(
             json_credentials=json_credentials,
-            api=APIS[API.DIRECTORY][IDENTIFIER],
-            api_version=APIS[API.DIRECTORY][VERSION],
-            scopes=[Scope.ADMIN_DIRECTORY_USER_READONLY.value],
+            api="admin",
+            api_version="directory_v1",
+            scopes=["https://www.googleapis.com/auth/admin.directory.user.readonly"],
             api_timeout=timeout,
         )
 
@@ -228,8 +176,8 @@ class GoogleDirectoryClient:
     async def ping(self):
         try:
             await self._client.api_call(
-                resource=Resource.USER.value,
-                method=Method.LIST.value,
+                resource="users",
+                method="list",
                 maxResults=1,
                 customer=self._customer_id,
             )
@@ -240,8 +188,8 @@ class GoogleDirectoryClient:
         users_fields = f"{UserFields.EMAIL.value},{UserFields.CREATION_DATE.value}"
 
         async for page in self._client.api_call_paged(
-            resource=Resource.USER.value,
-            method=Method.LIST.value,
+            resource="users",
+            method="list",
             fields=f"nextPageToken,users({users_fields})",
             pageSize=ONE_HUNDRED_ITEMS,
             customer=self._customer_id,
@@ -260,9 +208,9 @@ class GMailClient:
         self._customer_id = customer_id
         self._client = GoogleServiceAccountClient(
             json_credentials=json_credentials,
-            api=APIS[API.GMAIL][IDENTIFIER],
-            api_version=APIS[API.GMAIL][VERSION],
-            scopes=[Scope.GMAIL_READONLY.value],
+            api="gmail",
+            api_version="v1",
+            scopes=["https://www.googleapis.com/auth/gmail.readonly"],
             api_timeout=timeout,
         )
 
@@ -272,7 +220,7 @@ class GMailClient:
     async def ping(self):
         try:
             await self._client.api_call(
-                resource=Resource.USER.value, method="getProfile", userId=self.user
+                resource="users", method="getProfile", userId=self.user
             )
         except Exception:
             raise
@@ -281,8 +229,8 @@ class GMailClient:
         fields = "id"
 
         async for page in self._client.api_call_paged(
-            resource=[Resource.USERS.value, Resource.MESSAGES.value],
-            method=Method.LIST.value,
+            resource=["users", "messages"],
+            method="list",
             userId=self.user,
             q=query,
             fields=f"nextPageToken,messages({fields})",
@@ -295,8 +243,8 @@ class GMailClient:
         fields = "raw,internalDate"
 
         return await self._client.api_call(
-            resource=[Resource.USERS.value, Resource.MESSAGES.value],
-            method=Method.GET.value,
+            resource=["users", "messages"],
+            method="get",
             format="raw",
             userId=self.user,
             id=id_,
