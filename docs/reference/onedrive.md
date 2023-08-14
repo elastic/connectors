@@ -1,6 +1,6 @@
 # OneDrive Connector
 
-The [Elastic OneDrive connector](../connectors/sources/onedrive.py) is provided in the Elastic connectors python framework and can be used via [build a connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic OneDrive connector](../connectors/sources/onedrive.py) is built with the Elastic connectors Python framework and is available as a self-managed [connector client](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
 
 ## Availability and prerequisites
 
@@ -16,7 +16,7 @@ For additional operations, see [Usage](https://www.elastic.co/guide/en/enterpris
 
 ## Connecting to OneDrive
 
-For initiating a connection to OneDrive the connector will need an Azure application credentials:
+To connect to OneDrive you need to [create an Azure Active Directory application and service principal](https://learn.microsoft.com/en-us/azure/active-directory/develop/howto-create-service-principal-portal) that can access resources. Follow these steps:
 
 1. Go to the Azure portal (https://portal.azure.com) and sign in with your Azure account.
 
@@ -40,11 +40,11 @@ For initiating a connection to OneDrive the connector will need an Azure applica
 
 11. Click on the "Add permissions" button to add the selected permissions to your app.
 
-Finally, click on the "Grant admin consent" button to grant the required permissions to the app. This step requires administrative privileges. (Note: If you are not an admin, you need to request the Admin to grant consent via their Azure Portal)
+Finally, click on the "Grant admin consent" button to grant the required permissions to the app. This step requires administrative privileges. ℹ️ **NOTE**: If you are not an admin, you need to request the Admin to grant consent via their Azure Portal.
 
 12. Click on "Certificates & Secrets" tab. Go to Client Secrets. Generate a new client secret and keep a note of the string present under `Value` column.
 
-After completion, use the below noted parameters to configure the connector.
+After completion, use the following configuration parameters to configure the connector.
 
 ## Configuration
 
@@ -54,13 +54,13 @@ The following configuration fields are required:
 
 #### `Azure application Client ID`  (required)
 
-It is a unique identifier of your Azure Application, present on the app's overview page. Example:
+Unique identifier for your Azure Application, found on the app's overview page. Example:
 
 - `ab123453-12a2-100a-1123-93fd09d67394`
 
 #### `Azure application Client Secret`  (required)
 
-It is a string value that the application uses to prove its identity when requesting a token, available under `Certificates & Secrets` tab of your Azure application menu. Example:
+String value that the application uses to prove its identity when requesting a token, available under the `Certificates & Secrets` tab of your Azure application menu. Example:
 
 - `eyav1~12aBadIg6SL-STDfg102eBfCGkbKBq_Ddyu`
 
@@ -76,7 +76,7 @@ The number of retry attempts after failed request to OneDrive. Default value is 
 
 ### Content Extraction
 
-The connector uses the Elastic ingest attachment processor plugin for extracting file contents. The ingest attachment processor extracts files by using the Apache text extraction library Tika. Supported file types eligible for extraction can be found as `TIKA_SUPPORTED_FILETYPES` in [utils.py](../../connectors/utils.py) file.
+Refer to [content extraction](https://www.elastic.co/guide/en/enterprise-search/current/connectors-content-extraction.html) in the official docs.
 
 ## Documents and syncs
 
