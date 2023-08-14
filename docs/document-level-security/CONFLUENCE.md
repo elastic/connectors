@@ -18,7 +18,7 @@ Refer to [document level security](https://www.elastic.co/guide/en/enterprise-se
 
 ##### `Enable document level security`
 
-Toggle to enable [document level security (DLS)](https://www.elastic.co/guide/en/enterprise-search/master/dls.html). DLS is supported for the Confluence connector. When enabled:
+Toggle to enable [document level security (DLS)](https://www.elastic.co/guide/en/enterprise-search/master/dls.html).  When enabled:
 - Full syncs will fetch access control lists for each document and store them in the `_allow_access_control` field.
 - Access control syncs will fetch users' access control lists and store them in a separate index.
 
