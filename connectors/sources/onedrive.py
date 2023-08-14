@@ -106,7 +106,7 @@ class AccessToken:
         Returns:
             str: Access Token
         """
-        if cached_value := self._token_cache.get():
+        if cached_value := self._token_cache.get_value():
             return cached_value
         try:
             await self._set_access_token()
@@ -149,7 +149,7 @@ class AccessToken:
             self.token_expires_at = datetime.utcnow() + timedelta(
                 seconds=int(token_reponse.get("expires_in", 0))
             )
-            self._token_cache.set(self.access_token, self.token_expires_at)
+            self._token_cache.set_value(self.access_token, self.token_expires_at)
 
 
 class OneDriveClient:
