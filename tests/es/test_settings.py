@@ -152,14 +152,14 @@ def test_settings_supported_language():
     assert isinstance(actual, dict)
     assert "analysis" in actual
     assert "filter" in actual["analysis"]
-    filter = actual["analysis"]["filter"]
+    analysis_filter = actual["analysis"]["filter"]
 
     for k in (
         f"{language_code}-stem-filter",
         f"{language_code}-stop-words-filter",
         f"{language_code}-elision",
     ):
-        assert k in filter
+        assert k in analysis_filter
 
 
 def test_settings_none_language():
