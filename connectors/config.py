@@ -95,6 +95,7 @@ def _default_config():
             "sharepoint_online": "connectors.sources.sharepoint_online:SharepointOnlineDataSource",
             "github": "connectors.sources.github:GitHubDataSource",
             "slack": "connectors.sources.slack:SlackDataSource",
+            "onedrive": "connectors.sources.onedrive:OneDriveDataSource",
         },
     }
 
