@@ -179,7 +179,6 @@ class GoogleServiceAccountClient:
                     api_name=self.api, api_version=self.api_version
                 )
 
-                # TODO: test explicitly nested features
                 if isinstance(resource, list):
                     resource_object = getattr(workspace_client, resource[0])
                     for nested_resource in resource[1:]:
@@ -211,7 +210,6 @@ def remove_universe_domain(json_credentials):
         json_credentials.pop("universe_domain")
 
 
-# TODO: this class can probably be also used by multiple google connectors
 class GoogleDirectoryClient:
     def __init__(self, json_credentials, customer_id, timeout=DEFAULT_TIMEOUT):
         remove_universe_domain(json_credentials)
@@ -245,7 +243,6 @@ class GoogleDirectoryClient:
             resource=Resource.USER.value,
             method=Method.LIST.value,
             fields=f"nextPageToken,users({users_fields})",
-            # TODO: seems like it's not used?
             pageSize=ONE_HUNDRED_ITEMS,
             customer=self._customer_id,
         ):
