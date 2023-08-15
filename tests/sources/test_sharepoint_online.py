@@ -1574,6 +1574,7 @@ class TestSharepointOnlineDataSource:
                 "id": "1",
                 "webUrl": "https://test.sharepoint.com/site-1",
                 "name": "site-1",
+                "siteCollection": self.site_collections[0]["siteCollection"],
             }
         ]
 
@@ -1933,6 +1934,9 @@ class TestSharepointOnlineDataSource:
             assert len([i for i in results if i["object_type"] == "site_page"]) == len(
                 self.site_pages
             )
+
+            for item in results:
+                assert ACCESS_CONTROL not in item
 
     @pytest.mark.asyncio
     @patch(
