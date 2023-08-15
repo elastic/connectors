@@ -11,8 +11,8 @@ import sys
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 import elasticsearch
-from envyaml import EnvYAML
 
+from connectors.config import load_config
 from connectors.es.settings import DEFAULT_LANGUAGE, Mappings, Settings
 from connectors.es.sink import SyncOrchestrator
 from connectors.logger import logger, set_logger
@@ -406,7 +406,7 @@ def main(args=None):
         raise IOError(f"config file at '{config_file}' does not exist")
 
     set_logger(args.debug and logging.DEBUG or logging.INFO)
-    config = EnvYAML(config_file)
+    config = load_config(config_file)
     connector_definition = None
     if (
         connector_definition_file
