@@ -1406,9 +1406,9 @@ class SalesforceDocMapper:
 
         return created_by_list
 
-    def _format_list(self, list):
+    def _format_list(self, unformatted):
         return sorted(
-            set(filter(None, [str(x).strip() for x in list if x is not None]))
+            set(filter(None, [str(x).strip() for x in unformatted if x is not None]))
         )
 
 
