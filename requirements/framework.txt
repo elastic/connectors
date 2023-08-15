@@ -1,4 +1,4 @@
-aiohttp==3.8.4
+aiohttp==3.8.5
 elasticsearch[async]==8.8.0
 elastic-transport==8.4.0
 pyyaml==6.0
