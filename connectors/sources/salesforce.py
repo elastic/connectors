@@ -1191,16 +1191,24 @@ class SalesforceDataSource(BaseDataSource):
         return {
             "client_id": {
                 "label": "Client ID",
+                "order": 1,
+                "tooltip": "The client id for your OAuth2-enabled connected app. Also called 'consumer key'",
                 "type": "str",
                 "value": "",
             },
             "client_secret": {
                 "label": "Client Secret",
+                "order": 2,
+                "sensitive": True,
+                "tooltip": "The client secret for your OAuth2-enabled connected app. Also called 'consumer secret'",
                 "type": "str",
                 "value": "",
             },
             "domain": {
                 "label": "Domain",
+                "order": 3,
+                "sensitive": True,
+                "tooltip": "The domain for your Salesforce instance. If your Salesforce URL is 'foo.my.salesforce.com', the domain would be 'foo'.",
                 "type": "str",
                 "value": "",
             },
