@@ -96,6 +96,7 @@ def _default_config():
             "github": "connectors.sources.github:GitHubDataSource",
             "slack": "connectors.sources.slack:SlackDataSource",
             "onedrive": "connectors.sources.onedrive:OneDriveDataSource",
+            "gmail": "connectors.sources.gmail:GMailDataSource",
         },
     }
 
