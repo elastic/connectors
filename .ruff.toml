@@ -1,4 +1,4 @@
-select = ["A", "E", "F", "B"]
+select = ["A", "I", "E", "F", "B"]
 ignore = ["E501"]
 
 # Allow autofix for all enabled rules (when `--fix`) is provided.
@@ -17,3 +17,6 @@ target-version = "py310"
 
 [per-file-ignores]
 "tests/*" = ["B017"]
+
+[isort]
+known-first-party=["connectors", "tests"]
