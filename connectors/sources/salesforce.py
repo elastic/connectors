@@ -483,6 +483,8 @@ class SalesforceClient:
                 grouped[content_doc_id]["linked_ids"] = [
                     content_doc["linked_sobject_id"]
                 ]
+                # the id is now in the list of linked_ids so we can delete it
+                del grouped[content_doc_id]["linked_sobject_id"]
 
         grouped_objects = list(grouped.values())
         return grouped_objects
