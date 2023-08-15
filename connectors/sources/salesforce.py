@@ -155,7 +155,6 @@ class SalesforceClient:
         self._queryable_sobjects = None
         self._queryable_sobject_fields = None
         self._sobjects_cache_by_type = None
-        self._supported_file_types = [x[1:] for x in TIKA_SUPPORTED_FILETYPES]
         self._content_document_links_join = None
 
         self.base_url = BASE_URL.replace("<domain>", configuration["domain"])
@@ -932,7 +931,8 @@ class SalesforceClient:
             f"ContentDocument.LatestPublishedVersion.{x}"
             for x in queryable_version_fields
         ]
-        where_in_clause = ",".join(f"'{x}'" for x in self._supported_file_types)
+        [f"'{x[1:]}'" for x in TIKA_SUPPORTED_FILETYPES]
+        where_in_clause = ",".join([f"'{x[1:]}'" for x in TIKA_SUPPORTED_FILETYPES])
 
         query_builder = SalesforceSoqlBuilder("ContentDocumentLinks")
         query_builder.with_fields(
