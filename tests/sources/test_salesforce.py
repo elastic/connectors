@@ -973,7 +973,9 @@ async def test_get_cases_when_success(mock_responses):
         (404, None, None),
     ],
 )
-async def test_get_all_with_content_docs_when_success(mock_responses, response_status, response_body, expected_attachment):
+async def test_get_all_with_content_docs_when_success(
+    mock_responses, response_status, response_body, expected_attachment
+):
     async with create_salesforce_source() as source:
         expected_doc = {
             "_id": "content_document_id",
@@ -1222,6 +1224,7 @@ async def test_build_soql_query_with_fields():
         "FROM Test\nWHERE FooField = 'FOO'\nORDER BY CreatedDate DESC\nLIMIT 2"
     )
 
+
 @pytest.mark.asyncio
 async def test_combine_duplicate_content_docs_with_duplicates():
     async with create_salesforce_source(mock_queryables=False) as source:
@@ -1234,21 +1237,14 @@ async def test_combine_duplicate_content_docs_with_duplicates():
                 "Id": "content_doc_1",
                 "linked_sobject_id": "case_id",
             },
-            {
-                "Id": "content_doc_2",
-                "linked_sobject_id": "account_id"
-            }
+            {"Id": "content_doc_2", "linked_sobject_id": "account_id"},
         ]
         expected_docs = [
-            {
-                "Id": "content_doc_1",
-                "linked_ids": ["account_id", "case_id"]
-            },
-            {
-                "Id": "content_doc_2",
-                "linked_ids": ["account_id"]
-            }
+            {"Id": "content_doc_1", "linked_ids": ["account_id", "case_id"]},
+            {"Id": "content_doc_2", "linked_ids": ["account_id"]},
         ]
 
-        combined_docs = source.salesforce_client._combine_duplicate_content_docs(content_docs)
+        combined_docs = source.salesforce_client._combine_duplicate_content_docs(
+            content_docs
+        )
         TestCase().assertCountEqual(combined_docs, expected_docs)
