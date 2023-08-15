@@ -22,7 +22,6 @@
 #connector_id: null
 #
 #
-#
 ##  The service type of the connector.
 ##    (Deprecated. Configure the connector client in an object in the `connectors` list)
 #service_type: null
