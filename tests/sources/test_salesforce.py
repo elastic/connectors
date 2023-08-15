@@ -10,6 +10,7 @@ from unittest import TestCase, mock
 
 import pytest
 from aiohttp.client_exceptions import ClientConnectionError
+from aioresponses import CallbackResult
 
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.salesforce import (
@@ -27,6 +28,8 @@ from tests.sources.support import create_source
 
 TEST_DOMAIN = "fake"
 TEST_BASE_URL = f"https://{TEST_DOMAIN}.my.salesforce.com"
+TEST_FILE_DOWNLOAD_URL = f"https://{TEST_DOMAIN}.file.force.com"
+TEST_QUERY_MATCH_URL = re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*")
 TEST_CLIENT_ID = "1234"
 TEST_CLIENT_SECRET = "9876"
 
@@ -133,7 +136,7 @@ CONTACT_RESPONSE_PAYLOAD = {
     ],
 }
 
-LEAD_PAYLOAD = {
+LEAD_RESPONSE_PAYLOAD = {
     "records": [
         {
             "attributes": {
@@ -161,7 +164,7 @@ LEAD_PAYLOAD = {
     ]
 }
 
-CAMPAIGN_PAYLOAD = {
+CAMPAIGN_RESPONSE_PAYLOAD = {
     "records": [
         {
             "attributes": {
@@ -197,7 +200,7 @@ CAMPAIGN_PAYLOAD = {
     ]
 }
 
-CASE_PAYLOAD = {
+CASE_RESPONSE_PAYLOAD = {
     "records": [
         {
             "attributes": {
@@ -295,7 +298,7 @@ CASE_PAYLOAD = {
     ]
 }
 
-CASE_FEED_PAYLOAD = {
+CASE_FEED_RESPONSE_PAYLOAD = {
     "records": [
         {
             "attributes": {
@@ -349,6 +352,59 @@ CASE_FEED_PAYLOAD = {
     ]
 }
 
+CONTENT_DOCUMENT_LINKS_PAYLOAD = {
+    "records": [
+        {
+            "attributes": {
+                "type": "ContentDocumentLink",
+                "url": "/services/data/v58.0/sobjects/ContentDocumentLink/content_document_link_id",
+            },
+            "Id": "content_document_link_id",
+            "ContentDocument": {
+                "attributes": {
+                    "type": "ContentDocument",
+                    "url": "/services/data/v58.0/sobjects/ContentDocument/content_document_id",
+                },
+                "Id": "content_document_id",
+                "Description": "A file about a ring.",
+                "Title": "the_ring",
+                "ContentSize": 1000,
+                "FileExtension": "txt",
+                "CreatedDate": "",
+                "LatestPublishedVersion": {
+                    "attributes": {
+                        "type": "ContentVersion",
+                        "url": "/services/data/v58.0/sobjects/ContentVersion/content_version_id",
+                    },
+                    "Id": "content_version_id",
+                    "VersionDataUrl": f"{TEST_FILE_DOWNLOAD_URL}/sfc/servlet.shepherd/version/download/download_id",
+                    "CreatedDate": "",
+                    "VersionNumber": "2",
+                },
+                "Owner": {
+                    "attributes": {
+                        "type": "User",
+                        "url": "/services/data/v58.0/sobjects/User/user_id",
+                    },
+                    "Id": "user_id",
+                    "Name": "Frodo",
+                    "Email": "frodo@tlotr.com",
+                },
+                "CreatedBy": {
+                    "attributes": {
+                        "type": "User",
+                        "url": "/services/data/v58.0/sobjects/User/user_id",
+                    },
+                    "Id": "user_id",
+                    "Name": "Frodo",
+                    "Email": "frodo@tlotr.com",
+                },
+                "LastModifiedDate": "",
+            },
+        }
+    ]
+}
+
 CACHED_SOBJECTS = {
     "Account": {"account_id": {"Id": "account_id", "Name": "TLOTR"}},
     "User": {
@@ -364,14 +420,56 @@ CACHED_SOBJECTS = {
 
 
 @asynccontextmanager
-async def create_salesforce_source():
+async def create_salesforce_source(mock_queryables=True):
     async with create_source(
         SalesforceDataSource,
         domain=TEST_DOMAIN,
         client_id=TEST_CLIENT_ID,
         client_secret=TEST_CLIENT_SECRET,
     ) as source:
+        if mock_queryables is True:
+            source.salesforce_client.sobjects_cache_by_type = mock.AsyncMock(
+                return_value=CACHED_SOBJECTS
+            )
+            source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
+            source.salesforce_client._select_queryable_fields = mock.AsyncMock(
+                return_value=RELEVANT_SOBJECT_FIELDS
+            )
+
         yield source
+
+
+def salesforce_query_callback(url, **kwargs):
+    """Dynamically returns a payload based on query
+    and adds ContentDocumentLinks to each payload
+    """
+    payload = {}
+
+    # get table name after last "FROM" in query
+    query = kwargs["params"]["q"]
+    table_name = re.findall(r"\bFROM\s+(\w+)", query)[-1]
+
+    match table_name:
+        case "Account":
+            payload = ACCOUNT_RESPONSE_PAYLOAD.copy()
+        case "Campaign":
+            payload = CAMPAIGN_RESPONSE_PAYLOAD.copy()
+        case "Case":
+            payload = CASE_RESPONSE_PAYLOAD.copy()
+        case "CaseFeed":
+            payload = CASE_FEED_RESPONSE_PAYLOAD.copy()
+        case "Contact":
+            payload = CONTACT_RESPONSE_PAYLOAD.copy()
+        case "Lead":
+            payload = LEAD_RESPONSE_PAYLOAD.copy()
+        case "Opportunity":
+            payload = OPPORTUNITY_RESPONSE_PAYLOAD.copy()
+
+    if table_name != "CaseFeed":
+        for record in payload["records"]:
+            record["ContentDocumentLinks"] = CONTENT_DOCUMENT_LINKS_PAYLOAD
+
+    return CallbackResult(status=200, payload=payload)
 
 
 def generate_account_doc(identifier):
@@ -531,7 +629,7 @@ async def test_generate_token_with_unexpected_error_retries(
     ["FooField", "BarField", "ArghField"],
 )
 async def test_get_queryable_sobjects(mock_responses, sobject, expected_result):
-    async with create_salesforce_source() as source:
+    async with create_salesforce_source(mock_queryables=False) as source:
         response_payload = {
             "sobjects": [
                 {
@@ -562,7 +660,7 @@ async def test_get_queryable_sobjects(mock_responses, sobject, expected_result):
     ["FooField", "BarField", "ArghField"],
 )
 async def test_get_queryable_fields(mock_responses):
-    async with create_salesforce_source() as source:
+    async with create_salesforce_source(mock_queryables=False) as source:
         expected_fields = [
             {
                 "name": "FooField",
@@ -614,25 +712,13 @@ async def test_get_accounts_when_success(mock_responses):
             "website_url": "www.tlotr.com",
         }
 
-        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
-        source.salesforce_client._select_queryable_fields = mock.AsyncMock(
-            return_value=[
-                "Name",
-                "Description",
-                "BillingAddress",
-                "Type",
-                "Website",
-                "Rating",
-                "Department",
-            ]
-        )
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            TEST_QUERY_MATCH_URL,
             status=200,
             payload=ACCOUNT_RESPONSE_PAYLOAD,
         )
-        async for account in source.salesforce_client.get_accounts():
-            assert account == expected_doc
+        async for record, _ in source.salesforce_client.get_accounts():
+            assert record == expected_doc
 
 
 @pytest.mark.asyncio
@@ -640,7 +726,7 @@ async def test_get_accounts_when_paginated_yields_all_pages(mock_responses):
     async with create_salesforce_source() as source:
         response_page_1 = {
             "done": False,
-            "nextRecordsUrl": f"{TEST_BASE_URL}/barbar",
+            "nextRecordsUrl": "/barbar",
             "records": [
                 {
                     "Id": 1234,
@@ -656,10 +742,8 @@ async def test_get_accounts_when_paginated_yields_all_pages(mock_responses):
             ],
         }
 
-        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
-        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            TEST_QUERY_MATCH_URL,
             status=200,
             payload=response_page_1,
         )
@@ -670,22 +754,21 @@ async def test_get_accounts_when_paginated_yields_all_pages(mock_responses):
         )
 
         yielded_account_ids = []
-        async for account in source.salesforce_client.get_accounts():
-            yielded_account_ids.append(account["_id"])
+        async for record, _ in source.salesforce_client.get_accounts():
+            yielded_account_ids.append(record["_id"])
 
         assert sorted(yielded_account_ids) == [1234, 5678]
 
 
 @pytest.mark.asyncio
 async def test_get_accounts_when_invalid_request(patch_sleep, mock_responses):
-    async with create_salesforce_source() as source:
+    async with create_salesforce_source(mock_queryables=False) as source:
         response_payload = [
             {"message": "Unable to process query.", "errorCode": "INVALID_FIELD"}
         ]
 
-        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            TEST_QUERY_MATCH_URL,
             status=405,
             payload=response_payload,
         )
@@ -699,8 +782,8 @@ async def test_get_accounts_when_invalid_request(patch_sleep, mock_responses):
 async def test_get_accounts_when_not_queryable_yields_nothing(mock_responses):
     async with create_salesforce_source() as source:
         source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
-        async for account in source.salesforce_client.get_accounts():
-            assert account is None
+        async for record, _ in source.salesforce_client.get_accounts():
+            assert record is None
 
 
 @pytest.mark.asyncio
@@ -722,21 +805,13 @@ async def test_get_opportunities_when_success(mock_responses):
             "url": f"{TEST_BASE_URL}/opportunity_id",
         }
 
-        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
-        source.salesforce_client._select_queryable_fields = mock.AsyncMock(
-            return_value=[
-                "Name",
-                "Description",
-                "StageName",
-            ]
-        )
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            TEST_QUERY_MATCH_URL,
             status=200,
             payload=OPPORTUNITY_RESPONSE_PAYLOAD,
         )
-        async for account in source.salesforce_client.get_opportunities():
-            assert account == expected_doc
+        async for record, _ in source.salesforce_client.get_opportunities():
+            assert record == expected_doc
 
 
 @pytest.mark.asyncio
@@ -762,30 +837,13 @@ async def test_get_contacts_when_success(mock_responses):
             "url": f"{TEST_BASE_URL}/contact_id",
         }
 
-        source.salesforce_client.sobjects_cache_by_type = mock.AsyncMock(
-            return_value=CACHED_SOBJECTS
-        )
-        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
-        source.salesforce_client._select_queryable_fields = mock.AsyncMock(
-            return_value=[
-                "Name",
-                "Description",
-                "Email",
-                "Phone",
-                "Title",
-                "PhotoUrl",
-                "LastModifiedDate" "LeadSource",
-                "AccountId",
-                "OwnerId",
-            ]
-        )
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            TEST_QUERY_MATCH_URL,
             status=200,
             payload=CONTACT_RESPONSE_PAYLOAD,
         )
-        async for account in source.salesforce_client.get_contacts():
-            assert account == expected_doc
+        async for record, _ in source.salesforce_client.get_contacts():
+            assert record == expected_doc
 
 
 @pytest.mark.asyncio
@@ -819,36 +877,13 @@ async def test_get_leads_when_success(mock_responses):
             "url": f"{TEST_BASE_URL}/lead_id",
         }
 
-        source.salesforce_client.sobjects_cache_by_type = mock.AsyncMock(
-            return_value=CACHED_SOBJECTS
-        )
-        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
-        source.salesforce_client._select_queryable_fields = mock.AsyncMock(
-            return_value=[
-                "Company",
-                "ConvertedAccountId",
-                "ConvertedContactId",
-                "ConvertedDate",
-                "ConvertedOpportunityId",
-                "Description",
-                "Email",
-                "LeadSource",
-                "Name",
-                "OwnerId",
-                "Phone",
-                "PhotoUrl",
-                "Rating",
-                "Status",
-                "Title",
-            ]
-        )
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            TEST_QUERY_MATCH_URL,
             status=200,
-            payload=LEAD_PAYLOAD,
+            payload=LEAD_RESPONSE_PAYLOAD,
         )
-        async for account in source.salesforce_client.get_leads():
-            assert account == expected_doc
+        async for record, _ in source.salesforce_client.get_leads():
+            assert record == expected_doc
 
 
 @pytest.mark.asyncio
@@ -874,32 +909,17 @@ async def test_get_campaigns_when_success(mock_responses):
             "url": f"{TEST_BASE_URL}/campaign_id",
         }
 
-        source.salesforce_client.sobjects_cache_by_type = mock.AsyncMock(
-            return_value=CACHED_SOBJECTS
-        )
-        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
-        source.salesforce_client._select_queryable_fields = mock.AsyncMock(
-            return_value=[
-                "Name",
-                "IsActive",
-                "Type",
-                "Description",
-                "Status",
-                "StartDate",
-                "EndDate",
-            ]
-        )
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            TEST_QUERY_MATCH_URL,
             status=200,
-            payload=CAMPAIGN_PAYLOAD,
+            payload=CAMPAIGN_RESPONSE_PAYLOAD,
         )
-        async for account in source.salesforce_client.get_campaigns():
-            assert account == expected_doc
+        async for record, _ in source.salesforce_client.get_campaigns():
+            assert record == expected_doc
 
 
 @pytest.mark.asyncio
-async def test_get_casess_when_success(mock_responses):
+async def test_get_cases_when_success(mock_responses):
     async with create_salesforce_source() as source:
         expected_doc = {
             "_id": "case_id",
@@ -930,25 +950,75 @@ async def test_get_casess_when_success(mock_responses):
             "url": f"{TEST_BASE_URL}/case_id",
         }
 
-        source.salesforce_client.sobjects_cache_by_type = mock.AsyncMock(
-            return_value=CACHED_SOBJECTS
-        )
-        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
-        source.salesforce_client._select_queryable_fields = mock.AsyncMock(
-            return_value=RELEVANT_SOBJECT_FIELDS
+        mock_responses.get(
+            TEST_QUERY_MATCH_URL,
+            status=200,
+            payload=CASE_RESPONSE_PAYLOAD,
         )
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            TEST_QUERY_MATCH_URL,
             status=200,
-            payload=CASE_PAYLOAD,
+            payload=CASE_FEED_RESPONSE_PAYLOAD,
+        )
+        async for record, _ in source.salesforce_client.get_cases():
+            assert record == expected_doc
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response_status, response_body, expected_attachment",
+    [
+        (200, b"chunk1", "Y2h1bmsx"),  # base64 for "chunk1"
+        (200, b"", ""),
+        (404, None, None),
+    ],
+)
+async def test_get_all_with_content_docs_when_success(
+    mock_responses, response_status, response_body, expected_attachment
+):
+    async with create_salesforce_source() as source:
+        expected_doc = {
+            "_id": "content_document_id",
+            "content_size": 1000,
+            "created_at": "",
+            "created_by": "Frodo",
+            "created_by_email": "frodo@tlotr.com",
+            "description": "A file about a ring.",
+            "file_extension": "txt",
+            "last_updated": "",
+            "linked_ids": [
+                "account_id",
+                "campaign_id",
+                "case_id",
+                "contact_id",
+                "lead_id",
+                "opportunity_id",
+            ],  # contains every SObject that is connected to this doc
+            "owner": "Frodo",
+            "owner_email": "frodo@tlotr.com",
+            "title": "the_ring.txt",
+            "type": "content_document",
+            "url": f"{TEST_BASE_URL}/content_document_id",
+            "version_number": "2",
+            "version_url": f"{TEST_BASE_URL}/content_version_id",
+            "_attachment": expected_attachment,
+        }
+
+        mock_responses.get(
+            f"{TEST_FILE_DOWNLOAD_URL}/sfc/servlet.shepherd/version/download/download_id",
+            status=response_body,
+            body=response_body,
         )
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
-            status=200,
-            payload=CASE_FEED_PAYLOAD,
+            TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
         )
-        async for account in source.salesforce_client.get_cases():
-            assert account == expected_doc
+
+        content_document_records = []
+        async for record in source.salesforce_client.get_docs():
+            if record["type"] == "content_document":
+                content_document_records.append(record)
+
+        TestCase().assertCountEqual(content_document_records, [expected_doc])
 
 
 @pytest.mark.asyncio
@@ -964,9 +1034,8 @@ async def test_prepare_sobject_cache(mock_responses):
             "id_1": {"Id": "id_1", "Name": "Foo", "Type": "Account"},
             "id_2": {"Id": "id_2", "Name": "Bar", "Type": "Account"},
         }
-        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            TEST_QUERY_MATCH_URL,
             status=200,
             payload=sobjects,
         )
@@ -1013,16 +1082,13 @@ async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_resp
             status=200,
             payload=token_response_payload,
         )
-        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
-        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
-
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            TEST_QUERY_MATCH_URL,
             status=401,
             payload=invalid_token_payload,
         )
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            TEST_QUERY_MATCH_URL,
             status=200,
             payload=ACCOUNT_RESPONSE_PAYLOAD,
         )
@@ -1032,8 +1098,8 @@ async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_resp
             "generate",
             wraps=source.salesforce_client.api_token.generate,
         ) as mock_get_token:
-            async for account in source.salesforce_client.get_accounts():
-                assert account == expected_doc
+            async for record, _ in source.salesforce_client.get_accounts():
+                assert record == expected_doc
                 mock_get_token.assert_called_once()
 
 
@@ -1046,8 +1112,6 @@ async def test_request_when_rate_limited_raises_error_no_retries(mock_responses)
                 "errorCode": "REQUEST_LIMIT_EXCEEDED",
             }
         ]
-        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
-        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
         mock_responses.get(
             re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
             status=403,
@@ -1078,8 +1142,6 @@ async def test_request_when_invalid_query_raises_error_no_retries(
                 "errorCode": error_code,
             }
         ]
-        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
-        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
         mock_responses.get(
             re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
             status=400,
@@ -1096,10 +1158,8 @@ async def test_request_when_generic_400_raises_error_with_retries(
     patch_sleep, mock_responses
 ):
     async with create_salesforce_source() as source:
-        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
-        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            TEST_QUERY_MATCH_URL,
             status=400,
             repeat=True,
         )
@@ -1114,10 +1174,8 @@ async def test_request_when_generic_500_raises_error_with_retries(
     patch_sleep, mock_responses
 ):
     async with create_salesforce_source() as source:
-        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=True)
-        source.salesforce_client._select_queryable_fields = mock.AsyncMock()
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            TEST_QUERY_MATCH_URL,
             status=500,
             repeat=True,
         )
@@ -1165,3 +1223,28 @@ async def test_build_soql_query_with_fields():
     assert query.endswith(
         "FROM Test\nWHERE FooField = 'FOO'\nORDER BY CreatedDate DESC\nLIMIT 2"
     )
+
+
+@pytest.mark.asyncio
+async def test_combine_duplicate_content_docs_with_duplicates():
+    async with create_salesforce_source(mock_queryables=False) as source:
+        content_docs = [
+            {
+                "Id": "content_doc_1",
+                "linked_sobject_id": "account_id",
+            },
+            {
+                "Id": "content_doc_1",
+                "linked_sobject_id": "case_id",
+            },
+            {"Id": "content_doc_2", "linked_sobject_id": "account_id"},
+        ]
+        expected_docs = [
+            {"Id": "content_doc_1", "linked_ids": ["account_id", "case_id"]},
+            {"Id": "content_doc_2", "linked_ids": ["account_id"]},
+        ]
+
+        combined_docs = source.salesforce_client._combine_duplicate_content_docs(
+            content_docs
+        )
+        TestCase().assertCountEqual(combined_docs, expected_docs)

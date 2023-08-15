@@ -4,20 +4,30 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Salesforce source module responsible to fetch documents from Salesforce."""
+import asyncio
 from contextlib import contextmanager
 from functools import cached_property
 from itertools import groupby
 from threading import Lock
 
+import aiofiles
 import aiohttp
+from aiofiles.os import remove
+from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.utils import CancellableSleeps, retryable
+from connectors.utils import (
+    TIKA_SUPPORTED_FILETYPES,
+    CancellableSleeps,
+    convert_to_b64,
+    retryable,
+)
 
 RETRIES = 3
 RETRY_INTERVAL = 1
+CHUNK_SIZE = 1024
 
 BASE_URL = "https://<domain>.my.salesforce.com"
 API_VERSION = "v58.0"
@@ -33,6 +43,9 @@ RELEVANT_SOBJECTS = [
     "CaseComment",
     "CaseFeed",
     "Contact",
+    "ContentDocument",
+    "ContentDocumentLink",
+    "ContentVersion",
     "EmailMessage",
     "FeedComment",
     "Lead",
@@ -48,6 +61,7 @@ RELEVANT_SOBJECT_FIELDS = [
     "CommentBody",
     "CommentCount",
     "Company",
+    "ContentSize",
     "ConvertedAccountId",
     "ConvertedContactId",
     "ConvertedDate",
@@ -56,6 +70,7 @@ RELEVANT_SOBJECT_FIELDS = [
     "Description",
     "Email",
     "EndDate",
+    "FileExtension",
     "FirstOpenedDate",
     "FromAddress",
     "FromName",
@@ -65,6 +80,7 @@ RELEVANT_SOBJECT_FIELDS = [
     "LastEditById",
     "LastEditDate",
     "LastModifiedById",
+    "LatestPublishedVersionId",
     "LeadSource",
     "LinkUrl",
     "MessageDate",
@@ -83,6 +99,8 @@ RELEVANT_SOBJECT_FIELDS = [
     "Title",
     "ToAddress",
     "Type",
+    "VersionDataUrl",
+    "VersionNumber",
     "Website",
 ]
 
@@ -137,6 +155,7 @@ class SalesforceClient:
         self._queryable_sobjects = None
         self._queryable_sobject_fields = None
         self._sobjects_cache_by_type = None
+        self._content_document_links_join = None
 
         self.base_url = BASE_URL.replace("<domain>", configuration["domain"])
         self.api_token = SalesforceAPIToken(
@@ -183,23 +202,35 @@ class SalesforceClient:
             del self.session
 
     async def get_docs(self):
-        async for account in self.get_accounts():
-            yield account, None
+        all_content_docs = []
 
-        async for opportunity in self.get_opportunities():
-            yield opportunity, None
+        async for account, content_docs in self.get_accounts():
+            all_content_docs.extend(content_docs)
+            yield account
 
-        async for contact in self.get_contacts():
-            yield contact, None
+        async for opportunity, content_docs in self.get_opportunities():
+            all_content_docs.extend(content_docs)
+            yield opportunity
 
-        async for lead in self.get_leads():
-            yield lead, None
+        async for contact, content_docs in self.get_contacts():
+            all_content_docs.extend(content_docs)
+            yield contact
 
-        async for campaign in self.get_campaigns():
-            yield campaign, None
+        async for lead, content_docs in self.get_leads():
+            all_content_docs.extend(content_docs)
+            yield lead
 
-        async for case in self.get_cases():
-            yield case, None
+        async for campaign, content_docs in self.get_campaigns():
+            all_content_docs.extend(content_docs)
+            yield campaign
+
+        async for case, content_docs in self.get_cases():
+            all_content_docs.extend(content_docs)
+            yield case
+
+        all_content_docs = self._combine_duplicate_content_docs(all_content_docs)
+        async for content_doc in self.download_content_documents(all_content_docs):
+            yield content_doc
 
     async def get_accounts(self):
         if not await self._is_queryable("Account"):
@@ -211,7 +242,8 @@ class SalesforceClient:
         query = await self._accounts_query()
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
-                yield self.doc_mapper.map_account(record)
+                content_documents = self._parse_content_documents(record)
+                yield self.doc_mapper.map_account(record), content_documents
 
     async def get_opportunities(self):
         if not await self._is_queryable("Opportunity"):
@@ -223,7 +255,8 @@ class SalesforceClient:
         query = await self._opportunities_query()
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
-                yield self.doc_mapper.map_opportunity(record)
+                content_documents = self._parse_content_documents(record)
+                yield self.doc_mapper.map_opportunity(record), content_documents
 
     async def get_contacts(self):
         if not await self._is_queryable("Contact"):
@@ -235,12 +268,14 @@ class SalesforceClient:
         query = await self._contacts_query()
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
+                content_documents = self._parse_content_documents(record)
+
                 sobjects_by_id = await self.sobjects_cache_by_type()
                 record["Account"] = sobjects_by_id["Account"].get(
                     record.get("AccountId"), {}
                 )
                 record["Owner"] = sobjects_by_id["User"].get(record.get("OwnerId"), {})
-                yield self.doc_mapper.map_contact(record)
+                yield self.doc_mapper.map_contact(record), content_documents
 
     async def get_leads(self):
         if not await self._is_queryable("Lead"):
@@ -252,6 +287,8 @@ class SalesforceClient:
         query = await self._leads_query()
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
+                content_documents = self._parse_content_documents(record)
+
                 sobjects_by_id = await self.sobjects_cache_by_type()
                 record["Owner"] = sobjects_by_id["User"].get(record.get("OwnerId"), {})
                 record["ConvertedAccount"] = sobjects_by_id["Account"].get(
@@ -263,7 +300,7 @@ class SalesforceClient:
                 record["ConvertedOpportunity"] = sobjects_by_id["Opportunity"].get(
                     record.get("ConvertedOpportunityId"), {}
                 )
-                yield self.doc_mapper.map_lead(record)
+                yield self.doc_mapper.map_lead(record), content_documents
 
     async def get_campaigns(self):
         if not await self._is_queryable("Campaign"):
@@ -275,7 +312,8 @@ class SalesforceClient:
         query = await self._campaigns_query()
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
-                yield self.doc_mapper.map_campaign(record)
+                content_documents = self._parse_content_documents(record)
+                yield self.doc_mapper.map_campaign(record), content_documents
 
     async def get_cases(self):
         if not await self._is_queryable("Case"):
@@ -287,7 +325,7 @@ class SalesforceClient:
         query = await self._cases_query()
         async for records in self._yield_non_bulk_query_pages(query):
             case_feeds_by_case_id = {}
-            if self._is_queryable("CaseFeed") and records:
+            if await self._is_queryable("CaseFeed") and records:
                 case_ids = [x.get("Id") for x in records]
                 case_feeds = await self.get_case_feeds(case_ids)
 
@@ -299,12 +337,27 @@ class SalesforceClient:
                 }
 
             for record in records:
+                content_documents = self._parse_content_documents(record)
+
                 record["Feeds"] = case_feeds_by_case_id.get(record.get("Id"))
-                yield self.doc_mapper.map_case(record)
+                yield self.doc_mapper.map_case(record), content_documents
 
     async def get_case_feeds(self, case_ids):
         query = await self._case_feeds_query(case_ids)
         return await self._execute_non_paginated_query(query)
+
+    async def download_content_documents(self, content_documents):
+        for content_document in content_documents:
+            content_version = content_document.get("LatestPublishedVersion", {}) or {}
+            doc = self.doc_mapper.map_content_document(
+                content_document, content_version
+            )
+
+            download_url = content_version.get("VersionDataUrl")
+            if content_version.get("VersionDataUrl"):
+                doc["_attachment"] = await self._download(download_url)
+
+            yield doc
 
     async def queryable_sobjects(self):
         """Cached async property"""
@@ -398,6 +451,43 @@ class SalesforceClient:
         queryable_fields = sobject_fields.get(sobject, [])
         return [f for f in fields if f.lower() in queryable_fields]
 
+    def _parse_content_documents(self, record):
+        content_docs = []
+        content_links = record.get("ContentDocumentLinks", {}) or {}
+        content_links = content_links.get("records", []) or []
+        for content_link in content_links:
+            content_doc = content_link.get("ContentDocument")
+            if not content_doc:
+                continue
+
+            content_doc["linked_sobject_id"] = record.get("Id")
+            content_docs.append(content_doc)
+
+        return content_docs
+
+    def _combine_duplicate_content_docs(self, content_docs):
+        """Duplicate ContentDocuments may appear linked to multiple SObjects
+        Here we ensure that we don't download any duplicates while retaining links"""
+        grouped = {}
+
+        for content_doc in content_docs:
+            content_doc_id = content_doc["Id"]
+            if content_doc_id in grouped:
+                linked_id = content_doc["linked_sobject_id"]
+                linked_ids = grouped[content_doc_id]["linked_ids"]
+                if linked_id not in linked_ids:
+                    linked_ids.append(linked_id)
+            else:
+                grouped[content_doc_id] = content_doc
+                grouped[content_doc_id]["linked_ids"] = [
+                    content_doc["linked_sobject_id"]
+                ]
+                # the id is now in the list of linked_ids so we can delete it
+                del grouped[content_doc_id]["linked_sobject_id"]
+
+        grouped_objects = list(grouped.values())
+        return grouped_objects
+
     async def _yield_non_bulk_query_pages(self, soql_query):
         """loops through query response pages and yields lists of records"""
         url = f"{self.base_url}{QUERY_ENDPOINT}"
@@ -412,7 +502,7 @@ class SalesforceClient:
             if response.get("done", True) is True:
                 break
 
-            url = response.get("nextRecordsUrl")
+            url = f"{self.base_url}{response.get('nextRecordsUrl')}"
             params = None
 
     async def _execute_non_paginated_query(self, soql_query):
@@ -424,6 +514,34 @@ class SalesforceClient:
             params=params,
         )
         return response.get("records")
+
+    async def _download(self, download_url):
+        attachment = None
+        source_file_name = ""
+
+        try:
+            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+                resp = await self._get(download_url)
+                async for data in resp.content.iter_chunked(CHUNK_SIZE):
+                    await async_buffer.write(data)
+                source_file_name = async_buffer.name
+
+            await asyncio.to_thread(
+                convert_to_b64,
+                source=source_file_name,
+            )
+
+            async with aiofiles.open(file=source_file_name, mode="r") as target_file:
+                attachment = (await target_file.read()).strip()
+        except Exception as e:
+            self._logger.error(
+                f"Exception encountered when processing file: {source_file_name}. Exception: {e}"
+            )
+        finally:
+            if source_file_name:
+                await remove(str(source_file_name))
+
+        return attachment
 
     def _auth_headers(self):
         return {"authorization": f"Bearer {self.api_token.token()}"}
@@ -541,6 +659,9 @@ class SalesforceClient:
             join_builder.with_limit(1)
             query_builder.with_join(join_builder.build())
 
+        doc_links_join = await self.content_document_links_join()
+        query_builder.with_join(doc_links_join)
+
         return query_builder.build()
 
     async def _opportunities_query(self):
@@ -558,6 +679,9 @@ class SalesforceClient:
         query_builder.with_fields(queryable_fields)
         # TODO add uncommon_object_remote_fields
         query_builder.with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
+
+        doc_links_join = await self.content_document_links_join()
+        query_builder.with_join(doc_links_join)
 
         return query_builder.build()
 
@@ -581,6 +705,10 @@ class SalesforceClient:
         query_builder.with_default_metafields()
         query_builder.with_fields(queryable_fields)
         # TODO add uncommon_object_remote_fields
+
+        doc_links_join = await self.content_document_links_join()
+        query_builder.with_join(doc_links_join)
+
         return query_builder.build()
 
     async def _leads_query(self):
@@ -609,6 +737,10 @@ class SalesforceClient:
         query_builder.with_default_metafields()
         query_builder.with_fields(queryable_fields)
         # TODO add uncommon_object_remote_fields
+
+        doc_links_join = await self.content_document_links_join()
+        query_builder.with_join(doc_links_join)
+
         return query_builder.build()
 
     async def _campaigns_query(self):
@@ -631,6 +763,10 @@ class SalesforceClient:
         # TODO add uncommon_object_remote_fields
         query_builder.with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
         query_builder.with_fields(["Parent.Id", "Parent.Name"])
+
+        doc_links_join = await self.content_document_links_join()
+        query_builder.with_join(doc_links_join)
+
         return query_builder.build()
 
     async def _cases_query(self):
@@ -659,6 +795,10 @@ class SalesforceClient:
         case_comments_join = await self._case_comments_join_query()
         query_builder.with_join(email_mesasges_join)
         query_builder.with_join(case_comments_join)
+
+        doc_links_join = await self.content_document_links_join()
+        query_builder.with_join(doc_links_join)
+
         return query_builder.build()
 
     async def _email_messages_join_query(self):
@@ -754,6 +894,79 @@ class SalesforceClient:
         query_builder.with_limit(500)
         return query_builder.build()
 
+    async def content_document_links_join(self):
+        """Cached async property for getting downloadable attached files
+        This join is identical for all SObject queries"""
+        if self._content_document_links_join is not None:
+            return self._content_document_links_join
+
+        links_queryable = await self._is_queryable("ContentDocumentLink")
+        docs_queryable = await self._is_queryable("ContentDocument")
+        versions_queryable = await self._is_queryable("ContentVersion")
+        if not all([links_queryable, docs_queryable, versions_queryable]):
+            self._logger.warning(
+                "ContentDocuments, ContentVersions, or ContentDocumentLinks were not queryable, so not including in any queries."
+            )
+            self._content_document_links_join = ""
+            return self._content_document_links_join
+
+        queryable_docs_fields = await self._select_queryable_fields(
+            "ContentDocument",
+            [
+                "Title",
+                "FileExtension",
+                "ContentSize",
+                "Description",
+            ],
+        )
+        queryable_version_fields = await self._select_queryable_fields(
+            "ContentVersion",
+            [
+                "VersionDataUrl",
+                "VersionNumber",
+            ],
+        )
+        queryable_docs_fields = [f"ContentDocument.{x}" for x in queryable_docs_fields]
+        queryable_version_fields = [
+            f"ContentDocument.LatestPublishedVersion.{x}"
+            for x in queryable_version_fields
+        ]
+        [f"'{x[1:]}'" for x in TIKA_SUPPORTED_FILETYPES]
+        where_in_clause = ",".join([f"'{x[1:]}'" for x in TIKA_SUPPORTED_FILETYPES])
+
+        query_builder = SalesforceSoqlBuilder("ContentDocumentLinks")
+        query_builder.with_fields(
+            [
+                "ContentDocument.Id",
+                "ContentDocument.LatestPublishedVersion.Id",
+                "ContentDocument.CreatedDate",
+                "ContentDocument.LastModifiedDate",
+                "ContentDocument.LatestPublishedVersion.CreatedDate",
+            ]
+        )
+        query_builder.with_fields(queryable_docs_fields)
+        query_builder.with_fields(queryable_version_fields)
+        query_builder.with_fields(
+            [
+                "ContentDocument.Owner.Id",
+                "ContentDocument.Owner.Name",
+                "ContentDocument.Owner.Email",
+            ]
+        )
+        query_builder.with_fields(
+            [
+                "ContentDocument.CreatedBy.Id",
+                "ContentDocument.CreatedBy.Name",
+                "ContentDocument.CreatedBy.Email",
+            ]
+        )
+        query_builder.with_where(
+            f"ContentDocument.FileExtension IN ({where_in_clause})"
+        )
+
+        self._content_document_links_join = query_builder.build()
+        return self._content_document_links_join
+
 
 class SalesforceAPIToken:
     def __init__(self, session, base_url, client_id, client_secret):
@@ -837,6 +1050,9 @@ class SalesforceSoqlBuilder:
         self.limit = f"LIMIT {limit}"
 
     def with_join(self, join):
+        if not join:
+            return
+
         self.fields.append(f"(\n{join})\n")
 
     def build(self):
@@ -1063,6 +1279,29 @@ class SalesforceDocMapper:
             "url": f"{self.base_url}/{case.get('Id')}",
         }
 
+    def map_content_document(self, content_document, content_version):
+        owner = content_document.get("Owner", {})
+        created_by = content_document.get("CreatedBy", {}) or {}
+
+        return {
+            "_id": content_document.get("Id"),
+            "content_size": content_document.get("ContentSize"),
+            "created_at": content_document.get("CreatedDate"),
+            "created_by": created_by.get("Name"),
+            "created_by_email": created_by.get("Email"),
+            "description": content_document.get("Description"),
+            "file_extension": content_document.get("FileExtension"),
+            "last_updated": content_document.get("LastModifiedDate"),
+            "linked_ids": sorted(content_document.get("linked_ids")),
+            "owner": owner.get("Name"),
+            "owner_email": owner.get("Email"),
+            "title": f"{content_document.get('Title')}.{content_document.get('FileExtension')}",
+            "type": "content_document",
+            "url": f"{self.base_url}/{content_document.get('Id')}",
+            "version_number": content_version.get("VersionNumber"),
+            "version_url": f"{self.base_url}/{content_version.get('Id')}",
+        }
+
     def _format_address(self, address):
         if not address:
             return None
@@ -1227,10 +1466,6 @@ class SalesforceDataSource(BaseDataSource):
         except Exception as e:
             self._logger.exception(f"Error while connecting to Salesforce: {e}")
             raise
-
-    async def get_content(self, attachment, timestamp=None, doit=False):
-        # TODO implement
-        return
 
     async def get_docs(self, filtering=None):
         await self.salesforce_client.get_token()
