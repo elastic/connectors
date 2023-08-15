@@ -552,7 +552,7 @@ class GoogleDriveDataSource(BaseDataSource):
         Raises:
             Exception: The format of service account json is invalid.
         """
-        self.configuration.check_valid()
+        await super().validate_config()
 
         self._validate_service_account_json()
 
