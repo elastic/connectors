@@ -163,7 +163,7 @@ class FilteringValidator:
     async def validate(self, filtering):
         def _is_valid_str(result):
             if result is None:
-                return "Unknown (check validator implementation)"
+                return "Unknown (check validator implementation as it should never return 'None')"
 
             return "valid" if result.is_valid else "invalid"
 
