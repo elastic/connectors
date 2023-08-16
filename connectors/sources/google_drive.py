@@ -6,6 +6,7 @@
 import asyncio
 import json
 import os
+import re
 from functools import cached_property, partial
 
 import aiofiles
@@ -58,6 +59,9 @@ GOOGLE_DRIVE_EMULATOR_HOST = os.environ.get("GOOGLE_DRIVE_EMULATOR_HOST")
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
+
+# Regular expression pattern to match a basic email format (no whitespace, valid domain)
+EMAIL_REGEX_PATTERN = r"^\S+@\S+\.\S+$"
 
 
 class RetryableAiohttpSession(AiohttpSession):
@@ -390,7 +394,7 @@ class GoogleAdminDirectoryClient(GoogleAPIClient):
             resource="users",
             method="list",
             domain=self.domain,
-            fields="users(id,name,primaryEmail),nextPageToken",
+            fields="kind,users(id,name,primaryEmail),nextPageToken",
         ):
             yield user
 
@@ -404,7 +408,7 @@ class GoogleAdminDirectoryClient(GoogleAPIClient):
             resource="groups",
             method="list",
             userKey=user_id,
-            fields="groups(email),nextPageToken",
+            fields="kind,groups(email),nextPageToken",
         ):
             yield group
 
@@ -501,6 +505,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 "order": 3,
                 "tooltip": "In order to use Document Level Security you need to enable Google Workspace domain-wide delegation of authority for your service account. A service account with delegated authority can impersonate admin user with sufficient permissions to fetch all users and their corresponding permissions.",
                 "type": "str",
+                "validations": [{"type": "regex", "constraint": EMAIL_REGEX_PATTERN}],
                 "value": "admin@your-organization.com",
             },
             "max_concurrency": {
@@ -539,6 +544,8 @@ class GoogleDriveDataSource(BaseDataSource):
         """
         self._validate_service_account_json()
 
+        self._validate_google_workspace_admin_email()
+
         json_credentials = json.loads(self.configuration["service_account_credentials"])
 
         return GoogleAdminDirectoryClient(
@@ -555,12 +562,7 @@ class GoogleDriveDataSource(BaseDataSource):
         self.configuration.check_valid()
 
         self._validate_service_account_json()
-
-        if self._dls_enabled():
-            if self.configuration["google_workspace_admin_email"] is None:
-                raise ConfigurableFieldValueError(
-                    "Google Workspace admin email cannot be empty when Document Level Security is enabled."
-                )
+        self._validate_google_workspace_admin_email()
 
     def _validate_service_account_json(self):
         """Validates whether service account JSON is a valid JSON string and
@@ -583,6 +585,38 @@ class GoogleDriveDataSource(BaseDataSource):
             if key not in SERVICE_ACCOUNT_JSON_ALLOWED_KEYS:
                 raise ConfigurableFieldValueError(
                     f"Google Drive service account JSON contains an unexpected key: '{key}'. Allowed keys are: {SERVICE_ACCOUNT_JSON_ALLOWED_KEYS}"
+                )
+
+    def _validate_google_workspace_admin_email(self):
+        """
+        This method is used to validate the Google Workspace admin email address when Document Level Security (DLS) is enabled
+        for the current configuration. The email address should not be empty, and it should have a valid email format (no
+        whitespace and a valid domain).
+
+        Raises:
+            ConfigurableFieldValueError: If the Google Workspace admin email is empty when DLS is enabled,
+                or if the email is malformed or contains whitespace characters.
+
+        Note:
+            - This function assumes that `_dls_enabled()` is used to determine whether Document Level Security is enabled.
+            - The email address is validated using a basic regular expression pattern which might not cover all
+            possible valid email formats. For more accurate validation, consider using a comprehensive email validation
+            library or service.
+
+        """
+        if self._dls_enabled():
+            google_workspace_admin_email = self.configuration[
+                "google_workspace_admin_email"
+            ]
+
+            if google_workspace_admin_email is None:
+                raise ConfigurableFieldValueError(
+                    "Google Workspace admin email cannot be empty when Document Level Security is enabled."
+                )
+
+            if not re.fullmatch(EMAIL_REGEX_PATTERN, google_workspace_admin_email):
+                raise ConfigurableFieldValueError(
+                    "Google Workspace admin email is malformed or contains whitespace characters."
                 )
 
     async def ping(self):
