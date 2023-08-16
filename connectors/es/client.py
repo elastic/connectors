@@ -10,9 +10,8 @@ import time
 from enum import Enum
 
 from elastic_transport.client_utils import url_to_node_config
-from elasticsearch import ApiError, AsyncElasticsearch, ConflictError
+from elasticsearch import ApiError, AsyncElasticsearch, ConflictError, NotFoundError
 from elasticsearch import ConnectionError as ElasticConnectionError
-from elasticsearch import NotFoundError
 
 from connectors import __version__
 from connectors.logger import logger, set_extra_logger
