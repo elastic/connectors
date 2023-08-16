@@ -13,7 +13,7 @@ from connectors.logger import logger
 
 def load_config(config_file):
     logger.info(f"Loading config from {config_file}")
-    configuration = EnvYAML(config_file)
+    configuration = dict(_merge_dicts(_default_config(), EnvYAML(config_file).export()))
     _ent_search_config(configuration)
     return configuration
 
@@ -38,6 +38,67 @@ log_level_mappings = {
     "fatal": "CRITICAL",
     "unknown": "NOTSET",
 }
+
+
+def _default_config():
+    return {
+        "elasticsearch": {
+            "host": "http://localhost:9200",
+            "username": "elastic",
+            "password": "changeme",
+            "ssl": True,
+            "bulk": {
+                "queue_max_size": 1024,
+                "queue_max_mem_size": 25,
+                "display_every": 100,
+                "chunk_size": 1000,
+                "max_concurrency": 5,
+                "chunk_max_mem_size": 5,
+                "concurrent_downloads": 10,
+            },
+            "retry_on_timeout": True,
+            "request_timeout": 120,
+            "max_wait_duration": 120,
+            "initial_backoff_duration": 1,
+            "backoff_multiplier": 2,
+            "log_level": "info",
+        },
+        "service": {
+            "idling": 30,
+            "heartbeat": 300,
+            "preflight_max_attempts": 10,
+            "preflight_idle": 30,
+            "max_errors": 20,
+            "max_errors_span": 600,
+            "max_concurrent_content_syncs": 1,
+            "max_concurrent_access_control_syncs": 1,
+            "job_cleanup_interval": 300,
+            "log_level": "INFO",
+        },
+        "sources": {
+            "mongodb": "connectors.sources.mongo:MongoDataSource",
+            "s3": "connectors.sources.s3:S3DataSource",
+            "dir": "connectors.sources.directory:DirectoryDataSource",
+            "mysql": "connectors.sources.mysql:MySqlDataSource",
+            "network_drive": "connectors.sources.network_drive:NASDataSource",
+            "google_cloud_storage": "connectors.sources.google_cloud_storage:GoogleCloudStorageDataSource",
+            "google_drive": "connectors.sources.google_drive:GoogleDriveDataSource",
+            "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",
+            "postgresql": "connectors.sources.postgresql:PostgreSQLDataSource",
+            "oracle": "connectors.sources.oracle:OracleDataSource",
+            "sharepoint_server": "connectors.sources.sharepoint_server:SharepointServerDataSource",
+            "mssql": "connectors.sources.mssql:MSSQLDataSource",
+            "jira": "connectors.sources.jira:JiraDataSource",
+            "confluence": "connectors.sources.confluence:ConfluenceDataSource",
+            "dropbox": "connectors.sources.dropbox:DropboxDataSource",
+            "servicenow": "connectors.sources.servicenow:ServiceNowDataSource",
+            "sharepoint_online": "connectors.sources.sharepoint_online:SharepointOnlineDataSource",
+            "github": "connectors.sources.github:GitHubDataSource",
+            "slack": "connectors.sources.slack:SlackDataSource",
+            "onedrive": "connectors.sources.onedrive:OneDriveDataSource",
+            "gmail": "connectors.sources.gmail:GMailDataSource",
+        },
+    }
 
 
 def _ent_search_config(configuration):
@@ -88,3 +149,18 @@ def _update_config_field(configuration, field, value):
         current_leaf = current_leaf[subfield]
 
     current_leaf[subfields[-1]] = value
+
+
+def _merge_dicts(hsh1, hsh2):
+    for k in set(hsh1.keys()).union(hsh2.keys()):
+        if k in hsh1 and k in hsh2:
+            if isinstance(hsh1[k], dict) and isinstance(
+                hsh2[k], dict
+            ):  # only merge objects
+                yield (k, dict(_merge_dicts(hsh1[k], hsh2[k])))
+            else:
+                yield (k, hsh2[k])
+        elif k in hsh1:
+            yield (k, hsh1[k])
+        else:
+            yield (k, hsh2[k])
