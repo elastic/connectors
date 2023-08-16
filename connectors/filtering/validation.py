@@ -162,11 +162,14 @@ class FilteringValidator:
 
     async def validate(self, filtering):
         def _is_valid_str(result):
+            if result is None:
+                return "Unknown (check validator implementation)"
+
             return "valid" if result.is_valid else "invalid"
 
         self._logger.info("Filtering validation started")
         basic_rules = filtering.basic_rules
-        basic_rules_ids = [basic_rule.id_ for basic_rule in basic_rules]
+        basic_rules_ids = [basic_rule["id"] for basic_rule in basic_rules]
 
         filtering_validation_result = FilteringValidationResult()
 
