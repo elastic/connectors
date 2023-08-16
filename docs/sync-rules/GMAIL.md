@@ -1,4 +1,4 @@
-### Setting up the Github connector
+### Setting up the GMail connector
 
 See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 
