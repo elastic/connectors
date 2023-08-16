@@ -19,6 +19,11 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 from fastjsonschema import JsonSchemaValueException
 
+from connectors.access_control import (
+    ACCESS_CONTROL,
+    es_access_control_query,
+    prefix_identity,
+)
 from connectors.es.sink import OP_DELETE, OP_INDEX
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -42,8 +47,6 @@ from connectors.utils import (
 SPO_API_MAX_BATCH_SIZE = 20
 
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
-
-ACCESS_CONTROL = "_allow_access_control"
 
 DEFAULT_GROUPS = ["Visitors", "Owners", "Members"]
 
@@ -923,35 +926,28 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
             )
 
 
-def _prefix_identity(prefix, identity):
-    if prefix is None or identity is None:
-        return None
-
-    return f"{prefix}:{identity}"
-
-
 def _prefix_group(group):
-    return _prefix_identity("group", group)
+    return prefix_identity("group", group)
 
 
 def _prefix_site_group(site_group):
-    return _prefix_identity("site_group", site_group)
+    return prefix_identity("site_group", site_group)
 
 
 def _prefix_user(user):
-    return _prefix_identity("user", user)
+    return prefix_identity("user", user)
 
 
 def _prefix_site_user_id(site_user_id):
-    return _prefix_identity("site_user_id", site_user_id)
+    return prefix_identity("site_user_id", site_user_id)
 
 
 def _prefix_user_id(user_id):
-    return _prefix_identity("user_id", user_id)
+    return prefix_identity("user_id", user_id)
 
 
 def _prefix_email(email):
-    return _prefix_identity("email", email)
+    return prefix_identity("email", email)
 
 
 def _postfix_group(group):
@@ -1280,41 +1276,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         return self.configuration["use_document_level_security"]
 
     def access_control_query(self, access_control):
-        # filter out 'None' values
-        filtered_access_control = list(
-            filter(
-                lambda access_control_entity: access_control_entity is not None,
-                access_control,
-            )
-        )
-
-        return {
-            "query": {
-                "template": {"params": {"access_control": filtered_access_control}},
-                "source": {
-                    "bool": {
-                        "filter": {
-                            "bool": {
-                                "should": [
-                                    {
-                                        "bool": {
-                                            "must_not": {
-                                                "exists": {"field": ACCESS_CONTROL}
-                                            }
-                                        }
-                                    },
-                                    {
-                                        "terms": {
-                                            f"{ACCESS_CONTROL}.enum": filtered_access_control
-                                        }
-                                    },
-                                ]
-                            }
-                        }
-                    }
-                },
-            }
-        }
+        return es_access_control_query(access_control)
 
     async def _user_access_control_doc(self, user):
         """Constructs a user access control document, which will be synced to the corresponding access control index.
