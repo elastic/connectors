@@ -61,7 +61,7 @@ RUNNING_FTEST = (
 )  # Flag to check if a connector is run for ftest or not.
 
 # Regular expression pattern to match a basic email format (no whitespace, valid domain)
-EMAIL_REGEX_PATTERN = r'^\S+@\S+\.\S+$'
+EMAIL_REGEX_PATTERN = r"^\S+@\S+\.\S+$"
 
 
 class RetryableAiohttpSession(AiohttpSession):
@@ -605,8 +605,9 @@ class GoogleDriveDataSource(BaseDataSource):
 
         """
         if self._dls_enabled():
-
-            google_workspace_admin_email = self.configuration["google_workspace_admin_email"]
+            google_workspace_admin_email = self.configuration[
+                "google_workspace_admin_email"
+            ]
 
             if google_workspace_admin_email is None:
                 raise ConfigurableFieldValueError(
