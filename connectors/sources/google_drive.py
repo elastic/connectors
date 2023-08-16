@@ -720,7 +720,6 @@ class GoogleDriveDataSource(BaseDataSource):
         async for groups_page in self.google_admin_directory_client.list_groups_for_user(
             user_id
         ):
-            self._logger.info(f"User groups page: {groups_page}")
             for group in groups_page.get("groups", []):
                 user_groups.append(group.get("email"))
 
