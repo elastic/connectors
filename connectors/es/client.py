@@ -50,17 +50,13 @@ class ESClient:
         }
         logger.debug(f"Host is {self.host}")
 
-        if "username" in config:
-            if "api_key" in config:
-                raise KeyError(
-                    "You can't use basic auth ('username' and 'password') and 'api_key' at the same time in config.yml"
-                )
+        if "api_key" in config:
+            logger.debug(f"Connecting with an Api Key ({config['api_key'][:5]}...)")
+            options["api_key"] = config["api_key"]
+        elif "username" in config:
             auth = config["username"], config["password"]
             options["basic_auth"] = auth
             logger.debug(f"Connecting using Basic Auth (user: {config['username']})")
-        elif "api_key" in config:
-            logger.debug(f"Connecting with an Api Key ({config['api_key'][:5]}...)")
-            options["api_key"] = config["api_key"]
 
         if config.get("ssl", False):
             options["verify_certs"] = True
