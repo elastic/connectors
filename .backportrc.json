@@ -3,8 +3,7 @@
     { "name": "main", "checked": true },
     "8.10",
     "pre-8.10-stable",
-    "8.9",
-    "8.8"
+    "8.9"
   ],
   "fork": false,
   "targetPRLabels": ["backport"],
