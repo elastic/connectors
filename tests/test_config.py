@@ -9,7 +9,7 @@ from unittest import mock
 
 import pytest
 
-from connectors.config import _update_config_field, load_config
+from connectors.config import _nest_configs, load_config
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))
@@ -48,33 +48,33 @@ def test_config_with_invalid_log_level(set_env):
         assert e.match("Unexpected log level.*")
 
 
-def test_update_config_when_nested_field_does_not_exist():
+def test_nest_config_when_nested_field_does_not_exist():
     config = {}
 
-    _update_config_field(config, "test.nested.property", 50)
+    _nest_configs(config, "test.nested.property", 50)
 
     assert config["test"]["nested"]["property"] == 50
 
 
-def test_update_config_when_nested_field_exists():
+def test_nest_config_when_nested_field_exists():
     config = {"test": {"nested": {"property": 25}}}
 
-    _update_config_field(config, "test.nested.property", 50)
+    _nest_configs(config, "test.nested.property", 50)
 
     assert config["test"]["nested"]["property"] == 50
 
 
-def test_update_config_when_root_field_does_not_exist():
+def test_nest_config_when_root_field_does_not_exist():
     config = {}
 
-    _update_config_field(config, "test", 50)
+    _nest_configs(config, "test", 50)
 
     assert config["test"] == 50
 
 
-def test_update_config_when_root_field_does_exists():
+def test_nest_config_when_root_field_does_exists():
     config = {"test": 10}
 
-    _update_config_field(config, "test", 50)
+    _nest_configs(config, "test", 50)
 
     assert config["test"] == 50
