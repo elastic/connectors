@@ -374,6 +374,27 @@ async def test_concurrent_runner_high_concurrency():
     assert second_results == [3]
 
 
+@pytest.mark.asyncio
+async def test_concurrent_runner_try_put():
+    results = []
+
+    def _results_callback(result):
+        results.append(result)
+
+    async def coroutine(i):
+        await asyncio.sleep(0.1)
+        return i
+
+    runner = ConcurrentTasks(1, results_callback=_results_callback)
+    await runner.put(functools.partial(coroutine, 0))
+    task = await runner.try_put(functools.partial(coroutine, 1))
+
+    await runner.join()
+
+    assert task is None
+    assert 1 not in results
+
+
 @contextlib.contextmanager
 def temp_file(converter):
     if converter == "system":
