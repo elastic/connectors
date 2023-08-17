@@ -1110,9 +1110,11 @@ class GoogleDriveDataSource(BaseDataSource):
                 except HTTPError as exception:
                     # Gracefully handle scenario when the service account does not
                     # have permission to fetch ACL for a file.
-                    self._logger.warning(
-                        f"Unable to fetch permission list for the file {file_name}. Exception: {exception}."
-                    )
+                    exception_log_msg = f"Unable to fetch permission list for the file {file_name}. Exception: {exception}."
+                    if exception.res.status_code == 403:
+                        self._logger.warning(exception_log_msg)
+                    else:
+                        self._logger.error(exception_log_msg)
 
             file_document[ACCESS_CONTROL] = self._process_permissions(permissions)
 
