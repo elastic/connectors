@@ -400,7 +400,7 @@ class OracleDataSource(BaseDataSource):
             if row_count > 0:
                 # Query to get the table's primary key
                 keys = await self.oracle_client.get_table_primary_key(table=table)
-                keys = map_column_names(column_names=keys, table=table)
+                keys = map_column_names(column_names=keys, tables=[table])
                 if keys:
                     try:
                         last_update_time = (
@@ -416,7 +416,7 @@ class OracleDataSource(BaseDataSource):
                     streamer = self.oracle_client.data_streamer(table=table)
                     column_names = await anext(streamer)
                     column_names = map_column_names(
-                        column_names=column_names, table=table
+                        column_names=column_names, tables=[table]
                     )
                     async for row in streamer:
                         row = dict(zip(column_names, row, strict=True))

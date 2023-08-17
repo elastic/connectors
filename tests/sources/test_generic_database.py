@@ -18,8 +18,8 @@ from connectors.sources.mssql import MSSQLQueries
 
 SCHEMA = "dbo"
 TABLE = "emp_table"
+USER = "admin"
 CUSTOMER_TABLE = "customer"
-USER = "ADMIN"
 
 
 class ConnectionSync:
