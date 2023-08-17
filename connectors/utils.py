@@ -371,6 +371,20 @@ class ConcurrentTasks:
         )
         return task
 
+    async def try_put(self, coroutine, result_callback=None):
+        """Tries to add a coroutine for immediate execution.
+
+        If the number of running tasks reach `max_concurrency`, this
+        function return a None task immediately
+
+        If provided, `result_callback` will be called when the task is done.
+        """
+
+        if self._sem.locked():
+            return None
+
+        return await self.put(coroutine, result_callback=result_callback)
+
     async def join(self):
         """Wait for all tasks to finish."""
         await asyncio.gather(*self.tasks, return_exceptions=True)
