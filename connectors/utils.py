@@ -342,12 +342,10 @@ class ConcurrentTasks:
     def _callback(self, task, result_callback=None):
         self.tasks.remove(task)
         self._sem.release()
-        try:
-            exception = task.exception()
-        except Exception as e:
-            exception = e
-        if exception:
-            logger.error(f"Exception found for task {task.get_name()}: {exception}")
+        if task.exception():
+            logger.error(
+                f"Exception found for task {task.get_name()}: {task.exception()}"
+            )
         if result_callback is not None:
             result_callback(task.result())
         # global callback
