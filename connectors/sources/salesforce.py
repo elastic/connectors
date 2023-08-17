@@ -1472,4 +1472,4 @@ class SalesforceDataSource(BaseDataSource):
 
         # TODO filtering
         async for doc in self.salesforce_client.get_docs():
-            yield doc
+            yield doc, None
