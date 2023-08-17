@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Salesforce source class methods"""
+from copy import deepcopy
 import re
 from contextlib import asynccontextmanager
 from unittest import TestCase, mock
@@ -420,13 +421,16 @@ CACHED_SOBJECTS = {
 
 
 @asynccontextmanager
-async def create_salesforce_source(mock_queryables=True):
+async def create_salesforce_source(mock_token=True, mock_queryables=True):
     async with create_source(
         SalesforceDataSource,
         domain=TEST_DOMAIN,
         client_id=TEST_CLIENT_ID,
         client_secret=TEST_CLIENT_SECRET,
     ) as source:
+        if mock_token is True:
+            source.salesforce_client.api_token.token = mock.AsyncMock(return_value="foo")
+
         if mock_queryables is True:
             source.salesforce_client.sobjects_cache_by_type = mock.AsyncMock(
                 return_value=CACHED_SOBJECTS
@@ -451,23 +455,23 @@ def salesforce_query_callback(url, **kwargs):
 
     match table_name:
         case "Account":
-            payload = ACCOUNT_RESPONSE_PAYLOAD.copy()
+            payload = deepcopy(ACCOUNT_RESPONSE_PAYLOAD)
         case "Campaign":
-            payload = CAMPAIGN_RESPONSE_PAYLOAD.copy()
+            payload = deepcopy(CAMPAIGN_RESPONSE_PAYLOAD)
         case "Case":
-            payload = CASE_RESPONSE_PAYLOAD.copy()
+            payload = deepcopy(CASE_RESPONSE_PAYLOAD)
         case "CaseFeed":
-            payload = CASE_FEED_RESPONSE_PAYLOAD.copy()
+            payload = deepcopy(CASE_FEED_RESPONSE_PAYLOAD)
         case "Contact":
-            payload = CONTACT_RESPONSE_PAYLOAD.copy()
+            payload = deepcopy(CONTACT_RESPONSE_PAYLOAD)
         case "Lead":
-            payload = LEAD_RESPONSE_PAYLOAD.copy()
+            payload = deepcopy(LEAD_RESPONSE_PAYLOAD)
         case "Opportunity":
-            payload = OPPORTUNITY_RESPONSE_PAYLOAD.copy()
+            payload = deepcopy(OPPORTUNITY_RESPONSE_PAYLOAD)
 
     if table_name != "CaseFeed":
         for record in payload["records"]:
-            record["ContentDocumentLinks"] = CONTENT_DOCUMENT_LINKS_PAYLOAD
+            record["ContentDocumentLinks"] = deepcopy(CONTENT_DOCUMENT_LINKS_PAYLOAD)
 
     return CallbackResult(status=200, payload=payload)
 
@@ -551,28 +555,26 @@ async def test_generate_token_with_successful_connection(mock_responses):
             status=200,
             payload=response_payload,
         )
-        await source.salesforce_client.get_token()
-
-        assert source.salesforce_client.api_token.token() == "foo"
+        assert await source.salesforce_client.api_token.token() == "foo"
 
 
 @pytest.mark.asyncio
 async def test_generate_token_with_bad_domain_raises_error(
     patch_sleep, mock_responses, patch_cancellable_sleeps
 ):
-    async with create_salesforce_source() as source:
+    async with create_salesforce_source(mock_token=False) as source:
         mock_responses.post(
             f"{TEST_BASE_URL}/services/oauth2/token", status=500, repeat=True
         )
         with pytest.raises(TokenFetchException):
-            await source.salesforce_client.get_token()
+            await source.salesforce_client.api_token.token()
 
 
 @pytest.mark.asyncio
 async def test_generate_token_with_bad_credentials_raises_error(
     patch_sleep, mock_responses, patch_cancellable_sleeps
 ):
-    async with create_salesforce_source() as source:
+    async with create_salesforce_source(mock_token=False) as source:
         mock_responses.post(
             f"{TEST_BASE_URL}/services/oauth2/token",
             status=400,
@@ -580,9 +582,11 @@ async def test_generate_token_with_bad_credentials_raises_error(
                 "error": "invalid_client",
                 "error_description": "Invalid client credentials",
             },
+            repeat=True
+
         )
         with pytest.raises(InvalidCredentialsException):
-            await source.salesforce_client.get_token()
+            await source.salesforce_client.api_token.token()
 
 
 @pytest.mark.asyncio
@@ -607,10 +611,7 @@ async def test_generate_token_with_unexpected_error_retries(
             status=200,
             payload=response_payload,
         )
-
-        await source.salesforce_client.get_token()
-
-        assert source.salesforce_client.api_token.token() == "foo"
+        assert await source.salesforce_client.api_token.token() == "foo"
 
 
 @pytest.mark.asyncio
@@ -688,6 +689,9 @@ async def test_get_queryable_fields(mock_responses):
 @pytest.mark.asyncio
 async def test_get_accounts_when_success(mock_responses):
     async with create_salesforce_source() as source:
+        payload = deepcopy(ACCOUNT_RESPONSE_PAYLOAD)
+        expected_record = payload["records"][0]
+
         expected_doc = {
             "_id": "account_id",
             "account_type": "Customer - Direct",
@@ -718,7 +722,8 @@ async def test_get_accounts_when_success(mock_responses):
             payload=ACCOUNT_RESPONSE_PAYLOAD,
         )
         async for record, _ in source.salesforce_client.get_accounts():
-            assert record == expected_doc
+            assert record == expected_record
+            assert source.doc_mapper.map_account(record) == expected_doc
 
 
 @pytest.mark.asyncio
@@ -755,7 +760,7 @@ async def test_get_accounts_when_paginated_yields_all_pages(mock_responses):
 
         yielded_account_ids = []
         async for record, _ in source.salesforce_client.get_accounts():
-            yielded_account_ids.append(record["_id"])
+            yielded_account_ids.append(record["Id"])
 
         assert sorted(yielded_account_ids) == [1234, 5678]
 
@@ -811,12 +816,25 @@ async def test_get_opportunities_when_success(mock_responses):
             payload=OPPORTUNITY_RESPONSE_PAYLOAD,
         )
         async for record, _ in source.salesforce_client.get_opportunities():
-            assert record == expected_doc
+            assert record == OPPORTUNITY_RESPONSE_PAYLOAD["records"][0]
+            assert source.doc_mapper.map_opportunity(record) == expected_doc
 
 
 @pytest.mark.asyncio
 async def test_get_contacts_when_success(mock_responses):
     async with create_salesforce_source() as source:
+        payload = deepcopy(CONTACT_RESPONSE_PAYLOAD)
+        expected_record = payload["records"][0]
+        expected_record["Account"] = {
+            "Id": "account_id",
+            "Name": "TLOTR",
+        }
+        expected_record["Owner"] = {
+            "Id": "user_id",
+            "Name": "Frodo",
+            "Email": "frodo@tlotr.com"
+        }
+
         expected_doc = {
             "_id": "contact_id",
             "account": "TLOTR",
@@ -843,12 +861,24 @@ async def test_get_contacts_when_success(mock_responses):
             payload=CONTACT_RESPONSE_PAYLOAD,
         )
         async for record, _ in source.salesforce_client.get_contacts():
-            assert record == expected_doc
+            assert record == expected_record
+            assert source.doc_mapper.map_contact(record) == expected_doc
 
 
 @pytest.mark.asyncio
 async def test_get_leads_when_success(mock_responses):
     async with create_salesforce_source() as source:
+        payload = deepcopy(LEAD_RESPONSE_PAYLOAD)
+        expected_record = payload["records"][0]
+        expected_record["Owner"] = {
+            "Id": "user_id",
+            "Name": "Frodo",
+            "Email": "frodo@tlotr.com"
+        }
+        expected_record["ConvertedAccount"] = {}
+        expected_record["ConvertedContact"] = {}
+        expected_record["ConvertedOpportunity"] = {}
+
         expected_doc = {
             "_id": "lead_id",
             "body": "Forger of the One Ring",
@@ -883,7 +913,8 @@ async def test_get_leads_when_success(mock_responses):
             payload=LEAD_RESPONSE_PAYLOAD,
         )
         async for record, _ in source.salesforce_client.get_leads():
-            assert record == expected_doc
+            assert record == expected_record
+            assert source.doc_mapper.map_lead(record) == expected_doc
 
 
 @pytest.mark.asyncio
@@ -915,12 +946,19 @@ async def test_get_campaigns_when_success(mock_responses):
             payload=CAMPAIGN_RESPONSE_PAYLOAD,
         )
         async for record, _ in source.salesforce_client.get_campaigns():
-            assert record == expected_doc
+            assert record == CAMPAIGN_RESPONSE_PAYLOAD["records"][0]
+            assert source.doc_mapper.map_campaign(record) == expected_doc
 
 
 @pytest.mark.asyncio
 async def test_get_cases_when_success(mock_responses):
     async with create_salesforce_source() as source:
+        payload = deepcopy(CASE_RESPONSE_PAYLOAD)
+        expected_record = payload["records"][0]
+
+        feeds_payload = deepcopy(CASE_FEED_RESPONSE_PAYLOAD)
+        expected_record["Feeds"] = feeds_payload["records"]
+
         expected_doc = {
             "_id": "case_id",
             "account_id": "account_id",
@@ -961,7 +999,8 @@ async def test_get_cases_when_success(mock_responses):
             payload=CASE_FEED_RESPONSE_PAYLOAD,
         )
         async for record, _ in source.salesforce_client.get_cases():
-            assert record == expected_doc
+            assert record == expected_record
+            assert source.doc_mapper.map_case(record) == expected_doc
 
 
 @pytest.mark.asyncio
@@ -1014,7 +1053,7 @@ async def test_get_all_with_content_docs_when_success(
         )
 
         content_document_records = []
-        async for record in source.salesforce_client.get_docs():
+        async for record, _ in source.get_docs():
             if record["type"] == "content_document":
                 content_document_records.append(record)
 
@@ -1045,30 +1084,9 @@ async def test_prepare_sobject_cache(mock_responses):
 
 @pytest.mark.asyncio
 async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_responses):
-    async with create_salesforce_source() as source:
-        expected_doc = {
-            "_id": "account_id",
-            "account_type": "Customer - Direct",
-            "address": "The Burrow under the Hill, Bag End, Hobbiton, The Shire, Eriador, 111, Middle Earth",
-            "body": "A story about the One Ring.",
-            "content_source_id": "account_id",
-            "created_at": "",
-            "last_updated": "",
-            "owner": "Frodo",
-            "owner_email": "frodo@tlotr.com",
-            "open_activities": "",
-            "open_activities_urls": "",
-            "opportunity_name": "The Fellowship",
-            "opportunity_status": "Closed Won",
-            "opportunity_url": f"{TEST_BASE_URL}/opportunity_id",
-            "rating": "Hot",
-            "source": "salesforce",
-            "tags": ["Customer - Direct"],
-            "title": "TLOTR",
-            "type": "account",
-            "url": f"{TEST_BASE_URL}/account_id",
-            "website_url": "www.tlotr.com",
-        }
+    async with create_salesforce_source(mock_token=False) as source:
+        payload = deepcopy(ACCOUNT_RESPONSE_PAYLOAD)
+        expected_record = payload["records"][0]
 
         invalid_token_payload = [
             {
@@ -1081,6 +1099,7 @@ async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_resp
             f"{TEST_BASE_URL}/services/oauth2/token",
             status=200,
             payload=token_response_payload,
+            repeat=True
         )
         mock_responses.get(
             TEST_QUERY_MATCH_URL,
@@ -1095,12 +1114,13 @@ async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_resp
 
         with mock.patch.object(
             source.salesforce_client.api_token,
-            "generate",
-            wraps=source.salesforce_client.api_token.generate,
+            "token",
+            wraps=source.salesforce_client.api_token.token,
         ) as mock_get_token:
             async for record, _ in source.salesforce_client.get_accounts():
-                assert record == expected_doc
-                mock_get_token.assert_called_once()
+                assert record == expected_record
+                # assert called once for initial query, called again after invalid_token_payload
+                mock_get_token.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -1244,7 +1264,7 @@ async def test_combine_duplicate_content_docs_with_duplicates():
             {"Id": "content_doc_2", "linked_ids": ["account_id"]},
         ]
 
-        combined_docs = source.salesforce_client._combine_duplicate_content_docs(
+        combined_docs = source._combine_duplicate_content_docs(
             content_docs
         )
         TestCase().assertCountEqual(combined_docs, expected_docs)

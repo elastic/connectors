@@ -8,7 +8,6 @@ import asyncio
 from contextlib import contextmanager
 from functools import cached_property
 from itertools import groupby
-from threading import Lock
 
 import aiofiles
 import aiohttp
@@ -141,14 +140,8 @@ class SalesforceServerError(Exception):
     pass
 
 
-class LockedException(Exception):
-    """Notifies that the current process is locked, only for token generation"""
-
-    pass
-
-
 class SalesforceClient:
-    def __init__(self, configuration):
+    def __init__(self, configuration, base_url):
         self._logger = logger
         self._sleeps = CancellableSleeps()
 
@@ -157,14 +150,13 @@ class SalesforceClient:
         self._sobjects_cache_by_type = None
         self._content_document_links_join = None
 
-        self.base_url = BASE_URL.replace("<domain>", configuration["domain"])
+        self.base_url = base_url
         self.api_token = SalesforceAPIToken(
             self.session,
             self.base_url,
             configuration["client_id"],
             configuration["client_secret"],
         )
-        self.doc_mapper = SalesforceDocMapper(self.base_url)
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -175,62 +167,14 @@ class SalesforceClient:
             timeout=aiohttp.ClientTimeout(total=None),
         )
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        skipped_exceptions=[InvalidCredentialsException],
-    )
-    async def get_token(self):
-        while True:
-            try:
-                await self.api_token.generate()
-                break
-            except LockedException:
-                self._logger.debug("Token generation is already in process.")
-                break
-            except Exception as e:
-                raise e
-
     async def ping(self):
         # TODO ping something of value (this could be config check instead)
         await self.session.head(self.base_url)
 
     async def close(self):
         self.api_token.clear()
-        if self.session is not None:
-            await self.session.close()
-            del self.session
-
-    async def get_docs(self):
-        all_content_docs = []
-
-        async for account, content_docs in self.get_accounts():
-            all_content_docs.extend(content_docs)
-            yield account
-
-        async for opportunity, content_docs in self.get_opportunities():
-            all_content_docs.extend(content_docs)
-            yield opportunity
-
-        async for contact, content_docs in self.get_contacts():
-            all_content_docs.extend(content_docs)
-            yield contact
-
-        async for lead, content_docs in self.get_leads():
-            all_content_docs.extend(content_docs)
-            yield lead
-
-        async for campaign, content_docs in self.get_campaigns():
-            all_content_docs.extend(content_docs)
-            yield campaign
-
-        async for case, content_docs in self.get_cases():
-            all_content_docs.extend(content_docs)
-            yield case
-
-        all_content_docs = self._combine_duplicate_content_docs(all_content_docs)
-        async for content_doc in self.download_content_documents(all_content_docs):
-            yield content_doc
+        await self.session.close()
+        del self.session
 
     async def get_accounts(self):
         if not await self._is_queryable("Account"):
@@ -242,8 +186,8 @@ class SalesforceClient:
         query = await self._accounts_query()
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
-                content_documents = self._parse_content_documents(record)
-                yield self.doc_mapper.map_account(record), content_documents
+                content_docs = self._parse_content_documents(record)
+                yield record, content_docs
 
     async def get_opportunities(self):
         if not await self._is_queryable("Opportunity"):
@@ -255,8 +199,8 @@ class SalesforceClient:
         query = await self._opportunities_query()
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
-                content_documents = self._parse_content_documents(record)
-                yield self.doc_mapper.map_opportunity(record), content_documents
+                content_docs = self._parse_content_documents(record)
+                yield record, content_docs
 
     async def get_contacts(self):
         if not await self._is_queryable("Contact"):
@@ -268,14 +212,14 @@ class SalesforceClient:
         query = await self._contacts_query()
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
-                content_documents = self._parse_content_documents(record)
+                content_docs = self._parse_content_documents(record)
 
                 sobjects_by_id = await self.sobjects_cache_by_type()
                 record["Account"] = sobjects_by_id["Account"].get(
                     record.get("AccountId"), {}
                 )
                 record["Owner"] = sobjects_by_id["User"].get(record.get("OwnerId"), {})
-                yield self.doc_mapper.map_contact(record), content_documents
+                yield record, content_docs
 
     async def get_leads(self):
         if not await self._is_queryable("Lead"):
@@ -287,7 +231,7 @@ class SalesforceClient:
         query = await self._leads_query()
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
-                content_documents = self._parse_content_documents(record)
+                content_docs = self._parse_content_documents(record)
 
                 sobjects_by_id = await self.sobjects_cache_by_type()
                 record["Owner"] = sobjects_by_id["User"].get(record.get("OwnerId"), {})
@@ -300,7 +244,8 @@ class SalesforceClient:
                 record["ConvertedOpportunity"] = sobjects_by_id["Opportunity"].get(
                     record.get("ConvertedOpportunityId"), {}
                 )
-                yield self.doc_mapper.map_lead(record), content_documents
+
+                yield record, content_docs
 
     async def get_campaigns(self):
         if not await self._is_queryable("Campaign"):
@@ -312,8 +257,8 @@ class SalesforceClient:
         query = await self._campaigns_query()
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
-                content_documents = self._parse_content_documents(record)
-                yield self.doc_mapper.map_campaign(record), content_documents
+                content_docs = self._parse_content_documents(record)
+                yield record, content_docs
 
     async def get_cases(self):
         if not await self._is_queryable("Case"):
@@ -324,8 +269,8 @@ class SalesforceClient:
 
         query = await self._cases_query()
         async for records in self._yield_non_bulk_query_pages(query):
-            case_feeds_by_case_id = {}
             if await self._is_queryable("CaseFeed") and records:
+                case_feeds_by_case_id = {}
                 case_ids = [x.get("Id") for x in records]
                 case_feeds = await self.get_case_feeds(case_ids)
 
@@ -337,27 +282,40 @@ class SalesforceClient:
                 }
 
             for record in records:
-                content_documents = self._parse_content_documents(record)
-
+                content_docs = self._parse_content_documents(record)
                 record["Feeds"] = case_feeds_by_case_id.get(record.get("Id"))
-                yield self.doc_mapper.map_case(record), content_documents
+                yield record, content_docs
 
     async def get_case_feeds(self, case_ids):
         query = await self._case_feeds_query(case_ids)
-        return await self._execute_non_paginated_query(query)
+        all_case_feeds = []
+        async for case_feeds in self._yield_non_bulk_query_pages(query):
+            all_case_feeds.extend(case_feeds)
+
+        return all_case_feeds
+
+    def _parse_content_documents(self, record):
+        content_docs = []
+        content_links = record.get("ContentDocumentLinks", {}) or {}
+        content_links = content_links.get("records", []) or []
+        for content_link in content_links:
+            content_doc = content_link.get("ContentDocument")
+            if not content_doc:
+                continue
+
+            content_doc["linked_sobject_id"] = record.get("Id")
+            content_docs.append(content_doc)
+
+        return content_docs
 
     async def download_content_documents(self, content_documents):
         for content_document in content_documents:
             content_version = content_document.get("LatestPublishedVersion", {}) or {}
-            doc = self.doc_mapper.map_content_document(
-                content_document, content_version
-            )
-
             download_url = content_version.get("VersionDataUrl")
-            if content_version.get("VersionDataUrl"):
-                doc["_attachment"] = await self._download(download_url)
+            if download_url:
+                content_document["_attachment"] = await self._download(download_url)
 
-            yield doc
+            yield content_document
 
     async def queryable_sobjects(self):
         """Cached async property"""
@@ -451,43 +409,6 @@ class SalesforceClient:
         queryable_fields = sobject_fields.get(sobject, [])
         return [f for f in fields if f.lower() in queryable_fields]
 
-    def _parse_content_documents(self, record):
-        content_docs = []
-        content_links = record.get("ContentDocumentLinks", {}) or {}
-        content_links = content_links.get("records", []) or []
-        for content_link in content_links:
-            content_doc = content_link.get("ContentDocument")
-            if not content_doc:
-                continue
-
-            content_doc["linked_sobject_id"] = record.get("Id")
-            content_docs.append(content_doc)
-
-        return content_docs
-
-    def _combine_duplicate_content_docs(self, content_docs):
-        """Duplicate ContentDocuments may appear linked to multiple SObjects
-        Here we ensure that we don't download any duplicates while retaining links"""
-        grouped = {}
-
-        for content_doc in content_docs:
-            content_doc_id = content_doc["Id"]
-            if content_doc_id in grouped:
-                linked_id = content_doc["linked_sobject_id"]
-                linked_ids = grouped[content_doc_id]["linked_ids"]
-                if linked_id not in linked_ids:
-                    linked_ids.append(linked_id)
-            else:
-                grouped[content_doc_id] = content_doc
-                grouped[content_doc_id]["linked_ids"] = [
-                    content_doc["linked_sobject_id"]
-                ]
-                # the id is now in the list of linked_ids so we can delete it
-                del grouped[content_doc_id]["linked_sobject_id"]
-
-        grouped_objects = list(grouped.values())
-        return grouped_objects
-
     async def _yield_non_bulk_query_pages(self, soql_query):
         """loops through query response pages and yields lists of records"""
         url = f"{self.base_url}{QUERY_ENDPOINT}"
@@ -499,7 +420,7 @@ class SalesforceClient:
                 params=params,
             )
             yield response.get("records")
-            if response.get("done", True) is True:
+            if not response.get("nextRecordsUrl"):
                 break
 
             url = f"{self.base_url}{response.get('nextRecordsUrl')}"
@@ -543,8 +464,9 @@ class SalesforceClient:
 
         return attachment
 
-    def _auth_headers(self):
-        return {"authorization": f"Bearer {self.api_token.token()}"}
+    async def _auth_headers(self):
+        token = await self.api_token.token()
+        return {"authorization": f"Bearer {token}"}
 
     @retryable(
         retries=RETRIES,
@@ -553,24 +475,23 @@ class SalesforceClient:
     )
     async def _get_json(self, url, params=None):
         response_body = None
-
-        while True:
-            try:
-                response = await self._get(url, params=params)
-                response_body = await response.json()
-                # We get the response body before raising for status as it contains vital error information
-                response.raise_for_status()
-                return response_body
-            except ClientResponseError as e:
-                await self._handle_client_response_error(response_body, e)
-            except Exception as e:
-                raise e
+        try:
+            response = await self._get(url, params=params)
+            response_body = await response.json()
+            # We get the response body before raising for status as it contains vital error information
+            response.raise_for_status()
+            return response_body
+        except ClientResponseError as e:
+            await self._handle_client_response_error(response_body, e)
+        except Exception as e:
+            raise e
 
     async def _get(self, url, params=None):
         self._logger.debug(f"Sending request. Url: {url}, params: {params}")
+        headers = await self._auth_headers()
         return await self.session.get(
             url,
-            headers=self._auth_headers(),
+            headers=headers,
             params=params,
         )
 
@@ -582,9 +503,8 @@ class SalesforceClient:
                 f"Token expired, attemping to fetch new token. Status: {e.status}, message: {e.message}"
             )
             # The user can alter the lifetime of issued tokens, so we don't know when they expire
-            # Therefore we fetch the token when we encounter an error rather than when it expires
+            # By clearing the bearer token, we force the auth headers to fetch a new token in the next request
             self.api_token.clear()
-            await self.get_token()
             # raise to continue with retry strategy
             raise e
         elif 400 <= e.status < 500:
@@ -970,7 +890,6 @@ class SalesforceClient:
 
 class SalesforceAPIToken:
     def __init__(self, session, base_url, client_id, client_secret):
-        self.lock = Lock()
         self._token = None
         self.session = session
         self.url = f"{base_url}{TOKEN_ENDPOINT}"
@@ -980,47 +899,41 @@ class SalesforceAPIToken:
             "client_secret": client_secret,
         }
 
-    def token(self):
-        return self._token
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+    )
+    async def token(self):
+        if self._token:
+            return self._token
 
-    async def generate(self):
-        with self._non_blocking_lock():
-            response_body = {}
-            try:
-                response = await self.session.post(self.url, data=self.token_payload)
-                response_body = await response.json()
-                response.raise_for_status()
-                self._token = response_body["access_token"]
-            except ClientResponseError as e:
-                if 400 <= e.status < 500:
-                    # 400s have detailed error messages in body
-                    error_message = response_body.get(
-                        "error", "No error dscription found."
-                    )
-                    if error_message == "invalid_client":
-                        raise InvalidCredentialsException(
-                            f"The `client_id` and `client_secret` provided could not be used to generate a token. Status: {e.status}, message: {e.message}, details: {error_message}"
-                        ) from e
-                    else:
-                        raise TokenFetchException(
-                            f"Could not fetch token from Salesforce: Status: {e.status}, message: {e.message}, details: {error_message}"
-                        ) from e
+        try:
+            response = await self.session.post(self.url, data=self.token_payload)
+            response_body = await response.json()
+            response.raise_for_status()
+            self._token = response_body["access_token"]
+            return self._token
+        except ClientResponseError as e:
+            if 400 <= e.status < 500:
+                # 400s have detailed error messages in body
+                error_message = response_body.get(
+                    "error", "No error dscription found."
+                )
+                if error_message == "invalid_client":
+                    raise InvalidCredentialsException(
+                        f"The `client_id` and `client_secret` provided could not be used to generate a token. Status: {e.status}, message: {e.message}, details: {error_message}"
+                    ) from e
                 else:
                     raise TokenFetchException(
-                        f"Unexpected error while fetching Salesforce token. Status: {e.status}, message: {e.message}"
+                        f"Could not fetch token from Salesforce: Status: {e.status}, message: {e.message}, details: {error_message}"
                     ) from e
+            else:
+                raise TokenFetchException(
+                    f"Unexpected error while fetching Salesforce token. Status: {e.status}, message: {e.message}"
+                ) from e
 
     def clear(self):
         self._token = None
-
-    @contextmanager
-    def _non_blocking_lock(self):
-        if not self.lock.acquire(blocking=False):
-            raise LockedException("Token generation is already running.")
-        try:
-            yield self.lock
-        finally:
-            self.lock.release()
 
 
 class SalesforceSoqlBuilder:
@@ -1215,7 +1128,7 @@ class SalesforceDocMapper:
         }
 
     def map_campaign(self, campaign):
-        owner = campaign.get("Owner", {})
+        owner = campaign.get("Owner", {}) or {}
 
         parent = campaign.get("Parent", {}) or {}
         parent_id = parent.get("Id")
@@ -1247,7 +1160,7 @@ class SalesforceDocMapper:
         }
 
     def map_case(self, case):
-        owner = case.get("Owner", {})
+        owner = case.get("Owner", {}) or {}
 
         created_by = case.get("CreatedBy", {}) or {}
 
@@ -1279,12 +1192,14 @@ class SalesforceDocMapper:
             "url": f"{self.base_url}/{case.get('Id')}",
         }
 
-    def map_content_document(self, content_document, content_version):
-        owner = content_document.get("Owner", {})
+    def map_content_document(self, content_document):
+        content_version = content_document.get("LatestPublishedVersion", {}) or {}
+        owner = content_document.get("Owner", {}) or {}
         created_by = content_document.get("CreatedBy", {}) or {}
 
         return {
             "_id": content_document.get("Id"),
+            "_attachment": content_document.get("_attachment"),
             "content_size": content_document.get("ContentSize"),
             "created_at": content_document.get("CreatedDate"),
             "created_by": created_by.get("Name"),
@@ -1420,7 +1335,9 @@ class SalesforceDataSource(BaseDataSource):
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
-        self.salesforce_client = SalesforceClient(configuration=configuration)
+        self.base_url = BASE_URL.replace("<domain>", configuration["domain"])
+        self.salesforce_client = SalesforceClient(configuration=configuration, base_url=self.base_url)
+        self.doc_mapper = SalesforceDocMapper(self.base_url)
 
     def _set_internal_logger(self):
         self.salesforce_client.set_logger(self._logger)
@@ -1454,7 +1371,7 @@ class SalesforceDataSource(BaseDataSource):
         }
 
     async def validate_config(self):
-        self.configuration.check_valid()
+        await super().validate_config()
 
     async def close(self):
         await self.salesforce_client.close()
@@ -1468,8 +1385,57 @@ class SalesforceDataSource(BaseDataSource):
             raise
 
     async def get_docs(self, filtering=None):
-        await self.salesforce_client.get_token()
+        # We collect all content documents and de-duplicate them before downloading and yielding
+        all_content_docs = []
 
-        # TODO filtering
-        async for doc in self.salesforce_client.get_docs():
-            yield doc, None
+        async for account, content_docs in self.salesforce_client.get_accounts():
+            all_content_docs.extend(content_docs)
+            yield self.doc_mapper.map_account(account), None
+
+        async for opportunity, content_docs in self.salesforce_client.get_opportunities():
+            all_content_docs.extend(content_docs)
+            yield self.doc_mapper.map_opportunity(opportunity), None
+
+        async for contact, content_docs in self.salesforce_client.get_contacts():
+            all_content_docs.extend(content_docs)
+            yield self.doc_mapper.map_contact(contact), None
+
+        async for lead, content_docs in self.salesforce_client.get_leads():
+            all_content_docs.extend(content_docs)
+            yield self.doc_mapper.map_lead(lead), None
+
+        async for campaign, content_docs in self.salesforce_client.get_campaigns():
+            all_content_docs.extend(content_docs)
+            yield self.doc_mapper.map_campaign(campaign), None
+
+        async for case, content_docs in self.salesforce_client.get_cases():
+            all_content_docs.extend(content_docs)
+            yield self.doc_mapper.map_case(case), None
+
+        # Note: this could possibly be done on the fly if memory becomes an issue
+        all_content_docs = self._combine_duplicate_content_docs(all_content_docs)
+        async for content_doc in self.salesforce_client.download_content_documents(all_content_docs):
+            yield self.doc_mapper.map_content_document(content_doc), None
+
+    def _combine_duplicate_content_docs(self, content_docs):
+        """Duplicate ContentDocuments may appear linked to multiple SObjects
+        Here we ensure that we don't download any duplicates while retaining links"""
+        grouped = {}
+
+        for content_doc in content_docs:
+            content_doc_id = content_doc["Id"]
+            if content_doc_id in grouped:
+                linked_id = content_doc["linked_sobject_id"]
+                linked_ids = grouped[content_doc_id]["linked_ids"]
+                if linked_id not in linked_ids:
+                    linked_ids.append(linked_id)
+            else:
+                grouped[content_doc_id] = content_doc
+                grouped[content_doc_id]["linked_ids"] = [
+                    content_doc["linked_sobject_id"]
+                ]
+                # the id is now in the list of linked_ids so we can delete it
+                del grouped[content_doc_id]["linked_sobject_id"]
+
+        grouped_objects = list(grouped.values())
+        return grouped_objects
