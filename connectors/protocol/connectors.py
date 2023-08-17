@@ -335,7 +335,7 @@ class SyncJob(ESDocument):
         await self.index.update(doc_id=self.id, doc=doc)
 
     def _prefix(self):
-        return f"[Sync Job id: {self.id}, connector id: {self.connector_id}, index name: {self.index_name}]"
+        return f"[Connector id: {self.connector_id}, index name: {self.index_name}, Sync job id: {self.id}]"
 
     def _extra(self):
         return {

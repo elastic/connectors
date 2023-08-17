@@ -6,6 +6,7 @@
 import asyncio
 import json
 import os
+import re
 from functools import cached_property, partial
 
 import aiofiles
@@ -15,6 +16,11 @@ from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 from aiogoogle.sessions.aiohttp_session import AiohttpSession
 
+from connectors.access_control import (
+    ACCESS_CONTROL,
+    es_access_control_query,
+    prefix_identity,
+)
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
@@ -31,8 +37,6 @@ FILE_SIZE_LIMIT = 10485760  # ~ 10 Megabytes
 GOOGLE_API_MAX_CONCURRENCY = 25  # Max open connections to Google API
 
 DRIVE_API_TIMEOUT = 1 * 60  # 1 min
-
-ACCESS_CONTROL = "_allow_access_control"
 
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 
@@ -58,6 +62,9 @@ GOOGLE_DRIVE_EMULATOR_HOST = os.environ.get("GOOGLE_DRIVE_EMULATOR_HOST")
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
+
+# Regular expression pattern to match a basic email format (no whitespace, valid domain)
+EMAIL_REGEX_PATTERN = r"^\S+@\S+\.\S+$"
 
 
 class RetryableAiohttpSession(AiohttpSession):
@@ -390,7 +397,7 @@ class GoogleAdminDirectoryClient(GoogleAPIClient):
             resource="users",
             method="list",
             domain=self.domain,
-            fields="users(id,name,primaryEmail),nextPageToken",
+            fields="kind,users(id,name,primaryEmail),nextPageToken",
         ):
             yield user
 
@@ -404,28 +411,21 @@ class GoogleAdminDirectoryClient(GoogleAPIClient):
             resource="groups",
             method="list",
             userKey=user_id,
-            fields="groups(email),nextPageToken",
+            fields="kind,groups(email),nextPageToken",
         ):
             yield group
 
 
-def _prefix_identity(prefix, identity):
-    if prefix is None or identity is None:
-        return None
-
-    return f"{prefix}:{identity}"
-
-
 def _prefix_group(group):
-    return _prefix_identity("group", group)
+    return prefix_identity("group", group)
 
 
 def _prefix_user(user):
-    return _prefix_identity("user", user)
+    return prefix_identity("user", user)
 
 
 def _prefix_domain(domain):
-    return _prefix_identity("domain", domain)
+    return prefix_identity("domain", domain)
 
 
 def _is_user_permission(permission_type):
@@ -501,6 +501,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 "order": 3,
                 "tooltip": "In order to use Document Level Security you need to enable Google Workspace domain-wide delegation of authority for your service account. A service account with delegated authority can impersonate admin user with sufficient permissions to fetch all users and their corresponding permissions.",
                 "type": "str",
+                "validations": [{"type": "regex", "constraint": EMAIL_REGEX_PATTERN}],
                 "value": "admin@your-organization.com",
             },
             "max_concurrency": {
@@ -539,6 +540,8 @@ class GoogleDriveDataSource(BaseDataSource):
         """
         self._validate_service_account_json()
 
+        self._validate_google_workspace_admin_email()
+
         json_credentials = json.loads(self.configuration["service_account_credentials"])
 
         return GoogleAdminDirectoryClient(
@@ -552,15 +555,10 @@ class GoogleDriveDataSource(BaseDataSource):
         Raises:
             Exception: The format of service account json is invalid.
         """
-        self.configuration.check_valid()
+        await super().validate_config()
 
         self._validate_service_account_json()
-
-        if self._dls_enabled():
-            if self.configuration["google_workspace_admin_email"] is None:
-                raise ConfigurableFieldValueError(
-                    "Google Workspace admin email cannot be empty when Document Level Security is enabled."
-                )
+        self._validate_google_workspace_admin_email()
 
     def _validate_service_account_json(self):
         """Validates whether service account JSON is a valid JSON string and
@@ -583,6 +581,38 @@ class GoogleDriveDataSource(BaseDataSource):
             if key not in SERVICE_ACCOUNT_JSON_ALLOWED_KEYS:
                 raise ConfigurableFieldValueError(
                     f"Google Drive service account JSON contains an unexpected key: '{key}'. Allowed keys are: {SERVICE_ACCOUNT_JSON_ALLOWED_KEYS}"
+                )
+
+    def _validate_google_workspace_admin_email(self):
+        """
+        This method is used to validate the Google Workspace admin email address when Document Level Security (DLS) is enabled
+        for the current configuration. The email address should not be empty, and it should have a valid email format (no
+        whitespace and a valid domain).
+
+        Raises:
+            ConfigurableFieldValueError: If the Google Workspace admin email is empty when DLS is enabled,
+                or if the email is malformed or contains whitespace characters.
+
+        Note:
+            - This function assumes that `_dls_enabled()` is used to determine whether Document Level Security is enabled.
+            - The email address is validated using a basic regular expression pattern which might not cover all
+            possible valid email formats. For more accurate validation, consider using a comprehensive email validation
+            library or service.
+
+        """
+        if self._dls_enabled():
+            google_workspace_admin_email = self.configuration[
+                "google_workspace_admin_email"
+            ]
+
+            if google_workspace_admin_email is None:
+                raise ConfigurableFieldValueError(
+                    "Google Workspace admin email cannot be empty when Document Level Security is enabled."
+                )
+
+            if not re.fullmatch(EMAIL_REGEX_PATTERN, google_workspace_admin_email):
+                raise ConfigurableFieldValueError(
+                    "Google Workspace admin email is malformed or contains whitespace characters."
                 )
 
     async def ping(self):
@@ -609,33 +639,7 @@ class GoogleDriveDataSource(BaseDataSource):
         return self.configuration.get("max_concurrency") or GOOGLE_API_MAX_CONCURRENCY
 
     def access_control_query(self, access_control):
-        return {
-            "query": {
-                "template": {"params": {"access_control": access_control}},
-                "source": {
-                    "bool": {
-                        "filter": {
-                            "bool": {
-                                "should": [
-                                    {
-                                        "bool": {
-                                            "must_not": {
-                                                "exists": {"field": ACCESS_CONTROL}
-                                            }
-                                        }
-                                    },
-                                    {
-                                        "terms": {
-                                            f"{ACCESS_CONTROL}.enum": access_control
-                                        }
-                                    },
-                                ]
-                            }
-                        }
-                    }
-                },
-            }
-        }
+        return es_access_control_query(access_control)
 
     async def _process_items_concurrently(self, items, process_item_func):
         """Process a list of items concurrently using a semaphore for concurrency control.
