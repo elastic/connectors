@@ -201,7 +201,7 @@ class MongoDataSource(BaseDataSource):
                 yield self.serialize(doc), None
 
     async def validate_config(self):
-        self.configuration.check_valid()
+        await super().validate_config()
 
         client = self.client
         configured_database_name = self.configuration["database"]
