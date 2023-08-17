@@ -9,6 +9,7 @@ from functools import cached_property
 import fastjsonschema
 from fastjsonschema import JsonSchemaValueException
 
+from connectors.access_control import ACCESS_CONTROL, es_access_control_query
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
@@ -21,8 +22,6 @@ from connectors.sources.google import (
     UserFields,
 )
 from connectors.utils import base64url_to_base64, iso_utc
-
-ACCESS_CONTROL = "_allow_access_control"
 
 GMAIL_API_TIMEOUT = GOOGLE_DIRECTORY_TIMEOUT = 1 * 60  # 1 min
 
@@ -158,7 +157,7 @@ class GMailDataSource(BaseDataSource):
         Raises:
             Exception: The format of service account json is invalid.
         """
-        self.configuration.check_valid()
+        await super().validate_config()
 
         try:
             json.loads(self.configuration["service_account_credentials"])
@@ -222,41 +221,7 @@ class GMailDataSource(BaseDataSource):
         return self._features.document_level_security_enabled()
 
     def access_control_query(self, access_control):
-        # filter out 'None' values
-        filtered_access_control = list(
-            filter(
-                lambda access_control_entity: access_control_entity is not None,
-                access_control,
-            )
-        )
-
-        return {
-            "query": {
-                "template": {"params": {"access_control": filtered_access_control}},
-                "source": {
-                    "bool": {
-                        "filter": {
-                            "bool": {
-                                "should": [
-                                    {
-                                        "bool": {
-                                            "must_not": {
-                                                "exists": {"field": ACCESS_CONTROL}
-                                            }
-                                        }
-                                    },
-                                    {
-                                        "terms": {
-                                            f"{ACCESS_CONTROL}.enum": filtered_access_control
-                                        }
-                                    },
-                                ]
-                            }
-                        }
-                    }
-                },
-            }
-        }
+        return es_access_control_query(access_control)
 
     def _user_access_control_doc(self, user, access_control):
         email = user.get(UserFields.EMAIL.value)

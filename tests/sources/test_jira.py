@@ -16,7 +16,7 @@ from freezegun import freeze_time
 
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
-from connectors.sources.jira import JiraClient, JiraDataSource, _prefix_identity
+from connectors.sources.jira import JiraClient, JiraDataSource
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -374,12 +374,6 @@ async def test_validate_configuration_for_empty_fields(field, is_cloud):
         # Execute
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
-
-
-def test_prefix_identity():
-    prefix = "username"
-    identity = "Test User"
-    assert "username:Test User" == _prefix_identity(prefix=prefix, identity=identity)
 
 
 @pytest.mark.asyncio
