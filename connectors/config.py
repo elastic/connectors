@@ -145,6 +145,7 @@ def _nest_configs(configuration, field, value):
     }
     """
     subfields = field.split(".")
+    last_key = subfields[-1]
 
     current_leaf = configuration
     for subfield in subfields[:-1]:
@@ -152,7 +153,10 @@ def _nest_configs(configuration, field, value):
             current_leaf[subfield] = {}
         current_leaf = current_leaf[subfield]
 
-    current_leaf[subfields[-1]] = value
+    if isinstance(current_leaf.get(last_key), dict):
+        current_leaf[last_key] = dict(_merge_dicts(current_leaf[last_key], value))
+    else:
+        current_leaf[last_key] = value
 
 
 def _merge_dicts(hsh1, hsh2):

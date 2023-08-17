@@ -29,6 +29,8 @@ def test_bad_config_file():
 def test_config(set_env):
     config = load_config(CONFIG_FILE)
     assert isinstance(config, dict)
+    assert config["elasticsearch"]["host"] == "http://nowhere.com:9200"
+    assert config["elasticsearch"]["user"] == "elastic"
 
 
 def test_config_with_ent_search(set_env):
