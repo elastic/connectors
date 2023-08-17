@@ -47,12 +47,12 @@ def is_wildcard(tables):
     return tables in (WILDCARD, [WILDCARD])
 
 
-def map_column_names(column_names, schema=None, table=None):
+def map_column_names(column_names, schema=None, tables=None):
     prefix = ""
     if schema and len(schema.strip()) > 0:
         prefix += schema.strip() + "_"
-    if table and len(table.strip()) > 0:
-        prefix += table.strip() + "_"
+    if tables and len(tables) > 0:
+        prefix += f"{'_'.join(sorted(tables))}_"
     return [f"{prefix}{column}".lower() for column in column_names]
 
 
