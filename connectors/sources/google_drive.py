@@ -245,7 +245,10 @@ class GoogleDriveClient(GoogleAPIClient):
             json_credentials=json_credentials,
             api_name="drive",
             api_version="v3",
-            scopes=["https://www.googleapis.com/auth/drive.readonly"],
+            scopes=[
+                "https://www.googleapis.com/auth/drive.readonly",
+                "https://www.googleapis.com/auth/drive.metadata.readonly",
+            ],
         )
 
     async def ping(self):
@@ -555,7 +558,7 @@ class GoogleDriveDataSource(BaseDataSource):
         Raises:
             Exception: The format of service account json is invalid.
         """
-        self.configuration.check_valid()
+        await super().validate_config()
 
         self._validate_service_account_json()
         self._validate_google_workspace_admin_email()
@@ -1014,13 +1017,13 @@ class GoogleDriveDataSource(BaseDataSource):
             dict: Formatted file metadata.
         """
 
-        file_id = file.get("id")
+        file_id, file_name = file.get("id"), file.get("name")
 
         file_document = {
             "_id": file_id,
             "created_at": file.get("createdTime"),
             "last_updated": file.get("modifiedTime"),
-            "name": file.get("name"),
+            "name": file_name,
             "size": file.get("size") or 0,  # handle folders and shortcuts
             "_timestamp": file.get("modifiedTime"),
             "mime_type": file.get("mimeType"),
@@ -1070,9 +1073,18 @@ class GoogleDriveDataSource(BaseDataSource):
             # Read more: https://developers.google.com/drive/api/guides/shared-drives-diffs
             permissions = file.get("permissions", [])
             if not permissions:
-                permissions = await self._get_permissions_on_shared_drive(
-                    file_id=file_id
-                )
+                try:
+                    permissions = await self._get_permissions_on_shared_drive(
+                        file_id=file_id
+                    )
+                except HTTPError as exception:
+                    # Gracefully handle scenario when the service account does not
+                    # have permission to fetch ACL for a file.
+                    exception_log_msg = f"Unable to fetch permission list for the file {file_name}. Exception: {exception}."
+                    if exception.res.status_code == 403:
+                        self._logger.warning(exception_log_msg)
+                    else:
+                        self._logger.error(exception_log_msg)
 
             file_document[ACCESS_CONTROL] = self._process_permissions(permissions)
 

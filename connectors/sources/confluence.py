@@ -547,7 +547,7 @@ class ConfluenceDataSource(BaseDataSource):
         Raises:
             Exception: Configured keys can't be empty
         """
-        self.configuration.check_valid()
+        await super().validate_config()
         await self._remote_validation()
 
     async def _remote_validation(self):
