@@ -330,8 +330,8 @@ class OneDriveClient:
                 if file.get("name", "") != "root":
                     parent_path = file["parentReference"].get("path")
                     is_match = glob.globmatch(parent_path, pattern, flags=glob.GLOBSTAR)
-                    has_allowed_extension = (
-                        os.path.splitext(file["name"])[-1] not in skipped_extensions
+                    has_allowed_extension = os.path.splitext(file["name"])[-1] not in (
+                        skipped_extensions or []
                     )
 
                     if skipped_extensions is None and pattern == "":
