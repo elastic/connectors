@@ -13,7 +13,8 @@ from elasticsearch import ConflictError, ConnectionError
 from connectors.es.client import ESClient, License, with_concurrency_control
 
 BASIC_CONFIG = {"username": "elastic", "password": "changeme"}
-
+API_CONFIG = {"api_key": "foo"}
+BASIC_API_CONFIG = {"username": "elastic", "password": "changeme", "api_key": "foo"}
 
 def test_esclient():
     # creating a client with a minimal config should create one with sane
@@ -230,14 +231,21 @@ async def test_has_license_disabled_with_expired_license():
 
 
 @pytest.mark.asyncio
-async def test_auth_conflict_logs_warn(patch_logger):
-    config = {
-        "api_key": "foobar",
-        "username": "elastic",
-        "password": "doodah",
-        "host": "http://nowhere.com:9200",
-    }
-    ESClient(config)
+async def test_auth_conflict_logs_message(patch_logger):
+    ESClient(BASIC_API_CONFIG)
     patch_logger.assert_present(
         "configured API key will be used over configured basic auth"
     )
+
+@pytest.mark.parametrize(
+    "config, expected_auth_header",
+    [
+        (BASIC_CONFIG, f"Basic {base64.b64encode(b'elastic:changeme').decode()}"),
+        (API_CONFIG, "ApiKey foo"),
+        (BASIC_API_CONFIG, "ApiKey foo"),
+    ],
+)
+def test_es_client_with_auth(config, expected_auth_header):
+    es_client = ESClient(config)
+    assert es_client.client._headers["Authorization"] == expected_auth_header
+
