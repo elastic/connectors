@@ -470,7 +470,7 @@ class MySqlDataSource(BaseDataSource):
             ConfigurableFieldValueError: The database or the tables do not exist or aren't accessible, or a field contains an empty or wrong value
             ConfigurableFieldDependencyError: A inter-field dependency is not met
         """
-        self.configuration.check_valid()
+        await super().validate_config()
         await self._remote_validation()
 
     @retryable(
