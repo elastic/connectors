@@ -16,6 +16,11 @@ from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ServerDisconnectedError
 
+from connectors.access_control import (
+    ACCESS_CONTROL,
+    es_access_control_query,
+    prefix_identity,
+)
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.atlassian import AtlassianAdvancedRulesValidator
@@ -64,30 +69,21 @@ CONFLUENCE_CLOUD = "confluence_cloud"
 CONFLUENCE_SERVER = "confluence_server"
 WILDCARD = "*"
 
-ACCESS_CONTROL = "_allow_access_control"
-
-
-def _prefix_identity(prefix, identity):
-    if prefix is None or identity is None:
-        return None
-
-    return f"{prefix}:{identity}"
-
 
 def _prefix_account_id(account_id):
-    return _prefix_identity("account_id", account_id)
+    return prefix_identity("account_id", account_id)
 
 
 def _prefix_group_id(group_id):
-    return _prefix_identity("group_id", group_id)
+    return prefix_identity("group_id", group_id)
 
 
 def _prefix_role_key(role_key):
-    return _prefix_identity("role_key", role_key)
+    return prefix_identity("role_key", role_key)
 
 
 def _prefix_account_name(account_name):
-    return _prefix_identity("name", account_name.replace(" ", "-"))
+    return prefix_identity("name", account_name.replace(" ", "-"))
 
 
 class ConfluenceClient:
@@ -367,41 +363,7 @@ class ConfluenceDataSource(BaseDataSource):
         return self.configuration["use_document_level_security"]
 
     def access_control_query(self, access_control):
-        # filter out 'None' values
-        filtered_access_control = list(
-            filter(
-                lambda access_control_entity: access_control_entity is not None,
-                access_control,
-            )
-        )
-
-        return {
-            "query": {
-                "template": {"params": {"access_control": filtered_access_control}},
-                "source": {
-                    "bool": {
-                        "filter": {
-                            "bool": {
-                                "should": [
-                                    {
-                                        "bool": {
-                                            "must_not": {
-                                                "exists": {"field": ACCESS_CONTROL}
-                                            }
-                                        }
-                                    },
-                                    {
-                                        "terms": {
-                                            f"{ACCESS_CONTROL}.enum": filtered_access_control
-                                        }
-                                    },
-                                ]
-                            }
-                        }
-                    }
-                },
-            }
-        }
+        return es_access_control_query(access_control)
 
     def _decorate_with_access_control(self, document, access_control):
         if self._dls_enabled():
