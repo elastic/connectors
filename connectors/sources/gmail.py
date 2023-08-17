@@ -158,7 +158,7 @@ class GMailDataSource(BaseDataSource):
         Raises:
             Exception: The format of service account json is invalid.
         """
-        self.configuration.check_valid()
+        await super().validate_config()
 
         try:
             json.loads(self.configuration["service_account_credentials"])
