@@ -332,21 +332,22 @@ class ConcurrentTasks:
     """
 
     def __init__(self, max_concurrency=5, results_callback=None):
-        self.max_concurrency = max_concurrency
         self.tasks = []
         self.results_callback = results_callback
-        self._task_over = asyncio.Event()
+        self._sem = asyncio.Semaphore(max_concurrency)
 
     def __len__(self):
         return len(self.tasks)
 
     def _callback(self, task, result_callback=None):
         self.tasks.remove(task)
-        self._task_over.set()
-        if task.exception():
-            logger.error(
-                f"Exception found for task {task.get_name()}: {task.exception()}"
-            )
+        self._sem.release()
+        try:
+            exception = task.exception()
+        except Exception as e:
+            exception = e
+        if exception:
+            logger.error(f"Exception found for task {task.get_name()}: {exception}")
         if result_callback is not None:
             result_callback(task.result())
         # global callback
@@ -361,11 +362,7 @@ class ConcurrentTasks:
 
         If provided, `result_callback` will be called when the task is done.
         """
-        # If self.tasks has reached its max size, we wait for one task to finish
-        if len(self.tasks) >= self.max_concurrency:
-            await self._task_over.wait()
-            # rearm
-            self._task_over.clear()
+        await self._sem.acquire()
         task = asyncio.create_task(coroutine())
         self.tasks.append(task)
         task.add_done_callback(
