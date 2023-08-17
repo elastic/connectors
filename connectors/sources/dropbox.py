@@ -601,7 +601,7 @@ class DropboxDataSource(BaseDataSource):
         """Validates whether user input is empty or not for configuration fields
         Also validate, if user configured path is available in Dropbox."""
 
-        self.configuration.check_valid()
+        await super().validate_config()
         await self._remote_validation()
 
     async def _remote_validation(self):
