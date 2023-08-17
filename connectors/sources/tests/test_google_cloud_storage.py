@@ -50,7 +50,7 @@ def test_get_configuration():
 
     # Assert
 
-    assert type(config["service_account_credentials"]) == str
+    assert isinstance(config["service_account_credentials"], str)
     assert json.loads(
         config["service_account_credentials"].encode("unicode_escape").decode()
     )
