@@ -4,9 +4,9 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Salesforce source class methods"""
-from copy import deepcopy
 import re
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from unittest import TestCase, mock
 
 import pytest
@@ -429,7 +429,9 @@ async def create_salesforce_source(mock_token=True, mock_queryables=True):
         client_secret=TEST_CLIENT_SECRET,
     ) as source:
         if mock_token is True:
-            source.salesforce_client.api_token.token = mock.AsyncMock(return_value="foo")
+            source.salesforce_client.api_token.token = mock.AsyncMock(
+                return_value="foo"
+            )
 
         if mock_queryables is True:
             source.salesforce_client.sobjects_cache_by_type = mock.AsyncMock(
@@ -582,8 +584,7 @@ async def test_generate_token_with_bad_credentials_raises_error(
                 "error": "invalid_client",
                 "error_description": "Invalid client credentials",
             },
-            repeat=True
-
+            repeat=True,
         )
         with pytest.raises(InvalidCredentialsException):
             await source.salesforce_client.api_token.token()
@@ -832,7 +833,7 @@ async def test_get_contacts_when_success(mock_responses):
         expected_record["Owner"] = {
             "Id": "user_id",
             "Name": "Frodo",
-            "Email": "frodo@tlotr.com"
+            "Email": "frodo@tlotr.com",
         }
 
         expected_doc = {
@@ -873,7 +874,7 @@ async def test_get_leads_when_success(mock_responses):
         expected_record["Owner"] = {
             "Id": "user_id",
             "Name": "Frodo",
-            "Email": "frodo@tlotr.com"
+            "Email": "frodo@tlotr.com",
         }
         expected_record["ConvertedAccount"] = {}
         expected_record["ConvertedContact"] = {}
@@ -1099,7 +1100,7 @@ async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_resp
             f"{TEST_BASE_URL}/services/oauth2/token",
             status=200,
             payload=token_response_payload,
-            repeat=True
+            repeat=True,
         )
         mock_responses.get(
             TEST_QUERY_MATCH_URL,
@@ -1120,7 +1121,7 @@ async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_resp
             async for record, _ in source.salesforce_client.get_accounts():
                 assert record == expected_record
                 # assert called once for initial query, called again after invalid_token_payload
-                mock_get_token.call_count == 2
+                assert mock_get_token.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -1264,7 +1265,5 @@ async def test_combine_duplicate_content_docs_with_duplicates():
             {"Id": "content_doc_2", "linked_ids": ["account_id"]},
         ]
 
-        combined_docs = source._combine_duplicate_content_docs(
-            content_docs
-        )
+        combined_docs = source._combine_duplicate_content_docs(content_docs)
         TestCase().assertCountEqual(combined_docs, expected_docs)

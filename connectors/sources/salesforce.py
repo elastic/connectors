@@ -5,7 +5,6 @@
 #
 """Salesforce source module responsible to fetch documents from Salesforce."""
 import asyncio
-from contextlib import contextmanager
 from functools import cached_property
 from itertools import groupby
 
@@ -269,8 +268,8 @@ class SalesforceClient:
 
         query = await self._cases_query()
         async for records in self._yield_non_bulk_query_pages(query):
+            case_feeds_by_case_id = {}
             if await self._is_queryable("CaseFeed") and records:
-                case_feeds_by_case_id = {}
                 case_ids = [x.get("Id") for x in records]
                 case_feeds = await self.get_case_feeds(case_ids)
 
@@ -907,6 +906,7 @@ class SalesforceAPIToken:
         if self._token:
             return self._token
 
+        response_body = {}
         try:
             response = await self.session.post(self.url, data=self.token_payload)
             response_body = await response.json()
@@ -916,9 +916,7 @@ class SalesforceAPIToken:
         except ClientResponseError as e:
             if 400 <= e.status < 500:
                 # 400s have detailed error messages in body
-                error_message = response_body.get(
-                    "error", "No error dscription found."
-                )
+                error_message = response_body.get("error", "No error dscription found.")
                 if error_message == "invalid_client":
                     raise InvalidCredentialsException(
                         f"The `client_id` and `client_secret` provided could not be used to generate a token. Status: {e.status}, message: {e.message}, details: {error_message}"
@@ -1336,7 +1334,9 @@ class SalesforceDataSource(BaseDataSource):
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
         self.base_url = BASE_URL.replace("<domain>", configuration["domain"])
-        self.salesforce_client = SalesforceClient(configuration=configuration, base_url=self.base_url)
+        self.salesforce_client = SalesforceClient(
+            configuration=configuration, base_url=self.base_url
+        )
         self.doc_mapper = SalesforceDocMapper(self.base_url)
 
     def _set_internal_logger(self):
@@ -1414,7 +1414,9 @@ class SalesforceDataSource(BaseDataSource):
 
         # Note: this could possibly be done on the fly if memory becomes an issue
         all_content_docs = self._combine_duplicate_content_docs(all_content_docs)
-        async for content_doc in self.salesforce_client.download_content_documents(all_content_docs):
+        async for content_doc in self.salesforce_client.download_content_documents(
+            all_content_docs
+        ):
             yield self.doc_mapper.map_content_document(content_doc), None
 
     def _combine_duplicate_content_docs(self, content_docs):
