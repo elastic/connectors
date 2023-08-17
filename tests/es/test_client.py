@@ -227,3 +227,17 @@ async def test_has_license_disabled_with_expired_license():
 
     assert not is_enabled
     assert license_ == License.EXPIRED
+
+
+@pytest.mark.asyncio
+async def test_auth_conflict_logs_warn(patch_logger):
+    config = {
+        "api_key": "foobar",
+        "username": "elastic",
+        "password": "doodah",
+        "host": "http://nowhere.com:9200",
+    }
+    ESClient(config)
+    patch_logger.assert_present(
+        "configured API key will be used over configured basic auth"
+    )
