@@ -268,7 +268,7 @@ class SyncJobRunner:
             f"Sync ended with status {sync_status.value} -- "
             f"created: {result.get('doc_created', 0)} | "
             f"updated: {result.get('doc_updated', 0)} | "
-            f"deleted: {result.get('doc_deleted')} "
+            f"deleted: {result.get('doc_deleted', 0)} "
             f"(took {int(time.time() - self._start_time)} seconds)"  # pyright: ignore
         )
 
