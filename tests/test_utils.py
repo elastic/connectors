@@ -249,6 +249,30 @@ async def test_concurrent_runner():
 
 
 @pytest.mark.asyncio
+async def test_concurrent_runner_canceled():
+    results = []
+    tasks = []
+
+    def _results_callback(result):
+        results.append(result)
+
+    async def coroutine(i):
+        await asyncio.sleep(1)
+        return i
+
+    runner = ConcurrentTasks(max_concurrency=10, results_callback=_results_callback)
+    for i in range(10):
+        tasks.append(await runner.put(functools.partial(coroutine, i)))
+
+    runner.cancel()
+    await runner.join()
+    assert len(tasks) == 10
+    for task in tasks:
+        assert task.cancelled()
+    assert len(results) == 0
+
+
+@pytest.mark.asyncio
 async def test_concurrent_runner_fails():
     results = []
 
