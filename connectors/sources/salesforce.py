@@ -167,7 +167,6 @@ class SalesforceClient:
         )
 
     async def ping(self):
-        # TODO ping something of value (this could be config check instead)
         await self.session.head(self.base_url)
 
     async def close(self):
@@ -177,7 +176,7 @@ class SalesforceClient:
 
     async def get_accounts(self):
         if not await self._is_queryable("Account"):
-            self._logger.info(
+            self._logger.warning(
                 "Object Account is not queryable, so they won't be ingested."
             )
             return
@@ -185,12 +184,11 @@ class SalesforceClient:
         query = await self._accounts_query()
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
-                content_docs = self._parse_content_documents(record)
-                yield record, content_docs
+                yield record
 
     async def get_opportunities(self):
         if not await self._is_queryable("Opportunity"):
-            self._logger.info(
+            self._logger.warning(
                 "Object Opportunity is not queryable, so they won't be ingested."
             )
             return
@@ -198,12 +196,11 @@ class SalesforceClient:
         query = await self._opportunities_query()
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
-                content_docs = self._parse_content_documents(record)
-                yield record, content_docs
+                yield record
 
     async def get_contacts(self):
         if not await self._is_queryable("Contact"):
-            self._logger.info(
+            self._logger.warning(
                 "Object Contact is not queryable, so they won't be ingested."
             )
             return
@@ -211,18 +208,16 @@ class SalesforceClient:
         query = await self._contacts_query()
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
-                content_docs = self._parse_content_documents(record)
-
                 sobjects_by_id = await self.sobjects_cache_by_type()
                 record["Account"] = sobjects_by_id["Account"].get(
                     record.get("AccountId"), {}
                 )
                 record["Owner"] = sobjects_by_id["User"].get(record.get("OwnerId"), {})
-                yield record, content_docs
+                yield record
 
     async def get_leads(self):
         if not await self._is_queryable("Lead"):
-            self._logger.info(
+            self._logger.warning(
                 "Object Lead is not queryable, so they won't be ingested."
             )
             return
@@ -230,8 +225,6 @@ class SalesforceClient:
         query = await self._leads_query()
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
-                content_docs = self._parse_content_documents(record)
-
                 sobjects_by_id = await self.sobjects_cache_by_type()
                 record["Owner"] = sobjects_by_id["User"].get(record.get("OwnerId"), {})
                 record["ConvertedAccount"] = sobjects_by_id["Account"].get(
@@ -244,11 +237,11 @@ class SalesforceClient:
                     record.get("ConvertedOpportunityId"), {}
                 )
 
-                yield record, content_docs
+                yield record
 
     async def get_campaigns(self):
         if not await self._is_queryable("Campaign"):
-            self._logger.info(
+            self._logger.warning(
                 "Object Campaign is not queryable, so they won't be ingested."
             )
             return
@@ -256,12 +249,11 @@ class SalesforceClient:
         query = await self._campaigns_query()
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
-                content_docs = self._parse_content_documents(record)
-                yield record, content_docs
+                yield record
 
     async def get_cases(self):
         if not await self._is_queryable("Case"):
-            self._logger.info(
+            self._logger.warning(
                 "Object Case is not queryable, so they won't be ingested."
             )
             return
@@ -281,9 +273,8 @@ class SalesforceClient:
                 }
 
             for record in records:
-                content_docs = self._parse_content_documents(record)
                 record["Feeds"] = case_feeds_by_case_id.get(record.get("Id"))
-                yield record, content_docs
+                yield record
 
     async def get_case_feeds(self, case_ids):
         query = await self._case_feeds_query(case_ids)
@@ -292,20 +283,6 @@ class SalesforceClient:
             all_case_feeds.extend(case_feeds)
 
         return all_case_feeds
-
-    def _parse_content_documents(self, record):
-        content_docs = []
-        content_links = record.get("ContentDocumentLinks", {}) or {}
-        content_links = content_links.get("records", []) or []
-        for content_link in content_links:
-            content_doc = content_link.get("ContentDocument")
-            if not content_doc:
-                continue
-
-            content_doc["linked_sobject_id"] = record.get("Id")
-            content_docs.append(content_doc)
-
-        return content_docs
 
     async def download_content_documents(self, content_documents):
         for content_document in content_documents:
@@ -375,7 +352,9 @@ class SalesforceClient:
 
     async def _prepare_sobject_cache(self, sobject):
         if not await self._is_queryable(sobject):
-            self._logger.info(f"{sobject} is not queryable, so they won't be cached.")
+            self._logger.warning(
+                f"{sobject} is not queryable, so they won't be cached."
+            )
             return {}
 
         queryable_fields = ["Name"]
@@ -383,10 +362,12 @@ class SalesforceClient:
             queryable_fields.append("Email")
 
         sobjects = {}
-        query_builder = SalesforceSoqlBuilder(sobject)
-        query_builder.with_id()
-        query_builder.with_fields(queryable_fields)
-        query = query_builder.build()
+        query = (
+            SalesforceSoqlBuilder(sobject)
+            .with_id()
+            .with_fields(queryable_fields)
+            .build()
+        )
 
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
@@ -555,14 +536,9 @@ class SalesforceClient:
                 "Department",
             ],
         )
-        query_builder = SalesforceSoqlBuilder("Account")
-        query_builder.with_id()
-        query_builder.with_default_metafields()
-        query_builder.with_fields(queryable_fields)
-        # TODO add uncommon_object_remote_fields
-        query_builder.with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
-        query_builder.with_fields(["Parent.Id", "Parent.Name"])
 
+        doc_links_join = await self.content_document_links_join()
+        opportunities_join = None
         if await self._is_queryable("Opportunity"):
             queryable_join_fields = await self._select_queryable_fields(
                 "Opportunity",
@@ -571,17 +547,26 @@ class SalesforceClient:
                     "StageName",
                 ],
             )
-            join_builder = SalesforceSoqlBuilder("Opportunities")
-            join_builder.with_id()
-            join_builder.with_fields(queryable_join_fields)
-            join_builder.with_order_by("CreatedDate DESC")
-            join_builder.with_limit(1)
-            query_builder.with_join(join_builder.build())
+            opportunities_join = (
+                SalesforceSoqlBuilder("Opportunities")
+                .with_id()
+                .with_fields(queryable_join_fields)
+                .with_order_by("CreatedDate DESC")
+                .with_limit(1)
+                .build()
+            )
 
-        doc_links_join = await self.content_document_links_join()
-        query_builder.with_join(doc_links_join)
-
-        return query_builder.build()
+        return (
+            SalesforceSoqlBuilder("Account")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
+            .with_fields(["Parent.Id", "Parent.Name"])
+            .with_join(opportunities_join)
+            .with_join(doc_links_join)
+            .build()
+        )
 
     async def _opportunities_query(self):
         queryable_fields = await self._select_queryable_fields(
@@ -592,17 +577,17 @@ class SalesforceClient:
                 "StageName",
             ],
         )
-        query_builder = SalesforceSoqlBuilder("Opportunity")
-        query_builder.with_id()
-        query_builder.with_default_metafields()
-        query_builder.with_fields(queryable_fields)
-        # TODO add uncommon_object_remote_fields
-        query_builder.with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
 
         doc_links_join = await self.content_document_links_join()
-        query_builder.with_join(doc_links_join)
-
-        return query_builder.build()
+        return (
+            SalesforceSoqlBuilder("Opportunity")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
+            .with_join(doc_links_join)
+            .build()
+        )
 
     async def _contacts_query(self):
         queryable_fields = await self._select_queryable_fields(
@@ -619,16 +604,15 @@ class SalesforceClient:
                 "OwnerId",
             ],
         )
-        query_builder = SalesforceSoqlBuilder("Contact")
-        query_builder.with_id()
-        query_builder.with_default_metafields()
-        query_builder.with_fields(queryable_fields)
-        # TODO add uncommon_object_remote_fields
-
         doc_links_join = await self.content_document_links_join()
-        query_builder.with_join(doc_links_join)
-
-        return query_builder.build()
+        return (
+            SalesforceSoqlBuilder("Contact")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_join(doc_links_join)
+            .build()
+        )
 
     async def _leads_query(self):
         queryable_fields = await self._select_queryable_fields(
@@ -651,16 +635,15 @@ class SalesforceClient:
                 "Title",
             ],
         )
-        query_builder = SalesforceSoqlBuilder("Lead")
-        query_builder.with_id()
-        query_builder.with_default_metafields()
-        query_builder.with_fields(queryable_fields)
-        # TODO add uncommon_object_remote_fields
-
         doc_links_join = await self.content_document_links_join()
-        query_builder.with_join(doc_links_join)
-
-        return query_builder.build()
+        return (
+            SalesforceSoqlBuilder("Lead")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_join(doc_links_join)
+            .build()
+        )
 
     async def _campaigns_query(self):
         queryable_fields = await self._select_queryable_fields(
@@ -675,18 +658,17 @@ class SalesforceClient:
                 "EndDate",
             ],
         )
-        query_builder = SalesforceSoqlBuilder("Campaign")
-        query_builder.with_id()
-        query_builder.with_default_metafields()
-        query_builder.with_fields(queryable_fields)
-        # TODO add uncommon_object_remote_fields
-        query_builder.with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
-        query_builder.with_fields(["Parent.Id", "Parent.Name"])
-
         doc_links_join = await self.content_document_links_join()
-        query_builder.with_join(doc_links_join)
-
-        return query_builder.build()
+        return (
+            SalesforceSoqlBuilder("Campaign")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
+            .with_fields(["Parent.Id", "Parent.Name"])
+            .with_join(doc_links_join)
+            .build()
+        )
 
     async def _cases_query(self):
         queryable_fields = await self._select_queryable_fields(
@@ -702,23 +684,23 @@ class SalesforceClient:
                 "IsDeleted",
             ],
         )
-        query_builder = SalesforceSoqlBuilder("Case")
-        query_builder.with_id()
-        query_builder.with_default_metafields()
-        query_builder.with_fields(queryable_fields)
-        # TODO add uncommon_object_remote_fields
-        query_builder.with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
-        query_builder.with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
 
         email_mesasges_join = await self._email_messages_join_query()
         case_comments_join = await self._case_comments_join_query()
-        query_builder.with_join(email_mesasges_join)
-        query_builder.with_join(case_comments_join)
-
         doc_links_join = await self.content_document_links_join()
-        query_builder.with_join(doc_links_join)
 
-        return query_builder.build()
+        return (
+            SalesforceSoqlBuilder("Case")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
+            .with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
+            .with_join(email_mesasges_join)
+            .with_join(case_comments_join)
+            .with_join(doc_links_join)
+            .build()
+        )
 
     async def _email_messages_join_query(self):
         """For join with Case"""
@@ -741,12 +723,14 @@ class SalesforceClient:
             ],
         )
 
-        query_builder = SalesforceSoqlBuilder("EmailMessages")
-        query_builder.with_id()
-        query_builder.with_fields(queryable_fields)
-        query_builder.with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
-        query_builder.with_limit(500)
-        return query_builder.build()
+        return (
+            SalesforceSoqlBuilder("EmailMessages")
+            .with_id()
+            .with_fields(queryable_fields)
+            .with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
+            .with_limit(500)
+            .build()
+        )
 
     async def _case_comments_join_query(self):
         """For join with Case"""
@@ -759,13 +743,15 @@ class SalesforceClient:
             ],
         )
 
-        query_builder = SalesforceSoqlBuilder("CaseComments")
-        query_builder.with_id()
-        query_builder.with_default_metafields()
-        query_builder.with_fields(queryable_fields)
-        query_builder.with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
-        query_builder.with_limit(500)
-        return query_builder.build()
+        return (
+            SalesforceSoqlBuilder("CaseComments")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
+            .with_limit(500)
+            .build()
+        )
 
     async def _case_feeds_query(self, case_ids):
         queryable_fields = await self._select_queryable_fields(
@@ -783,15 +769,16 @@ class SalesforceClient:
         where_in_clause = ",".join(f"'{x}'" for x in case_ids)
         join_clause = await self._case_feed_comments_join()
 
-        query_builder = SalesforceSoqlBuilder("CaseFeed")
-        query_builder.with_id()
-        query_builder.with_default_metafields()
-        query_builder.with_fields(queryable_fields)
-        query_builder.with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
-        query_builder.with_join(join_clause)
-        query_builder.with_where(f"ParentId IN ({where_in_clause})")
-
-        return query_builder.build()
+        return (
+            SalesforceSoqlBuilder("CaseFeed")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
+            .with_join(join_clause)
+            .with_where(f"ParentId IN ({where_in_clause})")
+            .build()
+        )
 
     async def _case_feed_comments_join(self):
         queryable_fields = await self._select_queryable_fields(
@@ -806,12 +793,14 @@ class SalesforceClient:
                 "StatusParentId",
             ],
         )
-        query_builder = SalesforceSoqlBuilder("FeedComments")
-        query_builder.with_id()
-        query_builder.with_fields(queryable_fields)
-        query_builder.with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
-        query_builder.with_limit(500)
-        return query_builder.build()
+        return (
+            SalesforceSoqlBuilder("FeedComments")
+            .with_id()
+            .with_fields(queryable_fields)
+            .with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
+            .with_limit(500)
+            .build()
+        )
 
     async def content_document_links_join(self):
         """Cached async property for getting downloadable attached files
@@ -853,37 +842,37 @@ class SalesforceClient:
         [f"'{x[1:]}'" for x in TIKA_SUPPORTED_FILETYPES]
         where_in_clause = ",".join([f"'{x[1:]}'" for x in TIKA_SUPPORTED_FILETYPES])
 
-        query_builder = SalesforceSoqlBuilder("ContentDocumentLinks")
-        query_builder.with_fields(
-            [
-                "ContentDocument.Id",
-                "ContentDocument.LatestPublishedVersion.Id",
-                "ContentDocument.CreatedDate",
-                "ContentDocument.LastModifiedDate",
-                "ContentDocument.LatestPublishedVersion.CreatedDate",
-            ]
-        )
-        query_builder.with_fields(queryable_docs_fields)
-        query_builder.with_fields(queryable_version_fields)
-        query_builder.with_fields(
-            [
-                "ContentDocument.Owner.Id",
-                "ContentDocument.Owner.Name",
-                "ContentDocument.Owner.Email",
-            ]
-        )
-        query_builder.with_fields(
-            [
-                "ContentDocument.CreatedBy.Id",
-                "ContentDocument.CreatedBy.Name",
-                "ContentDocument.CreatedBy.Email",
-            ]
-        )
-        query_builder.with_where(
-            f"ContentDocument.FileExtension IN ({where_in_clause})"
+        self._content_document_links_join = (
+            SalesforceSoqlBuilder("ContentDocumentLinks")
+            .with_fields(queryable_docs_fields)
+            .with_fields(queryable_version_fields)
+            .with_fields(
+                [
+                    "ContentDocument.Id",
+                    "ContentDocument.LatestPublishedVersion.Id",
+                    "ContentDocument.CreatedDate",
+                    "ContentDocument.LastModifiedDate",
+                    "ContentDocument.LatestPublishedVersion.CreatedDate",
+                ]
+            )
+            .with_fields(
+                [
+                    "ContentDocument.Owner.Id",
+                    "ContentDocument.Owner.Name",
+                    "ContentDocument.Owner.Email",
+                ]
+            )
+            .with_fields(
+                [
+                    "ContentDocument.CreatedBy.Id",
+                    "ContentDocument.CreatedBy.Name",
+                    "ContentDocument.CreatedBy.Email",
+                ]
+            )
+            .with_where(f"ContentDocument.FileExtension IN ({where_in_clause})")
+            .build()
         )
 
-        self._content_document_links_join = query_builder.build()
         return self._content_document_links_join
 
 
@@ -901,6 +890,7 @@ class SalesforceAPIToken:
     @retryable(
         retries=RETRIES,
         interval=RETRY_INTERVAL,
+        skipped_exceptions=[InvalidCredentialsException],
     )
     async def token(self):
         if self._token:
@@ -944,27 +934,33 @@ class SalesforceSoqlBuilder:
 
     def with_id(self):
         self.fields.append("Id")
+        return self
 
     def with_default_metafields(self):
         self.fields.extend(["CreatedDate", "LastModifiedDate"])
+        return self
 
     def with_fields(self, fields):
         self.fields.extend(fields)
+        return self
 
     def with_where(self, where_string):
         self.where = f"WHERE {where_string}"
+        return self
 
     def with_order_by(self, order_by_string):
         self.order_by = f"ORDER BY {order_by_string}"
+        return self
 
     def with_limit(self, limit):
         self.limit = f"LIMIT {limit}"
+        return self
 
     def with_join(self, join):
-        if not join:
-            return
+        if join:
+            self.fields.append(f"(\n{join})\n")
 
-        self.fields.append(f"(\n{join})\n")
+        return self
 
     def build(self):
         select_columns = ",\n".join(set(self.fields))
@@ -1386,38 +1382,52 @@ class SalesforceDataSource(BaseDataSource):
 
     async def get_docs(self, filtering=None):
         # We collect all content documents and de-duplicate them before downloading and yielding
-        all_content_docs = []
+        content_docs = []
 
-        async for account, content_docs in self.salesforce_client.get_accounts():
-            all_content_docs.extend(content_docs)
+        async for account in self.salesforce_client.get_accounts():
+            content_docs.extend(self._parse_content_documents(account))
             yield self.doc_mapper.map_account(account), None
 
-        async for opportunity, content_docs in self.salesforce_client.get_opportunities():
-            all_content_docs.extend(content_docs)
+        async for opportunity in self.salesforce_client.get_opportunities():
+            content_docs.extend(self._parse_content_documents(opportunity))
             yield self.doc_mapper.map_opportunity(opportunity), None
 
-        async for contact, content_docs in self.salesforce_client.get_contacts():
-            all_content_docs.extend(content_docs)
+        async for contact in self.salesforce_client.get_contacts():
+            content_docs.extend(self._parse_content_documents(contact))
             yield self.doc_mapper.map_contact(contact), None
 
-        async for lead, content_docs in self.salesforce_client.get_leads():
-            all_content_docs.extend(content_docs)
+        async for lead in self.salesforce_client.get_leads():
+            content_docs.extend(self._parse_content_documents(lead))
             yield self.doc_mapper.map_lead(lead), None
 
-        async for campaign, content_docs in self.salesforce_client.get_campaigns():
-            all_content_docs.extend(content_docs)
+        async for campaign in self.salesforce_client.get_campaigns():
+            content_docs.extend(self._parse_content_documents(campaign))
             yield self.doc_mapper.map_campaign(campaign), None
 
-        async for case, content_docs in self.salesforce_client.get_cases():
-            all_content_docs.extend(content_docs)
+        async for case in self.salesforce_client.get_cases():
+            content_docs.extend(self._parse_content_documents(case))
             yield self.doc_mapper.map_case(case), None
 
         # Note: this could possibly be done on the fly if memory becomes an issue
-        all_content_docs = self._combine_duplicate_content_docs(all_content_docs)
+        content_docs = self._combine_duplicate_content_docs(content_docs)
         async for content_doc in self.salesforce_client.download_content_documents(
-            all_content_docs
+            content_docs
         ):
             yield self.doc_mapper.map_content_document(content_doc), None
+
+    def _parse_content_documents(self, record):
+        content_docs = []
+        content_links = record.get("ContentDocumentLinks", {}) or {}
+        content_links = content_links.get("records", []) or []
+        for content_link in content_links:
+            content_doc = content_link.get("ContentDocument")
+            if not content_doc:
+                continue
+
+            content_doc["linked_sobject_id"] = record.get("Id")
+            content_docs.append(content_doc)
+
+        return content_docs
 
     def _combine_duplicate_content_docs(self, content_docs):
         """Duplicate ContentDocuments may appear linked to multiple SObjects

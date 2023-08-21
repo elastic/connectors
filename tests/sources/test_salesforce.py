@@ -722,7 +722,7 @@ async def test_get_accounts_when_success(mock_responses):
             status=200,
             payload=ACCOUNT_RESPONSE_PAYLOAD,
         )
-        async for record, _ in source.salesforce_client.get_accounts():
+        async for record in source.salesforce_client.get_accounts():
             assert record == expected_record
             assert source.doc_mapper.map_account(record) == expected_doc
 
@@ -760,7 +760,7 @@ async def test_get_accounts_when_paginated_yields_all_pages(mock_responses):
         )
 
         yielded_account_ids = []
-        async for record, _ in source.salesforce_client.get_accounts():
+        async for record in source.salesforce_client.get_accounts():
             yielded_account_ids.append(record["Id"])
 
         assert sorted(yielded_account_ids) == [1234, 5678]
@@ -788,7 +788,7 @@ async def test_get_accounts_when_invalid_request(patch_sleep, mock_responses):
 async def test_get_accounts_when_not_queryable_yields_nothing(mock_responses):
     async with create_salesforce_source() as source:
         source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
-        async for record, _ in source.salesforce_client.get_accounts():
+        async for record in source.salesforce_client.get_accounts():
             assert record is None
 
 
@@ -816,7 +816,7 @@ async def test_get_opportunities_when_success(mock_responses):
             status=200,
             payload=OPPORTUNITY_RESPONSE_PAYLOAD,
         )
-        async for record, _ in source.salesforce_client.get_opportunities():
+        async for record in source.salesforce_client.get_opportunities():
             assert record == OPPORTUNITY_RESPONSE_PAYLOAD["records"][0]
             assert source.doc_mapper.map_opportunity(record) == expected_doc
 
@@ -861,7 +861,7 @@ async def test_get_contacts_when_success(mock_responses):
             status=200,
             payload=CONTACT_RESPONSE_PAYLOAD,
         )
-        async for record, _ in source.salesforce_client.get_contacts():
+        async for record in source.salesforce_client.get_contacts():
             assert record == expected_record
             assert source.doc_mapper.map_contact(record) == expected_doc
 
@@ -913,7 +913,7 @@ async def test_get_leads_when_success(mock_responses):
             status=200,
             payload=LEAD_RESPONSE_PAYLOAD,
         )
-        async for record, _ in source.salesforce_client.get_leads():
+        async for record in source.salesforce_client.get_leads():
             assert record == expected_record
             assert source.doc_mapper.map_lead(record) == expected_doc
 
@@ -946,7 +946,7 @@ async def test_get_campaigns_when_success(mock_responses):
             status=200,
             payload=CAMPAIGN_RESPONSE_PAYLOAD,
         )
-        async for record, _ in source.salesforce_client.get_campaigns():
+        async for record in source.salesforce_client.get_campaigns():
             assert record == CAMPAIGN_RESPONSE_PAYLOAD["records"][0]
             assert source.doc_mapper.map_campaign(record) == expected_doc
 
@@ -999,7 +999,7 @@ async def test_get_cases_when_success(mock_responses):
             status=200,
             payload=CASE_FEED_RESPONSE_PAYLOAD,
         )
-        async for record, _ in source.salesforce_client.get_cases():
+        async for record in source.salesforce_client.get_cases():
             assert record == expected_record
             assert source.doc_mapper.map_case(record) == expected_doc
 
@@ -1118,7 +1118,7 @@ async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_resp
             "token",
             wraps=source.salesforce_client.api_token.token,
         ) as mock_get_token:
-            async for record, _ in source.salesforce_client.get_accounts():
+            async for record in source.salesforce_client.get_accounts():
                 assert record == expected_record
                 # assert called once for initial query, called again after invalid_token_payload
                 assert mock_get_token.call_count == 2
@@ -1216,15 +1216,16 @@ async def test_build_soql_query_with_fields():
         "BarField",
     ]
 
-    builder = SalesforceSoqlBuilder("Test")
-    builder.with_id()
-    builder.with_default_metafields()
-    builder.with_fields(["FooField", "BarField"])
-    builder.with_where("FooField = 'FOO'")
-    builder.with_order_by("CreatedDate DESC")
-    builder.with_limit(2)
-    # builder.with_join()
-    query = builder.build()
+    query = (
+        SalesforceSoqlBuilder("Test")
+        .with_id()
+        .with_default_metafields()
+        .with_fields(["FooField", "BarField"])
+        .with_where("FooField = 'FOO'")
+        .with_order_by("CreatedDate DESC")
+        .with_limit(2)
+        .build()
+    )
 
     # SELECT Id,
     # CreatedDate,
