@@ -359,7 +359,7 @@ class ConcurrentTasks:
     def __init__(self, max_concurrency=5, results_callback=None):
         self.tasks = []
         self.results_callback = results_callback
-        self._sem = asyncio.Semaphore(max_concurrency)
+        self._sem = asyncio.BoundedSemaphore(max_concurrency)
 
     def __len__(self):
         return len(self.tasks)
