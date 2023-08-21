@@ -140,7 +140,7 @@ class SyncJobRunner:
                 self.sync_job.log_info(f"Executing {job_type.value} sync")
                 await self._execute_content_sync_job(job_type, bulk_options)
             elif job_type == JobType.ACCESS_CONTROL:
-                self.sync_job.log_info(f"Executing {job_type.value} sync")
+                self.sync_job.log_info("Executing access control sync")
                 await self._execute_access_control_sync_job(job_type, bulk_options)
             else:
                 raise UnsupportedJobType
