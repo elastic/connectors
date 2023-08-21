@@ -95,6 +95,7 @@ def _default_config():
             "jira": "connectors.sources.jira:JiraDataSource",
             "confluence": "connectors.sources.confluence:ConfluenceDataSource",
             "dropbox": "connectors.sources.dropbox:DropboxDataSource",
+            "salesforce": "connectors.sources.salesforce:SalesforceDataSource",
             "servicenow": "connectors.sources.servicenow:ServiceNowDataSource",
             "sharepoint_online": "connectors.sources.sharepoint_online:SharepointOnlineDataSource",
             "github": "connectors.sources.github:GitHubDataSource",
