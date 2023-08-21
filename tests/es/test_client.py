@@ -16,6 +16,7 @@ BASIC_CONFIG = {"username": "elastic", "password": "changeme"}
 API_CONFIG = {"api_key": "foo"}
 BASIC_API_CONFIG = {"username": "elastic", "password": "changeme", "api_key": "foo"}
 
+
 def test_esclient():
     # creating a client with a minimal config should create one with sane
     # defaults
@@ -237,6 +238,7 @@ async def test_auth_conflict_logs_message(patch_logger):
         "configured API key will be used over configured basic auth"
     )
 
+
 @pytest.mark.parametrize(
     "config, expected_auth_header",
     [
@@ -248,4 +250,3 @@ async def test_auth_conflict_logs_message(patch_logger):
 def test_es_client_with_auth(config, expected_auth_header):
     es_client = ESClient(config)
     assert es_client.client._headers["Authorization"] == expected_auth_header
-
