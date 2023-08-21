@@ -388,6 +388,9 @@ class ConcurrentTasks:
         await self._sem.acquire()
         task = asyncio.create_task(coroutine())
         self.tasks.append(task)
+        # _callback will be executed when the task is done,
+        # i.e. the wrapped coroutine either returned a value, raised an exception, or the Task was cancelled.
+        # Ref: https://docs.python.org/3/library/asyncio-task.html#asyncio.Task.done
         task.add_done_callback(
             functools.partial(self._callback, result_callback=result_callback)
         )
