@@ -16,6 +16,11 @@ from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 from aiogoogle.sessions.aiohttp_session import AiohttpSession
 
+from connectors.access_control import (
+    ACCESS_CONTROL,
+    es_access_control_query,
+    prefix_identity,
+)
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
@@ -32,8 +37,6 @@ FILE_SIZE_LIMIT = 10485760  # ~ 10 Megabytes
 GOOGLE_API_MAX_CONCURRENCY = 25  # Max open connections to Google API
 
 DRIVE_API_TIMEOUT = 1 * 60  # 1 min
-
-ACCESS_CONTROL = "_allow_access_control"
 
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 
@@ -242,7 +245,10 @@ class GoogleDriveClient(GoogleAPIClient):
             json_credentials=json_credentials,
             api_name="drive",
             api_version="v3",
-            scopes=["https://www.googleapis.com/auth/drive.readonly"],
+            scopes=[
+                "https://www.googleapis.com/auth/drive.readonly",
+                "https://www.googleapis.com/auth/drive.metadata.readonly",
+            ],
         )
 
     async def ping(self):
@@ -413,23 +419,16 @@ class GoogleAdminDirectoryClient(GoogleAPIClient):
             yield group
 
 
-def _prefix_identity(prefix, identity):
-    if prefix is None or identity is None:
-        return None
-
-    return f"{prefix}:{identity}"
-
-
 def _prefix_group(group):
-    return _prefix_identity("group", group)
+    return prefix_identity("group", group)
 
 
 def _prefix_user(user):
-    return _prefix_identity("user", user)
+    return prefix_identity("user", user)
 
 
 def _prefix_domain(domain):
-    return _prefix_identity("domain", domain)
+    return prefix_identity("domain", domain)
 
 
 def _is_user_permission(permission_type):
@@ -559,7 +558,7 @@ class GoogleDriveDataSource(BaseDataSource):
         Raises:
             Exception: The format of service account json is invalid.
         """
-        self.configuration.check_valid()
+        await super().validate_config()
 
         self._validate_service_account_json()
         self._validate_google_workspace_admin_email()
@@ -643,33 +642,7 @@ class GoogleDriveDataSource(BaseDataSource):
         return self.configuration.get("max_concurrency") or GOOGLE_API_MAX_CONCURRENCY
 
     def access_control_query(self, access_control):
-        return {
-            "query": {
-                "template": {"params": {"access_control": access_control}},
-                "source": {
-                    "bool": {
-                        "filter": {
-                            "bool": {
-                                "should": [
-                                    {
-                                        "bool": {
-                                            "must_not": {
-                                                "exists": {"field": ACCESS_CONTROL}
-                                            }
-                                        }
-                                    },
-                                    {
-                                        "terms": {
-                                            f"{ACCESS_CONTROL}.enum": access_control
-                                        }
-                                    },
-                                ]
-                            }
-                        }
-                    }
-                },
-            }
-        }
+        return es_access_control_query(access_control)
 
     async def _process_items_concurrently(self, items, process_item_func):
         """Process a list of items concurrently using a semaphore for concurrency control.
@@ -1044,13 +1017,13 @@ class GoogleDriveDataSource(BaseDataSource):
             dict: Formatted file metadata.
         """
 
-        file_id = file.get("id")
+        file_id, file_name = file.get("id"), file.get("name")
 
         file_document = {
             "_id": file_id,
             "created_at": file.get("createdTime"),
             "last_updated": file.get("modifiedTime"),
-            "name": file.get("name"),
+            "name": file_name,
             "size": file.get("size") or 0,  # handle folders and shortcuts
             "_timestamp": file.get("modifiedTime"),
             "mime_type": file.get("mimeType"),
@@ -1100,9 +1073,18 @@ class GoogleDriveDataSource(BaseDataSource):
             # Read more: https://developers.google.com/drive/api/guides/shared-drives-diffs
             permissions = file.get("permissions", [])
             if not permissions:
-                permissions = await self._get_permissions_on_shared_drive(
-                    file_id=file_id
-                )
+                try:
+                    permissions = await self._get_permissions_on_shared_drive(
+                        file_id=file_id
+                    )
+                except HTTPError as exception:
+                    # Gracefully handle scenario when the service account does not
+                    # have permission to fetch ACL for a file.
+                    exception_log_msg = f"Unable to fetch permission list for the file {file_name}. Exception: {exception}."
+                    if exception.res.status_code == 403:
+                        self._logger.warning(exception_log_msg)
+                    else:
+                        self._logger.error(exception_log_msg)
 
             file_document[ACCESS_CONTROL] = self._process_permissions(permissions)
 
