@@ -273,6 +273,32 @@ async def test_concurrent_runner_canceled():
 
 
 @pytest.mark.asyncio
+async def test_concurrent_runner_canceled_with_waiting_task():
+    results = []
+
+    def _results_callback(result):
+        results.append(result)
+
+    async def coroutine(i, sleep_time):
+        await asyncio.sleep(sleep_time)
+        return i
+
+    runner = ConcurrentTasks(max_concurrency=10, results_callback=_results_callback)
+    for i in range(10):
+        await runner.put(functools.partial(coroutine, i, 1))  # long-running task
+
+    # create a task to put a waiting task so that it won't block
+    asyncio.create_task(runner.put(functools.partial(coroutine, 100, 0.1)))
+    runner.cancel()
+    # wait for the first 10 tasks to be canceled
+    await runner.join()
+    # wait for the 11th task to complete
+    await runner.join()
+    assert len(results) == 1
+    assert results[0] == 100
+
+
+@pytest.mark.asyncio
 async def test_concurrent_runner_fails():
     results = []
 
