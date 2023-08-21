@@ -134,7 +134,7 @@ def patch_default_wait_multiplier():
 
 
 @pytest.fixture
-def patch_connection_pool():
+async def patch_connection_pool():
     connection_pool = Mock()
     connection_pool.close = Mock()
     connection_pool.wait_closed = AsyncMock()
