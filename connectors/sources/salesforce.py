@@ -839,7 +839,6 @@ class SalesforceClient:
             f"ContentDocument.LatestPublishedVersion.{x}"
             for x in queryable_version_fields
         ]
-        [f"'{x[1:]}'" for x in TIKA_SUPPORTED_FILETYPES]
         where_in_clause = ",".join([f"'{x[1:]}'" for x in TIKA_SUPPORTED_FILETYPES])
 
         self._content_document_links_join = (
