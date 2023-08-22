@@ -38,7 +38,7 @@ class PreflightCheck:
 
     async def run(self):
         try:
-            logger.info("Preflight checks...")
+            logger.info("Running preflight checks")
             self.running = True
             if not (await self.es_client.wait()):
                 logger.critical(f"{self.elastic_config['host']} seem down. Bye!")
