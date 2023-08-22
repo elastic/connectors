@@ -58,7 +58,7 @@ async def test_ping_negative(mock_apply_retry_strategy):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.apply_retry_strategy")
-async def test_fetch_documents_negative(mock_apply_retry_strategy):
+async def test_fetch_documents_from_table_negative(mock_apply_retry_strategy):
     mock_apply_retry_strategy.return_value = Mock()
     async with create_source(MSSQLDataSource) as source:
         with patch.object(
@@ -66,7 +66,23 @@ async def test_fetch_documents_negative(mock_apply_retry_strategy):
             "get_table_row_count",
             side_effect=ProgrammingError(statement=None, params=None, orig=None),
         ):
-            async for _ in source.fetch_documents(["table1"]):
+            async for _ in source.fetch_documents_from_table("table"):
+                pass
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.apply_retry_strategy")
+async def test_fetch_documents_from_query_negative(mock_apply_retry_strategy):
+    mock_apply_retry_strategy.return_value = Mock()
+    async with create_source(MSSQLDataSource) as source:
+        with patch.object(
+            source,
+            "get_primary_key",
+            side_effect=ProgrammingError(statement=None, params=None, orig=None),
+        ):
+            async for _ in source.fetch_documents_from_query(
+                ["table"], "select * from table"
+            ):
                 pass
 
 

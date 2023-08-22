@@ -29,6 +29,7 @@ from connectors.sources.generic_database import (
     Queries,
     configured_tables,
     fetch,
+    hash_id,
     is_wildcard,
     map_column_names,
 )
@@ -288,26 +289,22 @@ class MSSQLClient:
         )
         return row_count
 
-    async def get_table_primary_key(self, tables):
-        primary_keys = []
-        for table in tables:
-            primary_keys.extend(
-                [
-                    key
-                    async for [key] in fetch(
-                        cursor_func=partial(
-                            self.get_cursor,
-                            self.queries.table_primary_key(
-                                schema=self.schema,
-                                table=table,
-                            ),
-                        ),
-                        fetch_size=self.fetch_size,
-                        retry_count=self.retry_count,
-                    )
-                ]
+    async def get_table_primary_key(self, table):
+        primary_keys = [
+            key
+            async for [key] in fetch(
+                cursor_func=partial(
+                    self.get_cursor,
+                    self.queries.table_primary_key(
+                        schema=self.schema,
+                        table=table,
+                    ),
+                ),
+                fetch_size=self.fetch_size,
+                retry_count=self.retry_count,
             )
-        return sorted(primary_keys)
+        ]
+        return primary_keys
 
     async def get_table_last_update_time(self, table):
         [last_update_time] = await anext(
@@ -352,23 +349,6 @@ class MSSQLClient:
             retry_count=self.retry_count,
         ):
             yield data
-
-    def hash_id(self, tables, row, primary_key_columns):
-        """Generates an id using table names as prefix in sorted order and primary key values.
-
-        Example:
-            tables: table1, table2
-            primary key values: 1, 42
-            table1_table2_1_42
-        """
-
-        if not isinstance(tables, list):
-            tables = [tables]
-
-        return (
-            f"{'_'.join(sorted(tables))}_"
-            f"{'_'.join([str(pk_value) for pk in primary_key_columns if (pk_value := row.get(pk)) is not None])}"
-        )
 
 
 class MSSQLDataSource(BaseDataSource):
@@ -529,7 +509,12 @@ class MSSQLDataSource(BaseDataSource):
         return row
 
     async def get_primary_key(self, tables):
-        primary_key_columns = await self.mssql_client.get_table_primary_key(tables)
+        primary_key_columns = []
+        for table in tables:
+            primary_key_columns.extend(
+                await self.mssql_client.get_table_primary_key(table)
+            )
+        primary_key_columns = sorted(primary_key_columns)
         return map_column_names(
             column_names=primary_key_columns, schema=self.schema, tables=tables
         )
@@ -553,7 +538,7 @@ class MSSQLDataSource(BaseDataSource):
                 f"Skipping query for tables {', '.join(tables)} as primary key column name is not present in query."
             )
 
-    async def fetch_documents(self, tables, query=None):
+    async def fetch_documents_from_table(self, table):
         """Fetches all the table entries and format them in Elasticsearch documents
 
         Args:
@@ -563,16 +548,31 @@ class MSSQLDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
         try:
-            docs_generator = (
-                self._yield_docs_custom_query(tables, query)
-                if query is not None
-                else self._yield_all_docs_from_tables(tables[0])
-            )
+            docs_generator = self._yield_all_docs_from_tables(table=table)
             async for doc in docs_generator:
                 yield doc
         except (InternalClientError, ProgrammingError) as exception:
             self._logger.warning(
-                f"Something went wrong while fetching document for table {', '.join(tables)}. Error: {exception}"
+                f"Something went wrong while fetching document for table {table}. Error: {exception}"
+            )
+
+    async def fetch_documents_from_query(self, tables, query):
+        """Fetches all the data from the given query and format them in Elasticsearch documents
+
+        Args:
+            table (str): Name of table
+            query (str): Database Query
+
+        Yields:
+            Dict: Document to be indexed
+        """
+        try:
+            docs_generator = self._yield_docs_custom_query(tables=tables, query=query)
+            async for doc in docs_generator:
+                yield doc
+        except (InternalClientError, ProgrammingError) as exception:
+            self._logger.warning(
+                f"Something went wrong while fetching document for query {query} and tables {', '.join(tables)}. Error: {exception}"
             )
 
     async def _yield_docs_custom_query(self, tables, query):
@@ -604,7 +604,7 @@ class MSSQLDataSource(BaseDataSource):
             last_update_time = (
                 max(last_update_times) if len(last_update_times) else iso_utc()
             )
-            doc_id = f"{self.database}_{self.schema}_{self.mssql_client.hash_id([table for table in tables], row, primary_key_columns)}"
+            doc_id = f"{self.database}_{self.schema}_{hash_id([table for table in tables], row, primary_key_columns)}"
 
             yield self.serialize(
                 doc=self.row2doc(
@@ -630,7 +630,9 @@ class MSSQLDataSource(BaseDataSource):
                 async for row in self.yield_rows_for_query(
                     primary_key_columns=keys, tables=[table]
                 ):
-                    doc_id = f"{self.database}_{self.schema}_{self.mssql_client.hash_id([table], row, keys)}"
+                    doc_id = (
+                        f"{self.database}_{self.schema}_{hash_id([table], row, keys)}"
+                    )
                     yield self.serialize(
                         doc=self.row2doc(
                             row=row,
@@ -661,7 +663,9 @@ class MSSQLDataSource(BaseDataSource):
                 query = rule.get("query")
                 tables = rule.get("tables")
 
-                async for row in self.fetch_documents(tables=tables, query=query):
+                async for row in self.fetch_documents_from_query(
+                    tables=tables, query=query
+                ):
                     yield row, None
         else:
             table_count = 0
@@ -679,7 +683,7 @@ class MSSQLDataSource(BaseDataSource):
                     f"Found table: {table} in database: {self.database}."
                 )
                 table_count += 1
-                async for row in self.fetch_documents(tables=[table]):
+                async for row in self.fetch_documents_from_table(table=table):
                     yield row, None
             if table_count < 1:
                 self._logger.warning(

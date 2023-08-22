@@ -56,6 +56,24 @@ def map_column_names(column_names, schema=None, tables=None):
     return [f"{prefix}{column}".lower() for column in column_names]
 
 
+def hash_id(tables, row, primary_key_columns):
+    """Generates an id using table names as prefix in sorted order and primary key values.
+
+    Example:
+        tables: table1, table2
+        primary key values: 1, 42
+        table1_table2_1_42
+    """
+
+    if not isinstance(tables, list):
+        tables = [tables]
+
+    return (
+        f"{'_'.join(sorted(tables))}_"
+        f"{'_'.join([str(pk_value) for pk in primary_key_columns if (pk_value := row.get(pk)) is not None])}"
+    )
+
+
 async def fetch(
     cursor_func,
     fetch_columns=False,
