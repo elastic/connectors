@@ -13,7 +13,11 @@ from connectors.logger import logger
 
 def load_config(config_file):
     logger.info(f"Loading config from {config_file}")
-    configuration = dict(_merge_dicts(_default_config(), EnvYAML(config_file).export()))
+    yaml_config = EnvYAML(config_file, flatten=False).export()
+    nested_yaml_config = {}
+    for key, value in yaml_config.items():
+        _nest_configs(nested_yaml_config, key, value)
+    configuration = dict(_merge_dicts(_default_config(), nested_yaml_config))
     _ent_search_config(configuration)
     return configuration
 
@@ -121,18 +125,18 @@ def _ent_search_config(configuration):
                 )
             es_field_value = log_level_mappings[es_field_value]
 
-        _update_config_field(configuration, connector_field, es_field_value)
+        _nest_configs(configuration, connector_field, es_field_value)
 
         logger.debug(f"Overridden {connector_field}")
 
 
-def _update_config_field(configuration, field, value):
+def _nest_configs(configuration, field, value):
     """
     Update configuration field value taking into account the nesting.
 
     Configuration is a hash of hashes, so we need to dive inside to do proper assignment.
 
-    E.g. _update_config({}, "elasticsearch.bulk.queuesize", 20) will result in the following config:
+    E.g. _nest_config({}, "elasticsearch.bulk.queuesize", 20) will result in the following config:
     {
         "elasticsearch": {
             "bulk": {
@@ -142,6 +146,7 @@ def _update_config_field(configuration, field, value):
     }
     """
     subfields = field.split(".")
+    last_key = subfields[-1]
 
     current_leaf = configuration
     for subfield in subfields[:-1]:
@@ -149,7 +154,10 @@ def _update_config_field(configuration, field, value):
             current_leaf[subfield] = {}
         current_leaf = current_leaf[subfield]
 
-    current_leaf[subfields[-1]] = value
+    if isinstance(current_leaf.get(last_key), dict):
+        current_leaf[last_key] = dict(_merge_dicts(current_leaf[last_key], value))
+    else:
+        current_leaf[last_key] = value
 
 
 def _merge_dicts(hsh1, hsh2):
