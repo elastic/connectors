@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from aiohttp import StreamReader
-from exchangelib import EWSDate, EWSDateTime
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.outlook import (
@@ -17,7 +16,6 @@ from connectors.sources.outlook import (
     OUTLOOK_SERVER,
     OutlookDataSource,
     UsersFetchFailed,
-    ews_format_to_datetime,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -494,20 +492,6 @@ async def test_ping_for_cloud():
                 side_effect=side_effect_function,
             ):
                 await source.ping()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "date_time, expected_datetime",
-    [
-        (EWSDateTime(2023, 12, 12, 1, 1, 1), "2023-12-12T01:01:01Z"),
-        (EWSDate(2023, 12, 12), "2023-12-12"),
-        ("2023-12-12T01:01:01Z", "2023-12-12T01:01:01Z"),
-    ],
-)
-async def test_ews_format_to_datetime(date_time, expected_datetime):
-    response = ews_format_to_datetime(datetime=date_time, timezone=TIMEZONE)
-    assert response == expected_datetime
 
 
 @pytest.mark.asyncio
