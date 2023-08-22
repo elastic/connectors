@@ -54,6 +54,7 @@ RELEVANT_SOBJECT_FIELDS = [
     "AccountId",
     "BccAddress",
     "BillingAddress",
+    "Body",
     "CaseNumber",
     "CcAddress",
     "CommentBody",
@@ -264,7 +265,6 @@ class SalesforceClient:
             if await self._is_queryable("CaseFeed") and records:
                 case_ids = [x.get("Id") for x in records]
                 case_feeds = await self.get_case_feeds(case_ids)
-
                 # groupby requires pre-sorting apparently
                 case_feeds.sort(key=lambda x: x["ParentId"])
                 case_feeds_by_case_id = {
@@ -1156,7 +1156,6 @@ class SalesforceDocMapper:
         owner = case.get("Owner", {}) or {}
 
         created_by = case.get("CreatedBy", {}) or {}
-
         (
             participant_ids,
             participant_emails,
