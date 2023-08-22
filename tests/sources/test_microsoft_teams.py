@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock, Mock, patch
 
-import aiohttp
 import pytest
 import pytest_asyncio
 from aiohttp.client_exceptions import ClientOSError, ClientResponseError
@@ -10,7 +9,7 @@ from connectors.source import ConfigurableFieldValueError, DataSourceConfigurati
 from connectors.sources.microsoft_teams import (
     GraphAPIToken,
     InternalServerError,
-    MicrosoftAPISession,
+    MicrosoftTeamsClient,
     MicrosoftTeamsDataSource,
     NotFound,
     PermissionsMissing,
@@ -24,14 +23,8 @@ class StubAPIToken:
 
 
 @pytest_asyncio.fixture
-async def microsoft_api_session():
-    session = aiohttp.ClientSession()
-    yield MicrosoftAPISession(
-        session,
-        StubAPIToken(),
-        logger,
-    )
-    await session.close()
+async def microsoft_client():
+    yield MicrosoftTeamsClient(None, None, None, None, None)
 
 
 class ClientErrorException:
@@ -85,23 +78,35 @@ async def test_validate_configuration_with_invalid_fields_raises_error(
 
 @pytest.mark.asyncio
 async def test_ping_for_successful_connection():
-    async with create_source(MicrosoftTeamsDataSource) as source:
-        DUMMY_RESPONSE = {}
-        source.client._graph_api_client.fetch = Mock(
-            return_value=create_fake_coroutine(item=DUMMY_RESPONSE)
-        )
-        await source.ping()
+    with patch.object(
+        GraphAPIToken,
+        "_fetch_token",
+        return_value=await create_fake_coroutine(("hello", 15)),
+    ):
+        async with create_source(MicrosoftTeamsDataSource) as source:
+            DUMMY_RESPONSE = {}
+            source.client.fetch = Mock(
+                return_value=create_fake_coroutine(item=DUMMY_RESPONSE)
+            )
+            await source.ping()
 
 
 @pytest.mark.asyncio
 @patch("aiohttp.ClientSession.get")
 async def test_ping_for_failed_connection_exception(mock_get):
-    async with create_source(MicrosoftTeamsDataSource) as source:
-        with patch.object(
-            MicrosoftAPISession, "fetch", side_effect=Exception("Something went wrong")
-        ):
-            with pytest.raises(Exception):
-                await source.ping()
+    with patch.object(
+        GraphAPIToken,
+        "_fetch_token",
+        return_value=await create_fake_coroutine(("hello", 15)),
+    ):
+        async with create_source(MicrosoftTeamsDataSource) as source:
+            with patch.object(
+                MicrosoftTeamsClient,
+                "fetch",
+                side_effect=Exception("Something went wrong"),
+            ):
+                with pytest.raises(Exception):
+                    await source.ping()
 
 
 @pytest.mark.asyncio
@@ -115,7 +120,7 @@ async def test_set_internal_logger():
 
 @pytest.mark.asyncio
 async def test_call_api_with_403(
-    microsoft_api_session,
+    microsoft_client,
     mock_responses,
     patch_sleep,
     patch_cancellable_sleeps,
@@ -129,17 +134,21 @@ async def test_call_api_with_403(
     mock_responses.get(url, exception=unauthorized_error)
     mock_responses.get(url, exception=unauthorized_error)
     mock_responses.get(url, exception=unauthorized_error)
+    with patch.object(
+        GraphAPIToken,
+        "_fetch_token",
+        return_value=await create_fake_coroutine(("hello", 15)),
+    ):
+        with pytest.raises(PermissionsMissing) as e:
+            async for _ in microsoft_client._get(url):
+                pass
 
-    with pytest.raises(PermissionsMissing) as e:
-        async for _ in microsoft_api_session._get(url):
-            pass
-
-    assert e is not None
+        assert e is not None
 
 
 @pytest.mark.asyncio
 async def test_call_api_with_404(
-    microsoft_api_session,
+    microsoft_client,
     mock_responses,
     patch_sleep,
     patch_cancellable_sleeps,
@@ -154,16 +163,21 @@ async def test_call_api_with_404(
     mock_responses.get(url, exception=not_found_error)
     mock_responses.get(url, exception=not_found_error)
 
-    with pytest.raises(NotFound) as e:
-        async for _ in microsoft_api_session._get(url):
-            pass
+    with patch.object(
+        GraphAPIToken,
+        "_fetch_token",
+        return_value=await create_fake_coroutine(("hello", 15)),
+    ):
+        with pytest.raises(NotFound) as e:
+            async for _ in microsoft_client._get(url):
+                pass
 
-    assert e is not None
+        assert e is not None
 
 
 @pytest.mark.asyncio
 async def test_call_api_with_os_error(
-    microsoft_api_session,
+    microsoft_client,
     mock_responses,
     patch_sleep,
     patch_cancellable_sleeps,
@@ -176,17 +190,21 @@ async def test_call_api_with_os_error(
     mock_responses.get(url, exception=not_found_error)
     mock_responses.get(url, exception=not_found_error)
     mock_responses.get(url, exception=not_found_error)
+    with patch.object(
+        GraphAPIToken,
+        "_fetch_token",
+        return_value=await create_fake_coroutine(("hello", 15)),
+    ):
+        with pytest.raises(ClientOSError) as e:
+            async for _ in microsoft_client._get(url):
+                pass
 
-    with pytest.raises(ClientOSError) as e:
-        async for _ in microsoft_api_session._get(url):
-            pass
-
-    assert e is not None
+        assert e is not None
 
 
 @pytest.mark.asyncio
 async def test_call_api_with_500(
-    microsoft_api_session,
+    microsoft_client,
     mock_responses,
     patch_sleep,
     patch_cancellable_sleeps,
@@ -203,16 +221,21 @@ async def test_call_api_with_500(
     mock_responses.get(url, exception=not_found_error)
     mock_responses.get(url, exception=not_found_error)
 
-    with pytest.raises(InternalServerError) as e:
-        async for _ in microsoft_api_session._get(url):
-            pass
+    with patch.object(
+        GraphAPIToken,
+        "_fetch_token",
+        return_value=await create_fake_coroutine(("hello", 15)),
+    ):
+        with pytest.raises(InternalServerError) as e:
+            async for _ in microsoft_client._get(url):
+                pass
 
     assert e is not None
 
 
 @pytest.mark.asyncio
 async def test_call_api_with_unhandled_status(
-    microsoft_api_session,
+    microsoft_client,
     mock_responses,
     patch_sleep,
     patch_cancellable_sleeps,
@@ -229,11 +252,16 @@ async def test_call_api_with_unhandled_status(
     mock_responses.get(url, exception=not_found_error)
     mock_responses.get(url, exception=not_found_error)
 
-    with pytest.raises(ClientResponseError) as e:
-        async for _ in microsoft_api_session._get(url):
-            pass
+    with patch.object(
+        GraphAPIToken,
+        "_fetch_token",
+        return_value=await create_fake_coroutine(("hello", 15)),
+    ):
+        with pytest.raises(ClientResponseError) as e:
+            async for _ in microsoft_client._get(url):
+                pass
 
-    assert e.match(error_message)
+        assert e.match(error_message)
 
 
 @pytest.mark.asyncio
@@ -249,12 +277,17 @@ async def test_get_for_username_password():
 
 
 @pytest.mark.asyncio
-async def test_fetch(microsoft_api_session, mock_responses):
-    url = "http://localhost:1234/url"
+async def test_fetch(microsoft_client, mock_responses):
+    with patch.object(
+        GraphAPIToken,
+        "_fetch_token",
+        return_value=await create_fake_coroutine(("hello", 15)),
+    ):
+        url = "http://localhost:1234/url"
 
-    response = {"displayName": "Dummy", "id": "123"}
+        response = {"displayName": "Dummy", "id": "123"}
 
-    mock_responses.get(url, payload=response)
+        mock_responses.get(url, payload=response)
 
-    fetch_response = await microsoft_api_session.fetch(url)
-    assert response == fetch_response
+        fetch_response = await microsoft_client.fetch(url)
+        assert response == fetch_response

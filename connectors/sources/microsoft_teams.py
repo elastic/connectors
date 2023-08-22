@@ -157,18 +157,31 @@ class GraphAPIToken:
         return access_token, expires_in
 
 
-class MicrosoftAPISession:
-    def __init__(self, http_session, api_token, logger_):
-        self._http_session = http_session
-        self._api_token = api_token
+class MicrosoftTeamsClient:
+    """Client Class for API calls to Microsoft Teams"""
+
+    def __init__(self, tenant_id, client_id, client_secret, username, password):
         self._sleeps = CancellableSleeps()
-        self._logger = logger_
+        self._http_session = aiohttp.ClientSession(
+            headers={
+                "accept": "application/json",
+                "content-type": "application/json",
+            },
+            timeout=aiohttp.ClientTimeout(total=None),
+            raise_for_status=True,
+        )
+        self._api_token = GraphAPIToken(
+            tenant_id=tenant_id,
+            client_id=client_id,
+            client_secret=client_secret,
+            username=username,
+            password=password,
+        )
+
+        self._logger = logger
 
     def set_logger(self, logger_):
         self._logger = logger_
-
-    def close(self):
-        self._sleeps.cancel()
 
     async def fetch(self, url):
         return await self._get_json(absolute_url=url)
@@ -182,7 +195,7 @@ class MicrosoftAPISession:
         retries=RETRY_COUNT,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=NotFound,
+        skipped_exceptions=[NotFound, PermissionsMissing],
     )
     async def _get(self, absolute_url):
         try:
@@ -194,7 +207,7 @@ class MicrosoftAPISession:
             ) as resp:
                 yield resp
         except aiohttp.client_exceptions.ClientOSError:
-            self._logger.warning(
+            self._logger.error(
                 "Graph API dropped the connection. It might indicate, that connector makes too many requests - decrease concurrency settings, otherwise Graph API can block this app."
             )
             raise
@@ -215,47 +228,14 @@ class MicrosoftAPISession:
         else:
             raise
 
-
-class MicrosoftTeamsClient:
-    """Client Class for API calls to Microsoft Teams"""
-
-    def __init__(self, tenant_id, client_id, client_secret, username, password):
-        self._http_session = aiohttp.ClientSession(
-            headers={
-                "accept": "application/json",
-                "content-type": "application/json",
-            },
-            timeout=aiohttp.ClientTimeout(total=None),
-            raise_for_status=True,
-        )
-        self.graph_api_token = GraphAPIToken(
-            tenant_id=tenant_id,
-            client_id=client_id,
-            client_secret=client_secret,
-            username=username,
-            password=password,
-        )
-
-        self._logger = logger
-
-        self._graph_api_client = MicrosoftAPISession(
-            http_session=self._http_session,
-            api_token=self.graph_api_token,
-            logger_=self._logger,
-        )
-
-    def set_logger(self, logger_):
-        self._logger = logger_
-        self._graph_api_client.set_logger(self._logger)
-
     async def ping(self):
-        return await self._graph_api_client.fetch(
+        return await self.fetch(
             url=URLS[UserEndpointName.PING.value].format(base_url=BASE_URL)
         )
 
     async def close(self):
+        self._sleeps.cancel()
         await self._http_session.close()
-        self._graph_api_client.close()
 
 
 class MicrosoftTeamsDataSource(BaseDataSource):
@@ -288,10 +268,10 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         )
 
     async def validate_config(self):
-        self.configuration.check_valid()
+        await super().validate_config()
 
         # Check that we can log in into Graph API
-        await self.client.graph_api_token.get_with_username_password()
+        await self.client._api_token.get_with_username_password()
 
     async def ping(self):
         """Verify the connection with Microsoft Teams"""
