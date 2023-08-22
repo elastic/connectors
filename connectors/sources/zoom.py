@@ -350,7 +350,7 @@ class ZoomDataSource(BaseDataSource):
         }
 
     async def validate_config(self):
-        self.configuration.check_valid()
+        await super().validate_config()
         await self.client.api_token.get()
 
     async def ping(self):
