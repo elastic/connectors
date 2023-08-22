@@ -103,9 +103,13 @@ class OneDriveAdvancedRulesValidator(AdvancedRulesValidator):
                 "items": {"type": "string"},
             },
             "parentPathPattern": {"type": "string", "minLength": 1},
-            "userMailAccount": {"type": "string", "format": "email", "minLength": 1},
+            "userMailAccounts": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "format": "email", "minLength": 1},
+            },
         },
-        "required": ["userMailAccount"],
+        "minProperties": 1,
         "additionalProperties": False,
     }
 
@@ -141,7 +145,10 @@ class OneDriveAdvancedRulesValidator(AdvancedRulesValidator):
 
         async for user in self.source.client.list_users():
             users.append(user["mail"])
-        configured_users = [rule["userMailAccount"] for rule in advanced_rules]
+
+        configured_users = set()
+        for rule in advanced_rules:
+            configured_users.update(rule["userMailAccounts"])
 
         invalid_users = list(set(configured_users) - set(users))
         if len(invalid_users) > 0:
@@ -553,18 +560,24 @@ class OneDriveDataSource(BaseDataSource):
 
             for query_info in advanced_rules:
                 skipped_extensions = query_info.get("skipFilesWithExtensions")
-                user_mail = query_info.get("userMailAccount")
-                user_id = user_id_mail_map.get(user_mail)
+                user_mails = query_info.get("userMailAccounts")
+                if user_mails is None:
+                    user_mails = user_id_mail_map.keys()
+
                 pattern = query_info.get("parentPathPattern", "")
 
-                async for entity in self.client.get_owned_files(
-                    user_id, skipped_extensions, pattern
-                ):
-                    entity = self.prepare_doc(entity)
-                    if entity["type"] == FILE:
-                        yield entity, partial(self.get_content, copy(entity), user_id)
-                    else:
-                        yield entity, None
+                for mail in user_mails:
+                    user_id = user_id_mail_map.get(mail)
+                    async for entity in self.client.get_owned_files(
+                        user_id, skipped_extensions, pattern
+                    ):
+                        entity = self.prepare_doc(entity)
+                        if entity["type"] == FILE:
+                            yield entity, partial(
+                                self.get_content, copy(entity), user_id
+                            )
+                        else:
+                            yield entity, None
         else:
             async for user in self.client.list_users():
                 user_id = user.get("id")
