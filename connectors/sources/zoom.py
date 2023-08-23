@@ -157,7 +157,7 @@ class ZoomAPISession:
                 await self._api_token.get(is_cache=False)
                 raise
             elif exception.status == 404:
-                raise NotFound from exception
+                raise NotFound("Resource Not Found") from exception
             else:
                 raise
 
@@ -165,15 +165,19 @@ class ZoomAPISession:
         try:
             async with self._get(absolute_url=url) as response:
                 return await response.json()
-        except Exception:
-            self._logger.warning(f"Data for {url} is being skipped.")
+        except Exception as exception:
+            self._logger.warning(
+                f"Data for {url} is being skipped. Error: {exception}."
+            )
 
     async def content(self, url):
         try:
             async with self._get(absolute_url=url) as response:
                 return await response.text()
-        except NotFound:
-            self._logger.warning(f"Content for {url} is being skipped.")
+        except Exception as exception:
+            self._logger.warning(
+                f"Content for {url} is being skipped. Error: {exception}."
+            )
 
     async def scroll(self, url):
         scroll_url = url
@@ -251,20 +255,20 @@ class ZoomClient:
 
     async def get_recordings(self, user_id):
         # Zoom recording does not retrieve data that is more than 4 months old.
-        now = datetime.utcnow()
+        end_date = datetime.utcnow()
         for _ in range(4):
-            past_duration = now + timedelta(days=-30)
+            start_date = end_date + timedelta(days=-30)
             url = APIS["RECORDING"].format(
                 base_url=BASE_URL,
                 user_id=user_id,
-                date_from=format_recording_date(date=past_duration),
-                date_to=format_recording_date(date=now),
+                date_from=format_recording_date(date=start_date),
+                date_to=format_recording_date(date=end_date),
                 page_size=MEETING_PAGE_SIZE,
             )
             async for recordings in self.api_client.scroll(url=url):
                 for recording in recordings.get("meetings", []) or []:
                     yield recording
-            now = past_duration
+            end_date = start_date
 
     async def get_trash_recordings(self, user_id):
         url = APIS["TRASH_RECORDING"].format(
@@ -284,14 +288,14 @@ class ZoomClient:
 
     async def get_chats(self, user_id, chat_type):
         # Zoom chat does not retrieve data that is more than 6 months old.
-        now = datetime.utcnow()
-        past_duration = now + timedelta(days=-180)
+        end_date = datetime.utcnow()
+        start_date = end_date + timedelta(days=-180)
         url = APIS["CHAT"].format(
             base_url=BASE_URL,
             user_id=user_id,
             chat_type=chat_type,
-            date_from=format_chat_date(date=past_duration),
-            date_to=format_chat_date(date=now),
+            date_from=format_chat_date(date=start_date),
+            date_to=format_chat_date(date=end_date),
             page_size=CHAT_PAGE_SIZE,
         )
         async for chats in self.api_client.scroll(url=url):
@@ -350,7 +354,7 @@ class ZoomDataSource(BaseDataSource):
         }
 
     async def validate_config(self):
-        await super().validate_config()
+        self.configuration.check_valid()
         await self.client.api_token.get()
 
     async def ping(self):
@@ -393,7 +397,7 @@ class ZoomDataSource(BaseDataSource):
             self._logger.warning(
                 f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
             )
-            return
+            return False
         return True
 
     async def _get_document_with_content(self, doc):
@@ -404,28 +408,24 @@ class ZoomDataSource(BaseDataSource):
 
         temp_filename = ""
 
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            response = await self.client.get_file_content(
-                download_url=doc["download_url"]
-            )
-            await async_buffer.write(response.encode("utf-8"))
-            temp_filename = str(async_buffer.name)
-
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=temp_filename,
-        )
-        async with aiofiles.open(file=temp_filename, mode="r") as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            document["_attachment"] = (await target_file.read()).strip()
         try:
-            await remove(temp_filename)
-        except Exception as exception:
-            self._logger.warning(
-                f"Could not remove file: {temp_filename}. Error: {exception}"
-            )
+            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+                response = await self.client.get_file_content(
+                    download_url=doc["download_url"]
+                )
+                await async_buffer.write(response.encode("utf-8"))
+                temp_filename = str(async_buffer.name)
 
-        return document
+            await asyncio.to_thread(
+                convert_to_b64,
+                source=temp_filename,
+            )
+            async with aiofiles.open(file=temp_filename, mode="r") as target_file:
+                # base64 on macOS will add a EOL, so we strip() here
+                document["_attachment"] = (await target_file.read()).strip()
+            return document
+        finally:
+            await remove(temp_filename)
 
     async def get_content(self, doc, timestamp=None, doit=False):
         attachment_size = doc["file_size"]
@@ -435,7 +435,7 @@ class ZoomDataSource(BaseDataSource):
         attachment_name = doc["file_name"]
 
         attachment_extension = (
-            attachment_name[attachment_name.rfind(".") :]  # noqa
+            attachment_name[attachment_name.rfind(".") :]
             if "." in attachment_name
             else ""
         )
