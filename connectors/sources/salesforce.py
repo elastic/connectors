@@ -54,6 +54,7 @@ RELEVANT_SOBJECT_FIELDS = [
     "AccountId",
     "BccAddress",
     "BillingAddress",
+    "Body",
     "CaseNumber",
     "CcAddress",
     "CommentBody",
