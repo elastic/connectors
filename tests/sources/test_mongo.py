@@ -6,7 +6,7 @@
 import asyncio
 from datetime import datetime
 from unittest import mock
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from bson.decimal128 import Decimal128
