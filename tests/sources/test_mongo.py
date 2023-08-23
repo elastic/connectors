@@ -6,7 +6,7 @@
 import asyncio
 from datetime import datetime
 from unittest import mock
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from bson.decimal128 import Decimal128
@@ -143,7 +143,6 @@ def build_resp():
 @mock.patch(
     "pymongo.topology.Topology._select_servers_loop", lambda *x: [mock.MagicMock()]
 )
-@mock.patch("pymongo.mongo_client.MongoClient._get_socket")
 @mock.patch(
     "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
 )
@@ -161,15 +160,24 @@ async def test_get_docs(*args):
 @mock.patch(
     "pymongo.topology.Topology._select_servers_loop", lambda *x: [mock.MagicMock()]
 )
-@mock.patch("pymongo.mongo_client.MongoClient._get_socket")
 @mock.patch(
     "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
 )
-@pytest.mark.asyncio
 async def test_ping_when_called_then_does_not_raise(*args):
-    source = create_connector()
-
-    await source.ping()
+    admin_mock = Mock()
+    command_mock = AsyncMock()
+    admin_mock.command = command_mock
+    async with create_source(
+        MongoDataSource,
+        host="mongodb://127.0.0.1:27021",
+        database="db",
+        collection="col",
+        direct_connection=True,
+        user="foo",
+        password="password",
+    ) as source:
+        source.client.admin = admin_mock
+        await source.ping()
 
 
 @pytest.mark.asyncio
