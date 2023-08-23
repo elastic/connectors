@@ -19,6 +19,28 @@ Connectors can:
 
 At this stage, our assumption is that one connector will manage one index, and one index will have only one connector associated with it. This may change in the future.
 
+### Data freshness
+
+Data from remote sources are synced via [sync jobs](DEVELOPING.md#syncing), which means there can be data discrepancy between the remote source and Elasticsearch until the next sync job runs.
+
+We don't currently support streaming options for real-time data updates. In order to achieve (near) real-time data availability, [implement incremental sync](DEVELOPING.md#how-an-incremental-sync-works) for the data source, with a frequency that matches your needs.
+
+Kibana won't allow you to configure a schedule more frequently than every hour, but you can do so via the Elasticsearch API (through Kibana Dev Tools, or cURL, etc):
+
+```
+# Update to every 5 seconds
+POST /.elastic-connectors/_update/<_id>
+{
+  "doc": {
+    "scheduling": {
+      "incremental": {
+        "interval": "0/5 * * * * ?"
+      }
+    }
+  }
+}
+```
+
 ## Communication protocol
 
 All communication will need to go through Elasticsearch. We've created a connector index called `.elastic-connectors`, where a document represents a connector. In addition, there's a connector job index called `.elastic-connectors-sync-jobs`, which holds the job history. You can find the definitions for these indices in the next section.
