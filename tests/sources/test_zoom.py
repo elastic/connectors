@@ -175,12 +175,6 @@ SAMPLE_RECORDING_PAGE4 = {
         {"id": "recording4", "type": "recording", "start_time": "2023-12-01T00:00:00Z"}
     ],
 }
-SAMPLE_TRASH_RECORDING = {
-    "next_page_token": None,
-    "meetings": [
-        {"id": "recording5", "type": "trash", "start_time": "2023-03-09T00:00:00Z"}
-    ],
-}
 RECORDING_EXPECTED_RESPONSE = [
     {
         "id": "recording1",
@@ -209,13 +203,6 @@ RECORDING_EXPECTED_RESPONSE = [
         "start_time": "2023-12-01T00:00:00Z",
         "_id": "recording4",
         "_timestamp": "2023-12-01T00:00:00Z",
-    },
-    {
-        "id": "recording5",
-        "type": "trash",
-        "start_time": "2023-03-09T00:00:00Z",
-        "_id": "recording5",
-        "_timestamp": "2023-03-09T00:00:00Z",
     },
 ]
 
@@ -478,12 +465,6 @@ def mock_response(url, headers):
         == "https://api.zoom.us/v2/users/user1/recordings?page_size=300&from=2022-11-09&to=2022-12-09"
     ):
         return get_mock(mock_response=SAMPLE_RECORDING_PAGE4)
-
-    # Trash Recording APIS
-    elif (
-        url == "https://api.zoom.us/v2/users/user1/recordings?page_size=300&trash=true"
-    ):
-        return get_mock(mock_response=SAMPLE_TRASH_RECORDING)
 
     # Channel APIS
     elif url == "https://api.zoom.us/v2/chat/users/user1/channels?page_size=50":

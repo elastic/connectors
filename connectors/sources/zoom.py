@@ -44,7 +44,6 @@ APIS = {
     "PAST_MEETING": "{base_url}/past_meetings/{meeting_id}",
     "PAST_MEETING_PARTICIPANT": "{base_url}/past_meetings/{meeting_id}/participants?page_size={page_size}",
     "RECORDING": "{base_url}/users/{user_id}/recordings?page_size={page_size}&from={date_from}&to={date_to}",
-    "TRASH_RECORDING": "{base_url}/users/{user_id}/recordings?page_size={page_size}&trash=true",
     "CHANNEL": "{base_url}/chat/users/{user_id}/channels?page_size={page_size}",
     "CHAT": "{base_url}/chat/users/{user_id}/messages?page_size={page_size}&search_key=%20&search_type={chat_type}&from={date_from}&to={date_to}",
 }
@@ -270,14 +269,6 @@ class ZoomClient:
                     yield recording
             end_date = start_date
 
-    async def get_trash_recordings(self, user_id):
-        url = APIS["TRASH_RECORDING"].format(
-            base_url=BASE_URL, user_id=user_id, page_size=MEETING_PAGE_SIZE
-        )
-        async for recordings in self.api_client.scroll(url=url):
-            for meeting in recordings.get("meetings", []) or []:
-                yield meeting
-
     async def get_channels(self, user_id):
         url = APIS["CHANNEL"].format(
             base_url=BASE_URL, user_id=user_id, page_size=CHAT_PAGE_SIZE
@@ -467,9 +458,6 @@ class ZoomDataSource(BaseDataSource):
 
     async def fetch_recordings(self, user_id):
         async for recording in self.client.get_recordings(user_id=user_id):
-            yield recording
-
-        async for recording in self.client.get_trash_recordings(user_id=user_id):
             yield recording
 
     async def get_docs(self, filtering=None):
