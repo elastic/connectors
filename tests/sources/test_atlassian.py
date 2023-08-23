@@ -11,7 +11,12 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.sources.atlassian import AtlassianAdvancedRulesValidator
+from connectors.sources.atlassian import (
+    AtlassianAccessControl,
+    AtlassianAdvancedRulesValidator,
+)
+from connectors.sources.jira import JiraClient, JiraDataSource
+from tests.sources.support import create_source
 
 
 @pytest.mark.parametrize(
@@ -90,3 +95,47 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
     ).validate(advanced_rules)
 
     assert validation_result == expected_validation_result
+
+
+@pytest.mark.parametrize(
+    "user_info, result",
+    [
+        (
+            {
+                "self": "url1",
+                "accountId": "607194d6bc3c3f006f4c35d6",
+                "accountType": "atlassian",
+                "displayName": "user1",
+                "active": True,
+            },
+            True,
+        ),
+        (
+            {
+                "self": "url1",
+                "accountId": "607194d6bc3c3f006f4c35d6",
+                "accountType": "app",
+                "displayName": "user1",
+                "active": True,
+            },
+            False,
+        ),
+        (
+            {
+                "self": "url1",
+                "accountId": "607194d6bc3c3f006f4c35d6",
+                "accountType": "atlassian",
+                "displayName": "user1",
+                "active": False,
+            },
+            False,
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_active_atlassian_user(user_info, result):
+    async with create_source(JiraDataSource) as source:
+        validation_result = AtlassianAccessControl(
+            source, JiraClient
+        ).is_active_atlassian_user(user_info)
+        assert validation_result == result
