@@ -78,35 +78,25 @@ async def test_validate_configuration_with_invalid_fields_raises_error(
 
 @pytest.mark.asyncio
 async def test_ping_for_successful_connection():
-    with patch.object(
-        GraphAPIToken,
-        "_fetch_token",
-        return_value=await create_fake_coroutine(("hello", 15)),
-    ):
-        async with create_source(MicrosoftTeamsDataSource) as source:
-            DUMMY_RESPONSE = {}
-            source.client.fetch = Mock(
-                return_value=create_fake_coroutine(item=DUMMY_RESPONSE)
-            )
-            await source.ping()
+    async with create_source(MicrosoftTeamsDataSource) as source:
+        DUMMY_RESPONSE = {}
+        source.client.fetch = Mock(
+            return_value=create_fake_coroutine(item=DUMMY_RESPONSE)
+        )
+        await source.ping()
 
 
 @pytest.mark.asyncio
 @patch("aiohttp.ClientSession.get")
 async def test_ping_for_failed_connection_exception(mock_get):
-    with patch.object(
-        GraphAPIToken,
-        "_fetch_token",
-        return_value=await create_fake_coroutine(("hello", 15)),
-    ):
-        async with create_source(MicrosoftTeamsDataSource) as source:
-            with patch.object(
-                MicrosoftTeamsClient,
-                "fetch",
-                side_effect=Exception("Something went wrong"),
-            ):
-                with pytest.raises(Exception):
-                    await source.ping()
+    async with create_source(MicrosoftTeamsDataSource) as source:
+        with patch.object(
+            MicrosoftTeamsClient,
+            "fetch",
+            side_effect=Exception("Something went wrong"),
+        ):
+            with pytest.raises(Exception):
+                await source.ping()
 
 
 @pytest.mark.asyncio
@@ -122,8 +112,6 @@ async def test_set_internal_logger():
 async def test_call_api_with_403(
     microsoft_client,
     mock_responses,
-    patch_sleep,
-    patch_cancellable_sleeps,
 ):
     url = "http://localhost:1234/download-some-sample-file"
 
@@ -150,8 +138,6 @@ async def test_call_api_with_403(
 async def test_call_api_with_404(
     microsoft_client,
     mock_responses,
-    patch_sleep,
-    patch_cancellable_sleeps,
 ):
     url = "http://localhost:1234/download-some-sample-file"
 
@@ -180,7 +166,6 @@ async def test_call_api_with_os_error(
     microsoft_client,
     mock_responses,
     patch_sleep,
-    patch_cancellable_sleeps,
 ):
     url = "http://localhost:1234/download-some-sample-file"
 
@@ -207,7 +192,6 @@ async def test_call_api_with_500(
     microsoft_client,
     mock_responses,
     patch_sleep,
-    patch_cancellable_sleeps,
 ):
     url = "http://localhost:1234/download-some-sample-file"
 
@@ -238,7 +222,6 @@ async def test_call_api_with_unhandled_status(
     microsoft_client,
     mock_responses,
     patch_sleep,
-    patch_cancellable_sleeps,
 ):
     url = "http://localhost:1234/download-some-sample-file"
 
