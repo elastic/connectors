@@ -22,6 +22,8 @@ from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.atlassian import (
     AtlassianAccessControl,
     AtlassianAdvancedRulesValidator,
+    prefix_account_id,
+    prefix_group_id,
 )
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
@@ -423,17 +425,9 @@ class ConfluenceDataSource(BaseDataSource):
         for item in user_results + group_results:
             item_type = item.get("type")
             if item_type == "known" and item.get("accountType") == "atlassian":
-                identities.add(
-                    self.atlassian_access_control.prefix_account_id(
-                        account_id=item.get("accountId", "")
-                    )
-                )
+                identities.add(prefix_account_id(account_id=item.get("accountId", "")))
             elif item_type == "group":
-                identities.add(
-                    self.atlassian_access_control.prefix_group_id(
-                        group_id=item.get("id", "")
-                    )
-                )
+                identities.add(prefix_group_id(group_id=item.get("id", "")))
 
         return identities
 

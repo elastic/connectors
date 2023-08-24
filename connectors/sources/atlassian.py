@@ -64,22 +64,26 @@ class AtlassianAdvancedRulesValidator(AdvancedRulesValidator):
         )
 
 
+def prefix_account_id(account_id):
+    return prefix_identity("account_id", account_id)
+
+
+def prefix_group_id(group_id):
+    return prefix_identity("group_id", group_id)
+
+
+def prefix_role_key(role_key):
+    return prefix_identity("role_key", role_key)
+
+
+def prefix_account_name(account_name):
+    return prefix_identity("name", account_name.replace(" ", "-"))
+
+
 class AtlassianAccessControl:
     def __init__(self, source, client):
         self.source = source
         self.client = client
-
-    def prefix_account_id(self, account_id):
-        return prefix_identity("account_id", account_id)
-
-    def prefix_group_id(self, group_id):
-        return prefix_identity("group_id", group_id)
-
-    def prefix_role_key(self, role_key):
-        return prefix_identity("role_key", role_key)
-
-    def prefix_account_name(self, account_name):
-        return prefix_identity("name", account_name.replace(" ", "-"))
 
     def access_control_query(self, access_control):
         return es_access_control_query(access_control)
@@ -89,9 +93,9 @@ class AtlassianAccessControl:
         while True:
             async for users in self.client.api_call(url=f"{url}?startAt={start_at}"):
                 response = await users.json()
-                yield response
                 if len(response) == 0:
                     return
+                yield response
                 start_at += USER_BATCH
 
     async def fetch_user(self, url):
@@ -124,15 +128,15 @@ class AtlassianAccessControl:
         account_id = user.get("accountId")
         account_name = user.get("displayName")
 
-        prefixed_account_id = self.prefix_account_id(account_id=account_id)
-        prefixed_account_name = self.prefix_account_name(account_name=account_name)
+        prefixed_account_id = prefix_account_id(account_id=account_id)
+        prefixed_account_name = prefix_account_name(account_name=account_name)
 
         prefixed_group_ids = {
-            self.prefix_group_id(group_id=group.get("groupId", ""))
+            prefix_group_id(group_id=group.get("groupId", ""))
             for group in user.get("groups", {}).get("items", [])
         }
         prefixed_role_keys = {
-            self.prefix_role_key(role_key=role.get("key", ""))
+            prefix_role_key(role_key=role.get("key", ""))
             for role in user.get("applicationRoles", {}).get("items", [])
         }
 
