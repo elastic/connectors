@@ -19,6 +19,11 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 from fastjsonschema import JsonSchemaValueException
 
+from connectors.access_control import (
+    ACCESS_CONTROL,
+    es_access_control_query,
+    prefix_identity,
+)
 from connectors.es.sink import OP_DELETE, OP_INDEX
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -42,8 +47,6 @@ from connectors.utils import (
 SPO_API_MAX_BATCH_SIZE = 20
 
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
-
-ACCESS_CONTROL = "_allow_access_control"
 
 DEFAULT_GROUPS = ["Visitors", "Owners", "Members"]
 
@@ -764,27 +767,25 @@ class SharepointOnlineClient:
         self._validate_sharepoint_rest_url(site_web_url)
 
         # select = "Id,Title,LayoutWebpartsContent,CanvasContent1,Description,Created,AuthorId,Modified,EditorId"
-        select = ""  # ^ is what we want, but site pages don't have consistent schemas, and this causes errors. Better to fetch all and slice
+        select = "*,EncodedAbsUrl"  # ^ is what we want, but site pages don't have consistent schemas, and this causes errors. Better to fetch all and slice
         url = f"{site_web_url}/_api/web/lists/GetByTitle('Site%20Pages')/items?$select={select}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
                 for site_page in page:
                     yield {
-                        k: site_page.get(k, None)
-                        for k in (
-                            "Id",
-                            "Title",
-                            "LayoutWebpartsContent",
-                            "CanvasContent1",
-                            "WikiField",
-                            "Description",
-                            "Created",
-                            "AuthorId",
-                            "Modified",
-                            "EditorId",
-                            "odata.id",
-                        )
+                        "Id": site_page.get("Id"),
+                        "Title": site_page.get("Title"),
+                        "webUrl": site_page.get("EncodedAbsUrl"),
+                        "LayoutWebpartsContent": site_page.get("LayoutWebpartsContent"),
+                        "CanvasContent1": site_page.get("CanvasContent1"),
+                        "WikiField": site_page.get("WikiField"),
+                        "Description": site_page.get("Description"),
+                        "Created": site_page.get("Created"),
+                        "AuthorId": site_page.get("AuthorId"),
+                        "Modified": site_page.get("Modified"),
+                        "EditorId": site_page.get("EditorId"),
+                        "odata.id": site_page.get("odata.id"),
                     }
         except NotFound:
             # I'm not sure if site can have no pages, but given how weird API is I put this here
@@ -925,35 +926,28 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
             )
 
 
-def _prefix_identity(prefix, identity):
-    if prefix is None or identity is None:
-        return None
-
-    return f"{prefix}:{identity}"
-
-
 def _prefix_group(group):
-    return _prefix_identity("group", group)
+    return prefix_identity("group", group)
 
 
 def _prefix_site_group(site_group):
-    return _prefix_identity("site_group", site_group)
+    return prefix_identity("site_group", site_group)
 
 
 def _prefix_user(user):
-    return _prefix_identity("user", user)
+    return prefix_identity("user", user)
 
 
 def _prefix_site_user_id(site_user_id):
-    return _prefix_identity("site_user_id", site_user_id)
+    return prefix_identity("site_user_id", site_user_id)
 
 
 def _prefix_user_id(user_id):
-    return _prefix_identity("user_id", user_id)
+    return prefix_identity("user_id", user_id)
 
 
 def _prefix_email(email):
-    return _prefix_identity("email", email)
+    return prefix_identity("email", email)
 
 
 def _postfix_group(group):
@@ -1167,7 +1161,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         }
 
     async def validate_config(self):
-        self.configuration.check_valid()
+        await super().validate_config()
 
         # Check that we can log in into Graph API
         await self.client.graph_api_token.get()
@@ -1282,41 +1276,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         return self.configuration["use_document_level_security"]
 
     def access_control_query(self, access_control):
-        # filter out 'None' values
-        filtered_access_control = list(
-            filter(
-                lambda access_control_entity: access_control_entity is not None,
-                access_control,
-            )
-        )
-
-        return {
-            "query": {
-                "template": {"params": {"access_control": filtered_access_control}},
-                "source": {
-                    "bool": {
-                        "filter": {
-                            "bool": {
-                                "should": [
-                                    {
-                                        "bool": {
-                                            "must_not": {
-                                                "exists": {"field": ACCESS_CONTROL}
-                                            }
-                                        }
-                                    },
-                                    {
-                                        "terms": {
-                                            f"{ACCESS_CONTROL}.enum": filtered_access_control
-                                        }
-                                    },
-                                ]
-                            }
-                        }
-                    }
-                },
-            }
-        }
+        return es_access_control_query(access_control)
 
     async def _user_access_control_doc(self, user):
         """Constructs a user access control document, which will be synced to the corresponding access control index.
@@ -1546,9 +1506,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                     yield site_list, None
 
                     async for list_item, download_func in self.site_list_items(
-                        site_id=site["id"],
+                        site=site,
                         site_list_id=site_list["id"],
-                        site_web_url=site["webUrl"],
                         site_list_name=site_list["name"],
                         site_access_control=site_access_control,
                     ):
@@ -1644,9 +1603,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                     yield site_list, None, OP_INDEX
 
                     async for list_item, download_func in self.site_list_items(
-                        site_id=site["id"],
+                        site=site,
                         site_list_id=site_list["id"],
-                        site_web_url=site["webUrl"],
                         site_list_name=site_list["name"],
                         site_access_control=site_access_control,
                     ):
@@ -1780,8 +1738,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                 yield drive_item, self.download_function(drive_item, max_drive_item_age)
 
     async def site_list_items(
-        self, site_id, site_list_id, site_web_url, site_list_name, site_access_control
+        self, site, site_list_id, site_list_name, site_access_control
     ):
+        site_id = site.get("id")
+        site_web_url = site.get("webUrl")
+        site_collection = site.get("siteCollection", {}).get("hostname")
         async for list_item in self.client.site_list_items(site_id, site_list_id):
             # List Item IDs are unique within list.
             # Therefore we mix in site_list id to it to make sure they are
@@ -1849,6 +1810,18 @@ class SharepointOnlineDataSource(BaseDataSource):
                     list_item_attachment[
                         "_original_filename"
                     ] = list_item_attachment.get("FileName", "")
+                    if (
+                        "ServerRelativePath" in list_item_attachment
+                        and "DecodedUrl"
+                        in list_item_attachment.get("ServerRelativePath", {})
+                    ):
+                        list_item_attachment[
+                            "webUrl"
+                        ] = f"https://{site_collection}{list_item_attachment['ServerRelativePath']['DecodedUrl']}"
+                    else:
+                        self._logger.debug(
+                            f"Unable to populate webUrl for list item attachment {list_item_attachment['_id']}"
+                        )
 
                     if self._dls_enabled():
                         list_item_attachment[ACCESS_CONTROL] = list_item.get(

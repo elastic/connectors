@@ -672,7 +672,7 @@ class SharepointServerDataSource(BaseDataSource):
     async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields
         Also validate, if user configured collections are available in SharePoint."""
-        self.configuration.check_valid()
+        await super().validate_config()
         await self._remote_validation()
 
     async def ping(self):

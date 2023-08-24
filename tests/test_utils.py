@@ -31,6 +31,7 @@ from connectors.utils import (
     InvalidIndexNameError,
     MemQueue,
     RetryStrategy,
+    base64url_to_base64,
     convert_to_b64,
     decode_base64_value,
     deep_merge_dicts,
@@ -197,6 +198,21 @@ async def test_mem_queue_too_large_item():
 
     with pytest.raises(asyncio.QueueFull) as e:
         await queue.put("x")
+
+    assert e is not None
+
+
+@pytest.mark.asyncio
+async def test_mem_queue_put_nowait():
+    queue = MemQueue(
+        maxsize=5, maxmemsize=1000, refresh_interval=0.1, refresh_timeout=0.5
+    )
+    # make queue full by size
+    for i in range(5):
+        queue.put_nowait(i)
+
+    with pytest.raises(asyncio.QueueFull) as e:
+        await queue.put_nowait("x")
 
     assert e is not None
 
@@ -830,3 +846,11 @@ class TestExtractionService:
             patch_logger.assert_present(
                 "Extraction service could not parse `notreal.txt'. Status: [200]; oh no!: I'm all messed up..."
             )
+
+
+@pytest.mark.parametrize(
+    "base64url_encoded_value, base64_expected_value",
+    [("YQ-_", "YQ+/"), ("", ""), (None, None)],
+)
+def test_base64url_to_base64(base64url_encoded_value, base64_expected_value):
+    assert base64url_to_base64(base64url_encoded_value) == base64_expected_value

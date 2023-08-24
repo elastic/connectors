@@ -891,3 +891,14 @@ class ExtractionService:
 
         logger.debug(f"Text extraction is successful for '{filename}'.")
         return content.get("extracted_text", "")
+
+
+def base64url_to_base64(string):
+    if string is None:
+        return string
+
+    if len(string) == 0:
+        return ""
+
+    string = string.replace("-", "+")
+    return string.replace("_", "/")

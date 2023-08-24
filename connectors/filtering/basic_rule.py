@@ -152,6 +152,10 @@ class BasicRuleEngine:
                 continue
 
             if rule.matches(document):
+                logger.debug(
+                    f"Document (id: '{document.get('_id')}') matched basic rule (id: '{rule.id_}'). Document will be {rule.policy.value}d"
+                )
+
                 self.rules_match_stats.setdefault(
                     rule.id_, RuleMatchStats(rule.policy, 0)
                 )
@@ -161,6 +165,9 @@ class BasicRuleEngine:
 
         # default behavior: ingest document, if no rule matches ("default rule")
         self.rules_match_stats[BasicRule.DEFAULT_RULE_ID] += 1
+        logger.debug(
+            f"Document (id: '{document.get('_id')}') didn't match any basic rule. Document will be included"
+        )
         return True
 
 
