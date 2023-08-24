@@ -3,13 +3,22 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import json
 from enum import Enum
 
 from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
+from connectors.source import ConfigurableFieldValueError
 from connectors.utils import RetryStrategy, retryable
+
+# Google Service Account JSON includes "universe_domain" key. That argument is not
+# supported in aiogoogle library in version 5.3.0. The "universe_domain" key is allowed in
+# service account JSON but will be dropped before being passed to aiogoogle.auth.creds.ServiceAccountCreds.
+SERVICE_ACCOUNT_JSON_ALLOWED_KEYS = set(dict(ServiceAccountCreds()).keys()) | {
+    "universe_domain"
+}
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -27,6 +36,28 @@ class MessageFields(Enum):
     ID = "id"
     CREATION_DATE = "internalDate"
     FULL_MESSAGE = "raw"
+
+
+def validate_service_account_json(service_account_credentials, google_service):
+    """Validates whether service account JSON is a valid JSON string and
+    checks for unexpected keys.
+
+    Raises:
+        ConfigurableFieldValueError: The service account json is invalid.
+    """
+
+    try:
+        json_credentials = json.loads(service_account_credentials)
+    except ValueError as e:
+        raise ConfigurableFieldValueError(
+            f"{google_service} service account is not a valid JSON. Exception: {e}"
+        ) from e
+
+    for key in json_credentials.keys():
+        if key not in SERVICE_ACCOUNT_JSON_ALLOWED_KEYS:
+            raise ConfigurableFieldValueError(
+                f"{google_service} service account JSON contains an unexpected key: '{key}'. Allowed keys are: {SERVICE_ACCOUNT_JSON_ALLOWED_KEYS}"
+            )
 
 
 class GoogleServiceAccountClient:

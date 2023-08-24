@@ -178,7 +178,7 @@ class TestGMailDataSource:
 
     @pytest.mark.asyncio
     async def test_validate_config_valid(self):
-        valid_json = '{"key": "value"}'
+        valid_json = '{"project_id": "dummy123"}'
 
         async with setup_source() as source:
             source.configuration.set_field(
