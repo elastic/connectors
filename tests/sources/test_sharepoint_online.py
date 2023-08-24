@@ -42,7 +42,6 @@ from connectors.sources.sharepoint_online import (
     _get_login_name,
     _prefix_email,
     _prefix_group,
-    _prefix_identity,
     _prefix_user,
     _prefix_user_id,
     is_domain_group,
@@ -2776,40 +2775,6 @@ class TestSharepointOnlineDataSource:
             assert not source._dls_enabled()
 
     @pytest.mark.asyncio
-    async def test_access_control_query(self):
-        async with create_source(SharepointOnlineDataSource) as source:
-            access_control = ["user_1"]
-            access_control_query = source.access_control_query(access_control)
-
-            assert access_control_query == {
-                "query": {
-                    "template": {"params": {"access_control": access_control}},
-                    "source": {
-                        "bool": {
-                            "filter": {
-                                "bool": {
-                                    "should": [
-                                        {
-                                            "bool": {
-                                                "must_not": {
-                                                    "exists": {"field": ACCESS_CONTROL}
-                                                }
-                                            }
-                                        },
-                                        {
-                                            "terms": {
-                                                f"{ACCESS_CONTROL}.enum": access_control
-                                            }
-                                        },
-                                    ]
-                                }
-                            }
-                        }
-                    },
-                }
-            }
-
-    @pytest.mark.asyncio
     @patch(
         "connectors.sources.sharepoint_online.TIMESTAMP_FORMAT",
         TIMESTAMP_FORMAT_PATCHED,
@@ -2964,24 +2929,6 @@ class TestSharepointOnlineDataSource:
                 for email_or_username in actual_emails_and_usernames
             ]
         )
-
-    def test_prefix_identity(self):
-        prefix = "prefix"
-        identity = "identity"
-
-        assert _prefix_identity(prefix, identity) == f"{prefix}:{identity}"
-
-    def test_prefix_identity_with_prefix_none(self):
-        prefix = None
-        identity = "identity"
-
-        assert _prefix_identity(prefix, identity) is None
-
-    def test_prefix_identity_with_identity_none(self):
-        prefix = "prefix"
-        identity = None
-
-        assert _prefix_identity(prefix, identity) is None
 
     def test_prefix_group(self):
         group = "group"

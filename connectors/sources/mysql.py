@@ -331,6 +331,22 @@ def generate_id(tables, row, primary_key_columns):
         f"{'_'.join([str(pk_value) for pk in primary_key_columns if (pk_value := row.get(pk)) is not None])}"
     )
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_last_update_time(self, table):
+        async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+            await cursor.execute(self.queries.table_last_update_time(table))
+
+            result = await cursor.fetchone()
+
+            if result is not None:
+                return result[0]
+
+            return None
+
 
 class MySqlDataSource(BaseDataSource):
     """MySQL"""
@@ -454,7 +470,7 @@ class MySqlDataSource(BaseDataSource):
             ConfigurableFieldValueError: The database or the tables do not exist or aren't accessible, or a field contains an empty or wrong value
             ConfigurableFieldDependencyError: A inter-field dependency is not met
         """
-        self.configuration.check_valid()
+        await super().validate_config()
         await self._remote_validation()
 
     @retryable(
