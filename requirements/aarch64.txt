@@ -3,6 +3,7 @@
 
 aiomysql==0.0.22
 aioboto3==10.3.0
+pymongo==3.13.0
 motor==2.5.1
 smbprotocol==1.9.0
 pymongo[srv]==3.13.0
