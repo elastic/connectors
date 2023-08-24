@@ -14,7 +14,10 @@ from connectors.source import ConfigurableFieldValueError
 from connectors.sources.outlook import (
     OUTLOOK_CLOUD,
     OUTLOOK_SERVER,
+    Forbidden,
+    NotFound,
     OutlookDataSource,
+    UnauthorizedException,
     UsersFetchFailed,
 )
 from tests.commons import AsyncIterator
@@ -105,7 +108,7 @@ EXPECTED_RESPONSE = [
         "_timestamp": "2023-12-12T01:01:01Z",
         "type": "Calendar",
         "title": "TC Review meeting",
-        "meeting_type": "Normal",
+        "meeting_type": "Single",
         "organizer": "dummy.user@gmail.com",
         "attendees": ["dummy.user@gmail.com"],
         "start_date": "2023-12-12T01:01:01Z",
@@ -121,6 +124,12 @@ EXPECTED_RESPONSE = [
         "size": 1221,
     },
 ]
+
+
+class MockException(Exception):
+    def __init__(self, status, message=None):
+        super().__init__(message)
+        self.status = status
 
 
 class CustomPath:
@@ -139,9 +148,6 @@ class CustomPath:
 class MockAttachmentId:
     def __init__(self, id):  # noqa
         self.id = id
-
-    def __aenter__(self):
-        return self
 
 
 class MailDocument:
@@ -255,31 +261,11 @@ class MockAccount:
 
 class MockAttachment:
     def __init__(self, attachment_id, name, size, last_modified_time, content):
-        self._attachment_id = attachment_id
-        self._name = name
-        self._size = size
-        self._last_modified_time = last_modified_time
-        self._content = content
-
-    @property
-    def attachment_id(self):
-        return self._attachment_id
-
-    @property
-    def name(self):
-        return self._name
-
-    @property
-    def size(self):
-        return self._size
-
-    @property
-    def last_modified_time(self):
-        return self._last_modified_time
-
-    @property
-    def content(self):
-        return self._content
+        self.attachment_id = attachment_id
+        self.name = name
+        self.size = size
+        self.last_modified_time = last_modified_time
+        self.content = content
 
 
 MOCK_ATTACHMENT = MockAttachment(
@@ -446,7 +432,7 @@ async def test_validate_config_with_valid_dependency_fields_does_not_raise_error
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.ExchangeUsers._create_connection")
+@patch("connectors.sources.outlook.Connection")
 async def test_ping_for_server(mock_connection):
     mock_connection_instance = mock_connection.return_value
     mock_connection_instance.search.return_value = (
@@ -462,7 +448,7 @@ async def test_ping_for_server(mock_connection):
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.ExchangeUsers._create_connection")
+@patch("connectors.sources.outlook.Connection")
 async def test_ping_for_server_for_failed_connection(mock_connection):
     mock_connection_instance = mock_connection.return_value
     mock_connection_instance.search.return_value = (
@@ -492,6 +478,34 @@ async def test_ping_for_cloud():
                 side_effect=side_effect_function,
             ):
                 await source.ping()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "side_effect_exception, raised_exception",
+    [
+        (MockException(status=400), UnauthorizedException),
+        (MockException(status=401), UnauthorizedException),
+        (MockException(status=403), Forbidden),
+        (MockException(status=404), NotFound),
+    ],
+)
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_ping_for_cloud_for_failed_connection(
+    mock_apply_retry_strategy, raised_exception, side_effect_exception
+):
+    mock_apply_retry_strategy.return_value = mock.Mock()
+    async with create_source(OutlookDataSource) as source:
+        with mock.patch(
+            "aiohttp.ClientSession.post",
+            side_effect=side_effect_exception,
+        ):
+            with mock.patch(
+                "aiohttp.ClientSession.get",
+                return_value=AsyncMock(),
+            ):
+                with pytest.raises(raised_exception):
+                    await source.ping()
 
 
 @pytest.mark.asyncio
@@ -527,15 +541,21 @@ async def test_get_content(attachment, expected_content):
 async def test_get_user_accounts_for_cloud(account, is_cloud, user_response):
     async with create_source(OutlookDataSource) as source:
         source.client.is_cloud = is_cloud
-        source.client._get_client.get_users = AsyncMock(return_value=[user_response])
+        source.client._get_user_instance.get_users = AsyncMock(
+            return_value=[user_response]
+        )
 
-        async for source_account in source.client._get_client.get_user_accounts():
+        async for source_account in source.client._get_user_instance.get_user_accounts():
             assert source_account == "account"
 
 
 @pytest.mark.asyncio
 async def test_get_docs():
     async with create_source(OutlookDataSource) as source:
-        source.client._get_client.get_user_accounts = AsyncIterator([MockAccount()])
+        source.client._get_user_instance.get_user_accounts = AsyncIterator(
+            [MockAccount()]
+        )
         async for document, _ in source.get_docs():
+            if document not in EXPECTED_RESPONSE:
+                print(document)
             assert document in EXPECTED_RESPONSE

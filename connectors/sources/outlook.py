@@ -138,7 +138,7 @@ CALENDAR_FIELDS = [
 END_SIGNAL = "FINISHED"
 
 
-def ews_format_to_datetime(datetime, timezone):
+def ews_format_to_datetime(source_datetime, timezone):
     """Change datetime format to user account timezone
     Args:
         datetime: Datetime in UTC format
@@ -146,16 +146,16 @@ def ews_format_to_datetime(datetime, timezone):
     Returns:
         Datetime: Date format as user account timezone
     """
-    if isinstance(datetime, exchangelib.ewsdatetime.EWSDateTime):
-        return (datetime.astimezone(pytz.timezone(str(timezone)))).strftime(
+    if isinstance(source_datetime, exchangelib.ewsdatetime.EWSDateTime):
+        return (source_datetime.astimezone(pytz.timezone(str(timezone)))).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         )
-    elif isinstance(datetime, exchangelib.ewsdatetime.EWSDate) or isinstance(
-        datetime, date
+    elif isinstance(source_datetime, exchangelib.ewsdatetime.EWSDate) or isinstance(
+        source_datetime, date
     ):
-        return datetime.strftime("%Y-%m-%d")
+        return source_datetime.strftime("%Y-%m-%d")
     else:
-        return datetime
+        return source_datetime
 
 
 class TokenFetchFailed(Exception):
@@ -176,6 +176,18 @@ class UnauthorizedException(Exception):
     pass
 
 
+class Forbidden(Exception):
+    pass
+
+
+class NotFound(Exception):
+    pass
+
+
+class SSLFailed(Exception):
+    pass
+
+
 class RootCAAdapter(requests.adapters.HTTPAdapter):
     """Class to verify SSL Certificate for Exchange Servers"""
 
@@ -184,25 +196,31 @@ class RootCAAdapter(requests.adapters.HTTPAdapter):
         self.ssl_ctx = None
 
     def cert_verify(self, conn, url, ssl_certificate_file, cert):
-        super().cert_verify(
-            conn=conn, url=url, verify=self.ssl_verify, cert=self.ssl_ctx
-        )
+        try:
+            super().cert_verify(
+                conn=conn, url=url, verify=self.ssl_verify, cert=self.ssl_ctx
+            )
+        except Exception as exception:
+            raise SSLFailed(
+                f"Something went wrong while verifying SSL certificate. Error: {exception}"
+            ) from exception
 
 
 class ExchangeUsers:
     """Fetch users from Exchange Active Directory"""
 
     def __init__(self, ad_server, domain, exchange_server, user, password, ssl_enabled):
-        self.ad_server = ad_server
+        self.ad_server = Server(host=ad_server)
         self.domain = domain
         self.exchange_server = exchange_server
         self.user = user
         self.password = password
         self.ssl_enabled = ssl_enabled
 
-    def _create_connection(self, server):
+    @cached_property
+    def _create_connection(self):
         return Connection(
-            server=server,
+            server=self.ad_server,
             user=self.user,
             password=self.password,
             client_strategy=SAFE_SYNC,
@@ -210,32 +228,33 @@ class ExchangeUsers:
         )
 
     async def get_users(self):
-        warnings.filterwarnings("ignore")
+        warnings.filterwarnings("default")
         ldap_domain_name_list = ["DC=" + domain for domain in self.domain.split(".")]
         search_query = ",".join(map(str, ldap_domain_name_list))
 
-        status, _, response, _ = self._create_connection(
-            server=Server(host=self.ad_server)
-        ).search(
+        has_value_for_normal_users, _, response, _ = self._create_connection.search(
             search_query,
             SEARCH_FILTER_FOR_NORMAL_USERS,
             attributes=["mail"],
         )
 
-        status, _, response_for_admin, _ = self._create_connection(
-            server=Server(host=self.ad_server)
-        ).search(
+        (
+            has_value_for_admin_users,
+            _,
+            response_for_admin,
+            _,
+        ) = self._create_connection.search(
             search_query,
             SEARCH_FILTER_FOR_ADMIN,
             attributes=["mail"],
         )
 
-        response.extend(response_for_admin)
-
-        if not status:
+        if not (has_value_for_normal_users or has_value_for_admin_users):
             raise UsersFetchFailed(
                 "Error while fetching users from Exchange Active Directory."
             )
+
+        response.extend(response_for_admin)
         return response
 
     async def get_user_accounts(self):
@@ -243,19 +262,20 @@ class ExchangeUsers:
             RootCAAdapter if self.ssl_enabled else NoVerifyHTTPAdapter
         )
 
+        credentials = Credentials(
+            username=self.user,
+            password=self.password,
+        )
+        configuration = Configuration(
+            credentials=credentials,
+            server=self.exchange_server,
+            retry_policy=FaultTolerance(max_wait=120),
+        )
+
         for user in await self.get_users():
             if "searchResRef" in user["type"]:
                 continue
 
-            credentials = Credentials(
-                username=self.user,
-                password=self.password,
-            )
-            configuration = Configuration(
-                credentials=credentials,
-                server=self.exchange_server,
-                retry_policy=FaultTolerance(max_wait=120),
-            )
             user_account = Account(
                 primary_smtp_address=user.get("attributes", {}).get("mail"),
                 config=configuration,
@@ -284,6 +304,12 @@ class Office365Users:
                 raise UnauthorizedException(
                     "Found invalid client id or client secret value"
                 )
+            case 403:
+                raise Forbidden(
+                    f"Missing permission or something went wrong. Error: {response}"
+                )
+            case 404:
+                raise NotFound(f"Resource Not Found. Error: {response}")
             case _:
                 raise
 
@@ -364,7 +390,7 @@ class OutlookDocFormatter:
         return {
             "_id": mail.id,
             "_timestamp": ews_format_to_datetime(
-                datetime=mail.last_modified_time, timezone=timezone
+                source_datetime=mail.last_modified_time, timezone=timezone
             ),
             "title": mail.subject,
             "type": mail_type["constant"],
@@ -387,11 +413,11 @@ class OutlookDocFormatter:
         document = {
             "_id": calendar.id,
             "_timestamp": ews_format_to_datetime(
-                datetime=calendar.last_modified_time, timezone=timezone
+                source_datetime=calendar.last_modified_time, timezone=timezone
             ),
             "type": "Calendar",
             "title": calendar.subject,
-            "meeting_type": "Normal"
+            "meeting_type": "Single"
             if calendar.type == "Single"
             else f"Recurring {calendar.recurrence.pattern}",
             "organizer": calendar.organizer.email_address,
@@ -401,7 +427,7 @@ class OutlookDocFormatter:
             document.update(
                 {
                     "date": ews_format_to_datetime(
-                        datetime=calendar.start, timezone=timezone
+                        source_datetime=calendar.start, timezone=timezone
                     ).split("T", 1)[0],
                 }
             )
@@ -414,10 +440,10 @@ class OutlookDocFormatter:
                         if attendee.mailbox.email_address
                     ],
                     "start_date": ews_format_to_datetime(
-                        datetime=calendar.start, timezone=timezone
+                        source_datetime=calendar.start, timezone=timezone
                     ),
                     "end_date": ews_format_to_datetime(
-                        datetime=calendar.end, timezone=timezone
+                        source_datetime=calendar.end, timezone=timezone
                     ),
                     "location": calendar.location,
                     "content": html_to_text(html=calendar.body),
@@ -430,19 +456,19 @@ class OutlookDocFormatter:
         return {
             "_id": task.id,
             "_timestamp": ews_format_to_datetime(
-                datetime=task.last_modified_time, timezone=timezone
+                source_datetime=task.last_modified_time, timezone=timezone
             ),
             "type": "Task",
             "title": task.subject,
             "owner": task.owner,
             "start_date": ews_format_to_datetime(
-                datetime=task.start_date, timezone=timezone
+                source_datetime=task.start_date, timezone=timezone
             ),
             "due_date": ews_format_to_datetime(
-                datetime=task.due_date, timezone=timezone
+                source_datetime=task.due_date, timezone=timezone
             ),
             "complete_date": ews_format_to_datetime(
-                datetime=task.complete_date, timezone=timezone
+                source_datetime=task.complete_date, timezone=timezone
             ),
             "categories": [category for category in (task.categories or [])],
             "importance": task.importance,
@@ -455,7 +481,7 @@ class OutlookDocFormatter:
             "_id": contact.id,
             "type": "Contact",
             "_timestamp": ews_format_to_datetime(
-                datetime=contact.last_modified_time, timezone=timezone
+                source_datetime=contact.last_modified_time, timezone=timezone
             ),
             "name": contact.display_name,
             "email_addresses": [
@@ -468,7 +494,7 @@ class OutlookDocFormatter:
             ],
             "company_name": contact.company_name,
             "birthday": ews_format_to_datetime(
-                datetime=contact.birthday, timezone=timezone
+                source_datetime=contact.birthday, timezone=timezone
             ),
         }
 
@@ -478,7 +504,7 @@ class OutlookDocFormatter:
             "title": attachment.name,
             "type": "attachment",
             "_timestamp": ews_format_to_datetime(
-                datetime=attachment.last_modified_time, timezone=timezone
+                source_datetime=attachment.last_modified_time, timezone=timezone
             ),
             "size": attachment.size,
         }
@@ -497,7 +523,7 @@ class OutlookClient:
         self._logger = logger_
 
     @cached_property
-    def _get_client(self):
+    def _get_user_instance(self):
         if self.is_cloud:
             return Office365Users(
                 client_id=self.configuration["client_id"],
@@ -522,11 +548,11 @@ class OutlookClient:
         )
 
     async def ping(self):
-        await self._get_client.get_users()
+        await self._get_user_instance.get_users()
 
     async def get_mails(self, account):
         for mail_type in MAIL_TYPES:
-            if "archive" in mail_type["folder"]:
+            if mail_type["folder"] == "archive":
                 # If 'Archive' folder is not present, skipping the iteration
                 try:
                     folder_object = (
@@ -742,7 +768,7 @@ class OutlookDataSource(BaseDataSource):
         document = {
             "_id": attachment.attachment_id.id,
             "_timestamp": ews_format_to_datetime(
-                datetime=attachment.last_modified_time, timezone=timezone
+                source_datetime=attachment.last_modified_time, timezone=timezone
             ),
             "_attachment": get_base64_value(attachment.content),
         }
@@ -884,7 +910,7 @@ class OutlookDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the files.
         """
-        async for account in self.client._get_client.get_user_accounts():
+        async for account in self.client._get_user_instance.get_user_accounts():
             timezone = account.default_timezone or DEFAULT_TIMEZONE
 
             await self.fetchers.put(
