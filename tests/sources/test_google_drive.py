@@ -1361,15 +1361,6 @@ async def test_prepare_access_control_doc(user, groups, access_control_doc):
                                     "bool": {
                                         "should": [
                                             {
-                                                "bool": {
-                                                    "must_not": {
-                                                        "exists": {
-                                                            "field": "_allow_access_control"
-                                                        }
-                                                    }
-                                                }
-                                            },
-                                            {
                                                 "terms": {
                                                     "_allow_access_control.enum": [
                                                         "user:user1@test.com",
