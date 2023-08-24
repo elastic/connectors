@@ -1388,6 +1388,21 @@ async def test_connector_validate_filtering_with_race_condition():
     )
 
 
+@pytest.mark.asyncio
+async def test_document_count():
+    expected_count = 20
+    index = Mock()
+    index.serverless = False
+    index.client.indices.refresh = AsyncMock()
+    index.client.count = AsyncMock(return_value={"count": expected_count})
+
+    connector = Connector(elastic_index=index, doc_source=DOC_SOURCE)
+    count = await connector.document_count()
+    index.client.indices.refresh.assert_awaited_once()
+    index.client.count.assert_awaited_once()
+    assert count == expected_count
+
+
 @pytest.mark.parametrize(
     "filtering_json, filter_state, domain, expected_filter",
     [
