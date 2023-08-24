@@ -1263,15 +1263,6 @@ async def test_prepare_file_on_my_drive_with_dls_enabled(file, expected_file):
                                 "bool": {
                                     "should": [
                                         {
-                                            "bool": {
-                                                "must_not": {
-                                                    "exists": {
-                                                        "field": "_allow_access_control"
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        {
                                             "terms": {
                                                 "_allow_access_control.enum": [
                                                     "user:user1@test.com",

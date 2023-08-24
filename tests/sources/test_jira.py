@@ -931,13 +931,6 @@ async def test_get_access_control_dls_enabled():
                         "bool": {
                             "should": [
                                 {
-                                    "bool": {
-                                        "must_not": {
-                                            "exists": {"field": "_allow_access_control"}
-                                        }
-                                    }
-                                },
-                                {
                                     "terms": {
                                         "_allow_access_control.enum": [
                                             "account_id:607194d6bc3c3f006f4c35d6",
