@@ -2,6 +2,14 @@
 
 See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 
+### Overview
+
+The advanced sync rules consists of a set of rules where each rule can have one or more parameters out of these:
+
+1. userMailAccounts: list of user emails for which the rule would execute.
+2. skipFilesWithExtensions: list of file extensions to be skipped for the sync.
+3. parentPathPattern: glob pattern specifying the path where the files to be synced are present. 
+
 ### Example advanced sync rules
 
 #### Advanced rule for indexing the files and folders excluding .xlsx and .docx files
@@ -25,25 +33,25 @@ See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 ]
 ```
 
-#### Advanced rule for indexing the files and folders inside path '/drive/root:/hello' excluding .md files
+#### Advanced rule for indexing the files and folders directly inside root folder path excluding .md files
 
 ```json
 [
   {
     "skipFilesWithExtensions": [".md"],
-    "parentPathPattern": "/drive/root:/hello"
+    "parentPathPattern": "/drive/root:"
   }
 ]
 ```
 
-#### Advanced rules for indexing files and folders of user 1, user 3 inside path '/drive/root:/abc' excluding .pdf and .py file
+#### Advanced rules for indexing the files and folders of user 1, user 3 directly inside folder 'abc' excluding .pdf and .py file
 
 ```json
 [
   {
     "userMailAccounts": ["user1-domain@onmicrosoft.com", "user3-domain@onmicrosoft.com"],
     "skipFilesWithExtensions": [".pdf", ".py"],
-    "parentPathPattern": "/drive/root:/abc"
+    "parentPathPattern": "/drive/root:/hello/**/abc"
   }
 ]
 ```

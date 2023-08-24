@@ -7,7 +7,6 @@
 """
 import asyncio
 import os
-from copy import copy
 from datetime import datetime, timedelta
 from functools import cached_property, partial
 from urllib import parse
@@ -141,21 +140,21 @@ class OneDriveAdvancedRulesValidator(AdvancedRulesValidator):
                 is_valid=False,
                 validation_message=e.message,
             )
-        invalid_users, users = [], []
+        invalid_users, users = set(), set()
 
         async for user in self.source.client.list_users():
-            users.append(user["mail"])
+            users.add(user["mail"])
 
         configured_users = set()
         for rule in advanced_rules:
             configured_users.update(rule["userMailAccounts"])
 
-        invalid_users = list(set(configured_users) - set(users))
+        invalid_users = configured_users - users
         if len(invalid_users) > 0:
             return SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
-                validation_message=f"Following users accounts do not exist in Azure: '{', '.join(invalid_users)}'",
+                validation_message=f"Following users accounts do not exist in Azure AD: '{', '.join(invalid_users)}'",
             )
         return SyncRuleValidationResult.valid_result(
             SyncRuleValidationResult.ADVANCED_RULES
@@ -335,19 +334,16 @@ class OneDriveClient:
         async for response in self.paginated_api_call(url_name=DELTA, user_id=user_id):
             for file in response:
                 if file.get("name", "") != "root":
-                    parent_path = file["parentReference"].get("path")
+                    parent_path = file.get("parentReference", {}).get("path")
                     is_match = glob.globmatch(parent_path, pattern, flags=glob.GLOBSTAR)
-                    has_allowed_extension = os.path.splitext(file["name"])[-1] not in (
+                    has_skipped_extension = os.path.splitext(file["name"])[-1] in (
                         skipped_extensions or []
                     )
-
-                    if skipped_extensions is None and pattern == "":
-                        yield file
-                    elif pattern and is_match and skipped_extensions is None:
-                        yield file
-                    elif skipped_extensions and has_allowed_extension and pattern == "":
-                        yield file
-                    elif is_match and has_allowed_extension:
+                    if (skipped_extensions and has_skipped_extension) or (
+                        pattern and not is_match
+                    ):
+                        continue
+                    else:
                         yield file
 
 
@@ -574,7 +570,7 @@ class OneDriveDataSource(BaseDataSource):
                         entity = self.prepare_doc(entity)
                         if entity["type"] == FILE:
                             yield entity, partial(
-                                self.get_content, copy(entity), user_id
+                                self.get_content, entity.copy(), user_id
                             )
                         else:
                             yield entity, None
@@ -585,6 +581,6 @@ class OneDriveDataSource(BaseDataSource):
                 async for entity in self.client.get_owned_files(user_id):
                     entity = self.prepare_doc(entity)
                     if entity["type"] == FILE:
-                        yield entity, partial(self.get_content, copy(entity), user_id)
+                        yield entity, partial(self.get_content, entity.copy(), user_id)
                     else:
                         yield entity, None
