@@ -607,7 +607,6 @@ class Extractor:
         )
 
 
-
 class IndexMissing(Exception):
     pass
 
