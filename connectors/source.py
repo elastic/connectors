@@ -12,6 +12,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from functools import cache
+from pydoc import locate
 
 from bson import Decimal128
 
@@ -105,28 +106,23 @@ class Field:
     def value(self, value):
         self._value = value
 
-    def _convert(self, value, type_):
-        match type_:
-            case "int":
-                if isinstance(value, int):
-                    return value
-                return int(value) if value else None
-            case "float":
-                if isinstance(value, float):
-                    return value
-                return float(value) if value else None
-            case "bool":
-                if isinstance(value, bool):
-                    return value
-                return bool(value) if value is not None else None
-            case "list":
-                if isinstance(value, list):
-                    return value
-                if isinstance(value, str):
-                    return [item.strip() for item in value.split(",")] if value else []
+    def _convert(self, value, field_type_):
+        cast_type = locate(field_type_)
+        if isinstance(value, cast_type):
+            return value
+
+        # list requires special type casting
+        if field_type_ == "list":
+            if isinstance(value, str):
+                return [item.strip() for item in value.split(",")] if value else []
+            else:
                 return [value] if value is not None else []
-            case _:  # str
-                return str(value) if value else ""
+
+        # strings don't get nullified
+        if value is None and field_type_ == "str":
+            return ""
+
+        return cast_type(value) if value else None
 
     def is_value_empty(self):
         """Checks if the `value` field is empty or not.

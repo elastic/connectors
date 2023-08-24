@@ -75,29 +75,29 @@ def test_field():
 
 
 def test_field_convert():
-    assert Field("name", value="", type="str").value == ""
-    assert Field("name", value="1", type="str").value == "1"
-    assert Field("name", value="foo", type="str").value == "foo"
-    assert Field("name", value=None, type="str").value == ""
+    assert Field("name", value="", field_type="str").value == ""
+    assert Field("name", value="1", field_type="str").value == "1"
+    assert Field("name", value="foo", field_type="str").value == "foo"
+    assert Field("name", value=None, field_type="str").value == ""
 
-    assert Field("name", value="1", type="int").value == 1
-    assert Field("name", value="", type="int").value is None
-    assert Field("name", value=None, type="int").value is None
+    assert Field("name", value="1", field_type="int").value == 1
+    assert Field("name", value="", field_type="int").value is None
+    assert Field("name", value=None, field_type="int").value is None
 
-    assert Field("name", value="1.2", type="float").value == 1.2
-    assert Field("name", value="", type="float").value is None
-    assert Field("name", value=None, type="float").value is None
+    assert Field("name", value="1.2", field_type="float").value == 1.2
+    assert Field("name", value="", field_type="float").value is None
+    assert Field("name", value=None, field_type="float").value is None
 
-    assert Field("name", value="foo", type="bool").value is True
-    assert Field("name", value="", type="bool").value is False
-    assert Field("name", value=None, type="bool").value is None
+    assert Field("name", value="foo", field_type="bool").value is True
+    assert Field("name", value="", field_type="bool").value is None
+    assert Field("name", value=None, field_type="bool").value is None
 
-    assert Field("name", value="1", type="list").value == ["1"]
-    assert Field("name", value="1,2,3", type="list").value == ["1", "2", "3"]
-    assert Field("name", value=[1, 2], type="list").value == [1, 2]
-    assert Field("name", value=0, type="list").value == [0]
-    assert Field("name", value="", type="list").value == []
-    assert Field("name", value=None, type="list").value == []
+    assert Field("name", value="1", field_type="list").value == ["1"]
+    assert Field("name", value="1,2,3", field_type="list").value == ["1", "2", "3"]
+    assert Field("name", value=[1, 2], field_type="list").value == [1, 2]
+    assert Field("name", value=0, field_type="list").value == [0]
+    assert Field("name", value="", field_type="list").value == []
+    assert Field("name", value=None, field_type="list").value == []
 
 
 def test_data_source_configuration():
