@@ -10,9 +10,8 @@ import time
 from enum import Enum
 
 from elastic_transport.client_utils import url_to_node_config
-from elasticsearch import ApiError, AsyncElasticsearch, ConflictError
+from elasticsearch import ApiError, AsyncElasticsearch, ConflictError, NotFoundError
 from elasticsearch import ConnectionError as ElasticConnectionError
-from elasticsearch import NotFoundError
 
 from connectors import __version__
 from connectors.logger import logger, set_extra_logger
@@ -51,17 +50,24 @@ class ESClient:
         }
         logger.debug(f"Host is {self.host}")
 
-        if "username" in config:
-            if "api_key" in config:
-                raise KeyError(
-                    "You can't use basic auth ('username' and 'password') and 'api_key' at the same time in config.yml"
-                )
+        if "api_key" in config:
+            logger.debug(f"Connecting with an API Key ({config['api_key'][:5]}...)")
+            options["api_key"] = config["api_key"]
+            if "username" in config or "password" in config:
+                msg = "configured API key will be used over configured basic auth"
+                if (
+                    config.get("username") == "elastic"
+                    and config.get("password") == "changeme"
+                ):
+                    logger.debug(
+                        msg
+                    )  # don't cause a panic if it's just the default creds
+                else:
+                    logger.warning(msg)
+        elif "username" in config:
             auth = config["username"], config["password"]
             options["basic_auth"] = auth
             logger.debug(f"Connecting using Basic Auth (user: {config['username']})")
-        elif "api_key" in config:
-            logger.debug(f"Connecting with an Api Key ({config['api_key'][:5]}...)")
-            options["api_key"] = config["api_key"]
 
         if config.get("ssl", False):
             options["verify_certs"] = True

@@ -91,3 +91,14 @@ steps:
       - ".buildkite/run_nigthly.sh google_drive"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Dropbox"
+    command:
+      - ".buildkite/run_nigthly.sh dropbox"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 OneDrive"
+    command:
+      - ".buildkite/run_nigthly.sh onedrive"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+

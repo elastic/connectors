@@ -67,13 +67,13 @@ def files_list():
             "kind": "drive#file",
             "mimeType": "text/plain",
             "id": generate_random_string(length=16),
-            "name": f"file_name_{id}",
+            "name": f"file_name_{id_}",
             "fileExtension": "txt",
             "size": 12345,
             "modifiedTime": 1687860674,
             "parents": [],
         }
-        for id in range(DOCS_COUNT.get(DATA_SIZE, "small"))
+        for id_ in range(DOCS_COUNT.get(DATA_SIZE, "small"))
     ]
     return {"nextPageToken": "dummyToken", "files": files_list}
 

@@ -31,17 +31,17 @@ def create_service():
     return JobCleanUpService(CONFIG)
 
 
-def mock_connector(id="1", index_name="index_name"):
+def mock_connector(connector_id="1", index_name="index_name"):
     connector = Mock()
-    connector.id = id
+    connector.id = connector_id
     connector.index_name = index_name
     connector.sync_done = AsyncMock()
     return connector
 
 
-def mock_sync_job(id="1", connector_id="1", index_name="index_name"):
+def mock_sync_job(sync_job_id="1", connector_id="1", index_name="index_name"):
     job = Mock()
-    job.job_id = id
+    job.job_id = sync_job_id
     job.connector_id = connector_id
     job.index_name = index_name
     job.fail = AsyncMock()

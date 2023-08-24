@@ -6,12 +6,14 @@
 - [Features](#features)
 - [Syncing](#syncing)
   - [Sync Strategy](#sync-strategy)
-  - [How a sync works](#how-a-sync-works)
+  - [How a full sync works](#how-a-full-sync-works)
+  - [How an incremental sync works](#how-an-incremental-sync-works)
 - [Runtime dependencies](#runtime-dependencies)
 - [Implementing a new source](#implementing-a-new-source)
   - [Common patterns](#common-patterns)
     - [Source/Client](#sourceclient)
     - [Async](#async)
+    - [Rich Configurable Fields](#rich-configurable-fields)
   - [Other considerations](#other-considerations)
   - [Sync rules](#sync-rules)
     - [Basic rules vs advanced rules](#basic-rules-vs-advanced-rules)
@@ -215,6 +217,40 @@ When you send work in the background, you will have two options:
 
 When building async I/O-bound connectors, make sure that you provide a way to recycle connections and that you can throttle calls to the backends. This is very important to avoid file descriptors exhaustion and hammering the backend service.
 
+#### Rich Configurable Fields
+
+Each connector needs to define the [get_default_configuration()](../connectors/source.py) method, that returns a list of __Rich Configurable Fields (RCF)__. Those fields are used by Kibana to:
+- render user-friendly connector configuration section that includes informative labels, tooltips and dedicated UI components (`display`)
+- obfuscate sensitive fields
+- perform user input validation with `type` and `validations`
+
+The connector configuration, expressed as list of RCFs, is stored in the Connector index `.elastic-connectors` and is governed by the [Connector Protocol](./CONNECTOR_PROTOCOL.md).
+
+Rich Configurable Fields are defined as JSON objects with the following key-value pairs:
+
+| Key | Description | Value |
+|---|---|---|
+| `default_value` | The value used if `value` is empty (only for non-required fields) | `any` |
+| `depends_on` | Array of dependencies, field will not be validated and displayed in UI unless dependencies are met. Each dependency is represented as an object with `field` and `value` keys, where: <ul><li>`field`: The key for the field that this will depend on</li><li>`value`: The value required to have this dependency met</li></ul> | <ul><li>`field`: `string`</li><li>`value`: `string \| number \| boolean`</li></ul> |
+| `display` | What UI element this field should use | `'dropdown' \| 'numeric' \| 'text' \| 'textarea' \| 'toggle'` |
+| `label` | The label to be displayed for the field in Kibana | `string` |
+| `order` | The order the configurable field will appear in the UI | `number` |
+| `required` | Whether or not the field needs a value | `boolean` |
+| `sensitive` | Whether or not to obfuscate the field in Kibana | `boolean` |
+| `tooltip` | Text for populating the Kibana tooltip element | `string` |
+| `type` | The field value type | `'str' \| 'int' \| 'bool' \| 'list'` |
+| `ui_restrictions` | List of places in the UI to restrict the field to | `string[]`, note: only `'advanced'` place is supported for now  |
+| `validations` | Array of rules to validate the field's value against. Each rule is represented as an object with `type` and `constraint` keys, where: <ul><li>`type`: The validation type</li><li>`constraint`: The rule to use for this validation</li></ul> | <ul><li>`type`: `'less_than' \| 'greater_than' \| 'list_type' \| 'included_in' \| 'regex'`</li><li>`constraint`: `string \| number \| list`</li></ul> |
+| `value` | The value of the field configured in Kibana | `any` |
+
+
+Explanation of possible validation rules, where `value` refers to validated value:
+- `less_than` - The `constraint` has to be numeric. Validator checks for `value < constraint`.
+- `greater_than` - The `constraint` has to be numeric. Validator checks for `value > constraint`.
+- `list_type` - The constraint has to be either `int` or `str`. The `value` has to be of list type. The validator checks the type of each element in the `value` list.
+- `included_in` - The constraint has to be of `list` type and include allowed values. The `value` has to be of list type. The validator checks if `value is subset of constraint`
+- `regex` - The constrain has to be a [valid regex expression](https://docs.python.org/3/library/re.html). The `value` has to be `str`. The validator checks if `value` matches the `constraint` regular expression.
+
 ### Other considerations
 
 When creating a new connector, there are a number of topics to thoughtfully consider before you begin coding.
@@ -346,7 +382,7 @@ For smaller-payload resources like Users and Groups, this can probably be safely
 ##### When should failure responses be retried?
 
 As discussed above, many APIs utilize rate limits and will issue 429 responses for requests that should be retried later.
-However, sometimes there are other cases that warrant retries. 
+However, sometimes there are other cases that warrant retries.
 
 Some services experience frequent-but-transient timeout issues.
 Some services experiencing a large volume of write operations may sometimes respond with 409 "conflict" codes.
@@ -449,7 +485,7 @@ async def get_docs(self, filtering=None):
         advanced_rules = filtering.get_advanced_rules()
         # your custom advanced rules implementation
     else:
-        # default fetch all data implementation 
+        # default fetch all data implementation
 ```
 
 For example, here you could pass custom queries to a database.
@@ -483,7 +519,7 @@ The framework expects the custom validators to return a `SyncRuleValidationResul
 
 ```python
 class MyValidator(AdvancedRulesValidator):
-    
+
     def validate(self, advanced_rules):
         # custom validation logic
         return SyncRuleValidationResult(...)
@@ -511,7 +547,7 @@ There are two possible ways to validate basic rules:
 - **Every rule gets validated in isolation**. Extend the class `BasicRuleValidator` located in [validation.py](../connectors/filtering/validation.py):
     ```python
     class MyBasicRuleValidator(BasicRuleValidator):
-        
+
         @classmethod
         def validate(cls, rule):
             # custom validation logic
@@ -520,7 +556,7 @@ There are two possible ways to validate basic rules:
 - **Validate the whole set of basic rules**. If you want to validate constraints on the set of rules, for example to detect duplicate or conflicting rules. Extend the class `BasicRulesSetValidator` located in [validation.py](../connectors/filtering/validation.py):
     ```python
     class MyBasicRulesSetValidator(BasicRulesSetValidator):
-        
+
         @classmethod
         def validate(cls, set_of_rules):
             # custom validation logic
@@ -533,7 +569,7 @@ class MyDataSource(BaseDataSource):
 
     @classmethod
     def basic_rules_validators(self):
-        return BaseDataSource.basic_rule_validators() 
+        return BaseDataSource.basic_rule_validators()
                 + [MyBasicRuleValidator, MyBasicRulesSetValidator]
 ```
 

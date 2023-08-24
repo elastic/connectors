@@ -3,6 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from copy import deepcopy
+
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.license import requires_platinum_license
@@ -78,7 +80,7 @@ class JobExecutionService(BaseService):
             source_klass=source_klass,
             sync_job=sync_job,
             connector=connector,
-            es_config=self.es_config,
+            es_config=self._override_es_config(connector),
         )
         await self.content_syncs.put(sync_job_runner.execute)
 
@@ -93,7 +95,7 @@ class JobExecutionService(BaseService):
             source_klass=source_klass,
             sync_job=sync_job,
             connector=connector,
-            es_config=self.es_config,
+            es_config=self._override_es_config(connector),
         )
         await self.access_control_syncs.put(sync_job_runner.execute)
 
@@ -144,11 +146,17 @@ class JobExecutionService(BaseService):
         self.sync_job_index = SyncJobIndex(self.es_config)
 
         native_service_types = self.config.get("native_service_types", []) or []
-        logger.debug(f"Native support for {', '.join(native_service_types)}")
+        if len(native_service_types) > 0:
+            logger.debug(
+                f"Native support for job execution for {', '.join(native_service_types)}"
+            )
+        else:
+            logger.debug("No native service types configured for job execution")
+
         connector_ids = list(self.connectors.keys())
 
         logger.info(
-            f"Service started, listening to events from {self.es_config['host']}"
+            f"Job Execution Service started, listening to events from {self.es_config['host']}"
         )
 
         try:
@@ -163,7 +171,7 @@ class JobExecutionService(BaseService):
 
                 try:
                     logger.debug(
-                        f"Polling every {self.idling} seconds for Job Execution Service"
+                        f"Polling every {self.idling} seconds for Job Execution"
                     )
                     supported_connector_ids = [
                         connector.id
@@ -204,3 +212,18 @@ class JobExecutionService(BaseService):
                 self.sync_job_index.stop_waiting()
                 await self.sync_job_index.close()
         return 0
+
+    def _override_es_config(self, connector):
+        es_config = deepcopy(self.es_config)
+        if connector.id not in self.connectors:
+            return es_config
+
+        api_key = self.connectors[connector.id].get("api_key", None)
+        if not api_key:
+            return es_config
+
+        es_config.pop("username", None)
+        es_config.pop("password", None)
+        es_config["api_key"] = api_key
+
+        return es_config

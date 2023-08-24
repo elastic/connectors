@@ -134,7 +134,7 @@ def patch_default_wait_multiplier():
 
 
 @pytest.fixture
-def patch_connection_pool():
+async def patch_connection_pool():
     connection_pool = Mock()
     connection_pool.close = Mock()
     connection_pool.wait_closed = AsyncMock()
@@ -262,13 +262,6 @@ def mock_cursor_fetchmany(rows_per_batch=None):
     mock_cursor.__aenter__.return_value = mock_cursor
 
     return mock_cursor
-
-
-@pytest.mark.asyncio
-async def test_close_when_source_setup_correctly_does_not_raise_errors():
-    source = await setup_mysql_source()
-
-    await source.close()
 
 
 @pytest.mark.asyncio
@@ -447,21 +440,22 @@ async def test_fetch_documents(patch_connection_pool):
     column = "column"
     document = ["table1"]
 
-    source = await setup_mysql_source(DATABASE)
-    source.mysql_client = as_async_context_manager_mock(
-        mocked_mysql_client(
-            pk_cols=[primary_key_col],
-            table_cols=[column],
-            last_update_times=[TIME],
-            documents=[document],
+    async with create_source(MySqlDataSource) as source:
+        await setup_mysql_source(source, DATABASE)
+        source.mysql_client = as_async_context_manager_mock(
+            mocked_mysql_client(
+                pk_cols=[primary_key_col],
+                table_cols=[column],
+                last_update_times=[TIME],
+                documents=[document],
+            )
         )
-    )
 
-    document_list = []
-    async for document in source.fetch_documents(tables=[TABLE_ONE]):
-        document_list.append(document)
+        document_list = []
+        async for document in source.fetch_documents(tables=[TABLE_ONE]):
+            document_list.append(document)
 
-    assert document in document_list
+        assert document in document_list
 
 
 @freeze_time(TIME)
@@ -481,37 +475,38 @@ async def test_fetch_documents_when_used_custom_query_then_sort_pk_cols(
 
     patch_row2doc.return_value = document
 
-    source = await setup_mysql_source(DATABASE)
-    source.mysql_client = as_async_context_manager_mock(
-        mocked_mysql_client(
-            pk_cols=[primary_key_col],
-            table_cols=[column],
-            last_update_times=[TIME],
-            documents=[document],
-            custom_query=True,
+    async with create_source(MySqlDataSource) as source:
+        await setup_mysql_source(source, DATABASE)
+        source.mysql_client = as_async_context_manager_mock(
+            mocked_mysql_client(
+                pk_cols=[primary_key_col],
+                table_cols=[column],
+                last_update_times=[TIME],
+                documents=[document],
+                custom_query=True,
+            )
         )
-    )
 
-    document_list = []
-    async for document in source.fetch_documents(
-        tables=[TABLE_ONE], query="SELECT * FROM *"
-    ):
-        document_list.append(document)
+        document_list = []
+        async for document in source.fetch_documents(
+            tables=[TABLE_ONE], query="SELECT * FROM *"
+        ):
+            document_list.append(document)
 
-    assert document in document_list
-    assert patch_row2doc.call_args.kwargs == {
-        "row": {
-            "Table": "table_name",
-            "_id": "table_name_",
-            "_timestamp": TIME,
-            "table_name_column": "table1",
-        },
-        "column_names": ["column"],
-        # primary key columns are now sorted
-        "primary_key_columns": ["ab", "cd"],
-        "table": ["table1"],
-        "timestamp": TIME,
-    }
+        assert document in document_list
+        assert patch_row2doc.call_args.kwargs == {
+            "row": {
+                "Table": "table_name",
+                "_id": "table_name_",
+                "_timestamp": TIME,
+                "table_name_column": "table1",
+            },
+            "column_names": ["column"],
+            # primary key columns are now sorted
+            "primary_key_columns": ["ab", "cd"],
+            "table": ["table1"],
+            "timestamp": TIME,
+        }
 
 
 @freeze_time(TIME)
@@ -531,48 +526,51 @@ async def test_fetch_documents_when_custom_query_used_and_update_time_none(
 
     patch_row2doc.return_value = document
 
-    source = await setup_mysql_source(DATABASE)
-    source.mysql_client = as_async_context_manager_mock(
-        mocked_mysql_client(
-            pk_cols=[primary_key_col],
-            table_cols=[column],
-            last_update_times=[None],
-            documents=[document],
-            custom_query=True,
+    async with create_source(MySqlDataSource) as source:
+        await setup_mysql_source(source, DATABASE)
+        source.mysql_client = as_async_context_manager_mock(
+            mocked_mysql_client(
+                pk_cols=[primary_key_col],
+                table_cols=[column],
+                last_update_times=[None],
+                documents=[document],
+                custom_query=True,
+            )
         )
-    )
 
-    document_list = []
-    async for document in source.fetch_documents(
-        tables=[TABLE_ONE], query="SELECT * FROM *"
-    ):
-        document_list.append(document)
+        document_list = []
+        async for document in source.fetch_documents(
+            tables=[TABLE_ONE], query="SELECT * FROM *"
+        ):
+            document_list.append(document)
 
-    assert document in document_list
-    assert patch_row2doc.call_args.kwargs == {
-        "row": {
-            "Table": "table_name",
-            "_id": "table_name_",
-            "_timestamp": TIME,
-            "table_name_column": "table1",
-        },
-        "column_names": ["column"],
-        "primary_key_columns": ["ab", "cd"],
-        "table": ["table1"],
-        # Should be called with an empty timestamp without failing on a comparison needed for max(...)
-        "timestamp": None,
-    }
+        assert document in document_list
+        assert patch_row2doc.call_args.kwargs == {
+            "row": {
+                "Table": "table_name",
+                "_id": "table_name_",
+                "_timestamp": TIME,
+                "table_name_column": "table1",
+            },
+            "column_names": ["column"],
+            "primary_key_columns": ["ab", "cd"],
+            "table": ["table1"],
+            # Should be called with an empty timestamp without failing on a comparison needed for max(...)
+            "timestamp": None,
+        }
 
 
 @pytest.mark.asyncio
 async def test_get_docs(patch_connection_pool):
-    source = await setup_mysql_source(DATABASE)
+    async with create_source(MySqlDataSource) as source:
+        await setup_mysql_source(source, DATABASE)
+        source.mysql_client = MagicMock()
 
-    source.get_tables_to_fetch = AsyncMock(return_value=["table"])
-    source.fetch_documents = AsyncIterator([{"a": 1, "b": 2}])
+        source.get_tables_to_fetch = AsyncMock(return_value=["table"])
+        source.fetch_documents = AsyncIterator([{"a": 1, "b": 2}])
 
-    async for doc, _ in source.get_docs():
-        assert doc == {"a": 1, "b": 2}
+        async for doc, _ in source.get_docs():
+            assert doc == {"a": 1, "b": 2}
 
 
 async def setup_mysql_client():
@@ -589,13 +587,12 @@ async def setup_mysql_client():
     return client
 
 
-async def setup_mysql_source(database="", client=None):
+async def setup_mysql_source(source, database="", client=None):
     if client is None:
         client = MagicMock()
 
-    source = create_source(MySqlDataSource)
     source.configuration.set_field(
-        name="database", label="Database", value=database, type="str"
+        name="database", label="Database", value=database, field_type="str"
     )
 
     source.database = database
@@ -661,23 +658,23 @@ def setup_available_docs(advanced_snippet):
 )
 @pytest.mark.asyncio
 async def test_get_docs_with_advanced_rules(filtering, expected_docs):
-    source = await setup_mysql_source(DATABASE)
-    docs_in_db = setup_available_docs(filtering.get_advanced_rules())
-    source.fetch_documents = AsyncIterator(docs_in_db)
+    async with create_source(MySqlDataSource) as source:
+        await setup_mysql_source(source)
+        docs_in_db = setup_available_docs(filtering.get_advanced_rules())
+        source.fetch_documents = AsyncIterator(docs_in_db)
 
-    yielded_docs = set()
-    async for doc, _ in source.get_docs(filtering):
-        yielded_docs.add(doc)
+        yielded_docs = set()
+        async for doc, _ in source.get_docs(filtering):
+            yielded_docs.add(doc)
 
-    assert yielded_docs == expected_docs
+        assert yielded_docs == expected_docs
 
 
 @pytest.mark.asyncio
 async def test_validate_config_when_host_empty_then_raise_error():
-    source = create_source(MySqlDataSource, host="")
-
-    with pytest.raises(ConfigurableFieldValueError):
-        await source.validate_config()
+    async with create_source(MySqlDataSource, host="") as source:
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
 
 
 @pytest.mark.parametrize(
@@ -803,79 +800,77 @@ async def test_advanced_rules_validation(
     expected_validation_result,
     patch_ping,
 ):
-    source = await setup_mysql_source()
+    async with create_source(MySqlDataSource) as source:
+        client = await setup_mysql_source(source, DATABASE)
+        client.get_all_table_names = AsyncMock(return_value=tables_present_in_source)
 
-    client = MagicMock()
-    client.get_all_table_names = AsyncMock(return_value=tables_present_in_source)
+        source.mysql_client = as_async_context_manager_mock(client)
 
-    source.mysql_client = as_async_context_manager_mock(client)
+        validation_result = await MySQLAdvancedRulesValidator(source).validate(
+            advanced_rules
+        )
 
-    validation_result = await MySQLAdvancedRulesValidator(source).validate(
-        advanced_rules
-    )
-
-    assert validation_result == expected_validation_result
+        assert validation_result == expected_validation_result
 
 
 @pytest.mark.parametrize("tables", ["*", ["*"]])
 @pytest.mark.asyncio
 async def test_get_tables_when_wildcard_configured_then_fetch_all_tables(tables):
-    source = create_source(MySqlDataSource)
-    source.tables = tables
+    async with create_source(MySqlDataSource) as source:
+        source.tables = tables
 
-    client = MagicMock()
-    client.get_all_table_names = AsyncMock(return_value="table")
+        client = MagicMock()
+        client.get_all_table_names = AsyncMock(return_value="table")
 
-    source.mysql_client = as_async_context_manager_mock(client)
+        source.mysql_client = as_async_context_manager_mock(client)
 
-    await source.get_tables_to_fetch()
+        await source.get_tables_to_fetch()
 
-    assert client.get_all_table_names.call_count == 1
+        assert client.get_all_table_names.call_count == 1
 
 
 @pytest.mark.asyncio
 async def test_validate_database_accessible_when_accessible_then_no_error_raised():
-    source = create_source(MySqlDataSource)
-    source.database = "test_database"
+    async with create_source(MySqlDataSource) as source:
+        source.database = "test_database"
 
-    cursor = AsyncMock()
-    cursor.execute.return_value = None
+        cursor = AsyncMock()
+        cursor.execute.return_value = None
 
-    await source._validate_database_accessible(cursor)
-    cursor.execute.assert_called_with(f"USE {source.database};")
+        await source._validate_database_accessible(cursor)
+        cursor.execute.assert_called_with(f"USE {source.database};")
 
 
 @pytest.mark.asyncio
 async def test_validate_database_accessible_when_not_accessible_then_error_raised():
-    source = create_source(MySqlDataSource)
+    async with create_source(MySqlDataSource) as source:
+        cursor = AsyncMock()
+        cursor.execute.side_effect = aiomysql.Error("Error")
 
-    cursor = AsyncMock()
-    cursor.execute.side_effect = aiomysql.Error("Error")
-
-    with pytest.raises(ConfigurableFieldValueError):
-        await source._validate_database_accessible(cursor)
+        with pytest.raises(ConfigurableFieldValueError):
+            await source._validate_database_accessible(cursor)
 
 
 @pytest.mark.asyncio
 async def test_validate_tables_accessible_when_accessible_then_no_error_raised():
-    source = create_source(MySqlDataSource)
-    source.tables = ["table_1", "table_2", "table_3"]
+    async with create_source(MySqlDataSource) as source:
+        source.tables = ["table_1", "table_2", "table_3"]
 
-    client = MagicMock()
-    client.get_all_table_names = AsyncMock(
-        return_value=["table_1", "table_2", "table_3"]
-    )
+        client = MagicMock()
+        client.get_all_table_names = AsyncMock(
+            return_value=["table_1", "table_2", "table_3"]
+        )
 
-    context_manager = MagicMock()
-    context_manager.__aenter__.return_value = client
-    context_manager.__aexit__.return_value = None
+        context_manager = MagicMock()
+        context_manager.__aenter__.return_value = client
+        context_manager.__aexit__.return_value = None
 
-    source.mysql_client = MagicMock(return_value=context_manager)
+        source.mysql_client = MagicMock(return_value=context_manager)
 
-    cursor = AsyncMock()
-    cursor.execute.return_value = None
+        cursor = AsyncMock()
+        cursor.execute.return_value = None
 
-    await source._validate_tables_accessible(cursor)
+        await source._validate_tables_accessible(cursor)
 
 
 @pytest.mark.parametrize("tables", ["*", ["*"]])
@@ -883,31 +878,31 @@ async def test_validate_tables_accessible_when_accessible_then_no_error_raised()
 async def test_validate_tables_accessible_when_accessible_and_wildcard_then_no_error_raised(
     tables,
 ):
-    source = create_source(MySqlDataSource)
-    source.tables = tables
-    source.get_tables_to_fetch = AsyncMock(
-        return_value=["table_1", "table_2", "table_3"]
-    )
+    async with create_source(MySqlDataSource) as source:
+        source.tables = tables
+        source.get_tables_to_fetch = AsyncMock(
+            return_value=["table_1", "table_2", "table_3"]
+        )
 
-    cursor = AsyncMock()
-    cursor.execute.return_value = None
+        cursor = AsyncMock()
+        cursor.execute.return_value = None
 
-    await source._validate_tables_accessible(cursor)
+        await source._validate_tables_accessible(cursor)
 
-    assert source.get_tables_to_fetch.call_count == 1
+        assert source.get_tables_to_fetch.call_count == 1
 
 
 @pytest.mark.asyncio
 async def test_validate_tables_accessible_when_not_accessible_then_error_raised():
-    source = create_source(MySqlDataSource)
-    source.tables = ["table1"]
-    source.get_tables_to_fetch = AsyncMock(return_value=["table1"])
+    async with create_source(MySqlDataSource) as source:
+        source.tables = ["table1"]
+        source.get_tables_to_fetch = AsyncMock(return_value=["table1"])
 
-    cursor = AsyncMock()
-    cursor.execute.side_effect = aiomysql.Error("Error")
+        cursor = AsyncMock()
+        cursor.execute.side_effect = aiomysql.Error("Error")
 
-    with pytest.raises(ConfigurableFieldValueError):
-        await source._validate_tables_accessible(cursor)
+        with pytest.raises(ConfigurableFieldValueError):
+            await source._validate_tables_accessible(cursor)
 
 
 @pytest.mark.parametrize(

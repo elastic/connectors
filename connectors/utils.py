@@ -412,17 +412,33 @@ class UnknownRetryStrategyError(Exception):
     pass
 
 
-def retryable(retries=3, interval=1.0, strategy=RetryStrategy.LINEAR_BACKOFF):
+def retryable(
+    retries=3,
+    interval=1.0,
+    strategy=RetryStrategy.LINEAR_BACKOFF,
+    skipped_exceptions=None,
+):
     def wrapper(func):
-        if inspect.isasyncgenfunction(func):
-            return retryable_async_generator(func, retries, interval, strategy)
+        if skipped_exceptions is None:
+            processed_skipped_exceptions = []
+        elif not isinstance(skipped_exceptions, list):
+            processed_skipped_exceptions = [skipped_exceptions]
         else:
-            return retryable_async_function(func, retries, interval, strategy)
+            processed_skipped_exceptions = skipped_exceptions
+
+        if inspect.isasyncgenfunction(func):
+            return retryable_async_generator(
+                func, retries, interval, strategy, processed_skipped_exceptions
+            )
+        else:
+            return retryable_async_function(
+                func, retries, interval, strategy, processed_skipped_exceptions
+            )
 
     return wrapper
 
 
-def retryable_async_function(func, retries, interval, strategy):
+def retryable_async_function(func, retries, interval, strategy, skipped_exceptions):
     @functools.wraps(func)
     async def wrapped(*args, **kwargs):
         retry = 1
@@ -430,16 +446,18 @@ def retryable_async_function(func, retries, interval, strategy):
             try:
                 return await func(*args, **kwargs)
             except Exception as e:
-                if retry >= retries:
+                if retry >= retries or e.__class__ in skipped_exceptions:
                     raise e
-
+                logger.debug(
+                    f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
+                )
                 await apply_retry_strategy(strategy, interval, retry)
                 retry += 1
 
     return wrapped
 
 
-def retryable_async_generator(func, retries, interval, strategy):
+def retryable_async_generator(func, retries, interval, strategy, skipped_exceptions):
     @functools.wraps(func)
     async def wrapped(*args, **kwargs):
         retry = 1
@@ -449,9 +467,12 @@ def retryable_async_generator(func, retries, interval, strategy):
                     yield item
                 break
             except Exception as e:
-                if retry >= retries:
+                if retry >= retries or e.__class__ in skipped_exceptions:
                     raise e
 
+                logger.debug(
+                    f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
+                )
                 await apply_retry_strategy(strategy, interval, retry)
                 retry += 1
 
@@ -641,7 +662,7 @@ class CacheWithTimeout:
     Example of usage:
 
     cache = CacheWithTimeout()
-    cache.set(50, datetime.datetime.now() + datetime.timedelta(5)
+    cache.set_value(50, datetime.datetime.now() + datetime.timedelta(5)
     value = cache.get() # 50
     sleep(5)
     value = cache.get() # None
@@ -651,7 +672,7 @@ class CacheWithTimeout:
         self._value = None
         self._expiration_date = None
 
-    def get(self):
+    def get_value(self):
         """Get the value that's stored inside if it hasn't expired.
 
         If the expiration_date is past due, None is returned instead.
@@ -664,7 +685,7 @@ class CacheWithTimeout:
 
         return None
 
-    def set(self, value, expiration_date):
+    def set_value(self, value, expiration_date):
         """Set the value in the cache with expiration date.
 
         Once expiration_date is past due, the value will be lost.
@@ -709,6 +730,16 @@ def iterable_batches_generator(iterable, batch_size):
     num_items = len(iterable)
     for idx in range(0, num_items, batch_size):
         yield iterable[idx : min(idx + batch_size, num_items)]
+
+
+def dict_slice(hsh, keys, default=None):
+    """
+    Slice a dict by a subset of its keys.
+    :param hsh: The input dictionary to slice
+    :param keys: The desired keys from that dictionary. If any key is not present in hsh, the default value will be stored in the result.
+    :return: A new dict with only the subset of keys
+    """
+    return {k: hsh.get(k, default) for k in keys}
 
 
 class ExtractionService:
@@ -858,4 +889,16 @@ class ExtractionService:
             )
             return ""
 
+        logger.debug(f"Text extraction is successful for '{filename}'.")
         return content.get("extracted_text", "")
+
+
+def base64url_to_base64(string):
+    if string is None:
+        return string
+
+    if len(string) == 0:
+        return ""
+
+    string = string.replace("-", "+")
+    return string.replace("_", "/")
