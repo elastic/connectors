@@ -161,7 +161,7 @@ class FilteringValidator:
         self._logger = logger_ or logger
 
     async def validate(self, filtering):
-        self._logger.info("Filtering validation started")
+        self._logger.debug("Filtering validation started")
         basic_rules = filtering.basic_rules
 
         filtering_validation_result = FilteringValidationResult()
@@ -189,12 +189,14 @@ class FilteringValidator:
             for validator in advanced_rules_validators:
                 filtering_validation_result += await validator.validate(advanced_rules)
 
-        self._logger.info(
+        self._logger.debug(
             f"Filtering validation result: {filtering_validation_result.state}"
         )
-        self._logger.info(
-            f"Filtering validation errors: {[str(error) for error in filtering_validation_result.errors] if filtering_validation_result.errors else 'None'}"
-        )
+
+        if filtering_validation_result.errors:
+            self._logger.error(
+                f"Filtering validation errors: {[str(error) for error in filtering_validation_result.errors]}"
+            )
 
         return filtering_validation_result
 
