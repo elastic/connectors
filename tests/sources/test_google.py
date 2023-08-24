@@ -18,14 +18,21 @@ from tests.commons import AsyncIterator
 
 JSON_CREDENTIALS = {"key": "value"}
 CUSTOMER_ID = "customer_id"
+SUBJECT = "subject@domain.com"
 
 
-def setup_gmail_client():
-    return GMailClient(JSON_CREDENTIALS, CUSTOMER_ID, "me")
+def setup_gmail_client(json_credentials=None):
+    if json_credentials is None:
+        json_credentials = JSON_CREDENTIALS
+
+    return GMailClient(json_credentials, CUSTOMER_ID, SUBJECT)
 
 
-def setup_google_directory_client():
-    return GoogleDirectoryClient(JSON_CREDENTIALS, CUSTOMER_ID)
+def setup_google_directory_client(json_credentials=None):
+    if json_credentials is None:
+        json_credentials = JSON_CREDENTIALS
+
+    return GoogleDirectoryClient(json_credentials, CUSTOMER_ID, SUBJECT)
 
 
 def setup_google_service_account_client():
@@ -188,6 +195,14 @@ class TestGoogleDirectoryClient:
 
         assert actual_users == users[0]["users"]
 
+    def test_subject_added_to_service_account_credentials(
+        self, patch_google_service_account_client
+    ):
+        json_credentials = {}
+        setup_google_directory_client(json_credentials=json_credentials)
+
+        assert "subject" in json_credentials
+
 
 class TestGMailClient:
     @pytest_asyncio.fixture
@@ -253,3 +268,11 @@ class TestGMailClient:
         actual_message = await gmail_client.message("1")
 
         assert actual_message == message
+
+    def test_subject_added_to_service_account_credentials(
+        self, patch_google_service_account_client
+    ):
+        json_credentials = {}
+        setup_gmail_client(json_credentials=json_credentials)
+
+        assert "subject" in json_credentials
