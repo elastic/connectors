@@ -4,17 +4,20 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the OneDrive source class methods"""
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
 from aiohttp import StreamReader
 from aiohttp.client_exceptions import ClientResponseError
 
+from connectors.filtering.validation import SyncRuleValidationResult
+from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.onedrive import (
     AccessToken,
     InternalServerError,
     NotFound,
+    OneDriveAdvancedRulesValidator,
     OneDriveClient,
     OneDriveDataSource,
     TokenRetrievalError,
@@ -22,6 +25,7 @@ from connectors.sources.onedrive import (
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
+ADVANCED_SNIPPET = "advanced_snippet"
 EXPECTED_USERS = [
     {
         "displayName": "Adele Vance",
@@ -73,6 +77,7 @@ RESPONSE_FILES = {
             "lastModifiedDateTime": "2023-08-04T02:55:19Z",
             "name": "root",
             "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents",
+            "parentReference": {"path": "root"},
             "size": 206100,
         },
         {
@@ -83,6 +88,7 @@ RESPONSE_FILES = {
             "name": "folder1",
             "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder1",
             "cTag": '"c:{FF3F899A-2CBB-4D06-AE16-BBBBF5C35C4E},0"',
+            "parentReference": {"path": "root"},
             "size": 10484,
         },
         {
@@ -94,6 +100,7 @@ RESPONSE_FILES = {
             "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/Doc.aspx?sourcedoc=34680133F84%7&file=Document.docx&action=default&mobileredirect=true",
             "cTag": '"c:{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
             "size": 10484,
+            "parentReference": {"path": "root"},
             "file": {
                 "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             },
@@ -110,6 +117,7 @@ EXPECTED_FILES = [
         "name": "folder1",
         "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder1",
         "cTag": '"c:{FF3F899A-2CBB-4D06-AE16-BBBBF5C35C4E},0"',
+        "parentReference": {"path": "root"},
         "size": 10484,
     },
     {
@@ -121,6 +129,7 @@ EXPECTED_FILES = [
         "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/Doc.aspx?sourcedoc=34680133F84%7&file=Document.docx&action=default&mobileredirect=true",
         "cTag": '"c:{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
         "size": 10484,
+        "parentReference": {"path": "root"},
         "file": {
             "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         },
@@ -136,6 +145,7 @@ RESPONSE_USER1_FILES = [
         "eTag": '"{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
         "cTag": '"c:{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
         "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder1",
+        "parentReference": {"path": "/drive/root:/hello"},
         "size": 10484,
     },
     {
@@ -146,6 +156,7 @@ RESPONSE_USER1_FILES = [
         "eTag": '"{2E301580-9Y39-4D32-A6D4-E34680133WE8},3"',
         "cTag": '"c:{2E301580-9Y39-4D32-A6D4-E34680133WE8},3"',
         "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/Doc.aspx?sourcedoc=34680133F84%7&file=doit.py&action=default&mobileredirect=true",
+        "parentReference": {"path": "/drive/root:/anc"},
         "size": 10484,
         "file": {"mimeType": "application/python"},
     },
@@ -181,6 +192,7 @@ RESPONSE_USER2_FILES = [
         "eTag": '"{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
         "cTag": '"c:{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
         "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder4",
+        "parentReference": {"path": "/drive/root:/dummy"},
         "size": 10484,
     },
     {
@@ -191,6 +203,7 @@ RESPONSE_USER2_FILES = [
         "eTag": '"{2E301580-9Y39-4D32-A6D4-E34680133WE8},3"',
         "cTag": '"c:{2E301580-9Y39-4D32-A6D4-E34680133WE8},3"',
         "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/mac.txt?sourcedoc=34680133F84%7&file=mac.txt&action=default&mobileredirect=true",
+        "parentReference": {"path": "/drive/root:/hello/world"},
         "size": 10484,
         "file": {"mimeType": "plain/text"},
     },
@@ -606,3 +619,164 @@ async def test_get_docs(users_patch, files_patch):
         assert documents == expected_responses
 
         assert len(downloads) == 2
+
+
+@pytest.mark.parametrize(
+    "advanced_rules, expected_validation_result",
+    [
+        (
+            # valid: empty array should be valid
+            [],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: empty object should also be valid -> default value in Kibana
+            {},
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: one custom query
+            [
+                {
+                    "userMailAccounts": ["a1@onmicrosoft.com", "b1@onmicrosoft.com"],
+                    "parentPathPattern": "/drive/root:/folder1/folder2",
+                }
+            ],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: two custom queries
+            [
+                {
+                    "userMailAccounts": ["a1@onmicrosoft.com"],
+                    "skipFilesWithExtensions": [".py"],
+                },
+                {
+                    "userMailAccounts": ["b1@onmicrosoft.com", "c1@onmicrosoft.com"],
+                    "parentPathPattern": "/drive/root:/hello/*",
+                },
+            ],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # invalid: value empty
+            [
+                {"userMailAccounts": ["a1@onmicrosoft.com"], "parentPathPattern": ""},
+                {"userMailAccounts": ["a1@onmicrosoft.com"]},
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: unallowed key
+            [{"userMailAccounts": ["a1@onmicrosoft.com"], "path": "/drive/root:/a/**"}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: invalid format in userMailAccounts
+            {"userMailAccounts": ["abccom.in"]},
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: array of arrays -> wrong type
+            [
+                {
+                    "userMailAccounts": ["a1@onmicrosoft.com"],
+                    "skipFilesWithExtensions": [[".pdf", ".exe"], [".docs"]],
+                }
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+    mock_data = [
+        {"mail": "a1@onmicrosoft.com", "id": "123"},
+        {"mail": "b1@onmicrosoft.com", "id": "321"},
+        {"mail": "c1@onmicrosoft.com", "id": "456"},
+    ]
+    async with create_source(OneDriveDataSource) as source:
+        source.client.list_users = AsyncIterator(mock_data)
+
+        validation_result = await OneDriveAdvancedRulesValidator(source).validate(
+            advanced_rules
+        )
+
+        assert validation_result == expected_validation_result
+
+
+@pytest.mark.parametrize(
+    "filtering",
+    [
+        Filter(
+            {
+                ADVANCED_SNIPPET: {
+                    "value": [
+                        {
+                            "userMailAccounts": ["AdeleV@w076v.onmicrosoft.com"],
+                            "skipFilesWithExtensions": [".py"],
+                        },
+                        {
+                            "userMailAccounts": ["AlexW@w076v.onmicrosoft.com"],
+                            "parentPathPattern": "/drive/root:/hello/*",
+                        },
+                    ],
+                }
+            }
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules(filtering):
+    async with create_source(OneDriveDataSource) as source:
+        with patch.object(AccessToken, "get", return_value="abc"):
+            with patch.object(
+                OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS)
+            ):
+                async_response_user1 = AsyncMock()
+                async_response_user1.__aenter__ = AsyncMock(
+                    return_value=JSONAsyncMock({"value": RESPONSE_USER1_FILES})
+                )
+
+                async_response_user2 = AsyncMock()
+                async_response_user2.__aenter__ = AsyncMock(
+                    return_value=JSONAsyncMock({"value": RESPONSE_USER2_FILES})
+                )
+
+                with patch(
+                    "aiohttp.ClientSession.get",
+                    side_effect=[async_response_user1, async_response_user2],
+                ):
+                    documents = []
+                    expected_responses = [
+                        EXPECTED_USER1_FILES[0],
+                        EXPECTED_USER2_FILES[1],
+                    ]
+                    async for item, _ in source.get_docs(filtering):
+                        documents.append(item)
+
+        assert documents == expected_responses
