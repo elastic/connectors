@@ -108,7 +108,11 @@ class Field:
 
     def _convert(self, value, field_type_):
         cast_type = locate(field_type_)
-        if isinstance(value, cast_type):
+        if cast_type not in [str, int, float, bool, list]:
+            # unsupported type
+            return value
+
+        if isinstance(value, cast_type):  # pyright:ignore
             return value
 
         # list requires special type casting
@@ -122,7 +126,7 @@ class Field:
         if value is None and field_type_ == "str":
             return ""
 
-        return cast_type(value) if value else None
+        return cast_type(value) if value else None  # pyright:ignore
 
     def is_value_empty(self):
         """Checks if the `value` field is empty or not.

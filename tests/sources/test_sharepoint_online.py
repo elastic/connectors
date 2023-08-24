@@ -106,11 +106,15 @@ def set_dls_enabled(source, dls_enabled):
 
 
 def set_fetch_drive_item_permissions_enabled(source, enabled):
-    source.configuration.set_field("fetch_drive_item_permissions", field_type="bool", value=enabled)
+    source.configuration.set_field(
+        "fetch_drive_item_permissions", field_type="bool", value=enabled
+    )
 
 
 def set_fetch_unique_list_permissions_enabled(source, enabled):
-    source.configuration.set_field("fetch_unique_list_permissions", field_type="bool", value=enabled)
+    source.configuration.set_field(
+        "fetch_unique_list_permissions", field_type="bool", value=enabled
+    )
 
 
 def dls_feature_flag_enabled(value):
