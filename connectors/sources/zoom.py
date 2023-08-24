@@ -401,11 +401,14 @@ class ZoomDataSource(BaseDataSource):
 
         try:
             async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+                temp_filename = str(async_buffer.name)
                 response = await self.client.get_file_content(
                     download_url=doc["download_url"]
                 )
+
+                if not response:
+                    return
                 await async_buffer.write(response.encode("utf-8"))
-                temp_filename = str(async_buffer.name)
 
             await asyncio.to_thread(
                 convert_to_b64,
@@ -416,7 +419,12 @@ class ZoomDataSource(BaseDataSource):
                 document["_attachment"] = (await target_file.read()).strip()
             return document
         finally:
-            await remove(temp_filename)
+            try:
+                await remove(temp_filename)
+            except Exception as exception:
+                self._logger.warning(
+                    f"Error while deleting the file: {temp_filename} from disk. Error: {exception}"
+                )
 
     async def get_content(self, doc, timestamp=None, doit=False):
         attachment_size = doc["file_size"]
@@ -455,10 +463,6 @@ class ZoomDataSource(BaseDataSource):
 
         previous_meeting["participants"] = participants
         return previous_meeting
-
-    async def fetch_recordings(self, user_id):
-        async for recording in self.client.get_recordings(user_id=user_id):
-            yield recording
 
     async def get_docs(self, filtering=None):
         async for user in self.client.get_users():
@@ -504,7 +508,7 @@ class ZoomDataSource(BaseDataSource):
                         doc_time=previous_meeting.get("created_at"),
                     ), None
 
-            async for recording in self.fetch_recordings(user_id=user.get("id")):
+            async for recording in self.client.get_recordings(user_id=user.get("id")):
                 yield self._format_doc(
                     doc=recording, doc_time=recording.get("start_time")
                 ), None
