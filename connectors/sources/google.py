@@ -159,8 +159,10 @@ def remove_universe_domain(json_credentials):
 
 
 class GoogleDirectoryClient:
-    def __init__(self, json_credentials, customer_id, timeout=DEFAULT_TIMEOUT):
+    def __init__(self, json_credentials, customer_id, subject, timeout=DEFAULT_TIMEOUT):
         remove_universe_domain(json_credentials)
+
+        json_credentials["subject"] = subject
         self._customer_id = customer_id
         self._client = GoogleServiceAccountClient(
             json_credentials=json_credentials,

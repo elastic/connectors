@@ -184,6 +184,7 @@ class GMailDataSource(BaseDataSource):
         return GoogleDirectoryClient(
             json_credentials=self._service_account_credentials,
             customer_id=self.configuration["customer_id"],
+            subject=self.configuration["subject"],
         )
 
     def _gmail_client(self, subject):
