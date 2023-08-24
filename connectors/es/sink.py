@@ -380,12 +380,7 @@ class Extractor:
             async for count, doc in aenumerate(generator):
                 doc, lazy_download, operation = doc
                 if count % self.display_every == 0:
-                    self._logger.info(
-                        "Sync in progress -- "
-                        f"created: {self.total_docs_created} | "
-                        f"updated: {self.total_docs_updated} | "
-                        f"deleted: {self.total_docs_deleted}"
-                    )
+                    self._log_progress()
 
                 doc_id = doc["id"] = doc.pop("_id")
 
@@ -466,12 +461,7 @@ class Extractor:
             async for count, doc in aenumerate(generator):
                 doc, lazy_download, operation = doc
                 if count % self.display_every == 0:
-                    self._logger.info(
-                        "Sync progress -- "
-                        f"created: {self.total_docs_created} | "
-                        f"updated: {self.total_docs_updated} | "
-                        f"deleted: {self.total_docs_deleted}"
-                    )
+                    self._log_progress()
 
                 doc_id = doc["id"] = doc.pop("_id")
 
@@ -551,7 +541,7 @@ class Extractor:
                 doc, _, _ = doc
                 count += 1
                 if count % self.display_every == 0:
-                    self._logger.info(str(self))
+                    self._log_progress()
 
                 doc_id = doc["id"] = doc.pop("_id")
                 doc_exists = doc_id in existing_ids
@@ -607,6 +597,14 @@ class Extractor:
                 }
             )
             self.total_docs_deleted += 1
+
+    def _log_progress(self):
+        self._logger.info(
+            "Sync progress -- "
+            f"created: {self.total_docs_created} | "
+            f"updated: {self.total_docs_updated} | "
+            f"deleted: {self.total_docs_deleted}"
+        )
 
 
 class IndexMissing(Exception):
