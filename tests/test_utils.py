@@ -202,6 +202,21 @@ async def test_mem_queue_too_large_item():
     assert e is not None
 
 
+@pytest.mark.asyncio
+async def test_mem_queue_put_nowait():
+    queue = MemQueue(
+        maxsize=5, maxmemsize=1000, refresh_interval=0.1, refresh_timeout=0.5
+    )
+    # make queue full by size
+    for i in range(5):
+        queue.put_nowait(i)
+
+    with pytest.raises(asyncio.QueueFull) as e:
+        await queue.put_nowait("x")
+
+    assert e is not None
+
+
 def test_get_base64_value():
     """This test verify get_base64_value method and convert encoded data into base64"""
     expected_result = get_base64_value("dummy".encode("utf-8"))
