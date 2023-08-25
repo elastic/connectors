@@ -5,7 +5,7 @@
 #
 from datetime import datetime
 from decimal import Decimal
-from unittest import mock
+from unittest import TestCase, mock
 
 import pytest
 from bson import Decimal128
@@ -79,6 +79,7 @@ def test_field_convert():
     assert Field("name", value="1", field_type="str").value == "1"
     assert Field("name", value="foo", field_type="str").value == "foo"
     assert Field("name", value=None, field_type="str").value == ""
+    assert Field("name", value={"foo": "bar"}, field_type="str").value == "{'foo': 'bar'}"
 
     assert Field("name", value="1", field_type="int").value == 1
     assert Field("name", value="", field_type="int").value is None
@@ -98,6 +99,8 @@ def test_field_convert():
     assert Field("name", value=0, field_type="list").value == [0]
     assert Field("name", value="", field_type="list").value == []
     assert Field("name", value=None, field_type="list").value == []
+    assert Field("name", value={"foo": "bar"}, field_type="list").value == [('foo', 'bar')]
+    TestCase().assertCountEqual(Field("name", value={"foo", "bar"}, field_type="list").value, ["foo", "bar"])
 
 
 def test_data_source_configuration():

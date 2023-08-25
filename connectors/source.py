@@ -41,6 +41,14 @@ DEFAULT_CONFIGURATION = {
     "value": "",
 }
 
+TYPE_DEFAULTS = {
+    str: "",
+    int: None,
+    float: None,
+    bool: None,
+    list: [],
+}
+
 
 class ValidationTypes(Enum):
     LESS_THAN = "less_than"
@@ -108,7 +116,7 @@ class Field:
 
     def _convert(self, value, field_type_):
         cast_type = locate(field_type_)
-        if cast_type not in [str, int, float, bool, list]:
+        if cast_type not in TYPE_DEFAULTS:
             # unsupported type
             return value
 
@@ -116,17 +124,22 @@ class Field:
             return value
 
         # list requires special type casting
-        if field_type_ == "list":
+        if cast_type == list:
             if isinstance(value, str):
                 return [item.strip() for item in value.split(",")] if value else []
+            elif isinstance(value, int):
+                return [value]
+            elif isinstance(value, set):
+                return list(value)
+            elif isinstance(value, dict):
+                return list(value.items())
             else:
-                return [value] if value is not None else []
+                return [str(value)] if value is not None else []
 
-        # strings don't get nullified
-        if value is None and field_type_ == "str":
-            return ""
+        if value is None or value == "":
+            return TYPE_DEFAULTS[cast_type]
 
-        return cast_type(value) if value else None  # pyright:ignore
+        return cast_type(value)
 
     def is_value_empty(self):
         """Checks if the `value` field is empty or not.
