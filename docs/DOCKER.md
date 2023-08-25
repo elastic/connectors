@@ -41,7 +41,7 @@ curl https://raw.githubusercontent.com/elastic/connectors-python/main/config.yml
 If you're running the Connector Service against a dockerised version of Elasticsearch and Kibana, your config file will look like this:
 
 ```
-# When connecting to your cloud deployment you should edit this value
+# When connecting to your cloud deployment you should edit the host value
 elasticsearch.host: http://host.docker.internal:9200
 
 # Using `api_key` is recommended instead of `username`/`password`
@@ -56,7 +56,7 @@ connectors:
 
 ```
 
-to make Connectors Service run properly for you.
+Note: You can change other default configurations by simply uncommenting specific settings in the configuration file and modifying their values.
 
 After that, you can build your own Docker image to run:
 
