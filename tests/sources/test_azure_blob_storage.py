@@ -465,7 +465,7 @@ async def test_validate_config_no_account_name():
 
     # Setup
     async with create_source(AzureBlobStorageDataSource) as source:
-        source.configuration.set_value(name="account_name", value="")
+        source.configuration.set_field(name="account_name", value="")
 
         with pytest.raises(ConfigurableFieldValueError):
             # Execute

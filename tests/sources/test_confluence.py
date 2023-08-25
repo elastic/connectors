@@ -514,22 +514,20 @@ async def test_configuration():
 
 
 @pytest.mark.parametrize(
-    "field, data_source",
+    "field, is_cloud",
     [
-        ("confluence_url", "confluence_cloud"),
-        ("account_email", "confluence_cloud"),
-        ("api_token", "confluence_cloud"),
-        ("username", "confluence_server"),
-        ("password", "confluence_server"),
+        ("confluence_url", True),
+        ("account_email", True),
+        ("api_token", True),
+        ("username", False),
+        ("password", False),
     ],
 )
 @pytest.mark.asyncio
-async def test_validate_configuration_for_empty_fields(field, data_source):
+async def test_validate_configuration_for_empty_fields(field, is_cloud):
     async with create_source(ConfluenceDataSource) as source:
-        source.confluence_client.configuration.set_value(
-            name="data_source", value=data_source
-        )
-        source.confluence_client.configuration.set_value(name=field, value="")
+        source.confluence_client.is_cloud = is_cloud
+        source.confluence_client.configuration.set_field(name=field, value="")
 
         # Execute
         with pytest.raises(Exception):

@@ -114,6 +114,7 @@ def test_field_convert():
         Field("name", value={"foo", "bar"}, field_type="list").value, ["foo", "bar"]
     )
 
+
     # unsupported cases that aren't converted
     assert Field("name", value={"foo": "bar"}, field_type="dict").value == {
         "foo": "bar"

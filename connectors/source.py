@@ -78,13 +78,13 @@ class Field:
         if validations is None:
             validations = []
 
+        self.default_value = self._convert(default_value, field_type)
         self.depends_on = depends_on
         self.label = label
         self.name = name
         self.required = required
         self._field_type = field_type
         self.validations = validations
-        self.default_value = self._convert(default_value, field_type)
         self._value = self._convert(value, field_type)
 
     @property
@@ -298,11 +298,6 @@ class DataSourceConfiguration:
             validations,
             value,
         )
-
-    def set_value(self, name, value):
-        # For updating the value of an existing Field only
-        config = self._config[name]
-        config.value = config._convert(value, config.field_type)
 
     def get_field(self, name):
         return self._config[name]

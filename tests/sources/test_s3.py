@@ -373,7 +373,7 @@ async def test_get_bucket_list():
 async def test_get_bucket_list_for_wildcard():
     # Setup
     async with create_source(S3DataSource) as source:
-        source.configuration.set_value(name="buckets", value=["*"])
+        source.configuration.set_field(name="buckets", field_type="list", value=["*"])
 
         # Execute
         with mock.patch(
@@ -390,12 +390,12 @@ async def test_validate_config_for_empty_bucket_string():
     """This function test validate_configwhen buckets string is empty"""
     # Setup
     async with create_source(S3DataSource) as source:
-        source.configuration.set_value(name="buckets", value=[""])
+        source.configuration.set_field(name="buckets", field_type="list", value=[""])
         # Execute
         with pytest.raises(ConfigurableFieldValueError) as e:
             await source.validate_config()
 
-        assert e.match("Buckets")
+        assert e.match("buckets")
 
 
 @pytest.mark.asyncio
