@@ -99,6 +99,7 @@ def test_field_convert():
     assert Field("name", value=0, field_type="list").value == [0]
     assert Field("name", value="", field_type="list").value == []
     assert Field("name", value=None, field_type="list").value == []
+    assert Field("name", value=False, field_type="list").value == [False]
     assert Field("name", value={"foo": "bar"}, field_type="list").value == [('foo', 'bar')]
     TestCase().assertCountEqual(Field("name", value={"foo", "bar"}, field_type="list").value, ["foo", "bar"])
 

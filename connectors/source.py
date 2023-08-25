@@ -134,7 +134,7 @@ class Field:
             elif isinstance(value, dict):
                 return list(value.items())
             else:
-                return [str(value)] if value is not None else []
+                return [value] if value is not None else []
 
         if value is None or value == "":
             return TYPE_DEFAULTS[cast_type]
