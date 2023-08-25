@@ -67,15 +67,15 @@ def test_get_configuration():
 
 def setup_servicenow(source):
     # Set up default config with default values
-    source.configuration.set_field(name="username", value="admin")
-    source.configuration.set_field(name="password", value="changeme")
+    source.configuration.get_field("username").value = "admin"
+    source.configuration.get_field("password").value = "changeme"
 
 
 @pytest.mark.parametrize("field", ["username", "password", "services"])
 @pytest.mark.asyncio
 async def test_validate_config_missing_fields_then_raise(field):
     async with create_source(ServiceNowDataSource) as source:
-        source.configuration.set_field(name=field, value="")
+        source.configuration.get_field(field).value = ""
 
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
