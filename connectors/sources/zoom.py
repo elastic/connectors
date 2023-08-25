@@ -159,6 +159,8 @@ class ZoomAPISession:
                 raise NotFound("Resource Not Found") from exception
             else:
                 raise
+        except Exception:
+            raise
 
     async def fetch(self, url):
         try:

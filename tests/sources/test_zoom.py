@@ -6,7 +6,9 @@
 """Tests the Zoom source class methods"""
 from unittest import mock
 
+import aiohttp
 import pytest
+from aiohttp.client_exceptions import ClientResponseError
 from freezegun import freeze_time
 
 from connectors.source import ConfigurableFieldValueError
@@ -17,9 +19,13 @@ from tests.sources.support import create_source
 SAMPLE_ACCESS_TOKEN_RESPONSE = {"access_token": "token#123", "expires_in": 3599}
 
 # User document
-SAMPLE_USER_PAGE = {
-    "next_page_token": "page1",
+SAMPLE_USER_PAGE1 = {
+    "next_page_token": "page2",
     "users": [{"id": "user1", "type": "user", "name": "admin"}],
+}
+SAMPLE_USER_PAGE2 = {
+    "next_page_token": None,
+    "users": None,
 }
 USER_EXPECTED_RESPONSE = [
     {
@@ -77,6 +83,7 @@ SAMPLE_PREVIOUS_MEETING = {
         },
     ],
 }
+
 SAMPLE_PREVIOUS_MEETING_DETAIL1 = {
     "id": "meeting5",
     "type": "previous_meeting_detail",
@@ -89,6 +96,16 @@ SAMPLE_PREVIOUS_MEETING_DETAIL2 = {
 }
 SAMPLE_PREVIOUS_MEETING_PARTICIPANTS = {
     "next_page_token": None,
+    "participants": [
+        {"id": "participant1", "type": "participant"},
+        {"id": "participant2", "type": "participant"},
+        {"id": "participant3", "type": "participant"},
+    ],
+}
+EXPECTED_PREVIOUS_MEETING = {
+    "id": "meeting5",
+    "type": "previous_meeting_detail",
+    "created_at": "2023-03-03T00:00:00Z",
     "participants": [
         {"id": "participant1", "type": "participant"},
         {"id": "participant2", "type": "participant"},
@@ -257,59 +274,72 @@ CHAT_EXPECTED_RESPONSE = [
 ]
 
 # File document
+SAMPLE_CONTENT = "Content"
+FILE = {
+    "id": "file1",
+    "file_id": "file1",
+    "type": "file",
+    "date_time": "2023-03-09T00:00:00Z",
+    "file_size": 100,
+    "file_name": "file1.txt",
+    "download_url": "https://api.zoom.us/v2/download_url",
+}
+FILE_EXPECTED_CONTENT = {
+    "_id": "file1",
+    "_timestamp": "2023-03-09T00:00:00Z",
+    "_attachment": "Q29udGVudA==",
+}
+FILE_EXPECTED_RESPONSE = {
+    "_id": "file1",
+    "_timestamp": "2023-03-09T00:00:00Z",
+    "file_id": "file1",
+    "type": "file",
+    "date_time": "2023-03-09T00:00:00Z",
+    "file_size": 100,
+    "file_name": "file1.txt",
+    "download_url": "https://api.zoom.us/v2/download_url",
+}
+FILE_WITHOUT_EXTENSION = {
+    "file_id": "file2",
+    "type": "file",
+    "date_time": "2023-02-09T00:00:00Z",
+    "file_size": 300,
+    "file_name": "file4",
+    "download_url": "https://api.zoom.us/v2/download_url",
+}
+FILE_WITH_LARGE_DATA = {
+    "file_id": "file3",
+    "type": "file",
+    "date_time": "2023-02-09T00:00:00Z",
+    "file_size": 10485761,
+    "file_name": "file5.txt",
+    "download_url": "https://api.zoom.us/v2/download_url",
+}
+FILE_WITH_UNSUPPORTED_EXTENSION = {
+    "file_id": "file4",
+    "type": "file",
+    "date_time": "2023-02-09T00:00:00Z",
+    "file_size": 300,
+    "file_name": "file3.png",
+    "download_url": "https://api.zoom.us/v2/download_url",
+}
 SAMPLE_FILE = {
     "next_page_token": None,
     "messages": [
-        {
-            "file_id": "file1",
-            "type": "file",
-            "date_time": "2023-03-09T00:00:00Z",
-            "file_size": 100,
-            "file_name": "file1.txt",
-            "download_url": "download_url1",
-        },
-        {
-            "file_id": "file2",
-            "type": "file",
-            "date_time": "2023-02-09T00:00:00Z",
-            "file_size": 200,
-            "file_name": "file2.txt",
-            "download_url": "download_url2",
-        },
-        {
-            "file_id": "file3",
-            "type": "file",
-            "date_time": "2023-02-09T00:00:00Z",
-            "file_size": 300,
-            "file_name": "file3.png",
-            "download_url": "download_url3",
-        },
-        {
-            "file_id": "file4",
-            "type": "file",
-            "date_time": "2023-02-09T00:00:00Z",
-            "file_size": 300,
-            "file_name": "file4",
-            "download_url": "download_url4",
-        },
-        {
-            "file_id": "file5",
-            "type": "file",
-            "date_time": "2023-02-09T00:00:00Z",
-            "file_size": 10485761,
-            "file_name": "file5.txt",
-            "download_url": "download_url5",
-        },
+        FILE,
+        FILE_WITHOUT_EXTENSION,
+        FILE_WITH_LARGE_DATA,
+        FILE_WITH_UNSUPPORTED_EXTENSION,
     ],
 }
-FILE_EXPECTED_RESPONSE = [
+EXPECTED_FILES_RESPONSE = [
     {
         "file_id": "file1",
         "type": "file",
         "date_time": "2023-03-09T00:00:00Z",
         "file_size": 100,
         "file_name": "file1.txt",
-        "download_url": "download_url1",
+        "download_url": "https://api.zoom.us/v2/download_url",
         "id": "file1",
         "_id": "file1",
         "_timestamp": "2023-03-09T00:00:00Z",
@@ -318,9 +348,9 @@ FILE_EXPECTED_RESPONSE = [
         "file_id": "file2",
         "type": "file",
         "date_time": "2023-02-09T00:00:00Z",
-        "file_size": 200,
-        "file_name": "file2.txt",
-        "download_url": "download_url2",
+        "file_size": 300,
+        "file_name": "file4",
+        "download_url": "https://api.zoom.us/v2/download_url",
         "id": "file2",
         "_id": "file2",
         "_timestamp": "2023-02-09T00:00:00Z",
@@ -329,9 +359,9 @@ FILE_EXPECTED_RESPONSE = [
         "file_id": "file3",
         "type": "file",
         "date_time": "2023-02-09T00:00:00Z",
-        "file_size": 300,
-        "file_name": "file3.png",
-        "download_url": "download_url3",
+        "file_size": 10485761,
+        "file_name": "file5.txt",
+        "download_url": "https://api.zoom.us/v2/download_url",
         "id": "file3",
         "_id": "file3",
         "_timestamp": "2023-02-09T00:00:00Z",
@@ -341,38 +371,11 @@ FILE_EXPECTED_RESPONSE = [
         "type": "file",
         "date_time": "2023-02-09T00:00:00Z",
         "file_size": 300,
-        "file_name": "file4",
-        "download_url": "download_url4",
+        "file_name": "file3.png",
+        "download_url": "https://api.zoom.us/v2/download_url",
         "id": "file4",
         "_id": "file4",
         "_timestamp": "2023-02-09T00:00:00Z",
-    },
-    {
-        "file_id": "file5",
-        "type": "file",
-        "date_time": "2023-02-09T00:00:00Z",
-        "file_size": 10485761,
-        "file_name": "file5.txt",
-        "download_url": "download_url5",
-        "id": "file5",
-        "_id": "file5",
-        "_timestamp": "2023-02-09T00:00:00Z",
-    },
-]
-
-# Content document
-SAMPLE_CONTENT1 = "Content1"
-SAMPLE_CONTENT2 = "Content2"
-CONTENT_EXPECTED_RESPONSE = [
-    {
-        "_id": "file1",
-        "_timestamp": "2023-03-09T00:00:00Z",
-        "_attachment": "Q29udGVudDE=",
-    },
-    {
-        "_id": "file2",
-        "_timestamp": "2023-02-09T00:00:00Z",
-        "_attachment": "Q29udGVudDI=",
     },
 ]
 
@@ -407,10 +410,12 @@ def setup_zoom(source, fetch_past_meeting_details=False):
     )
 
 
-def mock_response(url, headers):
+def mock_zoom_apis(url, headers):
     # Users APIS
     if url == "https://api.zoom.us/v2/users?page_size=300":
-        return get_mock(mock_response=SAMPLE_USER_PAGE)
+        return get_mock(mock_response=SAMPLE_USER_PAGE1)
+    elif url == "https://api.zoom.us/v2/users?page_size=300&next_page_token=page2":
+        return get_mock(mock_response=SAMPLE_USER_PAGE2)
 
     # Meeting APIS
     elif url == "https://api.zoom.us/v2/users/user1/meetings?page_size=300&type=live":
@@ -483,14 +488,205 @@ def mock_response(url, headers):
         return get_mock(mock_response=SAMPLE_FILE)
 
     # Content APIS
-    elif url == "download_url1":
-        return get_mock(mock_response=SAMPLE_CONTENT1)
-    elif url == "download_url2":
-        return get_mock(mock_response=SAMPLE_CONTENT2)
+    elif url == "https://api.zoom.us/v2/download_url":
+        return get_mock(mock_response=SAMPLE_CONTENT)
 
     # Emtpy Response
     else:
-        return get_mock(mock_response={})
+        return get_mock(mock_response=None)
+
+
+def mock_token_response():
+    return get_mock(mock_response=SAMPLE_ACCESS_TOKEN_RESPONSE)
+
+
+@pytest.mark.asyncio
+async def test_fetch_for_successful_call():
+    async with create_source(ZoomDataSource) as source:
+        setup_zoom(source)
+        with mock.patch(
+            "aiohttp.ClientSession.post",
+            return_value=mock_token_response(),
+        ):
+            with mock.patch(
+                "aiohttp.ClientSession.get",
+                side_effect=mock_zoom_apis,
+            ):
+                response = await source.client.api_client.fetch(
+                    url="https://api.zoom.us/v2/past_meetings/meeting5"
+                )
+                assert response == SAMPLE_PREVIOUS_MEETING_DETAIL1
+
+
+@pytest.mark.asyncio
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_fetch_for_unsuccessful_call(mock_apply_retry_strategy):
+    async with create_source(ZoomDataSource) as source:
+        setup_zoom(source)
+        with mock.patch(
+            "aiohttp.ClientSession.post",
+            return_value=mock_token_response(),
+        ):
+            with mock.patch(
+                "aiohttp.ClientSession.get",
+                side_effect=Exception("Something went wrong"),
+            ):
+                response = await source.client.api_client.fetch(
+                    url="https://api.zoom.us/v2/past_meetings/meeting5"
+                )
+                assert response is None
+
+
+@pytest.mark.asyncio
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_fetch_for_unauthorized_error(mock_apply_retry_strategy):
+    async with create_source(ZoomDataSource) as source:
+        setup_zoom(source)
+        with mock.patch(
+            "aiohttp.ClientSession.post",
+            return_value=mock_token_response(),
+        ):
+            with mock.patch(
+                "aiohttp.ClientSession.get",
+                side_effect=ClientResponseError(
+                    status=401,
+                    request_info=aiohttp.RequestInfo(
+                        real_url="", method=None, headers=None, url=""
+                    ),
+                    history=None,
+                ),
+            ):
+                response = await source.client.api_client.fetch(
+                    url="https://api.zoom.us/v2/past_meetings/meeting5"
+                )
+                assert response is None
+
+
+@pytest.mark.asyncio
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_fetch_for_notfound_error(mock_apply_retry_strategy):
+    async with create_source(ZoomDataSource) as source:
+        setup_zoom(source)
+        with mock.patch(
+            "aiohttp.ClientSession.post",
+            return_value=mock_token_response(),
+        ):
+            with mock.patch(
+                "aiohttp.ClientSession.get",
+                side_effect=ClientResponseError(
+                    status=404,
+                    request_info=aiohttp.RequestInfo(
+                        real_url="", method=None, headers=None, url=""
+                    ),
+                    history=None,
+                ),
+            ):
+                response = await source.client.api_client.fetch(
+                    url="https://api.zoom.us/v2/past_meetings/meeting5"
+                )
+                assert response is None
+
+
+@pytest.mark.asyncio
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_fetch_for_other_client_error(mock_apply_retry_strategy):
+    async with create_source(ZoomDataSource) as source:
+        setup_zoom(source)
+        with mock.patch(
+            "aiohttp.ClientSession.post",
+            return_value=mock_token_response(),
+        ):
+            with mock.patch(
+                "aiohttp.ClientSession.get",
+                side_effect=ClientResponseError(
+                    status=405,
+                    request_info=aiohttp.RequestInfo(
+                        real_url="", method=None, headers=None, url=""
+                    ),
+                    history=None,
+                ),
+            ):
+                response = await source.client.api_client.fetch(
+                    url="https://api.zoom.us/v2/past_meetings/meeting5"
+                )
+                assert response is None
+
+
+@pytest.mark.asyncio
+async def test_content_for_successful_call():
+    async with create_source(ZoomDataSource) as source:
+        setup_zoom(source)
+        with mock.patch(
+            "aiohttp.ClientSession.post",
+            return_value=mock_token_response(),
+        ):
+            with mock.patch(
+                "aiohttp.ClientSession.get",
+                side_effect=mock_zoom_apis,
+            ):
+                response = await source.client.api_client.content(
+                    url="https://api.zoom.us/v2/download_url"
+                )
+                assert response == SAMPLE_CONTENT
+
+
+@pytest.mark.asyncio
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_content_for_unsuccessful_call(mock_apply_retry_strategy):
+    async with create_source(ZoomDataSource) as source:
+        setup_zoom(source)
+        with mock.patch(
+            "aiohttp.ClientSession.post",
+            return_value=mock_token_response(),
+        ):
+            with mock.patch(
+                "aiohttp.ClientSession.get",
+                side_effect=Exception("Something went wrong"),
+            ):
+                response = await source.client.api_client.content(
+                    url="https://api.zoom.us/v2/download_url"
+                )
+                assert response is None
+
+
+@pytest.mark.asyncio
+async def test_scroll_for_successful_response():
+    async with create_source(ZoomDataSource) as source:
+        setup_zoom(source)
+        with mock.patch(
+            "aiohttp.ClientSession.post",
+            return_value=mock_token_response(),
+        ):
+            with mock.patch(
+                "aiohttp.ClientSession.get",
+                side_effect=mock_zoom_apis,
+            ):
+                response = []
+                async for res in source.client.api_client.scroll(
+                    url="https://api.zoom.us/v2/users?page_size=300"
+                ):
+                    response.append(res)
+                assert response == [SAMPLE_USER_PAGE1, SAMPLE_USER_PAGE2]
+
+
+@pytest.mark.asyncio
+async def test_scroll_for_empty_response():
+    async with create_source(ZoomDataSource) as source:
+        setup_zoom(source)
+        with mock.patch(
+            "aiohttp.ClientSession.post",
+            return_value=mock_token_response(),
+        ):
+            with mock.patch(
+                "aiohttp.ClientSession.get",
+                side_effect=mock_zoom_apis,
+            ):
+                response = []
+                async for res in source.client.api_client.scroll(
+                    url="https://api.zoom.us/v2/users?page_size=300&next_page_token=page3"
+                ):
+                    response.append(res)
+                assert response == []
 
 
 @pytest.mark.asyncio
@@ -499,7 +695,7 @@ async def test_validate_config():
         setup_zoom(source)
         with mock.patch(
             "aiohttp.ClientSession.post",
-            return_value=get_mock(mock_response=SAMPLE_ACCESS_TOKEN_RESPONSE),
+            return_value=mock_token_response(),
         ):
             await source.validate_config()
 
@@ -520,7 +716,7 @@ async def test_ping_for_successful_connection():
         setup_zoom(source)
         with mock.patch(
             "aiohttp.ClientSession.post",
-            return_value=get_mock(mock_response=SAMPLE_ACCESS_TOKEN_RESPONSE),
+            return_value=mock_token_response(),
         ):
             await source.ping()
 
@@ -540,6 +736,34 @@ async def test_ping_for_unsuccessful_connection(mock_apply_retry_strategy):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "attachment, doit, expected_content",
+    [
+        (FILE, True, FILE_EXPECTED_CONTENT),
+        (FILE, False, None),
+        (FILE_WITHOUT_EXTENSION, True, None),
+        (FILE_WITH_LARGE_DATA, True, None),
+        (FILE_WITH_UNSUPPORTED_EXTENSION, True, None),
+    ],
+)
+async def test_get_content(attachment, doit, expected_content):
+    async with create_source(ZoomDataSource) as source:
+        with mock.patch(
+            "aiohttp.ClientSession.post",
+            return_value=mock_token_response(),
+        ):
+            with mock.patch(
+                "aiohttp.ClientSession.get",
+                side_effect=mock_zoom_apis,
+            ):
+                response = await source.get_content(
+                    doc=attachment,
+                    doit=doit,
+                )
+                assert response == expected_content
+
+
+@pytest.mark.asyncio
 @freeze_time("2023-03-09T00:00:00")
 async def test_get_docs():
     document_without_attachment = []
@@ -550,7 +774,7 @@ async def test_get_docs():
             "aiohttp.ClientSession.post",
             return_value=get_mock(mock_response=SAMPLE_ACCESS_TOKEN_RESPONSE),
         ):
-            with mock.patch("aiohttp.ClientSession.get", side_effect=mock_response):
+            with mock.patch("aiohttp.ClientSession.get", side_effect=mock_zoom_apis):
                 async for (doc, content) in source.get_docs():
                     document_without_attachment.append(doc)
                     if content:
@@ -574,8 +798,8 @@ async def test_get_docs():
         element in document_without_attachment for element in CHAT_EXPECTED_RESPONSE
     )  # Chats
     assert all(
-        element in document_without_attachment for element in FILE_EXPECTED_RESPONSE
+        element in document_without_attachment for element in EXPECTED_FILES_RESPONSE
     )  # Files
     assert all(
-        element in document_with_attachment for element in CONTENT_EXPECTED_RESPONSE
+        element in document_with_attachment for element in [FILE_EXPECTED_CONTENT]
     )  # Contents
