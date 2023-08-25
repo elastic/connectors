@@ -75,6 +75,7 @@ def test_field():
 
 
 def test_field_convert():
+    assert Field("name", field_type="str").value == ""
     assert Field("name", value="", field_type="str").value == ""
     assert Field("name", value="1", field_type="str").value == "1"
     assert Field("name", value="foo", field_type="str").value == "foo"
@@ -83,18 +84,22 @@ def test_field_convert():
         Field("name", value={"foo": "bar"}, field_type="str").value == "{'foo': 'bar'}"
     )
 
+    assert Field("name", field_type="int").value is None
     assert Field("name", value="1", field_type="int").value == 1
     assert Field("name", value="", field_type="int").value is None
     assert Field("name", value=None, field_type="int").value is None
 
+    assert Field("name", field_type="float").value is None
     assert Field("name", value="1.2", field_type="float").value == 1.2
     assert Field("name", value="", field_type="float").value is None
     assert Field("name", value=None, field_type="float").value is None
 
+    assert Field("name", field_type="bool").value is None
     assert Field("name", value="foo", field_type="bool").value is True
     assert Field("name", value="", field_type="bool").value is None
     assert Field("name", value=None, field_type="bool").value is None
 
+    assert Field("name", field_type="list").value == []
     assert Field("name", value="1", field_type="list").value == ["1"]
     assert Field("name", value="1,2,3", field_type="list").value == ["1", "2", "3"]
     assert Field("name", value=[1, 2], field_type="list").value == [1, 2]
@@ -108,6 +113,7 @@ def test_field_convert():
     TestCase().assertCountEqual(
         Field("name", value={"foo", "bar"}, field_type="list").value, ["foo", "bar"]
     )
+
 
     # unsupported cases that aren't converted
     assert Field("name", value={"foo": "bar"}, field_type="dict").value == {

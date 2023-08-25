@@ -260,7 +260,7 @@ class DataSourceConfiguration:
 
     def set_defaults(self, default_config):
         for name, item in default_config.items():
-            self._defaults[name] = item.get("value", None)
+            self._defaults[name] = item["value"]
             if name in self._config:
                 self._config[name].field_type = item["type"]
 
