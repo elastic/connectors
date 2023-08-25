@@ -43,11 +43,7 @@ If you're running the Connector Service against a dockerised version of Elastics
 ```
 # When connecting to your cloud deployment you should edit the host value
 elasticsearch.host: http://host.docker.internal:9200
-
-# Using `api_key` is recommended instead of `username`/`password`
 elasticsearch.api_key: <ELASTICSEARCH_API_KEY>
-# elasticsearch.username: elastic
-# elasticsearch.password: <YOUR_PASSWORD>
 
 connectors:
   - connector_id: <CONNECTOR_ID_FROM_KIBANA>
@@ -55,6 +51,8 @@ connectors:
     api_key: <API_KEY_FROM_KIBANA>
 
 ```
+
+Using the `elasticsearch.api_key` is the recommended authentication method. However, you can also use `elasticsearch.username` and `elasticsearch.password` to authenticate with your Elasticsearch instance.
 
 Note: You can change other default configurations by simply uncommenting specific settings in the configuration file and modifying their values.
 
@@ -70,7 +68,7 @@ For example, if you've created a custom version of MongoDB connector, you can ta
 docker build -t connector/custom-mongodb:1.0 .
 ```
 
-You can later use `<TAG_OF_THE_IMAGE>` instead of `docker.elastic.co/enterprise-search/elastic-connectors:8.10.0.0-SNAPSHOT` in the next step to run the Docker image.
+You can later use `<TAG_OF_THE_IMAGE>` instead of `docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT` in the next step to run the Docker image.
 
 ## 5. Run the Docker image.
 
@@ -82,7 +80,7 @@ docker run \
 --network "elastic" \
 --tty \
 --rm \
-docker.elastic.co/enterprise-search/elastic-connectors:8.10.0.0-SNAPSHOT \
+docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT \
 /app/bin/elastic-ingest \
 -c /config/config.yml
 ```
@@ -91,7 +89,7 @@ You might need to adjust some details here:
 
 - `-v ~/connectors-python-config:/config \` - replace `~/connectors-python-config` with the directory that you've created in step 2 if you've chosen a different name for it.
 - `--network "elastic"` - replace `elastic` with the network that you've created in step 1 if you've chosen a different name for it.
-- `docker.elastic.co/enterprise-search/elastic-connectors:8.10.0.0-SNAPSHOT` - adjust the version for the connectors to match your Elasticsearch deployment version.
-  - For Elasticsearch of version 8.7 you can use `elastic-connectors:8.10.0.0`for a stable revision of the connectors, or `elastic-connectors:8.10.0.0-SNAPSHOT` if you want the latest nightly build of the connectors (not recommended).
-  - If you are using nightly builds, you will need to run `docker pull docker.elastic.co/enterprise-search/elastic-connectors:8.10.0.0-SNAPSHOT` before starting the service. This ensures you're using the latest version of the Docker image.
+- `docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT` - adjust the version for the connectors to match your Elasticsearch deployment version.
+  - For Elasticsearch of version `<VERSION>` you can use `elastic-connectors:<VERSION>`for a stable revision of the connectors, or `elastic-connectors:<VERSION>-SNAPSHOT` if you want the latest nightly build of the connectors (not recommended).
+  - If you are using nightly builds, you will need to run `docker pull docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT` before starting the service. This ensures you're using the latest version of the Docker image.
 - `-c /config/config.yml` - replace `config.yml` with the name of the config file you've put in the directory you've created in step 2.
