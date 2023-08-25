@@ -116,7 +116,7 @@ async def test_validate_config_when_host_url_is_empty():
     """This function test validate_config when host_url is empty"""
     # Setup
     async with create_source(SharepointServerDataSource) as source:
-        source.configuration.set_field(name="host_url", value="")
+        source.configuration.set_value(name="host_url", value="")
 
         # Execute
         with pytest.raises(ConfigurableFieldValueError):

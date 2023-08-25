@@ -100,21 +100,15 @@ DEFAULT_GROUPS_PATCHED = ["some default group"]
 
 def set_dls_enabled(source, dls_enabled):
     source.set_features(Features({"document_level_security": {"enabled": dls_enabled}}))
-    source.configuration.set_field(
-        "use_document_level_security", field_type="bool", value=dls_enabled
-    )
+    source.configuration.set_value("use_document_level_security", value=dls_enabled)
 
 
 def set_fetch_drive_item_permissions_enabled(source, enabled):
-    source.configuration.set_field(
-        "fetch_drive_item_permissions", field_type="bool", value=enabled
-    )
+    source.configuration.set_value("fetch_drive_item_permissions", value=enabled)
 
 
 def set_fetch_unique_list_permissions_enabled(source, enabled):
-    source.configuration.set_field(
-        "fetch_unique_list_permissions", field_type="bool", value=enabled
-    )
+    source.configuration.set_value("fetch_unique_list_permissions", value=enabled)
 
 
 def dls_feature_flag_enabled(value):
@@ -2767,8 +2761,8 @@ class TestSharepointOnlineDataSource:
             source._features.document_level_security_enabled = Mock(
                 return_value=dls_feature_flag
             )
-            source.configuration.set_field(
-                "use_document_level_security", field_type="bool", value=dls_config_value
+            source.configuration.set_value(
+                "use_document_level_security", value=dls_config_value
             )
 
             assert source._dls_enabled() == expected_dls_enabled

@@ -119,9 +119,7 @@ def setup_source():
 
 def set_dls_enabled(source, dls_enabled):
     source.set_features(Features({"document_level_security": {"enabled": dls_enabled}}))
-    source.configuration.set_field(
-        "use_document_level_security", field_type="bool", value=dls_enabled
-    )
+    source.configuration.set_value("use_document_level_security", value=dls_enabled)
 
 
 class TestGMailDataSource:
@@ -183,10 +181,10 @@ class TestGMailDataSource:
         valid_json = '{"project_id": "dummy123"}'
 
         async with setup_source() as source:
-            source.configuration.set_field(
+            source.configuration.set_value(
                 "service_account_credentials", value=valid_json
             )
-            source.configuration.set_field("customer_id", value=CUSTOMER_ID)
+            source.configuration.set_value("customer_id", value=CUSTOMER_ID)
 
             try:
                 await source.validate_config()
@@ -196,7 +194,7 @@ class TestGMailDataSource:
     @pytest.mark.asyncio
     async def test_validate_config_invalid(self):
         async with setup_source() as source:
-            source.configuration.set_field(
+            source.configuration.set_value(
                 "service_account_credentials", value="invalid json"
             )
 

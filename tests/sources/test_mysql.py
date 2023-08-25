@@ -591,9 +591,7 @@ async def setup_mysql_source(source, database="", client=None):
     if client is None:
         client = MagicMock()
 
-    source.configuration.set_field(
-        name="database", label="Database", value=database, field_type="str"
-    )
+    source.configuration.set_value(name="database", value=database)
 
     source.database = database
     source.mysql_client = client

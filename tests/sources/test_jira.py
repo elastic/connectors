@@ -355,21 +355,23 @@ async def test_configuration():
 
 
 @pytest.mark.parametrize(
-    "field, is_cloud",
+    "field, data_source",
     [
-        ("jira_url", True),
-        ("projects", True),
-        ("api_token", True),
-        ("account_email", True),
-        ("username", False),
-        ("password", False),
+        ("jira_url", "jira_cloud"),
+        ("projects", "jira_cloud"),
+        ("api_token", "jira_cloud"),
+        ("account_email", "jira_cloud"),
+        ("username", "jira_server"),
+        ("password", "jira_server"),
     ],
 )
 @pytest.mark.asyncio
-async def test_validate_configuration_for_empty_fields(field, is_cloud):
+async def test_validate_configuration_for_empty_fields(field, data_source):
     async with create_source(JiraDataSource) as source:
-        source.jira_client.is_cloud = is_cloud
-        source.jira_client.configuration.set_field(name=field, value="")
+        source.jira_client.configuration.set_value(
+            name="data_source", value=data_source
+        )
+        source.jira_client.configuration.set_value(name=field, value="")
 
         # Execute
         with pytest.raises(ConfigurableFieldValueError):
