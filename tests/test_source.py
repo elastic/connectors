@@ -109,6 +109,12 @@ def test_field_convert():
         Field("name", value={"foo", "bar"}, field_type="list").value, ["foo", "bar"]
     )
 
+    # unsupported cases that aren't converted
+    assert Field("name", value={"foo": "bar"}, field_type="dict").value == {
+        "foo": "bar"
+    }
+    assert Field("name", value="not a dict", field_type="dict").value == "not a dict"
+
 
 def test_data_source_configuration():
     c = DataSourceConfiguration(CONFIG)

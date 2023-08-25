@@ -120,7 +120,7 @@ class Field:
             # unsupported type
             return value
 
-        if isinstance(value, cast_type):  # pyright:ignore
+        if isinstance(value, cast_type):
             return value
 
         # list requires special type casting
