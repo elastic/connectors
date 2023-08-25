@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+import itertools
 import os
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -92,7 +93,7 @@ def sync_job_index_mock():
 
 def concurrent_task_mock():
     task_mock = Mock()
-    task_mock.put = AsyncMock()
+    task_mock.try_put = AsyncMock()
     task_mock.join = AsyncMock()
     task_mock.cancel = Mock()
 
@@ -163,8 +164,8 @@ async def test_no_connector(connector_index_mock, concurrent_tasks_mocks, set_en
     connector_index_mock.supported_connectors.return_value = AsyncIterator([])
     await create_and_run_service()
 
-    content_syncs_tasks_mock.put.assert_not_awaited()
-    access_control_syncs_tasks_mock.put.assert_not_awaited()
+    content_syncs_tasks_mock.try_put.assert_not_awaited()
+    access_control_syncs_tasks_mock.try_put.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -181,8 +182,8 @@ async def test_no_pending_jobs(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([])
     await create_and_run_service()
 
-    content_syncs_tasks_mock.put.assert_not_awaited()
-    access_control_syncs_tasks_mock.put.assert_not_awaited()
+    content_syncs_tasks_mock.try_put.assert_not_awaited()
+    access_control_syncs_tasks_mock.try_put.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -207,8 +208,10 @@ async def test_job_execution_content_sync_job_and_access_control_sync_job(
 
     await create_and_run_service()
 
-    content_syncs_tasks_mock.put.assert_awaited_once_with(sync_job_runner_mock.execute)
-    access_control_syncs_tasks_mock.put.assert_awaited_once_with(
+    content_syncs_tasks_mock.try_put.assert_awaited_once_with(
+        sync_job_runner_mock.execute
+    )
+    access_control_syncs_tasks_mock.try_put.assert_awaited_once_with(
         sync_job_runner_mock.execute
     )
 
@@ -232,8 +235,10 @@ async def test_job_execution_content_sync_job(
 
     await create_and_run_service()
 
-    content_syncs_tasks_mock.put.assert_awaited_once_with(sync_job_runner_mock.execute)
-    access_control_syncs_tasks_mock.put.assert_not_awaited()
+    content_syncs_tasks_mock.try_put.assert_awaited_once_with(
+        sync_job_runner_mock.execute
+    )
+    access_control_syncs_tasks_mock.try_put.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -257,10 +262,10 @@ async def test_job_execution_access_control_sync_job(
 
     await create_and_run_service()
 
-    access_control_syncs_tasks_mock.put.assert_awaited_once_with(
+    access_control_syncs_tasks_mock.try_put.assert_awaited_once_with(
         sync_job_runner_mock.execute
     )
-    content_syncs_tasks_mock.put.assert_not_awaited()
+    content_syncs_tasks_mock.try_put.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -278,8 +283,8 @@ async def test_job_execution_with_unsupported_source(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service()
 
-    content_syncs_tasks_mock.put.assert_not_awaited()
-    access_control_syncs_tasks_mock.put.assert_not_awaited()
+    content_syncs_tasks_mock.try_put.assert_not_awaited()
+    access_control_syncs_tasks_mock.try_put.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -302,8 +307,8 @@ async def test_job_execution_with_connector_not_found(
     )
     await create_and_run_service()
 
-    content_syncs_tasks_mock.put.assert_not_awaited()
-    access_control_syncs_tasks_mock.put.assert_not_awaited()
+    content_syncs_tasks_mock.try_put.assert_not_awaited()
+    access_control_syncs_tasks_mock.try_put.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -323,8 +328,8 @@ async def test_job_execution_with_premium_connector(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service()
 
-    content_syncs_tasks_mock.put.assert_not_awaited()
-    access_control_syncs_tasks_mock.put.assert_awaited_once_with(
+    content_syncs_tasks_mock.try_put.assert_not_awaited()
+    access_control_syncs_tasks_mock.try_put.assert_awaited_once_with(
         sync_job_runner_mock.execute
     )
 
@@ -355,10 +360,12 @@ async def test_job_execution_with_premium_connector_with_insufficient_license(
     await create_and_run_service()
 
     # Access control sync job should not be executed (license insufficient)
-    access_control_syncs_tasks_mock.put.assert_not_awaited()
+    access_control_syncs_tasks_mock.try_put.assert_not_awaited()
 
     # We still want to execute full content sync jobs
-    content_syncs_tasks_mock.put.assert_awaited_once_with(sync_job_runner_mock.execute)
+    content_syncs_tasks_mock.try_put.assert_awaited_once_with(
+        sync_job_runner_mock.execute
+    )
 
 
 @pytest.mark.asyncio
@@ -378,8 +385,8 @@ async def test_content_job_execution_with_connector_still_syncing(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service()
 
-    content_syncs_tasks_mock.put.assert_not_awaited()
-    access_control_syncs_tasks_mock.put.assert_not_awaited()
+    content_syncs_tasks_mock.try_put.assert_not_awaited()
+    access_control_syncs_tasks_mock.try_put.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -402,8 +409,8 @@ async def test_access_control_job_execution_with_connector_still_syncing(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service()
 
-    content_syncs_tasks_mock.put.assert_not_awaited()
-    access_control_syncs_tasks_mock.put.assert_not_awaited()
+    content_syncs_tasks_mock.try_put.assert_not_awaited()
+    access_control_syncs_tasks_mock.try_put.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -430,8 +437,8 @@ async def test_access_control_job_execution_with_insufficient_license(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service()
 
-    content_syncs_tasks_mock.put.assert_not_awaited()
-    access_control_syncs_tasks_mock.put.assert_not_awaited()
+    content_syncs_tasks_mock.try_put.assert_not_awaited()
+    access_control_syncs_tasks_mock.try_put.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -458,8 +465,8 @@ async def test_access_control_job_execution_with_dls_feature_flag_disabled(
 
     await create_and_run_service()
 
-    content_syncs_tasks_mock.put.assert_not_awaited()
-    access_control_syncs_tasks_mock.put.assert_not_awaited()
+    content_syncs_tasks_mock.try_put.assert_not_awaited()
+    access_control_syncs_tasks_mock.try_put.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -484,8 +491,44 @@ async def test_job_execution_with_unknown_job_type(
 
     await create_and_run_service()
 
-    content_syncs_tasks_mock.put.assert_not_awaited()
-    access_control_syncs_tasks_mock.put.assert_not_awaited()
+    content_syncs_tasks_mock.try_put.assert_not_awaited()
+    access_control_syncs_tasks_mock.try_put.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_job_execution_new_sync_job_not_blocked(
+    connector_index_mock,
+    sync_job_index_mock,
+    concurrent_tasks_mocks,
+    sync_job_runner_mock,
+    set_env,
+):
+    content_syncs_tasks_mock, access_control_syncs_tasks_mock = concurrent_tasks_mocks
+
+    connector = mock_connector()
+    connector_index_mock.supported_connectors.side_effect = itertools.chain(
+        [AsyncIterator([connector]), AsyncIterator([connector])],
+        itertools.repeat(AsyncIterator([])),
+    )
+    connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
+
+    first_content_sync_job = mock_sync_job(job_type=JobType.FULL)
+    second_content_sync_job = mock_sync_job(job_type=JobType.FULL)
+    first_access_control_sync_job = mock_sync_job(job_type=JobType.ACCESS_CONTROL)
+    second_access_control_sync_job = mock_sync_job(job_type=JobType.ACCESS_CONTROL)
+    sync_job_index_mock.pending_jobs.side_effect = [
+        AsyncIterator([first_content_sync_job, first_access_control_sync_job]),
+        AsyncIterator([second_content_sync_job, second_access_control_sync_job]),
+    ]
+
+    await create_and_run_service(stop_after=0.2)
+
+    content_syncs_tasks_mock.try_put.assert_awaited_with(sync_job_runner_mock.execute)
+    assert content_syncs_tasks_mock.try_put.await_count == 2
+    access_control_syncs_tasks_mock.try_put.assert_awaited_with(
+        sync_job_runner_mock.execute
+    )
+    assert access_control_syncs_tasks_mock.try_put.await_count == 2
 
 
 def test_load_max_concurrent_content_syncs_from_config():

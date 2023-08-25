@@ -82,7 +82,10 @@ class JobExecutionService(BaseService):
             connector=connector,
             es_config=self._override_es_config(connector),
         )
-        await self.content_syncs.put(sync_job_runner.execute)
+        if not await self.content_syncs.try_put(sync_job_runner.execute):
+            sync_job.log_warning(
+                f"Content sync job execution has reached the maximum concurrency of {self.max_concurrent_content_syncs}. Retry in {self.idling} seconds."
+            )
 
     async def _access_control_sync(self, sync_job, connector, source_klass):
         if connector.last_access_control_sync_status == JobStatus.IN_PROGRESS:
@@ -97,7 +100,10 @@ class JobExecutionService(BaseService):
             connector=connector,
             es_config=self._override_es_config(connector),
         )
-        await self.access_control_syncs.put(sync_job_runner.execute)
+        if not await self.access_control_syncs.try_put(sync_job_runner.execute):
+            sync_job.log_warning(
+                f"Access control sync job execution has reached the maximum concurrency of {self.max_concurrent_access_control_syncs}. Retry in {self.idling} seconds."
+            )
 
     async def _sync(self, sync_job):
         if sync_job.service_type not in self.source_list:
@@ -160,15 +166,13 @@ class JobExecutionService(BaseService):
         )
 
         try:
+            self.content_syncs = ConcurrentTasks(
+                max_concurrency=self.max_concurrent_content_syncs
+            )
+            self.access_control_syncs = ConcurrentTasks(
+                max_concurrency=self.max_concurrent_access_control_syncs
+            )
             while self.running:
-                # creating pools of tasks for every round
-                self.content_syncs = ConcurrentTasks(
-                    max_concurrency=self.max_concurrent_content_syncs
-                )
-                self.access_control_syncs = ConcurrentTasks(
-                    max_concurrency=self.max_concurrent_access_control_syncs
-                )
-
                 try:
                     logger.debug(
                         f"Polling every {self.idling} seconds for Job Execution"
@@ -193,12 +197,6 @@ class JobExecutionService(BaseService):
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
-                finally:
-                    await self.content_syncs.join()
-                    await self.access_control_syncs.join()
-
-                self.content_syncs = None
-                self.access_control_syncs = None
 
                 # Immediately break instead of sleeping
                 if not self.running:
