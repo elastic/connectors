@@ -12,7 +12,7 @@ These connectors are available as:
 - [**Native connectors**](https://www.elastic.co/guide/en/enterprise-search/current/native-connectors.html) using our fully managed service on Elastic Cloud
 
 ℹ️ For an overview of the steps involved in deploying connector clients refer to [**Connector clients**](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
-You can get started quickly with Docker, using [these instructions](./docs/docker.md).
+You can get started quickly with Docker, using [these instructions](docs/DOCKER.md).
 We also have an end-to-end tutorial using the [PostgreSQL connector client](https://www.elastic.co/guide/en/enterprise-search/current/postgresql-connector-client-tutorial.html).
 
 
