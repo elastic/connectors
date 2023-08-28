@@ -31,9 +31,6 @@ def configured_tables(tables):
     def table_filter(table):
         return table is not None and len(table) > 0
 
-    if tables is None:
-        return []
-
     return (
         list(
             filter(
