@@ -353,29 +353,35 @@ class MySqlDataSource(BaseDataSource):
             "host": {
                 "label": "Host",
                 "order": 1,
+                "type": "str",
             },
             "port": {
                 "display": "numeric",
                 "label": "Port",
                 "order": 2,
+                "type": "int",
             },
             "user": {
                 "label": "Username",
                 "order": 3,
+                "type": "str",
             },
             "password": {
                 "label": "Password",
                 "order": 4,
                 "sensitive": True,
+                "type": "str",
             },
             "database": {
                 "label": "Database",
                 "order": 5,
+                "type": "str",
             },
             "tables": {
                 "display": "textarea",
                 "label": "Comma-separated list of tables",
                 "order": 6,
+                "type": "list",
             },
             "ssl_enabled": {
                 "display": "toggle",
@@ -387,6 +393,7 @@ class MySqlDataSource(BaseDataSource):
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
                 "order": 8,
+                "type": "str",
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
