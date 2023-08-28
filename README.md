@@ -2,7 +2,7 @@
 
 <img width="468" alt="search-icon" src="https://github.com/elastic/connectors-python/assets/32779855/2f594d89-7369-4c49-994a-1d67eefce436">
 
-## Connectors 
+## Connectors
 
 This repository contains the source code for all Elastic connectors, developed by the Search team at Elastic.
 Use connectors to sync data from popular data sources to Elasticsearch.
@@ -12,6 +12,7 @@ These connectors are available as:
 - [**Native connectors**](https://www.elastic.co/guide/en/enterprise-search/current/native-connectors.html) using our fully managed service on Elastic Cloud
 
 ℹ️ For an overview of the steps involved in deploying connector clients refer to [**Connector clients**](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+You can get started quickly using Docker, using [these instructions](./docs/docker.md).
 We also have an end-to-end tutorial using the [PostgreSQL connector client](https://www.elastic.co/guide/en/enterprise-search/current/postgresql-connector-client-tutorial.html).
 
 
