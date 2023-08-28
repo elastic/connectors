@@ -541,9 +541,7 @@ async def test_get_content(attachment, expected_content):
 async def test_get_user_accounts_for_cloud(account, is_cloud, user_response):
     async with create_source(OutlookDataSource) as source:
         source.client.is_cloud = is_cloud
-        source.client._get_user_instance.get_users = AsyncMock(
-            return_value=[user_response]
-        )
+        source.client._get_user_instance.get_users = AsyncIterator([user_response])
 
         async for source_account in source.client._get_user_instance.get_user_accounts():
             assert source_account == "account"

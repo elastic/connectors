@@ -255,7 +255,8 @@ class ExchangeUsers:
             )
 
         response.extend(response_for_admin)
-        return response
+        for user in response:
+            yield user
 
     async def get_user_accounts(self):
         BaseProtocol.HTTP_ADAPTER_CLS = (
@@ -272,7 +273,7 @@ class ExchangeUsers:
             retry_policy=FaultTolerance(max_wait=120),
         )
 
-        for user in await self.get_users():
+        async for user in self.get_users():
             if "searchResRef" in user["type"]:
                 continue
 
@@ -356,12 +357,13 @@ class Office365Users:
                     for user in json_response.get("value")
                     if user.get("mail")
                 ]
-                return users_mails
+                for user in users_mails:
+                    yield user
         except Exception:
             raise
 
     async def get_user_accounts(self):
-        for user in await self.get_users():
+        async for user in self.get_users():
             credentials = OAuth2Credentials(
                 client_id=self.client_id,
                 tenant_id=self.tenant_id,
@@ -548,7 +550,7 @@ class OutlookClient:
         )
 
     async def ping(self):
-        await self._get_user_instance.get_users()
+        await anext(self._get_user_instance.get_users())
 
     async def get_mails(self, account):
         for mail_type in MAIL_TYPES:
