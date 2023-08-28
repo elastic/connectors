@@ -533,7 +533,7 @@ async def test_get_content(attachment, expected_content):
 @pytest.mark.parametrize(
     "is_cloud, user_response",
     [
-        (True, "dummy.user@gmail.com"),
+        (True, {"value": [{"mail": "dummy.user@gmail.com"}]}),
         (False, {"type": "user", "attributes": {"mail": "account"}}),
     ],
 )

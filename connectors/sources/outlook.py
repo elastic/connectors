@@ -9,6 +9,8 @@ import warnings
 from copy import copy
 from datetime import date
 from functools import cached_property, partial
+from tempfile import NamedTemporaryFile
+from urllib.parse import urlparse
 
 import aiohttp
 import exchangelib
@@ -36,9 +38,9 @@ from connectors.utils import (
     MemQueue,
     RetryStrategy,
     get_base64_value,
+    get_pem_format,
     html_to_text,
     retryable,
-    ssl_context,
 )
 
 RETRIES = 3
@@ -188,18 +190,25 @@ class SSLFailed(Exception):
     pass
 
 
+global_dns_name = ""
+global_cert = ""
+
+
 class RootCAAdapter(requests.adapters.HTTPAdapter):
     """Class to verify SSL Certificate for Exchange Servers"""
 
-    def __init__(self):
-        self.ssl_verify = False
-        self.ssl_ctx = None
-
     def cert_verify(self, conn, url, ssl_certificate_file, cert):
         try:
-            super().cert_verify(
-                conn=conn, url=url, verify=self.ssl_verify, cert=self.ssl_ctx
-            )
+            with NamedTemporaryFile(mode="w", delete=False, suffix=".cer") as file:
+                file.write(global_cert)
+
+                ssl_certificate_file = {
+                    global_dns_name: file.name,
+                }[urlparse(url).hostname]
+
+                super().cert_verify(
+                    conn=conn, url=url, verify=ssl_certificate_file, cert=cert
+                )
         except Exception as exception:
             raise SSLFailed(
                 f"Something went wrong while verifying SSL certificate. Error: {exception}"
@@ -227,38 +236,70 @@ class ExchangeUsers:
             auto_bind=True,  # pyright: ignore
         )
 
+    async def close(self):
+        pass
+
+    def _fetch_normal_users(self, search_query):
+        try:
+            has_value_for_normal_users, _, response, _ = self._create_connection.search(
+                search_query,
+                SEARCH_FILTER_FOR_NORMAL_USERS,
+                attributes=["mail"],
+            )
+
+            if not has_value_for_normal_users:
+                raise UsersFetchFailed(
+                    "Error while fetching users from Exchange Active Directory."
+                )
+
+            for user in response:
+                yield user
+
+        except Exception as e:
+            raise UsersFetchFailed(
+                f"Something went wrong while fetching users. Error: {e}"
+            ) from e
+
+    def _fetch_admin_users(self, search_query):
+        try:
+            (
+                has_value_for_admin_users,
+                _,
+                response_for_admin,
+                _,
+            ) = self._create_connection.search(
+                search_query,
+                SEARCH_FILTER_FOR_ADMIN,
+                attributes=["mail"],
+            )
+
+            if not has_value_for_admin_users:
+                raise UsersFetchFailed(
+                    "Error while fetching users from Exchange Active Directory."
+                )
+
+            for user in response_for_admin:
+                yield user
+        except Exception as e:
+            raise UsersFetchFailed(
+                f"Something went wrong while fetching users. Error: {e}"
+            ) from e
+
     async def get_users(self):
         warnings.filterwarnings("default")
         ldap_domain_name_list = ["DC=" + domain for domain in self.domain.split(".")]
-        search_query = ",".join(map(str, ldap_domain_name_list))
+        search_query = ",".join(ldap_domain_name_list)
 
-        has_value_for_normal_users, _, response, _ = self._create_connection.search(
-            search_query,
-            SEARCH_FILTER_FOR_NORMAL_USERS,
-            attributes=["mail"],
-        )
+        for user in self._fetch_normal_users(search_query=search_query):
+            yield user
 
-        (
-            has_value_for_admin_users,
-            _,
-            response_for_admin,
-            _,
-        ) = self._create_connection.search(
-            search_query,
-            SEARCH_FILTER_FOR_ADMIN,
-            attributes=["mail"],
-        )
-
-        if not (has_value_for_normal_users or has_value_for_admin_users):
-            raise UsersFetchFailed(
-                "Error while fetching users from Exchange Active Directory."
-            )
-
-        response.extend(response_for_admin)
-        for user in response:
+        for user in self._fetch_admin_users(search_query=search_query):
             yield user
 
     async def get_user_accounts(self):
+        global global_dns_name
+        global_dns_name = self.exchange_server
+
         BaseProtocol.HTTP_ADAPTER_CLS = (
             RootCAAdapter if self.ssl_enabled else NoVerifyHTTPAdapter
         )
@@ -296,6 +337,10 @@ class Office365Users:
     @cached_property
     def _get_session(self):
         return aiohttp.ClientSession(raise_for_status=True)
+
+    async def close(self):
+        await self._get_session.close()
+        del self._get_session
 
     def _check_errors(self, response):
         match response.status:
@@ -351,38 +396,36 @@ class Office365Users:
                     "Content-Type": "application/json",
                 },
             ) as response:
-                json_response = await response.json()
-                users_mails = [
-                    user.get("mail")
-                    for user in json_response.get("value")
-                    if user.get("mail")
-                ]
-                for user in users_mails:
-                    yield user
+                yield await response.json()
         except Exception:
             raise
 
     async def get_user_accounts(self):
-        async for user in self.get_users():
-            credentials = OAuth2Credentials(
-                client_id=self.client_id,
-                tenant_id=self.tenant_id,
-                client_secret=self.client_secret,
-                identity=Identity(primary_smtp_address=user),
-            )
-            configuration = Configuration(
-                credentials=credentials,
-                auth_type=OAUTH2,
-                service_endpoint=EWS_ENDPOINT,
-                retry_policy=FaultTolerance(max_wait=120),
-            )
-            user_account = Account(
-                primary_smtp_address=user,
-                config=configuration,
-                autodiscover=False,
-                access_type=IMPERSONATION,
-            )
-            yield user_account
+        async for users in self.get_users():
+            for user in users.get("value", []):
+                mail = user.get("mail")
+                if mail is None:
+                    continue
+
+                credentials = OAuth2Credentials(
+                    client_id=self.client_id,
+                    tenant_id=self.tenant_id,
+                    client_secret=self.client_secret,
+                    identity=Identity(primary_smtp_address=mail),
+                )
+                configuration = Configuration(
+                    credentials=credentials,
+                    auth_type=OAUTH2,
+                    service_endpoint=EWS_ENDPOINT,
+                    retry_policy=FaultTolerance(max_wait=120),
+                )
+                user_account = Account(
+                    primary_smtp_address=mail,
+                    config=configuration,
+                    autodiscover=False,
+                    access_type=IMPERSONATION,
+                )
+                yield user_account
 
 
 class OutlookDocFormatter:
@@ -535,10 +578,12 @@ class OutlookClient:
 
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
+
+        global global_cert
         if self.ssl_enabled and self.certificate:
-            self.ssl_ctx = ssl_context(certificate=self.certificate)
+            global_cert = get_pem_format(self.certificate)
         else:
-            self.ssl_ctx = False
+            global_cert = ""
 
         return ExchangeUsers(
             ad_server=self.configuration["active_directory_server"],
@@ -712,6 +757,9 @@ class OutlookDataSource(BaseDataSource):
                 "value": "",
             },
         }
+
+    async def close(self):
+        await self.client._get_user_instance.close()
 
     def _pre_checks_for_get_content(
         self, attachment_extension, attachment_name, attachment_size
