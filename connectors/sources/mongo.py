@@ -118,14 +118,12 @@ class MongoDataSource(BaseDataSource):
                 "label": "Server hostname",
                 "order": 1,
                 "type": "str",
-                "value": "",
             },
             "user": {
                 "label": "Username",
                 "order": 2,
                 "type": "str",
                 "value": "",
-                "required": False,
             },
             "password": {
                 "label": "Password",
@@ -133,21 +131,18 @@ class MongoDataSource(BaseDataSource):
                 "sensitive": True,
                 "type": "str",
                 "value": "",
-                "required": False,
             },
             "database": {"label": "Database", "order": 4, "type": "str", "value": ""},
             "collection": {
                 "label": "Collection",
                 "order": 5,
                 "type": "str",
-                "value": "",
             },
             "direct_connection": {
                 "display": "toggle",
                 "label": "Direct connection",
                 "order": 6,
                 "type": "bool",
-                "value": False,
             },
         }
 

@@ -14,7 +14,7 @@ from freezegun import freeze_time
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.logger import logger
 from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.mysql import (
     MySQLAdvancedRulesValidator,
     MySQLClient,
