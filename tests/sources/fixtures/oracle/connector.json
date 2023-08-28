@@ -54,7 +54,7 @@
                         "options": [],
                         "order": 6,
                         "type": "list",
-                        "value": "*",
+                        "value": "*"
                 },
                 "fetch_size": {
                         "default_value": 50,
