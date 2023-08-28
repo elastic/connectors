@@ -12,6 +12,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from functools import cache
+from pydoc import locate
 
 from bson import Decimal128
 
@@ -40,6 +41,14 @@ DEFAULT_CONFIGURATION = {
     "value": "",
 }
 
+TYPE_DEFAULTS = {
+    str: "",
+    int: None,
+    float: None,
+    bool: None,
+    list: [],
+}
+
 
 class ValidationTypes(Enum):
     LESS_THAN = "less_than"
@@ -58,7 +67,7 @@ class Field:
         depends_on=None,
         label=None,
         required=True,
-        type="str",
+        field_type="str",
         validations=None,
         value=None,
     ):
@@ -69,23 +78,23 @@ class Field:
         if validations is None:
             validations = []
 
-        self.default_value = self._convert(default_value, type)
+        self.default_value = self._convert(default_value, field_type)
         self.depends_on = depends_on
         self.label = label
         self.name = name
         self.required = required
-        self._type = type
+        self._field_type = field_type
         self.validations = validations
-        self._value = self._convert(value, type)
+        self._value = self._convert(value, field_type)
 
     @property
-    def type(self):
-        return self._type
+    def field_type(self):
+        return self._field_type
 
-    @type.setter
-    def type(self, value):
-        self._type = value
-        self.value = self._convert(self.value, self._type)
+    @field_type.setter
+    def field_type(self, value):
+        self._field_type = value
+        self.value = self._convert(self.value, self.field_type)
 
     @property
     def value(self):
@@ -105,20 +114,32 @@ class Field:
     def value(self, value):
         self._value = value
 
-    def _convert(self, value, type_):
-        if not isinstance(value, str):
-            # we won't convert the value if it's not a str
+    def _convert(self, value, field_type_):
+        cast_type = locate(field_type_)
+        if cast_type not in TYPE_DEFAULTS:
+            # unsupported type
             return value
 
-        if type_ == "int":
-            return int(value)
-        elif type_ == "float":
-            return float(value)
-        elif type_ == "bool":
-            return value.lower() in ("y", "yes", "true", "1")
-        elif type_ == "list":
-            return [item.strip() for item in value.split(",")]
-        return value
+        if isinstance(value, cast_type):
+            return value
+
+        # list requires special type casting
+        if cast_type == list:
+            if isinstance(value, str):
+                return [item.strip() for item in value.split(",")] if value else []
+            elif isinstance(value, int):
+                return [value]
+            elif isinstance(value, set):
+                return list(value)
+            elif isinstance(value, dict):
+                return list(value.items())
+            else:
+                return [value] if value is not None else []
+
+        if value is None or value == "":
+            return TYPE_DEFAULTS[cast_type]
+
+        return cast_type(value)
 
     def is_value_empty(self):
         """Checks if the `value` field is empty or not.
@@ -241,7 +262,7 @@ class DataSourceConfiguration:
         for name, item in default_config.items():
             self._defaults[name] = item["value"]
             if name in self._config:
-                self._config[name].type = item["type"]
+                self._config[name].field_type = item["type"]
 
     def __getitem__(self, key):
         if key not in self._config and key in self._defaults:
@@ -263,12 +284,19 @@ class DataSourceConfiguration:
         depends_on=None,
         label=None,
         required=True,
-        type="str",
+        field_type="str",
         validations=None,
         value=None,
     ):
         self._config[name] = Field(
-            name, default_value, depends_on, label, required, type, validations, value
+            name,
+            default_value,
+            depends_on,
+            label,
+            required,
+            field_type,
+            validations,
+            value,
         )
 
     def get_field(self, name):

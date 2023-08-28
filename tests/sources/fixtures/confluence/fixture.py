@@ -31,7 +31,7 @@ class ConfluenceAPI:
         self.app.route("/rest/api/space", methods=["GET"])(self.get_spaces)
         self.app.route("/rest/api/content/search", methods=["GET"])(self.get_content)
         self.app.route(
-            "/rest/api/content/<string:id>/child/attachment", methods=["GET"]
+            "/rest/api/content/<string:content_id>/child/attachment", methods=["GET"]
         )(self.get_attachments)
         self.app.route(
             "/download/attachments/<string:content_id>/<string:attachment_id>",
@@ -121,7 +121,7 @@ class ConfluenceAPI:
             )
         return content
 
-    def get_attachments(self, id):
+    def get_attachments(self, content_id):
         """Function to handle get attachments calls
 
         Args:
@@ -140,14 +140,14 @@ class ConfluenceAPI:
 
         for attachment_count in range(self.attachment_start_at, self.attachment_end_at):
             attachment = {
-                "id": f"attachment_{id}_{attachment_count}",
-                "title": f"attachment_{id}_{attachment_count}.py",
+                "id": f"attachment_{content_id}_{attachment_count}",
+                "title": f"attachment_{content_id}_{attachment_count}.py",
                 "type": "attachment",
                 "version": {"when": "2023-01-03T09:24:50.633Z"},
                 "extensions": {"fileSize": FILE_SIZE},
                 "_links": {
-                    "download": f"/download/attachments/{id}/attachment_{id}_{attachment_count}.py",
-                    "webui": f"/pages/viewpageattachments.action?pageId={id}&preview=attachment_{id}_{attachment_count}.py",
+                    "download": f"/download/attachments/{content_id}/attachment_{content_id}_{attachment_count}.py",
+                    "webui": f"/pages/viewpageattachments.action?pageId={content_id}&preview=attachment_{content_id}_{attachment_count}.py",
                 },
             }
             attachments["results"].append(attachment)
@@ -168,4 +168,4 @@ class ConfluenceAPI:
 
 
 if __name__ == "__main__":
-    ConfluenceAPI().app.run(host="0.0.0.0")
+    ConfluenceAPI().app.run(host="0.0.0.0", port="9696")

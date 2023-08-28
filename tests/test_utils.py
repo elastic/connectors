@@ -31,6 +31,7 @@ from connectors.utils import (
     InvalidIndexNameError,
     MemQueue,
     RetryStrategy,
+    base64url_to_base64,
     convert_to_b64,
     decode_base64_value,
     deep_merge_dicts,
@@ -197,6 +198,21 @@ async def test_mem_queue_too_large_item():
 
     with pytest.raises(asyncio.QueueFull) as e:
         await queue.put("x")
+
+    assert e is not None
+
+
+@pytest.mark.asyncio
+async def test_mem_queue_put_nowait():
+    queue = MemQueue(
+        maxsize=5, maxmemsize=1000, refresh_interval=0.1, refresh_timeout=0.5
+    )
+    # make queue full by size
+    for i in range(5):
+        queue.put_nowait(i)
+
+    with pytest.raises(asyncio.QueueFull) as e:
+        await queue.put_nowait("x")
 
     assert e is not None
 
@@ -424,6 +440,55 @@ async def test_exponential_backoff_retry():
     await does_not_raise()
 
 
+@pytest.mark.parametrize(
+    "skipped_exceptions",
+    [CustomGeneratorException, [CustomGeneratorException, RuntimeError]],
+)
+@pytest.mark.asyncio
+async def test_skipped_exceptions_retry_async_generator(skipped_exceptions):
+    mock_gen = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        skipped_exceptions=skipped_exceptions,
+    )
+    async def raises_async_generator():
+        for _ in range(3):
+            mock_gen()
+            raise CustomGeneratorException()
+            yield 1
+
+    with pytest.raises(CustomGeneratorException):
+        async for _ in raises_async_generator():
+            pass
+
+    assert mock_gen.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "skipped_exceptions", [CustomException, [CustomException, RuntimeError]]
+)
+@pytest.mark.asyncio
+async def test_skipped_exceptions_retry(skipped_exceptions):
+    mock_func = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        skipped_exceptions=skipped_exceptions,
+    )
+    async def raises():
+        mock_func()
+        raise CustomException()
+
+    with pytest.raises(CustomException):
+        await raises()
+
+        # retried 10 times
+        assert mock_func.call_count == 1
+
+
 class MockSSL:
     """This class contains methods which returns dummy ssl context"""
 
@@ -472,44 +537,41 @@ def test_evaluate_timedelta():
     assert expected_response == "2023-02-19T14:25:05.158843"
 
 
-def test_get_pem_format():
-    """This function tests prepare private key and certificate with dummy values"""
-    # Setup
-    expected_formated_pem_key = """-----BEGIN PRIVATE KEY-----
+def test_get_pem_format_with_postfix():
+    expected_formatted_pem_key = """-----BEGIN PRIVATE KEY-----
 PrivateKey
 -----END PRIVATE KEY-----"""
     private_key = "-----BEGIN PRIVATE KEY----- PrivateKey -----END PRIVATE KEY-----"
 
-    # Execute
-    formated_privat_key = get_pem_format(
+    formatted_private_key = get_pem_format(
         key=private_key, postfix="-----END PRIVATE KEY-----"
     )
-    assert formated_privat_key == expected_formated_pem_key
+    assert formatted_private_key == expected_formatted_pem_key
 
-    # Setup
-    expected_formated_certificate = """-----BEGIN CERTIFICATE-----
+
+def test_get_pem_format_multiline():
+    expected_formatted_certificate = """-----BEGIN CERTIFICATE-----
 Certificate1
 Certificate2
 -----END CERTIFICATE-----"""
     certificate = "-----BEGIN CERTIFICATE----- Certificate1 Certificate2 -----END CERTIFICATE-----"
 
-    # Execute
-    formated_certificate = get_pem_format(key=certificate)
-    assert formated_certificate == expected_formated_certificate
+    formatted_certificate = get_pem_format(key=certificate)
+    assert formatted_certificate == expected_formatted_certificate
 
-    # Setup
-    expected_formated_multi_certificate = """-----BEGIN CERTIFICATE-----
+
+def test_get_pem_format_multiple_certificates():
+    expected_formatted_multiple_certificates = """-----BEGIN CERTIFICATE-----
 Certificate1
 -----END CERTIFICATE-----
 -----BEGIN CERTIFICATE-----
 Certificate2
 -----END CERTIFICATE-----
 """
-    multi_certificate = "-----BEGIN CERTIFICATE----- Certificate1 -----END CERTIFICATE----- -----BEGIN CERTIFICATE----- Certificate2 -----END CERTIFICATE-----"
+    multiple_certificates = "-----BEGIN CERTIFICATE----- Certificate1 -----END CERTIFICATE----- -----BEGIN CERTIFICATE----- Certificate2 -----END CERTIFICATE-----"
 
-    # Execute
-    formated_multi_certificate = get_pem_format(key=multi_certificate)
-    assert formated_multi_certificate == expected_formated_multi_certificate
+    formatted_multi_certificate = get_pem_format(key=multiple_certificates)
+    assert formatted_multi_certificate == expected_formatted_multiple_certificates
 
 
 def test_hash_id():
@@ -677,7 +739,7 @@ class TestExtractionService:
             assert extraction_service._check_configured() is expected_result
 
     @pytest.mark.asyncio
-    async def test_extract_text(self, mock_responses):
+    async def test_extract_text(self, mock_responses, patch_logger):
         filepath = "tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/"
         payload = {"extracted_text": "I've been extracted!"}
@@ -695,9 +757,12 @@ class TestExtractionService:
             await extraction_service._end_session()
 
             assert response == "I've been extracted!"
+            patch_logger.assert_present(
+                "Text extraction is successful for 'notreal.txt'."
+            )
 
     @pytest.mark.asyncio
-    async def test_extract_text_with_file_pointer(self, mock_responses):
+    async def test_extract_text_with_file_pointer(self, mock_responses, patch_logger):
         filepath = "/tmp/notreal.txt"
         url = "http://localhost:8090/extract_text/?local_file_path=/tmp/notreal.txt"
         payload = {"extracted_text": "I've been extracted from a local file!"}
@@ -719,6 +784,9 @@ class TestExtractionService:
             await extraction_service._end_session()
 
             assert response == "I've been extracted from a local file!"
+            patch_logger.assert_present(
+                "Text extraction is successful for 'notreal.txt'."
+            )
 
     @pytest.mark.asyncio
     async def test_extract_text_when_response_isnt_200_logs_warning(
@@ -778,3 +846,11 @@ class TestExtractionService:
             patch_logger.assert_present(
                 "Extraction service could not parse `notreal.txt'. Status: [200]; oh no!: I'm all messed up..."
             )
+
+
+@pytest.mark.parametrize(
+    "base64url_encoded_value, base64_expected_value",
+    [("YQ-_", "YQ+/"), ("", ""), (None, None)],
+)
+def test_base64url_to_base64(base64url_encoded_value, base64_expected_value):
+    assert base64url_to_base64(base64url_encoded_value) == base64_expected_value

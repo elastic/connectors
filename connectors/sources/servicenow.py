@@ -228,8 +228,8 @@ class ServiceNowClient:
             {"name": "Accept", "value": "application/json"},
         ]
         apis = []
-        for id in ids:
-            params = {"table_sys_id": id}
+        for id_ in ids:
+            params = {"table_sys_id": id_}
             apis.append(
                 {
                     "id": str(uuid.uuid4()),
@@ -508,20 +508,20 @@ class ServiceNowDataSource(BaseDataSource):
                 "label": "Username",
                 "order": 2,
                 "type": "str",
-                "value": "admin",
+                "value": "",
             },
             "password": {
                 "label": "Password",
                 "order": 3,
                 "sensitive": True,
                 "type": "str",
-                "value": "changeme",
+                "value": "",
             },
             "services": {
                 "display": "textarea",
                 "label": "Comma-separated list of services",
                 "order": 4,
-                "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
+                "tooltip": "List of services is ignored when Advanced Sync Rules are used.",
                 "type": "list",
                 "value": "*",
             },
@@ -570,7 +570,7 @@ class ServiceNowDataSource(BaseDataSource):
         """Validates whether user input is empty or not for configuration fields
         Also validate, if user configured services are available in ServiceNow."""
 
-        self.configuration.check_valid()
+        await super().validate_config()
         await self._remote_validation()
 
     async def close(self):

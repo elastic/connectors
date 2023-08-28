@@ -1,33 +1,4 @@
-elasticsearch:
-  host: http://localhost:9200
-  username: elastic
-  password: changeme
-  ssl: true
-  bulk:
-    queue_max_size: 1024
-    queue_max_mem_size: 25
-    display_every: 100
-    chunk_size: 1000
-    max_concurrency: 5
-    chunk_max_mem_size: 5
-    concurrent_downloads: 10
-  request_timeout: 120
-  max_wait_duration: 120
-  initial_backoff_duration: 1
-  backoff_multiplier: 2
-  log_level: info
-
-service:
-  idling: 5
-  heartbeat: 300
-  max_errors: 20
-  max_errors_span: 600
-  max_concurrent_syncs: 1
-  job_cleanup_interval: 300
-  log_level: INFO
-
-connector_id: 'mssql'
-service_type: 'mssql'
-
-sources:
-  mssql: connectors.sources.mssql:MSSQLDataSource
+connectors:
+  -
+    connector_id: 'mssql'
+    service_type: 'mssql'

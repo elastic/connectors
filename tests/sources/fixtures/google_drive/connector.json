@@ -31,7 +31,12 @@
       "type": "str",
       "required": true,
       "options": [],
-      "validations": [],
+      "validations": [
+        {
+          "constraint": "^\\S+@\\S+\\.\\S+$",
+          "type": "regex"
+        }
+      ],
       "value": "admin@your-organization.com",
       "order": 3,
       "ui_restrictions": []

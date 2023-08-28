@@ -1,5 +1,6 @@
+
+elasticsearch.host: http://nowhere.com:9200
 elasticsearch:
-  host: http://nowhere.com:9200
   user: elastic
   password: ${elasticsearch.password}
   bulk:
@@ -18,7 +19,9 @@ service:
   max_concurrent_access_control_syncs: 10
   log_level: INFO
 
-connector_id: '1'
+connectors:
+  -
+    connector_id: '1'
 
 sources:
   fake: fake_sources:FakeSource

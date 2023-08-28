@@ -16,16 +16,16 @@ async def test_basics():
 
 @pytest.mark.asyncio
 async def test_get_docs(catch_stdout):
-    source = create_source(DirectoryDataSource)
-    num = 0
-    async for (doc, dl) in source.get_docs():
-        num += 1
-        if doc["path"].endswith("__init__.py"):
-            continue
-        data = await dl(doit=True, timestamp="xx")
-        if data is not None:
-            assert len(data["_attachment"]) > 0
-        if num > 100:
-            break
+    async with create_source(DirectoryDataSource) as source:
+        num = 0
+        async for (doc, dl) in source.get_docs():
+            num += 1
+            if doc["path"].endswith("__init__.py"):
+                continue
+            data = await dl(doit=True, timestamp="xx")
+            if data is not None:
+                assert len(data["_attachment"]) > 0
+            if num > 100:
+                break
 
-    assert num > 3
+        assert num > 3

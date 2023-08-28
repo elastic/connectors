@@ -94,7 +94,20 @@ async def test_assert_not_called():
     items = []
 
     async_generator = AsyncIterator(items)
-    assert async_generator.assert_not_called()
+    async_generator.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_assert_not_called_with_one_call():
+    items = []
+
+    async_generator = AsyncIterator(items)
+
+    async for _ in async_generator():
+        pass
+
+    with pytest.raises(AssertionError):
+        async_generator.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -110,4 +123,182 @@ async def test_assert_called_once():
     async for _ in async_generator:
         pass
 
-    assert async_generator.assert_called_once()
+    async_generator.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_assert_called_once_with_two_calls():
+    items = []
+
+    async_generator = AsyncIterator(items)
+
+    # first call
+    async for _ in async_generator():
+        pass
+
+    # second call
+    async for _ in async_generator():
+        pass
+
+    with pytest.raises(AssertionError):
+        async_generator.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_assert_called_once_with_one_arg():
+    items = [1]
+
+    argument = "some argument"
+
+    async_iterator = AsyncIterator(items)
+
+    async for _ in async_iterator(argument):
+        pass
+
+    async_iterator.assert_called_once_with(argument)
+
+
+@pytest.mark.asyncio
+async def test_assert_called_once_with_wrong_arg():
+    items = [1]
+
+    argument = "some argument"
+    wrong_argument = "wrong argument"
+
+    async_iterator = AsyncIterator(items)
+
+    async for _ in async_iterator(argument):
+        pass
+
+    with pytest.raises(AssertionError):
+        async_iterator.assert_called_once_with(wrong_argument)
+
+
+@pytest.mark.asyncio
+async def test_assert_called_once_with_one_arg_and_two_calls():
+    items = [1]
+
+    argument = "some argument"
+
+    async_iterator = AsyncIterator(items)
+
+    # first call
+    async for _ in async_iterator(argument):
+        pass
+
+    # second call
+    async for _ in async_iterator(argument):
+        pass
+
+    with pytest.raises(AssertionError):
+        async_iterator.assert_called_once_with(argument)
+
+
+@pytest.mark.asyncio
+async def test_assert_called_once_with_three_args():
+    items = [1]
+
+    argument_one = "some argument one"
+    argument_two = "some argument two"
+    argument_three = "some argument three"
+
+    async_iterator = AsyncIterator(items)
+
+    async for _ in async_iterator(argument_one, argument_two, argument_three):
+        pass
+
+    async_iterator.assert_called_once_with(argument_one, argument_two, argument_three)
+
+
+@pytest.mark.asyncio
+async def test_assert_called_once_with_one_kwarg():
+    items = [1]
+
+    argument = "some argument"
+
+    async_iterator = AsyncIterator(items)
+
+    async for _ in async_iterator(argument=argument):
+        pass
+
+    async_iterator.assert_called_once_with(argument=argument)
+
+
+@pytest.mark.asyncio
+async def test_assert_called_once_with_one_kwarg_and_two_calls():
+    items = [1]
+
+    argument = "some argument"
+
+    async_iterator = AsyncIterator(items)
+
+    # first call
+    async for _ in async_iterator(argument=argument):
+        pass
+
+    # second call
+    async for _ in async_iterator(argument=argument):
+        pass
+
+    with pytest.raises(AssertionError):
+        async_iterator.assert_called_once_with(argument=argument)
+
+
+@pytest.mark.asyncio
+async def test_assert_called_once_with_wrong_kwarg():
+    items = [1]
+
+    argument = "some argument"
+    wrong_argument = "wrong argument"
+
+    async_iterator = AsyncIterator(items)
+
+    async for _ in async_iterator(argument=argument):
+        pass
+
+    with pytest.raises(AssertionError):
+        async_iterator.assert_called_once_with(wrong_argument=wrong_argument)
+
+
+@pytest.mark.asyncio
+async def test_assert_called_once_with_three_kwargs():
+    items = [1]
+
+    argument_one = "some argument one"
+    argument_two = "some argument two"
+    argument_three = "some argument three"
+
+    async_iterator = AsyncIterator(items)
+
+    async for _ in async_iterator(
+        argument_one=argument_one,
+        argument_two=argument_two,
+        argument_three=argument_three,
+    ):
+        pass
+
+    async_iterator.assert_called_once_with(
+        argument_one=argument_one,
+        argument_two=argument_two,
+        argument_three=argument_three,
+    )
+
+
+@pytest.mark.asyncio
+async def test_assert_called_once_with_args_and_kwargs():
+    items = [1]
+
+    argument_one = "some argument one"
+    argument_two = "some argument two"
+    argument_three = "some argument three"
+
+    async_iterator = AsyncIterator(items)
+
+    async for _ in async_iterator(
+        argument_one, argument_two=argument_two, argument_three=argument_three
+    ):
+        pass
+
+    async_iterator.assert_called_once_with(
+        argument_one, argument_two=argument_two, argument_three=argument_three
+    )
