@@ -554,6 +554,4 @@ async def test_get_docs():
             [MockAccount()]
         )
         async for document, _ in source.get_docs():
-            if document not in EXPECTED_RESPONSE:
-                print(document)
             assert document in EXPECTED_RESPONSE
