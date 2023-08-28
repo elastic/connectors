@@ -91,7 +91,7 @@
                         "default_value": "",
                         "label": "Path of Oracle Service",
                         "order": 10,
-                        "required": False,
+                        "required": false,
                         "type": "str",
                         "value": ""
                 },
@@ -99,7 +99,7 @@
                         "default_value": "",
                         "label": "Path of Oracle Service configuration files",
                         "order": 11,
-                        "required": False,
+                        "required": false,
                         "type": "str",
                         "value": ""
                 }
