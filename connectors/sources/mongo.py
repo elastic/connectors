@@ -132,7 +132,7 @@ class MongoDataSource(BaseDataSource):
                 "type": "str",
                 "value": "",
             },
-            "database": {"label": "Database", "order": 4, "type": "str", "value": ""},
+            "database": {"label": "Database", "order": 4, "type": "str"},
             "collection": {
                 "label": "Collection",
                 "order": 5,
