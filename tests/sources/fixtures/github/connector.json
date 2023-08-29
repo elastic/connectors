@@ -1,85 +1,137 @@
 {
-    "name": "github",
-    "service_type": "github",
-    "index_name": "search-github",
-    "sync_cursor": null,
-    "is_native": false,
-    "api_key_id": null,
-    "status": "configured",
-    "language": "en",
-    "last_access_control_sync_error": null,
-    "last_access_control_sync_status": null,
-    "last_sync_status": null,
-    "last_sync_error": null,
-    "last_synced": null,
-    "last_seen": null,
-    "created_at": null,
-    "updated_at": null,
-    "configuration": {
-        "data_source": {
-            "display": "dropdown",
-            "label": "GitHub data source",
-            "options": [
-                {"label": "GitHub Cloud", "value": "github_cloud"},
-                {"label": "GitHub Server", "value": "github_server"}
-            ],
-            "order": 1,
-            "type": "str",
-            "value": "github_server"
+        "name": "github",
+        "index_name": "search-github",
+        "service_type": "github",
+        "sync_cursor": null,
+        "is_native": false,
+        "api_key_id": null,
+        "status": "configured",
+        "language": "en",
+        "last_access_control_sync_error": null,
+        "last_access_control_sync_status": null,
+        "last_sync_status": "canceled",
+        "last_sync_error": null,
+        "last_synced": null,
+        "last_seen": null,
+        "created_at": null,
+        "updated_at": null,
+        "configuration": {
+                "data_source": {
+                        "display": "dropdown",
+                        "label": "GitHub data source",
+                        "options": [
+                                {"label": "GitHub Cloud", "value": "github_cloud"},
+                                {"label": "GitHub Server", "value": "github_server"}
+                        ],
+                        "order": 1,
+                        "type": "str",
+                        "value": "github_server"
+                },
+                "host": {
+                        "depends_on": [{"field": "data_source", "value": "github_server"}],
+                        "label": "GitHub URL",
+                        "order": 2,
+                        "type": "str",
+                        "value": "http://127.0.0.1:9091"
+                },
+                "token": {
+                        "label": "GitHub Token",
+                        "order": 3,
+                        "sensitive": true,
+                        "type": "str",
+                        "value": "changeme"
+                },
+                "repositories": {
+                        "display": "textarea",
+                        "label": "List of repositories",
+                        "order": 4,
+                        "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
+                        "type": "list",
+                        "value": "*"
+                },
+                "ssl_enabled": {
+                        "display": "toggle",
+                        "label": "Enable SSL",
+                        "order": 5,
+                        "type": "bool",
+                        "value": false
+                },
+                "ssl_ca": {
+                        "depends_on": [{"field": "ssl_enabled", "value": true}],
+                        "label": "SSL certificate",
+                        "order": 6,
+                        "type": "str",
+                        "value": ""
+                },
+                "retry_count": {
+                        "display_value": 3,
+                        "display": "numeric",
+                        "label": "Maximum retries per request",
+                        "order": 7,
+                        "required": false,
+                        "type": "int",
+                        "ui_restrictions": ["advanced"],
+                        "value": 3,
+                        "validations": [{"type": "less_than", "constraint": 10}]
+                }
         },
-        "host": {
-            "depends_on": [{"field": "data_source", "value": "github_server"}],
-            "label": "GitHub URL",
-            "order": 2,
-            "type": "str",
-            "value": "http://127.0.0.1:9091"
-        },
-        "token": {
-            "label": "GitHub Token",
-            "order": 3,
-            "sensitive": true,
-            "type": "str",
-            "value": "changeme"
-        },
-        "repositories": {
-            "display": "textarea",
-            "label": "List of repositories",
-            "order": 4,
-            "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
-            "type": "list",
-            "value": "*"
-        },
-        "ssl_enabled": {
-            "display": "toggle",
-            "label": "Enable SSL",
-            "order": 5,
-            "type": "bool",
-            "value": false
-        },
-        "ssl_ca": {
-            "depends_on": [{"field": "ssl_enabled", "value": true}],
-            "label": "SSL certificate",
-            "order": 6,
-            "type": "str",
-            "value": ""
-        },
-        "retry_count": {
-            "display_value": 3,
-            "display": "numeric",
-            "label": "Maximum retries per request",
-            "order": 7,
-            "required": false,
-            "type": "int",
-            "ui_restrictions": ["advanced"],
-            "value": 3,
-            "validations": [{"type": "less_than", "constraint": 10}]
+        "filtering": [
+                {
+                        "domain": "DEFAULT",
+                        "draft": {
+                            "advanced_snippet": {
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "value": {}
+                            },
+                            "rules": [
+                                {
+                                    "field": "_",
+                                    "updated_at": "2023-01-31T16:41:27.341Z",
+                                    "created_at": "2023-01-31T16:38:49.244Z",
+                                    "rule": "regex",
+                                    "id": "DEFAULT",
+                                    "value": ".*",
+                                    "order": 1,
+                                    "policy": "include"
+                                }
+                            ],
+                            "validation": {
+                                "state": "valid",
+                                "errors": []
+                            }
+                        },
+                        "active": {
+                            "advanced_snippet": {
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "value": {}
+                            },
+                            "rules": [
+                                {
+                                    "field": "_",
+                                    "updated_at": "2023-01-31T16:41:27.341Z",
+                                    "created_at": "2023-01-31T16:38:49.244Z",
+                                    "rule": "regex",
+                                    "id": "DEFAULT",
+                                    "value": ".*",
+                                    "order": 1,
+                                    "policy": "include"
+                                }
+                            ],
+                            "validation": {
+                                "state": "valid",
+                                "errors": []
+                            }
+                        }
+                }
+
+        ],
+        "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
+        "pipeline": {
+                "extract_binary_content": true,
+                "name": "ent-search-generic-ingestion",
+                "reduce_whitespace": true,
+                "run_ml_inference": true
         }
-    },
-    "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
-    "pipeline": {
-        "extract_binary_content": true,
-        "name": "ent-search-generic-ingestion",
-        "reduce_whitespace": true,
-        "run_ml_inference": true
-    }
 }
