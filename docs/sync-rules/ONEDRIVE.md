@@ -55,3 +55,30 @@ The advanced sync rules consists of a set of rules where each rule can have one 
   }
 ]
 ```
+
+### Two Advanced rules for indexing the files and folders of user 1 and user 2, and only .py files of other users
+
+```json
+[
+  {
+    "userMailAccounts": ["user1-domain@onmicrosoft.com", "user2-domain@onmicrosoft.com"]
+  },
+  {
+    "skipFilesWithExtensions": [".py"]
+  }
+]
+```
+
+### Two Advanced rules for indexing the .md files user 1 and user 2 and files/folders recursively inside folder abc 
+
+```json
+[
+  {
+    "userMailAccounts": ["user1-domain@onmicrosoft.com", "user2-domain@onmicrosoft.com"],
+    "skipFilesWithExtensions": [".md"]
+  },
+  {
+    "parentPathPattern": "/drive/root:/abc/**"
+  }
+]
+```

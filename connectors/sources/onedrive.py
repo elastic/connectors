@@ -124,14 +124,6 @@ class OneDriveAdvancedRulesValidator(AdvancedRulesValidator):
                 SyncRuleValidationResult.ADVANCED_RULES
             )
 
-        return await self._remote_validation(advanced_rules)
-
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def _remote_validation(self, advanced_rules):
         try:
             OneDriveAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -140,22 +132,7 @@ class OneDriveAdvancedRulesValidator(AdvancedRulesValidator):
                 is_valid=False,
                 validation_message=e.message,
             )
-        invalid_users, users = set(), set()
 
-        async for user in self.source.client.list_users():
-            users.add(user["mail"])
-
-        configured_users = set()
-        for rule in advanced_rules:
-            configured_users.update(rule["userMailAccounts"])
-
-        invalid_users = configured_users - users
-        if len(invalid_users) > 0:
-            return SyncRuleValidationResult(
-                SyncRuleValidationResult.ADVANCED_RULES,
-                is_valid=False,
-                validation_message=f"Following users accounts do not exist in Azure AD: '{', '.join(invalid_users)}'",
-            )
         return SyncRuleValidationResult.valid_result(
             SyncRuleValidationResult.ADVANCED_RULES
         )
@@ -339,9 +316,7 @@ class OneDriveClient:
                     has_skipped_extension = os.path.splitext(file["name"])[-1] in (
                         skipped_extensions or []
                     )
-                    if (skipped_extensions and has_skipped_extension) or (
-                        pattern and not is_match
-                    ):
+                    if has_skipped_extension or (pattern and not is_match):
                         continue
                     else:
                         yield file

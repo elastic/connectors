@@ -714,14 +714,7 @@ async def test_get_docs(users_patch, files_patch):
 )
 @pytest.mark.asyncio
 async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
-    mock_data = [
-        {"mail": "a1@onmicrosoft.com", "id": "123"},
-        {"mail": "b1@onmicrosoft.com", "id": "321"},
-        {"mail": "c1@onmicrosoft.com", "id": "456"},
-    ]
     async with create_source(OneDriveDataSource) as source:
-        source.client.list_users = AsyncIterator(mock_data)
-
         validation_result = await OneDriveAdvancedRulesValidator(source).validate(
             advanced_rules
         )
