@@ -242,14 +242,12 @@ class ConfluenceDataSource(BaseDataSource):
                 ],
                 "order": 1,
                 "type": "str",
-                "value": CONFLUENCE_SERVER,
             },
             "username": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_SERVER}],
                 "label": "Confluence Server username",
                 "order": 2,
                 "type": "str",
-                "value": "admin",
             },
             "password": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_SERVER}],
@@ -257,14 +255,12 @@ class ConfluenceDataSource(BaseDataSource):
                 "sensitive": True,
                 "order": 3,
                 "type": "str",
-                "value": "abc@123",
             },
             "account_email": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
                 "label": "Confluence Cloud account email",
                 "order": 4,
                 "type": "str",
-                "value": "me@example.com",
             },
             "api_token": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
@@ -272,13 +268,11 @@ class ConfluenceDataSource(BaseDataSource):
                 "sensitive": True,
                 "order": 5,
                 "type": "str",
-                "value": "abc#123",
             },
             "confluence_url": {
                 "label": "Confluence URL",
                 "order": 6,
                 "type": "str",
-                "value": "http://127.0.0.1:9696",
             },
             "spaces": {
                 "display": "textarea",
@@ -286,21 +280,18 @@ class ConfluenceDataSource(BaseDataSource):
                 "order": 7,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
-                "value": WILDCARD,
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
                 "order": 8,
                 "type": "bool",
-                "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
                 "order": 9,
                 "type": "str",
-                "value": "",
             },
             "retry_count": {
                 "default_value": 3,
@@ -310,7 +301,6 @@ class ConfluenceDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": 3,
             },
             "concurrent_downloads": {
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
@@ -323,7 +313,6 @@ class ConfluenceDataSource(BaseDataSource):
                 "validations": [
                     {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
                 ],
-                "value": MAX_CONCURRENT_DOWNLOADS,
             },
             "use_document_level_security": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
@@ -332,7 +321,6 @@ class ConfluenceDataSource(BaseDataSource):
                 "order": 12,
                 "tooltip": "Document level security ensures identities and permissions set in confluence are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
-                "value": False,
             },
         }
 
