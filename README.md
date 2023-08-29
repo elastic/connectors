@@ -29,7 +29,7 @@ For everything to do with _developing_ connectors, you'll find that here in this
 
 ## Connector service code
 
-In addition to the source code for individual connectors, this repo also contains the connector service code, which is used to run  connectors, manage scheduling, run syncs, and cleanup.
+In addition to the source code for individual connectors, this repo also contains the connector service code, which is used for tasks like running connectors, and managing scheduling, syncs, and cleanup.
 This is shared code that is used by all connectors.
 
 ## Python connector framework
