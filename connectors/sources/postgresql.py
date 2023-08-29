@@ -381,7 +381,9 @@ class PostgreSQLDataSource(BaseDataSource):
                 keys = await self.postgresql_client.get_table_primary_key(
                     schema=schema, table=table
                 )
-                keys = map_column_names(column_names=keys, schema=schema, table=table)
+                keys = map_column_names(
+                    column_names=keys, schema=schema, tables=[table]
+                )
                 if keys:
                     try:
                         last_update_time = (
@@ -399,7 +401,7 @@ class PostgreSQLDataSource(BaseDataSource):
                     )
                     column_names = await anext(streamer)
                     column_names = map_column_names(
-                        column_names=column_names, schema=schema, table=table
+                        column_names=column_names, schema=schema, tables=[table]
                     )
                     async for row in streamer:
                         row = dict(zip(column_names, row, strict=True))
